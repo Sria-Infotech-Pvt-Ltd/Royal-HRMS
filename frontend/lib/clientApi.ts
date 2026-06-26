@@ -1,7 +1,7 @@
 "use client";
 import axios from "axios";
 import type { AxiosError, InternalAxiosRequestConfig } from "axios";
-import { API_URL, API_BASE } from "./config";
+import { API_BASE } from "./config";
 import { clearAuth } from "./auth";
 
 // Endpoints that must never trigger a silent refresh on 401
@@ -19,7 +19,7 @@ let _intentionalLogout = false;
 export function markIntentionalLogout() { _intentionalLogout = true; }
 
 const clientApi = axios.create({
-  baseURL: `${API_URL}${API_BASE}`,
+  baseURL: API_BASE,
   timeout: 15000,
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
@@ -91,7 +91,7 @@ clientApi.interceptors.response.use(
     try {
       // The httpOnly refresh token cookie is sent automatically via withCredentials.
       await axios.post(
-        `${API_URL}${API_BASE}/token/refresh/`,
+        `${API_BASE}/token/refresh/`,
         {},
         { withCredentials: true, headers: { "Content-Type": "application/json" } }
       );

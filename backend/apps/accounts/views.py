@@ -203,12 +203,23 @@ class LoginView(APIView):
         })
         resp.set_cookie(
             'royal_access_token', str(refresh.access_token),
-            max_age=900, httponly=True, secure=not settings.DEBUG, samesite='Lax',
+            max_age=900, httponly=True, secure=not settings.DEBUG, samesite='Lax', domain=None,
         )
         resp.set_cookie(
             'royal_refresh_token', str(refresh),
-            max_age=604800, httponly=True, secure=not settings.DEBUG, samesite='Lax',
+            max_age=604800, httponly=True, secure=not settings.DEBUG, samesite='Lax', domain=None,
         )
+        if settings.DEBUG:
+            for name, morsel in resp.cookies.items():
+                attrs = '; '.join(filter(None, [
+                    f'Max-Age={morsel["max-age"]}',
+                    f'Path={morsel["path"]}',
+                    f'Domain={morsel["domain"]}' if morsel['domain'] else 'Domain=(not set)',
+                    'Secure' if morsel['secure'] else 'Secure=(not set)',
+                    'HttpOnly' if morsel['httponly'] else None,
+                    f'SameSite={morsel["samesite"]}' if morsel['samesite'] else None,
+                ]))
+                logger.debug('[cookie-debug] Set-Cookie: %s=[token]; %s', name, attrs)
         return resp
 
 
@@ -229,12 +240,12 @@ class TokenRefreshAPIView(APIView):
         resp = success('Token refreshed successfully.', data={})
         resp.set_cookie(
             'royal_access_token', serializer.validated_data['access'],
-            max_age=900, httponly=True, secure=not settings.DEBUG, samesite='Lax',
+            max_age=900, httponly=True, secure=not settings.DEBUG, samesite='Lax', domain=None,
         )
         if 'refresh' in serializer.validated_data:
             resp.set_cookie(
                 'royal_refresh_token', serializer.validated_data['refresh'],
-                max_age=604800, httponly=True, secure=not settings.DEBUG, samesite='Lax',
+                max_age=604800, httponly=True, secure=not settings.DEBUG, samesite='Lax', domain=None,
             )
         return resp
 
