@@ -2,12 +2,13 @@ export interface NavSection {
   section: string;
 }
 export interface NavItem {
-  id:         string;
-  icon:       string;
-  label:      string;
-  badge?:     string;
-  path:       string;
-  permission: string | null; // null = always visible
+  id:          string;
+  icon:        string;
+  label:       string;
+  badge?:      string;
+  path:        string;
+  permission:  string | null; // null = always visible
+  comingSoon?: boolean;       // true = non-clickable, shows "Soon" badge
 }
 export type NavEntry = NavSection | NavItem;
 
@@ -38,18 +39,18 @@ const ALL_NAV: NavEntry[] = [
   { id: "expenses",         icon: "ti-wallet",               label: "Expenses",         path: "/dashboard/expenses",         permission: "expenses.view" },
 
   { section: "HR Ops" },
-  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: "leave.view" },
-  { id: "separation",       icon: "ti-logout",               label: "Separation & FnF", path: "/dashboard/separation",       permission: "employees.view" },
+  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: "leave.view",      comingSoon: true },
+  { id: "separation",       icon: "ti-logout",               label: "Separation & FnF", path: "/dashboard/separation",       permission: "employees.view",  comingSoon: true },
   { id: "documents",        icon: "ti-folder",               label: "Document Center",  path: "/dashboard/documents",        permission: "documents.view" },
 
   { section: "My" },
   { id: "my-attendance",    icon: "ti-clock-check",          label: "My Attendance",    path: "/dashboard/my-attendance",    permission: null },
-  { id: "my-requests",      icon: "ti-inbox",                label: "My Requests",      path: "/dashboard/my-requests",      permission: null },
+  { id: "my-requests",      icon: "ti-inbox",                label: "My Requests",      path: "/dashboard/my-requests",      permission: null,             comingSoon: true },
   { id: "profile",          icon: "ti-user-circle",          label: "My Profile",       path: "/dashboard/profile",          permission: null },
 
   { section: "System" },
-  { id: "reports",          icon: "ti-chart-bar",            label: "Reports",          path: "/dashboard/reports",          permission: "reports.view" },
-  { id: "audit",            icon: "ti-shield-check",         label: "Audit Log",        path: "/dashboard/audit",            permission: "audit.view" },
+  { id: "reports",          icon: "ti-chart-bar",            label: "Reports",          path: "/dashboard/reports",          permission: "reports.view",   comingSoon: true },
+  { id: "audit",            icon: "ti-shield-check",         label: "Audit Log",        path: "/dashboard/settings/audit",   permission: "audit.view" },
   { id: "settings",         icon: "ti-settings",             label: "Settings",         path: "/dashboard/settings",         permission: "settings.view" },
 ];
 

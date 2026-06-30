@@ -152,7 +152,29 @@ export default function DashboardShell({
               );
             }
             const item = entry as NavItem;
-            const isActive = pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"));
+            const isActive = !item.comingSoon && (pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/")));
+            if (item.comingSoon) {
+              return (
+                <div key={item.id} className="px-2 mb-px">
+                  <div
+                    className="flex items-center gap-2.5 px-2 py-2 rounded-lg w-full text-[13px] whitespace-nowrap"
+                    style={{ color: "var(--outline)", cursor: "not-allowed", opacity: 0.6 }}
+                    title={collapsed ? `${item.label} — Coming Soon` : undefined}
+                    suppressHydrationWarning
+                  >
+                    <i className={`ti ${item.icon} text-[18px] flex-shrink-0`} />
+                    {!collapsed && (
+                      <>
+                        <span className="overflow-hidden text-ellipsis whitespace-nowrap flex-1">{item.label}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, background: "var(--outline-v)", color: "var(--outline)", padding: "1px 5px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.04em" }}>
+                          SOON
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={item.id} className="px-2 mb-px">
                 <button
