@@ -103,6 +103,27 @@ a {
    COMPONENTS (utility classes — safe alongside CSS Modules)
    ============================================================ */
 
+/* Sidebar Logo */
+.sidebar-logo-expanded {
+  width: 100%;
+  height: auto;
+  max-height: 56px;
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+  display: block;
+}
+
+.sidebar-logo-collapsed {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  object-fit: cover;
+  object-position: center center;
+  border-radius: 8px;
+  display: block;
+}
+
 /* Cards */
 .card {
   background: #fff;

@@ -16,27 +16,29 @@ function initials(name: string) {
 }
 
 const PAGE_TITLES: Record<string, string> = {
-  "/dashboard":                          "Dashboard",
-  "/dashboard/settings":                 "Settings",
-  "/dashboard/profile":                  "My Profile",
-  "/dashboard/settings/permissions":     "Roles & Permissions",
-  "/dashboard/employees":                "Employees",
-  "/dashboard/employees/new":            "Add New Employee",
-  "/dashboard/attendance":               "Attendance & Time",
-  "/dashboard/payroll":                  "Payroll Management",
-  "/dashboard/leave":                    "Leave Management",
-  "/dashboard/expenses":                 "Expense Claims",
-  "/dashboard/documents":                "Document Center",
-  "/dashboard/separation":               "Separation & FnF",
-  "/dashboard/interview-list":           "Interview List",
-  "/dashboard/candidate-review":         "Candidate Review & Onboarding",
-  "/dashboard/email-logs":               "Email Logs",
-  "/dashboard/org-chart":               "Organisation Chart",
-  "/dashboard/announcements":            "Announcements",
-  "/dashboard/my-payslip":              "My Payslips",
-  "/dashboard/my-requests":             "My Requests",
-  "/dashboard/approvals":               "Team Approvals",
-  "/dashboard/branches":                "Branch Management",
+  "/dashboard": "Dashboard",
+  "/dashboard/settings": "Settings",
+  "/dashboard/profile": "My Profile",
+  "/dashboard/settings/permissions": "Roles & Permissions",
+  "/dashboard/employees": "Employees",
+  "/dashboard/employees/new": "Add New Employee",
+  "/dashboard/attendance": "Attendance & Time",
+  "/dashboard/my-attendance": "My Attendance",
+  "/dashboard/payroll": "Payroll Management",
+  "/dashboard/leave": "Leave Management",
+  "/dashboard/expenses": "Expense Claims",
+  "/dashboard/documents": "Document Center",
+  "/dashboard/separation": "Separation & FnF",
+  "/dashboard/interview-list": "Interview List",
+  "/dashboard/candidate-review": "Candidate Review & Onboarding",
+  "/dashboard/email-logs": "Email Logs",
+  "/dashboard/org-chart": "Organisation Chart",
+  "/dashboard/announcements": "Announcements",
+  "/dashboard/my-payslip": "My Payslips",
+  "/dashboard/my-requests": "My Requests",
+  "/dashboard/approvals": "Team Approvals",
+  "/dashboard/branches":                    "Branch Management",
+  "/dashboard/settings/attendance-config":  "Attendance Rules",
 };
 
 
@@ -106,27 +108,19 @@ export default function DashboardShell({
         ].join(" ")}
       >
         {/* Sidebar header */}
-        <div className="h-14 px-3 flex items-center gap-2.5 border-b border-[var(--outline-v)] flex-shrink-0">
-          <div className="flex items-center gap-2 flex-1 overflow-hidden">
+        <div className="h-[68px] px-3 pr-2 flex items-center gap-2 border-b border-[var(--outline-v)] flex-shrink-0">
+          <div className="flex items-center flex-1 min-w-0">
             {collapsed ? (
               <img
                 src="/logo.png"
                 alt="Royal HRMS"
-                style={{
-                  width: 36, height: 36, flexShrink: 0,
-                  objectFit: "cover", objectPosition: "45% center",
-                  borderRadius: 6,
-                }}
+                className="sidebar-logo-collapsed"
               />
             ) : (
               <img
                 src="/logo.png"
                 alt="Royal HRMS"
-                style={{
-                  height: 44, width: "auto", maxWidth: 170,
-                  objectFit: "contain", objectPosition: "left center",
-                  flexShrink: 0,
-                }}
+                className="sidebar-logo-expanded"
               />
             )}
           </div>
