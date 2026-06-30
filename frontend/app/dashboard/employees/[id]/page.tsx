@@ -169,6 +169,7 @@ export default function EmployeeProfilePage({
   const [justSaved,  setJustSaved]  = useState(false);
   const [saving,     setSaving]     = useState(false);
   const [saveError,  setSaveError]  = useState(false);
+  const [isEditing,  setIsEditing]  = useState(false);
 
   const [deptOptions,     setDeptOptions]     = useState<FieldOption[]>([]);
   const [allDesigs,       setAllDesigs]       = useState<{ name: string; department_name: string }[]>([]);
@@ -292,6 +293,7 @@ export default function EmployeeProfilePage({
       setBaseValues(values);
       setBaseTables(tables);
       setJustSaved(true);
+      setIsEditing(false);
     } catch {
       setSaveError(true);
     } finally {
@@ -302,6 +304,7 @@ export default function EmployeeProfilePage({
     setValues(baseValues);
     setTables(baseTables);
     setJustSaved(false);
+    setIsEditing(false);
   }
 
   const activeTab = PROFILE_TABS.find(t => t.id === tab)!;
@@ -349,6 +352,8 @@ export default function EmployeeProfilePage({
                 ssRole:      [{ value: "", label: "Select role" }, ...roleOptions],
                 branch:      [{ value: "", label: "Select branch" }, ...branchOptions],
               }}
+              readOnly={!isEditing}
+              onEdit={() => setIsEditing(true)}
               onFieldChange={onFieldChange}
               onRowsChange={onRowsChange}
               onSave={onSave}

@@ -255,7 +255,7 @@ export function ApprovalMatrixTab({ employeeCode }: Props) {
   const currentUser = getStoredUser();
   const canEdit = currentUser?.role === "hr_admin" || currentUser?.role === "system_admin";
 
-  function handleSaved(updated: WorkflowMatrixRow) {
+  function handleSaved(_updated: WorkflowMatrixRow) {
     refetch();
     setEditing(null);
   }

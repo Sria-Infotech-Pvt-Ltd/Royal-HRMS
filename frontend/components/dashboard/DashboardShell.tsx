@@ -111,12 +111,14 @@ export default function DashboardShell({
         <div className="h-[68px] px-3 pr-2 flex items-center gap-2 border-b border-[var(--outline-v)] flex-shrink-0">
           <div className="flex items-center flex-1 min-w-0">
             {collapsed ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src="/logo.png"
                 alt="Royal HRMS"
                 className="sidebar-logo-collapsed"
               />
             ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src="/logo.png"
                 alt="Royal HRMS"

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Candidate,
+  CandidateDocument,
   CandidateLog,
   LogType,
   RECRUITMENT_API,
@@ -11,6 +12,7 @@ import {
   initials,
 } from "../../interview-list/_data";
 import { HRDecisionModal } from "../HRDecisionModal";
+import DocPreviewModal from "@/components/DocPreviewModal";
 
 function Avatar({ name, size = 32 }: { name: string; size?: number }) {
   return (
@@ -35,20 +37,30 @@ interface AccordionItemProps {
 
 function CandidateAccordionItem({ candidate: initial, onDecision }: AccordionItemProps) {
   const [open, setOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<CandidateDocument | null>(null);
   const c = initial;
 
   const filled   = c.details_filled;
   const approved = c.hr_approved;
+  const docs     = c.documents ?? [];
 
   let badge: React.ReactNode;
   if (approved)    badge = <span className="badge badge-success">HR Approved</span>;
   else if (filled) badge = <span className="badge badge-warn">Details Submitted — Review</span>;
   else             badge = <span className="badge badge-neutral">Awaiting Details</span>;
 
-  const mockDocs = ["Aadhaar Card", "PAN Card", "Degree Certificate", "Offer Letter Signed", "Photograph"];
-
   return (
-    <div className="accordion-item mb-12">
+    <>
+      {previewDoc && (
+        <DocPreviewModal
+          name={previewDoc.document_type_display}
+          fileName={previewDoc.file_name}
+          fileUrl={previewDoc.file_url}
+          fileSize={previewDoc.file_size}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
+      <div className="accordion-item mb-12">
       <div className={`accordion-header ${open ? "open" : ""}`} onClick={() => setOpen(o => !o)}>
         <Avatar name={c.name} size={32} />
         <div className="flex-1">
@@ -75,13 +87,23 @@ function CandidateAccordionItem({ candidate: initial, onDecision }: AccordionIte
                 </div>
                 <div>
                   <div className="settings-card-title mb-8">Uploaded Documents</div>
-                  {mockDocs.map(d => (
-                    <div key={d} className="flex items-center gap-2 py-1.5 border-b border-[var(--outline-v)]">
-                      <i className="ti ti-file-check text-[var(--success)]" />
-                      <span className="text-[13px]">{d}</span>
-                      <button className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}><i className="ti ti-eye" /></button>
-                    </div>
-                  ))}
+                  {docs.length === 0 ? (
+                    <p className="text-[13px] text-[var(--on-variant)]">No documents uploaded yet.</p>
+                  ) : (
+                    docs.map(d => (
+                      <div key={d.id} className="flex items-center gap-2 py-1.5 border-b border-[var(--outline-v)]">
+                        <i className="ti ti-file-check text-[var(--success)]" />
+                        <span className="text-[13px]">{d.document_type_display}</span>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ marginLeft: "auto" }}
+                          onClick={() => setPreviewDoc(d)}
+                        >
+                          <i className="ti ti-eye" />
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
               <div className="flex items-end flex-wrap gap-3">
@@ -129,6 +151,7 @@ function CandidateAccordionItem({ candidate: initial, onDecision }: AccordionIte
         </div>
       )}
     </div>
+    </>
   );
 }
 

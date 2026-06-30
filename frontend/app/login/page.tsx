@@ -82,6 +82,7 @@ export default function LoginPage() {
 
             {/* Brand logo */}
             <div className="login-brand-wrap">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.png"
                 alt="Royal HRMS"

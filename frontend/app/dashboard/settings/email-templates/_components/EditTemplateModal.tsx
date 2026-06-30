@@ -869,6 +869,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                     borderRadius: 20, flexShrink: 0, maxWidth: 200,
                   }}>
                     {isImg ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={URL.createObjectURL(file)} alt={file.name}
                         style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                     ) : (

@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import DocPreviewModal from "@/components/DocPreviewModal";
 
 interface ProfileData {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -19,7 +20,7 @@ interface ProfileData {
   emergency_phone?: string; emergency_email?: string;
 }
 
-interface OnboardingDocument { id: number; document_type_display: string; file_name: string; }
+interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url: string; }
 
 interface ApprovalUser {
   id: string; full_name: string; email: string; phone: string;
@@ -57,12 +58,13 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 }
 
 export default function OnboardingQueueTab() {
-  const [page,      setPage]      = useState(1);
-  const [selected,  setSelected]  = useState<ApprovalUser | null>(null);
-  const [remarks,   setRemarks]   = useState("");
-  const [acting,    setActing]    = useState(false);
-  const [actionMsg, setActionMsg] = useState<string | null>(null);
-  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [page,       setPage]       = useState(1);
+  const [selected,   setSelected]   = useState<ApprovalUser | null>(null);
+  const [remarks,    setRemarks]    = useState("");
+  const [acting,     setActing]     = useState(false);
+  const [actionMsg,  setActionMsg]  = useState<string | null>(null);
+  const [actionErr,  setActionErr]  = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   const url = `${API.onboarding.approvals}?page=${page}&page_size=20`;
   const { data, loading, error, refetch } = useFetch<PageData>(url);
@@ -88,6 +90,14 @@ export default function OnboardingQueueTab() {
 
   return (
     <>
+      {previewDoc && (
+        <DocPreviewModal
+          name={previewDoc.document_type_display}
+          fileName={previewDoc.file_name}
+          fileUrl={previewDoc.file_url}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
       {actionMsg && <div className="alert alert-success" style={{ marginBottom: "1rem" }}>{actionMsg}</div>}
       {actionErr && <div className="alert alert-error"  style={{ marginBottom: "1rem" }}>{actionErr}</div>}
 
@@ -209,9 +219,18 @@ export default function OnboardingQueueTab() {
                 {selected.documents.length === 0
                   ? <p style={{ color: "var(--text-muted)", fontSize: ".85rem" }}>No documents uploaded.</p>
                   : selected.documents.map(d => (
-                    <div key={d.id} style={{ display: "flex", justifyContent: "space-between", padding: ".4rem 0", borderBottom: "1px solid var(--border)", fontSize: ".85rem" }}>
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: ".4rem 0", borderBottom: "1px solid var(--border)", fontSize: ".85rem" }}>
                       <span style={{ fontWeight: 500 }}>{d.document_type_display}</span>
-                      <span style={{ color: "var(--text-secondary)" }}>{d.file_name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>{d.file_name}</span>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setPreviewDoc(d)}
+                          title="Preview"
+                        >
+                          <i className="ti ti-eye" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 }

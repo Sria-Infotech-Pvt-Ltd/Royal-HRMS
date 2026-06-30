@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
@@ -139,7 +138,6 @@ function viewKey(id: number) { return `ann_viewed_${id}`; }
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AnnouncementsPage() {
-  const router = useRouter();
 
   // Read localStorage only on the client to avoid SSR/hydration mismatch.
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
@@ -365,7 +363,7 @@ export default function AnnouncementsPage() {
   function toggleExpand(id: number) {
     setExpanded(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }

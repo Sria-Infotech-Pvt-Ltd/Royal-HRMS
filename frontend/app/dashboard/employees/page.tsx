@@ -371,10 +371,6 @@ export default function EmployeesPage() {
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
                             <i className="ti ti-eye text-[14px]" /> View
                           </button>
-                          <button onClick={() => open(e.id)} suppressHydrationWarning
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-[var(--outline-v)] text-[var(--on-variant)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
-                            <i className="ti ti-pencil text-[14px]" />
-                          </button>
                           <button
                             onClick={() => toggleStatus(e)}
                             disabled={toggling === e.id}

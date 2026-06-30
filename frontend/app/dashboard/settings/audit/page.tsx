@@ -125,12 +125,12 @@ export default function AuditLogPage() {
   useEffect(() => {
     setPage(1);
     fetchLogs(1);
-  }, [module, dateFrom, dateTo]);
+  }, [module, dateFrom, dateTo, fetchLogs]);
 
   // Fetch when page changes
   useEffect(() => {
     fetchLogs(page);
-  }, [page]);
+  }, [page, fetchLogs]);
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();

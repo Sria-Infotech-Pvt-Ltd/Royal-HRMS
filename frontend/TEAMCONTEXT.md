@@ -1791,3 +1791,123 @@ The auto-save timer, `isDirty` ref, `useCallback`, and `beforeunload` handler we
 | `frontend/app/dashboard/employees/_data.ts` | Added `dateOfJoining`, `loginEmail`, `mobileNumber` as readonly fields |
 
 ---
+
+## Session 13 — Safura Samreen (30 June 2026)
+
+**Branch:** `frontend/documents-issue`
+
+---
+
+### 1. PDF Preview Fix — Client-side Blob URL Approach
+
+**Problem:** PDFs were failing to open inline. Two separate root causes:
+- Cloudinary (`raw/upload`) serves files without `Content-Type: application/pdf`, so Chrome's PDF viewer shows "Failed to load PDF document".
+- Django API document URLs (e.g. `http://192.168.0.113:8000/api/onboarding/documents/30/`) require auth cookies, which the browser won't send cross-origin.
+- An earlier attempt at a server-side Next.js proxy (`/api/pdf-proxy`) was blocked because `next.config.ts` rewrites ALL `/api/:path*` to Django before the filesystem — the local route was unreachable.
+
+**Fix:** Client-side blob URL pattern (same as existing Documents page):
+1. `fetch(url, { credentials: "include" })` in a `useEffect`
+2. Response as `ArrayBuffer` → stamped as `new Blob([buf], { type: "application/pdf" })` → `URL.createObjectURL()`
+3. `<iframe src={blobUrl}>` renders with correct MIME type regardless of what the server sent
+4. Blob URL cleaned up on unmount via `URL.revokeObjectURL()`
+
+---
+
+### 2. `components/DocPreviewModal.tsx` — New Shared Component
+
+Extracted from `ProfileForm.tsx` into a project-level shared component so all pages reuse the same preview logic.
+
+**Key features:**
+- Handles both images (rendered with `<img>`) and PDFs/other files (blob URL + `<iframe>`)
+- `resolveUrl(fileUrl)` helper normalises Django backend full URLs to relative paths:
+  - `http://192.168.0.113:8000/api/onboarding/documents/30/` → `/api/onboarding/documents/30/`
+  - Next.js rewrites forward `/api/:path*` to Django, so auth cookies are sent from the same origin
+  - Cloudinary or other external URLs (path doesn't start with `/api/`) pass through unchanged
+- `credentials: "include"` on every fetch — no-op for Cloudinary, required for Django API document URLs
+- Loading spinner while fetching, fallback "Open in new tab" button on fetch error
+- Escape key closes modal
+
+---
+
+### 3. Employee List Table — View Only
+
+Removed the pencil-icon Edit button from table rows in `app/dashboard/employees/page.tsx`. Only the View button remains. Editing is done from inside the profile page.
+
+---
+
+### 4. Employee Profile — View/Edit Mode
+
+Profile page now opens in **read-only** mode by default. An **Edit** button appears in the blue ProfileForm header (alongside the existing Import/Export icons).
+
+**Implementation:**
+- `isEditing` state added to `[id]/page.tsx` (default `false`)
+- `ProfileForm` receives `readOnly={!isEditing}` and `onEdit={() => setIsEditing(true)}`
+- On successful save: `setIsEditing(false)`
+- On cancel: reverts values and `setIsEditing(false)`
+- `ProfileForm.tsx` — Edit button shown in header when `readOnly && onEdit`; Cancel/Save footer hidden when `readOnly`
+- `FormField.tsx` — `disabled` prop added; disabled fields get grey background (`#eff2f8`) and `cursor-not-allowed`
+
+---
+
+### 5. Onboarding Documents — Replace Flow (DELETE before re-upload)
+
+`handleUpload` in `app/onboarding/page.tsx` now calls `DELETE /onboarding/documents/<str:doc_id>/` before re-uploading when a document of the same type already exists:
+
+```typescript
+const existing = docs.find(d => d.document_type === docType);
+if (existing) {
+  await clientApi.delete(API.onboarding.documentDetail(existing.id));
+}
+```
+
+`API.onboarding.documentDetail` endpoint added to `lib/api/endpoints.ts`:
+```typescript
+documentDetail: (docId: string) => `/onboarding/documents/${docId}/`
+```
+
+`UploadedDoc.id` changed from `number` to `string` to match Django `<str:doc_id>` URL param.
+
+---
+
+### 6. `CandidateDocument` Interface Fix
+
+`file` field renamed to `file_url` in `app/dashboard/interview-list/_data.ts` to match the actual API response. All consumers updated (`CandidateReviewTab.tsx` passes `fileUrl={previewDoc.file_url}`).
+
+---
+
+### 7. Onboarding Approvals Queue — Document View Button
+
+`OnboardingQueueTab.tsx` review drawer now shows a View (eye) button next to each uploaded document. Clicking opens `DocPreviewModal`.
+
+- `OnboardingDocument` interface updated to include `file_url: string`
+- `DocPreviewModal` imported and rendered conditionally when `previewDoc` is set
+- Eye button on each document row triggers `setPreviewDoc(d)`
+
+---
+
+### Key Files Changed (30 June 2026 — Session 13)
+
+| File | Change |
+|------|--------|
+| `components/DocPreviewModal.tsx` | **NEW** — shared PDF/image preview modal; blob URL fetch; `resolveUrl()` for backend URL normalisation; `credentials: include` |
+| `app/dashboard/employees/page.tsx` | Removed Edit button from table rows — View only |
+| `app/dashboard/employees/[id]/page.tsx` | `isEditing` state; `readOnly` + `onEdit` props passed to `ProfileForm`; `setIsEditing(false)` on save/cancel |
+| `app/dashboard/employees/[id]/_components/ProfileForm.tsx` | `readOnly` + `onEdit` props; Edit button in blue header; Cancel/Save footer hidden in read-only; imported shared `DocPreviewModal` |
+| `app/dashboard/employees/_components/FormField.tsx` | `disabled` prop; grey background + `cursor-not-allowed` when disabled |
+| `lib/api/endpoints.ts` | Added `onboarding.documentDetail(docId)` |
+| `app/onboarding/page.tsx` | DELETE existing doc before re-upload; `UploadedDoc.id` changed to `string`; View button in Documents tab wired to `DocPreviewModal` |
+| `app/dashboard/interview-list/_data.ts` | `CandidateDocument.file` → `file_url` |
+| `app/dashboard/candidate-review/_components/CandidateReviewTab.tsx` | `previewDoc.file` → `previewDoc.file_url` |
+| `app/dashboard/candidate-review/_components/OnboardingQueueTab.tsx` | `OnboardingDocument.file_url` added; `DocPreviewModal` import; eye button per document row |
+
+---
+
+### Notes for Next Developer (Session 13)
+
+- **`resolveUrl()` in `DocPreviewModal`** — strips host from any URL whose path starts with `/api/`. This is required for Django document endpoints which return full `http://host:port/api/...` URLs. Do NOT remove it — without this, auth cookies won't be sent and documents return 401.
+- **Cloudinary files do NOT need `credentials: include`** — `fetch` with credentials is harmless for cross-origin Cloudinary URLs because Cloudinary ignores unknown cookies. The credential header is needed only for Django.
+- **Never send `Authorization` header to Cloudinary** — MinIO / Cloudinary are bucket-level authenticated, not JWT. `DocPreviewModal` does not add an auth header; it only uses cookie credentials. This is correct.
+- **Employee profile is view-only by default** — `isEditing=false` on mount. Only field types `select`, `radio`, `textarea`, `date`, and `text` are affected by `disabled`. Readonly fields (`type: "readonly"`) are always locked regardless.
+- **`UploadedDoc.id` is now `string`** in the onboarding wizard — matches Django `<str:doc_id>` URL param. The backend also returns `id` as a number in JSON; `String(existing.id)` coercion is handled at the call site.
+
+---
