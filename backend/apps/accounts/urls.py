@@ -65,7 +65,8 @@ urlpatterns = [
     # Onboarding (self-service wizard)
     path('onboarding/profile/',                            EmployeeProfileView.as_view(),        name='onboarding-profile'),
     path('onboarding/profile/step/<int:step>/',            OnboardingStepSaveView.as_view(),     name='onboarding-profile-step'),
-    path('onboarding/documents/',                          EmployeeDocumentView.as_view(),       name='onboarding-documents'),
+    path('onboarding/documents/',              EmployeeDocumentView.as_view(), name='onboarding-documents'),
+    path('onboarding/documents/<str:doc_id>/', EmployeeDocumentView.as_view(), name='onboarding-document-detail'),
     path('onboarding/submit/',                             SubmitOnboardingView.as_view(),       name='onboarding-submit'),
     path('onboarding/pipeline/',                           OnboardingPipelineView.as_view(),     name='onboarding-pipeline'),
     path('onboarding/approvals/',                          OnboardingApprovalsListView.as_view(), name='onboarding-approvals'),

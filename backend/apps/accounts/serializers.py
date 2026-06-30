@@ -1074,14 +1074,24 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
 
 class EmployeeDocumentSerializer(serializers.ModelSerializer):
     document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    # file_url points to our backend proxy which signs the Cloudinary request —
+    # the raw Cloudinary URL requires authentication and cannot be opened directly.
+    file_url = serializers.SerializerMethodField()
 
     class Meta:
         model  = EmployeeDocument
         fields = [
             'id', 'document_type', 'document_type_display',
-            'file', 'file_name', 'file_size', 'uploaded_at',
+            'file', 'file_url', 'file_name', 'file_size', 'uploaded_at',
         ]
-        read_only_fields = ('id', 'document_type_display', 'file_name', 'file_size', 'uploaded_at')
+        read_only_fields = ('id', 'document_type_display', 'file_url', 'file_name', 'file_size', 'uploaded_at')
+        extra_kwargs = {'file': {'write_only': True}}
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return None
+        return request.build_absolute_uri(f'/api/onboarding/documents/{obj.pk}/')
 
     def validate_file(self, value):
         import os

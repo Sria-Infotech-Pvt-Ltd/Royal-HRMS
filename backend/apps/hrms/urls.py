@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    ExpenseApprovalView,
+    ExpenseDetailView,
     ExpenseListCreateView,
     ExpenseStatsView,
     LeaveApprovalView,
@@ -15,8 +17,10 @@ from .views import (
 
 urlpatterns = [
     # Expenses
-    path('expenses/',       ExpenseListCreateView.as_view(), name='expense-list-create'),
-    path('expenses/stats/', ExpenseStatsView.as_view(),      name='expense-stats'),
+    path('expenses/',                                ExpenseListCreateView.as_view(), name='expense-list-create'),
+    path('expenses/stats/',                          ExpenseStatsView.as_view(),      name='expense-stats'),
+    path('expenses/<str:expense_id>/',               ExpenseDetailView.as_view(),     name='expense-detail'),
+    path('expenses/<str:expense_id>/approve/',       ExpenseApprovalView.as_view(),   name='expense-approve'),
 
     # Leave — policy
     path('leave/policy/',                LeavePolicyView.as_view(),       name='leave-policy-list'),

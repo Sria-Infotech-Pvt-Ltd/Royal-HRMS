@@ -17,6 +17,7 @@ from .serializers import (
     CandidateDetailSerializer,
     CandidateEmailSerializer,
     CandidateListSerializer,
+    CandidateUpdateSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,11 +104,12 @@ class CandidateListCreateView(APIView):
         page_obj  = paginator.get_page(page_num)
 
         return success('Candidates retrieved.', data={
-            'count':       paginator.count,
-            'page':        page_obj.number,
-            'page_size':   page_size,
-            'total_pages': paginator.num_pages,
-            'results':     CandidateListSerializer(page_obj.object_list, many=True).data,
+            'count':          paginator.count,
+            'page':           page_obj.number,
+            'page_size':      page_size,
+            'total_pages':    paginator.num_pages,
+            'status_choices': CandidateStatusView._STATUS_CHOICES,
+            'results':        CandidateListSerializer(page_obj.object_list, many=True).data,
         })
 
     def post(self, request):
@@ -137,6 +139,65 @@ class CandidateListCreateView(APIView):
         return success('Candidate added to interview list.', data=CandidateListSerializer(candidate).data,
                   http_status=status.HTTP_201_CREATED)
 
+    def put(self, request):
+        return error(
+            f'PUT is not supported on {request.path}. '
+            'Use PUT /candidates/<id>/ to update a specific candidate.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def patch(self, request):
+        return error(
+            f'PATCH is not supported on {request.path}. '
+            'Use PATCH /candidates/<id>/ to partially update a specific candidate.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def delete(self, request):
+        """Bulk delete candidates by ID list. Skips converted / portal-credentials-sent candidates."""
+        if not _has_perm(request.user, 'recruitment.delete'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+
+        ids = request.data.get('ids')
+        if not ids or not isinstance(ids, list):
+            return error('Provide a non-empty list of candidate IDs in "ids".',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+        try:
+            ids = [int(i) for i in ids]
+        except (ValueError, TypeError):
+            return error('All values in "ids" must be integers.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+        if len(ids) > 100:
+            return error('Cannot delete more than 100 candidates at once.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+
+        qs        = Candidate.objects.filter(pk__in=ids)
+        deletable = qs.exclude(status=Candidate.STATUS_CONVERTED).exclude(portal_credentials_sent=True)
+        skipped   = qs.count() - deletable.count()
+
+        if deletable.count() == 0:
+            return error(
+                'No deletable candidates found. Converted candidates and those with '
+                'portal credentials already sent cannot be deleted.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        for candidate in deletable:
+            AuditLog.objects.create(
+                user=request.user, action='candidate_deleted', module='recruitment',
+                object_id=str(candidate.pk),
+                changes={'name': candidate.name},
+                ip_address=get_client_ip(request),
+            )
+        count = deletable.count()
+        deletable.delete()
+
+        msg = f'{count} candidate(s) deleted.'
+        if skipped:
+            msg += f' {skipped} skipped (converted or portal credentials sent).'
+        logger.info('%s by %s', msg, request.user.email)
+        return success(msg)
+
 
 # ─── Candidate Detail ─────────────────────────────────────────────────────────
 
@@ -159,11 +220,133 @@ class CandidateDetailView(APIView):
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Candidate retrieved.', data=CandidateDetailSerializer(candidate).data)
 
+    def put(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        candidate = self._get(pk)
+        if not candidate:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if candidate.status == Candidate.STATUS_CONVERTED:
+            return error('Cannot edit a candidate who has already been converted to an employee.')
+
+        serializer = CandidateUpdateSerializer(candidate, data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors,
+                         http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        try:
+            updated = serializer.save()
+        except Exception as exc:
+            logger.error('CandidateDetailView PUT failed pk=%s: %s', pk, exc, exc_info=True)
+            return error('Failed to update candidate. Please try again.',
+                         http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        AuditLog.objects.create(
+            user=request.user, action='candidate_updated', module='recruitment',
+            object_id=str(updated.pk),
+            changes={k: v for k, v in request.data.items()},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Candidate %s fully updated by %s', pk, request.user.email)
+        return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
+
+    def patch(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        candidate = self._get(pk)
+        if not candidate:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if candidate.status == Candidate.STATUS_CONVERTED:
+            return error('Cannot edit a candidate who has already been converted to an employee.')
+
+        serializer = CandidateUpdateSerializer(candidate, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors,
+                         http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        try:
+            updated = serializer.save()
+        except Exception as exc:
+            logger.error('CandidateDetailView PATCH failed pk=%s: %s', pk, exc, exc_info=True)
+            return error('Failed to update candidate. Please try again.',
+                         http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        AuditLog.objects.create(
+            user=request.user, action='candidate_updated', module='recruitment',
+            object_id=str(updated.pk),
+            changes={k: v for k, v in request.data.items()},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Candidate %s partially updated by %s', pk, request.user.email)
+        return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.delete'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        candidate = self._get(pk)
+        if not candidate:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if candidate.status == Candidate.STATUS_CONVERTED:
+            return error(
+                'Cannot delete a candidate who has been converted to an employee.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        if candidate.portal_credentials_sent:
+            return error(
+                'Cannot delete a candidate whose portal login has already been sent. '
+                'Deactivate their portal account first.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        name = candidate.name
+        try:
+            candidate.delete()
+        except Exception as exc:
+            logger.error('CandidateDetailView DELETE failed pk=%s: %s', pk, exc, exc_info=True)
+            return error('Failed to delete candidate. Please try again.',
+                         http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        AuditLog.objects.create(
+            user=request.user, action='candidate_deleted', module='recruitment',
+            object_id=str(pk),
+            changes={'name': name},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Candidate "%s" (pk=%s) deleted by %s', name, pk, request.user.email)
+        return success(f'Candidate "{name}" deleted successfully.')
+
+    def post(self, request, pk):
+        return self.put(request, pk)
+
+
+# ─── Status choices (no pk needed — same for all candidates) ─────────────────
+
+class CandidateStatusChoicesView(APIView):
+    """GET /api/recruitment/candidates/status-choices/
+    Returns the list of selectable statuses for the frontend dropdown.
+    Call this ONCE on page load — choices never vary per candidate.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'recruitment.view'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        return success(
+            'Status choices retrieved.',
+            data=CandidateStatusView._STATUS_CHOICES,
+        )
+
 
 # ─── Mark Selected / Rejected ─────────────────────────────────────────────────
 
 class CandidateStatusView(APIView):
     permission_classes = [IsAuthenticated]
+
+    # Statuses available in the dropdown — excludes system-managed ones
+    # (OFFER_SENT is set by portal login flow; CONVERTED is set by onboarding approval)
+    _STATUS_CHOICES = [
+        {'value': Candidate.STATUS_PENDING,             'label': 'Pending'},
+        {'value': Candidate.STATUS_SCREENING,           'label': 'Screening'},
+        {'value': Candidate.STATUS_INTERVIEW_SCHEDULED, 'label': 'Interview Scheduled'},
+        {'value': Candidate.STATUS_INTERVIEW_DONE,      'label': 'Interview Done'},
+        {'value': Candidate.STATUS_SELECTED,            'label': 'Selected'},
+        {'value': Candidate.STATUS_REJECTED,            'label': 'Rejected'},
+    ]
+    _VALID_STATUS_VALUES = frozenset(c['value'] for c in _STATUS_CHOICES)
 
     def patch(self, request, pk):
         if not _has_perm(request.user, 'recruitment.edit'):
@@ -175,16 +358,9 @@ class CandidateStatusView(APIView):
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         new_status = request.data.get('status')
-        valid_statuses = {
-            Candidate.STATUS_PENDING,
-            Candidate.STATUS_SCREENING,
-            Candidate.STATUS_INTERVIEW_SCHEDULED,
-            Candidate.STATUS_INTERVIEW_DONE,
-            Candidate.STATUS_SELECTED,
-            Candidate.STATUS_REJECTED,
-        }
-        if new_status not in valid_statuses:
-            return error(f'Invalid status. Choose from: {", ".join(sorted(valid_statuses))}.')
+        if new_status not in self._VALID_STATUS_VALUES:
+            valid_labels = ', '.join(c['label'] for c in self._STATUS_CHOICES)
+            return error(f'Invalid status. Choose from: {valid_labels}.')
 
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error('Cannot change status of a converted candidate.')
@@ -205,17 +381,17 @@ class CandidateStatusView(APIView):
         )
 
         # Send email only for selected or rejected transitions
+        email_sent = False
         if new_status in (Candidate.STATUS_SELECTED, Candidate.STATUS_REJECTED):
             default_slug  = 'selection' if new_status == Candidate.STATUS_SELECTED else 'rejection'
             template_slug = (request.data.get('template_name') or default_slug).strip()
             email_status  = _send_candidate_email(candidate, template_slug, request.user)
+            email_sent    = (email_status == CandidateEmail.STATUS_SENT)
             CandidateLog.objects.create(
                 candidate=candidate,
-                log_type=(CandidateLog.TYPE_SUCCESS
-                          if email_status == CandidateEmail.STATUS_SENT
-                          else CandidateLog.TYPE_WARN),
+                log_type=(CandidateLog.TYPE_SUCCESS if email_sent else CandidateLog.TYPE_WARN),
                 title=('Notification email sent'
-                       if email_status == CandidateEmail.STATUS_SENT
+                       if email_sent
                        else 'Email failed — check SMTP settings'),
                 description=f'Template: {template_slug}',
             )
@@ -227,10 +403,84 @@ class CandidateStatusView(APIView):
             ip_address=get_client_ip(request),
         )
 
+        status_label = new_status.replace('_', ' ').title()
+        if email_sent:
+            msg = f'{candidate.name} marked as {status_label}. Notification email sent.'
+        elif new_status in (Candidate.STATUS_SELECTED, Candidate.STATUS_REJECTED):
+            msg = f'{candidate.name} marked as {status_label}. Email could not be sent — check SMTP settings.'
+        else:
+            msg = f'{candidate.name} marked as {status_label}.'
+
         return success(
-            f'{candidate.name} marked as {new_status}. Email sent.',
+            msg,
             data=CandidateListSerializer(candidate).data,
         )
+
+    def get(self, request, pk):
+        """Return current status + dropdown choices for the frontend select element."""
+        if not _has_perm(request.user, 'recruitment.view'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            candidate = Candidate.objects.prefetch_related('logs').get(pk=pk)
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # Status change history from logs, newest first
+        history = [
+            {
+                'title':      log.title,
+                'log_type':   log.log_type,
+                'description': log.description,
+                'created_at': log.created_at,
+            }
+            for log in candidate.logs.filter(title__icontains='status').order_by('-created_at')[:10]
+        ]
+
+        return success('Status retrieved.', data={
+            'id':             candidate.pk,
+            'name':           candidate.name,
+            'current_status': candidate.status,
+            'updated_at':     candidate.updated_at,
+            'choices':        self._STATUS_CHOICES,   # ready-made for <select> / dropdown
+            'history':        history,
+        })
+
+    def post(self, request, pk):
+        return self.patch(request, pk)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        """Reset candidate status back to Pending."""
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            candidate = Candidate.objects.get(pk=pk)
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if candidate.status == Candidate.STATUS_CONVERTED:
+            return error('Cannot reset status of a converted candidate.')
+        if candidate.status == Candidate.STATUS_PENDING:
+            return success('Status is already Pending.', data=CandidateListSerializer(candidate).data)
+        old_status = candidate.status
+        candidate.status = Candidate.STATUS_PENDING
+        candidate.save(update_fields=['status', 'updated_at'])
+        CandidateLog.objects.create(
+            candidate=candidate,
+            log_type=CandidateLog.TYPE_INFO,
+            title='Status reset to Pending',
+            description=f'Reset from {old_status.replace("_", " ").title()} '
+                        f'by {request.user.full_name or request.user.email}',
+        )
+        AuditLog.objects.create(
+            user=request.user, action='candidate_status_reset', module='recruitment',
+            object_id=str(candidate.pk),
+            changes={'from': old_status, 'to': Candidate.STATUS_PENDING},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'{candidate.name} status reset to Pending.',
+                       data=CandidateListSerializer(candidate).data)
 
 
 # ─── HR Decision (Candidate Review) ──────────────────────────────────────────
@@ -304,6 +554,55 @@ class CandidateHRDecisionView(APIView):
 
         return success(msg, data=CandidateDetailSerializer(candidate).data)
 
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.view'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            candidate = Candidate.objects.get(pk=pk)
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return success('HR decision status retrieved.', data={
+            'id':          candidate.pk,
+            'name':        candidate.name,
+            'status':      candidate.status,
+            'hr_approved': candidate.hr_approved,
+            'updated_at':  candidate.updated_at,
+        })
+
+    def post(self, request, pk):
+        return self.patch(request, pk)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+    def delete(self, request, pk):
+        """Reset HR approval — sets hr_approved back to False."""
+        if not _has_perm(request.user, 'recruitment.approve'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            candidate = Candidate.objects.get(pk=pk)
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not candidate.hr_approved:
+            return success('HR decision has not been set — nothing to reset.',
+                           data={'hr_approved': False})
+        candidate.hr_approved = False
+        candidate.save(update_fields=['hr_approved', 'updated_at'])
+        CandidateLog.objects.create(
+            candidate=candidate,
+            log_type=CandidateLog.TYPE_WARN,
+            title='HR approval reset',
+            description=f'Reset by {request.user.full_name or request.user.email}',
+        )
+        AuditLog.objects.create(
+            user=request.user, action='candidate_hr_decision_reset', module='recruitment',
+            object_id=str(candidate.pk),
+            changes={'hr_approved': False},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('HR approval reset for candidate %s by %s', pk, request.user.email)
+        return success('HR approval reset.', data=CandidateDetailSerializer(candidate).data)
+
 
 # ─── Candidate Review list (selected only, with logs) ─────────────────────────
 
@@ -336,6 +635,26 @@ class CandidateReviewListView(APIView):
             'total_pages': paginator.num_pages,
             'results':     CandidateDetailSerializer(page_obj.object_list, many=True).data,
         })
+
+    def post(self, request):
+        return self.get(request)
+
+    def put(self, request):
+        return error(
+            f'PUT is not supported on {request.path}. '
+            'Use PATCH /candidates/<id>/hr-decision/ to submit an HR decision.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def patch(self, request):
+        return self.put(request)
+
+    def delete(self, request):
+        return error(
+            f'DELETE is not supported on {request.path}. '
+            'Use DELETE /candidates/<id>/hr-decision/ to reset a specific candidate\'s HR decision.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
 
 # ─── Email Logs ────────────────────────────────────────────────────────────────
@@ -373,6 +692,24 @@ class CandidateEmailLogView(APIView):
             'results':     CandidateEmailSerializer(page_obj.object_list, many=True).data,
         })
 
+    def post(self, request):
+        return self.get(request)
+
+    def put(self, request):
+        return error(
+            f'PUT is not supported on {request.path}. Email logs are read-only records.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def patch(self, request):
+        return self.put(request)
+
+    def delete(self, request):
+        return error(
+            f'DELETE is not supported on {request.path}. Email logs are permanent audit records.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
 
 # ─── Stats ─────────────────────────────────────────────────────────────────────
 
@@ -396,6 +733,77 @@ class CandidateStatsView(APIView):
             'selected': selected, 'rejected': rejected,
             'pending_review': pending_review,
         })
+
+    def post(self, request):
+        return self.get(request)
+
+    def put(self, request):
+        return error(
+            f'PUT is not supported on {request.path}. Stats are computed — no data to update.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def patch(self, request):
+        return self.put(request)
+
+    def delete(self, request):
+        return error(
+            f'DELETE is not supported on {request.path}. Stats are computed — no data to delete.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+
+# ─── Portal helpers ────────────────────────────────────────────────────────────
+
+def _portal_login_status(candidate):
+    return {
+        'id':                      candidate.pk,
+        'name':                    candidate.name,
+        'email':                   candidate.email,
+        'portal_credentials_sent': candidate.portal_credentials_sent,
+        'has_portal_account':      candidate.portal_user_id is not None,
+        'candidate_status':        candidate.status,
+    }
+
+
+def _revoke_portal_access(request, pk):
+    """Deactivate portal user account and clear credentials flag on candidate."""
+    if not _has_perm(request.user, 'recruitment.edit'):
+        return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+    try:
+        with transaction.atomic():
+            candidate = Candidate.objects.select_for_update().get(pk=pk)
+            if not candidate.portal_credentials_sent or not candidate.portal_user_id:
+                return error(
+                    'No active portal account found for this candidate.',
+                    http_status=status.HTTP_400_BAD_REQUEST,
+                )
+            portal_user = candidate.portal_user
+            if portal_user:
+                portal_user.is_active = False
+                portal_user.save(update_fields=['is_active', 'updated_at'])
+            candidate.portal_credentials_sent = False
+            candidate.save(update_fields=['portal_credentials_sent', 'updated_at'])
+            CandidateLog.objects.create(
+                candidate=candidate,
+                log_type=CandidateLog.TYPE_WARN,
+                title='Portal access revoked',
+                description=f'Revoked by {request.user.full_name or request.user.email}',
+            )
+            AuditLog.objects.create(
+                user=request.user, action='portal_access_revoked', module='recruitment',
+                object_id=str(candidate.pk),
+                changes={'email': candidate.email},
+                ip_address=get_client_ip(request),
+            )
+    except Candidate.DoesNotExist:
+        return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        logger.error('_revoke_portal_access failed pk=%s: %s', pk, exc, exc_info=True)
+        return error('Failed to revoke portal access. Please try again.',
+                     http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    logger.info('Portal access revoked for candidate %s by %s', pk, request.user.email)
+    return success('Portal access revoked successfully.')
 
 
 # ─── Send Portal Login (candidate onboarding invite) ──────────────────────────
@@ -510,6 +918,24 @@ class SendPortalLoginView(APIView):
         )
         return success('Portal login sent successfully.', data={'email': candidate.email})
 
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.view'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            candidate = Candidate.objects.get(pk=pk)
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return success('Portal login status retrieved.', data=_portal_login_status(candidate))
+
+    def put(self, request, pk):
+        return self.post(request, pk)
+
+    def patch(self, request, pk):
+        return self.post(request, pk)
+
+    def delete(self, request, pk):
+        return _revoke_portal_access(request, pk)
+
 
 # ─── Resend Portal Login ───────────────────────────────────────────────────────
 
@@ -602,4 +1028,22 @@ class ResendPortalLoginView(APIView):
             ip_address=get_client_ip(request),
         )
         return success('Portal credentials resent successfully.', data={'email': candidate.email})
+
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.view'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            candidate = Candidate.objects.get(pk=pk)
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return success('Portal login status retrieved.', data=_portal_login_status(candidate))
+
+    def put(self, request, pk):
+        return self.post(request, pk)
+
+    def patch(self, request, pk):
+        return self.post(request, pk)
+
+    def delete(self, request, pk):
+        return _revoke_portal_access(request, pk)
 

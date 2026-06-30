@@ -262,6 +262,38 @@ class AnnouncementDetailView(APIView):
         return success('Announcement updated.', out.data)
 
     @transaction.atomic
+    def patch(self, request, pk: int):
+        ann        = self._get_object(request, pk)
+        serializer = AnnouncementWriteSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        data = serializer.validated_data
+        for field in ('title', 'body', 'category', 'visibility', 'is_pinned', 'send_email'):
+            if field in data:
+                setattr(ann, field, data[field])
+        if 'target_department' in data:
+            ann.target_department = data.get('target_department')
+        if 'target_branch' in data:
+            ann.target_branch = data.get('target_branch')
+        ann.save()
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'announcement_updated',
+            module     = 'announcements',
+            object_id  = str(ann.pk),
+            changes    = {k: str(v) for k, v in data.items()},
+            ip_address = get_client_ip(request),
+        )
+
+        out = AnnouncementSerializer(ann, context={'request': request})
+        return success('Announcement updated.', out.data)
+
+    def post(self, request, pk: int):
+        return self.put(request, pk)
+
+    @transaction.atomic
     def delete(self, request, pk: int):
         ann = self._get_object(request, pk)
         ann_title = ann.title

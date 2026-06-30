@@ -225,6 +225,9 @@ class BranchDetailView(APIView):
         logger.info('Branch "%s" patched by %s', updated.branch_code, request.user.email)
         return success('Branch updated successfully.', data=BranchSerializer(updated).data)
 
+    def post(self, request, pk):
+        return self.put(request, pk)
+
     def delete(self, request, pk):
         if not _has_perm(request.user, 'branches.delete'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
