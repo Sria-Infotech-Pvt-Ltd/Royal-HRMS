@@ -127,6 +127,12 @@ class LeavePolicyView(APIView):
         serializer.save()
         return success('Policy updated.', LeavePolicySerializer(policy).data)
 
+    def patch(self, request, leave_type: str):
+        return self.put(request, leave_type)
+
+    def post(self, request, leave_type: str):
+        return self.put(request, leave_type)
+
 
 # ─── Leave Balance ─────────────────────────────────────────────────────────────
 
@@ -182,22 +188,62 @@ class LeaveBalanceView(APIView):
 class LeaveBalanceAdjustView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def _get_balance(self, balance_id: str):
+        try:
+            return LeaveBalance.objects.select_related('employee').get(id=balance_id), None
+        except LeaveBalance.DoesNotExist:
+            return None, error('Balance record not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+    def get(self, request, balance_id: str):
+        if not _has_perm(request.user, 'leave.approve'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        balance, err = self._get_balance(balance_id)
+        if err:
+            return err
+        return success('Balance retrieved.', LeaveBalanceSerializer(balance).data)
+
     def patch(self, request, balance_id: str):
         if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
-        try:
-            balance = LeaveBalance.objects.select_related('employee').get(id=balance_id)
-        except LeaveBalance.DoesNotExist:
-            return error('Balance record not found.', http_status=status.HTTP_404_NOT_FOUND)
+        balance, err = self._get_balance(balance_id)
+        if err:
+            return err
 
         total = request.data.get('total_days')
         used  = request.data.get('used_days')
+        if total is None and used is None:
+            return error('Provide at least one of total_days or used_days to adjust.')
         if total is not None:
+            try:
+                total = float(total)
+                if total < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return error('total_days must be a non-negative number.')
             balance.total_days = total
         if used is not None:
+            try:
+                used = float(used)
+                if used < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return error('used_days must be a non-negative number.')
             balance.used_days = used
         balance.save(update_fields=['total_days', 'used_days', 'updated_at'])
+        logger.info('Leave balance %s adjusted by %s', balance_id, request.user.email)
         return success('Balance adjusted.', LeaveBalanceSerializer(balance).data)
+
+    def put(self, request, balance_id: str):
+        return self.patch(request, balance_id)
+
+    def post(self, request, balance_id: str):
+        return self.patch(request, balance_id)
+
+    def delete(self, request, balance_id: str):
+        return error(
+            'Leave balance records cannot be deleted. Adjust total_days or used_days instead.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
 
 # ─── Leave Requests ────────────────────────────────────────────────────────────
@@ -326,9 +372,44 @@ class LeaveRequestDetailView(APIView):
         logger.info('Leave request %s cancelled by %s', leave_request.id, request.user.email)
         return success('Leave request cancelled.', LeaveRequestSerializer(leave_request, context={'request': request}).data)
 
+    def put(self, request, request_id: str):
+        return self.patch(request, request_id)
+
+    def post(self, request, request_id: str):
+        return self.patch(request, request_id)
+
+    def delete(self, request, request_id: str):
+        if not _has_perm(request.user, 'leave.approve'):
+            return error('Only HR can delete leave requests.', http_status=status.HTTP_403_FORBIDDEN)
+        leave_request, err = self._get_request(request_id, request.user)
+        if err:
+            return err
+        if leave_request.status == REQ_APPROVED:
+            return error(
+                'Approved leave requests cannot be deleted.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        leave_request.delete()
+        logger.info('Leave request %s deleted by %s', request_id, request.user.email)
+        return success('Leave request deleted.')
+
 
 class LeaveApprovalView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, request_id: str):
+        if not _has_perm(request.user, 'leave.approve'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            leave_request = LeaveRequest.objects.select_related(
+                'employee', 'l1_approver', 'l2_approver'
+            ).get(id=request_id)
+        except LeaveRequest.DoesNotExist:
+            return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return success(
+            'Leave request retrieved.',
+            LeaveRequestSerializer(leave_request, context={'request': request}).data,
+        )
 
     def post(self, request, request_id: str):
         if not _has_perm(request.user, 'leave.approve'):

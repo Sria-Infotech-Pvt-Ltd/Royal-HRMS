@@ -713,6 +713,89 @@ Leave management module completed — Leave Dashboard, Apply Leave workflow, App
 
 ---
 
+### 2026-06-30 — G. Durga Prasad (CRUD Completeness · Onboarding Fixes · Cloudinary PDF Proxy)
+
+**Branch:** `Employee_Onboarding`
+
+#### 1. CRUD Completeness — All Views
+
+Added missing HTTP methods to every view across all apps so no endpoint silently returns 405.
+
+**`announcements/views.py` — `AnnouncementDetailView`**
+- Added `PATCH` (partial update, field-by-field save with AuditLog)
+- Added `POST` (alias to `PUT`)
+
+**`branch/views.py` — `BranchDetailView`**
+- Added `POST` (alias to `PUT`)
+
+**`hrms/views/leave.py`**
+
+| View | Added |
+|---|---|
+| `LeavePolicyView` | `PATCH`, `POST` (both alias `PUT`) |
+| `LeaveBalanceAdjustView` | `GET` (retrieve record), `PUT`/`POST` (alias `PATCH`), `DELETE` (405 — adjustments are permanent) |
+| `LeaveRequestDetailView` | `PUT`/`POST` (alias `PATCH` cancel), `DELETE` (HR-only, blocks approved) |
+| `LeaveApprovalView` | `GET` (returns request + approval status, HR only) |
+
+**`hrms/views/expenses.py`** — two new classes:
+- `ExpenseDetailView` (`GET`, `PUT`, `PATCH`, `POST`, `DELETE`) — edit/delete only if pending, only by submitter
+- `ExpenseApprovalView` (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`) — approve/reject for HR; GET returns expense + status choices
+
+**`hrms/urls.py`** — two new endpoints:
+- `expenses/<str:expense_id>/` → `ExpenseDetailView`
+- `expenses/<str:expense_id>/approve/` → `ExpenseApprovalView`
+
+**`accounts/views.py`** — `POST` alias added to 8 detail views in previous sessions (RoleDetailView, PermissionDetailView, DepartmentDetailView, DesignationDetailView, SMTPSettingsDetailView, EmailTemplateCategoryDetailView, DocumentDetailView, EmployeeDetailView)
+
+**`recruitment/views.py`** — all views already had full CRUD from earlier session; added `CandidateStatusChoicesView` URL registration in `urls.py`
+
+#### 2. Onboarding Step Fixes
+
+**Cross-step empty field bug:** When user cleared optional fields (e.g. `institution: ""`), the old DB value was silently preserved instead of being cleared.
+
+- **Root cause:** `filled_data` building skipped required-field empty values with `continue`, then the required-field validation fell back to the saved DB value — so validation passed and the field was never updated.
+- **Fix 1:** `_STEP_REQUIRED_FIELDS[1]` — `year_of_passing` removed from required (was silently preserved when cleared). `highest_qualification` and `institution` remain required.
+- **Fix 2:** Required-field validation now checks `request.data` directly when field is explicitly sent — if a required field is submitted as empty the user gets 422, not silent preservation of the old value.
+
+**Step 4 GET returned empty data:** `GET /api/onboarding/profile/step/4/` was returning `data: {}` with a hint to call a separate endpoint. Frontend saw no documents.
+- **Fix:** Step 4 GET now queries `EmployeeDocument` directly and returns the serialized list — no second request needed.
+
+#### 3. Employee Document PDF 401 Fix (Cloudinary Signed Proxy)
+
+**Root cause:** `DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'` — all employee documents are stored on Cloudinary. Direct `raw/upload/` URLs require authentication; the browser received 401 when trying to open them.
+
+**Fix:**
+- `EmployeeDocumentSerializer` — `file` field made `write_only` (used only for upload). New `file_url` `SerializerMethodField` returns a backend proxy URL (`/api/onboarding/documents/<pk>/`) instead of the raw Cloudinary URL.
+- `EmployeeDocumentView.get(doc_id)` — signs the Cloudinary URL server-side via `cloudinary.utils.private_download_url()` and streams the file to the browser (same pattern as `DocumentDetailView`). Forces `Content-Type: application/pdf` for PDF files so the browser renders inline.
+- All `EmployeeDocumentSerializer` calls now pass `context={'request': request}` so `file_url` contains an absolute URL.
+- `DELETE /api/onboarding/documents/<doc_id>/` added for document removal (blocked once onboarding is complete).
+- Two `path()` entries in `urls.py` both point to `EmployeeDocumentView` (no separate detail class).
+
+#### 4. Files Changed
+
+```
+backend/
+  apps/accounts/
+    views.py        — step 4 GET returns docs, EmployeeDocumentView merged (list+stream+delete),
+                      required-field validation fix, POST aliases on all detail views
+    serializers.py  — EmployeeDocumentSerializer: file write_only, file_url proxy field
+    urls.py         — onboarding/documents/<doc_id>/ added
+  apps/announcements/
+    views.py        — AnnouncementDetailView: PATCH + POST added
+  apps/branch/
+    views.py        — BranchDetailView: POST added
+  apps/hrms/
+    views/leave.py  — LeavePolicyView, LeaveBalanceAdjustView, LeaveRequestDetailView,
+                      LeaveApprovalView — missing methods added
+    views/expenses.py — ExpenseDetailView + ExpenseApprovalView added
+    views/__init__.py — ExpenseDetailView + ExpenseApprovalView exported
+    urls.py         — expense detail + approval URLs added
+  apps/recruitment/
+    urls.py         — CandidateStatusChoicesView registered at candidates/status-choices/
+```
+
+---
+
 ### 2026-06-30 — Safura Samreen (Employee Profile API Wiring)
 
 **Branch:** `demo`

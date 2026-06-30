@@ -658,6 +658,9 @@ class RoleDetailView(APIView):
         logger.info('Role "%s" deleted by %s', role_name, request.user.email)
         return success(f'Role "{role_name}" deleted successfully.')
 
+    def post(self, request, pk):
+        return self.put(request, pk)
+
 
 # ─── Permission CRUD ──────────────────────────────────────────────────────────
 
@@ -740,6 +743,32 @@ class PermissionDetailView(APIView):
         logger.info('Permission "%s" updated by %s', updated.codename, request.user.email)
         return success('Permission updated successfully.', data=PermissionSerializer(updated).data)
 
+    def patch(self, request, pk):
+        perm = self._get_permission(pk)
+        if not perm:
+            return error('Permission not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PermissionSerializer(perm, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        try:
+            updated = serializer.save()
+        except IntegrityError:
+            return error(
+                f"Permission '{serializer.validated_data.get('codename', perm.codename)}' already exists.",
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        AuditLog.objects.create(
+            user=request.user, action='permission_updated', module='accounts',
+            object_id=str(updated.id),
+            changes={'codename': updated.codename},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Permission "%s" partially updated by %s', updated.codename, request.user.email)
+        return success('Permission updated successfully.', data=PermissionSerializer(updated).data)
+
     def delete(self, request, pk):
         perm = self._get_permission(pk)
         if not perm:
@@ -762,6 +791,9 @@ class PermissionDetailView(APIView):
         )
         logger.info('Permission "%s" deleted by %s', codename, request.user.email)
         return success(f'Permission "{codename}" deleted successfully.')
+
+    def post(self, request, pk):
+        return self.put(request, pk)
 
 
 # ─── Organisation Structure ────────────────────────────────────────────────────
@@ -919,6 +951,9 @@ class DepartmentDetailView(APIView):
         logger.info('Department "%s" deleted by %s', name, request.user.email)
         return success(f'Department "{name}" deleted successfully.')
 
+    def post(self, request, pk: int):
+        return self.put(request, pk)
+
 
 class DesignationListCreateView(APIView):
     permission_classes = [IsAuthenticated, CanManageRoles]
@@ -1053,6 +1088,9 @@ class DesignationDetailView(APIView):
         )
         return success(f'Designation "{name}" deleted successfully.')
 
+    def post(self, request, pk: int):
+        return self.put(request, pk)
+
 
 # ─── SMTP Settings ─────────────────────────────────────────────────────────────
 
@@ -1180,6 +1218,9 @@ class SMTPSettingsDetailView(APIView):
             msg += ' No SMTP config is currently active — outgoing emails will fail until another config is activated.'
         return success(msg)
 
+    def post(self, request, pk: int):
+        return self.put(request, pk)
+
 
 class SMTPActivateView(APIView):
     """POST /api/settings/smtp/<pk>/activate/  — make one config the active sender"""
@@ -1286,6 +1327,19 @@ class EmailTemplateCategoryDetailView(APIView):
             return error('Category not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Category retrieved successfully.', data=EmailTemplateCategorySerializer(cat).data)
 
+    def put(self, request, pk):
+        cat = self._get_category(pk)
+        if not cat:
+            return error('Category not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if cat.is_builtin:
+            return error('Built-in categories cannot be modified.', http_status=status.HTTP_403_FORBIDDEN)
+        serializer = EmailTemplateCategorySerializer(cat, data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        updated = serializer.save()
+        logger.info('Email template category "%s" fully updated by %s', updated.name, request.user.email)
+        return success('Category updated successfully.', data=EmailTemplateCategorySerializer(updated).data)
+
     def patch(self, request, pk):
         cat = self._get_category(pk)
         if not cat:
@@ -1312,6 +1366,9 @@ class EmailTemplateCategoryDetailView(APIView):
         cat.delete()
         logger.info('Email template category "%s" deleted by %s', cat.name, request.user.email)
         return success(f'Category "{cat.display_name}" deleted successfully.')
+
+    def post(self, request, pk):
+        return self.put(request, pk)
 
 
 class EmailTemplateListCreateView(APIView):
@@ -1835,6 +1892,49 @@ class DocumentDetailView(APIView):
             data=DocumentSerializer(doc, context={'request': request}).data,
         )
 
+    def put(self, request, pk: int):
+        if not _can_manage_docs(request.user):
+            return error('You do not have permission to update documents.', http_status=status.HTTP_403_FORBIDDEN)
+        doc = self._get_doc(pk)
+        if not doc:
+            return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = DocumentSerializer(doc, data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        new_file = serializer.validated_data.get('file')
+        old_file = doc.file if new_file else None
+        file_meta = {}
+        if new_file:
+            file_meta = {
+                'file_name': new_file.name,
+                'file_type': Document.MIME_TO_TYPE.get(new_file.content_type, 'FILE'),
+                'file_size': new_file.size,
+            }
+        try:
+            updated = serializer.save(**file_meta)
+        except Exception as exc:
+            logger.error('Document full update failed pk=%s: %s', pk, exc, exc_info=True)
+            return error('Failed to update document. Please try again.')
+        if old_file:
+            try:
+                old_file.delete(save=False)
+            except Exception:
+                logger.warning('Failed to delete old file from storage for document id=%s', updated.id)
+        try:
+            AuditLog.objects.create(
+                user=request.user, action='document_updated', module='documents',
+                object_id=str(updated.id),
+                changes={k: v for k, v in request.data.items() if not hasattr(v, 'read')},
+                ip_address=get_client_ip(request),
+            )
+        except Exception:
+            logger.warning('AuditLog write failed for document_updated id=%s', updated.id)
+        logger.info('Document "%s" fully updated by %s', updated.title, request.user.email)
+        return success(
+            'Document updated successfully.',
+            data=DocumentSerializer(updated, context={'request': request}).data,
+        )
+
     def patch(self, request, pk: int):
         if not _can_manage_docs(request.user):
             return error('You do not have permission to update documents.', http_status=status.HTTP_403_FORBIDDEN)
@@ -1906,6 +2006,9 @@ class DocumentDetailView(APIView):
             logger.warning('AuditLog write failed for document_deleted id=%s', doc.id)
         logger.info('Document "%s" soft-deleted by %s', title, request.user.email)
         return success(f'Document "{title}" deleted successfully.')
+
+    def post(self, request, pk: int):
+        return self.put(request, pk)
 
 
 class DocumentStatsView(APIView):
@@ -2204,6 +2307,8 @@ def _get_employee(identifier: str):
 
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
+    
+    
 
     def get(self, request, employee_id: str):
         if not _has_perm(request.user, 'employees.view'):
@@ -2341,6 +2446,42 @@ class EmployeeDetailView(APIView):
         verb = 'activated' if new_status else 'deactivated'
         return success(f'Employee {verb} successfully.', data=_employee_dict(employee))
 
+    def delete(self, request, employee_id: str):
+        if not _has_perm(request.user, 'employees.delete'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None:
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if employee.id == request.user.id:
+            return error('You cannot delete your own account.')
+
+        role_name = employee.role.name if employee.role else ''
+        if role_name == 'system_admin':
+            active_admins = User.objects.filter(role__name='system_admin', is_active=True).count()
+            if active_admins <= 1:
+                return error('Cannot delete the only active system administrator.')
+
+        full_name    = employee.full_name
+        emp_id_str   = employee.employee_id
+
+        employee.is_active = False
+        employee.save(update_fields=['is_active', 'updated_at'])
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'employee_deleted',
+            module     = 'employees',
+            object_id  = str(employee.id),
+            changes    = {'employee_id': emp_id_str, 'full_name': full_name},
+            ip_address = get_client_ip(request),
+        )
+        logger.info('Employee "%s" deactivated (deleted) by %s', full_name, request.user.email)
+        return success(f'Employee "{full_name}" deleted successfully.')
+
+    def post(self, request, employee_id: str):
+        return self.put(request, employee_id)
+
 
 class AuditLogListView(APIView):
     permission_classes = [IsAuthenticated, CanManageRoles]
@@ -2439,7 +2580,6 @@ _STEP_REQUIRED_FIELDS = {
     1: {
         'highest_qualification': 'Highest Qualification',
         'institution':           'Institution / University',
-        'year_of_passing':       'Year of Passing',
     },
     # Step 2 — Bank Details
     2: {
@@ -2480,6 +2620,16 @@ _STEP_ALL_FIELDS: dict = {
     }),
     4: frozenset(),
 }
+
+# Profile fields that are nullable in the DB (null=True).
+# Empty string from the frontend is converted to None for these fields so they
+# can be cleared properly. All other profile fields are CharField(blank=True)
+# which stores '' — never None.
+_NULLABLE_PROFILE_FIELDS = frozenset({
+    'date_of_birth',
+    'year_of_passing',
+    'total_experience_years',
+})
 
 
 class EmployeeProfileView(APIView):
@@ -2541,26 +2691,45 @@ class EmployeeProfileView(APIView):
 
 
 def _save_profile_step(request, step: int):
-    """
-    Shared logic for step-specific saves.
-    Enforces required fields for the given step, then saves filled fields only.
-    Returns a DRF Response built by success() / error().
-    """
     from apps.accounts.models import EmployeeProfile as EP
     from apps.accounts.serializers import EmployeeProfileSerializer
 
+    # ── Status guard ───────────────────────────────────────────────────────────
     if request.user.onboarding_status == User.ONBOARDING_COMPLETE:
-        return error('Onboarding is already complete.')
+        return error(
+            'Onboarding is already complete and cannot be modified.',
+            http_status=status.HTTP_403_FORBIDDEN,
+        )
 
+    # ── Step range validation ──────────────────────────────────────────────────
     if step not in _STEP_REQUIRED_FIELDS:
-        return error(f'Invalid step {step}. Must be 0 to 4.')
+        return error(
+            f'Invalid step {step}. Valid steps are 0 to 4.',
+            http_status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Step 4 — document upload step: verify required documents, nothing to save in profile
+    # ── Request body must be a key-value mapping ───────────────────────────────
+    if not hasattr(request.data, 'items'):
+        return error(
+            'Request body must be a JSON object.',
+            http_status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # ── Step 4 — document verification only (no profile fields to write) ───────
     if step == 4:
         from apps.accounts.models import EmployeeDocument as ED
-        uploaded = set(
-            ED.objects.filter(user=request.user).values_list('document_type', flat=True)
-        )
+        try:
+            uploaded = set(
+                ED.objects.filter(user=request.user).values_list('document_type', flat=True)
+            )
+        except Exception as exc:
+            logger.error('_save_profile_step step=4 document query failed user=%s: %s',
+                         request.user.pk, exc, exc_info=True)
+            return error(
+                'Unable to verify documents. Please try again.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         missing_docs = []
         if ED.TYPE_PAN not in uploaded:
             missing_docs.append('PAN Card')
@@ -2569,8 +2738,17 @@ def _save_profile_step(request, step: int):
         if ED.TYPE_DEGREE not in uploaded:
             missing_docs.append('Degree Certificate')
 
-        # Experience letter is required only when previous_employer is filled
-        profile, _ = EP.objects.get_or_create(user=request.user)
+        # Experience letter required only when previous employer is on record
+        try:
+            profile, _ = EP.objects.get_or_create(user=request.user)
+        except Exception as exc:
+            logger.error('_save_profile_step step=4 profile fetch failed user=%s: %s',
+                         request.user.pk, exc, exc_info=True)
+            return error(
+                'Unable to retrieve profile. Please try again.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         has_experience = (
             bool((profile.previous_employer or '').strip())
             or (profile.total_experience_years is not None and profile.total_experience_years > 0)
@@ -2580,75 +2758,315 @@ def _save_profile_step(request, step: int):
 
         if missing_docs:
             return error(
-                f'Please upload the following required documents: {", ".join(missing_docs)}.'
+                f'Please upload the following required documents: {", ".join(missing_docs)}.',
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
         return success('Documents verified. You can proceed to submit.')
 
-    profile, _ = EP.objects.get_or_create(user=request.user)
+    # ── Steps 0-3 — profile field save ────────────────────────────────────────
+    try:
+        profile, _ = EP.objects.get_or_create(user=request.user)
+    except Exception as exc:
+        logger.error('_save_profile_step profile fetch failed user=%s step=%d: %s',
+                     request.user.pk, step, exc, exc_info=True)
+        return error(
+            'Unable to retrieve profile. Please try again.',
+            http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
-    # Only accept fields that belong to this step — prevents cross-step writes when
-    # the frontend sends the full form payload on every "Save & Continue" call.
-    step_fields = _STEP_ALL_FIELDS.get(step, frozenset())
-    filled_data = {
-        k: v for k, v in request.data.items()
-        if v not in ('', None) and k in step_fields
-    }
+    step_fields   = _STEP_ALL_FIELDS.get(step, frozenset())
+    required_keys = frozenset(_STEP_REQUIRED_FIELDS[step].keys())
 
-    # Always enforce required fields on step-specific saves — check incoming data
-    # first, fall back to whatever is already saved on the profile.
+    filled_data: dict = {}
+    for k, v in request.data.items():
+        if k not in step_fields:
+            continue
+        if v in ('', None):
+            if k in required_keys:
+                continue  # let required-field validation catch the missing value
+            filled_data[k] = None if k in _NULLABLE_PROFILE_FIELDS else ''
+        else:
+            filled_data[k] = v
+
+   
     required = _STEP_REQUIRED_FIELDS[step]
-    missing = []
+    missing  = []
     for field, label in required.items():
-        incoming = filled_data.get(field)
-        saved    = getattr(profile, field, None)
-        value    = incoming if incoming not in (None, '') else saved
+        if field in request.data:
+            value = request.data.get(field)
+        else:
+            value = filled_data.get(field) or getattr(profile, field, None)
         if not value or (isinstance(value, str) and not value.strip()):
             missing.append(label)
     if missing:
         return error(
-            f'Please fill in the following required fields: {", ".join(missing)}.'
+            f'Please fill in the following required fields: {", ".join(missing)}.',
+            http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
 
+    # Step-scoped "nothing to save" — only triggers when the request had no step
+    # fields at all or all were required fields with empty values.
     if not filled_data:
-        return success('Nothing to save.', data=EmployeeProfileSerializer(profile).data)
+        all_data  = EmployeeProfileSerializer(profile).data
+        step_data = {k: v for k, v in all_data.items() if k in step_fields}
+        return success('Nothing to save.', data=step_data)
 
     serializer = EmployeeProfileSerializer(profile, data=filled_data, partial=True)
     if not serializer.is_valid():
-        return error(first_error(serializer.errors), data=serializer.errors)
-    serializer.save()
+        return error(
+            first_error(serializer.errors),
+            data=serializer.errors,
+            http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
 
-    # Move status to 'draft' (in-progress) on first step save
+    try:
+        serializer.save()
+    except Exception as exc:
+        logger.error('_save_profile_step serializer.save failed user=%s step=%d: %s',
+                     request.user.pk, step, exc, exc_info=True)
+        return error(
+            'Failed to save profile data. Please try again.',
+            http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # Move status to 'draft' (in-progress) on the very first step save
     if request.user.onboarding_status == User.ONBOARDING_PENDING:
-        User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_DRAFT)
+        try:
+            User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_DRAFT)
+        except Exception as exc:
+            logger.warning('_save_profile_step status→draft update failed user=%s: %s',
+                           request.user.pk, exc, exc_info=True)
 
-    return success('Profile saved.', data=serializer.data)
+    # Return ONLY the fields for this step — never leak other steps' data
+    all_data  = EmployeeProfileSerializer(profile).data
+    step_data = {k: v for k, v in all_data.items() if k in step_fields}
+    logger.info('Onboarding step %d saved for user %s', step, request.user.email)
+    return success('Profile saved.', data=step_data)
 
 
 class OnboardingStepSaveView(APIView):
-    """
-    PATCH /api/onboarding/profile/step/<step>/
-    Called by the frontend "Save & Continue" button on each step.
-    Enforces required fields for that step before saving.
-    Auto-save uses PATCH /api/onboarding/profile/ (no required-field check).
-    """
+
     permission_classes = [IsAuthenticated]
     parser_classes     = [JSONParser, FormParser, MultiPartParser]
 
-    def patch(self, request, step: int):
+    _VALID_STEPS = frozenset(_STEP_ALL_FIELDS.keys())
+
+    # ── Shared helpers ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _validate_step(step: int):
+        """Return an error Response if step is out of range, else None."""
+        if step not in _STEP_ALL_FIELDS:
+            return error(
+                f'Invalid step {step}. Valid steps are 0 to 4.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
+    @staticmethod
+    def _get_profile(user):
+        from apps.accounts.models import EmployeeProfile as EP
+        return EP.objects.get_or_create(user=user)
+
+    # ── GET — return saved fields for this step ────────────────────────────────
+
+    def get(self, request, step: int):
+        from apps.accounts.serializers import EmployeeProfileSerializer
+
+        step_err = self._validate_step(step)
+        if step_err:
+            return step_err
+
+        if step == 4:
+            from apps.accounts.models import EmployeeDocument as ED
+            from apps.accounts.serializers import EmployeeDocumentSerializer
+            try:
+                docs = ED.objects.filter(user=request.user)
+                return success(
+                    'Step 4 documents retrieved.',
+                    data=EmployeeDocumentSerializer(docs, many=True, context={'request': request}).data,
+                )
+            except Exception as exc:
+                logger.error('OnboardingStepSaveView GET step=4 doc fetch failed user=%s: %s',
+                             request.user.pk, exc, exc_info=True)
+                return error(
+                    'Unable to retrieve documents. Please try again.',
+                    http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        try:
+            profile, _ = self._get_profile(request.user)
+        except Exception as exc:
+            logger.error('OnboardingStepSaveView GET profile fetch failed user=%s step=%d: %s',
+                         request.user.pk, step, exc, exc_info=True)
+            return error(
+                'Unable to retrieve profile data. Please try again.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        try:
+            all_data  = EmployeeProfileSerializer(profile).data
+        except Exception as exc:
+            logger.error('OnboardingStepSaveView GET serialization failed user=%s step=%d: %s',
+                         request.user.pk, step, exc, exc_info=True)
+            return error(
+                'Unable to serialize profile data. Please try again.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        step_data = {k: v for k, v in all_data.items() if k in _STEP_ALL_FIELDS[step]}
+        return success(f'Step {step} data retrieved.', data=step_data)
+
+    # ── POST — save (create) step data ────────────────────────────────────────
+
+    def post(self, request, step: int):
+        step_err = self._validate_step(step)
+        if step_err:
+            return step_err
         return _save_profile_step(request, step)
 
+    # ── PUT — full update of step data ────────────────────────────────────────
 
-# ─── Onboarding — Document upload ─────────────────────────────────────────────
+    def put(self, request, step: int):
+        step_err = self._validate_step(step)
+        if step_err:
+            return step_err
+        return _save_profile_step(request, step)
+
+    # ── PATCH — partial update of step data ───────────────────────────────────
+
+    def patch(self, request, step: int):
+        step_err = self._validate_step(step)
+        if step_err:
+            return step_err
+        return _save_profile_step(request, step)
+
+    # ── DELETE — clear all fields for this step ───────────────────────────────
+
+    def delete(self, request, step: int):
+        from apps.accounts.models import EmployeeProfile as EP
+
+        step_err = self._validate_step(step)
+        if step_err:
+            return step_err
+
+        # Block modifications once submitted or complete
+        ob_status = request.user.onboarding_status
+        if ob_status == User.ONBOARDING_COMPLETE:
+            return error(
+                'Onboarding is already complete and cannot be modified.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+        if ob_status == User.ONBOARDING_SUBMITTED:
+            return error(
+                'Onboarding has been submitted and is awaiting approval. '
+                'Contact HR if you need to make changes.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Step 4 documents are managed by the dedicated document endpoint
+        if step == 4:
+            return success(
+                'Step 4 documents are managed individually — '
+                'use DELETE /api/onboarding/documents/<id>/ to remove a specific document.',
+                data={},
+            )
+
+        step_fields = _STEP_ALL_FIELDS.get(step, frozenset())
+        if not step_fields:
+            return success(
+                f'Step {step} has no profile fields to clear.',
+                data={},
+            )
+
+        try:
+            profile, _ = self._get_profile(request.user)
+        except Exception as exc:
+            logger.error('OnboardingStepSaveView DELETE profile fetch failed user=%s step=%d: %s',
+                         request.user.pk, step, exc, exc_info=True)
+            return error(
+                'Unable to retrieve profile. Please try again.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        try:
+            EP.objects.filter(pk=profile.pk).update(**{field: None for field in step_fields})
+        except Exception as exc:
+            logger.error('OnboardingStepSaveView DELETE clear failed user=%s step=%d: %s',
+                         request.user.pk, step, exc, exc_info=True)
+            return error(
+                'Failed to clear step data. Please try again.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        logger.info('Onboarding step %d cleared for user %s', step, request.user.email)
+        return success(f'Step {step} data cleared successfully.')
+
+
+# ─── Onboarding — Document upload / stream / delete ──────────────────────────
 
 class EmployeeDocumentView(APIView):
+    """
+    GET  /onboarding/documents/           → list all documents for this user
+    POST /onboarding/documents/           → upload a document
+    GET  /onboarding/documents/<doc_id>/  → stream the file (Cloudinary signed proxy)
+    DELETE /onboarding/documents/<doc_id>/ → delete a document
+    """
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser, FormParser]
 
-    def get(self, request):
+    def _get_doc(self, request, doc_id: str):
+        from apps.accounts.models import EmployeeDocument as ED
+        try:
+            doc = ED.objects.get(id=doc_id)
+        except ED.DoesNotExist:
+            return None, error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if doc.user_id != request.user.id and not _can_manage_docs(request.user):
+            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        return doc, None
+
+    def get(self, request, doc_id: str = None):
         from apps.accounts.models import EmployeeDocument as ED
         from apps.accounts.serializers import EmployeeDocumentSerializer
+
+        # ── Detail: stream the file through a signed Cloudinary URL ─────────
+        if doc_id:
+            doc, err = self._get_doc(request, doc_id)
+            if err:
+                return err
+
+            name  = doc.file.name
+            parts = os.path.basename(name).rsplit('.', 1)
+            fmt   = parts[1].lower() if len(parts) == 2 else ''
+
+            try:
+                dl_url = cloudinary.utils.private_download_url(
+                    name, fmt,
+                    resource_type='raw',
+                    type='upload',
+                    attachment=False,
+                )
+                r = http_req.get(dl_url, stream=True, timeout=30)
+                r.raise_for_status()
+            except http_req.exceptions.HTTPError as exc:
+                logger.error('Employee doc Cloudinary fetch failed doc=%s status=%s',
+                             doc_id, exc.response.status_code)
+                return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
+            except Exception as exc:
+                logger.error('Employee doc download error doc=%s: %s', doc_id, exc, exc_info=True)
+                return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
+
+            content_type = 'application/pdf' if fmt == 'pdf' else r.headers.get('content-type', 'application/octet-stream')
+            response = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{doc.file_name}"'
+            if 'content-length' in r.headers:
+                response['Content-Length'] = r.headers['content-length']
+            response['Cache-Control'] = 'no-store'
+            return response
+
+        # ── List: return all documents for this user ─────────────────────────
         docs = ED.objects.filter(user=request.user)
-        return success('Documents retrieved.', data=EmployeeDocumentSerializer(docs, many=True).data)
+        return success('Documents retrieved.', data=EmployeeDocumentSerializer(docs, many=True, context={'request': request}).data)
 
     def post(self, request):
         from apps.accounts.models import EmployeeDocument as ED
@@ -2660,9 +3078,7 @@ class EmployeeDocumentView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
         file_obj = serializer.validated_data['file']
         doc_type = serializer.validated_data['document_type']
-        # Save new file first, then delete old — avoids data loss if upload fails
-        from django.db import transaction as _tx
-        with _tx.atomic():
+        with transaction.atomic():
             doc = serializer.save(
                 user=request.user,
                 file_name=file_obj.name,
@@ -2672,8 +3088,25 @@ class EmployeeDocumentView(APIView):
                 user=request.user,
                 document_type=doc_type,
             ).exclude(pk=doc.pk).delete()
-        return success('Document uploaded.', data=EmployeeDocumentSerializer(doc).data,
+        return success('Document uploaded.', data=EmployeeDocumentSerializer(doc, context={'request': request}).data,
                        http_status=status.HTTP_201_CREATED)
+
+    def delete(self, request, doc_id: str = None):
+        if not doc_id:
+            return error('Document ID is required.', http_status=status.HTTP_400_BAD_REQUEST)
+        doc, err = self._get_doc(request, doc_id)
+        if err:
+            return err
+        if doc.user_id != request.user.id:
+            return error('Only the owner can delete their document.', http_status=status.HTTP_403_FORBIDDEN)
+        if request.user.onboarding_status == User.ONBOARDING_COMPLETE:
+            return error(
+                'Onboarding is already complete. Contact HR to update documents.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        doc.delete()
+        logger.info('Employee document %s deleted by %s', doc_id, request.user.email)
+        return success('Document deleted.')
 
 
 # ─── Onboarding — Submit wizard ───────────────────────────────────────────────
