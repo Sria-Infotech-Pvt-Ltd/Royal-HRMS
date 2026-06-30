@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState } from "react";
 import type {
   DetailValues,
   DocEntry,
@@ -10,6 +10,7 @@ import type {
   TableRow,
 } from "../../_data";
 import FormField from "../../_components/FormField";
+import DocPreviewModal from "@/components/DocPreviewModal";
 
 /* ── shared cell input style ────────────────────────────────── */
 const CELL =
@@ -25,10 +26,12 @@ export default function ProfileForm({
   saving,
   liveDocuments,
   fieldOptions,
+  readOnly,
   onFieldChange,
   onRowsChange,
   onSave,
   onCancel,
+  onEdit,
 }: {
   section: ProfileSection;
   values: DetailValues;
@@ -37,10 +40,12 @@ export default function ProfileForm({
   saving?: boolean;
   liveDocuments?: DocEntry[];
   fieldOptions?: Record<string, FieldOption[]>;
+  readOnly?: boolean;
   onFieldChange: (key: string, val: string) => void;
   onRowsChange: (rows: TableRow[]) => void;
   onSave: () => void;
   onCancel: () => void;
+  onEdit?: () => void;
 }) {
   return (
     <div
@@ -59,6 +64,17 @@ export default function ProfileForm({
         <div className="flex items-center gap-1">
           <HeaderBtn icon="ti-upload" title="Import" />
           <HeaderBtn icon="ti-download" title="Export" />
+          {readOnly && onEdit && (
+            <button
+              onClick={onEdit}
+              suppressHydrationWarning
+              title="Edit"
+              className="flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white/90 border border-white/30 hover:bg-white/15 transition-colors"
+            >
+              <i className="ti ti-pencil text-[13px]" />
+              Edit
+            </button>
+          )}
         </div>
       </div>
 
@@ -75,6 +91,7 @@ export default function ProfileForm({
                   field={mergedField}
                   value={values[f.key] ?? ""}
                   onChange={onFieldChange}
+                  disabled={readOnly}
                 />
               );
             })}
@@ -92,31 +109,33 @@ export default function ProfileForm({
         )}
       </div>
 
-      {/* ── Footer ──────────────────────────────────────────── */}
-      <div
-        className="flex items-center justify-end gap-3 px-6 py-3 border-t"
-        style={{ borderColor: "var(--outline-v)", background: "var(--bg-low)" }}
-      >
-        <button
-          onClick={onCancel}
-          disabled={!dirty}
-          suppressHydrationWarning
-          className="px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+      {/* ── Footer — hidden in read-only mode ───────────────── */}
+      {!readOnly && (
+        <div
+          className="flex items-center justify-end gap-3 px-6 py-3 border-t"
+          style={{ borderColor: "var(--outline-v)", background: "var(--bg-low)" }}
         >
-          Cancel
-        </button>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          suppressHydrationWarning
-          className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-          style={{ background: "var(--primary)" }}
-        >
-          <i className={`ti ${saving ? "ti-loader-2 animate-spin" : "ti-device-floppy"} text-[15px]`} />
-          {saving ? "Saving…" : "Save"}
-        </button>
-      </div>
+          <button
+            onClick={onCancel}
+            disabled={!dirty}
+            suppressHydrationWarning
+            className="px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            suppressHydrationWarning
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            style={{ background: "var(--primary)" }}
+          >
+            <i className={`ti ${saving ? "ti-loader-2 animate-spin" : "ti-device-floppy"} text-[15px]`} />
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -381,93 +400,21 @@ function fmtBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function isImage(fileName: string): boolean {
-  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(fileName);
-}
-
-/* ── Document preview modal ─────────────────────────────────── */
-function DocPreviewModal({
-  doc,
-  onClose,
-}: {
-  doc: DocEntry;
-  onClose: () => void;
-}) {
-  const close = useCallback(onClose, [onClose]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [close]);
-
-  const fileIsImage = isImage(doc.fileName ?? "");
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "rgba(0,0,0,0.55)" }}
-      onClick={onClose}
-    >
-      <div
-        className="relative flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "#fff", width: "min(860px, 92vw)", maxHeight: "88vh" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-3.5 flex-shrink-0"
-          style={{ background: "var(--primary)" }}
-        >
-          <div className="flex items-center gap-2.5">
-            <i className="ti ti-file-description text-white text-[18px]" />
-            <div>
-              <p className="text-[14px] font-semibold text-white leading-tight">{doc.name}</p>
-              {doc.fileName && (
-                <p className="text-[11.5px] text-white/70 leading-tight">{doc.fileName}{doc.fileSize ? ` · ${fmtBytes(doc.fileSize)}` : ""}</p>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            suppressHydrationWarning
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
-          >
-            <i className="ti ti-x text-[18px]" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-auto bg-[#f4f6fb] flex items-center justify-center p-4" style={{ minHeight: 0 }}>
-          {fileIsImage ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={doc.fileUrl}
-              alt={doc.name}
-              className="max-w-full max-h-full rounded-lg shadow object-contain"
-              style={{ maxHeight: "calc(88vh - 120px)" }}
-            />
-          ) : (
-            <iframe
-              src={doc.fileUrl}
-              title={doc.name}
-              className="w-full rounded-lg border-0"
-              style={{ height: "calc(88vh - 120px)" }}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Employee Documents — 4-col card grid ───────────────────── */
 function DocsCards({ documents }: { documents: DocEntry[] }) {
   const [preview, setPreview] = useState<DocEntry | null>(null);
 
   return (
     <>
-      {preview && <DocPreviewModal doc={preview} onClose={() => setPreview(null)} />}
+      {preview && preview.fileUrl && (
+        <DocPreviewModal
+          name={preview.name}
+          fileName={preview.fileName}
+          fileUrl={preview.fileUrl}
+          fileSize={preview.fileSize}
+          onClose={() => setPreview(null)}
+        />
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-5">
@@ -548,7 +495,15 @@ function DocsTable({ documents }: { documents: DocEntry[] }) {
   const [preview, setPreview] = useState<DocEntry | null>(null);
   return (
     <>
-      {preview && <DocPreviewModal doc={preview} onClose={() => setPreview(null)} />}
+      {preview && preview.fileUrl && (
+        <DocPreviewModal
+          name={preview.name}
+          fileName={preview.fileName}
+          fileUrl={preview.fileUrl}
+          fileSize={preview.fileSize}
+          onClose={() => setPreview(null)}
+        />
+      )}
     <div>
       {/* Info banner */}
       <div

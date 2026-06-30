@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
+import DocPreviewModal from "@/components/DocPreviewModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ interface ProfileForm {
   emergency_phone: string; emergency_email: string;
 }
 
-interface UploadedDoc { id: number; document_type: string; document_type_display: string; file_name: string; uploaded_at: string; }
+interface UploadedDoc { id: string; document_type: string; document_type_display: string; file?: string; file_name: string; uploaded_at: string; }
 
 const EMPTY: ProfileForm = {
   date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
@@ -101,10 +102,46 @@ export default function OnboardingPage() {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  const STEP_REQUIRED: Record<number, { key: keyof ProfileForm; label: string }[]> = {
+    0: [
+      { key: "date_of_birth",  label: "Date of Birth" },
+      { key: "gender",         label: "Gender" },
+      { key: "marital_status", label: "Marital Status" },
+      { key: "father_name",    label: "Father's Name" },
+      { key: "current_address",label: "Current Address" },
+    ],
+    1: [
+      { key: "highest_qualification", label: "Highest Qualification" },
+      { key: "institution",           label: "Institution / University" },
+    ],
+    2: [
+      { key: "account_holder_name", label: "Account Holder Name" },
+      { key: "account_type",        label: "Account Type" },
+      { key: "account_number",      label: "Account Number" },
+      { key: "ifsc_code",           label: "IFSC Code" },
+      { key: "bank_name",           label: "Bank Name" },
+      { key: "bank_branch_name",    label: "Bank Branch Name" },
+    ],
+    3: [
+      { key: "emergency_name",         label: "Emergency Contact Name" },
+      { key: "emergency_relationship", label: "Relationship" },
+      { key: "emergency_phone",        label: "Emergency Contact Phone" },
+    ],
+  };
+
   async function saveSection(): Promise<boolean> {
-    setSaving(true); setSaveMsg(null); setSaveErr(null);
+    setSaveMsg(null); setSaveErr(null);
+
+    const required = STEP_REQUIRED[tab] ?? [];
+    const missing = required.filter(f => !form[f.key]?.trim()).map(f => f.label);
+    if (missing.length > 0) {
+      setSaveErr(`Please fill in: ${missing.join(", ")}`);
+      return false;
+    }
+
+    setSaving(true);
     try {
-      const res = await clientApi.patch<{ success: boolean; message: string }>(
+      const res = await clientApi.post<{ success: boolean; message: string }>(
         API.onboarding.profileStep(tab), form
       );
       if (res.data?.success === false) {
@@ -132,10 +169,15 @@ export default function OnboardingPage() {
 
   async function handleUpload(docType: string, file: File) {
     setUploading(docType);
-    const fd = new FormData();
-    fd.append("document_type", docType);
-    fd.append("file", file);
     try {
+      // If a document of this type already exists, delete it first
+      const existing = docs.find(d => d.document_type === docType);
+      if (existing) {
+        await clientApi.delete(API.onboarding.documentDetail(existing.id));
+      }
+      const fd = new FormData();
+      fd.append("document_type", docType);
+      fd.append("file", file);
       await clientApi.post(API.onboarding.documents, fd);
       const r = await clientApi.get(API.onboarding.documents);
       setDocs(r.data?.data ?? []);
@@ -389,6 +431,9 @@ const CARD_STYLE: React.CSSProperties = {
   border: "1px solid rgba(30,78,140,0.08)",
 };
 
+// ── Shared: required marker ───────────────────────────────────────────────────
+const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }}>*</span>;
+
 // ── Tab: Personal ─────────────────────────────────────────────────────────────
 
 function TabPersonal({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm, v: string) => void }) {
@@ -396,11 +441,11 @@ function TabPersonal({ form, set }: { form: ProfileForm; set: (f: keyof ProfileF
     <div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Date of Birth</label>
+          <label className="field-label">Date of Birth<Req /></label>
           <input type="date" className={INP} value={form.date_of_birth} onChange={e => set("date_of_birth", e.target.value)} />
         </div>
         <div className="field-group">
-          <label className="field-label">Gender</label>
+          <label className="field-label">Gender<Req /></label>
           <select className={SEL} value={form.gender} onChange={e => set("gender", e.target.value)}>
             <option value="">Select</option>
             <option value="male">Male</option>
@@ -409,7 +454,7 @@ function TabPersonal({ form, set }: { form: ProfileForm; set: (f: keyof ProfileF
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Marital Status</label>
+          <label className="field-label">Marital Status<Req /></label>
           <select className={SEL} value={form.marital_status} onChange={e => set("marital_status", e.target.value)}>
             <option value="">Select</option>
             <option value="single">Single</option>
@@ -421,7 +466,7 @@ function TabPersonal({ form, set }: { form: ProfileForm; set: (f: keyof ProfileF
       </div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Father&apos;s Name</label>
+          <label className="field-label">Father&apos;s Name<Req /></label>
           <input className={INP} value={form.father_name} onChange={e => set("father_name", e.target.value)} placeholder="Father's full name" />
         </div>
         <div className="field-group">
@@ -433,7 +478,7 @@ function TabPersonal({ form, set }: { form: ProfileForm; set: (f: keyof ProfileF
         </div>
       </div>
       <div className="field-group">
-        <label className="field-label">Current Address</label>
+        <label className="field-label">Current Address<Req /></label>
         <textarea className={INP} rows={2} value={form.current_address} onChange={e => set("current_address", e.target.value)} placeholder="House / Flat no., Street, City, State, PIN" />
       </div>
       <div className="field-group">
@@ -452,7 +497,7 @@ function TabEducation({ form, set }: { form: ProfileForm; set: (f: keyof Profile
       <p style={{ fontWeight: 600, color: "var(--on-variant)", fontSize: ".8rem", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "1rem" }}>Education</p>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Highest Qualification</label>
+          <label className="field-label">Highest Qualification<Req /></label>
           <input className={INP} value={form.highest_qualification} onChange={e => set("highest_qualification", e.target.value)} placeholder="e.g. B.Tech, MBA" />
         </div>
         <div className="field-group">
@@ -462,7 +507,7 @@ function TabEducation({ form, set }: { form: ProfileForm; set: (f: keyof Profile
       </div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Institution / University</label>
+          <label className="field-label">Institution / University<Req /></label>
           <input className={INP} value={form.institution} onChange={e => set("institution", e.target.value)} placeholder="College or university name" />
         </div>
         <div className="field-group">
@@ -504,11 +549,11 @@ function TabBank({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm,
       </div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Account Holder Name</label>
+          <label className="field-label">Account Holder Name<Req /></label>
           <input className={INP} value={form.account_holder_name} onChange={e => set("account_holder_name", e.target.value)} placeholder="As printed on passbook" />
         </div>
         <div className="field-group">
-          <label className="field-label">Account Type</label>
+          <label className="field-label">Account Type<Req /></label>
           <select className={SEL} value={form.account_type} onChange={e => set("account_type", e.target.value)}>
             <option value="">Select</option>
             <option value="savings">Savings</option>
@@ -518,21 +563,21 @@ function TabBank({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm,
       </div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Account Number</label>
+          <label className="field-label">Account Number<Req /></label>
           <input className={INP} value={form.account_number} onChange={e => set("account_number", e.target.value)} placeholder="Bank account number" />
         </div>
         <div className="field-group">
-          <label className="field-label">IFSC Code</label>
+          <label className="field-label">IFSC Code<Req /></label>
           <input className={INP} value={form.ifsc_code} onChange={e => set("ifsc_code", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" maxLength={11} />
         </div>
       </div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Bank Name</label>
+          <label className="field-label">Bank Name<Req /></label>
           <input className={INP} value={form.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder="e.g. State Bank of India" />
         </div>
         <div className="field-group">
-          <label className="field-label">Branch Name</label>
+          <label className="field-label">Branch Name<Req /></label>
           <input className={INP} value={form.bank_branch_name} onChange={e => set("bank_branch_name", e.target.value)} placeholder="Branch city / locality" />
         </div>
       </div>
@@ -550,17 +595,17 @@ function TabEmergency({ form, set }: { form: ProfileForm; set: (f: keyof Profile
       </p>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Contact Name</label>
+          <label className="field-label">Contact Name<Req /></label>
           <input className={INP} value={form.emergency_name} onChange={e => set("emergency_name", e.target.value)} placeholder="Full name" />
         </div>
         <div className="field-group">
-          <label className="field-label">Relationship</label>
+          <label className="field-label">Relationship<Req /></label>
           <input className={INP} value={form.emergency_relationship} onChange={e => set("emergency_relationship", e.target.value)} placeholder="e.g. Spouse, Parent, Sibling" />
         </div>
       </div>
       <div className="field-group-row">
         <div className="field-group">
-          <label className="field-label">Phone Number</label>
+          <label className="field-label">Phone Number<Req /></label>
           <input className={INP} value={form.emergency_phone} onChange={e => set("emergency_phone", e.target.value)} placeholder="Mobile number" />
         </div>
         <div className="field-group">
@@ -583,66 +628,88 @@ function TabDocuments({
   fileRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
   onUpload: (docType: string, file: File) => void;
 }) {
+  const [preview, setPreview] = useState<UploadedDoc | null>(null);
+
   return (
-    <div>
-      <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-        Upload clear scans or photos. Accepted: PDF, JPG, PNG · Max 5 MB each.
-      </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: ".875rem" }}>
-        {DOC_TYPES.map(dt => {
-          const uploaded     = uploadedTypes.has(dt.value);
-          const uploaded_doc = docs.find(d => d.document_type === dt.value);
-          const isUploading  = uploading === dt.value;
-          return (
-            <div key={dt.value} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
-              padding: "1rem 1.25rem", borderRadius: 12,
-              border: `1.5px solid ${uploaded ? "var(--success)" : "var(--outline-v)"}`,
-              background: uploaded ? "var(--success-c)" : "#fff",
-              transition: "all 0.2s",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 9, background: uploaded ? "var(--success)" : "var(--bg-high)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <i className={uploaded ? "ti ti-file-check" : "ti ti-file-upload"} style={{ color: uploaded ? "#fff" : "var(--on-variant)", fontSize: 18 }} />
+    <>
+      {preview && preview.file && (
+        <DocPreviewModal
+          name={preview.document_type_display}
+          fileName={preview.file_name}
+          fileUrl={preview.file}
+          onClose={() => setPreview(null)}
+        />
+      )}
+      <div>
+        <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
+          Upload clear scans or photos. Accepted: PDF, JPG, PNG · Max 5 MB each.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: ".875rem" }}>
+          {DOC_TYPES.map(dt => {
+            const uploaded     = uploadedTypes.has(dt.value);
+            const uploaded_doc = docs.find(d => d.document_type === dt.value);
+            const isUploading  = uploading === dt.value;
+            return (
+              <div key={dt.value} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
+                padding: "1rem 1.25rem", borderRadius: 12,
+                border: `1.5px solid ${uploaded ? "var(--success)" : "var(--outline-v)"}`,
+                background: uploaded ? "var(--success-c)" : "#fff",
+                transition: "all 0.2s",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 9, background: uploaded ? "var(--success)" : "var(--bg-high)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className={uploaded ? "ti ti-file-check" : "ti ti-file-upload"} style={{ color: uploaded ? "#fff" : "var(--on-variant)", fontSize: 18 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>{dt.label}</div>
+                    {uploaded && uploaded_doc && (
+                      <div style={{ fontSize: ".78rem", color: "var(--success)", marginTop: 2 }}>
+                        <i className="ti ti-check" style={{ fontSize: 11 }} /> {uploaded_doc.file_name}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>{dt.label}</div>
-                  {uploaded && uploaded_doc && (
-                    <div style={{ fontSize: ".78rem", color: "var(--success)", marginTop: 2 }}>
-                      <i className="ti ti-check" style={{ fontSize: 11 }} /> {uploaded_doc.file_name}
-                    </div>
+                <div style={{ display: "flex", gap: ".5rem", alignItems: "center", flexShrink: 0 }}>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    style={{ display: "none" }}
+                    ref={el => { fileRefs.current[dt.value] = el; }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) onUpload(dt.value, file);
+                      e.target.value = "";
+                    }}
+                  />
+                  {uploaded && uploaded_doc?.file && (
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: ".83rem" }}
+                      onClick={() => setPreview(uploaded_doc)}
+                      type="button"
+                    >
+                      <i className="ti ti-eye" style={{ fontSize: 13 }} /> View
+                    </button>
                   )}
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: ".83rem", borderColor: uploaded ? "var(--success)" : undefined, color: uploaded ? "var(--success)" : undefined }}
+                    onClick={() => fileRefs.current[dt.value]?.click()}
+                    disabled={isUploading}
+                    type="button"
+                  >
+                    {isUploading
+                      ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Uploading…</>
+                      : uploaded ? "Replace" : "Upload"
+                    }
+                  </button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: ".5rem", alignItems: "center", flexShrink: 0 }}>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  style={{ display: "none" }}
-                  ref={el => { fileRefs.current[dt.value] = el; }}
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) onUpload(dt.value, file);
-                    e.target.value = "";
-                  }}
-                />
-                <button
-                  className="btn btn-ghost"
-                  style={{ fontSize: ".83rem", borderColor: uploaded ? "var(--success)" : undefined, color: uploaded ? "var(--success)" : undefined }}
-                  onClick={() => fileRefs.current[dt.value]?.click()}
-                  disabled={isUploading}
-                  type="button"
-                >
-                  {isUploading
-                    ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Uploading…</>
-                    : uploaded ? "Replace" : "Upload"
-                  }
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

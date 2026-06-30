@@ -4,9 +4,6 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { LeaveStats, LEAVE_TYPE_CONFIG } from "../_data";
 
-const AV_COLORS = ["#1e4e8c", "#0e7c86", "#1b8a6b", "#b5651d", "#ad95cf"];
-function avColor(name: string) { return AV_COLORS[name.charCodeAt(0) % AV_COLORS.length]; }
-
 export default function LeaveAnalytics() {
   const currentYear = new Date().getFullYear();
   const { data: stats, loading } = useFetch<LeaveStats>(API.leave.stats + `?year=${currentYear}`);
@@ -23,8 +20,6 @@ export default function LeaveAnalytics() {
   const totalPending  = stats?.pending   ?? 0;
   const totalAll      = stats?.total     ?? 0;
   const balances      = stats?.balances  ?? [];
-
-  const maxBalance = Math.max(...balances.map(b => b.total_days), 1);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

@@ -39,6 +39,61 @@ function StatusBadge({ status }: { status: CandidateStatus }) {
   );
 }
 
+function StatusDropdown({
+  candidate,
+  choices,
+  onChanged,
+  onMarkRequest,
+}: {
+  candidate: Candidate;
+  choices: { value: CandidateStatus; label: string }[];
+  onChanged: (updated: Candidate) => void;
+  onMarkRequest: (candidate: Candidate, targetStatus: "selected" | "rejected") => void;
+}) {
+  const [updating, setUpdating] = useState(false);
+
+  if (choices.length === 0) return null;
+
+  // Ensure current status is always visible even if not in the choices list
+  const hasCurrentStatus = choices.some(o => o.value === candidate.status);
+  const options = hasCurrentStatus
+    ? choices
+    : [{ value: candidate.status, label: STATUS_META[candidate.status]?.label ?? candidate.status }, ...choices];
+
+  async function handleChange(newStatus: CandidateStatus) {
+    if (newStatus === candidate.status) return;
+    // selected / rejected go through the modal (email template + preview)
+    if (newStatus === "selected" || newStatus === "rejected") {
+      onMarkRequest(candidate, newStatus);
+      return;
+    }
+    setUpdating(true);
+    try {
+      const res = await RECRUITMENT_API.setStatus(candidate.id, { status: newStatus });
+      onChanged(res.data?.data ?? { ...candidate, status: newStatus });
+    } catch {
+      // silently ignore — table will reflect current state on next load
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <select
+      className="field-input field-select"
+      style={{ fontSize: ".78rem", padding: "4px 28px 4px 8px", minWidth: 140, opacity: updating ? 0.6 : 1 }}
+      value={candidate.status}
+      disabled={updating}
+      onChange={e => handleChange(e.target.value as CandidateStatus)}
+      suppressHydrationWarning
+    >
+      {options.map(o => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
+
 function Avatar({ name, size = 32 }: { name: string; size?: number }) {
   return (
     <div className="user-avatar" style={{ width: size, height: size, fontSize: size * 0.38, flexShrink: 0 }}>
@@ -60,6 +115,8 @@ export default function InterviewListPage() {
   const [branchFilter,  setBranchFilter]  = useState<number | "">("");
   const [branches,      setBranches]      = useState<Branch[]>([]);
 
+  const [statusChoices, setStatusChoices] = useState<{ value: CandidateStatus; label: string }[]>([]);
+
   const [showAdd,   setShowAdd]   = useState(false);
   const [markData,  setMarkData]  = useState<{ candidate: Candidate; targetStatus: "selected" | "rejected" } | null>(null);
   const [logsFor,   setLogsFor]   = useState<Candidate | null>(null);
@@ -69,13 +126,17 @@ export default function InterviewListPage() {
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch active branches once for the dropdown
+  // Fetch active branches and status choices once on mount
   useEffect(() => {
     clientApi
       .get<{ data: { results: Branch[] } }>(API.branches.list, {
         params: { status: "active", page_size: 100 },
       })
       .then(r => setBranches(r.data?.data?.results ?? []))
+      .catch(() => {});
+
+    RECRUITMENT_API.getStatuses()
+      .then(r => setStatusChoices(r.data?.data ?? []))
       .catch(() => {});
   }, []);
 
@@ -184,6 +245,7 @@ export default function InterviewListPage() {
               style={{ minWidth: 180, paddingLeft: 32 }}
               value={branchFilter}
               onChange={e => handleBranchFilter(e.target.value ? Number(e.target.value) : "")}
+              suppressHydrationWarning
             >
               <option value="">All Branches</option>
               {branches.map(b => (
@@ -249,13 +311,14 @@ export default function InterviewListPage() {
           <div className="filter-bar" style={{ margin: 0 }}>
             <div className="search-bar">
               <i className="ti ti-search" />
-              <input placeholder="Search candidate…" value={search} onChange={e => handleSearch(e.target.value)} />
+              <input placeholder="Search candidate…" value={search} onChange={e => handleSearch(e.target.value)} suppressHydrationWarning />
             </div>
             <select
               className="field-input field-select"
               style={{ width: 180 }}
               value={statusFilter}
               onChange={e => handleStatusFilter(e.target.value as "" | CandidateStatus)}
+              suppressHydrationWarning
             >
               <option value="">All Status</option>
               <option value="pending">Pending</option>
@@ -320,48 +383,38 @@ export default function InterviewListPage() {
                           <i className="ti ti-history" /> Logs
                         </button>
 
-                        {/* Pre-selection pipeline: allow marking selected or rejected */}
-                        {(c.status === "pending" || c.status === "screening" || c.status === "interview_scheduled" || c.status === "interview_done") && (
-                          <>
-                            <button
-                              className="btn btn-success btn-sm"
-                              onClick={() => setMarkData({ candidate: c, targetStatus: "selected" })}
-                              title="Mark Selected"
-                            >
-                              <i className="ti ti-check" />
-                            </button>
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => setMarkData({ candidate: c, targetStatus: "rejected" })}
-                              title="Mark Rejected"
-                            >
-                              <i className="ti ti-x" />
-                            </button>
-                          </>
+                        {/* Status dropdown — only for pre-selection pipeline */}
+                        {c.status !== "converted" && c.status !== "selected" && c.status !== "offer_sent" && (
+                          <StatusDropdown
+                            candidate={c}
+                            choices={statusChoices}
+                            onChanged={onStatusChanged}
+                            onMarkRequest={(cand, status) => setMarkData({ candidate: cand, targetStatus: status })}
+                          />
                         )}
 
-                        {/* Selected but portal not sent yet */}
-                        {c.status === "selected" && !c.portal_credentials_sent && (
+                        {/* Selected: show Send Login button */}
+                        {c.status === "selected" && (
                           <button
                             className="btn btn-filled btn-sm"
                             style={{ fontSize: ".78rem" }}
                             onClick={() => handleSendPortalLogin(c.id)}
                             disabled={sendingPortal === c.id}
-                            title="Send portal login credentials"
                           >
                             {sendingPortal === c.id
-                              ? <><i className="ti ti-loader-2 spin" /> Sending…</>
+                              ? <><i className="ti ti-loader-2 animate-spin" /> Sending…</>
                               : <><i className="ti ti-send" /> Send Login</>
                             }
                           </button>
                         )}
 
-                        {/* Portal already sent */}
-                        {(c.status === "offer_sent" || (c.status === "selected" && c.portal_credentials_sent)) && (
+                        {/* Offer sent: portal credentials already sent */}
+                        {c.status === "offer_sent" && (
                           <span className="badge badge-success" style={{ fontSize: ".75rem" }}>
                             <i className="ti ti-mail-check" /> Login Sent
                           </span>
                         )}
+
 
                         {/* Converted to employee */}
                         {c.status === "converted" && (

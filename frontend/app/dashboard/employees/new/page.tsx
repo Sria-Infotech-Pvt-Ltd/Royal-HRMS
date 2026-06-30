@@ -653,7 +653,7 @@ function StepReview({ form, goTo, declaration, setDeclaration }: {
         style={{ background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.25)" }}>
         <i className="ti ti-circle-check text-[15px] mt-0.5 flex-shrink-0" style={{ color: "var(--success)" }} />
         <p className="text-[13px] font-medium" style={{ color: "#15803d" }}>
-          Almost done! Please review all the details below. You won't be able to edit after submission until HR reviews and either approves or requests changes.
+          Almost done! Please review all the details below. You won&apos;t be able to edit after submission until HR reviews and either approves or requests changes.
         </p>
       </div>
 

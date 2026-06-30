@@ -285,7 +285,10 @@ export default function CompanyInfoPage() {
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               {displayLogo
-                ? <img src={displayLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={displayLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                )
                 : <i className="ti ti-photo" style={{ fontSize: 28, color: "var(--outline)" }} />
               }
             </div>

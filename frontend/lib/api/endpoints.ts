@@ -67,19 +67,21 @@ export const API = {
     stats:           "/recruitment/candidates/stats/",
     review:          "/recruitment/candidates/review/",
     detail:          (id: number) => `/recruitment/candidates/${id}/`,
-    status:          (id: number) => `/recruitment/candidates/${id}/status/`,
+    status:          "/recruitment/candidates/status-choices/",
+    candidateStatus: (id: number) => `/recruitment/candidates/${id}/status/`,
     hrDecision:      (id: number) => `/recruitment/candidates/${id}/hr-decision/`,
     sendPortalLogin: (id: number) => `/recruitment/candidates/${id}/send-portal-login/`,
     emailLogs:       "/recruitment/emails/",
   },
 
   onboarding: {
-    profile:     "/onboarding/profile/",
-    profileStep: (step: number) => `/onboarding/profile/step/${step}/`,
-    documents:   "/onboarding/documents/",
-    submit:      "/onboarding/submit/",
-    approvals:   "/onboarding/approvals/",
-    approve:     (userId: string) => `/onboarding/approvals/${userId}/approve/`,
+    profile:        "/onboarding/profile/",
+    profileStep:    (step: number) => `/onboarding/profile/step/${step}/`,
+    documents:      "/onboarding/documents/",
+    documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,
+    submit:         "/onboarding/submit/",
+    approvals:      "/onboarding/approvals/",
+    approve:        (userId: string) => `/onboarding/approvals/${userId}/approve/`,
   },
 
   expenses: {
