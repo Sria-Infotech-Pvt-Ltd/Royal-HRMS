@@ -40,7 +40,8 @@ const ITEM_ROUTES: Record<string, string> = {
   "employee-code":      "/dashboard/settings/employee-code",
   "leave-policy":     "/dashboard/settings/leave-policy",
   "holiday-calendar": "/dashboard/settings/holiday-calendar",
-  "approval-rules":   "/dashboard/settings/approval-rules",
+  "approval-rules":       "/dashboard/settings/approval-rules",
+  "attendance-config":    "/dashboard/settings/attendance-config",
 };
 
 export default function SettingsPage() {

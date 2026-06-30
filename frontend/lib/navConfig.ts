@@ -43,6 +43,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "documents",        icon: "ti-folder",               label: "Document Center",  path: "/dashboard/documents",        permission: "documents.view" },
 
   { section: "My" },
+  { id: "my-attendance",    icon: "ti-clock-check",          label: "My Attendance",    path: "/dashboard/my-attendance",    permission: null },
   { id: "my-requests",      icon: "ti-inbox",                label: "My Requests",      path: "/dashboard/my-requests",      permission: null },
   { id: "profile",          icon: "ti-user-circle",          label: "My Profile",       path: "/dashboard/profile",          permission: null },
 

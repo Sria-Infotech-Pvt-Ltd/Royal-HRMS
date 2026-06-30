@@ -13,8 +13,9 @@ export const metadata: Metadata = {
   title: "Royal HRMS",
   description: "Royal Human Resource Management System — By SRIA",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/logo.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/logo.png", type: "image/png" }],
   },
 };
 
@@ -24,6 +25,10 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ height: "100%" }} suppressHydrationWarning>
       <head>
+        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <link rel="icon" type="image/png" href="/logo.png" sizes="any" />
+        <link rel="shortcut icon" href="/logo.svg" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"
