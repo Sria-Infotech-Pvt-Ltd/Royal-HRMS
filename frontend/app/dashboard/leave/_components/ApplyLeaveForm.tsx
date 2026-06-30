@@ -8,7 +8,8 @@ import {
   LeaveBalance, LeavePolicy, LeaveRequest,
   LeaveTypeKey, DurationKey,
   LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
-  calcWorkingDays, fmtDate,
+  STATUS_BADGE, STATUS_LABEL,
+  calcWorkingDays, fmtDate, fmtShortDate,
 } from "../_data";
 
 interface LeaveForm {
@@ -61,6 +62,9 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const currentYear = new Date().getFullYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
+  const { data: myRequests, refetch: refetchMine } = useFetch<LeaveRequest[]>(
+    API.leave.requests + "?scope=own"
+  );
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
   const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
@@ -111,6 +115,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
       const res = await clientApi.post(API.leave.requests, fd);
       setSubmitted(res.data.data as LeaveRequest);
+      refetchMine();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSubmitErr(msg || "Failed to submit leave request. Please try again.");
@@ -385,7 +390,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
           </div>
         </div>
 
-        {/* ── Right sidebar ────────────────────────────────────────────────── */}
+        {/* ── Right sidebar ────────────────────────────────────────────────────── */}
         <div className="w-72 flex-shrink-0 flex flex-col gap-4 sticky top-4">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Leave Balance</p>
@@ -416,6 +421,47 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         </div>
 
       </div>
+
+    {/* ── My Leave Requests history ─────────────────────────────────────── */}
+    {(myRequests ?? []).length > 0 && (
+      <div className="card" style={{ marginTop: 20 }}>
+        <div className="card-header">
+          <div className="card-title">
+            <i className="ti ti-history" /> My Leave Requests
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Leave Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th style={{ textAlign: "center" }}>Days</th>
+                <th>Approver</th>
+                <th>Applied On</th>
+                <th style={{ textAlign: "center" }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(myRequests ?? []).map(r => (
+                <tr key={r.id}>
+                  <td>{r.leave_type_display}</td>
+                  <td>{fmtShortDate(r.start_date)}</td>
+                  <td>{fmtShortDate(r.end_date)}</td>
+                  <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
+                  <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{r.l1_approver_name || "—"}</td>
+                  <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
+                  <td style={{ textAlign: "center" }}>
+                    <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

@@ -4,12 +4,17 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { LeaveStats, LEAVE_TYPE_CONFIG } from "../_data";
 
-const AV_COLORS = ["#1e4e8c", "#0e7c86", "#1b8a6b", "#b5651d", "#ad95cf"];
-function avColor(name: string) { return AV_COLORS[name.charCodeAt(0) % AV_COLORS.length]; }
 
-export default function LeaveAnalytics() {
+interface Props { role?: string }
+
+export default function LeaveAnalytics({ role = "employee" }: Props) {
+  const isEmployee  = role === "employee";
   const currentYear = new Date().getFullYear();
-  const { data: stats, loading } = useFetch<LeaveStats>(API.leave.stats + `?year=${currentYear}`);
+  // Employees see own stats+balances; approvers see team/branch/org stats (backend auto-scopes by role)
+  const statsUrl = isEmployee
+    ? API.leave.stats + `?year=${currentYear}&scope=own`
+    : API.leave.stats + `?year=${currentYear}`;
+  const { data: stats, loading } = useFetch<LeaveStats>(statsUrl);
 
   if (loading) {
     return (
@@ -23,8 +28,6 @@ export default function LeaveAnalytics() {
   const totalPending  = stats?.pending   ?? 0;
   const totalAll      = stats?.total     ?? 0;
   const balances      = stats?.balances  ?? [];
-
-  const maxBalance = Math.max(...balances.map(b => b.total_days), 1);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -82,12 +85,12 @@ export default function LeaveAnalytics() {
         </div>
       )}
 
-      {/* Leave type distribution */}
-      {balances.length === 0 && (
+      {/* Balance empty state — only shown to employees (approvers never receive balance data) */}
+      {isEmployee && balances.length === 0 && (
         <div className="card" style={{ padding: "40px 20px", textAlign: "center" }}>
           <i className="ti ti-chart-bar-off" style={{ fontSize: 32, color: "var(--outline-v)", display: "block", marginBottom: 8 }} />
           <p style={{ color: "var(--on-variant)", fontSize: 13 }}>
-            No leave balance data for {currentYear}. HR can credit balances from Leave Settings.
+            No leave balance data for {currentYear}. Contact HR to credit your annual leave.
           </p>
         </div>
       )}

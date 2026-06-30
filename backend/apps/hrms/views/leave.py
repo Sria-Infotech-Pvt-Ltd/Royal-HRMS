@@ -70,6 +70,41 @@ def _resolve_approval_chain(employee):
     return l1, l2
 
 
+def _role_name(user) -> str:
+    return user.role.name if user.role else 'employee'
+
+
+def _approval_scope_filter(user) -> 'Q':
+    """
+    Scope filter for the approval queue — always excludes the approver's own requests.
+    system_admin → all; hr_admin → own branch; manager → direct reports; employee → own.
+    """
+    role = _role_name(user)
+    if role == 'system_admin':
+        return ~Q(employee=user)
+    if role == 'hr_admin':
+        base = Q(employee__branch=user.branch) if user.branch else Q()
+        return base & ~Q(employee=user)
+    if role == 'manager':
+        return Q(employee__reporting_manager=user) & ~Q(employee=user)
+    return Q(employee=user)
+
+
+def _calendar_scope_filter(user) -> 'Q':
+    """
+    Scope filter for the team calendar.
+    employee → all approved (to see who's out); manager → team + own; hr_admin → branch; system_admin → all.
+    """
+    role = _role_name(user)
+    if role == 'system_admin':
+        return Q()
+    if role == 'hr_admin':
+        return Q(employee__branch=user.branch) if user.branch else Q()
+    if role == 'manager':
+        return Q(employee__reporting_manager=user) | Q(employee=user)
+    return Q()  # employee: see all approved leaves to plan around absences
+
+
 def _calc_working_days(start: date, end: date, duration: str) -> float:
     if duration != 'full_day':
         return 0.5
@@ -208,15 +243,16 @@ class LeaveRequestListCreateView(APIView):
 
     def get(self, request):
         has_approve = _has_perm(request.user, 'leave.approve')
+        scope       = request.query_params.get('scope', '')
 
-        if has_approve:
-            queryset = LeaveRequest.objects.select_related(
-                'employee', 'l1_approver', 'l2_approver'
-            ).all()
+        qs_base = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver')
+
+        if scope == 'own' or not has_approve:
+            # Always return the requesting user's own requests only
+            queryset = qs_base.filter(employee=request.user)
         else:
-            queryset = LeaveRequest.objects.select_related(
-                'employee', 'l1_approver', 'l2_approver'
-            ).filter(employee=request.user)
+            # Approval queue — scoped by role, own requests excluded
+            queryset = qs_base.filter(_approval_scope_filter(request.user))
 
         leave_type = request.query_params.get('leave_type')
         if leave_type:
@@ -339,6 +375,9 @@ class LeaveApprovalView(APIView):
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        if leave_request.employee_id == request.user.id:
+            return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
+
         action  = request.data.get('action')
         remarks = request.data.get('remarks', '').strip()
 
@@ -396,12 +435,16 @@ class LeaveStatsView(APIView):
 
     def get(self, request):
         has_approve = _has_perm(request.user, 'leave.approve')
-        year = int(request.query_params.get('year', _current_year()))
+        year        = int(request.query_params.get('year', _current_year()))
+        scope       = request.query_params.get('scope', '')
+        own_scope   = scope == 'own' or not has_approve
 
-        if has_approve:
-            qs = LeaveRequest.objects.filter(start_date__year=year)
-        else:
+        if own_scope:
             qs = LeaveRequest.objects.filter(employee=request.user, start_date__year=year)
+        else:
+            qs = LeaveRequest.objects.filter(
+                _approval_scope_filter(request.user), start_date__year=year
+            )
 
         agg = qs.aggregate(
             total     = Count('id'),
@@ -411,17 +454,17 @@ class LeaveStatsView(APIView):
             cancelled = Count('id', filter=Q(status=REQ_CANCELLED)),
         )
 
-        # Balance summary for employee view
+        # Balance breakdown only for own-scope views (employee or ?scope=own)
         balance_data = []
-        if not has_approve:
+        if own_scope:
             balances = LeaveBalance.objects.filter(employee=request.user, year=year)
             balance_data = [
                 {
-                    'leave_type':  b.leave_type,
+                    'leave_type':         b.leave_type,
                     'leave_type_display': b.get_leave_type_display(),
-                    'total_days':  float(b.total_days),
-                    'used_days':   float(b.used_days),
-                    'available':   float(b.total_days - b.used_days),
+                    'total_days':         float(b.total_days),
+                    'used_days':          float(b.used_days),
+                    'available':          float(b.total_days - b.used_days),
                 }
                 for b in balances
             ]
@@ -444,15 +487,18 @@ class LeaveCalendarView(APIView):
         year  = int(request.query_params.get('year',  _current_year()))
         month = request.query_params.get('month')
 
+        scope_filter = _calendar_scope_filter(request.user)
         qs = LeaveRequest.objects.select_related('employee').filter(
+            scope_filter,
             status=REQ_APPROVED,
             start_date__year=year,
         )
         if month:
             qs = qs.filter(start_date__month=int(month))
 
+        # system_admin can still narrow by branch via the UI branch dropdown
         branch = request.query_params.get('branch')
-        if branch:
+        if branch and _role_name(request.user) == 'system_admin':
             qs = qs.filter(employee__branch__iexact=branch)
 
         events = [
