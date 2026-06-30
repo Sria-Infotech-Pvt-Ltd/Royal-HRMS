@@ -31,19 +31,23 @@ const CATS = [
 type CatId = "all" | "company" | "modules" | "comm" | "system";
 
 const ITEM_ROUTES: Record<string, string> = {
-  company:              "/dashboard/settings/company",
-  permissions:          "/dashboard/settings/permissions",
-  departments:          "/dashboard/settings/departments",
-  smtp:                 "/dashboard/settings/smtp",
-  "email-templates":    "/dashboard/settings/email-templates",
-  audit:                "/dashboard/settings/audit",
-  "employee-code":      "/dashboard/settings/employee-code",
-  "leave-policy":     "/dashboard/settings/leave-policy",
-  "holiday-calendar": "/dashboard/settings/holiday-calendar",
-  "approval-rules":    "/dashboard/settings/approval-rules",
-  "attendance-config": "/dashboard/settings/attendance-config",
-  "payroll-config":    "/dashboard/settings/payroll-config",
+  company:                "/dashboard/settings/company",
+  permissions:            "/dashboard/settings/permissions",
+  departments:            "/dashboard/settings/departments",
+  smtp:                   "/dashboard/settings/smtp",
+  "email-templates":      "/dashboard/settings/email-templates",
+  audit:                  "/dashboard/settings/audit",
+  "employee-code":        "/dashboard/settings/employee-code",
+  "leave-policy":         "/dashboard/settings/leave-policy",
+  "holiday-calendar":     "/dashboard/settings/holiday-calendar",
+  "approval-rules":       "/dashboard/settings/approval-rules",
+  "attendance-config":    "/dashboard/settings/attendance-config",
+  "payroll-config":       "/dashboard/settings/payroll-config",
+  "recruitment-config":   "/dashboard/settings/recruitment-config",
+  "notifications":        "/dashboard/settings/notifications",
 };
+
+const COMING_SOON_ITEMS = new Set(["recruitment-config", "notifications"]);
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -77,28 +81,38 @@ export default function SettingsPage() {
 
       {/* Settings card grid */}
       <div className="settings-cards-grid">
-        {visible.map((item) => (
-          <div
-            key={item.id}
-            className="settings-card-tile"
-            style={{ cursor: "pointer" }}
-            onClick={() => {
-              const route = ITEM_ROUTES[item.id];
-              if (route) router.push(route);
-            }}
-          >
-            <div className={`settings-card-icon ${item.iconClass}`}>
-              <i className={`ti ${item.icon}`} />
+        {visible.map((item) => {
+          const isSoon = COMING_SOON_ITEMS.has(item.id);
+          return (
+            <div
+              key={item.id}
+              className="settings-card-tile"
+              style={{ cursor: isSoon ? "default" : "pointer", opacity: isSoon ? 0.7 : 1 }}
+              onClick={() => {
+                const route = ITEM_ROUTES[item.id];
+                if (route) router.push(route);
+              }}
+            >
+              <div className={`settings-card-icon ${item.iconClass}`}>
+                <i className={`ti ${item.icon}`} />
+              </div>
+              <div className="settings-card-body">
+                <div className="settings-card-name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {item.label}
+                  {isSoon && (
+                    <span style={{ fontSize: 9, fontWeight: 700, background: "var(--outline-v)", color: "var(--outline)", padding: "1px 6px", borderRadius: 4, letterSpacing: "0.04em" }}>
+                      SOON
+                    </span>
+                  )}
+                </div>
+                <div className="settings-card-desc">{item.desc}</div>
+              </div>
+              {!isSoon && (
+                <i className="ti ti-chevron-right" style={{ fontSize: 16, color: "var(--outline)", marginLeft: "auto", alignSelf: "center" }} />
+              )}
             </div>
-            <div className="settings-card-body">
-              <div className="settings-card-name">{item.label}</div>
-              <div className="settings-card-desc">{item.desc}</div>
-            </div>
-            {ITEM_ROUTES[item.id] && (
-              <i className="ti ti-chevron-right" style={{ fontSize: 16, color: "var(--outline)", marginLeft: "auto", alignSelf: "center" }} />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
