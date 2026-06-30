@@ -41,6 +41,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "leave-policy":     "/dashboard/settings/leave-policy",
   "holiday-calendar": "/dashboard/settings/holiday-calendar",
   "approval-rules":   "/dashboard/settings/approval-rules",
+  "payroll-config":   "/dashboard/settings/payroll-config",
 };
 
 export default function SettingsPage() {
