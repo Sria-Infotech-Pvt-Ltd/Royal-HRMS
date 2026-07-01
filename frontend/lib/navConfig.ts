@@ -39,13 +39,12 @@ const ALL_NAV: NavEntry[] = [
   { id: "expenses",         icon: "ti-wallet",               label: "Expenses",         path: "/dashboard/expenses",         permission: "expenses.view" },
 
   { section: "HR Ops" },
-  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: "leave.view",      comingSoon: true },
+  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: "leave.view" },
   { id: "separation",       icon: "ti-logout",               label: "Separation & FnF", path: "/dashboard/separation",       permission: "employees.view",  comingSoon: true },
   { id: "documents",        icon: "ti-folder",               label: "Document Center",  path: "/dashboard/documents",        permission: "documents.view" },
 
   { section: "My" },
   { id: "my-attendance",    icon: "ti-clock-check",          label: "My Attendance",    path: "/dashboard/my-attendance",    permission: null },
-  { id: "my-requests",      icon: "ti-inbox",                label: "My Requests",      path: "/dashboard/my-requests",      permission: null,             comingSoon: true },
   { id: "profile",          icon: "ti-user-circle",          label: "My Profile",       path: "/dashboard/profile",          permission: null },
 
   { section: "System" },

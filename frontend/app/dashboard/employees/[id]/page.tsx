@@ -8,6 +8,7 @@ import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
   type DetailValues,
+  type DocEntry,
   type FieldOption,
   type TableRow,
   type Employee,
@@ -18,7 +19,7 @@ import ProfileHeader from "./_components/ProfileHeader";
 import ProfileTabBar from "./_components/ProfileTabBar";
 import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
-import { ReportingManagerCard } from "./_components/ReportingManagerCard";
+import { EmployeePickerInline } from "./_components/ReportingManagerCard";
 import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
 
 interface ApiProfile {
@@ -52,25 +53,31 @@ interface ApiEmployee {
   department: string; designation: string; branch: string;
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
-  reporting_manager_id:   string | null;
-  reporting_manager_name: string | null;
+  reporting_manager: { id: string; name: string } | null;
+  hr:                { id: string; name: string } | null;
   profile?: ApiProfile;
   documents?: ApiDocument[];
 }
 
 const DOC_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-function buildDocEntries(apiDocs: ApiDocument[]) {
-  return apiDocs.map(api => {
-    const dt = new Date(api.uploaded_at);
+function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
+  // Use the static expected document types as the base list so the cards section
+  // always shows all document slots — uploaded ones get their file info merged in.
+  const docsSection = PROFILE_SECTIONS.find(s => s.id === "documents");
+  const base: DocEntry[] = docsSection?.kind === "docs" ? [...docsSection.documents] : [];
+
+  return base.map(expected => {
+    const uploaded = apiDocs.find(d => d.document_type_display === expected.name);
+    if (!uploaded) return expected;
+    const dt = new Date(uploaded.uploaded_at);
     return {
-      name: api.document_type_display,
-      required: false,
+      ...expected,
       status: "pending" as const,
       uploadedOn: `${DOC_MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
-      fileUrl: api.file,
-      fileName: api.file_name,
-      fileSize: api.file_size,
+      fileUrl: uploaded.file,
+      fileName: uploaded.file_name,
+      fileSize: uploaded.file_size,
     };
   });
 }
@@ -103,8 +110,12 @@ function apiToEmployee(u: ApiEmployee): Employee {
       dateOfJoining: u.date_of_joining || "",
       department:    u.department || "",
       designation:   u.designation || "",
-      branch:        u.branch || "",
-      category:      "General",
+      branch:              u.branch || "",
+      reportingManager:    u.reporting_manager?.name ?? "",
+      reportingManagerId:  u.reporting_manager?.id   ?? "",
+      hr:                  u.hr?.name ?? "",
+      hrId:                u.hr?.id   ?? "",
+      category:          "General",
       esiLocation:   "Corporate",
       metroTds:      "Metro",
       esiDispensary: "N/A",
@@ -115,7 +126,10 @@ function apiToEmployee(u: ApiEmployee): Employee {
       portalAccess:  "enabled",
       mobileNumber:  u.phone || "",
       // Personal (from onboarding profile)
-      maritalStatus:    p.marital_status || "",
+      // Backend returns lowercase ("single"); options are Title Case ("Single").
+      maritalStatus:    p.marital_status
+        ? p.marital_status.charAt(0).toUpperCase() + p.marital_status.slice(1)
+        : "",
       fatherName:       p.father_name || "",
       bloodGroup:       p.blood_group || "",
       currentAddress:   p.current_address || "",
@@ -159,8 +173,6 @@ export default function EmployeeProfilePage({
   const [employee,          setEmployee]          = useState<Employee | null>(null);
   const [loading,           setLoading]           = useState(true);
   const [notFound,          setNotFound]          = useState(false);
-  const [reportingMgrId,    setReportingMgrId]    = useState<string | null>(null);
-  const [reportingMgrName,  setReportingMgrName]  = useState<string | null>(null);
 
   const [values,     setValues]     = useState<DetailValues>({});
   const [tables,     setTables]     = useState<Record<string, TableRow[]>>({});
@@ -221,8 +233,6 @@ export default function EmployeeProfilePage({
         setBaseValues({ ...emp.details });
         setTables({});
         setBaseTables({});
-        setReportingMgrId(raw.reporting_manager_id ?? null);
-        setReportingMgrName(raw.reporting_manager_name ?? null);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -281,11 +291,13 @@ export default function EmployeeProfilePage({
     setJustSaved(false);
     try {
       const employeePayload = {
-        department:  values.department  || null,
-        designation: values.designation || null,
-        branch:      values.branch      || null,
-        role:        ROLE_SLUG[values.ssRole] || null,
-        is_active:   employee?.status !== "inactive",
+        department:           values.department  || null,
+        designation:          values.designation || null,
+        branch:               values.branch      || null,
+        role:                 ROLE_SLUG[values.ssRole] || null,
+        is_active:            employee?.status !== "inactive",
+        reporting_manager_id: values.reportingManagerId || null,
+        hr_id:                values.hrId || null,
       };
 
       await clientApi.put(API.employees.detail(id), employeePayload);
@@ -333,12 +345,6 @@ export default function EmployeeProfilePage({
             <ProfileSidebar active={sectionId} onChange={setSectionId} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <ReportingManagerCard
-              employeeCode={id}
-              currentManagerId={reportingMgrId}
-              currentManagerName={reportingMgrName}
-              onUpdated={(mgId, mgName) => { setReportingMgrId(mgId); setReportingMgrName(mgName); }}
-            />
             <ProfileForm
               section={section}
               values={values}
@@ -348,9 +354,48 @@ export default function EmployeeProfilePage({
               liveDocuments={sectionId === "documents" ? employee.documents : undefined}
               fieldOptions={{
                 department:  [{ value: "", label: "Select department" }, ...deptOptions],
-                designation: [{ value: "", label: desigOptions.length ? "Select designation" : "Select a department first" }, ...desigOptions],
+                designation: [
+                  { value: "", label: desigOptions.length || values.designation ? "Select designation" : "Select a department first" },
+                  ...(values.designation && !desigOptions.find(o => o.value === values.designation)
+                    ? [{ value: values.designation, label: values.designation }]
+                    : []),
+                  ...desigOptions,
+                ],
                 ssRole:      [{ value: "", label: "Select role" }, ...roleOptions],
                 branch:      [{ value: "", label: "Select branch" }, ...branchOptions],
+              }}
+              fieldSlot={(key, disabled) => {
+                if (key === "reportingManager") {
+                  if (!values.reportingManager) return "hidden";
+                  return (
+                    <EmployeePickerInline
+                      label="Reporting Manager"
+                      value={values.reportingManager}
+                      selectedId={values.reportingManagerId ?? ""}
+                      disabled={disabled}
+                      listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
+                      onSelect={(uuid, name) =>
+                        setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
+                      }
+                    />
+                  );
+                }
+                if (key === "hr") {
+                  if (!values.hr) return "hidden";
+                  return (
+                    <EmployeePickerInline
+                      label="Branch HR"
+                      value={values.hr}
+                      selectedId={values.hrId ?? ""}
+                      disabled={disabled}
+                      listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : API.employees.hrList}
+                      onSelect={(uuid, name) =>
+                        setValues(v => ({ ...v, hr: name ?? "", hrId: uuid ?? "" }))
+                      }
+                    />
+                  );
+                }
+                return null;
               }}
               readOnly={!isEditing}
               onEdit={() => setIsEditing(true)}
@@ -362,7 +407,7 @@ export default function EmployeeProfilePage({
           </div>
         </div>
       ) : tab === "approval" ? (
-        <ApprovalMatrixTab employeeCode={id} />
+        <ApprovalMatrixTab employeeCode={id} branch={values.branch ?? ""} />
       ) : (
         <TabPlaceholder icon={activeTab.icon} label={activeTab.label} />
       )}

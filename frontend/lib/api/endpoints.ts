@@ -37,10 +37,13 @@ export const API = {
 
   employees: {
     list:              "/employees/",
+    hrList:            "/employees/hrs/",
+    managerList:       "/employees/managers/",
     me:                "/employees/me/",
     detail:            (id: string) => `/employees/${id}/`,
     profile:           (id: string) => `/employees/${id}/profile/`,
     reportingManager:  (id: string) => `/employees/${id}/reporting-manager/`,
+    hr:                (id: string) => `/employees/${id}/hr/`,
     approvalMatrix:    (id: string) => `/employees/${id}/approval-matrix/`,
     branches:          "/branch/branches/",
   },
@@ -75,18 +78,30 @@ export const API = {
   },
 
   onboarding: {
-    profile:        "/onboarding/profile/",
-    profileStep:    (step: number) => `/onboarding/profile/step/${step}/`,
+    profile:        "/onboarding/",
+    profileStep:    (step: number) => `/onboarding/step/${step}/`,
     documents:      "/onboarding/documents/",
     documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,
-    submit:         "/onboarding/submit/",
+    submit:         "/onboarding/",
     approvals:      "/onboarding/approvals/",
-    approve:        (userId: string) => `/onboarding/approvals/${userId}/approve/`,
+    pipeline:       "/onboarding/approvals/?view=pipeline",
+    approve:        (userId: string) => `/onboarding/approvals/${userId}/`,
+  },
+
+  approvals: {
+    leaveRequests:  "/leave/requests/",
+    approveLeave:   (id: string) => `/leave/requests/${id}/approve/`,
+    expenseList:    "/expenses/",
+    approveExpense: (id: string) => `/expenses/${id}/approve/`,
   },
 
   expenses: {
-    list:  "/expenses/",
-    stats: "/expenses/stats/",
+    list:         "/expenses/",
+    stats:        "/expenses/stats/",
+    categories:   "/expenses/categories/",
+    updateStatus: "/expenses/status/",
+    detail:       (id: string) => `/expenses/${id}/`,
+    approve:      (id: string) => `/expenses/${id}/approve/`,
   },
 
   leave: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import type {
   DetailValues,
   DocEntry,
@@ -26,6 +26,7 @@ export default function ProfileForm({
   saving,
   liveDocuments,
   fieldOptions,
+  fieldSlot,
   readOnly,
   onFieldChange,
   onRowsChange,
@@ -40,6 +41,7 @@ export default function ProfileForm({
   saving?: boolean;
   liveDocuments?: DocEntry[];
   fieldOptions?: Record<string, FieldOption[]>;
+  fieldSlot?: (key: string, disabled: boolean) => React.ReactNode | null | "hidden";
   readOnly?: boolean;
   onFieldChange: (key: string, val: string) => void;
   onRowsChange: (rows: TableRow[]) => void;
@@ -83,6 +85,11 @@ export default function ProfileForm({
         {section.kind === "grid" && (
           <div className="grid grid-cols-2 gap-x-6 gap-y-5">
             {section.fields.map((f) => {
+              const slot = fieldSlot?.(f.key, readOnly ?? true);
+              if (slot === "hidden") return null;
+              if (slot != null) {
+                return <div key={f.key}>{slot}</div>;
+              }
               const overrideOpts = fieldOptions?.[f.key];
               const mergedField = overrideOpts ? { ...f, options: overrideOpts } : f;
               return (

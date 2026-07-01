@@ -1911,3 +1911,102 @@ documentDetail: (docId: string) => `/onboarding/documents/${docId}/`
 - **`UploadedDoc.id` is now `string`** in the onboarding wizard — matches Django `<str:doc_id>` URL param. The backend also returns `id` as a number in JSON; `String(existing.id)` coercion is handled at the call site.
 
 ---
+
+## Session 14 — Safura Samreen (1 July 2026)
+
+**Name:** Safura Samreen
+**Date:** 1 July 2026
+**Branch:** `Frontend/Approvals`
+
+---
+
+### Overview
+
+Combined the old separate "My Requests" and "Approvals" into a single unified page at `/dashboard/approvals` with two tabs. Removed the My Requests nav item from the sidebar. Wired all leave and expense request and approval flows to the real backend API.
+
+---
+
+### 1. Sidebar & Navigation Changes
+
+Removed the My Requests nav item from `lib/navConfig.ts` since it is now part of the Approvals page. Removed the `comingSoon` flag from the Approvals nav item so it is clickable. In `DashboardShell.tsx`, removed the My Requests page title entry and updated the Approvals title to "Team Approvals".
+
+---
+
+### 2. Unified Approvals Page (`app/dashboard/approvals/page.tsx`)
+
+Complete rewrite of the page. Two tabs at the top — My Requests and Team Approvals. My Requests is for all employees to submit and track their own leave and expense requests. Team Approvals is for managers and HR to view and action pending requests from their team.
+
+The page uses a generic `PaginatedResponse` type to handle Django's paginated list responses (`results`, `count`, `page`, `page_size`, `total_pages`). All list data is extracted from `.results`.
+
+Interfaces defined for `LeaveRequest`, `ExpenseRequest`, `ExpenseReceipt`, and `CategoryOption` (the shape returned by the categories and status choice APIs — an object with `value` and `label` fields).
+
+Shared components used across both tabs: a Type dropdown for switching between Leave and Expense, a Status filter dropdown, a coloured status badge, a leave type badge, an approve/reject action modal with a remarks field, and loading/error/empty state rows. All button elements have `suppressHydrationWarning` to prevent browser extension hydration mismatches.
+
+---
+
+### 3. My Requests Section
+
+Fetches leave requests from `GET /leave/requests/` and expense claims from `GET /expenses/` using `useFetch`. Only the active type fetches at a time. The status filter appends `?status=pending` etc. to the URL.
+
+Leave table shows: Leave Type, From, To, Days, Reason, Applied On, Status, Remarks.
+
+Expense table shows: Category, Amount, Description, Submitted On, Status, Remarks.
+
+Status is shown as a read-only badge. Employees cannot edit their own request status from this view.
+
+**New Leave Request modal** — fields are Leave Type (dropdown), From Date, To Date, Reason. Submits to `POST /leave/requests/`.
+
+**New Expense Claim modal** — fields are Category (combobox), Amount, Expense Date, Description, and Receipts (multi-file upload, PDF/JPG/PNG, max 5 MB each, at least one required). Submits as multipart form data to `POST /expenses/`. The category combobox fetches options from `GET /expenses/categories/` which returns value/label pairs. The user can also type a new category name and add it locally. If the categories endpoint is unavailable, it falls back to a static list.
+
+---
+
+### 4. Team Approvals Section
+
+Leave requests fetched from `GET /leave/requests/?status=pending`. Expense claims fetched from `GET /expenses/` with no status filter — the backend returns expenses the current user is authorised to approve based on their role.
+
+**Leave table** shows: Employee, Leave Type, From, To, Days, Reason, Applied On, and an Actions column with Approve and Reject buttons. Clicking either button opens the action modal where the manager enters optional remarks (remarks are required for rejection). Confirmation calls `POST /leave/requests/{id}/approve/` with the action and remarks.
+
+**Expense table** shows: Employee, Category, Amount, Description, Submitted On, and an Actions column with an inline status dropdown. The dropdown options are fetched once per section mount from `GET /expenses/status/` which returns value/label pairs (Pending, Approved, Rejected). The dropdown pre-selects the expense's current status. Changing the selection calls `PUT /expenses/{expense_number}/` with the new status and refreshes the table. On error it reverts to the previous selection.
+
+---
+
+### 5. API Endpoints Added (`lib/api/endpoints.ts`)
+
+Added an `approvals` group with endpoints for leave request list, leave approve action, expense list, and expense approve action. Added `categories`, `updateStatus`, and `detail` to the `expenses` group.
+
+---
+
+### 6. Bugs Fixed This Session
+
+- **Hydration mismatch on buttons** — browser password manager extensions inject a `fdprocessedid` attribute into button elements, which React flags as a hydration mismatch. Fixed by adding `suppressHydrationWarning` to every button in the page.
+- **`map is not a function` on leave and expense lists** — the backend returns a paginated envelope not a plain array. Fixed by typing responses as `PaginatedResponse<T>` and reading `.results`.
+- **`/expenses/categories/` returns 400 "categories is not a valid UUID"** — Django was matching the word "categories" against the `expenses/<str:expense_id>/` URL pattern. The backend needs to register the categories route before the detail route. The frontend falls back to a static list in the meantime.
+- **`c.toLowerCase is not a function` in the category combobox** — the categories API returns objects with `value` and `label` fields, not plain strings. Fixed by introducing the `CategoryOption` interface and filtering on `c.label.toLowerCase()`.
+- **Duplicate key warning on expense rows** — `r.id` was undefined for some rows. Fixed by using `r.expense_number ?? r.id ?? idx` as the row key.
+- **Expense status update was using POST** — changed to PUT as required by the backend.
+- **Expense status update was calling the wrong endpoint** — was calling `/expenses/status/`. Changed to `PUT /expenses/{expense_number}/`.
+
+---
+
+### Key Files Changed (1 July 2026)
+
+| File | Change |
+|------|--------|
+| `lib/navConfig.ts` | Removed `my-requests` nav item; removed `comingSoon` from `approvals` |
+| `components/dashboard/DashboardShell.tsx` | Removed My Requests page title; `approvals` mapped to "Team Approvals" |
+| `lib/api/endpoints.ts` | Added `approvals` group; added `categories`, `updateStatus` to `expenses` |
+| `app/dashboard/approvals/page.tsx` | Full rewrite — unified My Requests and Team Approvals tabs, all modals, tables, and fetch logic |
+
+---
+
+### Notes for Next Developer (1 July 2026)
+
+- The backend must register `expenses/categories/` before `expenses/<str:expense_id>/` in `urls.py`, otherwise the categories endpoint returns a UUID validation error. Until that is done the combobox falls back to a static list silently.
+- Use `expense_number` in API calls for expenses, not `id`. The `id` field from the list response may be undefined.
+- Status choices for the expense dropdown come from `GET /expenses/status/`. If this endpoint changes shape, update the `CategoryOption` usage in `TeamApprovalsSection`.
+- Leave approvals use a modal with remarks. Reject without remarks is blocked on the frontend and the backend validates this too.
+- Expense approvals use a direct PUT with no modal. The dropdown change triggers the update immediately.
+- `suppressHydrationWarning` on every button in this file is intentional — removing it will bring back the hydration mismatch from password manager extensions.
+- All list endpoints return a paginated envelope. Always access `.results` for the array, never the response root.
+
+---

@@ -7,129 +7,39 @@ import { getStoredUser } from "@/lib/auth";
 import clientApi from "@/lib/clientApi";
 import type { WorkflowMatrixRow, ApprovalWorkflowType } from "@/types/approvalMatrix";
 
-interface EmployeeResult {
-  uuid:        string;
+interface PickerEmployee {
+  id:          string;
   full_name:   string;
   employee_id: string;
   department:  string;
+  branch:      string;
 }
 
-interface ListResponse { results: EmployeeResult[]; }
-
-// ─── Module-level component — must NOT be defined inside another component ───
-
-interface SearchInputProps {
-  label:      string;
-  search:     string;
-  onSearch:   (v: string) => void;
-  selected:   EmployeeResult | null;
-  onSelect:   (e: EmployeeResult) => void;
-  onClear:    () => void;
-  results:    EmployeeResult[];
-  searching:  boolean;
-}
-
-function EmployeeSearchInput({
-  label, search, onSearch, selected, onSelect, onClear, results, searching,
-}: SearchInputProps) {
-  return (
-    <div className="field-group">
-      <label className="field-label">{label}</label>
-      {selected ? (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8,
-          background: "var(--bg-mid)", borderRadius: 8, padding: "8px 12px",
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{selected.full_name}</span>
-          <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{selected.employee_id}</span>
-          <button className="btn btn-ghost" style={{ padding: "2px 8px", fontSize: 12 }} onClick={onClear}>
-            <i className="ti ti-x" />
-          </button>
-        </div>
-      ) : (
-        <div style={{ position: "relative" }}>
-          <input
-            className="field-input"
-            placeholder="Type 2+ characters to search…"
-            value={search}
-            onChange={e => onSearch(e.target.value)}
-          />
-          {searching && (
-            <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)" }}>
-              <i className="ti ti-loader-2 spin" style={{ color: "var(--on-variant)", fontSize: 14 }} />
-            </div>
-          )}
-          {results.length > 0 && (
-            <div style={{
-              position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 60,
-              background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 8,
-              boxShadow: "0 4px 16px rgba(0,0,0,0.10)", overflow: "hidden",
-            }}>
-              {results.map(emp => (
-                <button
-                  key={emp.uuid}
-                  style={{
-                    display: "block", width: "100%", padding: "9px 12px",
-                    background: "none", border: "none", cursor: "pointer",
-                    textAlign: "left", borderBottom: "1px solid var(--outline-v)",
-                  }}
-                  onClick={() => { onSelect(emp); onSearch(""); }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-mid)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "none")}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{emp.full_name}</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                    {emp.employee_id} · {emp.department}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-          {search.trim().length >= 2 && !searching && results.length === 0 && (
-            <div style={{
-              position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 60,
-              background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 8,
-              padding: "12px 14px", fontSize: 13, color: "var(--on-variant)",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
-            }}>
-              No employees found.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Override Editor Modal ───────────────────────────────────────────────────
+// ─── Override Editor Modal ────────────────────────────────────────────────────
 
 interface OverrideEditorProps {
   row:          WorkflowMatrixRow;
   employeeCode: string;
+  branch:       string;
   onSaved:      (updated: WorkflowMatrixRow) => void;
   onClose:      () => void;
 }
 
-function OverrideEditor({ row, employeeCode, onSaved, onClose }: OverrideEditorProps) {
-  const [l1Search,   setL1Search]   = useState("");
-  const [l2Search,   setL2Search]   = useState("");
-  const [l1Selected, setL1Selected] = useState<EmployeeResult | null>(null);
-  const [l2Selected, setL2Selected] = useState<EmployeeResult | null>(null);
-  const [saving,     setSaving]     = useState(false);
-  const [apiError,   setApiError]   = useState("");
+function OverrideEditor({ row, employeeCode, branch, onSaved, onClose }: OverrideEditorProps) {
+  const [l1Id,    setL1Id]    = useState<string>(row.l1_is_override ? (row.l1_approver_id ?? "") : "");
+  const [l2Id,    setL2Id]    = useState<string>(row.l2_is_override ? (row.l2_approver_id ?? "") : "");
+  const [saving,  setSaving]  = useState(false);
+  const [apiError, setApiError] = useState("");
 
-  const l1Url = l1Search.trim().length >= 2
-    ? `${API.employees.list}?search=${encodeURIComponent(l1Search.trim())}&page_size=6`
-    : null;
-  const l2Url = l2Search.trim().length >= 2
-    ? `${API.employees.list}?search=${encodeURIComponent(l2Search.trim())}&page_size=6`
-    : null;
+  const branchParam = branch ? `?branch=${encodeURIComponent(branch)}` : "";
 
-  const { data: l1Data, loading: l1Searching } = useFetch<ListResponse>(l1Url);
-  const { data: l2Data, loading: l2Searching } = useFetch<ListResponse>(l2Url);
+  const { data: managersRaw, loading: loadingManagers } =
+    useFetch<PickerEmployee[]>(`${API.employees.managerList}${branchParam}`);
+  const { data: hrsRaw, loading: loadingHrs } =
+    useFetch<PickerEmployee[]>(`${API.employees.hrList}${branchParam}`);
 
-  const l1Results = l1Data?.results ?? [];
-  const l2Results = l2Data?.results ?? [];
+  const managers = managersRaw ?? [];
+  const hrs      = hrsRaw      ?? [];
 
   async function handleSave() {
     setSaving(true);
@@ -141,8 +51,8 @@ function OverrideEditor({ row, employeeCode, onSaved, onClose }: OverrideEditorP
         l2_override_id: string | null;
       } = {
         workflow_type:  row.workflow_type,
-        l1_override_id: l1Selected ? l1Selected.uuid : null,
-        l2_override_id: l2Selected ? l2Selected.uuid : null,
+        l1_override_id: l1Id || null,
+        l2_override_id: l2Id || null,
       };
       const res = await clientApi.patch<{ data: WorkflowMatrixRow }>(
         API.employees.approvalMatrix(employeeCode),
@@ -156,6 +66,11 @@ function OverrideEditor({ row, employeeCode, onSaved, onClose }: OverrideEditorP
       setSaving(false);
     }
   }
+
+  const SELECT_CLS =
+    "w-full px-3.5 py-[7px] rounded-md border text-[13px] outline-none transition-all bg-white appearance-none cursor-pointer" +
+    " focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(30,78,140,0.10)]";
+  const CHEVRON = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`;
 
   return (
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -174,34 +89,77 @@ function OverrideEditor({ row, employeeCode, onSaved, onClose }: OverrideEditorP
           <div className="alert alert-warn mb-16" style={{ fontSize: 13 }}>
             <i className="ti ti-info-circle" />
             <div>
-              Leave a level blank to keep the global default
-              (<strong>{row.l1_approver_label}</strong>
-              {row.l2_approver_role && <> / <strong>{row.l2_approver_label}</strong></>}).
+              Select a specific person to override, or leave as <strong>— Global default —</strong> to revert.
             </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <EmployeeSearchInput
-              label={`L1 Override (default: ${row.l1_approver_label})`}
-              search={l1Search}
-              onSearch={setL1Search}
-              selected={l1Selected}
-              onSelect={setL1Selected}
-              onClear={() => setL1Selected(null)}
-              results={l1Results}
-              searching={l1Searching}
-            />
+            {/* L1 — Managers */}
+            <div className="field-group">
+              <label className="field-label">
+                L1 Approver
+                <span style={{ fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
+                  (default: {row.l1_approver_label})
+                </span>
+              </label>
+              <select
+                value={l1Id}
+                onChange={e => setL1Id(e.target.value)}
+                disabled={loadingManagers}
+                className={SELECT_CLS}
+                style={{
+                  borderColor: "#d3dae8",
+                  backgroundImage: CHEVRON,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 10px center",
+                  backgroundSize: "15px",
+                  paddingRight: "2.5rem",
+                }}
+              >
+                <option value="">
+                  {loadingManagers ? "Loading…" : "— Global default —"}
+                </option>
+                {managers.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name} ({m.employee_id})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* L2 — HRs (only if row has L2) */}
             {row.l2_approver_role && (
-              <EmployeeSearchInput
-                label={`L2 Override (default: ${row.l2_approver_label})`}
-                search={l2Search}
-                onSearch={setL2Search}
-                selected={l2Selected}
-                onSelect={setL2Selected}
-                onClear={() => setL2Selected(null)}
-                results={l2Results}
-                searching={l2Searching}
-              />
+              <div className="field-group">
+                <label className="field-label">
+                  L2 Approver
+                  <span style={{ fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
+                    (default: {row.l2_approver_label})
+                  </span>
+                </label>
+                <select
+                  value={l2Id}
+                  onChange={e => setL2Id(e.target.value)}
+                  disabled={loadingHrs}
+                  className={SELECT_CLS}
+                  style={{
+                    borderColor: "#d3dae8",
+                    backgroundImage: CHEVRON,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 10px center",
+                    backgroundSize: "15px",
+                    paddingRight: "2.5rem",
+                  }}
+                >
+                  <option value="">
+                    {loadingHrs ? "Loading…" : "— Global default —"}
+                  </option>
+                  {hrs.map(h => (
+                    <option key={h.id} value={h.id}>
+                      {h.full_name} ({h.employee_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         </div>
@@ -219,23 +177,31 @@ function OverrideEditor({ row, employeeCode, onSaved, onClose }: OverrideEditorP
 
 // ─── Approver Cell ────────────────────────────────────────────────────────────
 
-function ApproverCell({ overrideId, overrideName, roleLabel }: {
-  overrideId:   string | null;
-  overrideName: string | null;
-  roleLabel:    string;
+function ApproverCell({ name, label, isOverride }: {
+  name:       string | null;
+  label:      string;
+  isOverride: boolean;
 }) {
-  if (overrideId && overrideName) {
-    return (
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{overrideName}</div>
-        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Specific person</div>
-      </div>
-    );
-  }
   return (
-    <div>
-      <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{roleLabel}</div>
-      <div style={{ fontSize: 11, color: "var(--outline)" }}>Global default</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>
+        {name || label}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        {isOverride ? (
+          <span style={{
+            fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 20,
+            background: "rgba(30,78,140,0.10)", color: "var(--primary)",
+            textTransform: "uppercase", letterSpacing: "0.04em",
+          }}>
+            Override
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, color: "var(--outline)" }}>
+            Global default
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -244,9 +210,10 @@ function ApproverCell({ overrideId, overrideName, roleLabel }: {
 
 interface Props {
   employeeCode: string;
+  branch:       string;
 }
 
-export function ApprovalMatrixTab({ employeeCode }: Props) {
+export function ApprovalMatrixTab({ employeeCode, branch }: Props) {
   const { data, loading, error, refetch } = useFetch<WorkflowMatrixRow[]>(
     API.employees.approvalMatrix(employeeCode),
   );
@@ -277,7 +244,7 @@ export function ApprovalMatrixTab({ employeeCode }: Props) {
     );
   }
 
-  const rows = data ?? [];
+  const rows = (data ?? []).filter(r => (r.workflow_type as string) !== "loan");
 
   return (
     <div className="settings-card">
@@ -299,24 +266,30 @@ export function ApprovalMatrixTab({ employeeCode }: Props) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => (
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={canEdit ? 4 : 3} style={{ padding: "40px 12px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
+                  No approval matrix configured.
+                </td>
+              </tr>
+            ) : rows.map(row => (
               <tr key={row.workflow_type} style={{ borderBottom: "1px solid var(--outline-v)" }}>
                 <td style={{ padding: "14px 12px", fontWeight: 500, color: "var(--on-bg)" }}>
                   {row.workflow_label}
                 </td>
                 <td style={{ padding: "14px 12px" }}>
                   <ApproverCell
-                    overrideId={row.l1_override_id}
-                    overrideName={row.l1_override_name}
-                    roleLabel={row.l1_approver_label}
+                    name={row.l1_approver_name}
+                    label={row.l1_approver_label}
+                    isOverride={row.l1_is_override}
                   />
                 </td>
                 <td style={{ padding: "14px 12px" }}>
                   {row.l2_approver_role ? (
                     <ApproverCell
-                      overrideId={row.l2_override_id}
-                      overrideName={row.l2_override_name}
-                      roleLabel={row.l2_approver_label}
+                      name={row.l2_approver_name}
+                      label={row.l2_approver_label}
+                      isOverride={row.l2_is_override}
                     />
                   ) : (
                     <span style={{ fontSize: 13, color: "var(--outline)", opacity: 0.6 }}>Single level</span>
@@ -343,6 +316,7 @@ export function ApprovalMatrixTab({ employeeCode }: Props) {
         <OverrideEditor
           row={editing}
           employeeCode={employeeCode}
+          branch={branch}
           onSaved={handleSaved}
           onClose={() => setEditing(null)}
         />
