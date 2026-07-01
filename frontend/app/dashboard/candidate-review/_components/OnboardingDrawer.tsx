@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import DocPreviewModal from "@/components/DocPreviewModal";
 
-interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file?: string; }
+interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
 
 interface ProfileData {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -71,6 +72,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [selDesig,   setSelDesig]   = useState(user.designation || "");
   const [loadDepts,  setLoadDepts]  = useState(false);
   const [assignErr,  setAssignErr]  = useState("");
+  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   // Fetch departments the first time the assign section appears
   useEffect(() => {
@@ -119,6 +121,16 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   }
 
   return (
+    <>
+    {previewDoc && previewDoc.file_url && (
+      <DocPreviewModal
+        name={previewDoc.document_type_display}
+        fileName={previewDoc.file_name}
+        fileUrl={previewDoc.file_url}
+        fileSize={previewDoc.file_size}
+        onClose={() => setPreviewDoc(null)}
+      />
+    )}
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
@@ -183,11 +195,15 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                       <div style={{ color: "var(--on-variant)", fontSize: ".78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{d.file_name}</div>
                     </div>
                   </div>
-                  {d.file
-                    ? <a href={d.file} target="_blank" rel="noopener noreferrer"
-                        style={{ display: "flex", alignItems: "center", gap: 4, fontSize: ".8rem", color: "var(--primary)", fontWeight: 500, textDecoration: "none", flexShrink: 0 }}>
-                        <i className="ti ti-external-link" style={{ fontSize: 13 }} /> View
-                      </a>
+                  {d.file_url
+                    ? <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ flexShrink: 0 }}
+                        onClick={() => setPreviewDoc(d)}
+                        title="Preview"
+                      >
+                        <i className="ti ti-eye" style={{ fontSize: 15 }} />
+                      </button>
                     : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>No link</span>
                   }
                 </div>
@@ -279,5 +295,6 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
         </div>
       </div>
     </div>
+    </>
   );
 }

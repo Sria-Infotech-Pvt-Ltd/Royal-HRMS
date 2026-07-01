@@ -20,7 +20,7 @@ interface ProfileData {
   emergency_phone?: string; emergency_email?: string;
 }
 
-interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url: string; }
+interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url: string; file_size?: number; }
 
 interface ApprovalUser {
   id: string; full_name: string; email: string; phone: string;
@@ -95,6 +95,7 @@ export default function OnboardingQueueTab() {
           name={previewDoc.document_type_display}
           fileName={previewDoc.file_name}
           fileUrl={previewDoc.file_url}
+          fileSize={previewDoc.file_size}
           onClose={() => setPreviewDoc(null)}
         />
       )}

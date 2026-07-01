@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface DocPreviewModalProps {
   name: string;
@@ -58,7 +59,13 @@ export default function DocPreviewModal({
     setLoading(true);
     setFetchErr(false);
 
-    fetch(resolvedUrl, { credentials: "include" })
+    // Only send auth cookies for local proxy paths — external URLs (Cloudinary etc.)
+    // reject credentialed cross-origin requests with 401.
+    const fetchOpts: RequestInit = resolvedUrl.startsWith("/api/")
+      ? { credentials: "include" }
+      : {};
+
+    fetch(resolvedUrl, fetchOpts)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
@@ -76,10 +83,10 @@ export default function DocPreviewModal({
     };
   }, [resolvedUrl, fileIsImage]);
 
-  return (
+  const overlay = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "rgba(0,0,0,0.55)" }}
+      className="fixed inset-0 flex items-center justify-center p-6"
+      style={{ background: "rgba(0,0,0,0.55)", zIndex: 9999 }}
       onClick={onClose}
     >
       <div
@@ -170,4 +177,6 @@ export default function DocPreviewModal({
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body ?? document.documentElement);
 }
