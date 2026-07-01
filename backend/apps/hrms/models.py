@@ -127,7 +127,8 @@ class ExpenseReceipt(models.Model):
 # ─── Leave Policy ─────────────────────────────────────────────────────────────
 
 class LeavePolicy(models.Model):
-    leave_type             = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES, unique=True)
+    leave_type             = models.CharField(max_length=50, unique=True)
+    leave_type_label       = models.CharField(max_length=100, blank=True, default='')
     annual_days            = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     can_carry_forward      = models.BooleanField(default=False)
     max_carry_forward_days = models.PositiveIntegerField(default=0)
@@ -140,7 +141,8 @@ class LeavePolicy(models.Model):
         db_table = 'hrms_leave_policies'
 
     def __str__(self) -> str:
-        return f'{self.get_leave_type_display()} — {self.annual_days}d/yr'
+        label = self.leave_type_label or dict(LEAVE_TYPE_CHOICES).get(self.leave_type, self.leave_type)
+        return f'{label} — {self.annual_days}d/yr'
 
 
 # ─── Leave Balance ────────────────────────────────────────────────────────────

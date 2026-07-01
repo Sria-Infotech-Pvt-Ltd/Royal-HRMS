@@ -71,7 +71,7 @@ def validate_receipt_file(file) -> None:
 # ─── Leave serializers ────────────────────────────────────────────────────────
 
 class LeavePolicySerializer(serializers.ModelSerializer):
-    leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
+    leave_type_display = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeavePolicy
@@ -80,6 +80,39 @@ class LeavePolicySerializer(serializers.ModelSerializer):
             'annual_days', 'can_carry_forward', 'max_carry_forward_days',
             'policy_note', 'is_active', 'updated_at',
         ]
+
+    def get_leave_type_display(self, obj) -> str:
+        if obj.leave_type_label:
+            return obj.leave_type_label
+        return dict(LEAVE_TYPE_CHOICES).get(obj.leave_type, obj.leave_type.replace('_', ' ').title())
+
+
+class LeavePolicyCreateSerializer(serializers.Serializer):
+    leave_type_label       = serializers.CharField(max_length=100)
+    annual_days            = serializers.DecimalField(max_digits=5, decimal_places=1, default=0)
+    can_carry_forward      = serializers.BooleanField(default=False)
+    max_carry_forward_days = serializers.IntegerField(default=0, min_value=0)
+    policy_note            = serializers.CharField(required=False, default='', allow_blank=True)
+    is_active              = serializers.BooleanField(default=True)
+
+    def validate_leave_type_label(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Display name cannot be empty.')
+        key = value.lower().replace(' ', '_').replace('-', '_')
+        if LeavePolicy.objects.filter(leave_type=key).exists():
+            raise serializers.ValidationError(f'A leave type with this name already exists.')
+        return value
+
+    def validate_annual_days(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Annual days cannot be negative.')
+        return value
+
+    def validate_max_carry_forward_days(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Max carry forward days cannot be negative.')
+        return value
 
 
 class LeavePolicyUpdateSerializer(serializers.ModelSerializer):

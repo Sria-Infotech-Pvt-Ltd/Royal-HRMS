@@ -25,6 +25,15 @@ interface EditForm {
   is_active: boolean;
 }
 
+interface CreateForm {
+  leave_type_label: string;
+  annual_days: number;
+  can_carry_forward: boolean;
+  max_carry_forward_days: number;
+  policy_note: string;
+  is_active: boolean;
+}
+
 const TYPE_COLORS: Record<string, string> = {
   casual:    "#1e4e8c",
   earned:    "#1b8a6b",
@@ -41,12 +50,21 @@ function Spin() {
 export default function PolicyTab() {
   const { data: policies, loading, error, refetch } = useFetch<LeavePolicy[]>(API.leave.policy);
 
+  // ── Edit state ────────────────────────────────────────────────────────────
   const [editing,   setEditing]   = useState<LeavePolicy | null>(null);
   const [form,      setForm]      = useState<EditForm>({ annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
   const [errors,    setErrors]    = useState<Record<string, string>>({});
-  const [saving,    setSaving]    = useState(false);
+  const [isSaving,  setIsSaving]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // ── Create state ──────────────────────────────────────────────────────────
+  const [isCreating,    setIsCreating]    = useState(false);
+  const [createForm,    setCreateForm]    = useState<CreateForm>({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+  const [createErrors,  setCreateErrors]  = useState<Record<string, string>>({});
+  const [isSubmitting,  setIsSubmitting]  = useState(false);
+  const [createError,   setCreateError]   = useState<string | null>(null);
+
+  // ── Edit handlers ─────────────────────────────────────────────────────────
   function openEdit(p: LeavePolicy) {
     setEditing(p);
     setForm({ annual_days: Number(p.annual_days), can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note, is_active: p.is_active });
@@ -54,9 +72,9 @@ export default function PolicyTab() {
     setSaveError(null);
   }
 
-  function closeModal() { setEditing(null); }
+  function closeEdit() { setEditing(null); }
 
-  function validate(): boolean {
+  function validateEdit(): boolean {
     const e: Record<string, string> = {};
     if (form.annual_days < 0) e.annual_days = "Annual days cannot be negative.";
     if (form.can_carry_forward && form.max_carry_forward_days < 1) e.max_carry_forward_days = "Must be at least 1 when carry forward is enabled.";
@@ -64,24 +82,63 @@ export default function PolicyTab() {
     return Object.keys(e).length === 0;
   }
 
-  async function save() {
-    if (!editing || !validate()) return;
-    setSaving(true);
+  async function saveEdit() {
+    if (!editing || !validateEdit()) return;
+    setIsSaving(true);
     setSaveError(null);
     try {
       await clientApi.put(API.leave.policyDetail(editing.leave_type), form);
       refetch();
-      closeModal();
+      closeEdit();
     } catch (err: unknown) {
       setSaveError((err as { message?: string })?.message ?? "Failed to save policy.");
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
   }
 
-  function field(key: keyof EditForm, value: string | number | boolean) {
+  function editField(key: keyof EditForm, value: string | number | boolean) {
     setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
     setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  // ── Create handlers ───────────────────────────────────────────────────────
+  function openCreate() {
+    setCreateForm({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+    setCreateErrors({});
+    setCreateError(null);
+    setIsCreating(true);
+  }
+
+  function closeCreate() { setIsCreating(false); }
+
+  function validateCreate(): boolean {
+    const e: Record<string, string> = {};
+    if (!createForm.leave_type_label.trim()) e.leave_type_label = "Display name is required.";
+    if (createForm.annual_days < 0) e.annual_days = "Annual days cannot be negative.";
+    if (createForm.can_carry_forward && createForm.max_carry_forward_days < 1) e.max_carry_forward_days = "Must be at least 1 when carry forward is enabled.";
+    setCreateErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function submitCreate() {
+    if (!validateCreate()) return;
+    setIsSubmitting(true);
+    setCreateError(null);
+    try {
+      await clientApi.post(API.leave.policy, createForm);
+      refetch();
+      closeCreate();
+    } catch (err: unknown) {
+      setCreateError((err as { message?: string })?.message ?? "Failed to create leave type.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function createField(key: keyof CreateForm, value: string | number | boolean) {
+    setCreateErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setCreateForm(prev => ({ ...prev, [key]: value }));
   }
 
   const list = policies ?? [];
@@ -111,7 +168,9 @@ export default function PolicyTab() {
       <div className="card">
         <div className="card-header">
           <div className="card-title"><i className="ti ti-beach" /> Leave Types</div>
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{list.length} configured</span>
+          <button className="btn btn-filled btn-sm" onClick={openCreate}>
+            <i className="ti ti-plus" /> Add Leave Type
+          </button>
         </div>
 
         {loading && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}><Spin /> &nbsp;Loading policies…</div>}
@@ -174,7 +233,7 @@ export default function PolicyTab() {
           <div className="modal" style={{ maxWidth: 480 }}>
             <div className="modal-header">
               <div className="modal-title"><i className="ti ti-beach" style={{ marginRight: 8 }} />Edit: {editing.leave_type_display}</div>
-              <button className="modal-close" onClick={closeModal}><i className="ti ti-x" /></button>
+              <button className="modal-close" onClick={closeEdit}><i className="ti ti-x" /></button>
             </div>
             <div className="modal-body">
               {saveError && (
@@ -183,34 +242,101 @@ export default function PolicyTab() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
                 <div className="field-group mb-16">
                   <label className="field-label">Annual Days *</label>
-                  <input className={`field-input${errors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={form.annual_days} onChange={e => field("annual_days", Number(e.target.value))} />
+                  <input className={`field-input${errors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={form.annual_days} onChange={e => editField("annual_days", Number(e.target.value))} />
                   {errors.annual_days && <p className="field-error-msg">{errors.annual_days}</p>}
                 </div>
                 <div className="field-group mb-16">
                   <label className="field-label">Max Carry Fwd (days)</label>
-                  <input className={`field-input${errors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={form.max_carry_forward_days} onChange={e => field("max_carry_forward_days", Number(e.target.value))} disabled={!form.can_carry_forward} />
+                  <input className={`field-input${errors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={form.max_carry_forward_days} onChange={e => editField("max_carry_forward_days", Number(e.target.value))} disabled={!form.can_carry_forward} />
                   {errors.max_carry_forward_days && <p className="field-error-msg">{errors.max_carry_forward_days}</p>}
                 </div>
               </div>
               <div className="field-group mb-16">
                 <label className="field-label">Policy Note</label>
-                <textarea className="field-input" rows={3} value={form.policy_note} onChange={e => field("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
+                <textarea className="field-input" rows={3} value={form.policy_note} onChange={e => editField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
               </div>
               <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
                 <label className="module-check">
-                  <input type="checkbox" checked={form.can_carry_forward} onChange={e => field("can_carry_forward", e.target.checked)} />
+                  <input type="checkbox" checked={form.can_carry_forward} onChange={e => editField("can_carry_forward", e.target.checked)} />
                   <span>Allow Carry Forward</span>
                 </label>
                 <label className="module-check">
-                  <input type="checkbox" checked={form.is_active} onChange={e => field("is_active", e.target.checked)} />
+                  <input type="checkbox" checked={form.is_active} onChange={e => editField("is_active", e.target.checked)} />
                   <span>Active</span>
                 </label>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={closeModal}>Cancel</button>
-              <button className="btn btn-filled" onClick={save} disabled={saving}>
-                {saving ? <><Spin />&nbsp;Saving…</> : "Save Changes"}
+              <button className="btn btn-ghost" onClick={closeEdit}>Cancel</button>
+              <button className="btn btn-filled" onClick={saveEdit} disabled={isSaving}>
+                {isSaving ? <><Spin />&nbsp;Saving…</> : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Modal */}
+      {isCreating && (
+        <div className="modal-overlay open">
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <div className="modal-title"><i className="ti ti-plus" style={{ marginRight: 8 }} />Add Leave Type</div>
+              <button className="modal-close" onClick={closeCreate}><i className="ti ti-x" /></button>
+            </div>
+            <div className="modal-body">
+              {createError && (
+                <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{createError}</div>
+              )}
+              <div className="field-group mb-16">
+                <label className="field-label">Display Name *</label>
+                <input
+                  className={`field-input${createErrors.leave_type_label ? " field-error" : ""}`}
+                  type="text"
+                  placeholder="e.g. Compensatory Off"
+                  value={createForm.leave_type_label}
+                  onChange={e => createField("leave_type_label", e.target.value)}
+                />
+                {createErrors.leave_type_label
+                  ? <p className="field-error-msg">{createErrors.leave_type_label}</p>
+                  : createForm.leave_type_label.trim() && (
+                    <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
+                      Key: <code>{createForm.leave_type_label.trim().toLowerCase().replace(/[\s-]+/g, "_")}</code>
+                    </p>
+                  )
+                }
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+                <div className="field-group mb-16">
+                  <label className="field-label">Annual Days *</label>
+                  <input className={`field-input${createErrors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={createForm.annual_days} onChange={e => createField("annual_days", Number(e.target.value))} />
+                  {createErrors.annual_days && <p className="field-error-msg">{createErrors.annual_days}</p>}
+                </div>
+                <div className="field-group mb-16">
+                  <label className="field-label">Max Carry Fwd (days)</label>
+                  <input className={`field-input${createErrors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={createForm.max_carry_forward_days} onChange={e => createField("max_carry_forward_days", Number(e.target.value))} disabled={!createForm.can_carry_forward} />
+                  {createErrors.max_carry_forward_days && <p className="field-error-msg">{createErrors.max_carry_forward_days}</p>}
+                </div>
+              </div>
+              <div className="field-group mb-16">
+                <label className="field-label">Policy Note</label>
+                <textarea className="field-input" rows={3} value={createForm.policy_note} onChange={e => createField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
+              </div>
+              <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
+                <label className="module-check">
+                  <input type="checkbox" checked={createForm.can_carry_forward} onChange={e => createField("can_carry_forward", e.target.checked)} />
+                  <span>Allow Carry Forward</span>
+                </label>
+                <label className="module-check">
+                  <input type="checkbox" checked={createForm.is_active} onChange={e => createField("is_active", e.target.checked)} />
+                  <span>Active</span>
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={closeCreate}>Cancel</button>
+              <button className="btn btn-filled" onClick={submitCreate} disabled={isSubmitting}>
+                {isSubmitting ? <><Spin />&nbsp;Creating…</> : "Create Leave Type"}
               </button>
             </div>
           </div>
