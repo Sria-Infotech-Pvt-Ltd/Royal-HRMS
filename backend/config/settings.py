@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'apps.announcements',
     'apps.recruitment',
     'apps.hrms',
+    'apps.attendance',
 ]
 
 MIDDLEWARE = [
@@ -181,6 +182,13 @@ if DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES = [
         r'^http://localhost(:\d+)?$',
         r'^http://192\.168\.\d+\.\d+(:\d+)?$',
+    ]
+    # Allow Django admin CSRF from localhost (any port) in development.
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:8000',
+        'http://localhost:8008',
+        'http://127.0.0.1:8000',
+        'http://127.0.0.1:8008',
     ]
 
 # ─── Upload limits ────────────────────────────────────────────────────────────
