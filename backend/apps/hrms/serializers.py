@@ -30,17 +30,23 @@ class ExpenseReceiptSerializer(serializers.ModelSerializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    employee_name = serializers.SerializerMethodField()
-    branch_name   = serializers.SerializerMethodField()
-    receipts      = ExpenseReceiptSerializer(many=True, read_only=True)
+    employee_name  = serializers.SerializerMethodField()
+    branch_name    = serializers.SerializerMethodField()
+    receipts       = ExpenseReceiptSerializer(many=True, read_only=True)
+    expense_ref    = serializers.SerializerMethodField()
 
     class Meta:
         model  = Expense
         fields = [
-            'id', 'title', 'category', 'amount', 'expense_date',
+            'expense_number', 'expense_ref', 'title', 'category', 'amount', 'expense_date',
             'description', 'status', 'receipts',
             'employee_name', 'branch_name', 'created_at',
         ]
+
+    def get_expense_ref(self, obj: Expense) -> str:
+        if obj.expense_number is None:
+            return ''
+        return f'EXP{obj.expense_number:03d}'
 
     def get_employee_name(self, obj: Expense) -> str:
         return obj.employee.full_name if obj.employee_id else ''
@@ -50,6 +56,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class ExpenseCreateSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
     class Meta:
         model  = Expense
         fields = ['title', 'category', 'amount', 'expense_date', 'description']
@@ -58,6 +66,25 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError('Amount must be greater than zero.')
         return value
+
+    def validate_category(self, value):
+        lowered  = value.strip().lower()
+        valid    = [c[0] for c in Expense.CATEGORY_CHOICES]
+        if lowered in valid:
+            return lowered
+        by_label = {label.lower(): key for key, label in Expense.CATEGORY_CHOICES}
+        if lowered in by_label:
+            return by_label[lowered]
+        raise serializers.ValidationError(
+            f'Invalid category. Choose from: {", ".join(valid)}.'
+        )
+
+    def validate(self, attrs):
+        if not attrs.get('title'):
+            label_map      = {key: label for key, label in Expense.CATEGORY_CHOICES}
+            category       = attrs.get('category', '')
+            attrs['title'] = label_map.get(category, category.capitalize())
+        return attrs
 
 
 def validate_receipt_file(file) -> None:

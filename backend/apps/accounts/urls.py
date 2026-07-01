@@ -8,12 +8,11 @@ from apps.accounts.views import (
     EmployeeDocumentView,
     EmployeeProfileView,
     EmployeeReportingManagerView,
+    HRListView,
+    ManagerListView,
     MyProfileView,
-    OnboardingApprovalsListView,
-    OnboardingApproveView,
-    OnboardingPipelineView,
-    OnboardingStepSaveView,
-    SubmitOnboardingView,
+    OnboardingView,
+    OnboardingApprovalView,
     CompanyRetrieveUpdateView,
     DepartmentDetailView,
     DepartmentListCreateView,
@@ -56,21 +55,23 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(),  name='change-password'),
 
     # Employees
-    path('employees/',                                          EmployeeListCreateView.as_view(),       name='employee-list-create'),
-    path('employees/me/',                                       MyProfileView.as_view(),                name='my-profile'),
-    path('employees/<str:employee_id>/reporting-manager/',      EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
-    path('employees/<str:employee_id>/approval-matrix/',        EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
-    path('employees/<str:employee_id>/',                        EmployeeDetailView.as_view(),           name='employee-detail'),
+    path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
+    path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
+    path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
+    path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),
+    path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
+    path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
+    path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
+    path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
-    # Onboarding (self-service wizard)
-    path('onboarding/profile/',                            EmployeeProfileView.as_view(),        name='onboarding-profile'),
-    path('onboarding/profile/step/<int:step>/',            OnboardingStepSaveView.as_view(),     name='onboarding-profile-step'),
-    path('onboarding/documents/',              EmployeeDocumentView.as_view(), name='onboarding-documents'),
-    path('onboarding/documents/<str:doc_id>/', EmployeeDocumentView.as_view(), name='onboarding-document-detail'),
-    path('onboarding/submit/',                             SubmitOnboardingView.as_view(),       name='onboarding-submit'),
-    path('onboarding/pipeline/',                           OnboardingPipelineView.as_view(),     name='onboarding-pipeline'),
-    path('onboarding/approvals/',                          OnboardingApprovalsListView.as_view(), name='onboarding-approvals'),
-    path('onboarding/approvals/<uuid:user_id>/approve/',   OnboardingApproveView.as_view(),      name='onboarding-approve'),
+    # Onboarding (self-service wizard — unified view)
+    path('onboarding/',                              OnboardingView.as_view(),         name='onboarding'),
+    path('onboarding/step/<int:step>/',              OnboardingView.as_view(),         name='onboarding-step'),
+    path('onboarding/profile/',                      EmployeeProfileView.as_view(),    name='onboarding-profile'),
+    path('onboarding/documents/',                    EmployeeDocumentView.as_view(),   name='onboarding-documents'),
+    path('onboarding/documents/<str:doc_id>/',       EmployeeDocumentView.as_view(),   name='onboarding-document-detail'),
+    path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
+    path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
 
     # Organisation structure
     path('departments/',           DepartmentListCreateView.as_view(), name='department-list'),
@@ -109,9 +110,8 @@ urlpatterns = [
     path('settings/email-templates/<int:pk>/',     EmailTemplateDetailView.as_view(),     name='email-template-detail'),
     path('settings/email-templates/<int:pk>/preview/', EmailTemplatePreviewView.as_view(), name='email-template-preview'),
 
-    # Document Center
-    path('documents/',           DocumentListCreateView.as_view(), name='document-list'),
+    # Document Center (admin)
+    path('documents/',           DocumentListCreateView.as_view(), name='document-list-create'),
     path('documents/stats/',     DocumentStatsView.as_view(),      name='document-stats'),
-    path('documents/<int:pk>/',  DocumentDetailView.as_view(),     name='document-detail'),
+    path('documents/<str:pk>/',  DocumentDetailView.as_view(),     name='document-detail'),
 ]
-

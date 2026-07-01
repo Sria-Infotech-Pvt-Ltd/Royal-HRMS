@@ -1,4 +1,4 @@
-from .expenses import ExpenseApprovalView, ExpenseDetailView, ExpenseListCreateView, ExpenseStatsView
+from .expenses import ExpenseCategoryListView, ExpenseDetailView, ExpenseListCreateView, ExpenseStatsView, ExpenseStatusListView
 from .leave import (
     LeavePolicyView,
     LeaveBalanceView,
