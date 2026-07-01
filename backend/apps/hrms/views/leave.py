@@ -306,7 +306,8 @@ class LeaveRequestListCreateView(APIView):
 
         req_status = request.query_params.get('status')
         if req_status:
-            queryset = queryset.filter(status=req_status)
+            statuses = [s.strip() for s in req_status.split(',')]
+            queryset = queryset.filter(status__in=statuses)
 
         year = request.query_params.get('year')
         if year:
