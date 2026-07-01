@@ -101,4 +101,15 @@ export const API = {
     stats:        "/leave/stats/",
     calendar:     "/leave/calendar/",
   },
+
+  attendance: {
+    settings:    "/attendance/settings/",
+    punch:       "/attendance/punch/",
+    today:       "/attendance/today/",
+    stats:       "/attendance/stats/",
+    summary:     "/attendance/summary/",
+    calendar:    "/attendance/calendar/",
+    correction:  "/attendance/correction/",
+    geofencing:  (branchPk: number) => `/branch/branches/${branchPk}/geofencing/`,
+  },
 } as const;

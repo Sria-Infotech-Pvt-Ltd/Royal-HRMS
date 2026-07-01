@@ -10,6 +10,7 @@ import {
   buildNav, isSection,
   type NavItem,
 } from "@/lib/navConfig";
+import { ToastProvider } from "@/components/ToastProvider";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -83,6 +84,7 @@ export default function DashboardShell({
   }
 
   return (
+    <ToastProvider>
     <div className="flex h-screen overflow-hidden">
 
       {/* Mobile overlay */}
@@ -298,5 +300,6 @@ export default function DashboardShell({
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }

@@ -72,6 +72,19 @@ function getOnboardingStatus(request: NextRequest): string {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // API routes — attach the access token as an Authorization header so the
+  // Django backend can authenticate all HTTP methods (GET, POST, PUT, PATCH, DELETE).
+  // The rewrite in next.config.ts handles forwarding to the backend.
+  if (pathname.startsWith("/api/")) {
+    const token = request.cookies.get(ACCESS_COOKIE)?.value;
+    if (token) {
+      const headers = new Headers(request.headers);
+      headers.set("Authorization", `Bearer ${token}`);
+      return NextResponse.next({ request: { headers } });
+    }
+    return NextResponse.next();
+  }
+
   const isAuthenticated = request.cookies.get(AUTH_COOKIE)?.value === "1";
   const isLoginPage     = pathname.startsWith("/login");
   const isOnboarding    = pathname.startsWith("/onboarding");
@@ -118,5 +131,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|api|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|mp4|pdf)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|mp4|pdf)$).*)"],
 };
