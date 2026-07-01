@@ -81,8 +81,9 @@ class Expense(models.Model):
         (STATUS_REJECTED, 'Rejected'),
     ]
 
-    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    employee     = models.ForeignKey(
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    expense_number = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
+    employee       = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         related_name='expenses',
@@ -99,7 +100,7 @@ class Expense(models.Model):
     amount       = models.DecimalField(max_digits=10, decimal_places=2)
     expense_date = models.DateField()
     description  = models.TextField(blank=True, default='')
-    status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     created_at   = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -179,7 +180,7 @@ class LeaveRequest(models.Model):
     end_date   = models.DateField()
     total_days = models.DecimalField(max_digits=4, decimal_places=1)
     reason     = models.TextField()
-    status     = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING)
+    status     = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
     is_lwp     = models.BooleanField(default=False)
 
     # L1 approval

@@ -1911,3 +1911,274 @@ documentDetail: (docId: string) => `/onboarding/documents/${docId}/`
 - **`UploadedDoc.id` is now `string`** in the onboarding wizard — matches Django `<str:doc_id>` URL param. The backend also returns `id` as a number in JSON; `String(existing.id)` coercion is handled at the call site.
 
 ---
+
+## Session 14 — G. Durga Prasad (01 July 2026)
+
+**Branch:** `Backend/Approvals`
+
+---
+
+### 1. Expense Categories Dropdown — New Endpoint
+
+Added `GET /api/expenses/categories/` returning all valid expense categories as a `{ value, label }` list.
+
+**`ExpenseCategoryListView`** (`backend/apps/hrms/views/expenses.py`):
+```python
+class ExpenseCategoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        categories = [
+            {'value': key, 'label': label}
+            for key, label in Expense.CATEGORY_CHOICES
+        ]
+        return success('Categories retrieved.', categories)
+```
+
+Categories: `travel` / `meals` / `equipment` / `other`
+
+---
+
+### 2. Expense Statuses Dropdown — New Endpoint
+
+Added `GET /api/expenses/status/` returning all valid expense statuses as a `{ value, label }` list.
+
+**`ExpenseStatusListView`** (`backend/apps/hrms/views/expenses.py`):
+```python
+class ExpenseStatusListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        statuses = [
+            {'value': key, 'label': label}
+            for key, label in Expense.STATUS_CHOICES
+        ]
+        return success('Statuses retrieved.', statuses)
+```
+
+Statuses: `pending` / `approved` / `rejected`
+
+---
+
+### 3. Production Standards — `accounts/views.py` (4 Fixes)
+
+Reviewed and fixed 4 production-standard issues in `backend/apps/accounts/views.py`:
+
+#### Fix 1 — Logger name
+```python
+# Before
+logger = logging.getLogger('accounts')
+# After
+logger = logging.getLogger(__name__)
+```
+`getLogger('accounts')` is hardcoded and breaks the module-path log trail. `__name__` is always correct.
+
+#### Fix 2 — Inline standard-library imports moved to file top
+All inline imports of `re`, `secrets`, `string`, and `datetime` were inside individual view methods. Moved to top of file:
+```python
+import re
+import secrets
+import string
+from datetime import datetime
+```
+All `_re.match` → `re.match`, `_string.ascii_letters` → `string.ascii_letters`, `_dt.strptime` → `datetime.strptime` replaced throughout.
+
+#### Fix 3 — `PermissionListView` paginated
+`PermissionListView.get()` was returning all permission records unpaginated. Added pagination:
+```python
+page_obj, paginator = paginate(queryset, request, default_page_size=100)
+```
+
+#### Fix 4 — `_ensure_default_rules()` — 1 SELECT instead of 4 writes
+Was calling `update_or_create` for every workflow type on every GET request (4 writes per request). Replaced with a single SELECT + conditional `bulk_create` only when rules are missing:
+```python
+def _ensure_default_rules():
+    existing = set(ApprovalWorkflowRule.objects.values_list('workflow_type', flat=True))
+    missing  = [wf for wf in _WORKFLOW_ORDER if wf not in existing]
+    if not missing:
+        return
+    ApprovalWorkflowRule.objects.bulk_create([
+        ApprovalWorkflowRule(workflow_type=wf, l1_approver_role=l1, l2_approver_role=l2)
+        for wf in missing
+    ])
+```
+
+Also fixed: inline `from apps.accounts.serializers import ApprovalWorkflowRuleUpdateSerializer` inside `ApprovalWorkflowRuleView.patch()` moved to top-level import block. Redundant inline `from apps.accounts.models import Department` and `from apps.accounts.models import Company` (both already at file top) removed.
+
+---
+
+### 4. Full CRUD for Expenses — `ExpenseDetailView`
+
+Added complete CRUD to `backend/apps/hrms/views/expenses.py`.
+
+#### `GET /api/expenses/<int:expense_number>/`
+Returns single expense. Permission: own expense OR `expenses.approve`.
+
+#### `PUT /api/expenses/<int:expense_number>/` — Full update (replaces receipts)
+- If `status` key is present in request body → routes to `_handle_approval()` (see §5)
+- Otherwise: admins can edit any expense; submitters can only edit their own **pending** expenses
+- If new receipt files are uploaded → deletes all existing receipts and replaces with new ones
+- Validates all files before touching the database
+
+#### `PATCH /api/expenses/<int:expense_number>/` — Partial update (appends receipts)
+- If `status` key is present → routes to `_handle_approval()`
+- Same permission rules as PUT
+- New receipt files are **appended** to existing receipts (not replaced)
+
+#### `POST /api/expenses/<int:expense_number>/` — Alias
+Routes to `PATCH` — allows form-based partial updates.
+
+#### `DELETE /api/expenses/<int:expense_number>/`
+Two modes controlled by query param:
+
+| Mode | Trigger | Behaviour |
+|------|---------|-----------|
+| Delete single receipt | `?receipt_id=<uuid>` | Removes that receipt; guards: ≥1 receipt must remain; non-pending blocked for non-admins |
+| Delete full expense | (no query param) | Blocked if status is `approved`; otherwise deletes |
+
+---
+
+### 5. Approval via `status` Field (merged into PUT/PATCH)
+
+Removed the separate `/approve/` URL. Approval is now detected by the presence of `status` key in the PUT/PATCH request body.
+
+**`_handle_approval()`** (private method on `ExpenseDetailView`):
+```python
+def _handle_approval(self, request, expense, expense_number: int):
+    if not _has_perm(request.user, 'expenses.approve'):
+        return error('Permission denied.', ...)
+    if expense.status != STATUS_PENDING:
+        return error(f'Expense is already {expense.status}. Only pending expenses can be actioned.', ...)
+    status_val = request.data.get('status', '').strip().lower()
+    if status_val not in (STATUS_APPROVED, STATUS_REJECTED):
+        return error('status must be "approved" or "rejected".')
+    expense.status = status_val
+    expense.save(update_fields=['status', 'updated_at'])
+    return success(f'Expense {status_val}.', self._fresh(expense.pk, request))
+```
+
+Frontend sends: `PUT /api/expenses/2/` with body `{ "status": "approved" }` or `{ "status": "rejected" }`.
+
+`ExpenseApprovalView` class removed entirely — was dead code after this merge.
+
+---
+
+### 6. `expense_number` Auto-Increment Field — New Model Field
+
+Added `expense_number` to the `Expense` model for short, human-readable identifiers.
+
+**`backend/apps/hrms/models.py`:**
+```python
+id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+expense_number = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
+```
+
+**Race-condition-safe assignment in `ExpenseListCreateView.post()`:**
+```python
+with transaction.atomic():
+    last_num = Expense.objects.select_for_update().aggregate(n=Max('expense_number'))['n'] or 0
+    expense  = serializer.save(
+        employee=request.user,
+        branch=branch,
+        expense_number=last_num + 1,
+    )
+```
+`select_for_update()` locks the table row during the MAX query so concurrent submissions cannot receive duplicate numbers.
+
+---
+
+### 7. `expense_ref` Display Field in Serializer
+
+Added `expense_ref` SerializerMethodField to `ExpenseSerializer` that formats `expense_number` as `EXP001`, `EXP002`, etc.
+
+```python
+def get_expense_ref(self, obj: Expense) -> str:
+    if obj.expense_number is None:
+        return ''
+    return f'EXP{obj.expense_number:03d}'
+```
+
+---
+
+### 8. URL Changed to `<int:expense_number>`
+
+Detail URL changed from `<str:expense_id>` (UUID) to `<int:expense_number>`:
+
+```
+GET  /api/expenses/1/
+PUT  /api/expenses/1/
+PATCH /api/expenses/1/
+DELETE /api/expenses/1/
+DELETE /api/expenses/1/?receipt_id=<uuid>
+```
+
+`_get_expense()` now looks up by `expense_number` not by `id`:
+```python
+.get(expense_number=expense_number)
+```
+
+---
+
+### 9. `id` (UUID) Removed from Expense List Response
+
+`ExpenseSerializer.Meta.fields` replaced `'id'` with `'expense_number'` so the response no longer exposes the internal UUID. The frontend uses `expense_number` to construct all detail/edit/delete URLs.
+
+**Response shape after change:**
+```json
+{
+  "expense_number": 2,
+  "expense_ref": "EXP002",
+  "title": "Equipment",
+  "category": "equipment",
+  "amount": "2000.00",
+  ...
+}
+```
+
+---
+
+### 10. Backfill Migration for Existing Expenses
+
+Expenses created before `expense_number` was added had `null` for that field and were unreachable via the new integer URL. Created a data migration to assign sequential numbers to all existing nulls.
+
+**`backend/apps/hrms/migrations/0007_backfill_expense_number.py`** — assigns `expense_number` to all expenses with `null`, ordered by `created_at`, starting from `max(existing) + 1`.
+
+---
+
+### Migrations Created
+
+| Migration | What |
+|-----------|------|
+| `backend/apps/hrms/migrations/0006_expense_number.py` | Schema: adds `expense_number` PositiveIntegerField (unique, nullable, indexed) to `hrms_expense` |
+| `backend/apps/hrms/migrations/0007_backfill_expense_number.py` | Data: backfills `expense_number` for all existing expenses with `null` |
+
+Both applied cleanly: `python manage.py migrate hrms 0007`.
+
+---
+
+### Key Files Changed / Created (01 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/models.py` | Added `expense_number` PositiveIntegerField (unique, nullable, db_index) |
+| `backend/apps/hrms/migrations/0006_expense_number.py` | **NEW** — schema migration |
+| `backend/apps/hrms/migrations/0007_backfill_expense_number.py` | **NEW** — data migration (backfill) |
+| `backend/apps/hrms/serializers.py` | Added `expense_ref` SerializerMethodField; replaced `id` → `expense_number` in `Meta.fields` |
+| `backend/apps/hrms/views/expenses.py` | Full rewrite: added `ExpenseCategoryListView`, `ExpenseStatusListView`; full CRUD on `ExpenseDetailView`; `_handle_approval()` merged into PUT/PATCH; removed `ExpenseApprovalView`; `_get_expense` uses `expense_number`; `_fresh()` and `_validate_receipts()` helpers |
+| `backend/apps/hrms/views/__init__.py` | Updated exports — `ExpenseCategoryListView`, `ExpenseStatusListView` added; `ExpenseApprovalView` removed |
+| `backend/apps/hrms/urls.py` | Added `expenses/categories/`, `expenses/status/`; detail URL changed to `<int:expense_number>/`; removed `expenses/<str:expense_id>/approve/` |
+| `backend/apps/accounts/views.py` | Logger fixed to `__name__`; inline stdlib imports moved to top; `PermissionListView` paginated; `_ensure_default_rules()` rewritten to 1 SELECT + bulk_create; redundant inline imports removed |
+
+---
+
+### Notes for Next Developer (01 July 2026)
+
+- **All expense URLs use `expense_number` (integer), not UUID** — e.g. `/api/expenses/1/`. The UUID (`id`) is the database primary key and is still used internally by `_fresh()` for re-fetch after save, but it is not in the API response and not in the URL.
+- **Approval = PUT/PATCH with `status` field** — sending `{ "status": "approved" }` or `{ "status": "rejected" }` on any PUT/PATCH triggers `_handle_approval()`. Any other PUT/PATCH (without `status` key) is treated as an edit.
+- **PUT replaces all receipts; PATCH appends** — if you send files on a PUT, all old receipts are deleted first. If you send files on a PATCH, new receipts are added to existing ones.
+- **Single receipt delete** — `DELETE /api/expenses/<number>/?receipt_id=<uuid>`. The `receipt_id` is the UUID of the `ExpenseReceipt` record (still UUID — only the expense URL uses integer).
+- **`expense_number` is race-condition-safe** — `select_for_update()` + `transaction.atomic()` in `post()`. Never assign `expense_number` manually outside this block.
+- **`_ensure_default_rules()` now runs 0 DB writes on every GET** — only 1 SELECT. `bulk_create` fires only once when rules are genuinely missing. No performance concern on repeated calls.
+- **Backfill is idempotent** — migration 0007 only touches rows where `expense_number IS NULL`. Re-running it is safe.
+
+---
