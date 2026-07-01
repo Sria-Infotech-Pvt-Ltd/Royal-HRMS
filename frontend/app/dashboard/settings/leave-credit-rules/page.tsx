@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { API } from "@/lib/api/endpoints";
+import clientApi from "@/lib/clientApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,20 +21,17 @@ interface CreditRule {
   is_active: boolean;
 }
 
-// ─── Static seed ──────────────────────────────────────────────────────────────
+// ─── Static seed (accrual automation — backend pending) ───────────────────────
 
 const SEED: CreditRule[] = [
-  { id: 1, leave_type: "Earned Leave",  accrual_days: 1.5, frequency: "monthly",    max_balance: 45, encashable: true,  encash_limit: 15, min_service_months: 6,  is_active: true  },
-  { id: 2, leave_type: "Casual Leave",  accrual_days: 1,   frequency: "monthly",    max_balance: 12, encashable: false, encash_limit: 0,  min_service_months: 0,  is_active: true  },
-  { id: 3, leave_type: "Sick Leave",    accrual_days: 0.5, frequency: "monthly",    max_balance: 6,  encashable: false, encash_limit: 0,  min_service_months: 0,  is_active: true  },
-  { id: 4, leave_type: "Annual Leave",  accrual_days: 21,  frequency: "annually",   max_balance: 21, encashable: true,  encash_limit: 10, min_service_months: 12, is_active: false },
+  { id: 1, leave_type: "Earned Leave",  accrual_days: 1.5, frequency: "monthly",  max_balance: 45, encashable: true,  encash_limit: 15, min_service_months: 6,  is_active: true  },
+  { id: 2, leave_type: "Casual Leave",  accrual_days: 1,   frequency: "monthly",  max_balance: 12, encashable: false, encash_limit: 0,  min_service_months: 0,  is_active: true  },
+  { id: 3, leave_type: "Sick Leave",    accrual_days: 0.5, frequency: "monthly",  max_balance: 6,  encashable: false, encash_limit: 0,  min_service_months: 0,  is_active: true  },
+  { id: 4, leave_type: "Annual Leave",  accrual_days: 21,  frequency: "annually", max_balance: 21, encashable: true,  encash_limit: 10, min_service_months: 12, is_active: false },
 ];
 
 const FREQ_LABELS: Record<AccrualFrequency, string> = {
-  monthly:    "Monthly",
-  quarterly:  "Quarterly",
-  annually:   "Annually",
-  on_joining: "On Joining",
+  monthly: "Monthly", quarterly: "Quarterly", annually: "Annually", on_joining: "On Joining",
 };
 
 const BLANK: Omit<CreditRule, "id"> = {
@@ -40,6 +39,8 @@ const BLANK: Omit<CreditRule, "id"> = {
   max_balance: 12, encashable: false, encash_limit: 0,
   min_service_months: 0, is_active: true,
 };
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
@@ -50,12 +51,36 @@ function Spin() {
 export default function LeaveCreditRulesPage() {
   const router = useRouter();
 
+  // Credit action state
+  const [creditYear,   setCreditYear]   = useState<number>(CURRENT_YEAR);
+  const [crediting,    setCrediting]    = useState(false);
+  const [creditResult, setCreditResult] = useState<{ credited: number } | null>(null);
+  const [creditError,  setCreditError]  = useState<string | null>(null);
+
+  // Accrual rules (local — backend automation pending)
   const [rules,   setRules]   = useState<CreditRule[]>(SEED);
   const [modal,   setModal]   = useState<"add" | "edit" | null>(null);
   const [editing, setEditing] = useState<CreditRule | null>(null);
   const [form,    setForm]    = useState<Omit<CreditRule, "id">>(BLANK);
   const [errors,  setErrors]  = useState<Record<string, string>>({});
   const [saving,  setSaving]  = useState(false);
+
+  async function creditAll() {
+    setCrediting(true);
+    setCreditResult(null);
+    setCreditError(null);
+    try {
+      const res = await clientApi.post<{ data: { year: number; credited: number } }>(
+        API.leave.balanceCredit,
+        { year: creditYear }
+      );
+      setCreditResult(res.data.data);
+    } catch (err: unknown) {
+      setCreditError((err as { message?: string })?.message ?? "Failed to credit balances.");
+    } finally {
+      setCrediting(false);
+    }
+  }
 
   function openAdd() {
     setEditing(null); setForm(BLANK); setErrors({}); setModal("add");
@@ -70,9 +95,9 @@ export default function LeaveCreditRulesPage() {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!form.leave_type.trim())       e.leave_type    = "Leave type is required.";
-    if (form.accrual_days <= 0)        e.accrual_days  = "Must be greater than 0.";
-    if (form.max_balance < 1)          e.max_balance   = "Max balance must be at least 1.";
+    if (!form.leave_type.trim())                  e.leave_type   = "Leave type is required.";
+    if (form.accrual_days <= 0)                   e.accrual_days = "Must be greater than 0.";
+    if (form.max_balance < 1)                     e.max_balance  = "Max balance must be at least 1.";
     if (form.encashable && form.encash_limit < 1) e.encash_limit = "Encash limit must be at least 1.";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -88,7 +113,7 @@ export default function LeaveCreditRulesPage() {
         setRules(prev => prev.map(r => r.id === editing.id ? { ...form, id: editing.id } : r));
       }
       setSaving(false); closeModal();
-    }, 400);
+    }, 300);
   }
 
   function remove(id: number) {
@@ -106,33 +131,73 @@ export default function LeaveCreditRulesPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Leave Credit Rules</div>
-          <div className="page-sub">Auto-accrual schedules, carry-forward limits and encashment policy</div>
+          <div className="page-sub">Credit employee leave balances and configure accrual schedules</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
             <i className="ti ti-arrow-left" /> Back
           </button>
-          <button className="btn btn-filled" onClick={openAdd}>
-            <i className="ti ti-plus" /> Add Rule
-          </button>
         </div>
       </div>
 
-      {/* Info banner */}
-      <div className="card mb-20" style={{ border: "1.5px solid rgba(30,78,140,0.2)", background: "rgba(30,78,140,0.04)" }}>
-        <div style={{ padding: "14px 20px", display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <i className="ti ti-info-circle" style={{ fontSize: 18, color: "var(--primary)", flexShrink: 0, marginTop: 1 }} />
-          <div style={{ fontSize: 13, color: "var(--on-variant)", lineHeight: 1.6 }}>
-            Credit rules define how leaves accrue over time for each leave type. The system will automatically credit the configured days to employee balances based on the chosen frequency.
+      {/* ── Credit Balances Action ──────────────────────────────────────────── */}
+      <div className="card mb-20" style={{ border: "1.5px solid rgba(30,78,140,0.25)", background: "rgba(30,78,140,0.03)" }}>
+        <div className="card-header" style={{ borderBottom: "1px solid var(--outline-v)" }}>
+          <div className="card-title"><i className="ti ti-coin" /> Credit Leave Balances</div>
+        </div>
+        <div style={{ padding: "20px 24px" }}>
+          <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 16, lineHeight: 1.6 }}>
+            Credit annual leave balances for all active employees based on the configured Leave Policy.
+            Employees who already have a balance record for the selected year are skipped automatically.
+          </p>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+            <div className="field-group" style={{ marginBottom: 0 }}>
+              <label className="field-label">Financial Year</label>
+              <input
+                className="field-input"
+                type="number"
+                min={2020}
+                max={2099}
+                value={creditYear}
+                onChange={e => { setCreditResult(null); setCreditError(null); setCreditYear(Number(e.target.value)); }}
+                style={{ width: 110 }}
+              />
+            </div>
+            <button className="btn btn-filled" onClick={creditAll} disabled={crediting}>
+              {crediting
+                ? <><Spin />&nbsp;Crediting…</>
+                : <><i className="ti ti-send" /> Credit All Employees</>}
+            </button>
           </div>
+
+          {creditResult && (
+            <div style={{ marginTop: 14, padding: "12px 16px", background: "rgba(27,138,107,0.08)", border: "1px solid rgba(27,138,107,0.25)", borderRadius: 8, color: "var(--success)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-circle-check" style={{ fontSize: 16 }} />
+              <span>
+                {creditResult.credited === 0
+                  ? `All employees already have balances for ${creditYear}. No new records created.`
+                  : `Credited ${creditResult.credited} leave balance record${creditResult.credited !== 1 ? "s" : ""} for ${creditYear}.`}
+              </span>
+            </div>
+          )}
+          {creditError && (
+            <div style={{ marginTop: 14, padding: "12px 16px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>
+              {creditError}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Accrual Rules (local config — automated scheduling pending) ─────── */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-coin" /> Accrual Rules</div>
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{rules.length} rules</span>
+          <div className="card-title"><i className="ti ti-refresh" /> Accrual Rules</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: "var(--outline)", background: "var(--outline-v)", padding: "2px 8px", borderRadius: 4 }}>Automation coming soon</span>
+            <button className="btn btn-ghost" style={{ fontSize: 12, height: 30, padding: "0 12px" }} onClick={openAdd}>
+              <i className="ti ti-plus" /> Add Rule
+            </button>
+          </div>
         </div>
         <div className="table-wrap">
           <table>
