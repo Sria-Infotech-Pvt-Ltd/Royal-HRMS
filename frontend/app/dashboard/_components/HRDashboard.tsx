@@ -1,4 +1,5 @@
 import type { SessionPayload } from "@/lib/session";
+import ClockInButton from "@/components/ClockInButton";
 
 interface Props { session: SessionPayload }
 
@@ -8,7 +9,7 @@ export default function HRDashboard({ session }: Props) {
   return (
     <>
       {/* Greeting banner */}
-      <div className="dash-greeting mb-20">
+      <div className="dash-greeting mb-20" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 }}>
         <div className="dash-greeting-content">
           <h1>Good morning, {firstName} 👋</h1>
           <p>4 candidates in pipeline · 2 leave approvals pending · 2 birthdays today</p>
@@ -18,6 +19,9 @@ export default function HRDashboard({ session }: Props) {
             <div className="dgs-item"><div className="dgs-val">4</div><div className="dgs-lbl">Active Interviews</div></div>
             <div className="dgs-item"><div className="dgs-val">₹12.4L</div><div className="dgs-lbl">June Payroll</div></div>
           </div>
+        </div>
+        <div style={{ flexShrink: 0, position: "relative", zIndex: 1 }}>
+          <ClockInButton />
         </div>
       </div>
 

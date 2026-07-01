@@ -1,4 +1,5 @@
 import type { SessionPayload } from "@/lib/session";
+import ClockInButton from "@/components/ClockInButton";
 
 interface Props { session: SessionPayload }
 
@@ -8,7 +9,7 @@ export default function EmployeeDashboard({ session }: Props) {
   return (
     <>
       {/* Greeting banner */}
-      <div className="dash-greeting mb-20" style={{ background: "linear-gradient(135deg, #2d5a8e 0%, #1a3a6e 100%)" }}>
+      <div className="dash-greeting mb-20" style={{ background: "linear-gradient(135deg, #2d5a8e 0%, #1a3a6e 100%)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 }}>
         <div className="dash-greeting-content">
           <h1>Welcome back, {firstName} 👋</h1>
           <p>Monday, June 24, 2026 · Have a great day!</p>
@@ -18,6 +19,9 @@ export default function EmployeeDashboard({ session }: Props) {
             <div className="dgs-item"><div className="dgs-val">2</div><div className="dgs-lbl">Pending Requests</div></div>
             <div className="dgs-item"><div className="dgs-val">Jun</div><div className="dgs-lbl">Latest Payslip</div></div>
           </div>
+        </div>
+        <div style={{ flexShrink: 0, position: "relative", zIndex: 1 }}>
+          <ClockInButton />
         </div>
       </div>
 

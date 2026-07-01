@@ -3,25 +3,26 @@
 import type { DayRecord, DayStatus } from "./CalendarGrid";
 
 interface Props {
-  year:  number;
-  month: number;
-  data:  Record<number, DayRecord>;
+  year:          number;
+  month:         number;
+  data:          Record<number, DayRecord>;
+  onRegularize?: (day: number) => void;
 }
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_ABBR    = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 const BADGE_MAP: Partial<Record<DayStatus, string>> = {
-  Present:     "badge badge-success",
-  Late:        "badge badge-warn",
-  Absent:      "badge badge-error",
-  "On Leave":  "badge badge-info",
-  "Half Day":  "badge badge-primary",
-  "Weekly Off":"badge badge-neutral",
-  Holiday:     "badge badge-neutral",
+  Present:      "badge badge-success",
+  Late:         "badge badge-warn",
+  Absent:       "badge badge-error",
+  "On Leave":   "badge badge-info",
+  "Half Day":   "badge badge-primary",
+  "Weekly Off": "badge badge-neutral",
+  Holiday:      "badge badge-neutral",
 };
 
-export default function MonthDetail({ year, month, data }: Props) {
+export default function MonthDetail({ year, month, data, onRegularize }: Props) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const rows = Array.from({ length: daysInMonth }, (_, i) => {
@@ -52,6 +53,7 @@ export default function MonthDetail({ year, month, data }: Props) {
               <th>Hours</th>
               <th>Status</th>
               <th>Note</th>
+              {onRegularize && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -79,6 +81,20 @@ export default function MonthDetail({ year, month, data }: Props) {
                     )}
                   </td>
                   <td style={{ fontSize: 11, color: "var(--on-variant)" }}>{record.note ?? ""}</td>
+                  {onRegularize && (
+                    <td>
+                      {record.canRegularize && (
+                        <button
+                          onClick={() => onRegularize(day)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: 11, color: "var(--warn)", gap: 4 }}
+                        >
+                          <i className="ti ti-flag-3" style={{ fontSize: 12 }} />
+                          Regularize
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}

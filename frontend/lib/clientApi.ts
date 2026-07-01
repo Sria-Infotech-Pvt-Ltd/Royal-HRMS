@@ -110,14 +110,16 @@ clientApi.interceptors.response.use(
 
 // ── Normalise error shape for all callers ─────────────────────────────────────
 function normaliseError(err: unknown) {
-  const e = err as AxiosError<{ message?: string; error?: string }>;
+  const e = err as AxiosError<{ message?: string; error?: string; data?: unknown }>;
   const message =
     e?.response?.data?.message ??
     e?.response?.data?.error ??
     (e as { message?: string })?.message ??
     "An unexpected error occurred.";
   const status = e?.response?.status ?? 500;
-  return { message, status };
+  // Preserve field-level validation errors (e.g. 422 responses with data.{field: [msg]})
+  const data = e?.response?.data?.data;
+  return { message, status, data };
 }
 
 export default clientApi;
