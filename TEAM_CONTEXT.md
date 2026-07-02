@@ -167,12 +167,126 @@ backend/config/
 | GET | `/api/branch/branches/<pk>/geofencing/` | Read branch geofence config |
 | PUT | `/api/branch/branches/<pk>/geofencing/` | Update branch geofence config |
 
-### Pending
+### Pending (resolved in 2026-07-02 session — see below)
 
-- Correction approval flow — manager approve/reject corrections
+- ~~Correction approval flow~~ — done
 - Attendance reports — CSV/PDF download for HR
 - Leave integration — auto-mark `on_leave` status when leave is approved
 - Frontend implementation — prompts given to Teerdaveni, not yet started
+
+---
+
+## Session Log — 2026-07-02
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. Celery connecting to Render Redis instead of local Redis**
+- Root cause: `$env:REDIS_URL` was set as a Windows User-level environment variable, overriding `.env` file values
+- Fix 1: Cleared the OS variable — `[System.Environment]::SetEnvironmentVariable('REDIS_URL', $null, 'User')`
+- Fix 2: `environ.Env.read_env(BASE_DIR / '.env', overwrite=True)` in `settings.py` — forces `.env` to win over any OS env vars
+- Fix 3: Added `CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True` to silence Celery 6.0 deprecation warning
+- File: `backend/config/settings.py`
+
+**2. Geofencing settings not saving (PATCH returned 200 but saved nothing)**
+- Root cause 1: `BranchSerializer.Meta.fields` was missing `latitude`, `longitude`, `allowed_radius_meters`, `geofencing_enabled`, `has_coordinates` — DRF silently dropped unknown fields
+- Root cause 2: Inline validation blocked enabling geofencing unless lat/lon were re-sent in the same request, even when the branch already had coordinates in DB
+- Fix: Added all 5 geofencing fields to `BranchSerializer`; added explicit `has_coordinates = serializers.BooleanField(read_only=True)` (model `@property` not auto-detected by DRF); moved validation to post-assignment check using `branch.has_coordinates`
+- File: `backend/apps/branch/serializers.py`, `backend/apps/branch/views.py`
+
+**3. Geofencing not enforcing for Mumbai employees**
+- Root cause: Mumbai branch had `geofencing_enabled=False` and no coordinates in DB — geofence code was correct
+- Fix: Data configuration — admin must set lat/lon and enable geofencing per branch via `PUT /api/branch/branches/<pk>/geofencing/`
+- Hyderabad HQ was the only branch with geofencing configured at time of diagnosis
+
+**4. Punch times showing UTC instead of IST**
+- Root cause: `timezone.now()` is UTC-aware; calling `.time()` directly gives UTC wall-clock time; shift_start/shift_end in `AttendanceWorkingHours` are plain IST times — late/early-exit comparisons were wrong
+- Root cause 2: `timezone.now().date()` returns UTC date, which can differ from IST date after midnight IST
+- Fix: Added `_ist_time(dt)` helper using `dt.astimezone(_IST).time()`; changed all `now.date()` → `timezone.localdate()` (IST-aware)
+- Fix 2: `AttendancePunch.punch_date` property and `punch_time_display` property were calling `.date()` and `.strftime()` directly on UTC datetime — both fixed to use `astimezone(_IST)` first
+- Files: `backend/apps/attendance/services_attendance.py`, `backend/apps/attendance/models.py`
+
+### Features Shipped
+
+**5. HR Attendance Management — Full API Suite**
+
+All 11 HR endpoints built and wired. Backend only. Frontend prompts provided.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/attendance/dashboard/` | Dashboard stats (present/absent/late/OT counts) |
+| GET | `/api/attendance/records/` | Paginated attendance list with filters |
+| GET | `/api/attendance/records/<pk>/` | Single record detail + punch timeline |
+| GET | `/api/attendance/overtime/` | OT entries list |
+| POST | `/api/attendance/overtime/create/` | Create manual OT entry |
+| GET | `/api/attendance/invalid-punches/` | Punches outside geofence or missing pair |
+| GET | `/api/attendance/un-punches/` | Employees who punched IN but never punched OUT |
+| POST | `/api/attendance/import/` | Bulk CSV import (max 5 MB) |
+| GET | `/api/attendance/export/` | CSV export with same filters as list |
+| POST | `/api/attendance/reprocess/` | Re-run processor for all employees on a date |
+| GET | `/api/attendance/corrections/` | List all employee correction requests |
+| PATCH | `/api/attendance/corrections/<pk>/review/` | Approve or reject a correction |
+
+**6. HR Corrections Approval Flow**
+- `approve_correction()`: creates `AttendancePunch` with `source='manual'` for the requested IN/OUT/BOTH times, then calls `AttendanceProcessorService.process_day()` — status flips from `incomplete` → `present` / `late`; employee drops off the Un-Punches list
+- `reject_correction()`: marks rejected, no punch changes
+- `_create_punch()` uses `get_or_create` to stay idempotent (safe to re-approve)
+- File: `backend/apps/attendance/services_hr_corrections.py` (new, ~120 lines)
+
+**7. Un-Punches ↔ Corrections Integration**
+- `get_unpunches()` now also queries `AttendanceCorrection` for each returned employee on that date
+- Each un-punch row now includes `correction_pending: bool` and `correction_id: uuid | null`
+- Frontend can use these to show "Pending" badge on the un-punch row and link directly to the correction
+- File: `backend/apps/attendance/services_hr_audit.py`
+
+**8. Role-Based Branch Scoping**
+- `system_admin` role + Django superusers: see all branches, all data
+- `hr_admin` and all other roles: scoped to `user.branch` — cannot query outside their branch regardless of `?branch=` query param
+- Two helpers added to `views/hr_attendance.py`:
+  - `_is_unrestricted(user)` — checks `user.is_superuser` or `user.role.name == 'system_admin'`
+  - `_branch_scope(user, requested)` — returns requested branch for unrestricted users, always returns `user.branch` for restricted users
+- Applied to all 8 data endpoints: Dashboard, List, OT List, Invalid Punches, Un-Punches, Reprocess, Corrections List, Export
+- File: `backend/apps/attendance/views/hr_attendance.py`
+
+### New Files
+
+```
+backend/apps/attendance/
+  services_hr.py               — get_dashboard_stats, get_attendance_list, get_attendance_detail, reprocess_date
+  services_hr_audit.py         — get_invalid_punches, get_unpunches (with correction_pending flag)
+  services_hr_ops.py           — list_overtime, create_overtime, import_attendance_csv, export_attendance_csv
+  services_hr_corrections.py   — list_corrections, approve_correction, reject_correction
+  serializers_hr.py            — all HR read/write serializers incl. CorrectionRowSerializer, UnpunchRowSerializer
+  views/hr_attendance.py       — 12 HR APIViews + _is_unrestricted + _branch_scope helpers
+```
+
+### Files Modified
+
+```
+backend/apps/attendance/
+  models.py                    — _ist_time fix for punch_date + punch_time_display properties
+  services_attendance.py       — _ist_time() helper, timezone.localdate(), IST-correct late/early-exit checks
+  views/__init__.py            — HRCorrectionListView, HRCorrectionReviewView exports added
+  urls.py                      — 12 new HR URL patterns added
+backend/apps/branch/
+  serializers.py               — geofencing fields + has_coordinates added to BranchSerializer
+  views.py                     — geofencing enable validation fixed
+backend/config/
+  settings.py                  — overwrite=True in read_env(), CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP
+```
+
+### Frontend Prompts Given (not yet implemented)
+
+- **Geofencing UI**: lat/lon/radius inputs + enable toggle in branch settings form; show `has_coordinates` badge
+- **Corrections UI**: Corrections tab in HR Attendance; approve/reject buttons; pending badge on un-punch rows
+- **Branch scoping UI**: HR admin sees only their branch (locked dropdown); system_admin sees all; `isUnrestrictedUser()` helper
+- **Punch log display**: Show only latest IN + latest OUT in ClockWidget punch log (filter client-side from full `punches[]` array)
+
+### Pending
+
+- Attendance reports — CSV/PDF download for HR
+- Leave integration — auto-mark `on_leave` when leave approved
+- Frontend implementation of all attendance pages (prompts given above)
 
 ---
 

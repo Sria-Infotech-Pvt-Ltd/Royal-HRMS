@@ -20,6 +20,19 @@ from apps.attendance.views import (
     WeeklyDayPolicyListCreateView,
     WorkingHoursPolicyDetailView,
     WorkingHoursPolicyListCreateView,
+    # HR Management
+    HRAttendanceDashboardView,
+    HRAttendanceListView,
+    HRAttendanceDetailView,
+    HROvertimeListView,
+    HROvertimeCreateView,
+    HRInvalidPunchesView,
+    HRUnpunchesView,
+    HRAttendanceImportView,
+    HRAttendanceExportView,
+    HRAttendanceReprocessView,
+    HRCorrectionListView,
+    HRCorrectionReviewView,
 )
 
 urlpatterns = [
@@ -57,4 +70,18 @@ urlpatterns = [
     path('summary/',    AttendanceSummaryView.as_view(),  name='attendance-summary'),
     path('calendar/',   AttendanceCalendarView.as_view(), name='attendance-calendar'),
     path('correction/', AttendanceCorrectionView.as_view(), name='attendance-correction'),
+
+    # ── HR Attendance Management ───────────────────────────────────────────────
+    path('dashboard/',                    HRAttendanceDashboardView.as_view(), name='hr-attendance-dashboard'),
+    path('records/',                      HRAttendanceListView.as_view(),      name='hr-attendance-list'),
+    path('records/<uuid:pk>/',            HRAttendanceDetailView.as_view(),    name='hr-attendance-detail'),
+    path('overtime/',                     HROvertimeListView.as_view(),        name='hr-overtime-list'),
+    path('overtime/create/',              HROvertimeCreateView.as_view(),      name='hr-overtime-create'),
+    path('invalid-punches/',              HRInvalidPunchesView.as_view(),      name='hr-invalid-punches'),
+    path('un-punches/',                   HRUnpunchesView.as_view(),           name='hr-un-punches'),
+    path('import/',                       HRAttendanceImportView.as_view(),    name='hr-attendance-import'),
+    path('export/',                       HRAttendanceExportView.as_view(),    name='hr-attendance-export'),
+    path('reprocess/',                    HRAttendanceReprocessView.as_view(), name='hr-attendance-reprocess'),
+    path('corrections/',                  HRCorrectionListView.as_view(),      name='hr-corrections-list'),
+    path('corrections/<uuid:pk>/review/', HRCorrectionReviewView.as_view(),    name='hr-correction-review'),
 ]

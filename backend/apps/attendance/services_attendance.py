@@ -15,9 +15,12 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, time, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
+
+_IST = ZoneInfo('Asia/Kolkata')
 
 from apps.attendance.models import (
     AttendanceAbsenceAlert,
@@ -61,6 +64,18 @@ def _time_to_display(t: Optional[time]) -> Optional[str]:
     return t.strftime('%H:%M') if t else None
 
 
+def _ist_time(dt: datetime) -> time:
+    """Return the IST wall-clock time for a UTC-aware datetime from punched_at.
+
+    punched_at is stored as UTC (timezone.now()).  shift_start / shift_end in
+    AttendanceWorkingHours are plain IST times.  Comparing them correctly requires
+    converting the punch timestamp to IST before extracting the time component.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+    return dt.astimezone(_IST).time()
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  PunchService
 # ══════════════════════════════════════════════════════════════════════════════
@@ -102,15 +117,16 @@ class PunchService:
         from apps.attendance.services_geofencing import GeofencingService
 
         now        = timezone.now()
+        today      = timezone.localdate()   # IST calendar date — not now.date() (UTC)
         punch_type = punch_data['punch_type']
         mode       = punch_data.get('attendance_mode', AttendancePunch.MODE_OFFICE)
 
         # ── Consecutive punch validation ──────────────────────────────────────
-        if punch_type == AttendancePunch.PUNCH_IN and cls._is_clocked_in(employee, now.date()):
+        if punch_type == AttendancePunch.PUNCH_IN and cls._is_clocked_in(employee, today):
             raise ValueError(
                 'You are already clocked in. Please clock out before clocking in again.'
             )
-        if punch_type == AttendancePunch.PUNCH_OUT and not cls._is_clocked_in(employee, now.date()):
+        if punch_type == AttendancePunch.PUNCH_OUT and not cls._is_clocked_in(employee, today):
             raise ValueError(
                 'You are not currently clocked in. Please clock in first.'
             )
@@ -147,7 +163,7 @@ class PunchService:
                 device_id=punch_data.get('device_id', ''),
             )
 
-        AttendanceProcessorService.process_day(employee, now.date())
+        AttendanceProcessorService.process_day(employee, today)
         logger.info(
             'Punch %s: employee=%s mode=%s geofence=%s distance=%sm',
             punch_type, employee.pk, mode,
@@ -162,7 +178,7 @@ class PunchService:
           is_clocked_in, punches[], total_seconds, session_seconds
         """
         now   = timezone.now()
-        today = now.date()
+        today = timezone.localdate()   # IST calendar date
 
         punches = list(
             AttendancePunch.objects
@@ -266,7 +282,20 @@ class AttendanceProcessorService:
             .order_by('punched_at')
         )
 
-        record_data = cls._calculate(punches, for_date, cfg)
+        # Weekly off with no punches → mark weekly_off, not absent
+        if not punches and cls._is_weekly_off(for_date, cfg):
+            record_data = {
+                'status':                AttendanceRecord.STATUS_WEEKLY_OFF,
+                'first_punch_in':        None,
+                'last_punch_out':        None,
+                'total_working_minutes': 0,
+                'overtime_minutes':      0,
+                'is_late':               False,
+                'is_early_exit':         False,
+                'note':                  'Weekly off',
+            }
+        else:
+            record_data = cls._calculate(punches, for_date, cfg)
 
         record, _ = AttendanceRecord.objects.update_or_create(
             employee=employee,
@@ -274,6 +303,14 @@ class AttendanceProcessorService:
             defaults=record_data,
         )
         return record
+
+    @staticmethod
+    def _is_weekly_off(for_date: date, cfg) -> bool:
+        """Return True if `for_date` is a configured weekly off day."""
+        if not cfg or not hasattr(cfg, 'weekly_off'):
+            return False
+        day_name = for_date.strftime('%A').lower()   # 'monday' … 'sunday'
+        return bool(getattr(cfg.weekly_off, day_name, False))
 
     # ── Calculation ───────────────────────────────────────────────────────────
 
@@ -321,9 +358,13 @@ class AttendanceProcessorService:
         net_minutes = max(0, closed_minutes - break_deduction)
 
         # Determine status
-        is_late      = cls._check_late(first_in.time(), cfg)
-        is_early_exit = cls._check_early_exit(last_out.time() if last_out else None, cfg)
-        status       = cls._resolve_status(net_minutes, is_late, cfg)
+        has_open_session    = any(out is None for _, out in pairs)
+        has_complete_pair   = any(out is not None for _, out in pairs)
+        is_late             = cls._check_late(_ist_time(first_in), cfg)
+        is_early_exit       = cls._check_early_exit(_ist_time(last_out) if last_out else None, cfg)
+        status              = cls._resolve_status(
+            net_minutes, is_late, cfg, has_open_session, has_complete_pair
+        )
 
         # Overtime
         ot_minutes = cls._calc_overtime(net_minutes, cfg)
@@ -335,8 +376,8 @@ class AttendanceProcessorService:
 
         return {
             'status':                status,
-            'first_punch_in':        first_in.time(),
-            'last_punch_out':        last_out.time() if last_out else None,
+            'first_punch_in':        _ist_time(first_in),
+            'last_punch_out':        _ist_time(last_out) if last_out else None,
             'total_working_minutes': net_minutes,
             'overtime_minutes':      ot_minutes,
             'is_late':               is_late,
@@ -381,7 +422,17 @@ class AttendanceProcessorService:
         return punch_out_time < early_threshold
 
     @staticmethod
-    def _resolve_status(net_minutes: int, is_late: bool, cfg) -> str:
+    def _resolve_status(
+        net_minutes: int,
+        is_late: bool,
+        cfg,
+        has_open_session: bool = False,
+        has_complete_pair: bool = False,
+    ) -> str:
+        # Still clocked in — mark present/late immediately, don't wait for hours
+        if has_open_session:
+            return AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
+
         if not cfg or not hasattr(cfg, 'punch_rules'):
             min_full = 480
             min_half = 240
@@ -393,6 +444,9 @@ class AttendanceProcessorService:
         if net_minutes >= min_full:
             return AttendanceRecord.STATUS_LATE if is_late else AttendanceRecord.STATUS_PRESENT
         if net_minutes >= min_half:
+            return AttendanceRecord.STATUS_HALF_DAY
+        # Employee did physically clock in and out — floor at half_day, not absent
+        if has_complete_pair:
             return AttendanceRecord.STATUS_HALF_DAY
         return AttendanceRecord.STATUS_ABSENT
 

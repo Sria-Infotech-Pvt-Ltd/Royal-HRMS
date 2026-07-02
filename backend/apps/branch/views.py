@@ -296,22 +296,17 @@ class BranchGeofencingView(APIView):
         from rest_framework import serializers as drf_serializers
 
         class GeofencingSerializer(drf_serializers.Serializer):
-            latitude             = drf_serializers.FloatField(required=False, allow_null=True)
-            longitude            = drf_serializers.FloatField(required=False, allow_null=True)
+            latitude              = drf_serializers.FloatField(required=False, allow_null=True)
+            longitude             = drf_serializers.FloatField(required=False, allow_null=True)
             allowed_radius_meters = drf_serializers.IntegerField(min_value=10, max_value=5000, required=False)
-            geofencing_enabled   = drf_serializers.BooleanField(required=False)
+            geofencing_enabled    = drf_serializers.BooleanField(required=False)
 
             def validate(self, attrs):
-                lat     = attrs.get('latitude')
-                lon     = attrs.get('longitude')
-                enabled = attrs.get('geofencing_enabled', False)
+                lat = attrs.get('latitude')
+                lon = attrs.get('longitude')
                 if (lat is None) != (lon is None):
                     raise drf_serializers.ValidationError(
                         'Both latitude and longitude must be provided together.'
-                    )
-                if enabled and lat is None and lon is None:
-                    raise drf_serializers.ValidationError(
-                        'Latitude and longitude are required to enable geofencing.'
                     )
                 return attrs
 
@@ -321,10 +316,18 @@ class BranchGeofencingView(APIView):
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         data = serializer.validated_data
-        if 'latitude'              in data: branch.latitude             = data['latitude']
-        if 'longitude'             in data: branch.longitude            = data['longitude']
+        if 'latitude'              in data: branch.latitude              = data['latitude']
+        if 'longitude'             in data: branch.longitude             = data['longitude']
         if 'allowed_radius_meters' in data: branch.allowed_radius_meters = data['allowed_radius_meters']
-        if 'geofencing_enabled'    in data: branch.geofencing_enabled   = data['geofencing_enabled']
+        if 'geofencing_enabled'    in data: branch.geofencing_enabled    = data['geofencing_enabled']
+
+        # Validate after applying: can't enable without coordinates (sent now or already on branch)
+        if branch.geofencing_enabled and not branch.has_coordinates:
+            return error(
+                'Set latitude and longitude before enabling geofencing.',
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
         branch.save(update_fields=['latitude', 'longitude', 'allowed_radius_meters', 'geofencing_enabled', 'updated_at'])
 
         AuditLog.objects.create(

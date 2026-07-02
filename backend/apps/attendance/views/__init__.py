@@ -31,6 +31,20 @@ from apps.attendance.views.my_attendance import (
     AttendanceCalendarView,
     AttendanceCorrectionView,
 )
+from apps.attendance.views.hr_attendance import (
+    HRAttendanceDashboardView,
+    HRAttendanceListView,
+    HRAttendanceDetailView,
+    HROvertimeListView,
+    HROvertimeCreateView,
+    HRInvalidPunchesView,
+    HRUnpunchesView,
+    HRAttendanceImportView,
+    HRAttendanceExportView,
+    HRAttendanceReprocessView,
+    HRCorrectionListView,
+    HRCorrectionReviewView,
+)
 
 __all__ = [
     'WorkingHoursPolicyListCreateView',
@@ -52,4 +66,17 @@ __all__ = [
     'AttendanceSummaryView',
     'AttendanceCalendarView',
     'AttendanceCorrectionView',
+    # HR Management
+    'HRAttendanceDashboardView',
+    'HRAttendanceListView',
+    'HRAttendanceDetailView',
+    'HROvertimeListView',
+    'HROvertimeCreateView',
+    'HRInvalidPunchesView',
+    'HRUnpunchesView',
+    'HRAttendanceImportView',
+    'HRAttendanceExportView',
+    'HRAttendanceReprocessView',
+    'HRCorrectionListView',
+    'HRCorrectionReviewView',
 ]

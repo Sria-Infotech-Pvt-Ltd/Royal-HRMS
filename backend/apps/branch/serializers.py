@@ -1,7 +1,7 @@
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.branch.models import Branch, City, State
+from apps.branch.models import Branch, City, EmployeeBranchAccess, State
 from apps.branch.utils import generate_branch_code
 
 
@@ -20,9 +20,10 @@ class CitySerializer(serializers.ModelSerializer):
 
 
 class BranchSerializer(serializers.ModelSerializer):
-    state_name = serializers.CharField(source='state.name', read_only=True)
-    city_name = serializers.CharField(source='city.name', read_only=True)
+    state_name      = serializers.CharField(source='state.name', read_only=True)
+    city_name       = serializers.CharField(source='city.name', read_only=True)
     employees_count = serializers.SerializerMethodField()
+    has_coordinates = serializers.BooleanField(read_only=True)
 
     def get_employees_count(self, obj):
         branch_counts = self.context.get('branch_counts')
@@ -38,9 +39,13 @@ class BranchSerializer(serializers.ModelSerializer):
             'id', 'branch_code', 'branch_name', 'address',
             'state', 'state_name', 'city', 'city_name',
             'employees_count', 'status', 'is_headquarter',
+            'latitude', 'longitude', 'allowed_radius_meters', 'geofencing_enabled',
+            'has_coordinates',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['branch_code', 'employees_count', 'created_at', 'updated_at']
+        read_only_fields = [
+            'branch_code', 'employees_count', 'has_coordinates', 'created_at', 'updated_at',
+        ]
 
     def validate_address(self, value: str) -> str:
         if value is not None:
@@ -74,6 +79,17 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'city': 'Selected city does not belong to the selected state.'}
             )
+
+        # Geofencing: enabling requires coordinates either in this request or already on the branch
+        enabled = data.get('geofencing_enabled')
+        if enabled:
+            lat = data.get('latitude') or (self.instance.latitude if self.instance else None)
+            lon = data.get('longitude') or (self.instance.longitude if self.instance else None)
+            if lat is None or lon is None:
+                raise serializers.ValidationError(
+                    {'geofencing_enabled': 'Set latitude and longitude before enabling geofencing.'}
+                )
+
         return data
 
     def create(self, validated_data):
@@ -87,3 +103,22 @@ class BranchSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+
+
+class EmployeeBranchAccessSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    branch_name   = serializers.CharField(source='branch.branch_name', read_only=True)
+    branch_code   = serializers.CharField(source='branch.branch_code', read_only=True)
+
+    class Meta:
+        model  = EmployeeBranchAccess
+        fields = [
+            'id', 'employee', 'employee_name', 'employee_code',
+            'branch', 'branch_name', 'branch_code', 'is_primary',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id', 'created_at',
+            'employee_name', 'employee_code', 'branch_name', 'branch_code',
+        ]

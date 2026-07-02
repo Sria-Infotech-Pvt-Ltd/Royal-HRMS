@@ -108,16 +108,7 @@ def _auto_assign_managers(employee: 'User') -> list:
     changed = []
     branch_obj = None
 
-    # Auto-assign HR from branch — only if not already set
-    if emp_branch and employee.hr_id is None:
-        branch_obj = (
-            Branch.objects.select_related('hr')
-            .filter(branch_name__iexact=emp_branch)
-            .first()
-        )
-        if branch_obj and branch_obj.hr and branch_obj.hr_id != employee.pk:
-            employee.hr = branch_obj.hr
-            changed.append('hr')
+    # hr auto-assign removed — Branch has no hr FK field
 
     # Managers have no reporting manager — they ARE the reporting manager for others.
     if role_name == 'manager':
@@ -150,20 +141,6 @@ def _auto_assign_managers(employee: 'User') -> list:
         and (dept.manager.branch or '').strip().lower() == emp_branch.lower()
     ):
         assigned = dept.manager
-
-    if assigned is None:
-        if branch_obj is None:
-            branch_obj = (
-                Branch.objects.select_related('hr')
-                .filter(branch_name__iexact=emp_branch)
-                .first()
-            )
-        if (
-            branch_obj and branch_obj.hr
-            and branch_obj.hr_id != employee.pk
-            and (branch_obj.hr.department or '').strip().lower() == emp_dept.lower()
-        ):
-            assigned = branch_obj.hr
 
     if assigned is not None:
         employee.reporting_manager = assigned
@@ -2243,7 +2220,7 @@ class EmployeeListCreateView(APIView):
 
         qs = (
             User.objects
-            .select_related('role', 'profile', 'reporting_manager', 'hr')
+            .select_related('role', 'profile', 'reporting_manager')
             .prefetch_related('employee_documents')
             .filter(is_active__in=[True, False])
             .exclude(employee_id='')   # portal candidates have no employee_id until onboarding is approved
@@ -2434,7 +2411,7 @@ def _get_employee(identifier: str):
     try:
         return (
             User.objects
-            .select_related('role', 'profile', 'reporting_manager', 'hr')
+            .select_related('role', 'profile', 'reporting_manager')
             .prefetch_related('employee_documents')
             .get(employee_id=identifier)
         )
@@ -3767,14 +3744,10 @@ class HRListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         branch = (request.query_params.get('branch') or '').strip()
-        if not branch:
-            return error('branch query parameter is required.')
-        hrs = (
-            User.objects
-            .filter(role__name='hr_admin', is_active=True, branch__iexact=branch)
-            .select_related('role')
-            .order_by('full_name')
-        )
+        hrs = User.objects.filter(role__name='hr_admin', is_active=True).select_related('role')
+        if branch:
+            hrs = hrs.filter(branch__iexact=branch)
+        hrs = hrs.order_by('full_name')
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}

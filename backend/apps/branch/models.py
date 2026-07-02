@@ -1,3 +1,6 @@
+import uuid
+
+from django.conf import settings
 from django.db import models
 
 
@@ -87,3 +90,42 @@ class Branch(models.Model):
     @property
     def has_coordinates(self) -> bool:
         return self.latitude is not None and self.longitude is not None
+
+
+class EmployeeBranchAccess(models.Model):
+    """
+    Grants an employee access to punch in from a specific branch.
+
+    Most employees have a single branch (from User.branch CharField) and do not
+    need a record here.  Add rows for HR, IT Support, Management, and Regional
+    Managers who work across multiple locations.  The geofencing service checks
+    this table first; if records exist it validates against all listed branches
+    instead of just the employee's primary branch.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='branch_access',
+    )
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.CASCADE,
+        related_name='employee_access',
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="True if this is the employee's home branch.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'employee_branch_access'
+        unique_together = ('employee', 'branch')
+        ordering = ['-is_primary', 'branch__branch_name']
+
+    def __str__(self):
+        label = 'primary' if self.is_primary else 'secondary'
+        return f'{self.employee} → {self.branch} ({label})'

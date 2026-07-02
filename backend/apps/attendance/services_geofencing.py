@@ -4,22 +4,23 @@ Geofencing service for attendance punch validation.
 Uses the Haversine formula to compute the great-circle distance between
 two GPS coordinates.  No external library required — pure Python math.
 
+Multi-branch support:
+  Most employees have a single branch (User.branch CharField).  For employees
+  who work across multiple locations (HR, IT, Management, Regional Managers),
+  add rows to EmployeeBranchAccess.  When such rows exist the geofencing service
+  validates against ALL listed branches and allows the punch if the employee is
+  within any one of them.
+
 Extensibility:
   Attendance modes are validated through a strategy map.
   To add a new mode (e.g. 'client_location'), register it in
   _MODE_VALIDATORS with its validation function.
-
-Performance:
-  Branch lookup is cached for the duration of a single request via
-  _resolve_employee_branch(), which does at most one SELECT per call.
-  No N+1 queries — branches are looked up directly by name match.
 """
 from __future__ import annotations
 
 import logging
 import math
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -41,11 +42,11 @@ class GeofenceResult:
     """
     Returned by GeofencingService.validate().
 
-    is_allowed        — whether the punch should be permitted
+    is_allowed         — whether the punch should be permitted
     is_inside_geofence — True/False/None (None = not evaluated)
-    calculated_distance — metres to branch (None if not calculated)
-    branch             — resolved Branch object (None if not found)
-    rejection_message  — human-readable reason if is_allowed is False
+    calculated_distance — metres to the matched branch (None if not calculated)
+    branch              — resolved Branch object (None if not found)
+    rejection_message   — human-readable reason if is_allowed is False
     """
     is_allowed:           bool
     is_inside_geofence:   Optional[bool]
@@ -59,12 +60,7 @@ class GeofenceResult:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def haversine_distance(coord1: GpsCoordinate, coord2: GpsCoordinate) -> float:
-    """
-    Returns the great-circle distance in metres between two GPS points.
-
-    Uses the Haversine formula — accurate to within ~0.3% for distances
-    under 1,000 km, which is more than sufficient for office geofencing.
-    """
+    """Returns the great-circle distance in metres between two GPS points."""
     lat1 = math.radians(coord1.latitude)
     lat2 = math.radians(coord2.latitude)
     d_lat = math.radians(coord2.latitude  - coord1.latitude)
@@ -79,7 +75,7 @@ def haversine_distance(coord1: GpsCoordinate, coord2: GpsCoordinate) -> float:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Branch resolver
+#  Branch resolvers
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _resolve_employee_branch(employee):
@@ -88,7 +84,7 @@ def _resolve_employee_branch(employee):
 
     User.branch is a plain CharField — we match it against Branch.branch_name.
     Falls back to branch_code match so slightly mismatched names still resolve.
-    Returns None if no match found (new employee, unassigned, etc.).
+    Returns None if no match found.
     """
     from apps.branch.models import Branch
 
@@ -102,13 +98,38 @@ def _resolve_employee_branch(employee):
         .first()
     )
     if branch is None:
-        # Try loose match on branch_code
         branch = (
             Branch.objects
             .filter(branch_code__iexact=branch_name, status=Branch.STATUS_ACTIVE)
             .first()
         )
     return branch
+
+
+def _resolve_all_allowed_branches(employee) -> list:
+    """
+    Returns every Branch the employee is authorised to punch from.
+
+    1. If the employee has EmployeeBranchAccess records, use those branches
+       (covers HR / IT / Management / Regional Managers with multi-branch access).
+    2. Otherwise fall back to the single branch resolved from User.branch.
+    """
+    from apps.branch.models import Branch, EmployeeBranchAccess
+
+    access_qs = (
+        EmployeeBranchAccess.objects
+        .filter(employee=employee)
+        .select_related('branch')
+    )
+
+    if access_qs.exists():
+        return [
+            r.branch for r in access_qs
+            if r.branch.status == Branch.STATUS_ACTIVE
+        ]
+
+    primary = _resolve_employee_branch(employee)
+    return [primary] if primary else []
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -124,8 +145,8 @@ class GeofencingService:
         result = GeofencingService.validate(
             employee=request.user,
             attendance_mode='office',
-            employee_lat=13.082840,
-            employee_lon=80.270500,
+            employee_lat=17.385044,
+            employee_lon=78.486671,
         )
         if not result.is_allowed:
             return error(result.rejection_message)
@@ -139,9 +160,6 @@ class GeofencingService:
         employee_lat: Optional[float] = None,
         employee_lon: Optional[float] = None,
     ) -> GeofenceResult:
-        """
-        Main entry point.  Delegates to the correct mode validator.
-        """
         validator = _MODE_VALIDATORS.get(attendance_mode, _validate_office)
         return validator(employee, employee_lat, employee_lon)
 
@@ -154,18 +172,19 @@ def _validate_office(
     employee_lon: Optional[float],
 ) -> GeofenceResult:
     """
-    Office mode: validate GPS against branch geofence.
+    Office mode: validate GPS against the employee's allowed branch geofences.
 
     Decision tree:
-    1. Resolve branch → if None, allow punch (unassigned branch, log warning).
-    2. Branch has no coordinates → allow punch (geofence not configured yet).
-    3. Branch geofencing_enabled = False → allow punch (feature disabled).
-    4. Employee sent no GPS → reject (coordinates required for office punch).
-    5. Calculate Haversine distance → allow if ≤ allowed_radius_meters.
+    1. Resolve allowed branches (EmployeeBranchAccess if present, else User.branch).
+    2. No branches resolved → allow punch (unassigned, log warning).
+    3. None of the branches have geofencing enabled + coordinates → allow.
+    4. Employee sent no GPS → reject (coordinates required).
+    5. Check Haversine distance against every geofenced branch.
+       Allow if within ANY one of them; reject if outside all.
     """
-    branch = _resolve_employee_branch(employee)
+    allowed_branches = _resolve_all_allowed_branches(employee)
 
-    if branch is None:
+    if not allowed_branches:
         logger.warning(
             'Geofence: no branch resolved for employee %s ("%s") — punch allowed without validation.',
             employee.pk, getattr(employee, 'branch', ''),
@@ -175,19 +194,26 @@ def _validate_office(
             calculated_distance=None, branch=None, rejection_message=None,
         )
 
-    if not branch.has_coordinates or not branch.geofencing_enabled:
+    # Branches that require GPS validation
+    validated_branches = [
+        b for b in allowed_branches
+        if b.has_coordinates and b.geofencing_enabled
+    ]
+
+    if not validated_branches:
+        # No branch has geofencing on — allow at the primary/first branch
         return GeofenceResult(
             is_allowed=True, is_inside_geofence=None,
-            calculated_distance=None, branch=branch, rejection_message=None,
+            calculated_distance=None, branch=allowed_branches[0], rejection_message=None,
         )
 
-    # Branch has coordinates + geofencing ON → GPS is required
+    # GPS is mandatory when at least one branch requires it
     if employee_lat is None or employee_lon is None:
         return GeofenceResult(
             is_allowed=False,
             is_inside_geofence=False,
             calculated_distance=None,
-            branch=branch,
+            branch=validated_branches[0],
             rejection_message=(
                 'Your location is required to clock in at this branch. '
                 'Please allow location access in your browser and try again.'
@@ -195,34 +221,52 @@ def _validate_office(
         )
 
     employee_coord = GpsCoordinate(latitude=float(employee_lat), longitude=float(employee_lon))
-    branch_coord   = GpsCoordinate(
-        latitude=float(branch.latitude),
-        longitude=float(branch.longitude),
+
+    # Find the nearest allowed branch the employee is within
+    best_branch:   object        = None
+    best_distance: Optional[float] = None
+
+    for branch in validated_branches:
+        branch_coord = GpsCoordinate(
+            latitude=float(branch.latitude),
+            longitude=float(branch.longitude),
+        )
+        distance_m = haversine_distance(employee_coord, branch_coord)
+        if distance_m <= branch.allowed_radius_meters:
+            if best_distance is None or distance_m < best_distance:
+                best_branch   = branch
+                best_distance = distance_m
+
+    if best_branch is not None:
+        return GeofenceResult(
+            is_allowed=True,
+            is_inside_geofence=True,
+            calculated_distance=round(best_distance, 2),
+            branch=best_branch,
+            rejection_message=None,
+        )
+
+    # Outside every allowed branch — find the closest for context
+    closest_branch = min(
+        validated_branches,
+        key=lambda b: haversine_distance(
+            employee_coord,
+            GpsCoordinate(float(b.latitude), float(b.longitude)),
+        ),
+    )
+    closest_distance = haversine_distance(
+        employee_coord,
+        GpsCoordinate(float(closest_branch.latitude), float(closest_branch.longitude)),
     )
 
-    distance_m   = haversine_distance(employee_coord, branch_coord)
-    is_inside    = distance_m <= branch.allowed_radius_meters
-
-    if not is_inside:
-        rejection = (
-            f'You are {round(distance_m)} m away from {branch.branch_name}. '
-            f'You must be within {branch.allowed_radius_meters} m to clock in. '
-            'Please move closer to the office and try again.'
-        )
-        return GeofenceResult(
-            is_allowed=False,
-            is_inside_geofence=False,
-            calculated_distance=round(distance_m, 2),
-            branch=branch,
-            rejection_message=rejection,
-        )
-
     return GeofenceResult(
-        is_allowed=True,
-        is_inside_geofence=True,
-        calculated_distance=round(distance_m, 2),
-        branch=branch,
-        rejection_message=None,
+        is_allowed=False,
+        is_inside_geofence=False,
+        calculated_distance=round(closest_distance, 2),
+        branch=closest_branch,
+        rejection_message=(
+            'You are outside your assigned office location. Punch In is not permitted.'
+        ),
     )
 
 

@@ -4,6 +4,9 @@ import uuid
 import datetime as dt
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+_IST = ZoneInfo('Asia/Kolkata')
 
 from django.conf import settings
 from django.db import models
@@ -696,6 +699,13 @@ class AttendanceWorkingHours(models.Model):
         default=15,
         help_text='Minutes of late-arrival tolerance before punch is flagged late.',
     )
+    missing_punch_grace_minutes = models.PositiveSmallIntegerField(
+        default=10,
+        help_text=(
+            'Minutes after shift end before a missing clock-out triggers an un-punch alert. '
+            'Employee is marked Incomplete and notified after shift_end + this value.'
+        ),
+    )
     break_duration_minutes = models.PositiveSmallIntegerField(
         default=30,
         help_text='Break deduction in minutes. 0 = no deduction.',
@@ -1011,11 +1021,11 @@ class AttendancePunch(models.Model):
 
     @property
     def punch_date(self) -> date:
-        return self.punched_at.date()
+        return self.punched_at.astimezone(_IST).date()
 
     @property
     def punch_time_display(self) -> str:
-        return self.punched_at.strftime('%H:%M')
+        return self.punched_at.astimezone(_IST).strftime('%H:%M')
 
 
 class AttendanceRecord(models.Model):
@@ -1033,6 +1043,7 @@ class AttendanceRecord(models.Model):
     STATUS_WEEKLY_OFF = 'weekly_off'
     STATUS_HOLIDAY    = 'holiday'
     STATUS_ON_LEAVE   = 'on_leave'
+    STATUS_INCOMPLETE = 'incomplete'   # clocked in, shift ended, no clock-out yet
     STATUS_CHOICES    = [
         (STATUS_PRESENT,    'Present'),
         (STATUS_LATE,       'Late'),
@@ -1041,6 +1052,7 @@ class AttendanceRecord(models.Model):
         (STATUS_WEEKLY_OFF, 'Weekly Off'),
         (STATUS_HOLIDAY,    'Holiday'),
         (STATUS_ON_LEAVE,   'On Leave'),
+        (STATUS_INCOMPLETE, 'Incomplete'),
     ]
 
     # Frontend display labels (must match DayStatus in CalendarGrid.tsx)
@@ -1052,6 +1064,7 @@ class AttendanceRecord(models.Model):
         STATUS_WEEKLY_OFF: 'Weekly Off',
         STATUS_HOLIDAY:    'Holiday',
         STATUS_ON_LEAVE:   'On Leave',
+        STATUS_INCOMPLETE: 'Incomplete',
     }
 
     id                     = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1082,6 +1095,7 @@ class AttendanceRecord(models.Model):
             models.Index(fields=['employee', 'date'],   name='rec_emp_date_idx'),
             models.Index(fields=['employee', 'status'], name='rec_emp_status_idx'),
             models.Index(fields=['date'],               name='rec_date_idx'),
+            models.Index(fields=['date', 'status'],     name='rec_date_status_idx'),
         ]
 
     def __str__(self) -> str:
@@ -1196,3 +1210,147 @@ class AttendanceCorrection(models.Model):
 
     def __str__(self) -> str:
         return f'Correction: {self.employee_id} — {self.date} ({self.status})'
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Overtime Entry  (HR-managed OT records)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AttendanceOvertime(models.Model):
+    OT_TYPE_REGULAR    = 'regular'
+    OT_TYPE_HOLIDAY    = 'holiday'
+    OT_TYPE_WEEKLY_OFF = 'weekly_off'
+    OT_TYPE_CHOICES    = [
+        (OT_TYPE_REGULAR,    'Regular (1.5×)'),
+        (OT_TYPE_HOLIDAY,    'Holiday (2.0×)'),
+        (OT_TYPE_WEEKLY_OFF, 'Weekly Off (1.5×)'),
+    ]
+
+    STATUS_PENDING  = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES  = [
+        (STATUS_PENDING,  'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_REJECTED, 'Rejected'),
+    ]
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee    = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='overtime_entries',
+    )
+    date        = models.DateField()
+    ot_start    = models.TimeField()
+    ot_end      = models.TimeField()
+    ot_minutes  = models.PositiveIntegerField(default=0)
+    ot_type     = models.CharField(max_length=15, choices=OT_TYPE_CHOICES, default=OT_TYPE_REGULAR)
+    ot_amount   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reason      = models.TextField(blank=True, default='')
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='approved_overtime',
+    )
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, related_name='created_overtime',
+    )
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_overtime'
+        ordering = ['-date', '-created_at']
+        indexes  = [
+            models.Index(fields=['employee', 'date'], name='ot_emp_date_idx'),
+            models.Index(fields=['status'],           name='ot_status_idx'),
+            models.Index(fields=['date'],             name='ot_date_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} OT {self.date} {self.ot_start}–{self.ot_end}'
+
+    @property
+    def ot_hours_display(self) -> str:
+        h = self.ot_minutes // 60
+        m = self.ot_minutes % 60
+        if h and m:
+            return f'{h}h {m:02d}m'
+        return f'{h}h' if h else f'{m}m'
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Attendance Import Log  (bulk upload audit trail)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AttendanceImportLog(models.Model):
+    STATUS_PROCESSING = 'processing'
+    STATUS_COMPLETED  = 'completed'
+    STATUS_FAILED     = 'failed'
+    STATUS_CHOICES    = [
+        (STATUS_PROCESSING, 'Processing'),
+        (STATUS_COMPLETED,  'Completed'),
+        (STATUS_FAILED,     'Failed'),
+    ]
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    imported_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, related_name='attendance_imports',
+    )
+    file_name    = models.CharField(max_length=255)
+    total_rows   = models.PositiveIntegerField(default=0)
+    success_rows = models.PositiveIntegerField(default=0)
+    failed_rows  = models.PositiveIntegerField(default=0)
+    status       = models.CharField(max_length=15, choices=STATUS_CHOICES, default=STATUS_PROCESSING)
+    errors       = models.JSONField(default=list, blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_import_logs'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'Import {self.file_name} ({self.status})'
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Missing Punch Notification Log  (de-duplicate clock-out reminder alerts)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class MissingPunchNotification(models.Model):
+    """
+    Records that a missing clock-out notification was sent to an employee for a date.
+
+    Used by the Celery un-punch detection task to ensure each employee receives
+    at most one notification per day regardless of how many times the task runs.
+    The unique_together constraint provides the deduplication guarantee.
+    """
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee   = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='missing_punch_notifications',
+    )
+    date       = models.DateField(help_text='The working date for which the notification was sent.')
+    channel    = models.CharField(
+        max_length=20,
+        default='email',
+        help_text='Delivery channel: email, in_app, push, sms.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'attendance_missing_punch_notifications'
+        unique_together = [('employee', 'date', 'channel')]
+        indexes         = [
+            models.Index(fields=['employee', 'date'], name='mpn_emp_date_idx'),
+            models.Index(fields=['date'],             name='mpn_date_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'MissingPunchNotification {self.employee_id} {self.date} [{self.channel}]'
