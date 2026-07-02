@@ -473,14 +473,16 @@ class DepartmentSerializer(serializers.ModelSerializer):
     designation_count = serializers.SerializerMethodField()
     employee_count    = serializers.SerializerMethodField()
     roles             = serializers.SerializerMethodField()
+    manager_name      = serializers.CharField(source='manager.full_name', read_only=True, default=None)
 
     class Meta:
         model  = Department
         fields = (
             'id', 'name', 'description', 'is_active', 'created_at',
+            'manager', 'manager_name',
             'designation_count', 'employee_count', 'roles',
         )
-        read_only_fields = ('id', 'created_at', 'designation_count', 'employee_count', 'roles')
+        read_only_fields = ('id', 'created_at', 'manager_name', 'designation_count', 'employee_count', 'roles')
 
     def get_designation_count(self, obj: Department) -> int:
         return len(obj.designations.all())  # uses prefetch cache — no extra query
@@ -1088,6 +1090,26 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         extra_kwargs = {'file': {'write_only': True}}
 
     def get_file_url(self, obj):
+        # HR approval context: return a signed Cloudinary URL so admins can
+        # open the file directly without routing through the employee proxy.
+        if self.context.get('use_cloudinary_url') and obj.file:
+            try:
+                import os as _os
+                import cloudinary.utils as _cu
+                name  = obj.file.name
+                parts = _os.path.basename(name).rsplit('.', 1)
+                fmt   = parts[1].lower() if len(parts) == 2 else 'raw'
+                return _cu.private_download_url(
+                    name, fmt,
+                    resource_type='raw',
+                    type='upload',
+                    attachment=False,
+                )
+            except Exception:
+                pass
+
+        # Default: backend proxy URL (signs the request server-side so the
+        # browser never hits Cloudinary directly — required for employee flow).
         request = self.context.get('request')
         if not request:
             return None
@@ -1185,6 +1207,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'id', 'full_name', 'email', 'phone', 'employee_id',
             'department', 'designation', 'branch',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
+            'onboarding_status', 'assessment_status',
             'profile',
         ]
 
@@ -1197,6 +1220,22 @@ class MyProfileUpdateSerializer(serializers.Serializer):
     emergency_relationship = serializers.CharField(max_length=50,   required=False, allow_blank=True)
     emergency_phone        = serializers.CharField(max_length=20,   required=False, allow_blank=True)
     emergency_email        = serializers.EmailField(required=False, allow_blank=True)
+
+    def _validate_phone_value(self, value: str, field_label: str) -> str:
+        if not value:
+            return value
+        value = value.strip()
+        if not _PHONE_RE_PROFILE.match(value):
+            raise serializers.ValidationError(
+                f'Enter a valid {field_label} (digits, spaces, +, -, ( ) allowed; 7–20 characters).'
+            )
+        return value
+
+    def validate_phone(self, value: str) -> str:
+        return self._validate_phone_value(value, 'phone number')
+
+    def validate_emergency_phone(self, value: str) -> str:
+        return self._validate_phone_value(value, 'emergency contact phone number')
 
 
 # ─── Approval Matrix ──────────────────────────────────────────────────────────

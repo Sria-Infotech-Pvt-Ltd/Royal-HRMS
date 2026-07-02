@@ -21,14 +21,14 @@ class CitySerializer(serializers.ModelSerializer):
 
 class BranchSerializer(serializers.ModelSerializer):
     state_name = serializers.CharField(source='state.name', read_only=True)
-    city_name = serializers.CharField(source='city.name', read_only=True)
+    city_name  = serializers.CharField(source='city.name', read_only=True)
+    hr_name    = serializers.CharField(source='hr.full_name', read_only=True, default=None)
     employees_count = serializers.SerializerMethodField()
 
     def get_employees_count(self, obj):
         branch_counts = self.context.get('branch_counts')
         if branch_counts is not None:
             return branch_counts.get(obj.branch_name, 0)
-        # Fallback for detail views — single query per branch is acceptable
         from apps.accounts.models import User
         return User.objects.filter(branch=obj.branch_name, is_active=True).count()
 
@@ -37,10 +37,11 @@ class BranchSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'branch_code', 'branch_name', 'address',
             'state', 'state_name', 'city', 'city_name',
+            'hr', 'hr_name',
             'employees_count', 'status', 'is_headquarter',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['branch_code', 'employees_count', 'created_at', 'updated_at']
+        read_only_fields = ['branch_code', 'hr_name', 'employees_count', 'created_at', 'updated_at']
 
     def validate_address(self, value: str) -> str:
         if value is not None:

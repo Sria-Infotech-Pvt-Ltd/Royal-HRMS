@@ -167,6 +167,23 @@ class BranchDetailView(APIView):
         except Branch.DoesNotExist:
             return None
 
+    def _cascade_hr(self, branch: Branch, old_hr_id) -> None:
+        """When branch HR changes, update hr field for all employees in that branch
+        who were pointing at the old HR (preserves manual overrides).
+        """
+        if branch.hr_id == old_hr_id:
+            return
+        from apps.accounts.models import User
+        base_qs = User.objects.filter(branch__iexact=branch.branch_name, is_active=True)
+        if branch.hr_id:
+            base_qs = base_qs.exclude(pk=branch.hr_id)
+
+        if branch.hr_id:
+            # Update employees whose hr still points at the old HR value
+            base_qs.filter(hr_id=old_hr_id).update(hr_id=branch.hr_id)
+        else:
+            base_qs.filter(hr_id=old_hr_id).update(hr=None)
+
     def get(self, request, pk):
         if not _has_perm(request.user, 'branches.view'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
@@ -181,6 +198,7 @@ class BranchDetailView(APIView):
         branch = self._get_branch(pk)
         if not branch:
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        old_hr_id = branch.hr_id
         serializer = BranchSerializer(branch, data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -191,6 +209,7 @@ class BranchDetailView(APIView):
                 'A branch with this name or code already exists.',
                 http_status=status.HTTP_409_CONFLICT,
             )
+        self._cascade_hr(updated, old_hr_id)
         AuditLog.objects.create(
             user=request.user, action='branch_updated', module='branch',
             object_id=str(updated.pk),
@@ -206,6 +225,7 @@ class BranchDetailView(APIView):
         branch = self._get_branch(pk)
         if not branch:
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        old_hr_id = branch.hr_id
         serializer = BranchSerializer(branch, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -216,6 +236,7 @@ class BranchDetailView(APIView):
                 'A branch with this name or code already exists.',
                 http_status=status.HTTP_409_CONFLICT,
             )
+        self._cascade_hr(updated, old_hr_id)
         AuditLog.objects.create(
             user=request.user, action='branch_updated', module='branch',
             object_id=str(updated.pk),

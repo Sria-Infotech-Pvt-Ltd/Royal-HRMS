@@ -1,6 +1,7 @@
 import logging
 from datetime import date
 
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
@@ -8,6 +9,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.pagination import paginate, paginated_data
 from core.responses import error, first_error, success
 
 from ..models import (
@@ -39,14 +41,12 @@ def _current_year() -> int:
 
 
 def _resolve_approver(role_str: str, employee) -> 'accounts.User | None':
-    """Map a role string from ApprovalWorkflowRule to an actual User."""
-    from apps.accounts.models import User
-    if role_str == 'rm':
-        return employee.reporting_manager
-    try:
-        return User.objects.filter(role__name=role_str, is_active=True).first()
-    except Exception:
-        return None
+    """Map a role string from ApprovalWorkflowRule to an actual User on the employee."""
+    if role_str in ('reporting_manager', 'rm', 'manager'):
+        return getattr(employee, 'reporting_manager', None)
+    if role_str in ('hr', 'hr_manager', 'hr_admin'):
+        return getattr(employee, 'hr', None)
+    return None
 
 
 def _resolve_approval_chain(employee):
@@ -78,14 +78,13 @@ def _role_name(user) -> str:
 def _approval_scope_filter(user) -> 'Q':
     """
     Scope filter for the approval queue — always excludes the approver's own requests.
-    system_admin → all; hr_admin → own branch; manager → direct reports; employee → own.
+    system_admin → all; hr_admin → employees where hr=user (L2); manager → direct reports (L1); employee → own.
     """
     role = _role_name(user)
     if role == 'system_admin':
         return ~Q(employee=user)
     if role == 'hr_admin':
-        base = Q(employee__branch=user.branch) if user.branch else Q()
-        return base & ~Q(employee=user)
+        return Q(employee__hr=user) & ~Q(employee=user)
     if role == 'manager':
         return Q(employee__reporting_manager=user) & ~Q(employee=user)
     return Q(employee=user)
@@ -334,8 +333,9 @@ class LeaveRequestListCreateView(APIView):
         if year:
             queryset = queryset.filter(start_date__year=year)
 
-        serializer = LeaveRequestSerializer(queryset, many=True, context={'request': request})
-        return success('Leave requests retrieved.', serializer.data)
+        page_obj, paginator = paginate(queryset, request, default_page_size=20)
+        serializer = LeaveRequestSerializer(page_obj.object_list, many=True, context={'request': request})
+        return success('Leave requests retrieved.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
         serializer = LeaveRequestCreateSerializer(data=request.data)
@@ -354,20 +354,25 @@ class LeaveRequestListCreateView(APIView):
 
         year = start.year
 
-        # Balance check (skip for LWP)
-        if leave_type != LEAVE_LWP:
-            balance = LeaveBalance.objects.filter(
-                employee=request.user, leave_type=leave_type, year=year
-            ).first()
-            if not balance:
-                return error(f'No leave balance found for {leave_type} in {year}. Contact HR.')
-            available = float(balance.total_days - balance.used_days)
-            if total_days > available:
-                return error(f'Insufficient balance. You have {available} day(s) available.')
+        # Balance check + creation wrapped in a transaction with row-level lock
+        # to prevent double-booking when the same employee submits concurrent requests.
+        with transaction.atomic():
+            if leave_type != LEAVE_LWP:
+                balance = (
+                    LeaveBalance.objects
+                    .select_for_update()
+                    .filter(employee=request.user, leave_type=leave_type, year=year)
+                    .first()
+                )
+                if not balance:
+                    return error(f'No leave balance found for {leave_type} in {year}. Contact HR.')
+                available = float(balance.total_days - balance.used_days)
+                if total_days > available:
+                    return error(f'Insufficient balance. You have {available} day(s) available.')
 
-        l1, l2 = _resolve_approval_chain(request.user)
+            l1, l2 = _resolve_approval_chain(request.user)
 
-        leave_request = LeaveRequest.objects.create(
+            leave_request = LeaveRequest.objects.create(
             employee=request.user,
             leave_type=leave_type,
             duration=duration,

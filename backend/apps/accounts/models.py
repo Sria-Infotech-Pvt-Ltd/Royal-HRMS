@@ -98,6 +98,13 @@ class User(AbstractBaseUser, PermissionsMixin):
         (ONBOARDING_COMPLETE,  'Complete'),
     ]
 
+    ASSESSMENT_PENDING  = 'pending'
+    ASSESSMENT_COMPLETE = 'complete'
+    ASSESSMENT_CHOICES  = [
+        (ASSESSMENT_PENDING,  'Pending'),
+        (ASSESSMENT_COMPLETE, 'Complete'),
+    ]
+
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email       = models.EmailField(unique=True)
     full_name   = models.CharField(max_length=150)
@@ -121,6 +128,13 @@ class User(AbstractBaseUser, PermissionsMixin):
                             blank=True,
                             related_name='direct_reports',
                         )
+    hr = models.ForeignKey(
+             'self',
+             on_delete=models.SET_NULL,
+             null=True,
+             blank=True,
+             related_name='hr_employees',
+         )
     is_active       = models.BooleanField(default=True)
     is_staff      = models.BooleanField(default=False)
     must_change_password    = models.BooleanField(default=True)
@@ -128,6 +142,11 @@ class User(AbstractBaseUser, PermissionsMixin):
                                   max_length=20,
                                   choices=ONBOARDING_CHOICES,
                                   default=ONBOARDING_PENDING,
+                              )
+    assessment_status       = models.CharField(
+                                  max_length=20,
+                                  choices=ASSESSMENT_CHOICES,
+                                  default=ASSESSMENT_PENDING,
                               )
     failed_login_attempts   = models.PositiveSmallIntegerField(default=0)
     locked_until            = models.DateTimeField(null=True, blank=True)
@@ -205,6 +224,12 @@ class User(AbstractBaseUser, PermissionsMixin):
 class Department(models.Model):
     name        = models.CharField(max_length=100, unique=True)
     description = models.CharField(max_length=300, blank=True)
+    manager     = models.ForeignKey(
+                      'User',
+                      on_delete=models.SET_NULL,
+                      null=True, blank=True,
+                      related_name='managed_departments',
+                  )
     is_active   = models.BooleanField(default=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
