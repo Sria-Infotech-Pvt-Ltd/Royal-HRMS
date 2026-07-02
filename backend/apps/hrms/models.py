@@ -81,8 +81,9 @@ class Expense(models.Model):
         (STATUS_REJECTED, 'Rejected'),
     ]
 
-    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    employee     = models.ForeignKey(
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    expense_number = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
+    employee       = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         related_name='expenses',
@@ -99,7 +100,7 @@ class Expense(models.Model):
     amount       = models.DecimalField(max_digits=10, decimal_places=2)
     expense_date = models.DateField()
     description  = models.TextField(blank=True, default='')
-    status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     created_at   = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -127,7 +128,8 @@ class ExpenseReceipt(models.Model):
 # ─── Leave Policy ─────────────────────────────────────────────────────────────
 
 class LeavePolicy(models.Model):
-    leave_type             = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES, unique=True)
+    leave_type             = models.CharField(max_length=50, unique=True)
+    leave_type_label       = models.CharField(max_length=100, blank=True, default='')
     annual_days            = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     can_carry_forward      = models.BooleanField(default=False)
     max_carry_forward_days = models.PositiveIntegerField(default=0)
@@ -140,7 +142,8 @@ class LeavePolicy(models.Model):
         db_table = 'hrms_leave_policies'
 
     def __str__(self) -> str:
-        return f'{self.get_leave_type_display()} — {self.annual_days}d/yr'
+        label = self.leave_type_label or dict(LEAVE_TYPE_CHOICES).get(self.leave_type, self.leave_type)
+        return f'{label} — {self.annual_days}d/yr'
 
 
 # ─── Leave Balance ────────────────────────────────────────────────────────────
@@ -179,7 +182,7 @@ class LeaveRequest(models.Model):
     end_date   = models.DateField()
     total_days = models.DecimalField(max_digits=4, decimal_places=1)
     reason     = models.TextField()
-    status     = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING)
+    status     = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
     is_lwp     = models.BooleanField(default=False)
 
     # L1 approval

@@ -30,17 +30,23 @@ class ExpenseReceiptSerializer(serializers.ModelSerializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    employee_name = serializers.SerializerMethodField()
-    branch_name   = serializers.SerializerMethodField()
-    receipts      = ExpenseReceiptSerializer(many=True, read_only=True)
+    employee_name  = serializers.SerializerMethodField()
+    branch_name    = serializers.SerializerMethodField()
+    receipts       = ExpenseReceiptSerializer(many=True, read_only=True)
+    expense_ref    = serializers.SerializerMethodField()
 
     class Meta:
         model  = Expense
         fields = [
-            'id', 'title', 'category', 'amount', 'expense_date',
+            'expense_number', 'expense_ref', 'title', 'category', 'amount', 'expense_date',
             'description', 'status', 'receipts',
             'employee_name', 'branch_name', 'created_at',
         ]
+
+    def get_expense_ref(self, obj: Expense) -> str:
+        if obj.expense_number is None:
+            return ''
+        return f'EXP{obj.expense_number:03d}'
 
     def get_employee_name(self, obj: Expense) -> str:
         return obj.employee.full_name if obj.employee_id else ''
@@ -50,6 +56,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class ExpenseCreateSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
     class Meta:
         model  = Expense
         fields = ['title', 'category', 'amount', 'expense_date', 'description']
@@ -58,6 +66,25 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError('Amount must be greater than zero.')
         return value
+
+    def validate_category(self, value):
+        lowered  = value.strip().lower()
+        valid    = [c[0] for c in Expense.CATEGORY_CHOICES]
+        if lowered in valid:
+            return lowered
+        by_label = {label.lower(): key for key, label in Expense.CATEGORY_CHOICES}
+        if lowered in by_label:
+            return by_label[lowered]
+        raise serializers.ValidationError(
+            f'Invalid category. Choose from: {", ".join(valid)}.'
+        )
+
+    def validate(self, attrs):
+        if not attrs.get('title'):
+            label_map      = {key: label for key, label in Expense.CATEGORY_CHOICES}
+            category       = attrs.get('category', '')
+            attrs['title'] = label_map.get(category, category.capitalize())
+        return attrs
 
 
 def validate_receipt_file(file) -> None:
@@ -71,7 +98,7 @@ def validate_receipt_file(file) -> None:
 # ─── Leave serializers ────────────────────────────────────────────────────────
 
 class LeavePolicySerializer(serializers.ModelSerializer):
-    leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
+    leave_type_display = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeavePolicy
@@ -80,6 +107,39 @@ class LeavePolicySerializer(serializers.ModelSerializer):
             'annual_days', 'can_carry_forward', 'max_carry_forward_days',
             'policy_note', 'is_active', 'updated_at',
         ]
+
+    def get_leave_type_display(self, obj) -> str:
+        if obj.leave_type_label:
+            return obj.leave_type_label
+        return dict(LEAVE_TYPE_CHOICES).get(obj.leave_type, obj.leave_type.replace('_', ' ').title())
+
+
+class LeavePolicyCreateSerializer(serializers.Serializer):
+    leave_type_label       = serializers.CharField(max_length=100)
+    annual_days            = serializers.DecimalField(max_digits=5, decimal_places=1, default=0)
+    can_carry_forward      = serializers.BooleanField(default=False)
+    max_carry_forward_days = serializers.IntegerField(default=0, min_value=0)
+    policy_note            = serializers.CharField(required=False, default='', allow_blank=True)
+    is_active              = serializers.BooleanField(default=True)
+
+    def validate_leave_type_label(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Display name cannot be empty.')
+        key = value.lower().replace(' ', '_').replace('-', '_')
+        if LeavePolicy.objects.filter(leave_type=key).exists():
+            raise serializers.ValidationError(f'A leave type with this name already exists.')
+        return value
+
+    def validate_annual_days(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Annual days cannot be negative.')
+        return value
+
+    def validate_max_carry_forward_days(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Max carry forward days cannot be negative.')
+        return value
 
 
 class LeavePolicyUpdateSerializer(serializers.ModelSerializer):

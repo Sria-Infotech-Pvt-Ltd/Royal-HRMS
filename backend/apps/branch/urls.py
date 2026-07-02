@@ -3,6 +3,7 @@ from django.urls import path
 from apps.branch.views import (
     BranchDetailView,
     BranchDistributionView,
+    BranchGeofencingView,
     BranchListCreateView,
     BranchPreviewCodeView,
     BranchStatsView,
@@ -22,5 +23,6 @@ urlpatterns = [
 
     # Branch CRUD (single base URL)
     path('branches/', BranchListCreateView.as_view(), name='branch-list-create'),
-    path('branches/<int:pk>/', BranchDetailView.as_view(), name='branch-detail'),
+    path('branches/<int:pk>/',             BranchDetailView.as_view(),     name='branch-detail'),
+    path('branches/<int:pk>/geofencing/',  BranchGeofencingView.as_view(), name='branch-geofencing'),
 ]

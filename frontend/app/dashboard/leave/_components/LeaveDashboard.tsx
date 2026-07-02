@@ -38,7 +38,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
   // Employee: all their own requests; Approver: pending approval queue (backend scopes by role, excludes own)
   const requestsUrl = isEmployee
     ? API.leave.requests
-    : API.leave.requests + "?status=pending";
+    : API.leave.requests + "?status=pending,l2_pending";
 
   const { data: requests, refetch: refetchRequests, loading } = useFetch<LeaveRequest[]>(requestsUrl);
 
@@ -49,8 +49,8 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
 
   const visibleRequests = selectedBranches.length === 0
-    ? (requests ?? [])
-    : (requests ?? []).filter(r => selectedBranches.includes(r.employee_branch));
+    ? requests
+    : requests.filter(r => selectedBranches.includes(r.employee_branch));
 
   async function approve(id: string) {
     setActioning(id);

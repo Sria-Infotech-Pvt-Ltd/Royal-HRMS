@@ -1,0 +1,266 @@
+"""
+My Attendance views.
+
+All views use APIView. Each view has one responsibility.
+Business logic lives in the service layer — views only coordinate
+request parsing, permission checks, and response shaping.
+
+Endpoints:
+  POST   /api/attendance/punch/          — Clock In / Clock Out
+  GET    /api/attendance/today/          — ClockWidget data
+  GET    /api/attendance/stats/          — Stat cards (?month=&year=)
+  GET    /api/attendance/summary/        — Monthly Summary grid (?month=&year=)
+  GET    /api/attendance/calendar/       — Calendar + detail table (?month=&year=)
+  POST   /api/attendance/correction/     — Submit Attendance Correction Request
+"""
+from __future__ import annotations
+
+import logging
+
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from core.responses import error, first_error, get_client_ip, success
+
+from apps.attendance.models import AttendanceCorrection
+from apps.attendance.serializers_my_attendance import (
+    CalendarSerializer,
+    CorrectionReadSerializer,
+    CorrectionWriteSerializer,
+    HistoryRowSerializer,
+    MonthYearQuerySerializer,
+    MonthlySummarySerializer,
+    PunchWriteSerializer,
+    StatsSerializer,
+    TodayAttendanceSerializer,
+)
+from apps.attendance.services_attendance import (
+    AttendanceDashboardService,
+    PunchService,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ── Punch (Clock In / Clock Out) ──────────────────────────────────────────────
+
+class AttendancePunchView(APIView):
+    """
+    POST /api/attendance/punch/
+
+    Body: { "punch_type": "IN" | "OUT" }
+
+    Stores the punch, processes the day's attendance record, and returns
+    the updated today-session so ClockWidget can refresh in one round-trip.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = PunchWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(
+                first_error(serializer.errors),
+                data=serializer.errors,
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        punch_data = serializer.validated_data.copy()
+        punch_data['ip_address'] = get_client_ip(request)
+
+        try:
+            PunchService.record_punch(request.user, punch_data)
+        except ValueError as exc:
+            return error(str(exc), http_status=status.HTTP_400_BAD_REQUEST)
+        except PermissionError as exc:
+            return error(str(exc), http_status=status.HTTP_403_FORBIDDEN)
+
+        punch_type = punch_data['punch_type']
+        session    = PunchService.get_today_session(request.user)
+        return success(
+            f'Clocked {"in" if punch_type == "IN" else "out"} successfully.',
+            TodayAttendanceSerializer(session).data,
+        )
+
+
+# ── Today's Session ───────────────────────────────────────────────────────────
+
+class TodayAttendanceView(APIView):
+    """
+    GET /api/attendance/today/
+
+    Returns everything ClockWidget needs:
+      is_clocked_in, punches[], total_seconds, session_seconds, date_display
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        session = PunchService.get_today_session(request.user)
+        return success(
+            "Today's attendance retrieved successfully.",
+            TodayAttendanceSerializer(session).data,
+        )
+
+
+# ── Stat Cards ────────────────────────────────────────────────────────────────
+
+class AttendanceStatsView(APIView):
+    """
+    GET /api/attendance/stats/?month=6&year=2025
+
+    Powers the four stat cards: Days Present, Late Arrivals, Avg Hours/Day,
+    Attendance %.  Defaults to the current month if params omitted.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        qp = MonthYearQuerySerializer(data=request.query_params)
+        if not qp.is_valid():
+            return error(first_error(qp.errors), data=qp.errors,
+                         http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        params = qp.validated_data
+        stats  = AttendanceDashboardService.get_stats(
+            request.user, params['year'], params['month'],
+        )
+        return success('Stats retrieved successfully.', StatsSerializer(stats).data)
+
+
+# ── Monthly Summary ───────────────────────────────────────────────────────────
+
+class AttendanceSummaryView(APIView):
+    """
+    GET /api/attendance/summary/?month=6&year=2025
+
+    Powers the Monthly Summary 6-cell grid:
+      Working Days, Days Present, Days Absent, Leave Days, Half Days, OT Hours.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        qp = MonthYearQuerySerializer(data=request.query_params)
+        if not qp.is_valid():
+            return error(first_error(qp.errors), data=qp.errors,
+                         http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        params  = qp.validated_data
+        summary = AttendanceDashboardService.get_monthly_summary(
+            request.user, params['year'], params['month'],
+        )
+        return success(
+            'Monthly summary retrieved successfully.',
+            MonthlySummarySerializer(summary).data,
+        )
+
+
+# ── Calendar ──────────────────────────────────────────────────────────────────
+
+class AttendanceCalendarView(APIView):
+    """
+    GET /api/attendance/calendar/?month=6&year=2025
+
+    Returns per-day data keyed by day number.
+    Shape matches CalendarGrid's Record<number, DayRecord> exactly.
+    Also returns the detail-table rows (used by MonthDetail component).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        qp = MonthYearQuerySerializer(data=request.query_params)
+        if not qp.is_valid():
+            return error(first_error(qp.errors), data=qp.errors,
+                         http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        params   = qp.validated_data
+        calendar = AttendanceDashboardService.get_calendar(
+            request.user, params['year'], params['month'],
+        )
+        history = AttendanceDashboardService.get_history(
+            request.user, params['year'], params['month'],
+        )
+        return success('Calendar retrieved successfully.', {
+            'calendar': CalendarSerializer(calendar).data,
+            'history':  HistoryRowSerializer(history, many=True).data,
+            'month':    params['month'],
+            'year':     params['year'],
+        })
+
+
+# ── Attendance Correction Request ─────────────────────────────────────────────
+
+class AttendanceCorrectionView(APIView):
+    """
+    POST /api/attendance/correction/
+
+    Submits a regularization request for a missed or incorrect punch.
+
+    Business rules enforced:
+    - Date cannot be in the future.
+    - Correct In Time required if punch_type is IN or BOTH.
+    - Correct Out Time required if punch_type is OUT or BOTH.
+    - Cannot submit if a pending correction already exists for the same date.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        serializer = CorrectionWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(
+                first_error(serializer.errors),
+                data=serializer.errors,
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        data     = serializer.validated_data
+        employee = request.user
+
+        # Guard: no duplicate pending correction for same date
+        if AttendanceCorrection.objects.filter(
+            employee=employee,
+            date=data['date'],
+            status=AttendanceCorrection.STATUS_PENDING,
+        ).exists():
+            return error(
+                'A correction request is already pending for this date. '
+                'Please wait for it to be reviewed before submitting another.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        correction = AttendanceCorrection.objects.create(
+            employee=employee,
+            date=data['date'],
+            punch_type=data['punch_type'],
+            requested_in_time=data.get('correct_in_time'),
+            requested_out_time=data.get('correct_out_time'),
+            reason=data['reason'],
+            notes=data.get('notes', ''),
+            status=AttendanceCorrection.STATUS_PENDING,
+            created_by=employee,
+        )
+
+        logger.info(
+            'Correction submitted: employee=%s date=%s type=%s',
+            employee.pk, data['date'], data['punch_type'],
+        )
+
+        return success(
+            'Attendance correction request submitted successfully. '
+            'Your manager will review it within the regularization window.',
+            CorrectionReadSerializer({
+                'id':         correction.pk,
+                'date':       correction.date,
+                'punch_type': correction.punch_type,
+                'reason':     correction.reason,
+                'status':     correction.status,
+                'created_at': correction.created_at,
+            }).data,
+            http_status=status.HTTP_201_CREATED,
+        )

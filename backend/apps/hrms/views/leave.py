@@ -18,6 +18,7 @@ from ..models import (
 )
 from ..serializers import (
     LeaveBalanceSerializer,
+    LeavePolicyCreateSerializer,
     LeavePolicySerializer,
     LeavePolicyUpdateSerializer,
     LeaveRequestCreateSerializer,
@@ -165,8 +166,28 @@ class LeavePolicyView(APIView):
     def patch(self, request, leave_type: str):
         return self.put(request, leave_type)
 
-    def post(self, request, leave_type: str):
-        return self.put(request, leave_type)
+    def post(self, request, leave_type: str = None):
+        if leave_type:
+            return self.put(request, leave_type)
+        if not (_has_perm(request.user, 'settings.edit') or _has_perm(request.user, 'leave.approve')):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        serializer = LeavePolicyCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        data = serializer.validated_data
+        label = data['leave_type_label']
+        leave_type_key = label.lower().replace(' ', '_').replace('-', '_')
+        policy = LeavePolicy.objects.create(
+            leave_type=leave_type_key,
+            leave_type_label=label,
+            annual_days=data['annual_days'],
+            can_carry_forward=data['can_carry_forward'],
+            max_carry_forward_days=data['max_carry_forward_days'],
+            policy_note=data.get('policy_note', ''),
+            is_active=data['is_active'],
+        )
+        logger.info('Created leave type "%s" by %s', leave_type_key, request.user.email)
+        return success('Leave type created.', LeavePolicySerializer(policy).data, http_status=status.HTTP_201_CREATED)
 
 
 # ─── Leave Balance ─────────────────────────────────────────────────────────────
@@ -306,7 +327,8 @@ class LeaveRequestListCreateView(APIView):
 
         req_status = request.query_params.get('status')
         if req_status:
-            queryset = queryset.filter(status=req_status)
+            statuses = [s.strip() for s in req_status.split(',')]
+            queryset = queryset.filter(status__in=statuses)
 
         year = request.query_params.get('year')
         if year:

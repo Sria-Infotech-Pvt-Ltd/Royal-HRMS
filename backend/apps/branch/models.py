@@ -46,12 +46,44 @@ class Branch(models.Model):
     employees_count = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     is_headquarter = models.BooleanField(default=False)
+
+    # ── Geofencing ────────────────────────────────────────────────────────────
+    latitude = models.DecimalField(
+        max_digits=12, decimal_places=8,
+        null=True, blank=True,
+        help_text='Office GPS latitude. Required when geofencing_enabled is True.',
+    )
+    longitude = models.DecimalField(
+        max_digits=12, decimal_places=8,
+        null=True, blank=True,
+        help_text='Office GPS longitude. Required when geofencing_enabled is True.',
+    )
+    allowed_radius_meters = models.PositiveIntegerField(
+        default=150,
+        help_text='Geofence radius in metres. Punches outside this radius are rejected.',
+    )
+    geofencing_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            'When True, employees must be within allowed_radius_meters of the branch '
+            'coordinates to record an office punch. Requires latitude + longitude to be set.'
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'branch_branches'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['branch_name'], name='branch_name_idx'),
+            models.Index(fields=['status'],      name='branch_status_idx'),
+        ]
 
     def __str__(self):
         return f"{self.branch_code} - {self.branch_name}"
+
+    @property
+    def has_coordinates(self) -> bool:
+        return self.latitude is not None and self.longitude is not None

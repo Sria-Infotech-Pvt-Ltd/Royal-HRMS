@@ -66,6 +66,116 @@ This file is updated at the end of each session. Read it at the start of any new
 
 ---
 
+## Session Log — 2026-07-01
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Attendance Settings API** (`/api/attendance/settings/`)
+- `GET` reads current settings (upsert pattern — creates defaults on first call)
+- `PUT` full save of all 6 sections (working hours, punch rules, overtime, weekly off, late mark, absence alert)
+- `PATCH` partial update — send only changed sections, others untouched
+- `first_error()` in `core/responses.py` rewritten to recursively handle nested serializer errors (previously showed generic "Validation error." for nested fields)
+- Files: `attendance/serializers_settings.py`, `attendance/services.py`, `attendance/views/settings_view.py`
+
+**2. My Attendance — Clock In / Clock Out** (`POST /api/attendance/punch/`)
+- Immutable `AttendancePunch` model — every punch event stored, never overwritten
+- Geofencing validated on every office punch using Haversine formula (pure Python, no library)
+- Runs `AttendanceProcessorService` synchronously after each punch to keep `AttendanceRecord` current
+- Returns full today-session in same response (no second GET needed from frontend)
+
+**3. My Attendance — Dashboard APIs**
+- `GET /api/attendance/today/` — ClockWidget: is_clocked_in, punch list, total_seconds, session_seconds
+- `GET /api/attendance/stats/` — Stat cards: days_present, late_arrivals, avg_hours, attendance %
+- `GET /api/attendance/summary/` — Monthly summary grid: working_days, days_present, absent, leave, half_day, OT hours
+- `GET /api/attendance/calendar/` — Per-day calendar data + history table rows
+
+**4. Attendance Correction Request** (`POST /api/attendance/correction/`)
+- Employee submits regularization for missed/wrong punch
+- Validates: date not in future, correct_in_time required for IN/BOTH, correct_out_time required for OUT/BOTH
+- Guard: blocks duplicate pending correction for same date (409)
+- Status flow: pending → approved/rejected (approval UI not yet built)
+
+**5. Enterprise Geofencing**
+- `Branch` model extended: `latitude`, `longitude`, `allowed_radius_meters` (default 150m), `geofencing_enabled`
+- `GET/PUT /api/branch/branches/<pk>/geofencing/` — dedicated geofence config API
+- `services_geofencing.py` — strategy pattern: `_MODE_VALIDATORS` maps attendance mode to validator function
+- Office mode: Haversine distance → allow if within radius, reject with distance message
+- WFH/field/client/remote modes: GPS stored for audit, no distance check
+- Branch resolver: matches `User.branch` (CharField) against `Branch.branch_name`, falls back to `branch_code`
+
+**6. Bug Fixes**
+- GPS `DecimalField` → `FloatField` in punch serializer — `navigator.geolocation` returns JS floats with 15+ decimal digits which exceeded `max_digits` on DecimalField
+- Branch model lat/lon upgraded to `max_digits=12, decimal_places=8` (was 10,7)
+- `browser` field `max_length` 100 → 500, `operating_system` 100 → 200 (raw `navigator.userAgent` exceeds 100 chars)
+- `TypeError: unsupported operand type Decimal vs float` in Haversine — fixed by casting `float()` before calculation
+- CSRF trusted origins added for Django admin in development
+
+### New Models
+
+| Model | Table | Purpose |
+|---|---|---|
+| `AttendancePunch` | `attendance_punches` | Immutable raw punch events with full GPS + device audit trail |
+| `AttendanceRecord` | `attendance_records` | Processed daily result per employee (present/late/absent/half_day) |
+| `AttendanceCorrection` | `attendance_corrections` | Regularization requests submitted by employees |
+
+### Migrations Applied
+
+```
+attendance/0008_attendance_transactions   — AttendancePunch, AttendanceRecord, AttendanceCorrection
+attendance/0009_punch_geofencing          — GPS + device audit fields on AttendancePunch
+attendance/0010_fix_gps_decimal_precision — lat/lon upgraded to DecimalField(12,8) on punch model
+attendance/0011_punch_browser_field_length — browser 500, operating_system 200
+branch/0004_branch_geofencing             — lat, lon, radius, geofencing_enabled on Branch
+branch/0005_fix_gps_decimal_precision     — geofencing_enabled help_text fix
+branch/0006_branch_gps_precision_12_8     — branch lat/lon upgraded to DecimalField(12,8)
+```
+
+### New Files
+
+```
+backend/apps/attendance/
+  models.py                        — AttendancePunch, AttendanceRecord, AttendanceCorrection added
+  serializers_settings.py          — AttendanceSettingsPatchSerializer added
+  serializers_my_attendance.py     — all My Attendance read/write serializers
+  services.py                      — partial_update() added to AttendanceSettingsService
+  services_attendance.py           — PunchService, AttendanceProcessorService, AttendanceDashboardService
+  services_geofencing.py           — GeofencingService, Haversine, branch resolver, mode validators
+  views/my_attendance.py           — 6 APIViews for punch, today, stats, summary, calendar, correction
+  views/settings_view.py           — PATCH method added
+  urls.py                          — 6 new URL patterns
+backend/apps/branch/
+  models.py                        — geofencing fields added to Branch
+  views.py                         — BranchGeofencingView added
+  urls.py                          — geofencing URL added
+backend/core/
+  responses.py                     — first_error() rewritten for nested errors
+backend/config/
+  settings.py                      — CSRF_TRUSTED_ORIGINS for localhost dev
+```
+
+### API Reference — My Attendance
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/attendance/punch/` | Clock In / Clock Out |
+| GET | `/api/attendance/today/` | ClockWidget session data |
+| GET | `/api/attendance/stats/?month=&year=` | Stat cards |
+| GET | `/api/attendance/summary/?month=&year=` | Monthly summary grid |
+| GET | `/api/attendance/calendar/?month=&year=` | Calendar + history table |
+| POST | `/api/attendance/correction/` | Regularization request |
+| GET | `/api/branch/branches/<pk>/geofencing/` | Read branch geofence config |
+| PUT | `/api/branch/branches/<pk>/geofencing/` | Update branch geofence config |
+
+### Pending
+
+- Correction approval flow — manager approve/reject corrections
+- Attendance reports — CSV/PDF download for HR
+- Leave integration — auto-mark `on_leave` status when leave is approved
+- Frontend implementation — prompts given to Teerdaveni, not yet started
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

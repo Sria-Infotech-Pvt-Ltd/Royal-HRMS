@@ -88,7 +88,7 @@ export default function FormField({
             className={INPUT + " appearance-none pr-9" + (disabled ? " cursor-not-allowed" : " cursor-pointer")}
             style={{
               borderColor: disabled ? BORDER : borderColor,
-              background: disabled ? "#eff2f8" : undefined,
+              backgroundColor: disabled ? "#eff2f8" : undefined,
               backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
               backgroundRepeat: "no-repeat",
               backgroundPosition: "right 10px center",
