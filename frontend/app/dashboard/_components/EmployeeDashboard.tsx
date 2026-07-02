@@ -59,16 +59,18 @@ export default function EmployeeDashboard({ session }: Props) {
   const firstName = session.name.split(" ")[0];
   const year = new Date().getFullYear();
 
-  const { data: balances, loading: balLoading } = useFetch<LeaveBalance[]>(
+  const { data: balRaw,  loading: balLoading } = useFetch<{ results: LeaveBalance[] }>(
     API.leave.balance + `?year=${year}`
   );
-  const { data: requests, loading: reqLoading } = useFetch<LeaveRequest[]>(
+  const { data: reqRaw, loading: reqLoading } = useFetch<{ results: LeaveRequest[] }>(
     API.leave.requests
   );
 
-  const recentRequests = (requests ?? []).slice(0, 5);
-  const pendingCount   = (requests ?? []).filter(r => r.status === "pending" || r.status === "l2_pending").length;
-  const displayBals    = (balances ?? []).filter(b => b.leave_type !== "lwp");
+  const requests       = reqRaw?.results ?? [];
+  const balances       = balRaw?.results ?? [];
+  const recentRequests = requests.slice(0, 5);
+  const pendingCount   = requests.filter(r => r.status === "pending" || r.status === "l2_pending").length;
+  const displayBals    = balances.filter(b => b.leave_type !== "lwp");
 
   return (
     <>

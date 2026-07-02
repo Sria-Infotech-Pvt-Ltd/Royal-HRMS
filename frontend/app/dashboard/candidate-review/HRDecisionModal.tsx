@@ -22,14 +22,13 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
   const [saving,           setSaving]           = useState(false);
   const [apiError,         setApiError]         = useState("");
   const [templateGroups,   setTemplateGroups]   = useState<{ category: string; templates: EmailTemplate[] }[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [extraVars,        setExtraVars]        = useState<Record<string, string>>({});
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
 
-  // Fetch templates + company info when modal opens for approval
+  // Load templates + company info for both approve and reject
   useEffect(() => {
-    if (!isApprove) return;
     setLoadingTemplates(true);
     Promise.all([
       RECRUITMENT_API.emailTemplates(),
@@ -38,21 +37,26 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
       .then(([tplRes, coRes]) => {
         const grouped: Record<string, EmailTemplate[]> = tplRes.data?.data?.results ?? {} as Record<string, EmailTemplate[]>;
         const groups = Object.entries(grouped)
-          .map(([category, items]) => ({
-            category,
-            templates: items.filter(t => t.is_active),
-          }))
+          .map(([category, items]) => ({ category, templates: items.filter(t => t.is_active) }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
-        const first = groups[0]?.templates[0] ?? null;
-        setSelectedTemplate(first);
+
+        const all = groups.flatMap(g => g.templates);
+        const preferred = isApprove
+          ? (all.find(t => t.name === "assessment_invitation") ??
+             all.find(t => t.name === "onboarding_approved")   ??
+             all[0] ?? null)
+          : (all.find(t => t.name === "onboarding_rejected")   ??
+             all.find(t => t.name === "revision_request")      ??
+             all[0] ?? null);
+        setSelectedTemplate(preferred);
         setCompany(coRes.data?.data ?? null);
       })
       .catch(() => setApiError("Could not load email templates."))
       .finally(() => setLoadingTemplates(false));
   }, [isApprove]);
 
-  // When template changes, reset manual variable inputs for non-auto variables
+  // Reset manual variable inputs when template changes
   useEffect(() => {
     if (!selectedTemplate) { setExtraVars({}); return; }
     const manual: Record<string, string> = {};
@@ -92,7 +96,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
         extra_context?: Record<string, string>;
       } = { decision, remarks };
 
-      if (isApprove && selectedTemplate) {
+      if (selectedTemplate) {
         body.template_name = selectedTemplate.name;
         body.extra_context = extraVars;
       }
@@ -111,10 +115,10 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
 
   return (
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: isApprove ? 700 : 480 }}>
+      <div className="modal" style={{ maxWidth: 700 }}>
         <div className="modal-header">
           <div className="modal-title">
-            {isApprove ? "Approve & Onboard" : "Request Revision"} — {candidate.name}
+            {isApprove ? "Approve & Send Assessment Invite" : "Request Revision"} — {candidate.name}
           </div>
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
@@ -126,118 +130,115 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
             </div>
           )}
 
-          {/* ── Approve: template selection + preview ── */}
-          {isApprove && (
-            <>
-              <div className="field-group mb-16">
-                <label className="field-label">Email Template *</label>
-                {loadingTemplates ? (
-                  <div className="text-sm text-[var(--on-variant)]">
-                    <i className="ti ti-loader-2 spin" /> Loading templates…
-                  </div>
-                ) : (
-                  <select
-                    className="field-input field-select"
-                    value={selectedTemplate?.name ?? ""}
-                    onChange={e => {
-                      const found = templateGroups
-                        .flatMap(g => g.templates)
-                        .find(t => t.name === e.target.value) ?? null;
-                      setSelectedTemplate(found);
-                    }}
-                  >
-                    {templateGroups.length === 0 && (
-                      <option value="">No active templates — create one in Settings → Email Templates</option>
-                    )}
-                    {templateGroups.map(g => (
-                      <optgroup
-                        key={g.category}
-                        label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}
-                      >
-                        {g.templates.map(t => (
-                          <option key={t.name} value={t.name}>{t.display_name}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                )}
+          {/* Status alert */}
+          <div className={`alert ${isApprove ? "alert-success" : "alert-warn"} mb-16`}>
+            <i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} />
+            <div>
+              You are <strong>{isApprove ? "approving" : "requesting revision for"}</strong>{" "}
+              <strong>{candidate.name}</strong>.
+              An email will be sent using the selected template below.
+            </div>
+          </div>
+
+          {/* Template picker */}
+          <div className="field-group mb-16">
+            <label className="field-label">Email Template *</label>
+            {loadingTemplates ? (
+              <div className="text-sm text-[var(--on-variant)]">
+                <i className="ti ti-loader-2 spin" /> Loading templates…
               </div>
-
-              {/* Manual inputs for non-auto variables */}
-              {Object.keys(extraVars).length > 0 && (
-                <div className="settings-card mb-16">
-                  <div className="settings-card-title mb-8">Fill in template variables</div>
-                  <div className="form-row cols-2">
-                    {Object.keys(extraVars).map(key => (
-                      <div key={key} className="field-group">
-                        <label className="field-label">
-                          {key.replace(/_/g, " ")} <span className="text-[var(--error)]">*</span>
-                        </label>
-                        <input
-                          className="field-input"
-                          placeholder={`Enter ${key.replace(/_/g, " ")}`}
-                          value={extraVars[key]}
-                          onChange={e => setExtraVars(prev => ({ ...prev, [key]: e.target.value }))}
-                        />
-                      </div>
+            ) : (
+              <select
+                className="field-input field-select"
+                value={selectedTemplate?.name ?? ""}
+                onChange={e => {
+                  const found = templateGroups
+                    .flatMap(g => g.templates)
+                    .find(t => t.name === e.target.value) ?? null;
+                  setSelectedTemplate(found);
+                }}
+              >
+                {templateGroups.length === 0 && (
+                  <option value="">No active templates — create one in Settings → Email Templates</option>
+                )}
+                {templateGroups.map(g => (
+                  <optgroup
+                    key={g.category}
+                    label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}
+                  >
+                    {g.templates.map(t => (
+                      <option key={t.name} value={t.name}>{t.display_name}</option>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </optgroup>
+                ))}
+              </select>
+            )}
+          </div>
 
-              {/* Full email preview with company branding */}
-              {selectedTemplate && (
-                <div className="settings-card mb-16">
-                  <div className="settings-card-title mb-8">
-                    <i className="ti ti-mail" /> Email Preview
+          {/* Manual inputs for non-auto variables */}
+          {Object.keys(extraVars).length > 0 && (
+            <div className="settings-card mb-16">
+              <div className="settings-card-title mb-8">Fill in template variables</div>
+              <div className="form-row cols-2">
+                {Object.keys(extraVars).map(key => (
+                  <div key={key} className="field-group">
+                    <label className="field-label">
+                      {key.replace(/_/g, " ")} <span style={{ color: "var(--error)" }}>*</span>
+                    </label>
+                    <input
+                      className="field-input"
+                      placeholder={`Enter ${key.replace(/_/g, " ")}`}
+                      value={extraVars[key]}
+                      onChange={e => setExtraVars(prev => ({ ...prev, [key]: e.target.value }))}
+                    />
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
-                    <strong>To:</strong> {candidate.email}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                    <strong>Subject:</strong>{" "}
-                    {renderTemplateVars(selectedTemplate.subject, previewVars())}
-                  </div>
-                  <iframe
-                    srcDoc={previewHtml()}
-                    sandbox="allow-same-origin"
-                    style={{
-                      width: "100%",
-                      height: 340,
-                      border: "1px solid var(--outline-v)",
-                      borderRadius: 6,
-                      display: "block",
-                    }}
-                    title="Email body preview"
-                  />
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ── Reject: simple confirmation ── */}
-          {!isApprove && (
-            <div className="alert alert-warn mb-16">
-              <i className="ti ti-alert-triangle" />
-              <div>
-                A revision request will be sent to <strong>{candidate.name}</strong> to resubmit
-                their details.
+                ))}
               </div>
             </div>
           )}
 
           {/* Remarks */}
-          <div className="field-group">
+          <div className="field-group mb-16">
             <label className="field-label">
               {isApprove ? "HR Remarks (optional)" : "Revision notes (required)"}
             </label>
-            <input
+            <textarea
               className="field-input"
+              rows={2}
               placeholder={isApprove ? "Any onboarding notes…" : "Specify what needs to be corrected…"}
               value={remarks}
               onChange={e => setRemarks(e.target.value)}
+              style={{ resize: "vertical" }}
             />
           </div>
+
+          {/* Email preview */}
+          {selectedTemplate && (
+            <div className="settings-card">
+              <div className="settings-card-title flex items-center gap-2 mb-8">
+                <i className="ti ti-mail" /> Email Preview
+              </div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 2 }}>
+                <strong>To:</strong> {candidate.email}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
+                <strong>Subject:</strong>{" "}
+                {renderTemplateVars(selectedTemplate.subject, previewVars())}
+              </div>
+              <iframe
+                srcDoc={previewHtml()}
+                sandbox="allow-same-origin"
+                style={{
+                  width: "100%",
+                  height: 340,
+                  border: "1px solid var(--outline-v)",
+                  borderRadius: 6,
+                  display: "block",
+                }}
+                title="Email body preview"
+              />
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
@@ -247,16 +248,16 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
             onClick={handleConfirm}
             disabled={
               saving ||
+              loadingTemplates ||
+              !selectedTemplate ||
               (!isApprove && !remarks.trim()) ||
-              (isApprove && (!selectedTemplate || hasUnfilledVars))
+              hasUnfilledVars
             }
           >
             {saving ? (
               <><i className="ti ti-loader-2 spin" /> Processing…</>
-            ) : isApprove ? (
-              <><i className="ti ti-check" /> Approve & Send Email</>
             ) : (
-              <><i className="ti ti-alert-triangle" /> Request Revision</>
+              <><i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} /> Confirm & Send Email</>
             )}
           </button>
         </div>

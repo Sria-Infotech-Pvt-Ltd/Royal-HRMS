@@ -13,6 +13,7 @@ export interface UserInfo {
   branch:            string;
   permissions:       string[];
   onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
+  assessment_status: string;   // 'pending' | 'complete'
 }
 
 export function saveAuth(user: UserInfo) {
@@ -30,6 +31,11 @@ export function clearAuth() {
 export function setOnboardingStatus(newStatus: string) {
   const user = getStoredUser();
   if (user) saveAuth({ ...user, onboarding_status: newStatus });
+}
+
+export function setAssessmentStatus(newStatus: string) {
+  const user = getStoredUser();
+  if (user) saveAuth({ ...user, assessment_status: newStatus });
 }
 
 export function getStoredUser(): UserInfo | null {

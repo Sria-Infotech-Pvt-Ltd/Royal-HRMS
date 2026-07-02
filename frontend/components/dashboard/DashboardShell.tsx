@@ -32,6 +32,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/separation": "Separation & FnF",
   "/dashboard/interview-list": "Interview List",
   "/dashboard/candidate-review": "Candidate Review & Onboarding",
+  "/dashboard/assessments":      "Assessment Management",
   "/dashboard/email-logs": "Email Logs",
   "/dashboard/org-chart": "Organisation Chart",
   "/dashboard/announcements": "Announcements",

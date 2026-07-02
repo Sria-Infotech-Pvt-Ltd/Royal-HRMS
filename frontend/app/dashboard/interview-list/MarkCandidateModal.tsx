@@ -43,7 +43,7 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
         setTemplateGroups(groups);
 
         const all = groups.flatMap(g => g.templates);
-        const defaultSlug = isSelect ? "selection" : "rejection";
+        const defaultSlug = isSelect ? "candidate_selected" : "candidate_rejected";
         const preferred   = all.find(t => t.name === defaultSlug) ?? all[0] ?? null;
         setSelectedTemplate(preferred);
 

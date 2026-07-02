@@ -138,6 +138,12 @@ export function validateTemplateForm(form: TemplateForm, isAdd: boolean): Templa
   return e;
 }
 
+// ─── Category value extractor (shared between page and modal) ─────────────────
+
+export function catValue(cat: ApiTemplateCategory): string {
+  return cat.code ?? cat.slug ?? cat.name.toLowerCase().replace(/\s+templates?$/i, "").trim();
+}
+
 // ─── Type metadata ────────────────────────────────────────────────────────────
 
 export const TYPE_META: Record<TemplateType, { label: string; color: string; icon: string }> = {

@@ -20,6 +20,7 @@ interface LoginApiResponse {
       branch: string;
       permissions: string[];
       onboarding_status: string;
+      assessment_status: string;
     };
   };
 }
@@ -48,9 +49,12 @@ export default function LoginPage() {
         branch: d.user.branch ?? "",
         permissions: d.user.permissions ?? [],
         onboarding_status: d.user.onboarding_status ?? "complete",
+        assessment_status: d.user.assessment_status ?? "complete",
       };
       saveAuth(user);
-      const dest = user.onboarding_status !== "complete" ? "/onboarding" : "/dashboard";
+      let dest = "/dashboard";
+      if (user.onboarding_status !== "complete")      dest = "/onboarding";
+      else if (user.assessment_status === "pending")  dest = "/onboarding/assessments";
       window.location.href = dest;
     } catch (err) {
       const { message } = err as { message: string };

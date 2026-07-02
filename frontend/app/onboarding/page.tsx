@@ -65,8 +65,9 @@ export default function OnboardingPage() {
   const [saveMsg,   setSaveMsg]   = useState<string | null>(null);
   const [saveErr,   setSaveErr]   = useState<string | null>(null);
   const [uploading,    setUploading]    = useState<string | null>(null);
-  const [submitted,         setSubmitted]         = useState(false);
+  const [submitted,          setSubmitted]          = useState(false);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
+  const [checkingApproval,   setCheckingApproval]   = useState(false);
   const [highestSaved, setHighestSaved] = useState(-1);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -74,6 +75,17 @@ export default function OnboardingPage() {
     const user = getStoredUser();
     if (user?.onboarding_status === "submitted") setIsAlreadySubmitted(true);
   }, []);
+
+  // When on the "waiting for approval" screen, poll assessments API.
+  // If HR has approved and assigned assessments, redirect the candidate there.
+  useEffect(() => {
+    if (!submitted && !isAlreadySubmitted) return;
+    clientApi.get(API.assessments.my).then(r => {
+      const assignments = r.data?.data?.assignments ?? [];
+      if (assignments.length > 0) router.replace("/onboarding/assessments");
+    }).catch(() => {});
+  }, [submitted, isAlreadySubmitted, router]);
+
 
   useEffect(() => {
     clientApi.get(API.onboarding.profile).then(r => {
@@ -142,7 +154,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       const res = await clientApi.post<{ success: boolean; message: string }>(
-        API.onboarding.profileStep(tab), form
+        tab === 4 ? API.onboarding.profile : API.onboarding.profileStep(tab), form
       );
       if (res.data?.success === false) {
         setSaveErr(res.data.message ?? "Please fill in all required fields.");
@@ -206,6 +218,19 @@ export default function OnboardingPage() {
 
   const uploadedTypes = new Set(docs.map(d => d.document_type));
 
+  async function handleCheckApproval() {
+    setCheckingApproval(true);
+    try {
+      const r = await clientApi.get(API.assessments.my);
+      const assignments = r.data?.data?.assignments ?? [];
+      if (assignments.length > 0) {
+        router.replace("/onboarding/assessments");
+      }
+    } catch { /* stay on page */ } finally {
+      setCheckingApproval(false);
+    }
+  }
+
   // ── Submitted screen ───────────────────────────────────────────────────────
   if (submitted || isAlreadySubmitted) {
     return (
@@ -219,9 +244,29 @@ export default function OnboardingPage() {
             Your onboarding details have been sent for HR review.<br />
             You will receive access once approved.
           </p>
-          <p style={{ fontSize: ".82rem", color: "var(--outline)", background: "var(--bg-low)", padding: ".75rem 1rem", borderRadius: 8 }}>
+          <p style={{ fontSize: ".82rem", color: "var(--outline)", background: "var(--bg-low)", padding: ".75rem 1rem", borderRadius: 8, marginBottom: "1.5rem" }}>
             You can close this tab. We will notify you by email when approved.
           </p>
+          <button
+            onClick={handleCheckApproval}
+            disabled={checkingApproval}
+            type="button"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 7,
+              padding: "10px 20px", borderRadius: 10,
+              border: "1.5px solid var(--primary)",
+              background: "var(--primary)",
+              color: "#fff",
+              cursor: checkingApproval ? "not-allowed" : "pointer",
+              fontSize: ".9rem", fontWeight: 600,
+              opacity: checkingApproval ? 0.7 : 1,
+            }}
+          >
+            {checkingApproval
+              ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} /> Checking…</>
+              : <><i className="ti ti-refresh" style={{ fontSize: 15 }} /> Check Approval Status</>
+            }
+          </button>
         </div>
 
         <button

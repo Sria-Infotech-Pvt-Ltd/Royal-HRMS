@@ -4,21 +4,23 @@ import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { ApprovalModal } from "./ApprovalModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LeaveRequest {
-  id:            string;
+  id:             string;
   employee_name?: string;
-  employee_id?:  string;
-  leave_type:    string;
-  from_date:     string;
-  to_date:       string;
-  days:          number;
-  reason:        string;
-  status:        string;
-  applied_on:    string;
-  remarks?:      string;
+  employee_email?: string;
+  employee_id?:   string;
+  leave_type:     string;
+  from_date:      string;
+  to_date:        string;
+  days:           number;
+  reason:         string;
+  status:         string;
+  applied_on:     string;
+  remarks?:       string;
 }
 
 interface ExpenseReceipt {
@@ -27,19 +29,20 @@ interface ExpenseReceipt {
 }
 
 interface ExpenseRequest {
-  id:             string;
-  expense_number: string;
-  title:          string;
-  category:       string;
-  amount:         string | number;
-  expense_date:   string;
-  description:    string;
-  status:         string;
-  employee_name:  string;
-  branch_name:    string;
-  receipts:       ExpenseReceipt[];
-  created_at:     string;
-  remarks?:       string;
+  id:              string;
+  expense_number:  string;
+  title:           string;
+  category:        string;
+  amount:          string | number;
+  expense_date:    string;
+  description:     string;
+  status:          string;
+  employee_name:   string;
+  employee_email?: string;
+  branch_name:     string;
+  receipts:        ExpenseReceipt[];
+  created_at:      string;
+  remarks?:        string;
 }
 
 interface PaginatedResponse<T> {
@@ -176,52 +179,6 @@ function StatusFilter({ value, onChange }: { value: string; onChange: (v: string
       <option value="approved">Approved</option>
       <option value="rejected">Rejected</option>
     </select>
-  );
-}
-
-// ─── Approve/Reject modal ─────────────────────────────────────────────────────
-
-function ActionModal({
-  action, itemLabel, onConfirm, onClose, saving,
-}: {
-  action: "approve" | "reject"; itemLabel: string;
-  onConfirm: (remarks: string) => void; onClose: () => void; saving: boolean;
-}) {
-  const [remarks, setRemarks] = useState("");
-  const isReject = action === "reject";
-  return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 440 }}>
-        <div className="modal-header">
-          <div className="modal-title">{isReject ? "Reject" : "Approve"} — {itemLabel}</div>
-          <button className="modal-close" suppressHydrationWarning onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-        <div className="modal-body">
-          <div className="field-group">
-            <label className="field-label">
-              Remarks {isReject && <span style={{ color: "var(--error)" }}>*</span>}
-            </label>
-            <textarea
-              className="field-input" rows={3}
-              placeholder={isReject ? "Reason for rejection (required)" : "Optional remarks"}
-              value={remarks} onChange={e => setRemarks(e.target.value)}
-              style={{ resize: "vertical" }}
-            />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" suppressHydrationWarning onClick={onClose} disabled={saving}>Cancel</button>
-          <button
-            className={`btn ${isReject ? "btn-danger" : "btn-primary"}`}
-            suppressHydrationWarning
-            disabled={saving || (isReject && !remarks.trim())}
-            onClick={() => onConfirm(remarks)}
-          >
-            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : isReject ? "Reject" : "Approve"}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -485,45 +442,6 @@ function NewExpenseModal({ onClose, onSubmitted }: { onClose: () => void; onSubm
 }
 
 
-// ─── Expense action dropdown (Team Approvals) ────────────────────────────────
-
-function ExpenseActionDropdown({
-  expenseNumber, currentStatus, statusOptions, onDone,
-}: {
-  expenseNumber: string; currentStatus: string; statusOptions: CategoryOption[]; onDone: () => void;
-}) {
-  const [selected, setSelected] = useState(currentStatus);
-  const [busy, setBusy]         = useState(false);
-
-  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const newStatus = e.target.value;
-    const prev = selected;
-    setSelected(newStatus);
-    setBusy(true);
-    try {
-      await clientApi.put(API.expenses.detail(expenseNumber), { status: newStatus });
-      onDone();
-    } catch {
-      setSelected(prev);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <select
-      value={selected}
-      onChange={handleChange}
-      disabled={busy}
-      suppressHydrationWarning
-      style={{ ...SELECT_STYLE, minWidth: 130, opacity: busy ? 0.6 : 1 }}
-    >
-      {statusOptions.map(opt => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
-  );
-}
 
 // ─── My Requests section ──────────────────────────────────────────────────────
 
@@ -636,25 +554,45 @@ function TeamApprovalsSection() {
 
   const { data: leaveRaw,      loading: leaveLoading,   error: leaveError,   refetch: refetchLeave   } = useFetch<LeaveListResponse>(  type === "leave"   ? `${API.approvals.leaveRequests}?status=pending` : null);
   const { data: expenseRaw,    loading: expenseLoading, error: expenseError, refetch: refetchExpense } = useFetch<ExpenseListResponse>( type === "expense" ? API.approvals.expenseList                        : null);
-  const { data: statusOptsRaw }                                                                        = useFetch<CategoryOption[]>(API.expenses.updateStatus);
-
   const leaveItems:   LeaveRequest[]   = leaveRaw?.results   ?? [];
   const expenseItems: ExpenseRequest[] = expenseRaw?.results ?? [];
-  const statusOptions: CategoryOption[] = Array.isArray(statusOptsRaw) ? statusOptsRaw : [];
 
-  const [modal, setModal]   = useState<{ id: string; action: "approve" | "reject"; label: string; kind: RequestType } | null>(null);
+  const [modal, setModal] = useState<{
+    id:            string;
+    action:        "approve" | "reject";
+    label:         string;
+    kind:          RequestType;
+    employeeName:  string;
+    employeeEmail: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [apiErr, setApiErr] = useState("");
 
-  async function handleConfirm(remarks: string) {
+  async function handleConfirm(
+    remarks: string,
+    templateName?: string,
+    extraContext?: Record<string, string>,
+  ) {
     if (!modal) return;
     setSaving(true); setApiErr("");
     try {
-      const endpoint = modal.kind === "leave"
-        ? API.approvals.approveLeave(modal.id)
-        : API.approvals.approveExpense(modal.id);
-      await clientApi.post(endpoint, { action: modal.action, remarks });
-      modal.kind === "leave" ? refetchLeave() : refetchExpense();
+      if (modal.kind === "leave") {
+        await clientApi.post(API.approvals.approveLeave(modal.id), {
+          action:        modal.action,
+          remarks,
+          template_name: templateName,
+          extra_context: extraContext,
+        });
+        refetchLeave();
+      } else {
+        await clientApi.put(API.expenses.detail(modal.id), {
+          status:        modal.action === "approve" ? "approved" : "rejected",
+          remarks,
+          template_name: templateName,
+          extra_context: extraContext,
+        });
+        refetchExpense();
+      }
       setModal(null);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -699,10 +637,10 @@ function TeamApprovalsSection() {
                     <td style={TD}>{formatDate(r.applied_on)}</td>
                     <td style={{ ...TD, textAlign: "right" }}>
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                        <button className="btn btn-primary" suppressHydrationWarning style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setModal({ id: r.id, action: "approve", label: `${r.employee_name}'s leave`, kind: "leave" })}>
+                        <button className="btn btn-primary" suppressHydrationWarning style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setModal({ id: r.id, action: "approve", label: `${r.employee_name}'s leave`, kind: "leave", employeeName: r.employee_name ?? "", employeeEmail: r.employee_email ?? "" })}>
                           <i className="ti ti-check" /> Approve
                         </button>
-                        <button className="btn btn-ghost" suppressHydrationWarning style={{ padding: "4px 10px", fontSize: 12, color: "var(--error)" }} onClick={() => setModal({ id: r.id, action: "reject", label: `${r.employee_name}'s leave`, kind: "leave" })}>
+                        <button className="btn btn-ghost" suppressHydrationWarning style={{ padding: "4px 10px", fontSize: 12, color: "var(--error)" }} onClick={() => setModal({ id: r.id, action: "reject", label: `${r.employee_name}'s leave`, kind: "leave", employeeName: r.employee_name ?? "", employeeEmail: r.employee_email ?? "" })}>
                           <i className="ti ti-x" /> Reject
                         </button>
                       </div>
@@ -729,7 +667,7 @@ function TeamApprovalsSection() {
               </thead>
               <tbody>
                 {expenseItems.map((r: ExpenseRequest) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid var(--outline-v)" }}>
+                  <tr key={r.expense_number} style={{ borderBottom: "1px solid var(--outline-v)" }}>
                     <td style={TD}>
                       <div style={{ fontWeight: 500 }}>{r.employee_name}</div>
                       <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{r.branch_name}</div>
@@ -740,8 +678,29 @@ function TeamApprovalsSection() {
                       <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description || "—"}</span>
                     </td>
                     <td style={TD}>{formatDate(r.created_at)}</td>
-                    <td style={TD}>
-                      <ExpenseActionDropdown expenseNumber={r.expense_number} currentStatus={r.status} statusOptions={statusOptions} onDone={refetchExpense} />
+                    <td style={{ ...TD, textAlign: "right" }}>
+                      {r.status === "pending" ? (
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                          <button
+                            className="btn btn-primary"
+                            suppressHydrationWarning
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            onClick={() => setModal({ id: r.expense_number, action: "approve", label: `${r.employee_name}'s expense`, kind: "expense", employeeName: r.employee_name, employeeEmail: r.employee_email ?? "" })}
+                          >
+                            <i className="ti ti-check" /> Approve
+                          </button>
+                          <button
+                            className="btn btn-ghost"
+                            suppressHydrationWarning
+                            style={{ padding: "4px 10px", fontSize: 12, color: "var(--error)" }}
+                            onClick={() => setModal({ id: r.expense_number, action: "reject", label: `${r.employee_name}'s expense`, kind: "expense", employeeName: r.employee_name, employeeEmail: r.employee_email ?? "" })}
+                          >
+                            <i className="ti ti-x" /> Reject
+                          </button>
+                        </div>
+                      ) : (
+                        <StatusBadge status={r.status} />
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -752,9 +711,14 @@ function TeamApprovalsSection() {
       )}
 
       {modal && (
-        <ActionModal
-          action={modal.action} itemLabel={modal.label}
-          onConfirm={handleConfirm} onClose={() => setModal(null)} saving={saving}
+        <ApprovalModal
+          action={modal.action}
+          itemLabel={modal.label}
+          employeeName={modal.employeeName}
+          employeeEmail={modal.employeeEmail}
+          onConfirm={handleConfirm}
+          onClose={() => setModal(null)}
+          saving={saving}
         />
       )}
     </>
