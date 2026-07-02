@@ -32,10 +32,15 @@ function geofenceDot(isInside: boolean | null) {
 }
 
 export default function ClockWidget() {
-  const { session, isLoading, isPunching, punch } = useClockWidget();
+  const { session, isLoading, isPunching, isLocating, punch } = useClockWidget();
   const [mode, setMode] = useState<AttendanceMode>("office");
 
   const isClockedIn = session?.is_clocked_in ?? false;
+
+  const punches    = session?.punches ?? [];
+  const latestIn   = [...punches].reverse().find(p => p.type === "IN");
+  const latestOut  = [...punches].reverse().find(p => p.type === "OUT");
+  const displayPunches = [latestIn, latestOut].filter((p): p is NonNullable<typeof p> => Boolean(p));
 
   if (isLoading) {
     return (
@@ -91,16 +96,18 @@ export default function ClockWidget() {
           opacity: isPunching ? 0.7 : 1, transition: "background 0.15s, opacity 0.15s",
         }}
       >
-        {isPunching
+        {isLocating
+          ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Getting location…</>
+          : isPunching
           ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Please wait…</>
           : <><i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} /> {isClockedIn ? "Clock Out" : "Clock In"}</>}
       </button>
 
-      {session && session.punches.length > 0 && (
+      {displayPunches.length > 0 && (
         <div>
           <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Punch Log</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {session.punches.map((p, i) => {
+            {displayPunches.map((p, i) => {
               const dot = geofenceDot(p.is_inside_geofence);
               return (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 8px", background: "var(--bg-low)", borderRadius: 6 }}>
