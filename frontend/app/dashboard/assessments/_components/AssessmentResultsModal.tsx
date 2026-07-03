@@ -47,8 +47,8 @@ export default function AssessmentResultsModal({ assessment, onClose }: { assess
                     <tr key={c.id} style={{ borderBottom: "1px solid var(--outline-v)" }}>
                       <td style={{ padding: "12px 14px", color: "var(--on-variant)", fontWeight: 500 }}>{idx + 1}</td>
                       <td style={{ padding: "12px 14px" }}>
-                        <div className="font-medium text-[var(--on-bg)]">{c.candidate_name}</div>
-                        <div className="text-xs text-[var(--on-variant)]">{c.candidate_email}</div>
+                        <div className="font-medium text-[var(--on-bg)]">{c.assignee_name}</div>
+                        <div className="text-xs text-[var(--on-variant)]">{c.assignee_email}</div>
                       </td>
                       <td style={{ padding: "12px 14px" }}>
                         <StatusBadge status={c.status} />

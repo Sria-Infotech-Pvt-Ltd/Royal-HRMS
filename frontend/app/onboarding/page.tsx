@@ -151,11 +151,14 @@ export default function OnboardingPage() {
       return false;
     }
 
+    // Tab 4 (documents) has no profile data to save — documents are uploaded
+    // individually via handleUpload. Skip the API call and let handleSubmit
+    // fire the single submit request.
+    if (tab === 4) return true;
+
     setSaving(true);
     try {
-      const res = await clientApi.post<{ success: boolean; message: string }>(
-        tab === 4 ? API.onboarding.profile : API.onboarding.profileStep(tab), form
-      );
+      const res = await clientApi.patch<{ success: boolean; message: string }>(API.onboarding.profileStep(tab), form);
       if (res.data?.success === false) {
         setSaveErr(res.data.message ?? "Please fill in all required fields.");
         return false;
@@ -205,7 +208,7 @@ export default function OnboardingPage() {
     if (!ok) return;
     setSaving(true);
     try {
-      await clientApi.post(API.onboarding.submit, {});
+      await clientApi.post(API.onboarding.submit, {}, { timeout: 60000 });
       setHighestSaved(STEPS.length - 1);
       setOnboardingStatus("submitted");
       setSubmitted(true);

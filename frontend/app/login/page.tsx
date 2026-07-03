@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import clientApi from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
@@ -26,6 +27,7 @@ interface LoginApiResponse {
 }
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export default function LoginPage() {
       let dest = "/dashboard";
       if (user.onboarding_status !== "complete")      dest = "/onboarding";
       else if (user.assessment_status === "pending")  dest = "/onboarding/assessments";
-      window.location.href = dest;
+      router.push(dest);
     } catch (err) {
       const { message } = err as { message: string };
       setError(message || "Login failed. Please check your credentials.");
