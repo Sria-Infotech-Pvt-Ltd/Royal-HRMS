@@ -286,6 +286,29 @@ class CanManageRoles(BasePermission):
         )
 
 
+def _login_assessment_status(user) -> str:
+    """Return the correct assessment_status string for the login response."""
+    from apps.assessments.models import CandidateAssignment
+    from apps.recruitment.models import Candidate
+
+    pending_statuses = [CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS]
+
+    # Always check candidate-based assignments (covers former candidates who became employees)
+    candidate = Candidate.objects.filter(portal_user=user).first()
+    if candidate:
+        if CandidateAssignment.objects.filter(candidate=candidate, status__in=pending_statuses).exists():
+            return User.ASSESSMENT_PENDING
+
+    # For role-bearing users also check employee-based assignments
+    if user.role_id:
+        if CandidateAssignment.objects.filter(employee=user, status__in=pending_statuses).exists():
+            return User.ASSESSMENT_PENDING
+        return User.ASSESSMENT_COMPLETE
+
+    # Portal candidate with no pending candidate assignments
+    return User.ASSESSMENT_COMPLETE
+
+
 # ─── Authentication ────────────────────────────────────────────────────────────
 
 class LoginView(APIView):
@@ -364,7 +387,7 @@ class LoginView(APIView):
                 'branch':              user.branch,
                 'must_change_password': user.must_change_password,
                 'onboarding_status':   user.onboarding_status,
-                'assessment_status':   user.assessment_status,
+                'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
             },
         })
@@ -2344,7 +2367,7 @@ class EmployeeListCreateView(APIView):
                 phone           = phone,
                 date_of_joining  = date_of_joining or None,
                 must_change_password = True,
-                onboarding_status    = User.ONBOARDING_COMPLETE,
+                onboarding_status    = User.ONBOARDING_PENDING,
             )
             auto_fields = _auto_assign_managers(user)
             if auto_fields:
@@ -2921,14 +2944,16 @@ class OnboardingView(APIView):
             data={k: v for k, v in all_data.items() if k in _STEP_ALL_FIELDS[step]},
         )
 
-    # ── POST — submit the completed wizard ────────────────────────────────────
+    # ── POST — save step data or submit the completed wizard ─────────────────
 
     def post(self, request, step: int = None):
         if step is not None:
-            return error(
-                'Use PATCH /onboarding/step/<n>/ to save step data.',
-                http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
-            )
+            if step not in self._VALID_STEPS:
+                return error(
+                    f'Invalid step {step}. Valid steps are 0 to 4.',
+                    http_status=status.HTTP_400_BAD_REQUEST,
+                )
+            return _save_profile_step(request, step)
         return self._submit(request)
 
     # ── PUT — not supported ───────────────────────────────────────────────────
@@ -3096,39 +3121,43 @@ class OnboardingView(APIView):
         User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
-        # Notify the assigned HR (or all hr_admins if none assigned)
-        try:
-            company      = Company.objects.first()
-            company_name = company.company_name if company else ''
-            portal_url   = (company.portal_url if company else '') or ''
-            context = {
-                'candidate_name':  request.user.full_name or request.user.email,
-                'candidate_email': request.user.email,
-                'company_name':    company_name,
-                'portal_url':      portal_url,
-            }
-            if request.user.hr_id:
-                hr_user = User.objects.filter(pk=request.user.hr_id, is_active=True).first()
-                if hr_user and hr_user.email:
+        # Notify HR in a background thread so SMTP latency doesn't delay the response
+        import threading
+        company      = Company.objects.first()
+        company_name = company.company_name if company else ''
+        portal_url   = (company.portal_url if company else '') or ''
+        email_context = {
+            'candidate_name':  request.user.full_name or request.user.email,
+            'candidate_email': request.user.email,
+            'company_name':    company_name,
+            'portal_url':      portal_url,
+        }
+        if request.user.hr_id:
+            hr_user = User.objects.filter(pk=request.user.hr_id, is_active=True).first()
+            hr_targets = [(hr_user.email, hr_user.full_name or 'HR')] if hr_user and hr_user.email else []
+        else:
+            hr_targets = [
+                (email, 'HR Team')
+                for email in User.objects.filter(role__name='hr_admin', is_active=True)
+                                         .exclude(email='')
+                                         .values_list('email', flat=True)
+            ]
+
+        def _send_hr_notifications():
+            for recipient_email, hr_name in hr_targets:
+                try:
                     send_template_email(
-                        recipient_email=hr_user.email,
+                        recipient_email=recipient_email,
                         template_name='onboarding_submitted',
-                        context={**context, 'hr_name': hr_user.full_name or 'HR'},
+                        context={**email_context, 'hr_name': hr_name},
                     )
-            else:
-                hr_emails = list(
-                    User.objects.filter(role__name='hr_admin', is_active=True)
-                                .exclude(email='')
-                                .values_list('email', flat=True)
-                )
-                for hr_email in hr_emails:
-                    send_template_email(
-                        recipient_email=hr_email,
-                        template_name='onboarding_submitted',
-                        context={**context, 'hr_name': 'HR Team'},
+                except Exception:
+                    logger.exception(
+                        'Failed to send onboarding_submitted to %s for user %s',
+                        recipient_email, email_context['candidate_email'],
                     )
-        except Exception:
-            logger.exception('Failed to send onboarding_submitted notification for user %s', request.user.email)
+
+        threading.Thread(target=_send_hr_notifications, daemon=True).start()
 
         return success('Onboarding submitted. Awaiting HR approval.')
 
@@ -3230,22 +3259,6 @@ def _save_profile_step(request, step: int):
             filled_data[k] = None if k in _NULLABLE_PROFILE_FIELDS else ''
         else:
             filled_data[k] = v
-
-   
-    required = _STEP_REQUIRED_FIELDS[step]
-    missing  = []
-    for field, label in required.items():
-        if field in request.data:
-            value = request.data.get(field)
-        else:
-            value = filled_data.get(field) or getattr(profile, field, None)
-        if not value or (isinstance(value, str) and not value.strip()):
-            missing.append(label)
-    if missing:
-        return error(
-            f'Please fill in the following required fields: {", ".join(missing)}.',
-            http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
 
     # Step-scoped "nothing to save" — only triggers when the request had no step
     # fields at all or all were required fields with empty values.
@@ -3511,16 +3524,13 @@ class OnboardingApprovalView(APIView):
 
             # Auto-assign default assessments — candidate completes these to unlock full portal
             from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
-            from django.db.models import Sum as DbSum
             assigned_assessments = []
             if linked_candidate:
                 default_assessments = list(
                     Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
                 )
                 for assessment in default_assessments:
-                    max_score = assessment.items.filter(
-                        item_type=AssessmentItem.TYPE_QUIZ
-                    ).aggregate(total=DbSum('pass_score'))['total'] or 0
+                    max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
                     _, created = CandidateAssignment.objects.get_or_create(
                         candidate=linked_candidate,
                         assessment=assessment,
