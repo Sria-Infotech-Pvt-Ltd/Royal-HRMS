@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import {
-  validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug,
+  validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug, catValue,
   ATTACHMENT_ACCEPT_ATTR, fileKind, FILE_KIND_META, formatBytes,
   EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplateAttachmentDetail, parseAvailableVars,
   type ApiAttachment, type ApiEmailTemplate, type ApiTemplateCategory, type TemplateForm, type TemplateFormErrors,
@@ -282,10 +282,6 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
   function removeExistingAttachment(id: number) {
     setExistingAttachments(prev => prev.filter(a => a.id !== id));
     setRemovedAttachmentIds(prev => [...prev, id]);
-  }
-
-  function catValue(cat: ApiTemplateCategory) {
-    return cat.code ?? cat.slug ?? cat.name.toLowerCase().replace(/\s+templates?$/i, "").trim();
   }
 
   async function handleCreateCategory() {

@@ -117,9 +117,9 @@ export default function InterviewListPage() {
 
   const [statusChoices, setStatusChoices] = useState<{ value: CandidateStatus; label: string }[]>([]);
 
-  const [showAdd,   setShowAdd]   = useState(false);
-  const [markData,  setMarkData]  = useState<{ candidate: Candidate; targetStatus: "selected" | "rejected" } | null>(null);
-  const [logsFor,   setLogsFor]   = useState<Candidate | null>(null);
+  const [showAdd,       setShowAdd]       = useState(false);
+  const [markData,      setMarkData]      = useState<{ candidate: Candidate; targetStatus: "selected" | "rejected" } | null>(null);
+  const [logsFor,       setLogsFor]       = useState<Candidate | null>(null);
   const [sendingPortal, setSendingPortal] = useState<number | null>(null);
   const [portalMsg,     setPortalMsg]     = useState<string | null>(null);
   const [portalErr,     setPortalErr]     = useState<string | null>(null);
@@ -393,13 +393,14 @@ export default function InterviewListPage() {
                           />
                         )}
 
-                        {/* Selected: show Send Login button */}
+                        {/* Selected: send onboarding portal login */}
                         {c.status === "selected" && (
                           <button
                             className="btn btn-filled btn-sm"
                             style={{ fontSize: ".78rem" }}
                             onClick={() => handleSendPortalLogin(c.id)}
                             disabled={sendingPortal === c.id}
+                            suppressHydrationWarning
                           >
                             {sendingPortal === c.id
                               ? <><i className="ti ti-loader-2 animate-spin" /> Sending…</>
@@ -414,7 +415,6 @@ export default function InterviewListPage() {
                             <i className="ti ti-mail-check" /> Login Sent
                           </span>
                         )}
-
 
                         {/* Converted to employee */}
                         {c.status === "converted" && (

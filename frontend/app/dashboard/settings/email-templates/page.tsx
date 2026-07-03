@@ -3,32 +3,58 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import { buildEmailPreview, type CompanyInfo } from "@/lib/emailPreview";
 import EditTemplateModal from "./_components/EditTemplateModal";
 import {
-  EMAIL_TEMPLATES_BASE, emailTemplateDetail, emailTemplatePreview,
-  flattenTemplates, TYPE_META,
-  type ApiEmailTemplate, type ApiEmailTemplatesResponse, type TemplateForm, type TemplateType,
+  EMAIL_TEMPLATES_BASE, EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplatePreview,
+  flattenTemplates, TYPE_META, catValue,
+  type ApiEmailTemplate, type ApiEmailTemplatesResponse, type ApiTemplateCategory, type TemplateForm, type TemplateType,
 } from "./_data";
 
 const TYPE_ORDER: TemplateType[] = ["document", "notification", "reminder", "wish"];
 
+const FALLBACK_META = { label: "Other", color: "var(--on-variant)", icon: "ti-tag" };
+
 export default function EmailTemplatesPage() {
   const router = useRouter();
 
-  const [templates, setTemplates] = useState<ApiEmailTemplate[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState<string | null>(null);
+  const [templates,    setTemplates]    = useState<ApiEmailTemplate[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
+  const [categories,   setCategories]   = useState<ApiTemplateCategory[]>([]);
 
   const [editing,        setEditing]        = useState<ApiEmailTemplate | null | "add">(null);
   const [viewing,        setViewing]        = useState<ApiEmailTemplate | null>(null);
   const [previewHtml,    setPreviewHtml]    = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const [company, setCompany] = useState<CompanyInfo | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [toast,  setToast]  = useState<{ msg: string; ok: boolean } | null>(null);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadCategories(); loadCompany(); }, []);
+
+  async function loadCompany() {
+    try {
+      const res = await clientApi.get<{ data: CompanyInfo }>(API.settings.company);
+      setCompany(res.data?.data ?? null);
+    } catch { /* preview falls back to no-branding */ }
+  }
+
+  async function loadCategories() {
+    try {
+      const res  = await clientApi.get(EMAIL_TEMPLATE_CATEGORIES);
+      const data = res.data?.data ?? res.data;
+      // Handle both flat array and paginated { results: [] } responses
+      const cats = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+      setCategories(cats);
+    } catch {
+      // silently fall back — templates still render grouped by their own template_type
+    }
+  }
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -119,10 +145,11 @@ export default function EmailTemplatesPage() {
     setPreviewHtml(null);
     setPreviewLoading(true);
     try {
-      const res = await clientApi.get(emailTemplatePreview(template.id));
-      setPreviewHtml(res.data.data?.preview ?? res.data?.preview ?? template.body);
+      const res  = await clientApi.get(emailTemplatePreview(template.id));
+      const body = res.data.data?.preview ?? res.data?.preview ?? template.body;
+      setPreviewHtml(buildEmailPreview(body, company));
     } catch {
-      setPreviewHtml(template.body);
+      setPreviewHtml(buildEmailPreview(template.body, company));
     } finally {
       setPreviewLoading(false);
     }
@@ -137,10 +164,19 @@ export default function EmailTemplatesPage() {
     (t.description ?? "").toLowerCase().includes(q)
   );
 
-  const grouped = TYPE_ORDER.reduce<Record<TemplateType, ApiEmailTemplate[]>>((acc, type) => {
-    acc[type] = filtered.filter(t => t.template_type === type);
+  // Group templates by their own template_type — this always works regardless of categories
+  const typeGroups = filtered.reduce<Record<string, ApiEmailTemplate[]>>((acc, t) => {
+    (acc[t.template_type] ??= []).push(t);
     return acc;
-  }, { document: [], notification: [], reminder: [], wish: [] });
+  }, {});
+
+  // Map category code → fetched category (for header enrichment)
+  const catByCode = Object.fromEntries(categories.map(c => [catValue(c), c]));
+
+  // Order: categories from API first (in their order), then any template_types not covered
+  const catCodes    = categories.map(c => catValue(c));
+  const extraTypes  = Object.keys(typeGroups).filter(t => !catCodes.includes(t));
+  const orderedTypes = [...catCodes.filter(code => typeGroups[code]), ...extraTypes];
 
   const isAddMode    = editing === "add";
   const editTemplate = editing && editing !== "add" ? editing : null;
@@ -209,10 +245,11 @@ export default function EmailTemplatesPage() {
       {/* Grouped sections */}
       {!loading && !error && filtered.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-          {TYPE_ORDER.map(type => {
-            const group = grouped[type];
-            if (!group.length) return null;
-            const meta = TYPE_META[type];
+          {orderedTypes.map(type => {
+            const group = typeGroups[type];
+            if (!group?.length) return null;
+            const cat  = catByCode[type];
+            const meta = TYPE_META[type as TemplateType] ?? { ...FALLBACK_META, label: cat?.name ?? type };
             return (
               <div key={type}>
                 {/* Section header */}
@@ -312,8 +349,12 @@ export default function EmailTemplatesPage() {
                   <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite" }} /> Loading preview…
                 </div>
               ) : (
-                <div style={{ padding: 16, border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", background: "#fff", lineHeight: 1.7, fontSize: 14 }}
-                  dangerouslySetInnerHTML={{ __html: previewHtml ?? viewing.body }} />
+                <iframe
+                  srcDoc={previewHtml ?? buildEmailPreview(viewing.body, company)}
+                  sandbox="allow-same-origin"
+                  style={{ width: "100%", height: 420, border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", display: "block" }}
+                  title="Email preview"
+                />
               )}
             </div>
             <div className="modal-footer" style={{ flexShrink: 0 }}>

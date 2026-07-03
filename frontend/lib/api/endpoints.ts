@@ -104,6 +104,22 @@ export const API = {
     approve:      (id: string) => `/expenses/${id}/approve/`,
   },
 
+  assessments: {
+    // Candidate portal
+    my:               "/assessments/my/",
+    respond:          (assignmentId: string, itemId: string) => `/assessments/${assignmentId}/respond/${itemId}/`,
+    complete:         (assignmentId: string) => `/assessments/${assignmentId}/complete/`,
+    retake:           (assignmentId: string) => `/assessments/${assignmentId}/retry/`,
+    // HR management
+    list:             "/assessments/",
+    detail:           (id: string) => `/assessments/${id}/`,
+    items:            (assessmentId: string) => `/assessments/${assessmentId}/items/`,
+    itemDetail:       (itemId: string) => `/assessments/items/${itemId}/`,
+    assign:           "/assessments/assign/",
+    results:          (assessmentId: string) => `/assessments/${assessmentId}/results/`,
+    candidateResults: (candidateId: string) => `/assessments/candidates/${candidateId}/results/`,
+  },
+
   leave: {
     policy:       "/leave/policy/",
     policyDetail: (leaveType: string) => `/leave/policy/${leaveType}/`,

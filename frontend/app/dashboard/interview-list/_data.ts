@@ -40,6 +40,8 @@ export interface Branch {
   status:      string;
 }
 
+export type AssessmentStatus = "pending" | "complete";
+
 export interface Candidate {
   id:                       number;
   name:                     string;
@@ -60,6 +62,7 @@ export interface Candidate {
   hr_approved:              boolean;
   portal_credentials_sent:  boolean;
   portal_user:              string | null;
+  assessment_status:        AssessmentStatus | null;
   added_by_name:            string;
   created_at:               string;
   updated_at:               string;
