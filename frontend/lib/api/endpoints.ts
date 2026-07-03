@@ -126,5 +126,18 @@ export const API = {
     calendar:    "/attendance/calendar/",
     correction:  "/attendance/correction/",
     geofencing:  (branchPk: number) => `/branch/branches/${branchPk}/geofencing/`,
+
+    // HR Management
+    dashboard:      "/attendance/dashboard/",
+    records:        "/attendance/records/",
+    record:         (id: string) => `/attendance/records/${id}/`,
+    overtime:       "/attendance/overtime/",
+    overtimeCreate: "/attendance/overtime/create/",
+    invalidPunches: "/attendance/invalid-punches/",
+    unPunches:      "/attendance/un-punches/",
+    import:         "/attendance/import/",
+    export:         "/attendance/export/",
+    corrections:       "/attendance/corrections/",
+    correctionReview:  (id: string) => `/attendance/corrections/${id}/review/`,
   },
 } as const;

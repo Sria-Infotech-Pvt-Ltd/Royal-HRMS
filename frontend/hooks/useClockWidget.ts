@@ -37,6 +37,7 @@ export function useClockWidget() {
   const { data: todayData, loading: fetchLoading } = useFetch<TodaySession>(API.attendance.today);
   const [session, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     if (todayData) setSession(todayData);
@@ -64,25 +65,33 @@ export function useClockWidget() {
       let accuracy: number | null = null;
 
       if (attendanceMode === "office") {
-        if (typeof navigator !== "undefined" && "geolocation" in navigator) {
-          try {
-            const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, maximumAge: 0 });
-            });
-            latitude  = pos.coords.latitude;
-            longitude = pos.coords.longitude;
-            accuracy  = pos.coords.accuracy;
-          } catch (geoErr: unknown) {
-            if ((geoErr as GeolocationPositionError).code === 1) {
-              showToast(
-                "Location access is required for office punch-in. Please allow location and try again.",
-                "error"
-              );
-              setIsPunching(false);
-              return;
-            }
-          }
+        if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+          showToast("Your browser does not support location access.", "error");
+          setIsPunching(false);
+          return;
         }
+
+        setIsLocating(true);
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, maximumAge: 0 });
+          });
+          latitude  = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+          accuracy  = pos.coords.accuracy;
+        } catch (geoErr: unknown) {
+          const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;
+          showToast(
+            isPermissionDenied
+              ? "Location access is required for office clock-in. Please allow location in your browser settings."
+              : "Unable to determine your location. Please check your device's location settings and try again.",
+            "error"
+          );
+          setIsLocating(false);
+          setIsPunching(false);
+          return;
+        }
+        setIsLocating(false);
       }
 
       try {
@@ -113,5 +122,5 @@ export function useClockWidget() {
     [showToast]
   );
 
-  return { session, isLoading: fetchLoading && !session, isPunching, punch };
+  return { session, isLoading: fetchLoading && !session, isPunching, isLocating, punch };
 }

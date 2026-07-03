@@ -45,3 +45,15 @@ export function getStoredUser(): UserInfo | null {
     return null;
   }
 }
+
+// Branch scoping — the backend already enforces this server-side for hr_admin
+// (it ignores/overrides any ?branch= param and returns only that user's branch).
+// These helpers exist so the UI stays consistent with what the API actually
+// returns, rather than showing an "All Branches" option that silently no-ops.
+export function isUnrestrictedUser(user: UserInfo | null): boolean {
+  return user?.role === "system_admin";
+}
+
+export function getEffectiveBranch(user: UserInfo | null): string {
+  return isUnrestrictedUser(user) ? "" : (user?.branch ?? "");
+}
