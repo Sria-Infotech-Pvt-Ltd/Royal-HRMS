@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import {
-  LeaveBalance, LeaveRequest, LeaveStats,
+  LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
   LEAVE_TYPE_CONFIG, STATUS_BADGE, STATUS_LABEL,
   fmtShortDate,
 } from "../_data";
@@ -25,6 +26,7 @@ const BALANCE_DISPLAY = [
 
 export default function LeaveDashboard({ role, onApply, selectedBranches }: Props) {
   const isEmployee = role === "employee";
+  const currentUser = useCurrentUser();
 
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
   const [actioning,    setActioning]    = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
     ? API.leave.requests
     : API.leave.requests + "?status=pending,l2_pending";
 
-  const { data: requests, refetch: refetchRequests, loading } = useFetch<LeaveRequest[]>(requestsUrl);
+  const { data: requests, refetch: refetchRequests, loading } = useFetch<PaginatedResponse<LeaveRequest>>(requestsUrl);
 
   const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(
     API.leave.stats + `?year=${currentYear}`
@@ -48,9 +50,11 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
 
+  const requestList = requests?.results ?? [];
+
   const visibleRequests = selectedBranches.length === 0
-    ? (requests ?? [])
-    : (requests ?? []).filter(r => selectedBranches.includes(r.employee_branch));
+    ? requestList
+    : requestList.filter(r => selectedBranches.includes(r.employee_branch));
 
   async function approve(id: string) {
     setActioning(id);
@@ -82,7 +86,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
 
   // ── Employee layout ────────────────────────────────────────────────────────
   if (isEmployee) {
-    const ownPending = (requests ?? []).filter(
+    const ownPending = requestList.filter(
       r => r.status === "pending" || r.status === "l2_pending"
     ).length;
 
@@ -144,7 +148,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
               <div style={{ padding: "40px 20px", textAlign: "center" }}>
                 <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
               </div>
-            ) : (requests ?? []).length === 0 ? (
+            ) : requestList.length === 0 ? (
               <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
                 No leave requests yet. Click <strong>Apply Leave</strong> to get started.
               </div>
@@ -162,7 +166,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                   </tr>
                 </thead>
                 <tbody>
-                  {(requests ?? []).map(r => (
+                  {requestList.map(r => (
                     <tr key={r.id}>
                       <td>{r.leave_type_display}</td>
                       <td>{fmtShortDate(r.start_date)}</td>
@@ -293,26 +297,32 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                       </span>
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => approve(r.id)}
-                          disabled={actioning === r.id}
-                          title="Approve"
-                          style={{ padding: "4px 10px" }}
-                        >
-                          {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => setRejectTarget({ id: r.id, employee: r.employee_name, type: r.leave_type_display })}
-                          disabled={actioning === r.id}
-                          title="Reject"
-                          style={{ padding: "4px 10px" }}
-                        >
-                          <i className="ti ti-x" />
-                        </button>
-                      </div>
+                      {r.employee_name === currentUser?.name ? (
+                        <span style={{ fontSize: 11, color: "var(--on-variant)" }} title="You cannot approve your own leave request.">
+                          Not applicable
+                        </span>
+                      ) : (
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          <button
+                            className="btn btn-sm btn-success"
+                            onClick={() => approve(r.id)}
+                            disabled={actioning === r.id}
+                            title="Approve"
+                            style={{ padding: "4px 10px" }}
+                          >
+                            {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => setRejectTarget({ id: r.id, employee: r.employee_name, type: r.leave_type_display })}
+                            disabled={actioning === r.id}
+                            title="Reject"
+                            style={{ padding: "4px 10px" }}
+                          >
+                            <i className="ti ti-x" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -5,7 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import {
-  LeaveBalance, LeavePolicy, LeaveRequest,
+  LeaveBalance, LeavePolicy, LeaveRequest, PaginatedResponse,
   LeaveTypeKey, DurationKey,
   LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
   STATUS_BADGE, STATUS_LABEL,
@@ -62,9 +62,10 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const currentYear = new Date().getFullYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
-  const { data: myRequests, refetch: refetchMine } = useFetch<LeaveRequest[]>(
+  const { data: myRequests, refetch: refetchMine } = useFetch<PaginatedResponse<LeaveRequest>>(
     API.leave.requests + "?scope=own"
   );
+  const myRequestList = myRequests?.results ?? [];
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
   const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
@@ -423,7 +424,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
       </div>
 
     {/* ── My Leave Requests history ─────────────────────────────────────── */}
-    {(myRequests ?? []).length > 0 && (
+    {myRequestList.length > 0 && (
       <div className="card" style={{ marginTop: 20 }}>
         <div className="card-header">
           <div className="card-title">
@@ -444,7 +445,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {(myRequests ?? []).map(r => (
+              {myRequestList.map(r => (
                 <tr key={r.id}>
                   <td>{r.leave_type_display}</td>
                   <td>{fmtShortDate(r.start_date)}</td>

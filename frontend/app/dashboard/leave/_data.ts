@@ -83,6 +83,14 @@ export interface LeaveRequest {
   created_at:         string;
 }
 
+export interface PaginatedResponse<T> {
+  count:       number;
+  page:        number;
+  page_size:   number;
+  total_pages: number;
+  results:     T[];
+}
+
 export interface LeaveStats {
   total:     number;
   pending:   number;

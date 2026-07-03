@@ -485,3 +485,139 @@ Confirmed with a full `tsc --noEmit` afterward — this was the only remaining t
 - `clientApi` used with `withCredentials: true`
 - No `localStorage` for tokens
 - No `any` types — all shapes explicitly typed
+
+---
+
+## Session 16 — Rithwika (03 July 2026)
+
+**Branch:** `frontend/Leavemanagement`
+
+---
+
+### 1. Leave Module — Pagination Envelope Bug (production crash fix)
+
+`GET /leave/requests/` was switched to a paginated response (`{count, page, page_size, total_pages, results}`, the same envelope every other list endpoint uses) at some point, but three leave components were still written as if the endpoint returned a bare array. Once real data loaded, `requests`/`pending`/`l2pending`/`history`/`myRequests` held the paginated **object**, not an array, so `.map()`/`.filter()` threw `TypeError: ... is not a function` / `... is not iterable` at runtime.
+
+Fixed by adding a `PaginatedResponse<T>` type to `app/dashboard/leave/_data.ts` (same shape already used in `types/attendance.ts` and `app/dashboard/approvals/page.tsx`) and reading `.results` everywhere:
+
+- **`LeaveDashboard.tsx`** — `requests` (both the employee's own list and the approver's pending queue use the same endpoint) now typed `PaginatedResponse<LeaveRequest>`; introduced `requestList = requests?.results ?? []` and replaced every direct array read with it.
+- **`LeaveApprovals.tsx`** — same fix for `pending`, `l2pending`, `history` (this was the component that actually crashed first, in the Approvals tab).
+- **`ApplyLeaveForm.tsx`** — same latent bug in the "My Leave Requests" history table at the bottom of the Apply Leave form; fixed proactively since it hits the identical endpoint.
+
+All three consumers of `API.leave.requests` are now consistent. No backend changes — the backend's pagination envelope is correct and matches every other list endpoint; the bug was purely stale frontend typing from before pagination was added.
+
+---
+
+### 2. Attendance — "View" Button on Absent Employees (UX fix)
+
+**File:** `app/dashboard/attendance/_components/AttendanceTab.tsx`
+
+The **View** button was `disabled` whenever a row had no `record_id` (absent employees have no `AttendanceRecord` for the day, so `record_id` is `null`). A disabled button fires no click handler, so users got zero feedback — it just looked broken/frozen.
+
+Button is now always clickable:
+```tsx
+onClick={() => {
+  if (r.record_id) {
+    setViewingId(r.record_id);
+  } else {
+    showToast("No attendance record to view — employee was absent this day.", "info");
+  }
+}}
+```
+
+---
+
+### 3. Attendance Import — Crash on Row Validation Errors
+
+**Files:** `types/attendance.ts`, `app/dashboard/attendance/_components/ImportModal.tsx`
+
+Reported error: `Objects are not valid as a React child (found: object with keys {date})`, thrown when opening the CSV import result's row-error table.
+
+**Root cause (backend, not changed — frontend-only fix per instruction):** `services_hr_ops.py`'s `import_attendance_csv()` puts the raw DRF `ser.errors` dict (e.g. `{"date": ["Date has wrong format..."]}`) into each failed row's `errors` field instead of flattening it with the project's existing `first_error()` helper (used everywhere else in the codebase). The frontend type declared `ImportRowError.errors: string` and rendered it directly as `<td>{e.errors}</td>` — when a row failed only on its `date` column, React tried to render that object and crashed.
+
+Fixed defensively on the frontend instead of touching the backend:
+- `ImportRowError.errors` retyped to `string | Record<string, string[]>`.
+- Added `formatRowError()` in `ImportModal.tsx` — passes strings through, flattens a field-errors object into `field: message` lines joined with `·`.
+- `<td>{e.errors}</td>` → `<td>{formatRowError(e.errors)}</td>`.
+
+> **Flagged, not fixed at the source:** the real fix is a one-line backend change (`'errors': first_error(ser.errors)` instead of `'errors': ser.errors`) to make the API actually match its documented contract. Worth doing whenever backend changes are back in scope — until then, any *other* frontend code that reads `ImportRowError.errors` as a plain string needs the same defensive handling.
+
+---
+
+### 4. Leave — Self-Approval Prevention
+
+**Files:** `LeaveDashboard.tsx`, `LeaveApprovals.tsx`
+
+Reported bug: an approver (manager/hr_admin) could see Approve/Reject buttons on their **own** leave request row in both the Leave Dashboard's "Pending Approvals" table and the Approvals tab's "Pending" table, and clicking them presumably no-ops or worse.
+
+Fix: in both components' pending-approvals row rendering, compare the row against the logged-in user (`useCurrentUser()`) and swap the action buttons for a disabled "Not applicable" label when it's their own request:
+
+```tsx
+{r.employee_name === currentUser?.name ? (
+  <span title="You cannot approve your own leave request.">Not applicable</span>
+) : (
+  /* existing Approve/Reject buttons */
+)}
+```
+
+> **Known limitation — no stable ID to match on.** `LeaveRequest` only exposes `employee_name`/`employee_code` (the employee's HR code, e.g. `EMP001`), and `UserInfo` (`lib/auth.ts`) only carries `userId` (an internal UUID), `email`, and `name` — there's no field shared between the two that isn't a display value. Matched on `employee_name === currentUser.name` since both trace back to the same `full_name` field, but this breaks if two employees ever share an exact full name. A robust fix needs the leave request payload to expose a stable employee identifier (e.g. the employee's user UUID) that can be compared to `UserInfo.userId` — that's a backend serializer change, out of scope for this frontend-only pass.
+
+---
+
+### 5. Attendance — Audit History + Invalid Punch Actions (frontend wired ahead of backend)
+
+Given a spec for three new backend endpoints, but **none of them exist yet** in `apps/attendance/` (checked `urls.py`, all views, all services, and all 14 migrations — confirmed absent). Per explicit instruction, implemented the frontend to the given contract anyway so it's ready the moment the backend ships; this will 404 until then.
+
+**Endpoints wired (`lib/api/endpoints.ts`):**
+```
+attendance.recordAudit(id)          → GET  /attendance/records/<id>/audit/
+attendance.invalidPunchAssign(id)   → POST /attendance/invalid-punches/<id>/assign/
+attendance.invalidPunchDiscard(id)  → POST /attendance/invalid-punches/<id>/discard/
+attendance.invalidPunchConvert(id)  → POST /attendance/invalid-punches/<id>/convert/
+```
+
+**Types added (`types/attendance.ts`):** `AttendanceAuditEntry`, `InvalidPunchAssignPayload`, `InvalidPunchDiscardPayload`, `InvalidPunchConvertPayload`.
+
+**`AttendanceDetailDrawer.tsx`** — replaced the "not available yet" Audit Log placeholder (see Session 15 §2) with a real vertical timeline: fetches on drawer open, sorts newest-first, color-coded event badge (`CLOCK_IN`/`CORRECTION_APPROVED`/etc. mapped to badge classes, unknown events fall back to neutral), shows `performed_by` + `performed_at` + `action`, an `old_value → new_value` line only when both are non-empty, and italicized `remarks` when present.
+
+**`InvalidPunchesTab.tsx`** — un-stubbed from the "Coming Soon" state (Session 15 §5) back to a real table; restored the previously-commented-out fetch/table code and added an **Actions** column with Assign / Convert / Discard buttons. Added an `onMutated` prop (same pattern as `AttendanceTab`) wired to `page.tsx`'s `refetchDashboard` so the "Invalid Punches" tab badge count updates after a resolution.
+
+**New modal components** (`app/dashboard/attendance/_components/`):
+- `AssignPunchModal.tsx` — HR-user dropdown sourced from the existing `API.employees.hrList` (`/employees/hrs/`, returns `{id, employee_id, full_name, ...}` per user — used `id` as `assigned_to` since that's the actual UUID, not the `employee_id` code).
+- `DiscardPunchModal.tsx` — optional remarks textarea, 500-char limit.
+- `ConvertPunchModal.tsx` — punch type select (IN/OUT) + `<input type="time">` for target time.
+
+All three: show the response `message` via the existing `useToast` on error; on success, refetch the invalid-punches list, call `onMutated?.()`, and close.
+
+> **Do not trust the exact response/error shapes until the backend actually ships** — they were inferred from the spec, not verified against a running endpoint.
+
+---
+
+### Key Files Changed / Created (03 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/leave/_data.ts` | Added `PaginatedResponse<T>` |
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | Fixed paginated-envelope bug; added self-approval guard |
+| `app/dashboard/leave/_components/LeaveApprovals.tsx` | Fixed paginated-envelope bug; added self-approval guard |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx` | Fixed paginated-envelope bug (proactive, same endpoint) |
+| `app/dashboard/attendance/_components/AttendanceTab.tsx` | "View" button on absent-employee rows now shows an info toast instead of being disabled |
+| `types/attendance.ts` | `ImportRowError.errors` retyped to `string \| Record<string, string[]>`; added `AttendanceAuditEntry`, `InvalidPunchAssignPayload`, `InvalidPunchDiscardPayload`, `InvalidPunchConvertPayload` |
+| `app/dashboard/attendance/_components/ImportModal.tsx` | Added `formatRowError()` to safely render string-or-dict row errors |
+| `lib/api/endpoints.ts` | Added `attendance.recordAudit`, `invalidPunchAssign`, `invalidPunchDiscard`, `invalidPunchConvert` |
+| `app/dashboard/attendance/_components/AttendanceDetailDrawer.tsx` | Audit Log placeholder replaced with a real fetched timeline |
+| `app/dashboard/attendance/_components/InvalidPunchesTab.tsx` | Un-stubbed; real table + Actions column (Assign/Convert/Discard); added `onMutated` prop |
+| `app/dashboard/attendance/_components/AssignPunchModal.tsx` | **NEW** |
+| `app/dashboard/attendance/_components/DiscardPunchModal.tsx` | **NEW** |
+| `app/dashboard/attendance/_components/ConvertPunchModal.tsx` | **NEW** |
+| `app/dashboard/attendance/page.tsx` | Passes `refetchDashboard` into `InvalidPunchesTab` as `onMutated` |
+
+---
+
+### Notes for Next Developer
+
+- **Three attendance endpoints are frontend-ready but backend-absent**: `GET /attendance/records/<id>/audit/`, `POST /attendance/invalid-punches/<id>/{assign,discard,convert}/`. Build these next — the frontend contract (request/response shapes) is already committed in `types/attendance.ts`, verify it matches whatever the backend actually implements before calling this "done."
+- **Invalid Punches is live again** (Session 15 §5's "Coming Soon" state is gone) — but every action button will 404 until the three endpoints above exist.
+- **The real fix for the Import row-error crash is still pending on the backend** — `services_hr_ops.py:145` should use `first_error(ser.errors)` instead of raw `ser.errors`, matching every other `error()` call in the codebase. The frontend defensive fix (§3 above) means it won't crash either way, but the backend contract is still technically wrong.
+- **Self-approval guard matches on employee full name, not a stable ID** (§4) — revisit if the backend ever adds a comparable employee/user identifier to the leave request payload.
+- **Leave module's pagination bug (§1) suggests checking other older leave/approvals pages** for the same "written before pagination was added" pattern if similar crashes turn up elsewhere.

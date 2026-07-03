@@ -217,8 +217,13 @@ export default function AttendanceTab({ onMutated }: Props) {
                     <button
                       className="btn btn-ghost btn-sm"
                       style={{ padding: "3px 10px", fontSize: 11 }}
-                      disabled={!r.record_id}
-                      onClick={() => r.record_id && setViewingId(r.record_id)}
+                      onClick={() => {
+                        if (r.record_id) {
+                          setViewingId(r.record_id);
+                        } else {
+                          showToast("No attendance record to view — employee was absent this day.", "info");
+                        }
+                      }}
                     >
                       View
                     </button>

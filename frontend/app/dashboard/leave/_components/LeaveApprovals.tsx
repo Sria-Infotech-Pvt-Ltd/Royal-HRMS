@@ -2,29 +2,31 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
-import { LeaveRequest, STATUS_BADGE, STATUS_LABEL, fmtShortDate } from "../_data";
+import { LeaveRequest, PaginatedResponse, STATUS_BADGE, STATUS_LABEL, fmtShortDate } from "../_data";
 
 type Tab = "pending" | "history";
 
 export default function LeaveApprovals() {
+  const currentUser = useCurrentUser();
   const [tab,       setTab]       = useState<Tab>("pending");
   const [actioning, setActioning] = useState<string | null>(null);
   const [rejectId,  setRejectId]  = useState<string | null>(null);
   const [remarks,   setRemarks]   = useState("");
 
   const { data: pending,  refetch: refetchPending, loading: loadingPending }  =
-    useFetch<LeaveRequest[]>(API.leave.requests + "?status=pending");
+    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?status=pending");
 
   const { data: l2pending, refetch: refetchL2, loading: loadingL2 } =
-    useFetch<LeaveRequest[]>(API.leave.requests + "?status=l2_pending");
+    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?status=l2_pending");
 
   const { data: history, refetch: refetchHistory, loading: loadingHistory } =
-    useFetch<LeaveRequest[]>(API.leave.requests + "?status=approved,rejected,cancelled");
+    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?status=approved,rejected,cancelled");
 
-  const allPending = [...(pending ?? []), ...(l2pending ?? [])];
-  const rows       = tab === "pending" ? allPending : (history ?? []);
+  const allPending = [...(pending?.results ?? []), ...(l2pending?.results ?? [])];
+  const rows       = tab === "pending" ? allPending : (history?.results ?? []);
   const loading    = tab === "pending" ? (loadingPending || loadingL2) : loadingHistory;
 
   function refetchAll() {
@@ -107,26 +109,32 @@ export default function LeaveApprovals() {
                     </td>
                     {tab === "pending" && (
                       <td style={{ textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                          <button
-                            className="btn btn-sm btn-success"
-                            onClick={() => act(r.id, "approve")}
-                            disabled={actioning === r.id}
-                            style={{ padding: "4px 10px" }}
-                            title="Approve"
-                          >
-                            {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
-                          </button>
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={() => { setRejectId(r.id); setRemarks(""); }}
-                            disabled={actioning === r.id}
-                            style={{ padding: "4px 10px" }}
-                            title="Reject"
-                          >
-                            <i className="ti ti-x" />
-                          </button>
-                        </div>
+                        {r.employee_name === currentUser?.name ? (
+                          <span style={{ fontSize: 11, color: "var(--on-variant)" }} title="You cannot approve your own leave request.">
+                            Not applicable
+                          </span>
+                        ) : (
+                          <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                            <button
+                              className="btn btn-sm btn-success"
+                              onClick={() => act(r.id, "approve")}
+                              disabled={actioning === r.id}
+                              style={{ padding: "4px 10px" }}
+                              title="Approve"
+                            >
+                              {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
+                            </button>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => { setRejectId(r.id); setRemarks(""); }}
+                              disabled={actioning === r.id}
+                              style={{ padding: "4px 10px" }}
+                              title="Reject"
+                            >
+                              <i className="ti ti-x" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     )}
                   </tr>
