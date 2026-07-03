@@ -4,6 +4,7 @@ import string
 
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -92,7 +93,9 @@ class CandidateListCreateView(APIView):
                 pass
 
         if q := request.query_params.get('search'):
-            qs = qs.filter(name__icontains=q) | qs.filter(email__icontains=q) | qs.filter(position_applied__icontains=q)
+            qs = qs.filter(
+                Q(name__icontains=q) | Q(email__icontains=q) | Q(position_applied__icontains=q)
+            )
 
         try:
             page_num  = max(1, int(request.query_params.get('page', 1)))
@@ -535,6 +538,55 @@ class CandidateHRDecisionView(APIView):
                        else 'Onboarding email failed — check SMTP settings'),
                 description=f'Using template: {template_name}',
             )
+
+            # Auto-assign default assessments so candidate must complete them
+            # before accessing the employment portal
+            if candidate.portal_user_id:
+                from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
+                from django.db.models import Sum as DbSum
+                from apps.accounts.models import User as _User
+                default_assessments = list(
+                    Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
+                )
+                assigned_assessments = []
+                for assessment in default_assessments:
+                    max_score = assessment.items.filter(
+                        item_type=AssessmentItem.TYPE_QUIZ
+                    ).aggregate(total=DbSum('pass_score'))['total'] or 0
+                    _, created = CandidateAssignment.objects.get_or_create(
+                        candidate=candidate,
+                        assessment=assessment,
+                        defaults={'assigned_by': request.user, 'max_score': max_score},
+                    )
+                    if created:
+                        assigned_assessments.append(assessment)
+
+                if assigned_assessments:
+                    portal_user = candidate.portal_user
+                    portal_user.assessment_status = _User.ASSESSMENT_PENDING
+                    portal_user.save(update_fields=['assessment_status', 'updated_at'])
+
+                    company      = Company.objects.first()
+                    company_name = company.company_name if company else ''
+                    portal_url   = (company.portal_url if company else '') or ''
+                    for assessment in assigned_assessments:
+                        try:
+                            send_template_email(
+                                recipient_email=candidate.email,
+                                template_name='assessment_assigned',
+                                context={
+                                    'candidate_name':   candidate.name,
+                                    'assessment_title': assessment.title,
+                                    'company_name':     company_name,
+                                    'portal_url':       portal_url,
+                                },
+                            )
+                        except Exception:
+                            logger.exception(
+                                'Failed to send assessment_assigned email for "%s" to %s',
+                                assessment.title, candidate.email,
+                            )
+
             msg = f'{candidate.name} approved and onboarded!'
         else:
             CandidateLog.objects.create(
@@ -862,6 +914,15 @@ class SendPortalLoginView(APIView):
         candidate.status                  = Candidate.STATUS_OFFER_SENT
         candidate.save(update_fields=['portal_user', 'portal_credentials_sent', 'status', 'updated_at'])
 
+        # Assessments are assigned after HR approval, not at portal login.
+        # Set complete so the candidate goes straight to the onboarding wizard.
+        portal_user.assessment_status = User.ASSESSMENT_COMPLETE
+        portal_user.save(update_fields=['assessment_status', 'updated_at'])
+
+        company      = Company.objects.first()
+        company_name = company.company_name if company else ''
+        portal_url   = portal_url_override or (company.portal_url if company else '') or ''
+
         CandidateLog.objects.create(
             candidate=candidate,
             log_type=CandidateLog.TYPE_INFO,
@@ -869,24 +930,19 @@ class SendPortalLoginView(APIView):
             description=f'Account created for {candidate.email}. Sent by {request.user.full_name or request.user.email}.',
         )
 
-        # Send credentials email
-        company      = Company.objects.first()
-        company_name = company.company_name if company else ''
-        portal_url   = portal_url_override or (company.portal_url if company else '') or ''
-        context = {
-            'candidate_name': candidate.name,
-            'position':       candidate.position_applied,
-            'company_name':   company_name,
-            'login_email':    candidate.email,
-            'temp_password':  temp_password,
-            'portal_url':     portal_url,
-        }
         sent_status = CandidateEmail.STATUS_FAILED
         try:
             send_template_email(
                 recipient_email=candidate.email,
                 template_name='portal_invite',
-                context=context,
+                context={
+                    'candidate_name': candidate.name,
+                    'position':       candidate.position_applied,
+                    'company_name':   company_name,
+                    'login_email':    candidate.email,
+                    'temp_password':  temp_password,
+                    'portal_url':     portal_url,
+                },
             )
             sent_status = CandidateEmail.STATUS_SENT
         except Exception as exc:

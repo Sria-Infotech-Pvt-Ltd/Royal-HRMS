@@ -290,6 +290,65 @@ backend/config/
 
 ---
 
+## Session Log — 02-07-2026
+**Author: G.Durga Prasad**
+**Branch: Backend/Assignments**
+
+### Changes Made
+
+**1. Onboarding wizard URLs cleaned up**
+- Removed redundant HTTP methods from `OnboardingView`
+- `PATCH /onboarding/` (no-step) → now returns 405, use `PATCH /onboarding/step/<n>/`
+- `PUT /onboarding/step/<n>/` → now returns 405, use `PATCH` instead
+- `POST /onboarding/step/<n>/` → now returns 405, use `PATCH` instead
+- Deleted dead `_patch_full_profile()` private method
+- Wizard now has 7 clean URLs with no duplicate functionality
+
+**2. Assessment participation counts on `GET /api/assessments/`**
+- Added `assigned_count`, `pending_count`, `in_progress_count`, `completed_count` to `AssessmentSerializer`
+- Added `candidates` array inline — each assessment now returns full list of candidates who took it
+- Candidate entry includes: name, email, status, attempt_count, pass_score, score_awarded, pass_percentage
+
+**3. `attempt_count` field added to `CandidateAssignment`**
+- New `PositiveSmallIntegerField(default=1)` on `CandidateAssignment` model
+- Migration `assessments/0004_candidateassignment_attempt_count` created and applied
+- `RetryAssessmentView` now increments `attempt_count` on every retry
+
+**4. `AssessmentCandidateSerializer` added**
+- New serializer in `assessments/serializers.py`
+- Returns: `candidate_id`, `candidate_name`, `candidate_email`, `status`, `attempt_count`, `pass_score`, `score_awarded`, `pass_percentage`, `completed_at`, `created_at`
+
+### Files Changed
+
+```
+backend/apps/assessments/
+  models.py                    — attempt_count field added to CandidateAssignment
+  serializers.py               — AssessmentSerializer updated with counts + candidates; AssessmentCandidateSerializer added
+  views/portal.py              — RetryAssessmentView increments attempt_count
+  migrations/0004_*            — migration for attempt_count (applied)
+
+backend/apps/accounts/
+  views.py                     — OnboardingView: removed redundant HTTP methods, deleted _patch_full_profile()
+```
+
+### API Changes
+
+| Endpoint | Change |
+|---|---|
+| `GET /api/assessments/` | Now returns counts + full candidates array per assessment |
+| `PATCH /onboarding/` | Now returns 405 — use step-based PATCH |
+| `PUT /onboarding/step/<n>/` | Now returns 405 — use PATCH |
+| `POST /onboarding/step/<n>/` | Now returns 405 — use PATCH |
+| `POST /api/assessments/<id>/retry/` | Now increments attempt_count |
+
+### Migrations Applied
+
+```
+assessments/0004_candidateassignment_attempt_count  ✅ applied
+```
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

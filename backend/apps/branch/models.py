@@ -46,6 +46,12 @@ class Branch(models.Model):
     address = models.TextField()
     state = models.ForeignKey(State, on_delete=models.PROTECT, related_name='branches')
     city = models.ForeignKey(City, on_delete=models.PROTECT, related_name='branches')
+    hr = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='managed_branches',
+    )
     employees_count = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     is_headquarter = models.BooleanField(default=False)

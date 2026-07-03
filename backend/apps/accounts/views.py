@@ -12,6 +12,8 @@ from datetime import datetime
 import cloudinary.utils
 import requests as http_req
 
+PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+
 from django.conf import settings
 from django.core import signing
 from django.core.paginator import Paginator
@@ -362,6 +364,7 @@ class LoginView(APIView):
                 'branch':              user.branch,
                 'must_change_password': user.must_change_password,
                 'onboarding_status':   user.onboarding_status,
+                'assessment_status':   user.assessment_status,
                 'permissions':         permissions,
             },
         })
@@ -2290,6 +2293,7 @@ class EmployeeListCreateView(APIView):
         if last_name   and len(last_name)   > 150: errs['last_name']   = 'Last name must be 150 characters or fewer.'
         if email       and len(email)       > 254: errs['email']       = 'Email must be 254 characters or fewer.'
         if phone       and len(phone)       > 20:  errs['phone']       = 'Phone must be 20 characters or fewer.'
+        if phone       and 'phone' not in errs and not PHONE_RE.match(phone): errs['phone'] = 'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
         if branch      and len(branch)      > 100: errs['branch']      = 'Branch must be 100 characters or fewer.'
         if department  and len(department)  > 100: errs['department']  = 'Department must be 100 characters or fewer.'
         if designation and len(designation) > 100: errs['designation'] = 'Designation must be 100 characters or fewer.'
@@ -2852,13 +2856,12 @@ class OnboardingView(APIView):
     """
     Unified employee self-service onboarding endpoint.
 
-    /onboarding/             GET   → full profile summary
-                             PATCH → auto-save across all fields (no step routing)
-                             POST  → submit the completed wizard
+    /onboarding/             GET    → full profile summary
+                             POST   → submit the completed wizard
 
-    /onboarding/step/<n>/    GET              → fields for this step only
-                             POST / PUT / PATCH → save step data
-                             DELETE           → clear all fields for this step
+    /onboarding/step/<n>/    GET    → fields for this step only
+                             PATCH  → save step data
+                             DELETE → clear all fields for this step
     """
     permission_classes = [IsAuthenticated]
     parser_classes     = [JSONParser, FormParser, MultiPartParser]
@@ -2918,38 +2921,32 @@ class OnboardingView(APIView):
             data={k: v for k, v in all_data.items() if k in _STEP_ALL_FIELDS[step]},
         )
 
-    # ── POST — no step: submit wizard | with step: save step data ─────────────
+    # ── POST — submit the completed wizard ────────────────────────────────────
 
     def post(self, request, step: int = None):
-        if step is None:
-            return self._submit(request)
-        if step not in self._VALID_STEPS:
+        if step is not None:
             return error(
-                f'Invalid step {step}. Valid steps are 0 to 4.',
-                http_status=status.HTTP_400_BAD_REQUEST,
-            )
-        return _save_profile_step(request, step)
-
-    # ── PUT — step full-replace ───────────────────────────────────────────────
-
-    def put(self, request, step: int = None):
-        if step is None:
-            return error(
-                'Use PATCH /onboarding/ to update your full profile, or specify a step.',
+                'Use PATCH /onboarding/step/<n>/ to save step data.',
                 http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        if step not in self._VALID_STEPS:
-            return error(
-                f'Invalid step {step}. Valid steps are 0 to 4.',
-                http_status=status.HTTP_400_BAD_REQUEST,
-            )
-        return _save_profile_step(request, step)
+        return self._submit(request)
 
-    # ── PATCH — no step: full-profile auto-save | with step: step save ────────
+    # ── PUT — not supported ───────────────────────────────────────────────────
+
+    def put(self, request, step: int = None):
+        return error(
+            'Use PATCH /onboarding/step/<n>/ to save step data.',
+            http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    # ── PATCH — save step data ─────────────────────────────────────────────────
 
     def patch(self, request, step: int = None):
         if step is None:
-            return self._patch_full_profile(request)
+            return error(
+                'Specify a step: PATCH /onboarding/step/<n>/',
+                http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
         if step not in self._VALID_STEPS:
             return error(
                 f'Invalid step {step}. Valid steps are 0 to 4.',
@@ -3018,46 +3015,6 @@ class OnboardingView(APIView):
 
         logger.info('Onboarding step %d cleared for user %s', step, request.user.email)
         return success(f'Step {step} data cleared successfully.')
-
-    # ── Private helpers ───────────────────────────────────────────────────────
-
-    def _patch_full_profile(self, request):
-        from apps.accounts.serializers import EmployeeProfileSerializer
-        if request.user.onboarding_status == User.ONBOARDING_COMPLETE:
-            return error('Onboarding is already complete.')
-        profile, _ = self._get_or_create_profile(request.user)
-        raw      = dict(request.data)
-        step_raw = raw.pop('step', [None])
-        filled_data = {k: v for k, v in raw.items() if v not in ('', None)}
-
-        step     = None
-        step_val = step_raw[0] if isinstance(step_raw, list) else step_raw
-        if step_val not in (None, '', 'null'):
-            try:
-                step = int(step_val)
-            except (ValueError, TypeError):
-                return error('step must be an integer between 0 and 3.')
-
-        if not filled_data:
-            return success('Nothing to save.', data=EmployeeProfileSerializer(profile).data)
-
-        if step is not None:
-            required = _STEP_REQUIRED_FIELDS.get(step, {})
-            missing  = []
-            for field, label in required.items():
-                incoming = filled_data.get(field)
-                saved    = getattr(profile, field, None)
-                value    = incoming if incoming not in (None, '') else saved
-                if not value or (isinstance(value, str) and not value.strip()):
-                    missing.append(label)
-            if missing:
-                return error(f'Please fill in the following required fields: {", ".join(missing)}.')
-
-        serializer = EmployeeProfileSerializer(profile, data=filled_data, partial=True)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        serializer.save()
-        return success('Profile saved.', data=serializer.data)
 
     def _submit(self, request):
         if request.user.onboarding_status == User.ONBOARDING_COMPLETE:
@@ -3138,6 +3095,41 @@ class OnboardingView(APIView):
 
         User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
         logger.info('User %s submitted onboarding wizard', request.user.email)
+
+        # Notify the assigned HR (or all hr_admins if none assigned)
+        try:
+            company      = Company.objects.first()
+            company_name = company.company_name if company else ''
+            portal_url   = (company.portal_url if company else '') or ''
+            context = {
+                'candidate_name':  request.user.full_name or request.user.email,
+                'candidate_email': request.user.email,
+                'company_name':    company_name,
+                'portal_url':      portal_url,
+            }
+            if request.user.hr_id:
+                hr_user = User.objects.filter(pk=request.user.hr_id, is_active=True).first()
+                if hr_user and hr_user.email:
+                    send_template_email(
+                        recipient_email=hr_user.email,
+                        template_name='onboarding_submitted',
+                        context={**context, 'hr_name': hr_user.full_name or 'HR'},
+                    )
+            else:
+                hr_emails = list(
+                    User.objects.filter(role__name='hr_admin', is_active=True)
+                                .exclude(email='')
+                                .values_list('email', flat=True)
+                )
+                for hr_email in hr_emails:
+                    send_template_email(
+                        recipient_email=hr_email,
+                        template_name='onboarding_submitted',
+                        context={**context, 'hr_name': 'HR Team'},
+                    )
+        except Exception:
+            logger.exception('Failed to send onboarding_submitted notification for user %s', request.user.email)
+
         return success('Onboarding submitted. Awaiting HR approval.')
 
 
@@ -3517,6 +3509,29 @@ class OnboardingApprovalView(APIView):
                 linked_candidate.hr_approved = True
                 linked_candidate.save(update_fields=['status', 'hr_approved', 'updated_at'])
 
+            # Auto-assign default assessments — candidate completes these to unlock full portal
+            from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
+            from django.db.models import Sum as DbSum
+            assigned_assessments = []
+            if linked_candidate:
+                default_assessments = list(
+                    Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
+                )
+                for assessment in default_assessments:
+                    max_score = assessment.items.filter(
+                        item_type=AssessmentItem.TYPE_QUIZ
+                    ).aggregate(total=DbSum('pass_score'))['total'] or 0
+                    _, created = CandidateAssignment.objects.get_or_create(
+                        candidate=linked_candidate,
+                        assessment=assessment,
+                        defaults={'assigned_by': request.user, 'max_score': max_score},
+                    )
+                    if created:
+                        assigned_assessments.append(assessment)
+                if assigned_assessments:
+                    target.assessment_status = User.ASSESSMENT_PENDING
+                    target.save(update_fields=['assessment_status', 'updated_at'])
+
             AuditLog.objects.create(
                 user=request.user, action='onboarding_approved', module='accounts',
                 object_id=str(target.pk),
@@ -3530,17 +3545,38 @@ class OnboardingApprovalView(APIView):
                     recipient_email=target.email,
                     template_name='onboarding_approved',
                     context={
-                        'employee_name':   target.full_name,
-                        'company_name':    company_name,
-                        'employee_id':     target.employee_id or '',
-                        'designation':     target.designation or '',
-                        'department':      target.department  or '',
-                        'date_of_joining': str(target.date_of_joining) if target.date_of_joining else '',
-                        'portal_url':      portal_url,
+                        'employee_name':    target.full_name,
+                        'company_name':     company_name,
+                        'employee_id':      target.employee_id or '',
+                        'designation':      target.designation or '',
+                        'department':       target.department  or '',
+                        'date_of_joining':  str(target.date_of_joining) if target.date_of_joining else '',
+                        'portal_url':       portal_url,
+                        'has_assessments':  'true' if assigned_assessments else 'false',
+                        'assessment_count': str(len(assigned_assessments)),
                     },
                 )
             except Exception:
                 logger.exception('Failed to send onboarding approval email to %s', target.email)
+
+            # Send individual assessment emails so the candidate knows exactly what to complete
+            for assessment in assigned_assessments:
+                try:
+                    send_template_email(
+                        recipient_email=target.email,
+                        template_name='assessment_assigned',
+                        context={
+                            'candidate_name':   target.full_name,
+                            'assessment_title': assessment.title,
+                            'company_name':     company_name,
+                            'portal_url':       portal_url,
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        'Failed to send assessment_assigned email for "%s" to %s',
+                        assessment.title, target.email,
+                    )
 
             return success(f'{target.full_name} onboarding approved.')
 

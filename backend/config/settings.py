@@ -9,7 +9,7 @@ environ.Env.read_env(BASE_DIR / '.env', overwrite=True)
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'apps.recruitment',
     'apps.hrms',
     'apps.attendance',
+    'apps.assessments',
 ]
 
 MIDDLEWARE = [
@@ -190,7 +191,11 @@ SIMPLE_JWT = {
 }
 
 # ─── Email ───────────────────────────────────────────────────────────────────
-EMAIL_BACKEND      = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND      = (
+    'django.core.mail.backends.console.EmailBackend'
+    if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend'
+)
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Royal Staffing HRMS <noreply@hrms.com>')
 
 OTP_EXPIRY_MINUTES = 10
