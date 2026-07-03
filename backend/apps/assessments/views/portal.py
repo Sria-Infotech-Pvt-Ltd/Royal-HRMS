@@ -39,7 +39,12 @@ class MyAssessmentView(APIView):
     def get(self, request):
         candidate = _get_candidate(request.user)
         if not candidate:
-            return error('No candidate profile linked to this account.', http_status=status.HTTP_404_NOT_FOUND)
+            # Employee or admin account with no candidate profile — mark complete and return empty.
+            from apps.accounts.models import User
+            if request.user.assessment_status != User.ASSESSMENT_COMPLETE:
+                request.user.assessment_status = User.ASSESSMENT_COMPLETE
+                request.user.save(update_fields=['assessment_status', 'updated_at'])
+            return success('No assessments assigned.', {'assignments': [], 'all_complete': True})
         assignments = (
             CandidateAssignment.objects.select_related('assessment')
                                        .prefetch_related(

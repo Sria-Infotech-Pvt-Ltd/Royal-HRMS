@@ -349,6 +349,91 @@ assessments/0004_candidateassignment_attempt_count  ✅ applied
 
 ---
 
+## Session Log — 2026-07-03
+**Author: Teerdaveni**
+**Branch: backend/attendance-leave**
+
+### Bug Fixes Shipped
+
+**1. Attendance Calendar — incomplete month coverage**
+- Root cause: `get_calendar()` only iterated over existing `AttendanceRecord` rows — days with no record (weekly off, future, absent days) were missing from the response
+- Fix: Full month iteration using `calendar.monthrange()`; 4 up-front queries (records, leaves, pending corrections, weekly-off policy) replace N+1 per-day queries
+- Status priority order: Holiday > Weekly Off > On Leave > record status > Absent; future days with no special status are omitted
+- `STATUS_INCOMPLETE` now maps to label `"Missing Clock Out"` with `regularization_required: true`
+- Added `_STATUS_COLOR` module constant mapping each status to a hex color
+- New static methods on `AttendanceDashboardService`: `_build_day()`, `_weekly_off_days()`, `_leave_dates()`, `_pending_correction_dates()`
+- `_weekly_off_days()`: reads `WeeklyDayPolicy` default → falls back to legacy `AttendanceWeeklyOff` → defaults to Saturday + Sunday
+- `_leave_dates()`: single query for approved `LeaveRequest` rows in month range, expanded to set of dates
+- `_pending_correction_dates()`: batch query replacing N per-day `_has_pending_correction()` calls
+- File: `backend/apps/attendance/services_attendance.py`
+
+**2. `DayRecordSerializer` — new fields added**
+- Added `date` (YYYY-MM-DD string), `color` (hex), `regularization_required` (bool)
+- File: `backend/apps/attendance/serializers_my_attendance.py`
+
+**3. Assessment portal — 404 for non-candidate users**
+- Root cause: `/api/assessments/my/` returned 404 when logged-in user had no linked `Candidate` record (employees, managers, HR admins)
+- Fix: Returns `200 {assignments: [], all_complete: true}` instead of 404; also auto-corrects stale `assessment_status` to `complete` for these users
+- Fixed `safurasamreen2003@gmail.com` — employee/manager account had stale `assessment_status: pending`
+- File: `backend/apps/assessments/views/portal.py`
+
+**4. Leave requests — managers/HR can't see their own pending requests**
+- Root cause: `LeaveRequestListCreateView.get()` defaulted to the approval queue for any user with `leave.approve` permission — their own pending leaves were invisible
+- Fix: Default scope changed to own requests for all users; `?scope=team` now required to see the approval queue
+- Same fix applied to `LeaveStatsView.get()` — stats now reflect own requests by default
+- File: `backend/apps/hrms/views/leave.py`
+
+**5. Approve/reject buttons showing to leave applicant**
+- Root cause: Serializer had no action flags — frontend used JWT role to decide button visibility
+- Fix: Added `can_approve` and `can_cancel` boolean fields to `LeaveRequestSerializer`
+  - `can_approve`: True only if requester has `leave.approve` perm AND is NOT the leave owner AND status is pending/l2_pending
+  - `can_cancel`: True only if requester IS the leave owner AND status is pending/l2_pending
+- Frontend should render action buttons based on these fields, not on role from JWT
+- File: `backend/apps/hrms/serializers.py`
+
+### Debugging Done
+
+- **`/api/assessments/my/` 404**: Used Django shell + temporary debug print to trace the request user (`safurasamreen2003@gmail.com`, role=manager, RSS00008) — confirmed no `Candidate` linked
+- **Candidate `portal_user` not found**: Shell confirmed `Candidate.objects.filter(portal_user=user)` returns correct result; issue was wrong email used in test (`@email.com` vs `@gmail.com`)
+- **Leave not showing for Safura**: Shell confirmed she has 1 pending leave; root cause was scope defaulting to approval queue for approvers
+
+### Data Fixes Applied
+
+| User | Fix |
+|---|---|
+| `safurasamreen2003@gmail.com` | `assessment_status` corrected to `complete` |
+| `taskforce1569@gmail.com` (Samreen) | `assessment_status` corrected to `complete` |
+| `safurasamreenshaik@gmail.com` (Samreen) | `assessment_status` corrected to `complete` |
+| Candidate ID 7 (G. Durga Prasad) | `portal_user` linked to `rithwikaveera@gmail.com` for testing |
+
+### API Behaviour Changes
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/leave/requests/` | Managers/HR → approval queue | Everyone → own requests |
+| `GET /api/leave/requests/?scope=team` | — | Approval queue for approvers |
+| `GET /api/leave/stats/` | Managers/HR → team stats | Own stats |
+| `GET /api/leave/stats/?scope=team` | — | Team stats for approvers |
+| `GET /api/assessments/my/` | 404 for non-candidate users | 200 with empty assignments |
+| `GET /api/attendance/calendar/` | Only days with records returned | All month days; weekly off + leaves included |
+
+### Files Modified
+
+```
+backend/apps/attendance/
+  services_attendance.py     — get_calendar() rewritten; _STATUS_COLOR added; 4 new static helpers
+  serializers_my_attendance.py — DayRecordSerializer: date, color, regularization_required added
+
+backend/apps/assessments/
+  views/portal.py            — MyAssessmentView: 404 → 200 empty for non-candidate users
+
+backend/apps/hrms/
+  views/leave.py             — LeaveRequestListCreateView + LeaveStatsView: scope default fixed
+  serializers.py             — LeaveRequestSerializer: can_approve + can_cancel fields added
+```
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

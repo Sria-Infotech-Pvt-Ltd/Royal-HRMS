@@ -1354,3 +1354,165 @@ class MissingPunchNotification(models.Model):
 
     def __str__(self) -> str:
         return f'MissingPunchNotification {self.employee_id} {self.date} [{self.channel}]'
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Attendance Audit Log  (immutable event history per attendance record)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AttendanceAuditLog(models.Model):
+    """
+    Immutable audit trail for every significant attendance event.
+
+    Never deleted.  created_at is the canonical timestamp; updated_at is kept
+    to satisfy the project model convention but will never change in practice.
+    """
+
+    EVENT_CLOCK_IN             = 'CLOCK_IN'
+    EVENT_CLOCK_OUT            = 'CLOCK_OUT'
+    EVENT_PROCESSED            = 'PROCESSED'
+    EVENT_RECALCULATED         = 'RECALCULATED'
+    EVENT_CORRECTION_SUBMITTED = 'CORRECTION_SUBMITTED'
+    EVENT_CORRECTION_APPROVED  = 'CORRECTION_APPROVED'
+    EVENT_CORRECTION_REJECTED  = 'CORRECTION_REJECTED'
+    EVENT_MANUALLY_EDITED      = 'MANUALLY_EDITED'
+    EVENT_IMPORTED             = 'IMPORTED'
+    EVENT_REPROCESSED          = 'REPROCESSED'
+    EVENT_INVALID_DISCARDED    = 'INVALID_DISCARDED'
+    EVENT_INVALID_CONVERTED    = 'INVALID_CONVERTED'
+
+    EVENT_CHOICES = [
+        (EVENT_CLOCK_IN,             'Clock In'),
+        (EVENT_CLOCK_OUT,            'Clock Out'),
+        (EVENT_PROCESSED,            'Attendance Processed'),
+        (EVENT_RECALCULATED,         'Attendance Recalculated'),
+        (EVENT_CORRECTION_SUBMITTED, 'Correction Submitted'),
+        (EVENT_CORRECTION_APPROVED,  'Correction Approved'),
+        (EVENT_CORRECTION_REJECTED,  'Correction Rejected'),
+        (EVENT_MANUALLY_EDITED,      'Manually Edited'),
+        (EVENT_IMPORTED,             'Imported'),
+        (EVENT_REPROCESSED,          'Reprocessed'),
+        (EVENT_INVALID_DISCARDED,    'Invalid Punch Discarded'),
+        (EVENT_INVALID_CONVERTED,    'Invalid Punch Converted'),
+    ]
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    record       = models.ForeignKey(
+        'AttendanceRecord',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='audit_logs',
+        help_text='The attendance record this event belongs to.',
+    )
+    employee     = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='attendance_audit_logs',
+    )
+    date         = models.DateField(help_text='Calendar date of the attendance event (denormalised).')
+    event        = models.CharField(max_length=30, choices=EVENT_CHOICES)
+    old_value    = models.CharField(max_length=200, blank=True, default='')
+    new_value    = models.CharField(max_length=200, blank=True, default='')
+    action       = models.CharField(max_length=300, blank=True, default='')
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='attendance_audit_actions',
+    )
+    remarks      = models.TextField(blank=True, default='')
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_audit_logs'
+        ordering = ['created_at']
+        indexes  = [
+            models.Index(fields=['record', 'created_at'],   name='audit_rec_time_idx'),
+            models.Index(fields=['employee', 'date'],       name='audit_emp_date_idx'),
+            models.Index(fields=['event'],                  name='audit_event_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'Audit {self.event} | {self.employee_id} | {self.date}'
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Invalid Punch Tracking  (HR action state for detected invalid punches)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class InvalidPunch(models.Model):
+    """
+    Persisted tracking record for an invalid punch detected by get_invalid_punches().
+
+    Created lazily when HR takes the first action (assign/discard/convert) on a punch.
+    The `punch` FK is the primary identifier — use AttendancePunch.id in URL paths.
+    """
+
+    STATUS_OPEN      = 'open'
+    STATUS_ASSIGNED  = 'assigned'
+    STATUS_DISCARDED = 'discarded'
+    STATUS_CONVERTED = 'converted'
+    STATUS_CHOICES   = [
+        (STATUS_OPEN,      'Open'),
+        (STATUS_ASSIGNED,  'Assigned'),
+        (STATUS_DISCARDED, 'Discarded'),
+        (STATUS_CONVERTED, 'Converted'),
+    ]
+
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    punch           = models.OneToOneField(
+        AttendancePunch,
+        on_delete=models.CASCADE,
+        related_name='invalid_record',
+    )
+    issue_type      = models.CharField(max_length=20, blank=True, default='')
+    issue           = models.CharField(max_length=200, blank=True, default='')
+    status          = models.CharField(max_length=15, choices=STATUS_CHOICES, default=STATUS_OPEN)
+
+    # Assign tracking
+    assigned_to     = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='assigned_invalid_punches',
+    )
+    assigned_by     = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='assigned_invalid_punch_actions',
+    )
+    assigned_at     = models.DateTimeField(null=True, blank=True)
+
+    # Discard tracking
+    discarded_by    = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='discarded_invalid_punches',
+    )
+    discarded_at    = models.DateTimeField(null=True, blank=True)
+    remarks         = models.TextField(blank=True, default='')
+
+    # Convert tracking
+    converted_punch = models.ForeignKey(
+        AttendancePunch,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='converted_from_invalid',
+    )
+
+    resolved_at     = models.DateTimeField(null=True, blank=True)
+    created_at      = models.DateTimeField(auto_now_add=True)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_invalid_punch_actions'
+        indexes  = [
+            models.Index(fields=['punch'],  name='invp_punch_idx'),
+            models.Index(fields=['status'], name='invp_status_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'InvalidPunch {self.punch_id} [{self.status}]'

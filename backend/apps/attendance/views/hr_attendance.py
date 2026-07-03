@@ -320,6 +320,7 @@ class HRAttendanceReprocessView(APIView):
             target_date=target_date,
             branch=_branch_scope(request.user, request.data.get('branch', '')),
             department=request.data.get('department', ''),
+            performed_by=request.user,
         )
         return success(
             f'Reprocessed {result["updated"]} record(s) for {result["date"]}.',
@@ -411,6 +412,6 @@ class HRAttendanceExportView(APIView):
         date_str = ser.validated_data['date'].strftime('%Y-%m-%d')
         filename = f'attendance_{date_str}.csv'
 
-        response = HttpResponse(csv_content, content_type='text/csv')
+        response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response

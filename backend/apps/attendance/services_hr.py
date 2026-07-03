@@ -104,14 +104,22 @@ def get_dashboard_stats(target_date: datetime.date, branch: str, department: str
 
 # ── Reprocess ─────────────────────────────────────────────────────────────────
 
-def reprocess_date(target_date: datetime.date, branch: str, department: str) -> dict:
+def reprocess_date(
+    target_date: datetime.date,
+    branch: str,
+    department: str,
+    performed_by=None,
+) -> dict:
     """
-    Reprocess AttendanceRecord for every employee who has punches on `target_date`.
+    Reprocess AttendanceRecord for employees who have punches OR existing records on target_date.
 
-    Called from the HR reprocess endpoint. Safe to run multiple times.
-    Returns a summary of what was updated.
+    Covering both sets ensures records are recalculated after settings changes even
+    for employees who appear as absent (no punches but a stale record).
+    Safe to run multiple times. Returns a summary of what was updated.
     """
+    from apps.attendance.models import AttendanceAuditLog
     from apps.attendance.services_attendance import AttendanceProcessorService
+    from apps.attendance.services_audit_log import write_audit_log
 
     employee_qs = User.objects.filter(is_active=True)
     if branch:
@@ -119,20 +127,34 @@ def reprocess_date(target_date: datetime.date, branch: str, department: str) -> 
     if department:
         employee_qs = employee_qs.filter(department=department)
 
-    # Employees who have at least one punch on this date
     punched_ids = set(
         AttendancePunch.objects
         .filter(punched_at__date=target_date, employee__in=employee_qs)
         .values_list('employee_id', flat=True)
         .distinct()
     )
+    record_ids = set(
+        AttendanceRecord.objects
+        .filter(date=target_date, employee__in=employee_qs)
+        .values_list('employee_id', flat=True)
+    )
+    all_ids = punched_ids | record_ids
 
     updated = 0
     errors  = 0
 
-    for employee in employee_qs.filter(pk__in=punched_ids):
+    for employee in employee_qs.filter(pk__in=all_ids).iterator(chunk_size=200):
         try:
-            AttendanceProcessorService.process_day(employee, target_date)
+            record = AttendanceProcessorService.process_day(employee, target_date)
+            write_audit_log(
+                employee=employee,
+                date=target_date,
+                event=AttendanceAuditLog.EVENT_REPROCESSED,
+                performed_by=performed_by,
+                record=record,
+                new_value=record.status if record else '',
+                action='Attendance reprocessed by HR',
+            )
             updated += 1
         except Exception as exc:
             logger.error('Reprocess failed for %s on %s: %s', employee.pk, target_date, exc)

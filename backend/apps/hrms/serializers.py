@@ -187,6 +187,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     l1_approver_name   = serializers.SerializerMethodField()
     l2_approver_name   = serializers.SerializerMethodField()
     document_url       = serializers.SerializerMethodField()
+    can_approve        = serializers.SerializerMethodField()
+    can_cancel         = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeaveRequest
@@ -198,6 +200,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
             'contact_during_leave', 'handover_to', 'handover_notes',
             'document_url', 'created_at',
+            'can_approve', 'can_cancel',
         ]
 
     def get_employee_name(self, obj):
@@ -224,6 +227,29 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         url = obj.document.url
         return request.build_absolute_uri(url) if request else url
+
+    def get_can_approve(self, obj):
+        """True only for approvers viewing someone else's pending request."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        user = request.user
+        is_own = obj.employee_id == user.id
+        is_pending = obj.status in ('pending', 'l2_pending')
+        has_perm = (
+            user.role is not None
+            and user.role.role_permissions.filter(permission__codename='leave.approve').exists()
+        )
+        return has_perm and not is_own and is_pending
+
+    def get_can_cancel(self, obj):
+        """True only for the employee who submitted the request, while still pending."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        is_own    = obj.employee_id == request.user.id
+        is_pending = obj.status in ('pending', 'l2_pending')
+        return is_own and is_pending
 
 
 MAX_DOCUMENT_SIZE  = 5 * 1024 * 1024

@@ -33,6 +33,11 @@ from apps.attendance.views import (
     HRAttendanceReprocessView,
     HRCorrectionListView,
     HRCorrectionReviewView,
+    # Audit + Invalid Punch Actions
+    HRAttendanceAuditView,
+    HRInvalidPunchAssignView,
+    HRInvalidPunchDiscardView,
+    HRInvalidPunchConvertView,
 )
 
 urlpatterns = [
@@ -84,4 +89,12 @@ urlpatterns = [
     path('reprocess/',                    HRAttendanceReprocessView.as_view(), name='hr-attendance-reprocess'),
     path('corrections/',                  HRCorrectionListView.as_view(),      name='hr-corrections-list'),
     path('corrections/<uuid:pk>/review/', HRCorrectionReviewView.as_view(),    name='hr-correction-review'),
+
+    # ── Audit History ─────────────────────────────────────────────────────────
+    path('records/<uuid:pk>/audit/',                    HRAttendanceAuditView.as_view(),         name='hr-attendance-audit'),
+
+    # ── Invalid Punch Actions ─────────────────────────────────────────────────
+    path('invalid-punches/<uuid:pk>/assign/',  HRInvalidPunchAssignView.as_view(),  name='hr-invalid-punch-assign'),
+    path('invalid-punches/<uuid:pk>/discard/', HRInvalidPunchDiscardView.as_view(), name='hr-invalid-punch-discard'),
+    path('invalid-punches/<uuid:pk>/convert/', HRInvalidPunchConvertView.as_view(), name='hr-invalid-punch-convert'),
 ]

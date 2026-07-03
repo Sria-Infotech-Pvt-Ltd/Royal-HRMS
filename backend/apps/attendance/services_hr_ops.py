@@ -7,6 +7,7 @@ import csv
 import datetime
 import io
 import logging
+import re
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -22,6 +23,21 @@ from apps.attendance.serializers_hr import ImportRowSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+# Maps common/exported column names → what ImportRowSerializer expects.
+# Keys must already be lowercase with spaces replaced by underscores.
+_HEADER_ALIASES: dict[str, str] = {
+    'clock_in':  'punch_in',
+    'clock_out': 'punch_out',
+    'in_time':   'punch_in',
+    'out_time':  'punch_out',
+    'checkin':   'punch_in',
+    'checkout':  'punch_out',
+    'punch_in_time':  'punch_in',
+    'punch_out_time': 'punch_out',
+    'employee_code':  'employee_id',
+    'emp_id':         'employee_id',
+}
 
 _OT_MULTIPLIERS = {
     AttendanceOvertime.OT_TYPE_REGULAR:    Decimal('1.5'),
@@ -137,7 +153,7 @@ def import_attendance_csv(file, imported_by) -> dict:
     errors: list[dict] = []
 
     for i, row in enumerate(rows, 1):
-        normalized = {k.strip().lower().replace(' ', '_'): v.strip() for k, v in row.items()}
+        normalized = _normalize_row(row)
         ser = ImportRowSerializer(data=normalized)
 
         if not ser.is_valid():
@@ -176,29 +192,119 @@ def import_attendance_csv(file, imported_by) -> dict:
 
 @transaction.atomic
 def _upsert_attendance_record(data: dict, imported_by) -> None:
-    employee = User.objects.get(employee_id=data['employee_id'])
+    from apps.attendance.models import AttendanceAuditLog
+    from apps.attendance.services_audit_log import write_audit_log
+
+    employee  = User.objects.get(employee_id=data['employee_id'])
     punch_in  = data['punch_in']
     punch_out = data.get('punch_out')
 
     minutes = 0
-    if punch_out:
+    if punch_in and punch_out:
         start_dt = datetime.datetime.combine(data['date'], punch_in)
         end_dt   = datetime.datetime.combine(data['date'], punch_out)
         if end_dt > start_dt:
             minutes = int((end_dt - start_dt).total_seconds() / 60)
 
-    status = AttendanceRecord.STATUS_PRESENT if minutes >= 240 else AttendanceRecord.STATUS_ABSENT
+    rec_status = AttendanceRecord.STATUS_PRESENT if minutes >= 240 else AttendanceRecord.STATUS_ABSENT
 
-    AttendanceRecord.objects.update_or_create(
+    record, _ = AttendanceRecord.objects.update_or_create(
         employee=employee,
         date=data['date'],
         defaults={
-            'status':                status,
+            'status':                rec_status,
             'first_punch_in':        punch_in,
             'last_punch_out':        punch_out,
             'total_working_minutes': minutes,
         },
     )
+
+    in_str  = punch_in.strftime('%H:%M') if punch_in else '—'
+    out_str = punch_out.strftime('%H:%M') if punch_out else '—'
+    write_audit_log(
+        employee=employee,
+        date=data['date'],
+        event=AttendanceAuditLog.EVENT_IMPORTED,
+        performed_by=imported_by,
+        record=record,
+        new_value=f'IN {in_str} OUT {out_str}',
+        action='Attendance record imported via CSV',
+    )
+
+
+_DATE_INPUT_FORMATS = ('%d-%m-%Y', '%d/%m/%Y', '%m-%d-%Y', '%m/%d/%Y', '%Y/%m/%d')
+_TIME_FIELDS       = frozenset({'punch_in', 'punch_out'})
+
+
+def _normalize_row(row: dict) -> dict:
+    """
+    Normalize a raw csv.DictReader row for ImportRowSerializer.
+
+    Per key:
+      1. Strip UTF-8 BOM — survives utf-8-sig decode on the first header key.
+      2. Strip surrounding whitespace, lowercase, spaces→underscores.
+      3. Apply _HEADER_ALIASES (clock_in → punch_in, etc.).
+      4. Normalize date to YYYY-MM-DD (handles DD-MM-YYYY written by Excel/WPS).
+      5. Convert empty-string time values to None so TimeField(allow_null) accepts them.
+    """
+    normalized: dict = {}
+    for raw_key, raw_val in row.items():
+        key = raw_key.lstrip('﻿').strip().lower().replace(' ', '_')
+        key = _HEADER_ALIASES.get(key, key)
+        val = raw_val.strip() if isinstance(raw_val, str) else (raw_val or '')
+        normalized[key] = val
+
+    if 'date' in normalized:
+        normalized['date'] = _normalize_date(normalized['date'])
+
+    for field in _TIME_FIELDS:
+        val = normalized.get(field, '')
+        if not val:
+            normalized[field] = None
+        else:
+            normalized[field] = _normalize_time(val)
+
+    return normalized
+
+
+def _normalize_date(value: str) -> str:
+    """Convert common date formats to YYYY-MM-DD; return value unchanged if unrecognized."""
+    if not value:
+        return value
+    for fmt in _DATE_INPUT_FORMATS:
+        try:
+            return datetime.datetime.strptime(value, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return value
+
+
+_TIME_12H_RE = re.compile(r'^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)$', re.IGNORECASE)
+
+
+def _normalize_time(value: str) -> str:
+    """
+    Normalize time strings for DRF TimeField (expects HH:MM in 24-hour).
+
+    '2:00 PM'  → '14:00'
+    '10:00 AM' → '10:00'
+    '2:00'     → '02:00'  (pads single-digit hour; stays as-is without AM/PM)
+    """
+    if not value:
+        return value
+    match = _TIME_12H_RE.match(value.strip())
+    if match:
+        hour, minute, meridiem = int(match.group(1)), match.group(2), match.group(3).lower()
+        if meridiem == 'am':
+            hour = 0 if hour == 12 else hour
+        else:
+            hour = 12 if hour == 12 else hour + 12
+        return f'{hour:02d}:{minute}'
+    parts = value.strip().split(':')
+    try:
+        return f'{int(parts[0]):02d}:' + ':'.join(parts[1:])
+    except (ValueError, IndexError):
+        return value
 
 
 # ── CSV Export ────────────────────────────────────────────────────────────────
@@ -206,12 +312,14 @@ def _upsert_attendance_record(data: dict, imported_by) -> None:
 def export_attendance_csv(filters: dict) -> str:
     """
     Return CSV string for all employees matching filters on the given date.
+    BOM prefix ensures Excel/WPS opens as UTF-8 without mojibake.
     """
     from apps.attendance.services_hr import get_attendance_list
 
     rows = get_attendance_list(filters)
 
     output = io.StringIO()
+    output.write('﻿')  # UTF-8 BOM — required for Excel/WPS auto-detection
     writer = csv.DictWriter(output, fieldnames=[
         'employee_id', 'name', 'department', 'branch',
         'date', 'clock_in', 'clock_out', 'total_hours',
@@ -219,7 +327,8 @@ def export_attendance_csv(filters: dict) -> str:
     ])
     writer.writeheader()
 
-    date_str = filters.get('date', datetime.date.today()).strftime('%Y-%m-%d')
+    # DD-MM-YYYY survives Indian-locale Excel round-trip; YYYY-MM-DD gets reformatted to MM-DD-YYYY
+    date_str = filters.get('date', datetime.date.today()).strftime('%d-%m-%Y')
     for row in rows:
         writer.writerow({
             'employee_id': row['employee_id'],
@@ -227,14 +336,21 @@ def export_attendance_csv(filters: dict) -> str:
             'department':  row['department'],
             'branch':      row['branch'],
             'date':        date_str,
-            'clock_in':    row['clock_in'],
-            'clock_out':   row['clock_out'],
-            'total_hours': row['total_hours'],
-            'overtime':    row['ot'],
+            'clock_in':    _dash_to_empty(row['clock_in']),
+            'clock_out':   _dash_to_empty(row['clock_out']),
+            'total_hours': _dash_to_empty(row['total_hours']),
+            'overtime':    _dash_to_empty(row['ot']),
             'status':      row['status'],
         })
 
     return output.getvalue()
+
+
+def _dash_to_empty(value) -> str:
+    """Replace em-dash placeholder with empty string for clean CSV output."""
+    if value in ('—', '-', None):
+        return ''
+    return str(value)
 
 
 # ── Shared helper ─────────────────────────────────────────────────────────────

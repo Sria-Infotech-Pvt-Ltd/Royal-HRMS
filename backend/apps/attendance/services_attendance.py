@@ -163,7 +163,8 @@ class PunchService:
                 device_id=punch_data.get('device_id', ''),
             )
 
-        AttendanceProcessorService.process_day(employee, today)
+        record = AttendanceProcessorService.process_day(employee, today)
+        _write_punch_audit(punch, record, employee, today)
         logger.info(
             'Punch %s: employee=%s mode=%s geofence=%s distance=%sm',
             punch_type, employee.pk, mode,
@@ -458,6 +459,19 @@ class AttendanceProcessorService:
         return max(0, net_minutes - threshold)
 
 
+# Status → hex colour used by CalendarGrid and DayRecordSerializer
+_STATUS_COLOR: dict[str, str] = {
+    AttendanceRecord.STATUS_PRESENT:    '#22c55e',   # green-500
+    AttendanceRecord.STATUS_LATE:       '#f59e0b',   # amber-500
+    AttendanceRecord.STATUS_ABSENT:     '#ef4444',   # red-500
+    AttendanceRecord.STATUS_HALF_DAY:   '#f97316',   # orange-500
+    AttendanceRecord.STATUS_WEEKLY_OFF: '#94a3b8',   # slate-400
+    AttendanceRecord.STATUS_HOLIDAY:    '#a855f7',   # purple-500
+    AttendanceRecord.STATUS_ON_LEAVE:   '#3b82f6',   # blue-500
+    AttendanceRecord.STATUS_INCOMPLETE: '#f59e0b',   # amber-500 (same as late)
+}
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  AttendanceDashboardService
 # ══════════════════════════════════════════════════════════════════════════════
@@ -540,29 +554,27 @@ class AttendanceDashboardService:
     @classmethod
     def get_calendar(cls, employee, year: int, month: int) -> dict:
         """
-        Returns per-day data keyed by day number (int).
+        Returns per-day data keyed by day number (int) for every day of the month.
+        Covers weekly-off days, approved leaves, and missing-clock-out (regularization).
         Shape matches CalendarGrid's Record<number, DayRecord>.
         """
-        records = cls._month_records(employee, year, month)
+        import calendar as _cal
+        _, days_in_month = _cal.monthrange(year, month)
+        month_start   = date(year, month, 1)
+        month_end     = date(year, month, days_in_month)
+        today         = timezone.localdate()
+        records       = {r.date: r for r in cls._month_records(employee, year, month)}
+        leave_dates   = cls._leave_dates(employee, month_start, month_end)
+        off_days      = cls._weekly_off_days()
+        pending_dates = cls._pending_correction_dates(employee, year, month)
+
         days: dict[int, dict] = {}
-
-        for r in records:
-            day_num = r.date.day
-            can_regularize = r.status in (
-                AttendanceRecord.STATUS_ABSENT,
-                AttendanceRecord.STATUS_LATE,
-                AttendanceRecord.STATUS_HALF_DAY,
-            ) and not cls._has_pending_correction(employee, r.date)
-
-            days[day_num] = {
-                'status':        r.status_display,
-                'clockIn':       r.clock_in_display,
-                'clockOut':      r.clock_out_display,
-                'hours':         r.total_hours_display if r.total_working_minutes else None,
-                'note':          r.note or None,
-                'canRegularize': can_regularize,
-            }
-
+        for day_num in range(1, days_in_month + 1):
+            entry = cls._build_day(
+                day_num, year, month, records, leave_dates, off_days, pending_dates, today,
+            )
+            if entry is not None:
+                days[day_num] = entry
         return {'days': days}
 
     @classmethod
@@ -611,6 +623,130 @@ class AttendanceDashboardService:
             date=for_date,
             status=AttendanceCorrection.STATUS_PENDING,
         ).exists()
+
+    @staticmethod
+    def _pending_correction_dates(employee, year: int, month: int) -> set:
+        """Single query for all pending corrections in the month (avoids N+1)."""
+        from apps.attendance.models import AttendanceCorrection
+        return set(
+            AttendanceCorrection.objects
+            .filter(
+                employee=employee,
+                date__year=year, date__month=month,
+                status=AttendanceCorrection.STATUS_PENDING,
+            )
+            .values_list('date', flat=True)
+        )
+
+    @staticmethod
+    def _leave_dates(employee, month_start: date, month_end: date) -> set:
+        """Returns set of dates in [month_start, month_end] that have approved leave."""
+        from apps.hrms.models import LeaveRequest, STATUS_APPROVED
+        leave_dates: set = set()
+        for lr in LeaveRequest.objects.filter(
+            employee=employee,
+            status=STATUS_APPROVED,
+            start_date__lte=month_end,
+            end_date__gte=month_start,
+        ):
+            cur = max(lr.start_date, month_start)
+            end = min(lr.end_date, month_end)
+            while cur <= end:
+                leave_dates.add(cur)
+                cur += timedelta(days=1)
+        return leave_dates
+
+    @staticmethod
+    def _weekly_off_days() -> set[str]:
+        """
+        Returns lowercase day names that are weekly off per the active default policy.
+        Falls back to legacy AttendanceWeeklyOff, then Saturday + Sunday.
+        """
+        from apps.attendance.models import WeeklyDayPolicy
+        try:
+            policy = WeeklyDayPolicy.objects.filter(is_active=True, is_default=True).first()
+            if policy:
+                return set(policy.weekly_off_days)
+        except Exception:
+            pass
+        try:
+            cfg = AttendanceSettings.objects.select_related('weekly_off').first()
+            if cfg and getattr(cfg, 'weekly_off', None):
+                _days = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+                return {d for d in _days if getattr(cfg.weekly_off, d, False)}
+        except Exception:
+            pass
+        return {'saturday', 'sunday'}
+
+    @staticmethod
+    def _build_day(
+        day_num: int, year: int, month: int,
+        records: dict, leave_dates: set, off_days: set,
+        pending_dates: set, today: date,
+    ) -> dict | None:
+        """Builds the response dict for one calendar day; returns None for blank future days."""
+        cur = date(year, month, day_num)
+        day = cur.strftime('%A').lower()
+        rec = records.get(cur)
+
+        if rec and rec.status == AttendanceRecord.STATUS_HOLIDAY:
+            key = AttendanceRecord.STATUS_HOLIDAY
+        elif day in off_days or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
+            key = AttendanceRecord.STATUS_WEEKLY_OFF
+        elif cur in leave_dates or (rec and rec.status == AttendanceRecord.STATUS_ON_LEAVE):
+            key = AttendanceRecord.STATUS_ON_LEAVE
+        elif rec:
+            key = rec.status
+        elif cur > today:
+            return None
+        else:
+            key = AttendanceRecord.STATUS_ABSENT
+
+        reg_required = key == AttendanceRecord.STATUS_INCOMPLETE
+        can_reg = (
+            key in (
+                AttendanceRecord.STATUS_ABSENT, AttendanceRecord.STATUS_LATE,
+                AttendanceRecord.STATUS_HALF_DAY, AttendanceRecord.STATUS_INCOMPLETE,
+            )
+            and cur not in pending_dates
+        )
+        label = 'Missing Clock Out' if reg_required else AttendanceRecord.STATUS_DISPLAY_MAP.get(key, key)
+        return {
+            'date':                    cur.strftime('%Y-%m-%d'),
+            'status':                  label,
+            'color':                   _STATUS_COLOR.get(key, '#94a3b8'),
+            'clockIn':                 rec.clock_in_display if rec else None,
+            'clockOut':                rec.clock_out_display if rec else None,
+            'hours':                   (rec.total_hours_display
+                                        if rec and rec.total_working_minutes else None),
+            'note':                    rec.note if rec else None,
+            'canRegularize':           can_reg,
+            'regularization_required': reg_required,
+        }
+
+
+# ── Audit helper ──────────────────────────────────────────────────────────────
+
+def _write_punch_audit(punch, record, employee, for_date) -> None:
+    """Write CLOCK_IN or CLOCK_OUT audit entry after a successful punch."""
+    from apps.attendance.models import AttendanceAuditLog
+    from apps.attendance.services_audit_log import write_audit_log
+
+    event = (
+        AttendanceAuditLog.EVENT_CLOCK_IN
+        if punch.punch_type == AttendancePunch.PUNCH_IN
+        else AttendanceAuditLog.EVENT_CLOCK_OUT
+    )
+    direction = 'in' if punch.punch_type == AttendancePunch.PUNCH_IN else 'out'
+    write_audit_log(
+        employee=employee,
+        date=for_date,
+        event=event,
+        performed_by=employee,
+        record=record,
+        new_value=punch.punch_time_display,
+        action=f'Employee clocked {direction} via {punch.source}',
+    )
 
 
 # ── Utility ────────────────────────────────────────────────────────────────────

@@ -45,6 +45,27 @@ from apps.attendance.services_attendance import (
 logger = logging.getLogger(__name__)
 
 
+def _write_correction_submitted_audit(employee, data: dict) -> None:
+    """Write CORRECTION_SUBMITTED audit entry — must never raise."""
+    from apps.attendance.models import AttendanceAuditLog, AttendanceRecord
+    from apps.attendance.services_audit_log import write_audit_log
+    try:
+        record = AttendanceRecord.objects.filter(
+            employee=employee, date=data['date'],
+        ).first()
+        write_audit_log(
+            employee=employee,
+            date=data['date'],
+            event=AttendanceAuditLog.EVENT_CORRECTION_SUBMITTED,
+            performed_by=employee,
+            record=record,
+            new_value=data['punch_type'],
+            action='Employee submitted attendance correction request',
+        )
+    except Exception as exc:
+        logger.error('Correction submitted audit failed: %s', exc)
+
+
 # ── Punch (Clock In / Clock Out) ──────────────────────────────────────────────
 
 class AttendancePunchView(APIView):
@@ -245,6 +266,7 @@ class AttendanceCorrectionView(APIView):
             status=AttendanceCorrection.STATUS_PENDING,
             created_by=employee,
         )
+        _write_correction_submitted_audit(employee, data)
 
         logger.info(
             'Correction submitted: employee=%s date=%s type=%s',

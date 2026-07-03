@@ -313,12 +313,12 @@ class LeaveRequestListCreateView(APIView):
 
         qs_base = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver')
 
-        if scope == 'own' or not has_approve:
-            # Always return the requesting user's own requests only
-            queryset = qs_base.filter(employee=request.user)
-        else:
+        if scope == 'team' and has_approve:
             # Approval queue — scoped by role, own requests excluded
             queryset = qs_base.filter(_approval_scope_filter(request.user))
+        else:
+            # Default: return the requesting user's own requests only
+            queryset = qs_base.filter(employee=request.user)
 
         leave_type = request.query_params.get('leave_type')
         if leave_type:
@@ -545,7 +545,7 @@ class LeaveStatsView(APIView):
         has_approve = _has_perm(request.user, 'leave.approve')
         year        = int(request.query_params.get('year', _current_year()))
         scope       = request.query_params.get('scope', '')
-        own_scope   = scope == 'own' or not has_approve
+        own_scope = not (scope == 'team' and has_approve)
 
         if own_scope:
             qs = LeaveRequest.objects.filter(employee=request.user, start_date__year=year)
