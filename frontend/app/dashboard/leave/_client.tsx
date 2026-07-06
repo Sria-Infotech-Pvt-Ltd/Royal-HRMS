@@ -1,19 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import BranchFilterSelect from "@/components/BranchFilterSelect";
 import LeaveDashboard from "./_components/LeaveDashboard";
 import LeaveApprovals from "./_components/LeaveApprovals";
 import ApplyLeaveForm from "./_components/ApplyLeaveForm";
 import TeamCalendar   from "./_components/TeamCalendar";
 import LeaveAnalytics from "./_components/LeaveAnalytics";
-import BranchDropdown from "./_components/BranchDropdown";
+
+interface BranchOption { id: number; branch_name: string }
 
 type TabId = "dashboard" | "apply" | "approvals" | "calendar" | "analytics";
 
 interface Props { role: string }
 
 export default function LeavePageClient({ role }: Props) {
-  const isEmployee = role === "employee";
+  const isEmployee    = role === "employee";
+  const isSystemAdmin = role === "system_admin";
 
   const ALL_TABS: { id: TabId; label: string; hideForEmployee?: boolean }[] = [
     { id: "dashboard",  label: "Dashboard"      },
@@ -25,8 +30,15 @@ export default function LeavePageClient({ role }: Props) {
 
   const tabs = ALL_TABS.filter(t => !(isEmployee && t.hideForEmployee));
 
-  const [active,           setActive]           = useState<TabId>("dashboard");
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
+  const [active, setActive] = useState<TabId>("dashboard");
+  const [branch, setBranch] = useState("");
+
+  // Branch filter is system_admin only — HR/manager are already branch-scoped
+  // server-side, so they never need to pick one.
+  const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(
+    isSystemAdmin ? `${API.branches.list}?page_size=100` : null
+  );
+  const branches = Array.isArray(branchData) ? branchData : (branchData?.results ?? []);
 
   return (
     <div>
@@ -35,8 +47,8 @@ export default function LeavePageClient({ role }: Props) {
           <div className="page-title">Leave Management</div>
           <div className="page-sub">Apply, approve and track all leave requests</div>
         </div>
-        {role === "system_admin" && (
-          <BranchDropdown selected={selectedBranches} onChange={setSelectedBranches} />
+        {isSystemAdmin && (
+          <BranchFilterSelect branches={branches} value={branch} onChange={setBranch} locked={false} />
         )}
       </div>
 
@@ -56,7 +68,7 @@ export default function LeavePageClient({ role }: Props) {
         {active === "dashboard" && (
           <LeaveDashboard
             role={role}
-            selectedBranches={selectedBranches}
+            branch={branch}
             onApply={() => setActive("apply")}
           />
         )}

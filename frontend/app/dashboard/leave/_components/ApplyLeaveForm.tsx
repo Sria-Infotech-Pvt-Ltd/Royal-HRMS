@@ -4,13 +4,25 @@ import { useState, useMemo } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
+import StatusCell from "./StatusCell";
+import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 import {
   LeaveBalance, LeavePolicy, LeaveRequest, PaginatedResponse,
-  LeaveTypeKey, DurationKey,
-  LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
-  STATUS_BADGE, STATUS_LABEL,
+  LeaveTypeKey, DurationKey, ReqStatus,
+  LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG, STATUS_LABEL,
   calcWorkingDays, fmtDate, fmtShortDate,
 } from "../_data";
+
+// Labels come from the shared STATUS_LABEL map so the chips always match the
+// status badges shown in the table — a manager's own requests start at
+// l2_pending, not pending, so "All" (no status filter) is the only sane default.
+const STATUS_FILTERS: Array<{ key: "all" | ReqStatus; label: string }> = [
+  { key: "all", label: "All" },
+  // Safe cast: STATUS_LABEL is typed Record<ReqStatus, string>, so its keys are
+  // exactly the ReqStatus union — Object.keys just widens them to string[].
+  ...(Object.keys(STATUS_LABEL) as ReqStatus[]).map(key => ({ key, label: STATUS_LABEL[key] })),
+];
 
 interface LeaveForm {
   leave_type:          LeaveTypeKey;
@@ -52,20 +64,39 @@ function dayName(iso: string): string {
 }
 
 export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
-  const [form,       setForm]       = useState<LeaveForm>(BLANK);
-  const [errors,     setErrors]     = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted,  setSubmitted]  = useState<LeaveRequest | null>(null);
-  const [submitErr,  setSubmitErr]  = useState("");
-  const [docFile,    setDocFile]    = useState<File | null>(null);
+  const { showToast } = useToast();
+  const [form,          setForm]          = useState<LeaveForm>(BLANK);
+  const [errors,        setErrors]        = useState<Record<string, string>>({});
+  const [submitting,    setSubmitting]    = useState(false);
+  const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
+  const [docFile,       setDocFile]       = useState<File | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<"all" | ReqStatus>("all");
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
 
   const currentYear = new Date().getFullYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
+  // Own leave history — always the bare endpoint, no scope, no status/year filter,
+  // regardless of role (employee/manager/HR all see their own requests here).
+  // scope=team is exclusively for the Approval Queue page.
   const { data: myRequests, refetch: refetchMine } = useFetch<PaginatedResponse<LeaveRequest>>(
-    API.leave.requests + "?scope=own"
+    API.leave.requests
   );
   const myRequestList = myRequests?.results ?? [];
+  const visibleHistory = historyFilter === "all"
+    ? myRequestList
+    : myRequestList.filter(r => r.status === historyFilter);
+
+  async function handleCancelRequest(id: string) {
+    try {
+      await clientApi.patch(API.leave.requestDetail(id));
+      refetchMine();
+      showToast("Leave request cancelled.", "success");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast(msg || "Failed to cancel leave request.", "error");
+    }
+  }
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
   const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
@@ -101,7 +132,6 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   async function handleSubmit() {
     if (!validate()) return;
     setSubmitting(true);
-    setSubmitErr("");
     try {
       const fd = new FormData();
       fd.append("leave_type",          form.leave_type);
@@ -119,7 +149,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
       refetchMine();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSubmitErr(msg || "Failed to submit leave request. Please try again.");
+      showToast(msg || "Failed to submit leave request. Please try again.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -168,13 +198,6 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
         <i className="ti ti-chevron-right text-gray-300" />
         <span className="text-gray-700 font-medium">Apply for Leave</span>
       </div>
-
-      {submitErr && (
-        <div className="alert alert-error mb-4">
-          <i className="ti ti-alert-circle" />
-          <span>{submitErr}</span>
-        </div>
-      )}
 
       <div className="flex gap-5 items-start">
 
@@ -426,9 +449,20 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     {/* ── My Leave Requests history ─────────────────────────────────────── */}
     {myRequestList.length > 0 && (
       <div className="card" style={{ marginTop: 20 }}>
-        <div className="card-header">
+        <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
           <div className="card-title">
             <i className="ti ti-history" /> My Leave Requests
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {STATUS_FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => setHistoryFilter(f.key)}
+                className={["btn", "btn-sm", historyFilter === f.key ? "btn-primary" : "btn-ghost"].join(" ")}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="table-wrap">
@@ -445,16 +479,27 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {myRequestList.map(r => (
-                <tr key={r.id}>
+              {visibleHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", color: "var(--on-variant)", padding: 20 }}>
+                    No requests match this filter.
+                  </td>
+                </tr>
+              ) : visibleHistory.map(r => (
+                <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
                   <td>{r.leave_type_display}</td>
                   <td>{fmtShortDate(r.start_date)}</td>
                   <td>{fmtShortDate(r.end_date)}</td>
                   <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
-                  <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{r.l1_approver_name || "—"}</td>
+                  <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                    {r.approved_by || "—"}
+                    {r.approved_at
+                      ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
+                      : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
+                  </td>
                   <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
                   <td style={{ textAlign: "center" }}>
-                    <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+                    <StatusCell request={r} />
                   </td>
                 </tr>
               ))}
@@ -462,6 +507,15 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
           </table>
         </div>
       </div>
+    )}
+
+    {detailRequest && (
+      <LeaveRequestDetailModal
+        requestId={detailRequest.id}
+        initialData={detailRequest}
+        onClose={() => setDetailRequest(null)}
+        onCancelRequest={() => handleCancelRequest(detailRequest.id)}
+      />
     )}
     </div>
   );

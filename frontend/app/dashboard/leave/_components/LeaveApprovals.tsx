@@ -2,36 +2,35 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
-import { LeaveRequest, PaginatedResponse, STATUS_BADGE, STATUS_LABEL, fmtShortDate } from "../_data";
+import { LeaveRequest, PaginatedResponse, fmtShortDate } from "../_data";
+import StatusCell from "./StatusCell";
+import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 
 type Tab = "pending" | "history";
 
 export default function LeaveApprovals() {
-  const currentUser = useCurrentUser();
   const [tab,       setTab]       = useState<Tab>("pending");
   const [actioning, setActioning] = useState<string | null>(null);
   const [rejectId,  setRejectId]  = useState<string | null>(null);
   const [remarks,   setRemarks]   = useState("");
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
 
-  const { data: pending,  refetch: refetchPending, loading: loadingPending }  =
-    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?status=pending");
-
-  const { data: l2pending, refetch: refetchL2, loading: loadingL2 } =
-    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?status=l2_pending");
+  // One URL for every approver role — the backend returns pending for managers
+  // and l2_pending for HR automatically. No status param: never hardcode it here.
+  const { data: pending, refetch: refetchPending, loading: loadingPending } =
+    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?scope=team");
 
   const { data: history, refetch: refetchHistory, loading: loadingHistory } =
-    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?status=approved,rejected,cancelled");
+    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?scope=team&status=approved,rejected,cancelled");
 
-  const allPending = [...(pending?.results ?? []), ...(l2pending?.results ?? [])];
+  const allPending = pending?.results ?? [];
   const rows       = tab === "pending" ? allPending : (history?.results ?? []);
-  const loading    = tab === "pending" ? (loadingPending || loadingL2) : loadingHistory;
+  const loading    = tab === "pending" ? loadingPending : loadingHistory;
 
   function refetchAll() {
     refetchPending();
-    refetchL2();
     refetchHistory();
   }
 
@@ -91,12 +90,11 @@ export default function LeaveApprovals() {
                   <th style={{ textAlign: "center" }}>Days</th>
                   <th>Applied</th>
                   <th style={{ textAlign: "center" }}>Status</th>
-                  {tab === "pending" && <th style={{ textAlign: "center" }}>Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.id}>
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
                     <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
                     <td style={{ color: "var(--on-variant)", fontSize: 13 }}>{r.employee_dept || "—"}</td>
                     <td>{r.leave_type_display}</td>
@@ -105,38 +103,8 @@ export default function LeaveApprovals() {
                     <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
                     <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
                     <td style={{ textAlign: "center" }}>
-                      <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+                      <StatusCell request={r} />
                     </td>
-                    {tab === "pending" && (
-                      <td style={{ textAlign: "center" }}>
-                        {r.employee_name === currentUser?.name ? (
-                          <span style={{ fontSize: 11, color: "var(--on-variant)" }} title="You cannot approve your own leave request.">
-                            Not applicable
-                          </span>
-                        ) : (
-                          <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                            <button
-                              className="btn btn-sm btn-success"
-                              onClick={() => act(r.id, "approve")}
-                              disabled={actioning === r.id}
-                              style={{ padding: "4px 10px" }}
-                              title="Approve"
-                            >
-                              {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
-                            </button>
-                            <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => { setRejectId(r.id); setRemarks(""); }}
-                              disabled={actioning === r.id}
-                              style={{ padding: "4px 10px" }}
-                              title="Reject"
-                            >
-                              <i className="ti ti-x" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
@@ -144,6 +112,16 @@ export default function LeaveApprovals() {
           )}
         </div>
       </div>
+
+      {detailRequest && (
+        <LeaveRequestDetailModal
+          requestId={detailRequest.id}
+          initialData={detailRequest}
+          onClose={() => setDetailRequest(null)}
+          onApprove={() => act(detailRequest.id, "approve")}
+          onReject={() => { setRejectId(detailRequest.id); setRemarks(""); }}
+        />
+      )}
 
       {/* Reject modal */}
       {rejectId && (

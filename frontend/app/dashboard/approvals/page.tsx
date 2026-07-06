@@ -5,23 +5,12 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { ApprovalModal } from "./ApprovalModal";
+import StatusCell from "../leave/_components/StatusCell";
+import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModal";
+import { useToast } from "@/components/ToastProvider";
+import { LeaveRequest } from "../leave/_data";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface LeaveRequest {
-  id:             string;
-  employee_name?: string;
-  employee_email?: string;
-  employee_id?:   string;
-  leave_type:     string;
-  from_date:      string;
-  to_date:        string;
-  days:           number;
-  reason:         string;
-  status:         string;
-  applied_on:     string;
-  remarks?:       string;
-}
 
 interface ExpenseReceipt {
   id:  string;
@@ -193,14 +182,25 @@ const LEAVE_TYPES = [
   { value: "paternity", label: "Paternity Leave" },
 ];
 
+const DURATIONS = [
+  { value: "full_day",       label: "Full Day"             },
+  { value: "half_morning",   label: "Half Day · Morning"   },
+  { value: "half_afternoon", label: "Half Day · Afternoon" },
+];
+
 function NewLeaveModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) {
-  const [form, setForm] = useState({ leave_type: "", from_date: "", to_date: "", reason: "" });
+  const { showToast } = useToast();
+  const [form, setForm] = useState({ leave_type: "", duration: "full_day", start_date: "", end_date: "", reason: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
 
   async function handleSubmit() {
-    if (!form.leave_type || !form.from_date || !form.to_date) {
-      setError("Leave type, from date, and to date are required.");
+    if (!form.leave_type || !form.start_date || !form.end_date) {
+      setError("Leave type, start date, and end date are required.");
+      return;
+    }
+    if (form.reason.trim().length < 10) {
+      setError("Reason must be at least 10 characters.");
       return;
     }
     setSaving(true); setError("");
@@ -209,7 +209,7 @@ function NewLeaveModal({ onClose, onSubmitted }: { onClose: () => void; onSubmit
       onSubmitted(); onClose();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Failed to submit request.");
+      showToast(msg || "Failed to submit request.", "error");
     } finally { setSaving(false); }
   }
 
@@ -222,6 +222,7 @@ function NewLeaveModal({ onClose, onSubmitted }: { onClose: () => void; onSubmit
         </div>
         <div className="modal-body">
           {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {error}</div>}
+          {/* API errors (e.g. duplicate-date validation) now surface as a toast instead. */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div className="field-group">
               <label className="field-label">Leave Type <span style={{ color: "var(--error)" }}>*</span></label>
@@ -234,19 +235,29 @@ function NewLeaveModal({ onClose, onSubmitted }: { onClose: () => void; onSubmit
                 {LEAVE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
+            <div className="field-group">
+              <label className="field-label">Duration <span style={{ color: "var(--error)" }}>*</span></label>
+              <select
+                className="field-input"
+                value={form.duration} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
+                style={{ backgroundImage: CHEVRON, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", backgroundSize: "15px", paddingRight: "2.5rem", appearance: "none" }}
+              >
+                {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div className="field-group">
-                <label className="field-label">From Date <span style={{ color: "var(--error)" }}>*</span></label>
-                <input type="date" className="field-input" value={form.from_date} onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))} />
+                <label className="field-label">Start Date <span style={{ color: "var(--error)" }}>*</span></label>
+                <input type="date" className="field-input" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
               </div>
               <div className="field-group">
-                <label className="field-label">To Date <span style={{ color: "var(--error)" }}>*</span></label>
-                <input type="date" className="field-input" value={form.to_date} onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))} />
+                <label className="field-label">End Date <span style={{ color: "var(--error)" }}>*</span></label>
+                <input type="date" className="field-input" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
               </div>
             </div>
             <div className="field-group">
-              <label className="field-label">Reason</label>
-              <textarea className="field-input" rows={3} placeholder="Optional reason" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} style={{ resize: "vertical" }} />
+              <label className="field-label">Reason <span style={{ color: "var(--error)" }}>*</span></label>
+              <textarea className="field-input" rows={3} placeholder="Briefly describe the reason for your leave request (min. 10 characters)" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} style={{ resize: "vertical" }} />
             </div>
           </div>
         </div>
@@ -449,6 +460,7 @@ function MyRequestsSection() {
   const [type, setType]     = useState<RequestType>("leave");
   const [filter, setFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
 
   const leaveEndpoint   = filter === "all" ? API.leave.requests   : `${API.leave.requests}?status=${filter}`;
   const expenseEndpoint = filter === "all" ? API.expenses.list     : `${API.expenses.list}?status=${filter}`;
@@ -486,28 +498,35 @@ function MyRequestsSection() {
               <thead>
                 <tr style={{ borderBottom: "2px solid var(--outline-v)" }}>
                   <Th>Leave Type</Th><Th>From</Th><Th>To</Th><Th>Days</Th>
-                  <Th>Reason</Th><Th>Applied On</Th><Th>Status</Th><Th>Remarks</Th>
+                  <Th>Reason</Th><Th>Applied On</Th><Th>Status</Th>
                 </tr>
               </thead>
               <tbody>
                 {leaveItems.map((r: LeaveRequest) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid var(--outline-v)" }}>
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ borderBottom: "1px solid var(--outline-v)", cursor: "pointer" }}>
                     <td style={TD}><LeaveBadge type={r.leave_type} /></td>
-                    <td style={TD}>{formatDate(r.from_date)}</td>
-                    <td style={TD}>{formatDate(r.to_date)}</td>
-                    <td style={TD}>{r.days}d</td>
+                    <td style={TD}>{formatDate(r.start_date)}</td>
+                    <td style={TD}>{formatDate(r.end_date)}</td>
+                    <td style={TD}>{r.total_days}d</td>
                     <td style={{ ...TD, maxWidth: 180 }}>
                       <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.reason || "—"}</span>
                     </td>
-                    <td style={TD}>{formatDate(r.applied_on)}</td>
-                    <td style={TD}><StatusBadge status={r.status} /></td>
-                    <td style={{ ...TD, maxWidth: 180, color: "var(--on-variant)", fontSize: 12 }}>{r.remarks || "—"}</td>
+                    <td style={TD}>{formatDate(r.created_at)}</td>
+                    <td style={TD}><StatusCell request={r} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )
+      )}
+
+      {detailRequest && (
+        <LeaveRequestDetailModal
+          requestId={detailRequest.id}
+          initialData={detailRequest}
+          onClose={() => setDetailRequest(null)}
+        />
       )}
 
       {type === "expense" && (
@@ -551,8 +570,9 @@ function MyRequestsSection() {
 
 function TeamApprovalsSection() {
   const [type, setType] = useState<RequestType>("leave");
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
 
-  const { data: leaveRaw,      loading: leaveLoading,   error: leaveError,   refetch: refetchLeave   } = useFetch<LeaveListResponse>(  type === "leave"   ? `${API.approvals.leaveRequests}?status=pending` : null);
+  const { data: leaveRaw,      loading: leaveLoading,   error: leaveError,   refetch: refetchLeave   } = useFetch<LeaveListResponse>(  type === "leave"   ? `${API.approvals.leaveRequests}?scope=team` : null);
   const { data: expenseRaw,    loading: expenseLoading, error: expenseError, refetch: refetchExpense } = useFetch<ExpenseListResponse>( type === "expense" ? API.approvals.expenseList                        : null);
   const leaveItems:   LeaveRequest[]   = leaveRaw?.results   ?? [];
   const expenseItems: ExpenseRequest[] = expenseRaw?.results ?? [];
@@ -617,40 +637,41 @@ function TeamApprovalsSection() {
               <thead>
                 <tr style={{ borderBottom: "2px solid var(--outline-v)" }}>
                   <Th>Employee</Th><Th>Leave Type</Th><Th>From</Th><Th>To</Th>
-                  <Th>Days</Th><Th>Reason</Th><Th>Applied On</Th><Th style={{ width: 150 }}>Actions</Th>
+                  <Th>Days</Th><Th>Reason</Th><Th>Applied On</Th><Th style={{ width: 110 }}>Status</Th>
                 </tr>
               </thead>
               <tbody>
                 {leaveItems.map((r: LeaveRequest) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid var(--outline-v)" }}>
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ borderBottom: "1px solid var(--outline-v)", cursor: "pointer" }}>
                     <td style={TD}>
                       <div style={{ fontWeight: 500 }}>{r.employee_name}</div>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{r.employee_id}</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{r.employee_code}</div>
                     </td>
                     <td style={TD}><LeaveBadge type={r.leave_type} /></td>
-                    <td style={TD}>{formatDate(r.from_date)}</td>
-                    <td style={TD}>{formatDate(r.to_date)}</td>
-                    <td style={TD}>{r.days}d</td>
+                    <td style={TD}>{formatDate(r.start_date)}</td>
+                    <td style={TD}>{formatDate(r.end_date)}</td>
+                    <td style={TD}>{r.total_days}d</td>
                     <td style={{ ...TD, maxWidth: 180 }}>
                       <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.reason || "—"}</span>
                     </td>
-                    <td style={TD}>{formatDate(r.applied_on)}</td>
-                    <td style={{ ...TD, textAlign: "right" }}>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                        <button className="btn btn-primary" suppressHydrationWarning style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setModal({ id: r.id, action: "approve", label: `${r.employee_name}'s leave`, kind: "leave", employeeName: r.employee_name ?? "", employeeEmail: r.employee_email ?? "" })}>
-                          <i className="ti ti-check" /> Approve
-                        </button>
-                        <button className="btn btn-ghost" suppressHydrationWarning style={{ padding: "4px 10px", fontSize: 12, color: "var(--error)" }} onClick={() => setModal({ id: r.id, action: "reject", label: `${r.employee_name}'s leave`, kind: "leave", employeeName: r.employee_name ?? "", employeeEmail: r.employee_email ?? "" })}>
-                          <i className="ti ti-x" /> Reject
-                        </button>
-                      </div>
-                    </td>
+                    <td style={TD}>{formatDate(r.created_at)}</td>
+                    <td style={TD}><StatusCell request={r} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )
+      )}
+
+      {detailRequest && (
+        <LeaveRequestDetailModal
+          requestId={detailRequest.id}
+          initialData={detailRequest}
+          onClose={() => setDetailRequest(null)}
+          onApprove={() => setModal({ id: detailRequest.id, action: "approve", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "" })}
+          onReject={() => setModal({ id: detailRequest.id, action: "reject", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "" })}
+        />
       )}
 
       {type === "expense" && (

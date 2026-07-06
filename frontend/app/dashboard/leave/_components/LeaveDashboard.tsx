@@ -1,21 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
-  LEAVE_TYPE_CONFIG, STATUS_BADGE, STATUS_LABEL,
+  LEAVE_TYPE_CONFIG,
   fmtShortDate,
 } from "../_data";
 import RejectModal from "./RejectModal";
+import StatusCell from "./StatusCell";
+import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 
 interface Props {
-  role:             string;
-  onApply:          () => void;
-  selectedBranches: string[];
+  role:    string;
+  onApply: () => void;
+  branch:  string;
 }
 
 const BALANCE_DISPLAY = [
@@ -24,12 +25,15 @@ const BALANCE_DISPLAY = [
   { key: "sick"   as const, icon: "ti-stethoscope",  iconClass: "si-info",     barColor: "var(--info)"    },
 ];
 
-export default function LeaveDashboard({ role, onApply, selectedBranches }: Props) {
+export default function LeaveDashboard({ role, onApply, branch }: Props) {
   const isEmployee = role === "employee";
-  const currentUser = useCurrentUser();
 
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
-  const [actioning,    setActioning]    = useState<string | null>(null);
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
+  const [page, setPage] = useState(1);
+
+  // Branch filter changed — the current page no longer means the same thing.
+  useEffect(() => { setPage(1); }, [branch]);
 
   const currentYear = new Date().getFullYear();
 
@@ -37,41 +41,43 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
     API.leave.balance + `?year=${currentYear}`
   );
 
-  // Employee: all their own requests; Approver: pending approval queue (backend scopes by role, excludes own)
+  // Employee: all their own requests, no scope/status/branch/page — this list
+  // is never paginated in the UI today and is always small (one person's own
+  // requests). Approver: the queue — one URL for every approver role; backend
+  // returns pending for managers and l2_pending for HR automatically. Never
+  // hardcode a status filter here. branch/page are system_admin-only (branch
+  // is always "" for manager/hr_admin, who are already branch-scoped server-side).
   const requestsUrl = isEmployee
     ? API.leave.requests
-    : API.leave.requests + "?status=pending,l2_pending";
+    : API.leave.requests
+      + "?scope=team"
+      + (branch ? `&branch=${encodeURIComponent(branch)}` : "")
+      + `&page=${page}`;
 
   const { data: requests, refetch: refetchRequests, loading } = useFetch<PaginatedResponse<LeaveRequest>>(requestsUrl);
 
-  const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(
-    API.leave.stats + `?year=${currentYear}`
-  );
+  const statsUrl = isEmployee
+    ? API.leave.stats + `?year=${currentYear}&scope=own`
+    : API.leave.stats + `?year=${currentYear}&scope=team`;
+
+  const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(statsUrl);
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
 
   const requestList = requests?.results ?? [];
 
-  const visibleRequests = selectedBranches.length === 0
-    ? requestList
-    : requestList.filter(r => selectedBranches.includes(r.employee_branch));
-
   async function approve(id: string) {
-    setActioning(id);
     try {
       await clientApi.post(API.leave.approve(id), { action: "approve" });
       refetchRequests();
       refetchStats();
     } catch {
       // silently handled
-    } finally {
-      setActioning(null);
     }
   }
 
   async function handleReject(reason: string) {
     if (!rejectTarget) return;
-    setActioning(rejectTarget.id);
     try {
       await clientApi.post(API.leave.approve(rejectTarget.id), { action: "reject", remarks: reason });
       refetchRequests();
@@ -79,7 +85,6 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
     } catch {
       // silently handled
     } finally {
-      setActioning(null);
       setRejectTarget(null);
     }
   }
@@ -167,15 +172,20 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                 </thead>
                 <tbody>
                   {requestList.map(r => (
-                    <tr key={r.id}>
+                    <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
                       <td>{r.leave_type_display}</td>
                       <td>{fmtShortDate(r.start_date)}</td>
                       <td>{fmtShortDate(r.end_date)}</td>
                       <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
                       <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
-                      <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{r.l1_approver_name || "—"}</td>
+                      <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                        {r.approved_by || "—"}
+                        {r.approved_at
+                          ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
+                          : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
+                      </td>
                       <td style={{ textAlign: "center" }}>
-                        <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+                        <StatusCell request={r} />
                       </td>
                     </tr>
                   ))}
@@ -184,6 +194,14 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
             )}
           </div>
         </div>
+
+        {detailRequest && (
+          <LeaveRequestDetailModal
+            requestId={detailRequest.id}
+            initialData={detailRequest}
+            onClose={() => setDetailRequest(null)}
+          />
+        )}
       </div>
     );
   }
@@ -243,9 +261,9 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
           <div className="card-title">
             <i className="ti ti-list-details" />
             Pending Approvals
-            {selectedBranches.length > 0 && (
+            {requests && (
               <span style={{ fontSize: 12, fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
-                · {visibleRequests.length} shown
+                · {requests.count} total
               </span>
             )}
           </div>
@@ -270,21 +288,20 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                   <th>To</th>
                   <th style={{ textAlign: "center" }}>Days</th>
                   <th style={{ textAlign: "center" }}>Status</th>
-                  <th style={{ textAlign: "center" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleRequests.length === 0 ? (
+                {requestList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: "center", padding: "40px 20px" }}>
+                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
                       <i className="ti ti-building" style={{ fontSize: 28, display: "block", marginBottom: 8, color: "var(--outline-v)" }} />
                       <span style={{ color: "var(--on-variant)", fontSize: 13 }}>
-                        {selectedBranches.length > 0 ? "No requests for the selected branch." : "No pending leave requests."}
+                        {branch ? "No requests for the selected branch." : "No pending leave requests."}
                       </span>
                     </td>
                   </tr>
-                ) : visibleRequests.map(r => (
-                  <tr key={r.id}>
+                ) : requestList.map(r => (
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
                     <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
                     <td><span className="badge badge-neutral">{r.employee_branch || "—"}</span></td>
                     <td>{r.leave_type_display}</td>
@@ -292,42 +309,26 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                     <td>{fmtShortDate(r.end_date)}</td>
                     <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
                     <td style={{ textAlign: "center" }}>
-                      <span className={STATUS_BADGE[r.status]} style={{ textTransform: "capitalize" }}>
-                        {STATUS_LABEL[r.status]}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {r.employee_name === currentUser?.name ? (
-                        <span style={{ fontSize: 11, color: "var(--on-variant)" }} title="You cannot approve your own leave request.">
-                          Not applicable
-                        </span>
-                      ) : (
-                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                          <button
-                            className="btn btn-sm btn-success"
-                            onClick={() => approve(r.id)}
-                            disabled={actioning === r.id}
-                            title="Approve"
-                            style={{ padding: "4px 10px" }}
-                          >
-                            {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
-                          </button>
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={() => setRejectTarget({ id: r.id, employee: r.employee_name, type: r.leave_type_display })}
-                            disabled={actioning === r.id}
-                            title="Reject"
-                            style={{ padding: "4px 10px" }}
-                          >
-                            <i className="ti ti-x" />
-                          </button>
-                        </div>
-                      )}
+                      <StatusCell request={r} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+
+          {requests && requests.total_pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
+              <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {requests.page} of {requests.total_pages}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
+                  <i className="ti ti-chevron-left" /> Prev
+                </button>
+                <button className="btn btn-ghost btn-sm" disabled={page >= requests.total_pages} onClick={() => setPage(p => Math.min(p + 1, requests.total_pages))}>
+                  Next <i className="ti ti-chevron-right" />
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -338,6 +339,16 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
           leaveType={rejectTarget.type}
           onCancel={() => setRejectTarget(null)}
           onConfirm={handleReject}
+        />
+      )}
+
+      {detailRequest && (
+        <LeaveRequestDetailModal
+          requestId={detailRequest.id}
+          initialData={detailRequest}
+          onClose={() => setDetailRequest(null)}
+          onApprove={() => approve(detailRequest.id)}
+          onReject={() => setRejectTarget({ id: detailRequest.id, employee: detailRequest.employee_name, type: detailRequest.leave_type_display })}
         />
       )}
     </div>

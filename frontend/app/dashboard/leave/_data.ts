@@ -81,6 +81,10 @@ export interface LeaveRequest {
   handover_notes:     string;
   document_url:       string | null;
   created_at:         string;
+  can_approve?:       boolean;
+  can_cancel?:        boolean;
+  approved_by:        string | null;
+  approved_at:        string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -120,8 +124,8 @@ export const STATUS_BADGE: Record<ReqStatus, string> = {
 };
 
 export const STATUS_LABEL: Record<ReqStatus, string> = {
-  pending:    "Pending",
-  l2_pending: "Pending L2",
+  pending:    "Pending Manager Approval",
+  l2_pending: "Pending HR Approval",
   approved:   "Approved",
   rejected:   "Rejected",
   cancelled:  "Cancelled",
