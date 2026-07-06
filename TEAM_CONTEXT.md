@@ -434,6 +434,101 @@ backend/apps/hrms/
 
 ---
 
+## Session Log — 2026-07-06
+**Author: Teerdaveni**
+**Branch: attendance/back/03**
+
+### Features Shipped
+
+**1. Branch-wise leave visibility for HR users**
+- `_approval_scope_filter(user)` now returns branch-scoped Q filter for `hr_admin` — if HR has a branch set, only employees in that branch are visible; otherwise falls back to `employee__hr=user`
+- `_user_branch(user)` helper added — safely reads `user.branch` CharField
+- `_can_hr_access_request(hr_user, leave_request)` guard added — used in `_get_request`, `LeaveApprovalView.get()`, and `LeaveApprovalView.post()` to block cross-branch access with 403
+- File: `backend/apps/hrms/views/leave.py`
+
+**2. Two-level leave approval workflow (Manager L1 → HR L2)**
+- `_resolve_approval_chain(employee)` — checks `EmployeeApprovalOverride` first, falls back to `ApprovalWorkflowRule`; returns `(l1_approver, l2_approver)`
+- `_resolve_approver(role_str, employee)` — maps rule role string to actual User FK
+- `LeaveApprovalView.post()` — handles both `REQ_PENDING` (L1) and `REQ_L2_PENDING` (L2) states; promotes to l2_pending after L1 approval if l2_approver exists; deducts balance only on final approval
+- File: `backend/apps/hrms/views/leave.py`
+
+**3. Manager applies leave → routes directly to HR (skip L1)**
+- Managers skip L1 — their leave is created with `status=REQ_L2_PENDING`, `l1_approver=None`, `l2_approver=HR`
+- Other employees follow normal L1 → L2 path
+- File: `backend/apps/hrms/views/leave.py` (`LeaveRequestListCreateView.post()`)
+
+**4. `approved_by` / `approved_at` fields in leave response**
+- `LeaveRequestSerializer` now has `approved_by` and `approved_at` computed fields
+- `approved_by`: shows L2 approver name if L2 has acted, else L1 approver name
+- `approved_at`: shows `l2_actioned_at` if available, else `l1_actioned_at`
+- File: `backend/apps/hrms/serializers.py`
+
+**5. Duplicate leave date validation**
+- Before creating a new leave request, checks for overlapping dates in any active status (`pending`, `l2_pending`, `approved`)
+- Uses `start_date__lte=end, end_date__gte=start` overlap query
+- Rejected or cancelled leaves do not block re-application for the same dates
+- File: `backend/apps/hrms/views/leave.py` (`LeaveRequestListCreateView.post()`)
+
+**6. System admin pagination + branch-wise filtering**
+- `GET /api/leave/requests/` now paginates with `default_page_size=20` for all roles
+- `?branch=<branch_name>` query param supported for `system_admin` only — case-insensitive filter
+- Same branch filter added to `LeaveCalendarView.get()`
+- File: `backend/apps/hrms/views/leave.py`
+
+**7. Week-off validation on leave application**
+- `_get_weekly_off_days()` helper reads current DB config:
+  1. `WeeklyDayPolicy` (is_active=True, is_default=True) → `weekly_off_days` property
+  2. Falls back to legacy `AttendanceSettings → AttendanceWeeklyOff`
+  3. Defaults to `{'saturday', 'sunday'}` if no DB config
+- `LeaveRequestListCreateView.post()` iterates every date in the selected range; if any date is a configured week-off day, returns error: `"{Day} ({date}) is a configured week-off day. Leave cannot be applied on a week-off day."`
+- Config changes take effect immediately (reads DB on every request, no server restart needed)
+- File: `backend/apps/hrms/views/leave.py`
+
+### Bug Fixes Shipped
+
+**8. `_deduct_balance_safe` TypeError — Q vs F expression**
+- Root cause: `Q('used_days') + days` — Q objects are filter expressions, not field references
+- Fix: Changed to `F('used_days') + float(leave_request.total_days)`
+- Added `F` to imports (`from django.db.models import Count, F, Q`)
+- File: `backend/apps/hrms/views/leave.py`
+
+**9. Rejection remarks not saving**
+- Root cause: Backend read `request.data.get('remarks')` but Postman/frontend sent `reason`
+- Fix: `remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()` — accepts both field names
+- File: `backend/apps/hrms/views/leave.py`
+
+### API Behaviour Changes
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/leave/requests/` | No pagination | Paginated (20/page) |
+| `GET /api/leave/requests/?scope=team` | HR sees all statuses | HR sees only `l2_pending`; manager sees only `pending` |
+| `GET /api/leave/requests/?branch=X` | Not supported | system_admin only — filters by branch |
+| `POST /api/leave/requests/` | No week-off check | Blocks if any selected date falls on configured week-off day |
+| `POST /api/leave/requests/approve/` | L1 approve → straight to approved | L1 approve → l2_pending (if l2 exists); L2 approve → approved + balance deducted |
+| `POST /api/leave/requests/approve/` | Only reads `remarks` | Accepts `remarks` or `reason` (both work) |
+| `GET /api/leave/requests/<id>/` | Response has no approver info | Returns `approved_by` (name) and `approved_at` (timestamp) |
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  views/leave.py   — _user_branch, _can_hr_access_request, _approval_scope_filter (branch+status scoped),
+                     _resolve_approver, _resolve_approval_chain, _get_weekly_off_days,
+                     LeaveRequestListCreateView (duplicate check, week-off validation, manager routing, pagination, branch filter),
+                     LeaveApprovalView (two-level flow, branch guard, remarks fix),
+                     _deduct_balance_safe (F() fix)
+  serializers.py   — LeaveRequestSerializer: approved_by + approved_at fields added
+```
+
+### Pending
+
+- Leave integration — auto-mark employee as `on_leave` in attendance when leave approved
+- Frontend leave pages — prompts not yet given this session
+- Attendance reports — CSV/PDF export for HR
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

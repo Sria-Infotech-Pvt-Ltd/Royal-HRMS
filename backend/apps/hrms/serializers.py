@@ -189,6 +189,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     document_url       = serializers.SerializerMethodField()
     can_approve        = serializers.SerializerMethodField()
     can_cancel         = serializers.SerializerMethodField()
+    approved_by        = serializers.SerializerMethodField()
+    approved_at        = serializers.SerializerMethodField()
 
     class Meta:
         model  = LeaveRequest
@@ -201,6 +203,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'contact_during_leave', 'handover_to', 'handover_notes',
             'document_url', 'created_at',
             'can_approve', 'can_cancel',
+            'approved_by', 'approved_at',
         ]
 
     def get_employee_name(self, obj):
@@ -227,6 +230,20 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         url = obj.document.url
         return request.build_absolute_uri(url) if request else url
+
+    def get_approved_by(self, obj):
+        """Latest actioner: HR if they acted, else manager if they acted, else assigned manager."""
+        if obj.l2_status:
+            return obj.l2_approver.full_name if obj.l2_approver_id else ''
+        if obj.l1_status:
+            return obj.l1_approver.full_name if obj.l1_approver_id else ''
+        return obj.l1_approver.full_name if obj.l1_approver_id else ''
+
+    def get_approved_at(self, obj):
+        """Timestamp of the latest action taken."""
+        if obj.l2_actioned_at:
+            return obj.l2_actioned_at
+        return obj.l1_actioned_at
 
     def get_can_approve(self, obj):
         """True only for approvers viewing someone else's pending request."""

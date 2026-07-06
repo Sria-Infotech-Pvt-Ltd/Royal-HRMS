@@ -2,7 +2,7 @@ import logging
 from datetime import date
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -75,18 +75,35 @@ def _role_name(user) -> str:
     return user.role.name if user.role else 'employee'
 
 
+def _user_branch(user) -> str:
+    return (getattr(user, 'branch', '') or '').strip()
+
+
+def _can_hr_access_request(hr_user, leave_request) -> bool:
+    """Branch guard for hr_admin: True when no branch set (no restriction) or branches match."""
+    branch = _user_branch(hr_user)
+    if not branch:
+        return True
+    return (getattr(leave_request.employee, 'branch', '') or '').strip() == branch
+
+
 def _approval_scope_filter(user) -> 'Q':
     """
-    Scope filter for the approval queue — always excludes the approver's own requests.
-    system_admin → all; hr_admin → employees where hr=user (L2); manager → direct reports (L1); employee → own.
+    Scope filter for the approval queue — enforces both role and status visibility.
+    manager   → pending requests from direct reports only (L1 queue)
+    hr_admin  → l2_pending requests from same branch only (L2 queue)
+    system_admin → all statuses, all employees except own
     """
     role = _role_name(user)
     if role == 'system_admin':
         return ~Q(employee=user)
     if role == 'hr_admin':
-        return Q(employee__hr=user) & ~Q(employee=user)
+        branch = _user_branch(user)
+        if branch:
+            return Q(employee__branch=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
+        return Q(employee__hr=user, status=REQ_L2_PENDING) & ~Q(employee=user)
     if role == 'manager':
-        return Q(employee__reporting_manager=user) & ~Q(employee=user)
+        return Q(employee__reporting_manager=user, status=REQ_PENDING) & ~Q(employee=user)
     return Q(employee=user)
 
 
@@ -116,6 +133,26 @@ def _calc_working_days(start: date, end: date, duration: str) -> float:
             count += 1
         current += timedelta(days=1)
     return float(count)
+
+
+def _get_weekly_off_days() -> set:
+    """Return configured weekly-off day names (lowercase) from DB config."""
+    try:
+        from apps.attendance.models import WeeklyDayPolicy
+        policy = WeeklyDayPolicy.objects.filter(is_active=True, is_default=True).first()
+        if policy:
+            return set(policy.weekly_off_days)
+    except Exception:
+        pass
+    try:
+        from apps.attendance.models import AttendanceSettings
+        cfg = AttendanceSettings.objects.select_related('weekly_off').first()
+        if cfg and getattr(cfg, 'weekly_off', None):
+            _days = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+            return {d for d in _days if getattr(cfg.weekly_off, d, False)}
+    except Exception:
+        pass
+    return {'saturday', 'sunday'}
 
 
 def _deduct_balance(employee, leave_type: str, days: float, year: int) -> None:
@@ -333,6 +370,12 @@ class LeaveRequestListCreateView(APIView):
         if year:
             queryset = queryset.filter(start_date__year=year)
 
+        branch = request.query_params.get('branch')
+        if branch and _role_name(request.user) == 'system_admin':
+            queryset = queryset.filter(employee__branch__iexact=branch)
+
+        queryset = queryset.order_by('-created_at')
+
         page_obj, paginator = paginate(queryset, request, default_page_size=20)
         serializer = LeaveRequestSerializer(page_obj.object_list, many=True, context={'request': request})
         return success('Leave requests retrieved.', paginated_data(paginator, page_obj, serializer.data))
@@ -351,6 +394,31 @@ class LeaveRequestListCreateView(APIView):
 
         if total_days <= 0:
             return error('Selected date range results in zero working days.')
+
+        from datetime import timedelta
+        weekly_off = _get_weekly_off_days()
+        if weekly_off:
+            cur = start
+            while cur <= end:
+                if cur.strftime('%A').lower() in weekly_off:
+                    return error(
+                        f'{cur.strftime("%A")} ({cur}) is a configured week-off day. '
+                        'Leave cannot be applied on a week-off day.'
+                    )
+                cur += timedelta(days=1)
+
+        _ACTIVE_STATUSES = (REQ_PENDING, REQ_L2_PENDING, REQ_APPROVED)
+        overlap = LeaveRequest.objects.filter(
+            employee=request.user,
+            status__in=_ACTIVE_STATUSES,
+            start_date__lte=end,
+            end_date__gte=start,
+        ).exists()
+        if overlap:
+            return error(
+                'You already have a leave request for the selected date(s). '
+                'Please modify or cancel the existing request before applying again.'
+            )
 
         year = start.year
 
@@ -372,23 +440,33 @@ class LeaveRequestListCreateView(APIView):
 
             l1, l2 = _resolve_approval_chain(request.user)
 
+            # Managers skip L1 — their leave routes directly to HR (L2)
+            if _role_name(request.user) == 'manager':
+                initial_status = REQ_L2_PENDING
+                l1_approver    = None
+                l2_approver    = l2
+            else:
+                initial_status = REQ_PENDING
+                l1_approver    = l1
+                l2_approver    = l2
+
             leave_request = LeaveRequest.objects.create(
-            employee=request.user,
-            leave_type=leave_type,
-            duration=duration,
-            start_date=start,
-            end_date=end,
-            total_days=total_days,
-            reason=data.get('reason', ''),
-            contact_during_leave=data.get('contact_during_leave', ''),
-            handover_to=data.get('handover_to', ''),
-            handover_notes=data.get('handover_notes', ''),
-            document=data.get('document'),
-            is_lwp=(leave_type == LEAVE_LWP),
-            l1_approver=l1,
-            l2_approver=l2,
-            status=REQ_PENDING,
-        )
+                employee=request.user,
+                leave_type=leave_type,
+                duration=duration,
+                start_date=start,
+                end_date=end,
+                total_days=total_days,
+                reason=data.get('reason', ''),
+                contact_during_leave=data.get('contact_during_leave', ''),
+                handover_to=data.get('handover_to', ''),
+                handover_notes=data.get('handover_notes', ''),
+                document=data.get('document'),
+                is_lwp=(leave_type == LEAVE_LWP),
+                l1_approver=l1_approver,
+                l2_approver=l2_approver,
+                status=initial_status,
+            )
 
         logger.info('Leave request %s created by %s (%s, %s days)', leave_request.id, request.user.email, leave_type, total_days)
         out = LeaveRequestSerializer(leave_request, context={'request': request})
@@ -408,6 +486,8 @@ class LeaveRequestDetailView(APIView):
 
         has_approve = _has_perm(user, 'leave.approve')
         if not has_approve and leave_request.employee_id != user.id:
+            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        if has_approve and _role_name(user) == 'hr_admin' and not _can_hr_access_request(user, leave_request):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         return leave_request, None
@@ -469,6 +549,8 @@ class LeaveApprovalView(APIView):
             ).get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _role_name(request.user) == 'hr_admin' and not _can_hr_access_request(request.user, leave_request):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return success(
             'Leave request retrieved.',
             LeaveRequestSerializer(leave_request, context={'request': request}).data,
@@ -479,15 +561,17 @@ class LeaveApprovalView(APIView):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            leave_request = LeaveRequest.objects.select_related('employee').get(id=request_id)
+            leave_request = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver').get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if leave_request.employee_id == request.user.id:
             return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
+        if _role_name(request.user) == 'hr_admin' and not _can_hr_access_request(request.user, leave_request):
+            return error('You can only approve leave requests for employees in your branch.', http_status=status.HTTP_403_FORBIDDEN)
 
         action  = request.data.get('action')
-        remarks = request.data.get('remarks', '').strip()
+        remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()
 
         if action not in ('approve', 'reject'):
             return error('Action must be "approve" or "reject".')
@@ -533,7 +617,7 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
         employee=leave_request.employee,
         leave_type=leave_request.leave_type,
         year=year,
-    ).update(used_days=Q('used_days') + float(leave_request.total_days))
+    ).update(used_days=F('used_days') + float(leave_request.total_days))
 
 
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────
