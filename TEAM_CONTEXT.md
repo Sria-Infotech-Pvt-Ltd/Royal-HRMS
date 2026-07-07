@@ -529,6 +529,94 @@ backend/apps/hrms/
 
 ---
 
+## Session Log — 2026-07-07
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. Celery Beat `unknown command HELLO` crash loop**
+- Root cause 1: Previous session added `?protocol=2` to Redis URL — kombu rejected it with `TypeError: Connection._init_params() got an unexpected keyword argument 'protocol'`
+- Fix: Removed `protocol=2` suffix from `_celery_redis_url()` in `settings.py`
+- Root cause 2 (original HELLO error): redis-py ≥ 4.0 sends `HELLO 3` to Redis server < 6.0 which does not support it
+- Fix: Downgrade redis-py — `pip install "redis>=3.5.3,<4.0"`
+- File: `backend/config/settings.py`
+
+**2. Sandwich Leave calculation counted only working days**
+- Root cause: `_calc_working_days()` used hardcoded `weekday() < 5` (Mon–Fri) — weekends always skipped regardless of policy
+- Fix: Rewrote `_calc_working_days()` to read `_get_weekly_off_days()` from DB and accept optional `policy` param; when `sandwich_leave_enabled=True`, all calendar days in range are counted (including weekends and holidays)
+- Week-off blocking validation is now skipped when `sandwich_leave_enabled=True` or `count_weekoffs_as_leave=True`
+- File: `backend/apps/hrms/views/leave.py`
+
+### Features Shipped
+
+**3. Leave Policies Module — Full Implementation**
+
+Extended existing `LeavePolicy` model with 30 new fields across 5 rule sections. No new model or service files created — all changes in existing files only.
+
+**New fields on `LeavePolicy` model:**
+
+| Section | Fields |
+|---|---|
+| Leave Application Rules | `minimum_leave_duration`, `maximum_leave_duration`, `maximum_consecutive_days`, `minimum_notice_period`, `allow_half_day`, `allow_backdated_leave`, `maximum_backdated_days`, `allow_future_leave`, `maximum_future_days` |
+| Holiday & Week-off Rules | `sandwich_leave_enabled`, `count_holidays_as_leave`, `count_weekoffs_as_leave` |
+| Eligibility Rules | `applicable_branches`, `applicable_departments`, `applicable_designations`, `applicable_employment_types`, `applicable_gender`, `minimum_service_period` |
+| Documentation Rules | `attachment_required`, `medical_certificate_required`, `medical_certificate_after_days` |
+| Leave Restrictions | `allow_negative_balance`, `convert_to_lop`, `allow_leave_cancellation`, `cancellation_allowed_until` |
+| Additional Rules | `allow_probation_leave`, `allow_notice_period_leave`, `allow_leave_extension`, `allow_leave_combination` |
+
+**New APIs:**
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | `/api/leave/policy/` | Returns all 30 new fields per policy |
+| PUT/PATCH | `/api/leave/policy/<leave_type>/` | Updates all fields with cross-field validation |
+| POST | `/api/leave/policy/` | Creates custom leave type with all fields |
+| DELETE | `/api/leave/policy/<leave_type>/` | Custom types only — built-in 6 are protected |
+
+**Leave application validation wired to policy:**
+- `_validate_leave_policy()` helper (47 lines) validates every leave request against the saved policy
+- Validates: half-day eligibility, min/max duration, max consecutive days, notice period, backdated/future date rules, attachment requirement, eligibility (branch/dept/gender/service period)
+- `convert_to_lop=True`: auto-converts leave type to LWP when balance is insufficient instead of rejecting
+- `allow_negative_balance=True`: allows overdraft without error
+- Custom leave types now accepted in `LeaveRequestCreateSerializer.validate_leave_type()` (checks `LeavePolicy` for non-built-in types)
+
+**Migration:** `hrms/0009_leavepolicy_application_rules` — applied ✅
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  models.py                   — 30 new fields on LeavePolicy; GENDER_CHOICES constant added
+  serializers.py              — LeavePolicySerializer, LeavePolicyCreateSerializer,
+                                LeavePolicyUpdateSerializer extended with all 30 fields;
+                                _POLICY_RULE_FIELDS shared list; cross-field validation added;
+                                LeaveRequestCreateSerializer.validate_leave_type accepts custom types
+  views/leave.py              — _calc_working_days() updated (policy param, sandwich/weekoff aware);
+                                _validate_leave_policy() helper added;
+                                LeavePolicyView.delete() added;
+                                LeavePolicyView.post() uses **data spread for new fields;
+                                LeaveRequestListCreateView.post() wired to policy validation,
+                                LOP conversion, allow_negative_balance
+  migrations/
+    0009_leavepolicy_application_rules.py  — 30 AddField operations (applied)
+backend/config/
+  settings.py                 — _celery_redis_url() protocol=2 suffix removed
+```
+
+### Frontend Prompts Given
+
+- **Leave Policy APIs**: Full request/response format for all 5 endpoints with field reference table, conditional UI rules (show/hide dependent fields), and leave application error messages
+- **Sandwich Leave preview fix**: `calcWorkingDays()` must count all calendar days (not skip weekends) when `sandwich_leave_enabled=True`; read flag from `GET /api/leave/policy/` response for the selected leave type
+
+### Pending
+
+- Frontend implementation of Leave Policies settings page (UI from screenshots provided)
+- Frontend day counter fix — "2 working days" preview should show "4 days" when sandwich leave is on
+- Leave integration — auto-mark employee `on_leave` in attendance when leave is approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

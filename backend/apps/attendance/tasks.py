@@ -32,3 +32,22 @@ def check_missing_clockouts(self):
     except Exception as exc:
         logger.error('check_missing_clockouts failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def check_absence_alerts(self):
+    """
+    Daily task: fire absence notifications for employees absent N+ consecutive
+    working days without approved leave.
+
+    Threshold and recipients come from AttendanceSettings → AbsenceAlert config.
+    Safe to re-run — de-duplicated per employee per calendar day.
+    """
+    try:
+        from apps.attendance.services_absence import detect_absence_alerts
+        result = detect_absence_alerts()
+        logger.info('check_absence_alerts: %s', result)
+        return result
+    except Exception as exc:
+        logger.error('check_absence_alerts failed: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)

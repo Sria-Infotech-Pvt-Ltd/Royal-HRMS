@@ -1,6 +1,7 @@
 import environ
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     'apps.hrms',
     'apps.attendance',
     'apps.assessments',
+    'apps.notifications',
 ]
 
 MIDDLEWARE = [
@@ -156,6 +158,11 @@ CELERY_BEAT_SCHEDULE = {
     'check-missing-clockouts': {
         'task':     'apps.attendance.tasks.check_missing_clockouts',
         'schedule': 300.0,  # seconds
+    },
+    # Runs once daily at 09:00 IST — fires absence alerts for employees absent N+ consecutive days.
+    'check-absence-alerts': {
+        'task':     'apps.attendance.tasks.check_absence_alerts',
+        'schedule': crontab(hour=9, minute=0),
     },
 }
 

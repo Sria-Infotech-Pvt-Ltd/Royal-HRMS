@@ -122,14 +122,18 @@ def _calendar_scope_filter(user) -> 'Q':
     return Q()  # employee: see all approved leaves to plan around absences
 
 
-def _calc_working_days(start: date, end: date, duration: str) -> float:
+def _calc_working_days(start: date, end: date, duration: str, policy=None) -> float:
     if duration != 'full_day':
         return 0.5
+    off_days    = _get_weekly_off_days()
+    count_offs  = getattr(policy, 'count_weekoffs_as_leave', False)
+    sandwich    = getattr(policy, 'sandwich_leave_enabled', False)
     count = 0
     current = start
     from datetime import timedelta
     while current <= end:
-        if current.weekday() < 5:
+        is_off = current.strftime('%A').lower() in off_days
+        if sandwich or count_offs or not is_off:
             count += 1
         current += timedelta(days=1)
     return float(count)
@@ -153,6 +157,51 @@ def _get_weekly_off_days() -> set:
     except Exception:
         pass
     return {'saturday', 'sunday'}
+
+
+def _validate_leave_policy(policy, employee, duration, total_days, start, end, document, today) -> str | None:
+    """Validate a leave request against policy rules. Returns error string or None."""
+    if duration != 'full_day' and not policy.allow_half_day:
+        return 'Half-day leave is not allowed for this leave type.'
+    if policy.minimum_leave_duration and total_days < float(policy.minimum_leave_duration):
+        return f'Minimum {policy.minimum_leave_duration} day(s) required for this leave type.'
+    if policy.maximum_leave_duration and total_days > policy.maximum_leave_duration:
+        return f'Maximum {policy.maximum_leave_duration} day(s) allowed for this leave type.'
+    if policy.maximum_consecutive_days and total_days > policy.maximum_consecutive_days:
+        return f'Maximum {policy.maximum_consecutive_days} consecutive day(s) allowed for this leave type.'
+    if policy.minimum_notice_period and (start - today).days < policy.minimum_notice_period:
+        return f'This leave type requires {policy.minimum_notice_period} day(s) advance notice.'
+    if start < today:
+        if not policy.allow_backdated_leave:
+            return 'Backdated leave applications are not allowed for this leave type.'
+        if policy.maximum_backdated_days and (today - start).days > policy.maximum_backdated_days:
+            return f'Backdated leave is limited to {policy.maximum_backdated_days} day(s) in the past.'
+    if start > today:
+        if not policy.allow_future_leave:
+            return 'Future-dated leave applications are not allowed for this leave type.'
+        if policy.maximum_future_days and (start - today).days > policy.maximum_future_days:
+            return f'Leave can only be applied {policy.maximum_future_days} day(s) in advance.'
+    if policy.attachment_required and not document:
+        return 'An attachment is required for this leave type.'
+    if policy.applicable_branches:
+        emp_branch = (getattr(employee, 'branch', '') or '').strip()
+        if emp_branch and emp_branch not in policy.applicable_branches:
+            return 'You are not eligible for this leave type (branch restriction).'
+    if policy.applicable_departments:
+        emp_dept = (getattr(employee, 'department', '') or '').strip()
+        if emp_dept and emp_dept not in policy.applicable_departments:
+            return 'You are not eligible for this leave type (department restriction).'
+    if policy.applicable_gender != 'all':
+        emp_gender = (getattr(employee, 'gender', '') or '').lower().strip()
+        if emp_gender and emp_gender != policy.applicable_gender:
+            return 'You are not eligible for this leave type (gender restriction).'
+    if policy.minimum_service_period:
+        joining = getattr(employee, 'date_of_joining', None) or getattr(employee, 'joining_date', None)
+        if joining:
+            months = (today.year - joining.year) * 12 + (today.month - joining.month)
+            if months < policy.minimum_service_period:
+                return f'This leave type requires {policy.minimum_service_period} month(s) of service.'
+    return None
 
 
 def _deduct_balance(employee, leave_type: str, days: float, year: int) -> None:
@@ -210,20 +259,27 @@ class LeavePolicyView(APIView):
         serializer = LeavePolicyCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
-        data = serializer.validated_data
-        label = data['leave_type_label']
+        data  = serializer.validated_data
+        label = data.pop('leave_type_label')
         leave_type_key = label.lower().replace(' ', '_').replace('-', '_')
         policy = LeavePolicy.objects.create(
-            leave_type=leave_type_key,
-            leave_type_label=label,
-            annual_days=data['annual_days'],
-            can_carry_forward=data['can_carry_forward'],
-            max_carry_forward_days=data['max_carry_forward_days'],
-            policy_note=data.get('policy_note', ''),
-            is_active=data['is_active'],
+            leave_type=leave_type_key, leave_type_label=label, **data
         )
         logger.info('Created leave type "%s" by %s', leave_type_key, request.user.email)
         return success('Leave type created.', LeavePolicySerializer(policy).data, http_status=status.HTTP_201_CREATED)
+
+    def delete(self, request, leave_type: str):
+        if not (_has_perm(request.user, 'settings.edit') or _has_perm(request.user, 'leave.approve')):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        _BUILTIN = {'casual', 'earned', 'sick', 'lwp', 'maternity', 'paternity'}
+        if leave_type in _BUILTIN:
+            return error('Built-in leave types cannot be deleted.', http_status=status.HTTP_400_BAD_REQUEST)
+        policy = LeavePolicy.objects.filter(leave_type=leave_type).first()
+        if not policy:
+            return error('Leave type not found.', http_status=status.HTTP_404_NOT_FOUND)
+        policy.delete()
+        logger.info('Deleted leave type "%s" by %s', leave_type, request.user.email)
+        return success('Leave type deleted.')
 
 
 # ─── Leave Balance ─────────────────────────────────────────────────────────────
@@ -390,14 +446,18 @@ class LeaveRequestListCreateView(APIView):
         end        = data['end_date']
         duration   = data.get('duration', 'full_day')
         leave_type = data['leave_type']
-        total_days = _calc_working_days(start, end, duration)
+
+        policy     = LeavePolicy.objects.filter(leave_type=leave_type, is_active=True).first()
+        total_days = _calc_working_days(start, end, duration, policy)
 
         if total_days <= 0:
             return error('Selected date range results in zero working days.')
 
         from datetime import timedelta
         weekly_off = _get_weekly_off_days()
-        if weekly_off:
+        count_offs = getattr(policy, 'count_weekoffs_as_leave', False)
+        sandwich   = getattr(policy, 'sandwich_leave_enabled', False)
+        if weekly_off and not count_offs and not sandwich:
             cur = start
             while cur <= end:
                 if cur.strftime('%A').lower() in weekly_off:
@@ -406,6 +466,15 @@ class LeaveRequestListCreateView(APIView):
                         'Leave cannot be applied on a week-off day.'
                     )
                 cur += timedelta(days=1)
+
+        if policy:
+            today   = timezone.localdate()
+            err_msg = _validate_leave_policy(
+                policy, request.user, duration, total_days,
+                start, end, data.get('document'), today,
+            )
+            if err_msg:
+                return error(err_msg)
 
         _ACTIVE_STATUSES = (REQ_PENDING, REQ_L2_PENDING, REQ_APPROVED)
         overlap = LeaveRequest.objects.filter(
@@ -436,7 +505,12 @@ class LeaveRequestListCreateView(APIView):
                     return error(f'No leave balance found for {leave_type} in {year}. Contact HR.')
                 available = float(balance.total_days - balance.used_days)
                 if total_days > available:
-                    return error(f'Insufficient balance. You have {available} day(s) available.')
+                    if policy and policy.convert_to_lop:
+                        leave_type = LEAVE_LWP
+                    elif policy and policy.allow_negative_balance:
+                        pass  # allow overdraft
+                    else:
+                        return error(f'Insufficient balance. You have {available} day(s) available.')
 
             l1, l2 = _resolve_approval_chain(request.user)
 
