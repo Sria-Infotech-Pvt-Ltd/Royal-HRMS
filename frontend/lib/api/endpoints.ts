@@ -66,6 +66,22 @@ export const API = {
     assessmentConfig: "/assessments/settings/",
   },
 
+  hrms: {
+    birthdays: "/hrms/birthdays/",
+  },
+
+  referrals: {
+    list:   "/recruitment/referrals/",
+    all:    "/recruitment/referrals/all/",
+    create: "/recruitment/referrals/",
+  },
+
+  referralRules: {
+    list:   "/recruitment/referral-rules/",
+    create: "/recruitment/referral-rules/",
+    detail: (id: number) => `/recruitment/referral-rules/${id}/`,
+  },
+
   recruitment: {
     candidates:      "/recruitment/candidates/",
     stats:           "/recruitment/candidates/stats/",
@@ -75,6 +91,7 @@ export const API = {
     candidateStatus: (id: number) => `/recruitment/candidates/${id}/status/`,
     hrDecision:      (id: number) => `/recruitment/candidates/${id}/hr-decision/`,
     sendPortalLogin: (id: number) => `/recruitment/candidates/${id}/send-portal-login/`,
+    sendEmail:       (id: number | string) => `/recruitment/candidates/${id}/send-email/`,
     emailLogs:       "/recruitment/emails/",
   },
 

@@ -102,11 +102,12 @@ export interface RecruitmentStats {
 }
 
 export interface PaginatedCandidates {
-  count:       number;
-  page:        number;
-  page_size:   number;
-  total_pages: number;
-  results:     Candidate[];
+  count:          number;
+  page:           number;
+  page_size:      number;
+  total_pages:    number;
+  status_choices: { value: CandidateStatus; label: string }[];
+  results:        Candidate[];
 }
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export interface PaginatedCandidates {
 export const RECRUITMENT_API = {
   stats:       () =>
     clientApi.get<{ data: RecruitmentStats }>(API.recruitment.stats),
-  list:        (params?: { status?: string; search?: string; branch?: number }) =>
+  list:        (params?: { status?: string; search?: string; branch?: number; page?: number }) =>
     clientApi.get<{ data: PaginatedCandidates }>(API.recruitment.candidates, { params }),
   create:      (body: Partial<Candidate>) =>
     clientApi.post<{ data: Candidate }>(API.recruitment.candidates, body),
@@ -122,7 +123,7 @@ export const RECRUITMENT_API = {
     clientApi.get<{ data: Candidate }>(API.recruitment.detail(id)),
   getStatuses: () =>
     clientApi.get<{ data: { value: CandidateStatus; label: string }[] }>(API.recruitment.status),
-  setStatus:   (id: number, body: { status: CandidateStatus; remarks?: string; template_name?: string }) =>
+  setStatus:   (id: number, body: { status: CandidateStatus; remarks?: string; template_name?: string; extra_context?: Record<string, string> }) =>
     clientApi.patch<{ data: Candidate }>(API.recruitment.candidateStatus(id), body),
   hrDecision:  (id: number, body: {
     decision:       "approve" | "reject";
@@ -139,6 +140,10 @@ export const RECRUITMENT_API = {
     clientApi.get<{ data: CandidateEmail[] }>(API.recruitment.emailLogs, { params }),
   sendPortalLogin: (id: number) =>
     clientApi.post<{ message: string }>(API.recruitment.sendPortalLogin(id)),
+  sendEmail: (id: number, body: { template_name: string; extra_context?: Record<string, string> }) =>
+    clientApi.post<{ success: boolean; message: string; data: null }>(API.recruitment.sendEmail(id), body),
+  update: (id: number, body: Partial<Pick<Candidate, "branch" | "interview_date" | "interview_mode" | "position_applied" | "notes">> & { extra_context?: Record<string, string> }) =>
+    clientApi.patch<{ data: Candidate }>(API.recruitment.detail(id), body),
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

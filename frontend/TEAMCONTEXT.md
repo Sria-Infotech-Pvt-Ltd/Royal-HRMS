@@ -432,6 +432,7 @@ Type error: 'requests' is possibly 'null'.
 `requests` comes from `useFetch<LeaveRequest[]>(...)`, typed `LeaveRequest[] | null`. Every other read of `requests` in this file already guards with `requests ?? []` — this one ternary didn't. Minimal fix, matching the existing pattern in the same file:
 
 ```tsx
+
 const visibleRequests = selectedBranches.length === 0
   ? (requests ?? [])
   : (requests ?? []).filter(r => selectedBranches.includes(r.employee_branch));
@@ -1064,3 +1065,406 @@ When `lopDays > 0`, the summary bar turns amber ("Xd will be LOP") and a breakdo
 - **Assign multi-send is sequential, not parallel** — `for...of` loop with `await` per request. If the backend adds a bulk-assign endpoint (`POST /assessments/assign/bulk/`), replace the loop with a single request.
 - **"Select All" operates on filtered set** — if the user has searched for "Roh" and clicks Select All, only the visible filtered employees are selected, not all 500. This is intentional.
 - **`tsc --noEmit` was clean at end of session** — only errors were stale IDE diagnostics.
+
+---
+
+## Session — Safura Samreen (06 July 2026)
+
+**Branch:** `Frontend/Assessment-Update`
+
+---
+
+### 1. Email Branding Card — `app/dashboard/settings/email-templates/page.tsx`
+
+Added a live Email Header & Footer branding card at the top of the email templates page.
+
+- Fetches company info from `GET /api/settings/company/` on page load
+- **Header preview** — shows company logo (or company name fallback) with blue bottom border, mirroring the actual email header
+- **Footer preview** — shows `website | address, city, state` text, mirroring the actual email footer
+- **Edit form** (toggled by Edit button): logo upload + 6 text fields (company name, website, phone, address, city, state) in a 2-column grid
+- `saveBranding()` sends `PATCH /api/settings/company/` as `FormData` (needed for logo file upload); updates `company` state on success
+- Logo preview uses `URL.createObjectURL()` for instant local preview before saving
+
+#### New interface and state
+```typescript
+interface BrandingForm {
+  company_name: string; website: string; address: string;
+  city: string; state: string; official_phone: string;
+}
+// States: brandingOpen, brandingForm, brandingSaving, logoFile, logoPreview, logoInputRef
+```
+
+#### TypeScript fix for TYPE_META access
+`TYPE_META[type as TemplateType]` caused a type error when `type` came from the API as a plain string. Fixed with:
+```typescript
+const meta = (TYPE_META as Record<string, { label: string; color: string; icon: string }>)[type]
+  ?? { ...FALLBACK_META, label: cat?.name ?? type };
+```
+
+---
+
+### 2. Email Variable Substitution — `MarkCandidateModal.tsx`
+
+The email preview in the Select/Reject modal was already substituting variables locally via `renderTemplateVars`. Wired up `extra_context` so the backend also receives all candidate variable values when sending the actual email.
+
+#### `candidateVars()` — comprehensive context builder
+```typescript
+function candidateVars(): Record<string, string> {
+  // Returns both snake_case and uppercase keys to cover all template styles:
+  candidate_name, full_name, first_name, last_name,
+  email, position_applied, position,
+  branch, branch_name, interview_date,
+  interview_mode, interview_mode_display,
+  company_name,
+  FULL_NAME, FNAME, LNAME, EMAIL, POSITION, COMPANY
+}
+```
+
+`interview_mode_display` maps `in_person` → `"In-Person"` etc. via `MODE_LABELS`.
+
+#### handleConfirm passes extra_context
+```typescript
+RECRUITMENT_API.setStatus(candidate.id, {
+  status: targetStatus, remarks,
+  template_name: selectedTemplate?.name,
+  extra_context: candidateVars(),   // ← added
+});
+```
+
+#### Fixed hasManualVars check
+Was using `.toUpperCase()` to check against `AUTO_KEYS` which contains lowercase keys — every variable incorrectly appeared "unfilled". Fixed to `.toLowerCase()`:
+```typescript
+// Before (broken):
+.some(v => !AUTO_KEYS.has(v.toUpperCase()))
+// After:
+.some(v => !AUTO_KEYS.has(v.toLowerCase()))
+```
+
+---
+
+### 3. Interview Details Save — `EditCandidateModal.tsx`
+
+`handleSave()` now builds and passes `extra_context` when saving interview details, so the backend has all values available for the interview scheduled email:
+
+```typescript
+const extra_context: Record<string, string> = {
+  candidate_name, full_name, first_name, last_name,
+  email, position_applied,
+  branch, branch_name,         // from branches.find(b => b.id === branch)
+  interview_date,              // sliced to YYYY-MM-DD
+  interview_mode,
+  interview_mode_display,      // human-readable via MODE_LABELS
+};
+```
+
+---
+
+### 4. API Type Updates — `_data.ts`
+
+`setStatus` and `update` now include `extra_context` in their payload types:
+
+```typescript
+setStatus: (id, body: {
+  status: CandidateStatus; remarks?: string;
+  template_name?: string;
+  extra_context?: Record<string, string>;   // ← added
+}) => ...
+
+update: (id, body: Partial<Pick<Candidate, ...>> & {
+  extra_context?: Record<string, string>;   // ← added
+}) => ...
+```
+
+---
+
+### 5. `lib/emailPreview.ts` — documented for reference
+
+Two exports used by both the email templates settings page and `MarkCandidateModal`:
+
+- `renderTemplateVars(text, vars)` — replaces `{key}` tokens with values; leaves unknown `{key}` visible
+- `buildEmailPreview(body, company)` — wraps a rendered body with the company-branded HTML email wrapper (header with logo + footer with website/address), matching the backend's `_company_email_wrapper` helper
+
+---
+
+### Backend issue identified (fix required on backend)
+
+The frontend sends `extra_context` correctly for all email flows. However `CandidateStatusView.patch` in `backend/apps/recruitment/views.py` line 391 calls `_send_candidate_email` without passing `extra_context` — the function already accepts and merges it, the view just never reads it from `request.data`.
+
+**Backend fix needed** (one line change at `views.py:391`):
+```python
+# Current:
+email_status = _send_candidate_email(candidate, template_slug, request.user)
+
+# Fix:
+raw_extra     = request.data.get('extra_context') or {}
+extra_context = {k: str(v)[:2000] for k, v in raw_extra.items() if isinstance(k, str) and k.isidentifier()} if isinstance(raw_extra, dict) else {}
+email_status  = _send_candidate_email(candidate, template_slug, request.user, extra_context)
+```
+
+`CandidateHRDecisionView.patch` already does this correctly — only the status-change view is missing it.
+
+---
+
+### 6. Referral Page — `app/dashboard/referrals/page.tsx` (NEW)
+
+Full employee referral portal built from scratch.
+
+#### Structure
+Three tabs inside a single card:
+- **My Referrals** — visible to all employees; shows referrals submitted by the logged-in user
+- **All Referrals** — visible only when `recruitment.view` permission is present (HR/Admin); shows every referral across all employees
+- **Referral Rules** — visible to all; fetches and displays active rules configured in Settings → Referral Rules
+
+#### Stats row
+Four cards computed from `myReferrals`:
+- Total Referred · In Pipeline (excludes `rejected`/`converted`) · Selected (includes `offer_sent`) · Converted
+
+#### Refer Someone modal
+Inline form fields: Full Name, Email, Phone, Position Applied For, Branch (read-only, auto-filled from cookie), Relationship (dropdown), Notes (textarea).
+- `handleSubmit` POSTs to `API.referrals.create`; on success calls `myRefetch()` and shows a 4-second success banner
+- `relationship` and `notes` are merged: `"Relationship: {value}\n{notes}"` sent as the `notes` field
+- Branch field is a display-only chip (not an editable select) — the employee can only refer to their own branch
+
+#### Permission check (client-side only)
+```typescript
+const pair = document.cookie.split(";").find(c => c.trim().startsWith("royal_hrms_user="));
+const user = JSON.parse(decodeURIComponent(raw));
+setIsAdmin(user.permissions?.includes("recruitment.view") ?? false);
+```
+This controls the "All Referrals" tab visibility. **Backend enforces it independently** — `API.referrals.all` returns 403 for non-admin users regardless.
+
+#### ReferralTable component
+Reusable table shared by "My Referrals" and "All Referrals" tabs. Client-side search via `search` state — filters `name`, `position_applied`, `referral_by_name`. Referred-by name shown in purple with `ti-user-plus` icon.
+
+#### Bonus breakdown table (inside Rules tab)
+Static `BONUS_STAGES` constant — three stages (Referral Accepted / Candidate Selected / 90-Day Milestone) with hardcoded amounts. **Update this constant** when the actual bonus policy is confirmed.
+
+#### Data fetching
+Uses `useFetch` hook (not manual useEffect):
+```typescript
+useFetch(API.referrals.list)           // my referrals
+useFetch(isAdmin ? API.referrals.all : null)  // null skips the call
+useFetch(API.referralRules.list)       // rules for the Rules tab
+useFetch(`${API.branches.list}?status=active&page_size=100`)  // for branch display name
+```
+
+---
+
+### 7. Referral Rules Settings — `app/dashboard/settings/referral-rules/page.tsx` (NEW)
+
+Admin CRUD page for managing referral rules shown on the Referral page.
+
+#### RuleForm component
+Inline shared form (used for both Add and Edit). Fields: icon picker (14 Tabler icon options with live preview), title, order (number), description (textarea), is_active (checkbox).
+
+#### List behaviour
+Rules sorted by `order` ascending. Each row shows the icon, order badge, title, description, Hidden badge if `is_active: false`, Edit and Delete buttons.
+
+Delete uses a two-step confirmation — first click shows inline Confirm/Cancel buttons; second click calls `DELETE API.referralRules.detail(id)`.
+
+Only one rule can be in edit mode at a time (`editing` state is `number | "new" | null`). All Edit/Delete/Add buttons are disabled while any form is open (`isBusy = editing !== null`).
+
+#### API calls
+```typescript
+POST   API.referralRules.create            // add new
+PATCH  API.referralRules.detail(id)        // update
+DELETE API.referralRules.detail(id)        // delete
+```
+
+---
+
+### Key Files Changed (06 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/settings/email-templates/page.tsx` | Full rewrite — added email branding card (live preview + inline edit form with logo upload), `BrandingForm` interface, `saveBranding()`/`cancelBranding()`/`handleLogoChange()`, `TYPE_META` cast fix |
+| `lib/emailPreview.ts` | Existing file — `renderTemplateVars` and `buildEmailPreview` used by both the templates page and the interview list modals |
+| `app/dashboard/interview-list/MarkCandidateModal.tsx` | Added `candidateVars()` with full snake_case + uppercase keys; `handleConfirm` passes `extra_context`; fixed `hasManualVars` check to use `.toLowerCase()`; `AUTO_KEYS` updated |
+| `app/dashboard/interview-list/EditCandidateModal.tsx` | `handleSave` builds and passes `extra_context` with all interview detail fields |
+| `app/dashboard/interview-list/_data.ts` | `setStatus` and `update` types extended with `extra_context?: Record<string, string>` |
+| `app/dashboard/referrals/page.tsx` | **NEW** — full employee referral portal; three-tab layout (My Referrals / All Referrals / Referral Rules); Refer Someone modal; `useFetch`-based data loading |
+| `app/dashboard/settings/referral-rules/page.tsx` | **NEW** — admin CRUD page for referral rules; inline add/edit form; two-step delete confirmation; icon picker with live preview |
+| `lib/api/endpoints.ts` | Added `referrals` and `referralRules` endpoint groups |
+
+---
+
+### Notes for Next Developer
+
+- **`extra_context` is sent but not yet used by the backend status-change email** — see §5 above for the one-line backend fix. Once applied, all template variables (`{position_applied}`, `{branch_name}`, `{interview_date}`, `{interview_mode_display}`) will resolve in sent emails. The preview already substitutes them correctly client-side.
+- **Email template variable format is single-brace `{key}`** — matches the backend's `EmailTemplate.render()` method. Do not use `{{ key }}` (Django template style) or `%(key)s` in template bodies.
+- **`candidateVars()` maps both cases** — `position_applied` AND `position` are both sent so templates using either key work. `interview_mode_display` is the human-readable label ("In-Person") while `interview_mode` is the raw value ("in_person").
+- **Branding card PATCH uses FormData** — even when only updating text fields (no logo). This is required because the logo field is an `ImageField`; JSON cannot carry file uploads. The `clientApi` interceptor automatically removes `Content-Type` for FormData so the browser sets the correct multipart boundary.
+- **`buildEmailPreview` mirrors the backend wrapper** — if the backend's `_company_email_wrapper` HTML structure changes, update `lib/emailPreview.ts` to match so the preview stays accurate.
+
+---
+
+## Session — Safura Samreen (07 July 2026)
+
+**Branch:** `Frontend/Referral-Mails`
+
+---
+
+### 1. Birthday & Wishes System
+
+#### `components/dashboard/BirthdayWidget.tsx` (NEW)
+
+Dashboard widget shown on HR, Admin, and Manager dashboards. Fetches `GET /hrms/birthdays/` on mount and renders two sections — **Today's Birthdays** (red highlight, 🎂 avatar, shows age turning) and **Upcoming Birthdays** (within the next 30 days).
+
+- Each row has a "Send Wish" button that opens `SendWishModal` with `preferredKey: "birthday"`
+- After sending, button label changes to "Resend" (not locked — wishes can be sent multiple times)
+- `sentIds: Set<string>` tracks which employees have been wished this session
+
+Added to three dashboard pages:
+- `app/dashboard/_components/HRDashboard.tsx` — replaced static birthday/anniversary sections
+- `app/dashboard/_components/AdminDashboard.tsx` — added at top of right column
+- `app/dashboard/_components/ManagerDashboard.tsx` — added at top of right column
+
+#### `components/dashboard/SendWishModal.tsx` (NEW)
+
+Shared wish email modal — same pattern as `MarkCandidateModal`. Used from both `BirthdayWidget` and `WishesTab`.
+
+- Fetches all templates from `GET /settings/email-templates/` grouped by category with `<optgroup>`
+- Pre-selects by `preferredKey` (e.g. `"birthday"` matches any template whose `name` contains `"birthday"`)
+- `employeeVars()` builds a full context map covering all common aliases: `employee_name`, `full_name`, `first_name`, `last_name`, `fname`, `lname`, `email`, `department`, `designation`, `company_name`, `company` (and uppercase variants)
+- POST body: `{ template_name, extra_context: normalizeExtraContext(employeeVars()) }`
+- Uses `API.recruitment.sendEmail(employeeId)` — same endpoint as candidate emails
+
+#### `app/dashboard/employees/[id]/_components/WishesTab.tsx` (REWRITTEN)
+
+Replaced the old flat list with occasion-based cards: **Birthday**, **Work Anniversary**, **Other**. Each card shows a TODAY / IN X DAYS badge, the date, days away, years completed, and a Send Wish / Resend button that opens `SendWishModal`.
+
+Props: `{ employeeId, employeeName, employeeEmail, dateOfBirth, dateOfJoining }`
+
+Cards only show the occasion button when the date is set; Other Occasion always shows it.
+
+---
+
+### 2. Employee Profile — Date of Birth Save Fix
+
+`app/dashboard/employees/[id]/page.tsx` — `onSave()` previously only sent employment fields in the PUT request. All profile fields are now merged into a single `PUT /employees/{id}/`:
+
+```typescript
+const employeePayload = {
+  // employment fields ...
+  date_of_birth: values.dateOfBirth || null,
+  gender, marital_status, father_name, blood_group,
+  current_address, permanent_address,
+  highest_qualification, institution, year_of_passing, specialization,
+  total_experience_years, previous_employer, previous_designation, leaving_reason,
+  account_holder_name, account_type, account_number, ifsc_code, bank_name, bank_branch_name,
+  emergency_name, emergency_relationship, emergency_phone, emergency_email,
+};
+await clientApi.put(API.employees.detail(id), employeePayload);
+```
+
+There is no `/employees/{id}/profile/` endpoint — everything goes to the detail endpoint.
+
+---
+
+### 3. Email Variable Substitution — Universal Fix
+
+#### `lib/emailPreview.ts` — two new features
+
+**`normalizeExtraContext(vars)`** — expands every key to three variants before sending to the backend:
+```typescript
+out[key]               = value;  // original
+out[key.toLowerCase()] = value;  // lowercase
+out[key.toUpperCase()] = value;  // uppercase
+```
+So a template using `{FNAME}`, `{fname}`, or `{Fname}` all resolve correctly regardless of how the template author wrote the tag.
+
+**`renderTemplateVars` — case-insensitive** — builds a lowercase lookup map and uses a regex replace so `{FNAME}`, `{fname}`, `{Full_Name}` all match the same key in the preview:
+```typescript
+const lookup: Record<string, string> = {};
+for (const [key, value] of Object.entries(vars)) {
+  lookup[key.toLowerCase()] = value;
+}
+return text.replace(/\{([^}]+)\}/g, (_match, tag) => {
+  const normalized = tag.toLowerCase();
+  return normalized in lookup ? lookup[normalized] : `{${tag}}`;
+});
+```
+
+**Gmail anti-clipping** — added invisible `&zwnj;` padding after the footer so Gmail does not collapse it behind the "Show trimmed content" (`...`) button:
+```html
+<div style="display:none;max-height:0;overflow:hidden;...">
+  &zwnj;&nbsp;&zwnj;&nbsp;... (20 pairs)
+</div>
+```
+
+#### Applied to all three email send points
+
+| File | Change |
+|------|--------|
+| `components/dashboard/SendWishModal.tsx` | `extra_context: normalizeExtraContext(employeeVars())` |
+| `app/dashboard/interview-list/MarkCandidateModal.tsx` | `extra_context: normalizeExtraContext(candidateVars())` |
+| `app/dashboard/interview-list/EditCandidateModal.tsx` | `normalizeExtraContext({...})` assigned to `extraContext` const then passed |
+
+---
+
+### 4. API Endpoint Cleanup — `lib/api/endpoints.ts`
+
+- Removed `employees.sendWish` — was a duplicate of `recruitment.sendEmail` pointing to the same URL
+- Widened `recruitment.sendEmail` type: `(id: number | string)` — needed because employee IDs are strings (e.g. `"RSS00023"`) while candidate IDs are numbers
+- Added `hrms: { birthdays: "/hrms/birthdays/" }`
+
+---
+
+### 5. Employees Page — Search & Pagination
+
+`app/dashboard/employees/page.tsx` — previously fetched page 1 only (20 employees) with client-side filtering.
+
+#### Server-side search
+`fetchEmployees(q = "", p = 1)` now passes `?search=q&page=p`. Debounced 350ms via `searchRef`. Search input moved from the filter bar below stats to the **page header** alongside "Add Employee" — immediately visible without scrolling.
+
+#### Pagination
+```typescript
+const [page,       setPage]       = useState(1);
+const [totalPages, setTotalPages] = useState(1);
+const [totalCount, setTotalCount] = useState(0);
+```
+Populated from `data.data.total_pages`, `data.data.count`, `data.data.page`.
+
+Pagination bar renders below the table when `totalPages > 1`: "Showing 1–20 of 27 employees" + numbered page buttons + Prev/Next.
+
+**Total Employees stat card** now uses `totalCount` from the backend (not `employees.length` which was capped at 20). Active / Onboarding / Departments are still computed from the current page — accurate only when there is one page or when filtering reduces to a single page.
+
+#### Branch / Dept / Status filters
+Remain client-side — they filter the results returned for the current page + search combination.
+
+---
+
+### 6. Interview List — Search Moved to Header
+
+`app/dashboard/interview-list/page.tsx` — search input moved from the card header (below stats + alerts + info banner) to the **page header** `page-actions` toolbar alongside the branch filter. Status filter remains in the card header. Server-side search behaviour (350ms debounce, `?search=` param) unchanged.
+
+---
+
+### Key Files Changed (07 July 2026)
+
+| File | Change |
+|------|--------|
+| `components/dashboard/BirthdayWidget.tsx` | **NEW** — birthday/anniversary dashboard widget; fetches `/hrms/birthdays/`; Send Wish → SendWishModal |
+| `components/dashboard/SendWishModal.tsx` | **NEW** — shared wish email modal; all-template picker with optgroup; `normalizeExtraContext(employeeVars())` |
+| `app/dashboard/employees/[id]/_components/WishesTab.tsx` | **REWRITTEN** — occasion cards (Birthday / Work Anniversary / Other); TODAY/IN X DAYS badges; opens SendWishModal |
+| `app/dashboard/employees/[id]/page.tsx` | All profile fields merged into single `PUT /employees/{id}/`; `dateOfBirth` and `dateOfJoining` passed to WishesTab |
+| `app/dashboard/_components/HRDashboard.tsx` | Replaced static birthday section with `<BirthdayWidget />` |
+| `app/dashboard/_components/AdminDashboard.tsx` | Added `<BirthdayWidget />` |
+| `app/dashboard/_components/ManagerDashboard.tsx` | Added `<BirthdayWidget />` |
+| `lib/emailPreview.ts` | Added `normalizeExtraContext()`; made `renderTemplateVars` case-insensitive; added Gmail anti-clipping `&zwnj;` padding |
+| `lib/api/endpoints.ts` | Removed `employees.sendWish`; widened `recruitment.sendEmail` to `number | string`; added `hrms.birthdays` |
+| `app/dashboard/interview-list/MarkCandidateModal.tsx` | Wraps `candidateVars()` in `normalizeExtraContext()` |
+| `app/dashboard/interview-list/EditCandidateModal.tsx` | Wraps interview context object in `normalizeExtraContext()` |
+| `app/dashboard/employees/page.tsx` | Server-side search + pagination; search in page header; `totalCount` from backend |
+| `app/dashboard/interview-list/page.tsx` | Search moved from card header to page header |
+
+---
+
+### Notes for Next Developer
+
+- **`normalizeExtraContext` must wrap ALL `extra_context` objects before POST** — it is the single point that ensures `{FNAME}`, `{fname}`, and `{Fname}` all resolve. If a new email send point is added anywhere, import and wrap it the same way.
+- **`renderTemplateVars` is now case-insensitive** — preview and backend will match any case. Do not add uppercase duplicates to `employeeVars()` or `candidateVars()`; the normaliser handles it.
+- **`BirthdayWidget` fetches on mount, no refetch** — birthday data does not change during a session. No polling needed.
+- **`SendWishModal` uses `recruitment.sendEmail(employeeId)`** — the endpoint is `/recruitment/candidates/{id}/send-email/`. It works for employee IDs (strings) because `sendEmail` was widened to `number | string`. The backend must accept an employee UUID/code at that route; verify this if wish emails start failing.
+- **Employee total stat is accurate; Active/Onboarding/Departments are per-page only** — to fix, ask the backend to add a `GET /employees/stats/` endpoint returning `{ total, active, onboarding, departments }`, then call it in parallel with `fetchEmployees` (same pattern as `RECRUITMENT_API.stats()` in the interview list).
+- **`BONUS_STAGES` in `referrals/page.tsx` is hardcoded** — update when actual bonus policy is confirmed.

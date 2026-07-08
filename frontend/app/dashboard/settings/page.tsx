@@ -13,6 +13,7 @@ const SETTINGS_ITEMS = [
   { id: "payroll-config",     cat: "modules", icon: "ti-report-money",    iconClass: "sc-modules", label: "Payroll Rules",         desc: "Salary components, tax slabs and statutory" },
   { id: "attendance-config",  cat: "modules", icon: "ti-clock",           iconClass: "sc-modules", label: "Attendance Rules",      desc: "Shift timings, late marks and overtime" },
   { id: "assessment-config",  cat: "modules", icon: "ti-clipboard-check", iconClass: "sc-modules", label: "Assessment Config",     desc: "Pass percentage, attempt limits and time settings" },
+  { id: "referral-rules",     cat: "modules", icon: "ti-user-plus",       iconClass: "sc-modules", label: "Referral Rules",        desc: "Manage the rules and bonus details shown on the Referral page" },
   { id: "recruitment-config", cat: "modules", icon: "ti-users",           iconClass: "sc-modules", label: "Recruitment Config",    desc: "Interview stages, evaluation criteria" },
   { id: "email-templates",    cat: "comm",    icon: "ti-mail",            iconClass: "sc-comm",    label: "Email Templates",       desc: "Customize all transactional emails" },
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
@@ -45,11 +46,12 @@ const ITEM_ROUTES: Record<string, string> = {
   "attendance-config":    "/dashboard/settings/attendance-config",
   "payroll-config":       "/dashboard/settings/payroll-config",
   "assessment-config":    "/dashboard/settings/assessment-config",
+  "referral-rules":       "/dashboard/settings/referral-rules",
   "recruitment-config":   "/dashboard/settings/recruitment-config",
   "notifications":        "/dashboard/settings/notifications",
 };
 
-const COMING_SOON_ITEMS = new Set(["recruitment-config", "notifications"]);
+const COMING_SOON_ITEMS = new Set(["recruitment-config", "notifications", "payroll-config"]);
 
 export default function SettingsPage() {
   const router = useRouter();

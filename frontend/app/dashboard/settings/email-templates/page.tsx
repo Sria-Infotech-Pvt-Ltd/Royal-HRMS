@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -9,12 +9,23 @@ import EditTemplateModal from "./_components/EditTemplateModal";
 import {
   EMAIL_TEMPLATES_BASE, EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplatePreview,
   flattenTemplates, TYPE_META, catValue,
-  type ApiEmailTemplate, type ApiEmailTemplatesResponse, type ApiTemplateCategory, type TemplateForm, type TemplateType,
+  type ApiEmailTemplate, type ApiEmailTemplatesResponse, type ApiTemplateCategory, type TemplateForm,
 } from "./_data";
 
-const TYPE_ORDER: TemplateType[] = ["document", "notification", "reminder", "wish"];
-
 const FALLBACK_META = { label: "Other", color: "var(--on-variant)", icon: "ti-tag" };
+
+interface BrandingForm {
+  company_name:   string;
+  website:        string;
+  address:        string;
+  city:           string;
+  state:          string;
+  official_phone: string;
+}
+
+const EMPTY_BRANDING: BrandingForm = {
+  company_name: "", website: "", address: "", city: "", state: "", official_phone: "",
+};
 
 export default function EmailTemplatesPage() {
   const router = useRouter();
@@ -31,6 +42,14 @@ export default function EmailTemplatesPage() {
 
   const [company, setCompany] = useState<CompanyInfo | null>(null);
 
+  // ── Branding state ──────────────────────────────────────────────────────────
+  const [brandingOpen,   setBrandingOpen]   = useState(false);
+  const [brandingForm,   setBrandingForm]   = useState<BrandingForm>(EMPTY_BRANDING);
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [logoFile,       setLogoFile]       = useState<File | null>(null);
+  const [logoPreview,    setLogoPreview]    = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [toast,  setToast]  = useState<{ msg: string; ok: boolean } | null>(null);
@@ -40,20 +59,28 @@ export default function EmailTemplatesPage() {
   async function loadCompany() {
     try {
       const res = await clientApi.get<{ data: CompanyInfo }>(API.settings.company);
-      setCompany(res.data?.data ?? null);
-    } catch { /* preview falls back to no-branding */ }
+      const data = res.data?.data ?? null;
+      setCompany(data);
+      if (data) {
+        setBrandingForm({
+          company_name:   data.company_name   ?? "",
+          website:        data.website        ?? "",
+          address:        data.address        ?? "",
+          city:           data.city           ?? "",
+          state:          data.state          ?? "",
+          official_phone: data.official_phone ?? "",
+        });
+      }
+    } catch { /* preview falls back gracefully */ }
   }
 
   async function loadCategories() {
     try {
       const res  = await clientApi.get(EMAIL_TEMPLATE_CATEGORIES);
       const data = res.data?.data ?? res.data;
-      // Handle both flat array and paginated { results: [] } responses
       const cats = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
       setCategories(cats);
-    } catch {
-      // silently fall back — templates still render grouped by their own template_type
-    }
+    } catch { /* silently fall back */ }
   }
 
   function showToast(msg: string, ok = true) {
@@ -76,7 +103,75 @@ export default function EmailTemplatesPage() {
     }
   }
 
-  // ── Create ─────────────────────────────────────────────────────────────────
+  // ── Branding save ───────────────────────────────────────────────────────────
+
+  async function saveBranding() {
+    setBrandingSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append("company_name",   brandingForm.company_name);
+      fd.append("website",        brandingForm.website);
+      fd.append("address",        brandingForm.address);
+      fd.append("city",           brandingForm.city);
+      fd.append("state",          brandingForm.state);
+      fd.append("official_phone", brandingForm.official_phone);
+      if (logoFile) fd.append("logo", logoFile, logoFile.name);
+
+      const res = await clientApi.patch<{ data: CompanyInfo }>(API.settings.company, fd);
+      const updated = res.data?.data;
+      if (updated) {
+        setCompany(updated);
+        setBrandingForm({
+          company_name:   updated.company_name   ?? "",
+          website:        updated.website        ?? "",
+          address:        updated.address        ?? "",
+          city:           updated.city           ?? "",
+          state:          updated.state          ?? "",
+          official_phone: updated.official_phone ?? "",
+        });
+      }
+      setLogoFile(null);
+      setLogoPreview(null);
+      setBrandingOpen(false);
+      showToast("Email branding updated");
+    } catch (err: unknown) {
+      showToast((err as { message?: string }).message ?? "Failed to save branding", false);
+    } finally {
+      setBrandingSaving(false);
+    }
+  }
+
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoFile(file);
+    const url = URL.createObjectURL(file);
+    setLogoPreview(url);
+  }
+
+  function cancelBranding() {
+    setBrandingOpen(false);
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (company) {
+      setBrandingForm({
+        company_name:   company.company_name   ?? "",
+        website:        company.website        ?? "",
+        address:        company.address        ?? "",
+        city:           company.city           ?? "",
+        state:          company.state          ?? "",
+        official_phone: company.official_phone ?? "",
+      });
+    }
+  }
+
+  // Derived footer text (mirrors emailPreview.ts)
+  const footerAddr   = [company?.address, company?.city, company?.state].filter(Boolean).join(", ");
+  const footerParts  = [company?.website, footerAddr].filter(Boolean);
+  const footerText   = footerParts.join("  |  ") || company?.company_name || "—";
+  const currentLogo  = logoPreview ?? company?.logo_url ?? company?.logo ?? "";
+
+  // ── Template CRUD ───────────────────────────────────────────────────────────
 
   async function handleCreate(form: TemplateForm) {
     setSaving(true);
@@ -101,8 +196,6 @@ export default function EmailTemplatesPage() {
     }
   }
 
-  // ── Update ─────────────────────────────────────────────────────────────────
-
   async function handleUpdate(form: TemplateForm) {
     if (!editing || editing === "add") return;
     const target = editing as ApiEmailTemplate;
@@ -124,8 +217,6 @@ export default function EmailTemplatesPage() {
     }
   }
 
-  // ── Toggle active ──────────────────────────────────────────────────────────
-
   async function handleToggleActive(template: ApiEmailTemplate) {
     const next = !template.is_active;
     setTemplates(prev => prev.map(t => t.id === template.id ? { ...t, is_active: next } : t));
@@ -137,8 +228,6 @@ export default function EmailTemplatesPage() {
       showToast((err as { message?: string }).message ?? "Failed to update template", false);
     }
   }
-
-  // ── Preview ────────────────────────────────────────────────────────────────
 
   async function openPreview(template: ApiEmailTemplate) {
     setViewing(template);
@@ -164,18 +253,14 @@ export default function EmailTemplatesPage() {
     (t.description ?? "").toLowerCase().includes(q)
   );
 
-  // Group templates by their own template_type — this always works regardless of categories
   const typeGroups = filtered.reduce<Record<string, ApiEmailTemplate[]>>((acc, t) => {
     (acc[t.template_type] ??= []).push(t);
     return acc;
   }, {});
 
-  // Map category code → fetched category (for header enrichment)
-  const catByCode = Object.fromEntries(categories.map(c => [catValue(c), c]));
-
-  // Order: categories from API first (in their order), then any template_types not covered
-  const catCodes    = categories.map(c => catValue(c));
-  const extraTypes  = Object.keys(typeGroups).filter(t => !catCodes.includes(t));
+  const catByCode    = Object.fromEntries(categories.map(c => [catValue(c), c]));
+  const catCodes     = categories.map(c => catValue(c));
+  const extraTypes   = Object.keys(typeGroups).filter(t => !catCodes.includes(t));
   const orderedTypes = [...catCodes.filter(code => typeGroups[code]), ...extraTypes];
 
   const isAddMode    = editing === "add";
@@ -205,6 +290,98 @@ export default function EmailTemplatesPage() {
             <i className="ti ti-plus" /> Add Template
           </button>
         </div>
+      </div>
+
+      {/* ── Email Branding Card ── */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", marginBottom: 24, overflow: "hidden" }}>
+        {/* Card header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--outline-v)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <i className="ti ti-palette" style={{ fontSize: 16, color: "var(--primary)" }} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Email Header &amp; Footer</span>
+            <span style={{ fontSize: 11, color: "var(--on-variant)", marginLeft: 4 }}>Applied to every outgoing email</span>
+          </div>
+          {!brandingOpen && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setBrandingOpen(true)} suppressHydrationWarning>
+              <i className="ti ti-pencil" style={{ fontSize: 13 }} /> Edit
+            </button>
+          )}
+        </div>
+
+        {/* Preview row — always visible */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+          {/* Header preview */}
+          <div style={{ padding: "20px 24px", borderRight: "1px solid var(--outline-v)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Header</div>
+            <div style={{ background: "#fff", borderRadius: 6, padding: "16px 20px", textAlign: "center", borderBottom: "3px solid #4f46e5", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              {currentLogo ? (
+                <img src={currentLogo} alt={company?.company_name ?? "Logo"} style={{ maxHeight: 60, maxWidth: 200, objectFit: "contain" }} />
+              ) : (
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#1a1a2e" }}>{company?.company_name ?? "[Company Name]"}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Footer preview */}
+          <div style={{ padding: "20px 24px" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Footer</div>
+            <div style={{ background: "#f8f8fb", borderRadius: 6, padding: "14px 20px", textAlign: "center", border: "1px solid #eee", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+              <span style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>{footerText}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Inline edit form */}
+        {brandingOpen && (
+          <div style={{ padding: "20px 24px", borderTop: "1px solid var(--outline-v)", background: "var(--bg)" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "var(--on-bg)" }}>Edit Email Branding</div>
+
+            {/* Logo upload */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 6 }}>Logo</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {currentLogo && (
+                  <img src={currentLogo} alt="Logo" style={{ height: 44, maxWidth: 140, objectFit: "contain", borderRadius: 4, border: "1px solid var(--outline-v)", background: "#fff", padding: 4 }} />
+                )}
+                <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoChange} />
+                <button className="btn btn-ghost btn-sm" onClick={() => logoInputRef.current?.click()} suppressHydrationWarning>
+                  <i className="ti ti-upload" style={{ fontSize: 13 }} /> {currentLogo ? "Change Logo" : "Upload Logo"}
+                </button>
+                {logoFile && <span style={{ fontSize: 12, color: "var(--on-variant)" }}>{logoFile.name}</span>}
+              </div>
+            </div>
+
+            {/* Text fields grid */}
+            <div className="et-branding-grid">
+              {([
+                ["company_name",   "Company Name",   "text"],
+                ["website",        "Website URL",    "url"],
+                ["official_phone", "Phone",          "tel"],
+                ["address",        "Address",        "text"],
+                ["city",           "City",           "text"],
+                ["state",          "State",          "text"],
+              ] as [keyof BrandingForm, string, string][]).map(([field, label, type]) => (
+                <div key={field}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{label}</label>
+                  <input
+                    type={type}
+                    className="field-input"
+                    value={brandingForm[field]}
+                    onChange={e => setBrandingForm(prev => ({ ...prev, [field]: e.target.value }))}
+                    suppressHydrationWarning
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost btn-sm" onClick={cancelBranding} disabled={brandingSaving} suppressHydrationWarning>Cancel</button>
+              <button className="btn btn-filled btn-sm" onClick={saveBranding} disabled={brandingSaving} suppressHydrationWarning>
+                {brandingSaving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : "Save Branding"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Search */}
@@ -249,10 +426,9 @@ export default function EmailTemplatesPage() {
             const group = typeGroups[type];
             if (!group?.length) return null;
             const cat  = catByCode[type];
-            const meta = TYPE_META[type as TemplateType] ?? { ...FALLBACK_META, label: cat?.name ?? type };
+            const meta = (TYPE_META as Record<string, { label: string; color: string; icon: string }>)[type] ?? { ...FALLBACK_META, label: cat?.name ?? type };
             return (
               <div key={type}>
-                {/* Section header */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 12, background: meta.color, borderRadius: "var(--radius)" }}>
                   <i className={`ti ${meta.icon}`} style={{ fontSize: 16, color: "#fff" }} />
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{meta.label} Templates</span>
@@ -261,7 +437,6 @@ export default function EmailTemplatesPage() {
                   </span>
                 </div>
 
-                {/* Cards grid */}
                 <div className="et-cards-grid" style={{ display: "grid", gap: 10 }}>
                   {group.map(template => (
                     <div key={template.id} className="et-card" style={{
@@ -292,7 +467,6 @@ export default function EmailTemplatesPage() {
                         <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => setEditing(template)} style={{ padding: "4px 7px" }} suppressHydrationWarning>
                           <i className="ti ti-pencil" style={{ fontSize: 14 }} />
                         </button>
-                        {/* Active toggle */}
                         <button
                           title={template.is_active ? "Deactivate" : "Activate"}
                           onClick={() => handleToggleActive(template)}
@@ -371,23 +545,26 @@ export default function EmailTemplatesPage() {
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
 
-        /* Cards grid: 1 col → 2 col → 3 col */
         .et-cards-grid { grid-template-columns: 1fr; }
         @media (min-width: 560px)  { .et-cards-grid { grid-template-columns: 1fr 1fr; } }
         @media (min-width: 1100px) { .et-cards-grid { grid-template-columns: 1fr 1fr 1fr; } }
 
-        /* Search: full-width mobile, capped on larger screens */
         .et-search-wrap { max-width: 100%; }
         @media (min-width: 560px) { .et-search-wrap { max-width: 360px; } }
 
-        /* Card: tighter padding + stack body/actions on very small screens */
-        @media (max-width: 400px) {
+        .et-branding-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px 16px;
+        }
+        @media (max-width: 560px) { .et-branding-grid { grid-template-columns: 1fr; } }
+
+        @media (max-width: 500px) {
           .et-card { padding: 10px 12px !important; gap: 8px !important; flex-wrap: wrap; }
           .et-card-body { min-width: 0; width: 100%; }
           .et-card-actions { margin-top: 0 !important; margin-left: auto; }
         }
 
-        /* Toast: full-width on mobile */
         @media (max-width: 480px) {
           .et-toast { left: 8px !important; right: 8px !important; top: 8px !important; width: auto !important; }
         }

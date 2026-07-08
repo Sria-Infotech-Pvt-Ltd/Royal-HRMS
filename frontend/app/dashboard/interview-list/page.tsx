@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 import {
   Branch,
   Candidate,
@@ -13,9 +14,10 @@ import {
   initials,
   MODE_LABELS,
 } from "./_data";
-import { AddCandidateModal }  from "./AddCandidateModal";
-import { MarkCandidateModal } from "./MarkCandidateModal";
-import { LogsModal }          from "./LogsModal";
+import { AddCandidateModal }    from "./AddCandidateModal";
+import { MarkCandidateModal }   from "./MarkCandidateModal";
+import { LogsModal }            from "./LogsModal";
+import { EditCandidateModal }   from "./EditCandidateModal";
 
 // ─── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -105,6 +107,7 @@ function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InterviewListPage() {
+  const { showToast } = useToast();
   const [candidates,    setCandidates]    = useState<Candidate[]>([]);
   const [stats,         setStats]         = useState<RecruitmentStats | null>(null);
   const [loading,       setLoading]       = useState(true);
@@ -116,6 +119,9 @@ export default function InterviewListPage() {
   const [branches,      setBranches]      = useState<Branch[]>([]);
 
   const [statusChoices, setStatusChoices] = useState<{ value: CandidateStatus; label: string }[]>([]);
+  const [page,          setPage]          = useState(1);
+  const [totalPages,    setTotalPages]    = useState(1);
+  const [totalCount,    setTotalCount]    = useState(0);
 
   const [showAdd,       setShowAdd]       = useState(false);
   const [markData,      setMarkData]      = useState<{ candidate: Candidate; targetStatus: "selected" | "rejected" } | null>(null);
@@ -123,10 +129,11 @@ export default function InterviewListPage() {
   const [sendingPortal, setSendingPortal] = useState<number | null>(null);
   const [portalMsg,     setPortalMsg]     = useState<string | null>(null);
   const [portalErr,     setPortalErr]     = useState<string | null>(null);
+  const [editTarget,    setEditTarget]    = useState<Candidate | null>(null);
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch active branches and status choices once on mount
+  // Fetch active branches once on mount
   useEffect(() => {
     clientApi
       .get<{ data: { results: Branch[] } }>(API.branches.list, {
@@ -134,27 +141,29 @@ export default function InterviewListPage() {
       })
       .then(r => setBranches(r.data?.data?.results ?? []))
       .catch(() => {});
-
-    RECRUITMENT_API.getStatuses()
-      .then(r => setStatusChoices(r.data?.data ?? []))
-      .catch(() => {});
   }, []);
 
   const fetchAll = useCallback(async (
     q?: string,
     s?: string,
     b?: number | "",
+    p?: number,
   ) => {
     setLoading(true);
     setError("");
     try {
       const cRes = await RECRUITMENT_API.list({
-        search: q   || undefined,
-        status: s   || undefined,
-        branch: b   || undefined,
+        search: q || undefined,
+        status: s || undefined,
+        branch: b || undefined,
+        page:   p ?? 1,
       });
       const raw = cRes.data?.data;
       setCandidates(Array.isArray(raw?.results) ? raw.results : []);
+      setTotalPages(raw?.total_pages ?? 1);
+      setTotalCount(raw?.count ?? 0);
+      setPage(raw?.page ?? 1);
+      if (raw?.status_choices?.length) setStatusChoices(raw.status_choices);
     } catch {
       setError("Failed to load candidates.");
       setCandidates([]);
@@ -174,29 +183,32 @@ export default function InterviewListPage() {
   function handleSearch(val: string) {
     setSearch(val);
     if (searchRef.current) clearTimeout(searchRef.current);
-    searchRef.current = setTimeout(() => fetchAll(val, statusFilter, branchFilter), 350);
+    searchRef.current = setTimeout(() => fetchAll(val, statusFilter, branchFilter, 1), 350);
   }
 
   function handleStatusFilter(val: "" | CandidateStatus) {
     setStatusFilter(val);
-    fetchAll(search, val, branchFilter);
+    fetchAll(search, val, branchFilter, 1);
   }
 
   function handleBranchFilter(val: number | "") {
     setBranchFilter(val);
-    fetchAll(search, statusFilter, val);
+    fetchAll(search, statusFilter, val, 1);
   }
 
-  function onCandidateAdded(c: Candidate) {
-    setCandidates(prev => [c, ...prev]);
-    setStats(prev => prev ? { ...prev, total: prev.total + 1, pending: prev.pending + 1 } : prev);
+  function handlePageChange(newPage: number) {
+    fetchAll(search, statusFilter, branchFilter, newPage);
+  }
+
+  function onCandidateAdded(_c: Candidate) {
     setShowAdd(false);
+    fetchAll(search, statusFilter, branchFilter, 1);
   }
 
   function onStatusChanged(updated: Candidate) {
     setCandidates(prev => prev.map(c => c.id === updated.id ? updated : c));
     setMarkData(null);
-    fetchAll(search, statusFilter, branchFilter);
+    fetchAll(search, statusFilter, branchFilter, page);
   }
 
   async function handleSendPortalLogin(candidateId: number) {
@@ -238,6 +250,17 @@ export default function InterviewListPage() {
           </div>
         </div>
         <div className="page-actions" style={{ gap: 10 }}>
+          {/* Search */}
+          <div className="search-bar">
+            <i className="ti ti-search" />
+            <input
+              placeholder="Search candidates…"
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              suppressHydrationWarning
+            />
+          </div>
+
           {/* Branch filter dropdown */}
           <div style={{ position: "relative" }}>
             <select
@@ -306,31 +329,20 @@ export default function InterviewListPage() {
         <div className="card-header">
           <span className="card-title">
             <i className="ti ti-users" />
-            {activeBranch ? `${activeBranch.branch_name} Candidates` : "All Candidates"} ({candidates.length})
+            {activeBranch ? `${activeBranch.branch_name} Candidates` : "All Candidates"} ({totalCount})
           </span>
-          <div className="filter-bar" style={{ margin: 0 }}>
-            <div className="search-bar">
-              <i className="ti ti-search" />
-              <input placeholder="Search candidate…" value={search} onChange={e => handleSearch(e.target.value)} suppressHydrationWarning />
-            </div>
-            <select
-              className="field-input field-select"
-              style={{ width: 180 }}
-              value={statusFilter}
-              onChange={e => handleStatusFilter(e.target.value as "" | CandidateStatus)}
-              suppressHydrationWarning
-            >
-              <option value="">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="screening">Screening</option>
-              <option value="interview_scheduled">Interview Scheduled</option>
-              <option value="interview_done">Interview Done</option>
-              <option value="selected">Selected</option>
-              <option value="offer_sent">Offer Sent</option>
-              <option value="rejected">Rejected</option>
-              <option value="converted">Converted</option>
-            </select>
-          </div>
+          <select
+            className="field-input field-select"
+            style={{ width: 180 }}
+            value={statusFilter}
+            onChange={e => handleStatusFilter(e.target.value as "" | CandidateStatus)}
+            suppressHydrationWarning
+          >
+            <option value="">All Status</option>
+            {statusChoices.map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
         </div>
 
         {error && (
@@ -365,6 +377,12 @@ export default function InterviewListPage() {
                         <div>
                           <strong>{c.name}</strong>
                           <div className="text-xs text-[var(--on-variant)]">{c.email}</div>
+                          {c.referral_by !== null && (
+                            <div style={{ fontSize: 11, color: "#7c3aed", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
+                              <i className="ti ti-user-plus" style={{ fontSize: 10 }} />
+                              Referred by {c.referral_by_name || "Employee"}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -382,6 +400,14 @@ export default function InterviewListPage() {
                         <button className="btn btn-ghost btn-sm" onClick={() => setLogsFor(c)}>
                           <i className="ti ti-history" /> Logs
                         </button>
+
+                        {/* Set Details — only for referred candidates missing branch or interview date */}
+                        {c.referral_by !== null && (!c.branch || !c.interview_date) && (
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEditTarget(c)} suppressHydrationWarning
+                            style={{ color: "var(--warn)" }}>
+                            <i className="ti ti-pencil" /> Set Details
+                          </button>
+                        )}
 
                         {/* Status dropdown — only for pre-selection pipeline */}
                         {c.status !== "converted" && c.status !== "selected" && c.status !== "offer_sent" && (
@@ -430,6 +456,45 @@ export default function InterviewListPage() {
             </table>
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderTop: "1px solid var(--outline-v)" }}>
+            <span style={{ fontSize: 13, color: "var(--on-variant)" }}>
+              Page {page} of {totalPages} · {totalCount} total
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page <= 1 || loading}
+                suppressHydrationWarning
+              >
+                <i className="ti ti-chevron-left" /> Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button
+                  key={p}
+                  className={`btn btn-sm ${p === page ? "btn-filled" : "btn-ghost"}`}
+                  onClick={() => handlePageChange(p)}
+                  disabled={loading}
+                  suppressHydrationWarning
+                  style={{ minWidth: 34 }}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page >= totalPages || loading}
+                suppressHydrationWarning
+              >
+                Next <i className="ti ti-chevron-right" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -443,6 +508,24 @@ export default function InterviewListPage() {
         />
       )}
       {logsFor && <LogsModal candidate={logsFor} onClose={() => setLogsFor(null)} />}
+      {editTarget && (
+        <EditCandidateModal
+          candidate={editTarget}
+          branches={branches}
+          onClose={() => setEditTarget(null)}
+          onSaved={updated => {
+            const hadDate = !!editTarget.interview_date;
+            const nowHasDate = !!updated.interview_date;
+            setCandidates(prev => prev.map(c => c.id === updated.id ? updated : c));
+            setEditTarget(null);
+            if (!hadDate && nowHasDate) {
+              showToast("Interview details saved. Invitation email sent to candidate.", "success");
+            } else {
+              showToast("Interview details updated.", "success");
+            }
+          }}
+        />
+      )}
     </>
   );
 }

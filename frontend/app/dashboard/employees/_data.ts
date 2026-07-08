@@ -225,6 +225,7 @@ export const PROFILE_TABS = [
   { id: "attendance", label: "Attendance", icon: "ti-clock" },
   { id: "approval", label: "Approval Matrix", icon: "ti-sitemap" },
   { id: "benefit", label: "Benefit", icon: "ti-gift" },
+  { id: "wishes", label: "Send Wishes", icon: "ti-confetti" },
 ] as const;
 
 // ────────────────────────────────────────────────────────────

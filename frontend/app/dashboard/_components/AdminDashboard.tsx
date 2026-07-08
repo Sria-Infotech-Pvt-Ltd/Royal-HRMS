@@ -1,4 +1,5 @@
 import type { SessionPayload } from "@/lib/session";
+import BirthdayWidget from "@/components/dashboard/BirthdayWidget";
 
 interface Props { session: SessionPayload }
 
@@ -104,6 +105,7 @@ export default function AdminDashboard({ session }: Props) {
 
         {/* Right */}
         <div>
+          <BirthdayWidget />
           {/* Recent System Events */}
           <div className="card mb-16">
             <div className="card-header">

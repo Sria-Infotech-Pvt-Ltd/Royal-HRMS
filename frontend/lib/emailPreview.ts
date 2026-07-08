@@ -10,6 +10,22 @@ export interface CompanyInfo {
 }
 
 /**
+ * Expands a vars map to include uppercase and lowercase variants of every key,
+ * so the backend substitutes {FNAME}, {fname}, {Fname} all from the same source.
+ */
+export function normalizeExtraContext(
+  vars: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    out[key]               = value;
+    out[key.toLowerCase()] = value;
+    out[key.toUpperCase()] = value;
+  }
+  return out;
+}
+
+/**
  * Renders template variable placeholders with real values.
  * Leaves any unrecognised {variable} visible so the user can see what remains.
  */
@@ -17,11 +33,18 @@ export function renderTemplateVars(
   text: string,
   vars: Record<string, string>,
 ): string {
-  let out = text;
+  // Build a lowercase-keyed lookup so matching is case-insensitive
+  const lookup: Record<string, string> = {};
   for (const [key, value] of Object.entries(vars)) {
-    out = out.replaceAll(`{${key}}`, value || `[${key}]`);
+    lookup[key.toLowerCase()] = value;
   }
-  return out;
+  // Replace every {ANYTHING} placeholder, case-insensitive
+  return text.replace(/\{([^}]+)\}/g, (_match, tag: string) => {
+    const normalized = tag.toLowerCase();
+    return normalized in lookup
+      ? (lookup[normalized] || `[${tag}]`)
+      : `{${tag}}`;
+  });
 }
 
 /**
@@ -78,6 +101,10 @@ export function buildEmailPreview(
     </div>
 
   </div>
+</div>
+<!-- prevent Gmail from collapsing footer as trimmed content -->
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f4f4f7;">
+  &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
 </div>
 </body>
 </html>`;

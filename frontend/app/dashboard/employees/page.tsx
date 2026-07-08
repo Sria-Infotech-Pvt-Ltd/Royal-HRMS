@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -93,22 +93,34 @@ export default function EmployeesPage() {
   const [isAdmin,    setIsAdmin]    = useState(false);
   const [userBranch, setUserBranch] = useState("");
 
-  const [employees,  setEmployees]  = useState<Employee[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [fetchError, setFetchError] = useState("");
-  const [search,     setSearch]     = useState("");
-  const [branch,     setBranch]     = useState("all");
-  const [dept,       setDept]       = useState("all");
-  const [status,     setStatus]     = useState<"all" | EmployeeStatus>("all");
-  const [showModal,  setShowModal]  = useState(false);
-  const [toggling,   setToggling]   = useState<string | null>(null);
+  const [employees,   setEmployees]   = useState<Employee[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [fetchError,  setFetchError]  = useState("");
+  const [search,      setSearch]      = useState("");
+  const [branch,      setBranch]      = useState("all");
+  const [dept,        setDept]        = useState("all");
+  const [status,      setStatus]      = useState<"all" | EmployeeStatus>("all");
+  const [showModal,   setShowModal]   = useState(false);
+  const [toggling,    setToggling]    = useState<string | null>(null);
+  const [page,        setPage]        = useState(1);
+  const [totalPages,  setTotalPages]  = useState(1);
+  const [totalCount,  setTotalCount]  = useState(0);
 
-  const fetchEmployees = useCallback(async () => {
+  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchEmployees = useCallback(async (q = "", p = 1) => {
     setLoading(true);
     setFetchError("");
     try {
-      const { data } = await clientApi.get<{ data: { results: ApiEmployee[] } }>(API.employees.list);
+      const params: Record<string, string | number> = { page: p };
+      if (q) params.search = q;
+      const { data } = await clientApi.get<{
+        data: { results: ApiEmployee[]; count: number; page: number; total_pages: number };
+      }>(API.employees.list, { params });
       setEmployees((data.data?.results ?? []).map(apiToEmployee));
+      setTotalPages(data.data?.total_pages ?? 1);
+      setTotalCount(data.data?.count ?? 0);
+      setPage(data.data?.page ?? p);
     } catch {
       setFetchError("Could not load employees. Please refresh.");
     } finally {
@@ -117,6 +129,16 @@ export default function EmployeesPage() {
   }, []);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+
+  function handleSearch(val: string) {
+    setSearch(val);
+    if (searchRef.current) clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(() => fetchEmployees(val, 1), 350);
+  }
+
+  function handlePageChange(newPage: number) {
+    fetchEmployees(search, newPage);
+  }
 
   useEffect(() => {
     const user = getStoredUser();
@@ -135,20 +157,13 @@ export default function EmployeesPage() {
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return employees.filter(e => {
-      const matchesQ =
-        !q ||
-        fullName(e).toLowerCase().includes(q) ||
-        e.email.toLowerCase().includes(q) ||
-        e.code.toLowerCase().includes(q) ||
-        e.designation.toLowerCase().includes(q);
       const matchesBranch = branch === "all" || e.location === branch;
       const matchesDept   = dept   === "all" || e.department === dept;
       const matchesStatus = status === "all" || e.status === status;
-      return matchesQ && matchesBranch && matchesDept && matchesStatus;
+      return matchesBranch && matchesDept && matchesStatus;
     });
-  }, [employees, search, branch, dept, status]);
+  }, [employees, branch, dept, status]);
 
   const stats = useMemo(() => {
     const source     = branch === "all" ? employees : employees.filter(e => e.location === branch);
@@ -156,12 +171,12 @@ export default function EmployeesPage() {
     const onboarding = source.filter(e => e.status === "onboarding").length;
     const depts      = new Set(source.map(e => e.department)).size;
     return [
-      { label: "Total Employees", value: source.length, icon: "ti-users",      tint: "primary" as const },
-      { label: "Active",          value: active,         icon: "ti-user-check", tint: "success" as const },
-      { label: "Onboarding",      value: onboarding,     icon: "ti-user-plus",  tint: "warn"    as const },
-      { label: "Departments",     value: depts,          icon: "ti-building",   tint: "info"    as const },
+      { label: "Total Employees", value: totalCount,    icon: "ti-users",      tint: "primary" as const },
+      { label: "Active",          value: active,        icon: "ti-user-check", tint: "success" as const },
+      { label: "Onboarding",      value: onboarding,    icon: "ti-user-plus",  tint: "warn"    as const },
+      { label: "Departments",     value: depts,         icon: "ti-building",   tint: "info"    as const },
     ];
-  }, [employees, branch]);
+  }, [employees, branch, totalCount]);
 
   function open(id: string) {
     router.push(`/dashboard/employees/${id}`);
@@ -177,7 +192,7 @@ export default function EmployeesPage() {
       setEmployees(prev => prev.map(e =>
         e.id === employee.id
           ? { ...e, status: isCurrentlyActive ? "inactive" : "active" }
-          : e
+          : e,
       ));
     } catch {
       // silently ignore — employee list state unchanged
@@ -201,11 +216,22 @@ export default function EmployeesPage() {
             }
           </div>
         </div>
-        <button onClick={() => setShowModal(true)} suppressHydrationWarning
-          className="btn btn-filled" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <i className="ti ti-plus" style={{ fontSize: 15 }} />
-          Add Employee
-        </button>
+        <div className="page-actions" style={{ gap: 10 }}>
+          <div className="search-bar">
+            <i className="ti ti-search" />
+            <input
+              placeholder="Search employees…"
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              suppressHydrationWarning
+            />
+          </div>
+          <button onClick={() => setShowModal(true)} suppressHydrationWarning
+            className="btn btn-filled" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <i className="ti ti-plus" style={{ fontSize: 15 }} />
+            Add Employee
+          </button>
+        </div>
       </div>
 
       {/* ── Stats ── */}
@@ -230,19 +256,6 @@ export default function EmployeesPage() {
 
       {/* ── Filters ── */}
       <div className="flex items-center gap-3 flex-wrap mb-4">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[220px] max-w-[360px]">
-          <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[var(--outline)] text-[15px]" />
-          <input
-            type="text"
-            placeholder="Search employees..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            suppressHydrationWarning
-            className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-[var(--outline-v)] bg-white text-[13px] text-[var(--on-bg)] placeholder:text-[var(--outline)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(30,78,140,0.12)] transition-colors"
-          />
-        </div>
-
         {/* Branch — system_admin sees switcher, hr_admin sees fixed label */}
         {isAdmin ? (
           <select
@@ -401,13 +414,50 @@ export default function EmployeesPage() {
         )}
       </div>
 
+      {/* ── Pagination ── */}
+      {totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, flexWrap: "wrap", gap: 8 }}>
+          <span style={{ fontSize: 13, color: "var(--on-variant)" }}>
+            Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, totalCount)} of {totalCount} employees
+          </span>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={page <= 1}
+              onClick={() => handlePageChange(page - 1)}
+              suppressHydrationWarning
+            >
+              <i className="ti ti-chevron-left" /> Prev
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+              <button
+                key={p}
+                className={`btn btn-sm ${p === page ? "btn-filled" : "btn-ghost"}`}
+                onClick={() => handlePageChange(p)}
+                suppressHydrationWarning
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={page >= totalPages}
+              onClick={() => handlePageChange(page + 1)}
+              suppressHydrationWarning
+            >
+              Next <i className="ti ti-chevron-right" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal ── */}
       {showModal && (
         <AddEmployeeModal
           onClose={() => setShowModal(false)}
           onCreated={() => {
             setShowModal(false);
-            fetchEmployees();
+            fetchEmployees(search, 1);
           }}
         />
       )}
