@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    BirthdayView,
     ExpenseCategoryListView,
     ExpenseDetailView,
     ExpenseListCreateView,
@@ -17,6 +18,9 @@ from .views import (
 )
 
 urlpatterns = [
+    # Birthdays
+    path('birthdays/', BirthdayView.as_view(), name='birthday-list'),
+
     # Expenses
     path('expenses/',                                ExpenseListCreateView.as_view(),   name='expense-list-create'),
     path('expenses/categories/',                     ExpenseCategoryListView.as_view(), name='expense-categories'),

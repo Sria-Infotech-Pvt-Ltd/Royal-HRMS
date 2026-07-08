@@ -476,7 +476,9 @@ class ForgotPasswordView(APIView):
 
         user = serializer.context.get('user')
         if not user:
-            return error('No active account found with this email address.')
+            # Return the same message regardless of whether the account exists
+            # to prevent attackers from enumerating registered email addresses.
+            return success('OTP sent to your email address. It is valid for 10 minutes.')
 
         try:
             _, plain_otp = OTPVerification.create_for_user(user)
@@ -607,12 +609,23 @@ class ChangePasswordView(APIView):
         user.must_change_password = False
         user.save(update_fields=['password', 'must_change_password'])
 
+        # Blacklist the refresh token so the old session cannot be reused
+        refresh_str = request.COOKIES.get('royal_refresh_token')
+        if refresh_str:
+            try:
+                RefreshToken(refresh_str).blacklist()
+            except TokenError:
+                pass
+
         AuditLog.objects.create(
             user=user, action='password_changed', module='accounts',
             ip_address=get_client_ip(request),
         )
         logger.info('Password changed for %s', user.email)
-        return success('Password changed successfully. Please log in again with your new password.')
+        resp = success('Password changed successfully. Please log in again with your new password.')
+        resp.delete_cookie('royal_access_token', path='/')
+        resp.delete_cookie('royal_refresh_token', path='/')
+        return resp
 
 
 # ─── Role management ──────────────────────────────────────────────────────────
@@ -1401,7 +1414,7 @@ class SMTPTestEmailView(APIView):
             )
         except Exception as exc:
             logger.error('SMTP test failed for %s: %s', request.user.email, exc, exc_info=True)
-            return error(f'Failed to send test email: {exc}')
+            return error('Failed to send test email. Check the SMTP configuration and try again.')
 
         logger.info('SMTP test email sent by %s', request.user.email)
         return success(
@@ -2508,6 +2521,20 @@ class EmployeeDetailView(APIView):
                 changes['date_of_joining'] = {'from': str(employee.date_of_joining), 'to': doj}
             employee.date_of_joining = doj
             update_fields.append('date_of_joining')
+
+        dob_raw = (data.get('date_of_birth') or '').strip()
+        if dob_raw:
+            try:
+                datetime.strptime(dob_raw, '%Y-%m-%d')
+            except ValueError:
+                return error('date_of_birth must be in YYYY-MM-DD format.')
+            from apps.accounts.models import EmployeeProfile
+            profile, _ = EmployeeProfile.objects.get_or_create(user=employee)
+            old_dob = str(profile.date_of_birth) if profile.date_of_birth else ''
+            if old_dob != dob_raw:
+                changes['date_of_birth'] = {'from': old_dob, 'to': dob_raw}
+            profile.date_of_birth = dob_raw
+            profile.save(update_fields=['date_of_birth', 'updated_at'])
 
         if len(update_fields) == 1:
             # Check if hr_id or reporting_manager_id will be set before bailing

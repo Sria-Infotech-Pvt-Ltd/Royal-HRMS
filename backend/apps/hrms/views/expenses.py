@@ -153,6 +153,8 @@ class ExpenseDetailView(APIView):
     def _handle_approval(self, request, expense, expense_number: int):
         if not _has_perm(request.user, 'expenses.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        if expense.employee_id == request.user.id:
+            return error('You cannot approve or reject your own expense.', http_status=status.HTTP_403_FORBIDDEN)
         if expense.status != STATUS_PENDING:
             return error(
                 f'Expense is already {expense.status}. Only pending expenses can be actioned.',
@@ -177,11 +179,10 @@ class ExpenseDetailView(APIView):
             return self._handle_approval(request, expense, expense_number)
 
         has_approve = _has_perm(request.user, 'expenses.approve')
-        if not has_approve:
-            if expense.employee_id != request.user.id:
-                return error('Only the submitter can edit an expense.', http_status=status.HTTP_403_FORBIDDEN)
-            if expense.status != STATUS_PENDING:
-                return error('Only pending expenses can be edited.', http_status=status.HTTP_409_CONFLICT)
+        if not has_approve and expense.employee_id != request.user.id:
+            return error('Only the submitter can edit an expense.', http_status=status.HTTP_403_FORBIDDEN)
+        if expense.status != STATUS_PENDING:
+            return error('Only pending expenses can be edited.', http_status=status.HTTP_409_CONFLICT)
 
         serializer = ExpenseCreateSerializer(expense, data=request.data)
         if not serializer.is_valid():
@@ -212,11 +213,10 @@ class ExpenseDetailView(APIView):
             return self._handle_approval(request, expense, expense_number)
 
         has_approve = _has_perm(request.user, 'expenses.approve')
-        if not has_approve:
-            if expense.employee_id != request.user.id:
-                return error('Only the submitter can edit an expense.', http_status=status.HTTP_403_FORBIDDEN)
-            if expense.status != STATUS_PENDING:
-                return error('Only pending expenses can be edited.', http_status=status.HTTP_409_CONFLICT)
+        if not has_approve and expense.employee_id != request.user.id:
+            return error('Only the submitter can edit an expense.', http_status=status.HTTP_403_FORBIDDEN)
+        if expense.status != STATUS_PENDING:
+            return error('Only pending expenses can be edited.', http_status=status.HTTP_409_CONFLICT)
 
         serializer = ExpenseCreateSerializer(expense, data=request.data, partial=True)
         if not serializer.is_valid():

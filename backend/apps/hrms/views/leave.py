@@ -2,7 +2,7 @@ import logging
 from datetime import date
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -123,7 +123,7 @@ def _deduct_balance(employee, leave_type: str, days: float, year: int) -> None:
         return
     LeaveBalance.objects.filter(
         employee=employee, leave_type=leave_type, year=year
-    ).update(used_days=Q('used_days') + days)
+    ).update(used_days=F('used_days') + days)
 
 
 # ─── Leave Policy ──────────────────────────────────────────────────────────────
@@ -195,7 +195,10 @@ class LeaveBalanceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        year = int(request.query_params.get('year', _current_year()))
+        try:
+            year = int(request.query_params.get('year', _current_year()))
+        except (TypeError, ValueError):
+            return error('year must be a valid integer.')
         employee_id = request.query_params.get('employee_id')
 
         if employee_id and _has_perm(request.user, 'employees.view'):
@@ -214,7 +217,10 @@ class LeaveBalanceView(APIView):
         if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
-        year = int(request.data.get('year', _current_year()))
+        try:
+            year = int(request.data.get('year', _current_year()))
+        except (TypeError, ValueError):
+            return error('year must be a valid integer.')
         from apps.accounts.models import User
         employees = User.objects.filter(is_active=True, onboarding_status='complete').exclude(employee_id='')
 
@@ -533,7 +539,7 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
         employee=leave_request.employee,
         leave_type=leave_request.leave_type,
         year=year,
-    ).update(used_days=Q('used_days') + float(leave_request.total_days))
+    ).update(used_days=F('used_days') + float(leave_request.total_days))
 
 
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────
@@ -543,8 +549,11 @@ class LeaveStatsView(APIView):
 
     def get(self, request):
         has_approve = _has_perm(request.user, 'leave.approve')
-        year        = int(request.query_params.get('year', _current_year()))
-        scope       = request.query_params.get('scope', '')
+        try:
+            year = int(request.query_params.get('year', _current_year()))
+        except (TypeError, ValueError):
+            return error('year must be a valid integer.')
+        scope = request.query_params.get('scope', '')
         own_scope   = scope == 'own' or not has_approve
 
         if own_scope:
@@ -592,7 +601,10 @@ class LeaveCalendarView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        year  = int(request.query_params.get('year',  _current_year()))
+        try:
+            year = int(request.query_params.get('year', _current_year()))
+        except (TypeError, ValueError):
+            return error('year must be a valid integer.')
         month = request.query_params.get('month')
 
         scope_filter = _calendar_scope_filter(request.user)
@@ -602,7 +614,10 @@ class LeaveCalendarView(APIView):
             start_date__year=year,
         )
         if month:
-            qs = qs.filter(start_date__month=int(month))
+            try:
+                qs = qs.filter(start_date__month=int(month))
+            except (TypeError, ValueError):
+                return error('month must be a valid integer between 1 and 12.')
 
         # system_admin can still narrow by branch via the UI branch dropdown
         branch = request.query_params.get('branch')

@@ -151,11 +151,18 @@ CELERY_ACCEPT_CONTENT    = ['json']
 
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
+from celery.schedules import crontab
+
 CELERY_BEAT_SCHEDULE = {
     # Runs every 5 minutes — detects employees past shift_end + grace with no clock-out.
     'check-missing-clockouts': {
         'task':     'apps.attendance.tasks.check_missing_clockouts',
         'schedule': 300.0,  # seconds
+    },
+    # Runs daily at 9:00 AM IST — sends birthday wish emails to employees.
+    'send-birthday-wishes': {
+        'task':     'apps.hrms.tasks.send_birthday_wishes',
+        'schedule': crontab(hour=9, minute=0),
     },
 }
 

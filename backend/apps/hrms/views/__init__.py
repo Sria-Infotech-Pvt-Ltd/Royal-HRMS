@@ -1,3 +1,4 @@
+from .birthdays import BirthdayView
 from .expenses import ExpenseCategoryListView, ExpenseDetailView, ExpenseListCreateView, ExpenseStatsView, ExpenseStatusListView
 from .leave import (
     LeavePolicyView,

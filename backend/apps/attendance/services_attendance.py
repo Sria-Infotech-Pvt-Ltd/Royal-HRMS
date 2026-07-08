@@ -496,7 +496,7 @@ class AttendanceDashboardService:
         )
 
         lop_pending = sum(
-            1 for r in records if r.is_late
+            1 for r in records if r.status == AttendanceRecord.STATUS_ABSENT
         )
 
         return {

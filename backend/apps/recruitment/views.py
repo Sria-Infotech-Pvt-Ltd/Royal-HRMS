@@ -12,13 +12,16 @@ from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, Company, User
 from apps.accounts.utils import send_template_email
-from .models import Candidate, CandidateEmail, CandidateLog
+from core.pagination import paginate, paginated_data
+from .models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
 from .serializers import (
     CandidateCreateSerializer,
     CandidateDetailSerializer,
     CandidateEmailSerializer,
     CandidateListSerializer,
     CandidateUpdateSerializer,
+    ReferralBonusSerializer,
+    ReferralRuleSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +72,152 @@ def _send_candidate_email(candidate, template_slug, actor, extra_context=None):
         sent_by=actor,
     )
     return sent_status
+
+
+# ─── Referral email helpers ───────────────────────────────────────────────────
+
+def _send_referral_email(candidate, template_slug, recipient_email, context):
+    """Send one referral-flow email and write CandidateEmail + CandidateLog records."""
+    sent_status = CandidateEmail.STATUS_FAILED
+    try:
+        send_template_email(
+            recipient_email=recipient_email,
+            template_name=template_slug,
+            context=context,
+        )
+        sent_status = CandidateEmail.STATUS_SENT
+        logger.info('Sent %s to %s for candidate %s', template_slug, recipient_email, candidate.id)
+    except Exception:
+        logger.exception('Failed to send %s to %s', template_slug, recipient_email)
+        CandidateLog.objects.create(
+            candidate=candidate,
+            log_type=CandidateLog.TYPE_ERROR,
+            title=f'Email failed: {template_slug}',
+            description=f'Could not deliver {template_slug} to {recipient_email}',
+        )
+    CandidateEmail.objects.create(
+        candidate=candidate,
+        template_used=template_slug,
+        subject=template_slug,
+        to_email=recipient_email,
+        status=sent_status,
+    )
+
+
+def _send_referral_submission_emails(candidate):
+    """Background: notify referrer + candidate when a referral is first submitted."""
+    company      = Company.objects.first()
+    company_name = company.company_name if company else ''
+    branch_name  = candidate.branch.branch_name if candidate.branch else ''
+    referrer     = candidate.referral_by
+    referrer_name = (referrer.full_name or referrer.email) if referrer else ''
+
+    # Email A — to the referring employee
+    if referrer and referrer.email:
+        _send_referral_email(
+            candidate=candidate,
+            template_slug='referral_submitted_referrer',
+            recipient_email=referrer.email,
+            context={
+                'referrer_name':    referrer_name,
+                'candidate_name':   candidate.name,
+                'position_applied': candidate.position_applied,
+                'branch_name':      branch_name,
+                'company_name':     company_name,
+            },
+        )
+
+    # Email B — to the referred candidate
+    _send_referral_email(
+        candidate=candidate,
+        template_slug='referral_submitted_candidate',
+        recipient_email=candidate.email,
+        context={
+            'candidate_name':   candidate.name,
+            'referrer_name':    referrer_name,
+            'position_applied': candidate.position_applied,
+            'company_name':     company_name,
+        },
+    )
+
+
+def _send_interview_scheduled_emails(candidate):
+    """Background: notify referred candidate + referrer when interview_date is first set."""
+    company      = Company.objects.first()
+    company_name = company.company_name if company else ''
+    branch_name  = candidate.branch.branch_name if candidate.branch else ''
+    referrer     = candidate.referral_by
+    referrer_name = (referrer.full_name or referrer.email) if referrer else ''
+    interview_date_str     = candidate.interview_date.strftime('%d %b %Y') if candidate.interview_date else ''
+    interview_mode_display = candidate.get_interview_mode_display()
+
+    # Email A — to the referred candidate
+    _send_referral_email(
+        candidate=candidate,
+        template_slug='referral_interview_scheduled_candidate',
+        recipient_email=candidate.email,
+        context={
+            'candidate_name':        candidate.name,
+            'position_applied':      candidate.position_applied,
+            'interview_date':        interview_date_str,
+            'interview_mode_display': interview_mode_display,
+            'branch_name':           branch_name,
+            'company_name':          company_name,
+        },
+    )
+
+    # Email B — to the referring employee
+    if referrer and referrer.email:
+        _send_referral_email(
+            candidate=candidate,
+            template_slug='referral_interview_scheduled_referrer',
+            recipient_email=referrer.email,
+            context={
+                'referrer_name':    referrer_name,
+                'candidate_name':   candidate.name,
+                'position_applied': candidate.position_applied,
+                'interview_date':   interview_date_str,
+                'company_name':     company_name,
+            },
+        )
+
+
+def _send_interview_scheduled_email_general(candidate):
+    """Background: notify a non-referred candidate when their interview date is first set."""
+    company      = Company.objects.first()
+    company_name = company.company_name if company else ''
+    branch_name  = candidate.branch.branch_name if candidate.branch else ''
+    interview_date_str     = candidate.interview_date.strftime('%d %b %Y') if candidate.interview_date else ''
+    interview_mode_display = candidate.get_interview_mode_display()
+
+    _send_referral_email(
+        candidate=candidate,
+        template_slug='interview_scheduled_candidate',
+        recipient_email=candidate.email,
+        context={
+            'candidate_name':         candidate.name,
+            'position_applied':       candidate.position_applied,
+            'interview_date':         interview_date_str,
+            'interview_mode_display': interview_mode_display,
+            'branch_name':            branch_name,
+            'company_name':           company_name,
+        },
+    )
+
+
+def _fire_interview_date_emails_if_needed(candidate, old_interview_date):
+    """Fire interview scheduled emails when interview_date is set or changed."""
+    if candidate.interview_date is None:
+        return
+    if old_interview_date == candidate.interview_date:
+        return
+    import threading
+    target = (
+        _send_interview_scheduled_emails        # referred: candidate + referrer emails
+        if candidate.referral_by_id
+        else _send_interview_scheduled_email_general  # direct: candidate email only
+    )
+    threading.Thread(target=target, args=(candidate,), daemon=True).start()
 
 
 # ─── Candidate List + Create ──────────────────────────────────────────────────
@@ -138,6 +287,7 @@ class CandidateListCreateView(APIView):
                 changes={'name': candidate.name, 'position': candidate.position_applied},
                 ip_address=get_client_ip(request),
             )
+        _fire_interview_date_emails_if_needed(candidate, old_interview_date=None)
         logger.info('Candidate %s created by %s', candidate.id, request.user.email)
         return success('Candidate added to interview list.', data=CandidateListSerializer(candidate).data,
                   http_status=status.HTTP_201_CREATED)
@@ -236,6 +386,7 @@ class CandidateDetailView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        old_interview_date = candidate.interview_date
         try:
             updated = serializer.save()
         except Exception as exc:
@@ -248,6 +399,7 @@ class CandidateDetailView(APIView):
             changes={k: v for k, v in request.data.items()},
             ip_address=get_client_ip(request),
         )
+        _fire_interview_date_emails_if_needed(updated, old_interview_date)
         logger.info('Candidate %s fully updated by %s', pk, request.user.email)
         return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
 
@@ -264,6 +416,7 @@ class CandidateDetailView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        old_interview_date = candidate.interview_date
         try:
             updated = serializer.save()
         except Exception as exc:
@@ -276,6 +429,7 @@ class CandidateDetailView(APIView):
             changes={k: v for k, v in request.data.items()},
             ip_address=get_client_ip(request),
         )
+        _fire_interview_date_emails_if_needed(updated, old_interview_date)
         logger.info('Candidate %s partially updated by %s', pk, request.user.email)
         return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
 
@@ -386,8 +540,9 @@ class CandidateStatusView(APIView):
         # Send email only for selected or rejected transitions
         email_sent = False
         if new_status in (Candidate.STATUS_SELECTED, Candidate.STATUS_REJECTED):
-            default_slug  = 'selection' if new_status == Candidate.STATUS_SELECTED else 'rejection'
-            template_slug = (request.data.get('template_name') or default_slug).strip()
+            default_slug      = 'selection' if new_status == Candidate.STATUS_SELECTED else 'rejection'
+            raw_template_name = request.data.get('template_name')
+            template_slug     = (str(raw_template_name).strip() if raw_template_name else default_slug)
             email_status  = _send_candidate_email(candidate, template_slug, request.user)
             email_sent    = (email_status == CandidateEmail.STATUS_SENT)
             CandidateLog.objects.create(
@@ -397,6 +552,17 @@ class CandidateStatusView(APIView):
                        if email_sent
                        else 'Email failed — check SMTP settings'),
                 description=f'Template: {template_slug}',
+            )
+
+        # Auto-create referral bonus record when candidate is converted
+        if new_status == Candidate.STATUS_CONVERTED and candidate.referral_by_id:
+            ReferralBonus.objects.get_or_create(
+                candidate=candidate,
+                defaults={'referrer': candidate.referral_by, 'bonus_amount': 0},
+            )
+            logger.info(
+                'Referral bonus record created for referrer %s (candidate %s)',
+                candidate.referral_by_id, candidate.pk,
             )
 
         AuditLog.objects.create(
@@ -763,6 +929,105 @@ class CandidateEmailLogView(APIView):
         )
 
 
+# ─── Manual Email Send ─────────────────────────────────────────────────────────
+
+class SendCandidateEmailView(APIView):
+    """
+    POST /candidates/<pk>/send-email/
+    HR manually sends any active email template to a specific candidate.
+
+    Body:
+        template_name  (str, required) — name of an active EmailTemplate
+        extra_context  (dict, optional) — additional variables to merge into the template
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+
+        template_name = request.data.get('template_name', '').strip()
+        if not template_name:
+            return error('template_name is required.')
+        if len(template_name) > 100:
+            return error('template_name must be 100 characters or fewer.')
+
+        extra_context = request.data.get('extra_context', {})
+        if not isinstance(extra_context, dict):
+            return error('extra_context must be an object.')
+
+        try:
+            if str(pk).isdigit():
+                candidate = Candidate.objects.select_related('branch', 'referral_by').get(id=int(pk))
+            else:
+                candidate = Candidate.objects.select_related('branch', 'referral_by').get(
+                    portal_user__employee_id=pk
+                )
+        except Candidate.DoesNotExist:
+            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        company      = Company.objects.first()
+        company_name = company.company_name if company else ''
+        branch_name  = candidate.branch.branch_name if candidate.branch else ''
+        referrer     = candidate.referral_by
+        referrer_name = (referrer.full_name or referrer.email) if referrer else ''
+        interview_date_str = (
+            candidate.interview_date.strftime('%d %b %Y')
+            if candidate.interview_date else ''
+        )
+
+        context = {
+            'candidate_name':         candidate.name,
+            'position_applied':       candidate.position_applied,
+            'company_name':           company_name,
+            'branch_name':            branch_name,
+            'interview_date':         interview_date_str,
+            'interview_mode_display': candidate.get_interview_mode_display(),
+            'status_display':         candidate.get_status_display(),
+            'referrer_name':          referrer_name,
+        }
+        context.update(extra_context)
+
+        sent_status = CandidateEmail.STATUS_FAILED
+        try:
+            send_template_email(
+                recipient_email=candidate.email,
+                template_name=template_name,
+                context=context,
+            )
+            sent_status = CandidateEmail.STATUS_SENT
+            logger.info(
+                'Manual email "%s" sent to candidate %s by %s',
+                template_name, candidate.id, request.user.email,
+            )
+        except LookupError as exc:
+            return error(str(exc), http_status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+            logger.exception(
+                'Manual email "%s" failed for candidate %s', template_name, candidate.id,
+            )
+            return error('Failed to send email. Check SMTP configuration.')
+        finally:
+            CandidateEmail.objects.create(
+                candidate=candidate,
+                template_used=template_name,
+                subject=template_name,
+                to_email=candidate.email,
+                status=sent_status,
+                sent_by=request.user,
+            )
+
+        AuditLog.objects.create(
+            user=request.user,
+            action='manual_email_sent',
+            module='recruitment',
+            object_id=str(candidate.pk),
+            changes={'template_name': template_name},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'Email sent to {candidate.email}.')
+
+
 # ─── Stats ─────────────────────────────────────────────────────────────────────
 
 class CandidateStatsView(APIView):
@@ -1103,3 +1368,310 @@ class ResendPortalLoginView(APIView):
     def delete(self, request, pk):
         return _revoke_portal_access(request, pk)
 
+
+
+# ─── Referrals ────────────────────────────────────────────────────────────────
+
+class ReferralListCreateView(APIView):
+    """
+    GET  /recruitment/referrals/  — my referrals (any authenticated user)
+    POST /recruitment/referrals/  — submit a referral (any authenticated user)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        queryset = (
+            Candidate.objects
+            .select_related('branch', 'interviewer', 'referral_by', 'added_by')
+            .filter(referral_by=request.user)
+        )
+        page_obj, paginator = paginate(queryset, request, default_page_size=20)
+        serializer = CandidateListSerializer(page_obj.object_list, many=True)
+        return success('Referrals fetched.', paginated_data(paginator, page_obj, serializer.data))
+
+    def post(self, request):
+        serializer = CandidateCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        candidate = serializer.save(
+            referral_by=request.user,
+            added_by=request.user,
+            status=Candidate.STATUS_PENDING,
+        )
+        import threading
+        threading.Thread(
+            target=_send_referral_submission_emails,
+            args=(candidate,),
+            daemon=True,
+        ).start()
+        logger.info('Referral submitted by %s for %s', request.user.email, candidate.email)
+        return success(
+            'Referral submitted successfully.',
+            CandidateListSerializer(candidate).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+class ReferralAllView(APIView):
+    """
+    GET /recruitment/referrals/all/ — all referrals from all employees (HR/admin)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'recruitment.view'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        queryset = (
+            Candidate.objects
+            .select_related('branch', 'interviewer', 'referral_by', 'added_by')
+            .filter(referral_by__isnull=False)
+        )
+        page_obj, paginator = paginate(queryset, request, default_page_size=20)
+        serializer = CandidateListSerializer(page_obj.object_list, many=True)
+        return success('Referrals fetched.', paginated_data(paginator, page_obj, serializer.data))
+
+
+# ─── Referral Rules ───────────────────────────────────────────────────────────
+
+class ReferralRuleListCreateView(APIView):
+    """
+    GET  /recruitment/referral-rules/  — list all rules (any authenticated user)
+    POST /recruitment/referral-rules/  — create a rule (settings.view permission)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rules = ReferralRule.objects.all()
+        return success('Rules fetched.', {'results': ReferralRuleSerializer(rules, many=True).data})
+
+    def post(self, request):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        serializer = ReferralRuleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        rule = serializer.save()
+        logger.info('ReferralRule "%s" created by %s', rule.title, request.user.email)
+        return success('Rule created.', ReferralRuleSerializer(rule).data, http_status=status.HTTP_201_CREATED)
+
+
+class ReferralRuleDetailView(APIView):
+    """
+    PATCH  /recruitment/referral-rules/<pk>/  — partial update (settings.view permission)
+    DELETE /recruitment/referral-rules/<pk>/  — hard delete  (settings.view permission)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_rule(self, pk):
+        try:
+            return ReferralRule.objects.get(pk=pk)
+        except ReferralRule.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        rule = self._get_rule(pk)
+        if not rule:
+            return error('Rule not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = ReferralRuleSerializer(rule, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        serializer.save()
+        logger.info('ReferralRule "%s" updated by %s', rule.title, request.user.email)
+        return success('Rule updated.', ReferralRuleSerializer(rule).data)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        rule = self._get_rule(pk)
+        if not rule:
+            return error('Rule not found.', http_status=status.HTTP_404_NOT_FOUND)
+        title = rule.title
+        rule.delete()
+        logger.info('ReferralRule "%s" deleted by %s', title, request.user.email)
+        return success('Rule deleted.', None)
+
+
+# ─── Referral Bonuses ──────────────────────────────────────────────────────────
+
+class ReferralBonusListView(APIView):
+    """
+    GET /recruitment/referral-bonuses/        — HR: all bonuses
+    GET /recruitment/referral-bonuses/?scope=my — Employee: their own bonuses
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        scope = request.query_params.get('scope', '')
+        has_approve = _has_perm(request.user, 'recruitment.edit')
+
+        if scope == 'my' or not has_approve:
+            qs = (
+                ReferralBonus.objects
+                .select_related('candidate', 'referrer', 'approved_by', 'paid_by')
+                .filter(referrer=request.user)
+            )
+        else:
+            qs = (
+                ReferralBonus.objects
+                .select_related('candidate', 'referrer', 'approved_by', 'paid_by')
+                .all()
+            )
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        page_obj, paginator = paginate(qs, request, default_page_size=20)
+        serializer = ReferralBonusSerializer(page_obj.object_list, many=True)
+        return success('Referral bonuses retrieved.', paginated_data(paginator, page_obj, serializer.data))
+
+
+class ReferralBonusDetailView(APIView):
+    """
+    GET   /recruitment/referral-bonuses/<pk>/  — view detail
+    PATCH /recruitment/referral-bonuses/<pk>/  — HR updates bonus_amount or notes before approving
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_bonus(self, pk):
+        try:
+            return ReferralBonus.objects.select_related(
+                'candidate', 'referrer', 'approved_by', 'paid_by'
+            ).get(pk=pk)
+        except ReferralBonus.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        bonus = self._get_bonus(pk)
+        if not bonus:
+            return error('Referral bonus not found.', http_status=status.HTTP_404_NOT_FOUND)
+        has_approve = _has_perm(request.user, 'recruitment.edit')
+        if not has_approve and bonus.referrer_id != request.user.id:
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        return success('Referral bonus retrieved.', ReferralBonusSerializer(bonus).data)
+
+    def patch(self, request, pk):
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        bonus = self._get_bonus(pk)
+        if not bonus:
+            return error('Referral bonus not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if bonus.status == ReferralBonus.STATUS_PAID:
+            return error('Cannot edit a bonus that has already been paid.')
+
+        if 'bonus_amount' in request.data:
+            try:
+                amount = float(request.data['bonus_amount'])
+                if amount < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return error('bonus_amount must be a non-negative number.')
+            bonus.bonus_amount = amount
+
+        if 'notes' in request.data:
+            bonus.notes = str(request.data['notes']).strip()
+
+        bonus.save(update_fields=['bonus_amount', 'notes', 'updated_at'])
+        logger.info('Referral bonus %s updated by %s', pk, request.user.email)
+        return success('Referral bonus updated.', ReferralBonusSerializer(bonus).data)
+
+    def put(self, request, pk):
+        return self.patch(request, pk)
+
+
+class ReferralBonusApproveView(APIView):
+    """
+    POST /recruitment/referral-bonuses/<pk>/approve/
+    HR approves a pending bonus. Sets status to approved.
+    Optionally accepts bonus_amount and notes in the body.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.utils import timezone as tz
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            bonus = ReferralBonus.objects.select_related('candidate', 'referrer').get(pk=pk)
+        except ReferralBonus.DoesNotExist:
+            return error('Referral bonus not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if bonus.status != ReferralBonus.STATUS_PENDING:
+            return error(
+                f'Bonus is already {bonus.get_status_display()}. Only pending bonuses can be approved.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        if 'bonus_amount' in request.data:
+            try:
+                amount = float(request.data['bonus_amount'])
+                if amount < 0:
+                    raise ValueError
+                bonus.bonus_amount = amount
+            except (TypeError, ValueError):
+                return error('bonus_amount must be a non-negative number.')
+
+        if 'notes' in request.data:
+            bonus.notes = str(request.data['notes']).strip()
+
+        bonus.status      = ReferralBonus.STATUS_APPROVED
+        bonus.approved_by = request.user
+        bonus.approved_at = tz.now()
+        bonus.save(update_fields=['bonus_amount', 'notes', 'status', 'approved_by', 'approved_at', 'updated_at'])
+
+        AuditLog.objects.create(
+            user=request.user, action='referral_bonus_approved', module='recruitment',
+            object_id=str(bonus.pk),
+            changes={'referrer': bonus.referrer.employee_id, 'amount': str(bonus.bonus_amount)},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Referral bonus %s approved by %s (amount: %s)', pk, request.user.email, bonus.bonus_amount)
+        return success(
+            f'Bonus of ₹{bonus.bonus_amount} approved for {bonus.referrer.full_name}.',
+            ReferralBonusSerializer(bonus).data,
+        )
+
+
+class ReferralBonusPayView(APIView):
+    """
+    POST /recruitment/referral-bonuses/<pk>/pay/
+    HR marks an approved bonus as paid after processing through payroll.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.utils import timezone as tz
+        if not _has_perm(request.user, 'recruitment.edit'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            bonus = ReferralBonus.objects.select_related('candidate', 'referrer').get(pk=pk)
+        except ReferralBonus.DoesNotExist:
+            return error('Referral bonus not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if bonus.status != ReferralBonus.STATUS_APPROVED:
+            return error(
+                'Only approved bonuses can be marked as paid.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        if 'notes' in request.data:
+            bonus.notes = str(request.data['notes']).strip()
+
+        bonus.status  = ReferralBonus.STATUS_PAID
+        bonus.paid_by = request.user
+        bonus.paid_at = tz.now()
+        bonus.save(update_fields=['notes', 'status', 'paid_by', 'paid_at', 'updated_at'])
+
+        AuditLog.objects.create(
+            user=request.user, action='referral_bonus_paid', module='recruitment',
+            object_id=str(bonus.pk),
+            changes={'referrer': bonus.referrer.employee_id, 'amount': str(bonus.bonus_amount)},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Referral bonus %s marked paid by %s', pk, request.user.email)
+        return success(
+            f'Bonus of ₹{bonus.bonus_amount} marked as paid for {bonus.referrer.full_name}.',
+            ReferralBonusSerializer(bonus).data,
+        )

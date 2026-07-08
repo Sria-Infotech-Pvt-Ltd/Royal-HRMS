@@ -708,6 +708,13 @@ class EmployeeProfile(models.Model):
     emergency_phone        = models.CharField(max_length=20, blank=True)
     emergency_email        = models.EmailField(blank=True)
 
+    # Birthday wish tracking
+    birthday_wish_sent_year = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text='Year in which the last birthday wish email was sent. '
+                  'Used to prevent duplicate sends on Celery beat retries.',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
