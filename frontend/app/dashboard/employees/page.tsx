@@ -322,7 +322,7 @@ export default function EmployeesPage() {
           <div className="py-14 text-center">
             <i className="ti ti-alert-circle text-3xl block mb-2" style={{ color: "var(--error)" }} />
             <p className="text-[13px] text-[var(--on-variant)]">{fetchError}</p>
-            <button onClick={fetchEmployees} suppressHydrationWarning
+            <button onClick={() => fetchEmployees()} suppressHydrationWarning
               className="mt-3 text-[13px] font-medium px-4 py-2 rounded-lg border border-[var(--outline-v)] text-[var(--primary)] hover:bg-[var(--bg-low)] transition-colors">
               Retry
             </button>
