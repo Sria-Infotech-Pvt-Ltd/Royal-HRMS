@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from .models import (
     Expense, ExpenseReceipt,
+    Holiday, HOLIDAY_TYPE_CHOICES,
     LeaveBalance, LeavePolicy, LeaveRequest,
     LEAVE_LWP, LEAVE_TYPE_CHOICES, DURATION_CHOICES,
 )
@@ -384,3 +385,46 @@ class LeaveRequestCreateSerializer(serializers.ModelSerializer):
         if start and end and end < start:
             raise serializers.ValidationError({'end_date': 'End date must be on or after start date.'})
         return data
+
+
+# ─── Holiday serializers ──────────────────────────────────────────────────────
+
+class HolidaySerializer(serializers.ModelSerializer):
+    branch_name          = serializers.SerializerMethodField()
+    holiday_type_display = serializers.CharField(source='get_holiday_type_display', read_only=True)
+    day                  = serializers.SerializerMethodField()
+    mandatory_optional   = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Holiday
+        fields = [
+            'id', 'name', 'date', 'day', 'holiday_type', 'holiday_type_display',
+            'is_optional', 'mandatory_optional',
+            'description', 'branch', 'branch_name', 'is_active', 'created_at',
+        ]
+
+    def get_branch_name(self, obj) -> str:
+        return obj.branch.branch_name if obj.branch_id else 'All Branches'
+
+    def get_day(self, obj) -> str:
+        return obj.date.strftime('%a')  # "Mon", "Tue", ...
+
+    def get_mandatory_optional(self, obj) -> str:
+        return 'Optional' if obj.is_optional else 'Mandatory'
+
+
+class HolidayCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Holiday
+        fields = ['name', 'date', 'holiday_type', 'is_optional', 'description', 'branch', 'is_active']
+
+    def validate_date(self, value):
+        if value.year < 2000:
+            raise serializers.ValidationError('Date must be year 2000 or later.')
+        return value
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Holiday name cannot be empty.')
+        return value

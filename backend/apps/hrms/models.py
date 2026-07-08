@@ -125,6 +125,39 @@ class ExpenseReceipt(models.Model):
         return f'Receipt for {self.expense.title}'
 
 
+# ─── Holiday Calendar ─────────────────────────────────────────────────────────
+
+HOLIDAY_TYPE_CHOICES = [
+    ('national', 'National Holiday'),
+    ('regional', 'Regional Holiday'),
+    ('company',  'Company Holiday'),
+]
+
+
+class Holiday(models.Model):
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name         = models.CharField(max_length=200)
+    date         = models.DateField(db_index=True)
+    holiday_type = models.CharField(max_length=20, choices=HOLIDAY_TYPE_CHOICES, default='national')
+    is_optional  = models.BooleanField(default=False, help_text='Optional/restricted holiday — employee can choose to take it.')
+    description  = models.TextField(blank=True, default='')
+    branch       = models.ForeignKey(
+        'branch.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='holidays',
+        help_text='Leave blank for a company-wide holiday.',
+    )
+    is_active    = models.BooleanField(default=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_holidays'
+        ordering = ['date']
+
+    def __str__(self) -> str:
+        return f'{self.name} ({self.date})'
+
+
 # ─── Leave Policy ─────────────────────────────────────────────────────────────
 
 GENDER_CHOICES = [('all', 'All'), ('male', 'Male'), ('female', 'Female')]

@@ -46,6 +46,26 @@ from apps.attendance.services_attendance import (
 logger = logging.getLogger(__name__)
 
 
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
+def _resolve_target_user(request):
+    """Return (target_user, err). If no employee_id param, returns (request.user, None)."""
+    employee_id = request.query_params.get('employee_id')
+    if not employee_id:
+        return request.user, None
+    if not (_has_perm(request.user, 'attendance.view') or _has_perm(request.user, 'employees.view')):
+        return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+    from apps.accounts.models import User
+    user = User.objects.filter(employee_id=employee_id).first()
+    if not user:
+        return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+    return user, None
+
+
 def _write_correction_submitted_audit(employee, data: dict) -> None:
     """Write CORRECTION_SUBMITTED audit entry — must never raise."""
     from apps.attendance.models import AttendanceAuditLog, AttendanceRecord
@@ -146,9 +166,13 @@ class AttendanceStatsView(APIView):
             return error(first_error(qp.errors), data=qp.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
+        target, err = _resolve_target_user(request)
+        if err:
+            return err
+
         params = qp.validated_data
         stats  = AttendanceDashboardService.get_stats(
-            request.user, params['year'], params['month'],
+            target, params['year'], params['month'],
         )
         return success('Stats retrieved successfully.', StatsSerializer(stats).data)
 
@@ -171,9 +195,13 @@ class AttendanceSummaryView(APIView):
             return error(first_error(qp.errors), data=qp.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
+        target, err = _resolve_target_user(request)
+        if err:
+            return err
+
         params  = qp.validated_data
         summary = AttendanceDashboardService.get_monthly_summary(
-            request.user, params['year'], params['month'],
+            target, params['year'], params['month'],
         )
         return success(
             'Monthly summary retrieved successfully.',
@@ -200,12 +228,16 @@ class AttendanceCalendarView(APIView):
             return error(first_error(qp.errors), data=qp.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
+        target, err = _resolve_target_user(request)
+        if err:
+            return err
+
         params   = qp.validated_data
         calendar = AttendanceDashboardService.get_calendar(
-            request.user, params['year'], params['month'],
+            target, params['year'], params['month'],
         )
         history = AttendanceDashboardService.get_history(
-            request.user, params['year'], params['month'],
+            target, params['year'], params['month'],
         )
         return success('Calendar retrieved successfully.', {
             'calendar': CalendarSerializer(calendar).data,
