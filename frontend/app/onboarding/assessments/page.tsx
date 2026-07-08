@@ -14,6 +14,7 @@ type AssignStatus = "pending" | "in_progress" | "complete";
 
 interface AssignmentItem {
   id: string; item_type: ItemType; title: string; order: number;
+  section_id: string | null; section_title: string | null;
   video_url: string; duration_secs: number | null;
   question: string; option_a: string; option_b: string; option_c: string; option_d: string;
   correct_option: string; pass_score: number; created_at: string;
@@ -61,14 +62,32 @@ function isItemDone(item: AssignmentItem, responses: ItemResponse[]): boolean {
   return item.item_type === "video" ? r.is_watched : r.selected_option !== "";
 }
 
-function toEmbedUrl(url: string): string {
-  const s = url.match(/youtu\.be\/([^?&/]+)/);
-  if (s) return `https://www.youtube.com/embed/${s[1]}`;
-  const w = url.match(/[?&]v=([^?&]+)/);
-  if (w) return `https://www.youtube.com/embed/${w[1]}`;
-  const v = url.match(/vimeo\.com\/(\d+)/);
-  if (v) return `https://player.vimeo.com/video/${v[1]}`;
-  return url;
+function toEmbedUrl(url: string): string | null {
+  // Already an embed URL — pass through
+  const already = url.match(/youtube\.com\/embed\/([^?&/]+)/);
+  if (already) return `https://www.youtube.com/embed/${already[1]}`;
+  const alreadyV = url.match(/player\.vimeo\.com\/video\/(\d+)/);
+  if (alreadyV) return `https://player.vimeo.com/video/${alreadyV[1]}`;
+
+  // youtu.be share link
+  const short = url.match(/youtu\.be\/([^?&/]+)/);
+  if (short) return `https://www.youtube.com/embed/${short[1]}`;
+
+  // Standard watch URL
+  const watch = url.match(/[?&]v=([^?&]+)/);
+  if (watch) return `https://www.youtube.com/embed/${watch[1]}`;
+
+  // Shorts and Live
+  const shorts = url.match(/youtube\.com\/shorts\/([^?&/]+)/);
+  if (shorts) return `https://www.youtube.com/embed/${shorts[1]}`;
+  const live = url.match(/youtube\.com\/live\/([^?&/]+)/);
+  if (live) return `https://www.youtube.com/embed/${live[1]}`;
+
+  // Vimeo
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+
+  return null;
 }
 
 // ── Completion Modal ──────────────────────────────────────────────────────────
@@ -129,6 +148,17 @@ export default function AssessmentsPage() {
   const [panelError, setPanelError]         = useState("");
   const [panelSelected, setPanelSelected]   = useState("");
   const [panelRunScore, setPanelRunScore]   = useState(0);
+
+  // Sidebar section collapse — key: `${assignmentId}|${sectionId}`, all open by default
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+
+  function toggleSection(key: string) {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
 
   // Countdown timers (seconds remaining per assignment, initialised from API)
   const [timers, setTimers]         = useState<Record<string, number>>({});
@@ -387,47 +417,99 @@ export default function AssessmentsPage() {
                   </div>
                 </div>
 
-                {/* Item list */}
-                <div style={{ paddingBottom: 8 }}>
-                  {sortedItems.map((item, idx) => {
-                    const done     = isItemDone(item, assignment.responses);
-                    const prevDone = idx === 0 || isItemDone(sortedItems[idx - 1], assignment.responses);
-                    const locked   = !prevDone && !done;
-                    const isActive = selectedPanel?.item.id === item.id;
-                    const isVideo  = item.item_type === "video";
-                    const itemResp = assignment.responses.find(r => r.item_id === item.id);
+                {/* Item list — grouped by section */}
+                {(() => {
+                  // Build ordered section groups from items
+                  const sectionOrder: string[] = [];
+                  const sectionMap = new Map<string, { title: string | null; items: AssignmentItem[] }>();
+                  for (const item of sortedItems) {
+                    const key = item.section_id ?? "__none__";
+                    if (!sectionMap.has(key)) {
+                      sectionOrder.push(key);
+                      sectionMap.set(key, { title: item.section_title ?? null, items: [] });
+                    }
+                    sectionMap.get(key)!.items.push(item);
+                  }
+                  const hasAnySections = sectionOrder.some(k => k !== "__none__");
+
+                  return sectionOrder.map(sectionKey => {
+                    const group = sectionMap.get(sectionKey)!;
+                    const collapseKey = `${assignment.id}|${sectionKey}`;
+                    const isOpen = !openSections.has(collapseKey);
+                    const sectionDone = group.items.every(i => isItemDone(i, assignment.responses));
 
                     return (
-                      <div key={item.id}
-                        onClick={() => !locked && openItem(item, assignment)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 10, padding: "8px 18px",
-                          cursor: locked ? "not-allowed" : "pointer", opacity: locked ? 0.45 : 1,
-                          background: isActive ? "rgba(30,78,140,0.07)" : "transparent",
-                          borderLeft: `3px solid ${isActive ? "#1e4e8c" : "transparent"}`,
-                          transition: "all 0.15s",
-                        }}>
-                        {/* Step indicator */}
-                        <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: done ? "#dcfce7" : locked ? "#f1f5f9" : isActive ? "#1e4e8c" : "#eff6ff", color: done ? "#16a34a" : locked ? "#94a3b8" : isActive ? "#fff" : "#1e4e8c", border: `1.5px solid ${done ? "#86efac" : locked ? "#e2e8f0" : isActive ? "#1e4e8c" : "#bfdbfe"}` }}>
-                          {done ? <i className="ti ti-check" style={{ fontSize: 12 }} /> : locked ? <i className="ti ti-lock" style={{ fontSize: 10 }} /> : (idx + 1)}
-                        </div>
-                        {/* Title + meta */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, color: locked ? "#94a3b8" : isActive ? "#1e4e8c" : "#334155", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
-                          <p style={{ fontSize: 10, color: "#94a3b8", margin: 0, display: "flex", alignItems: "center", gap: 3 }}>
-                            <i className={`ti ${isVideo ? "ti-player-play" : "ti-help-circle"}`} style={{ fontSize: 9 }} />
-                            {isVideo ? "Video" : "Quiz"}
-                            {done && itemResp && !isVideo && itemResp.is_correct != null && (
-                              <span style={{ color: itemResp.is_correct ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
-                                {" "}· {itemResp.is_correct ? `+${itemResp.score_awarded}pts` : "✗"}
-                              </span>
-                            )}
-                          </p>
-                        </div>
+                      <div key={sectionKey}>
+                        {/* Section header — only shown when there are named sections */}
+                        {hasAnySections && sectionKey !== "__none__" && (
+                          <div
+                            onClick={() => toggleSection(collapseKey)}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 8,
+                              padding: "7px 18px 7px 14px", cursor: "pointer",
+                              background: "#f8fafc",
+                              borderTop: "1px solid #f1f5f9",
+                              borderLeft: `3px solid ${sectionDone ? "#86efac" : "#bfdbfe"}`,
+                              userSelect: "none",
+                            }}>
+                            <i
+                              className={`ti ${isOpen ? "ti-chevron-down" : "ti-chevron-right"}`}
+                              style={{ fontSize: 12, color: "#94a3b8", flexShrink: 0, transition: "transform 0.15s" }}
+                            />
+                            <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.05em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {group.title ?? "Section"}
+                            </span>
+                            <span style={{ fontSize: 10, color: "#94a3b8", flexShrink: 0 }}>
+                              {group.items.filter(i => isItemDone(i, assignment.responses)).length}/{group.items.length}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Items — hidden when section collapsed */}
+                        {isOpen && group.items.map((item) => {
+                          const globalIdx = sortedItems.findIndex(i => i.id === item.id);
+                          const done     = isItemDone(item, assignment.responses);
+                          const prevDone = globalIdx === 0 || isItemDone(sortedItems[globalIdx - 1], assignment.responses);
+                          const locked   = !prevDone && !done;
+                          const isActive = selectedPanel?.item.id === item.id;
+                          const isVideo  = item.item_type === "video";
+                          const itemResp = assignment.responses.find(r => r.item_id === item.id);
+                          const indent   = hasAnySections && sectionKey !== "__none__" ? 28 : 18;
+
+                          return (
+                            <div key={item.id}
+                              onClick={() => !locked && openItem(item, assignment)}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 10,
+                                padding: `8px 18px 8px ${indent}px`,
+                                cursor: locked ? "not-allowed" : "pointer",
+                                opacity: locked ? 0.45 : 1,
+                                background: isActive ? "rgba(30,78,140,0.07)" : "transparent",
+                                borderLeft: `3px solid ${isActive ? "#1e4e8c" : "transparent"}`,
+                                transition: "all 0.15s",
+                              }}>
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, background: done ? "#dcfce7" : locked ? "#f1f5f9" : isActive ? "#1e4e8c" : "#eff6ff", color: done ? "#16a34a" : locked ? "#94a3b8" : isActive ? "#fff" : "#1e4e8c", border: `1.5px solid ${done ? "#86efac" : locked ? "#e2e8f0" : isActive ? "#1e4e8c" : "#bfdbfe"}` }}>
+                                {done ? <i className="ti ti-check" style={{ fontSize: 11 }} /> : locked ? <i className="ti ti-lock" style={{ fontSize: 9 }} /> : (globalIdx + 1)}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, color: locked ? "#94a3b8" : isActive ? "#1e4e8c" : "#334155", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
+                                <p style={{ fontSize: 10, color: "#94a3b8", margin: 0, display: "flex", alignItems: "center", gap: 3 }}>
+                                  <i className={`ti ${isVideo ? "ti-player-play" : "ti-help-circle"}`} style={{ fontSize: 9 }} />
+                                  {isVideo ? "Video" : "Quiz"}
+                                  {done && itemResp && !isVideo && itemResp.is_correct != null && (
+                                    <span style={{ color: itemResp.is_correct ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
+                                      {" "}· {itemResp.is_correct ? `+${itemResp.score_awarded}pts` : "✗"}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </div>
+                  });
+                })()}
 
                 {/* Submit / retake actions inside sidebar */}
                 {(allAnswered && !isDone) || isDone ? (
@@ -502,7 +584,7 @@ export default function AssessmentsPage() {
           )}
 
           {/* Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "32px 40px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
 
             {/* Loading */}
             {loading && (
@@ -553,16 +635,33 @@ export default function AssessmentsPage() {
               const alreadyDone = isItemDone(item, selectedAssignment.responses);
 
               return (
-                <div style={{ maxWidth: 720, margin: "0 auto" }}>
+                <div style={{ maxWidth: isVideo ? "100%" : 720, margin: "0 auto" }}>
 
                   {/* ── VIDEO ── */}
                   {isVideo && (
                     <div>
-                      {/* Player */}
-                      <div style={{ background: "#000", borderRadius: 14, overflow: "hidden", marginBottom: 16, aspectRatio: "16/9" }}>
-                        {(item.video_url.includes("youtu") || item.video_url.includes("vimeo"))
-                          ? <iframe src={toEmbedUrl(item.video_url)} allow="autoplay; fullscreen" allowFullScreen style={{ width: "100%", height: "100%", border: "none", display: "block" }} />
-                          : <video src={item.video_url} controls style={{ width: "100%", height: "100%", display: "block" }} />}
+                      {/* Player — fills the available content area, min-height so it's never tiny on small screens */}
+                      <div style={{ background: "#000", borderRadius: 14, overflow: "hidden", marginBottom: 16, width: "100%", aspectRatio: "16/9", minHeight: 220 }}>
+                        {(() => {
+                          const embedUrl = toEmbedUrl(item.video_url);
+                          if (embedUrl) {
+                            return <iframe src={embedUrl ?? undefined} allow="autoplay; fullscreen" allowFullScreen style={{ width: "100%", height: "100%", border: "none", display: "block" }} />;
+                          }
+                          // Direct video file (mp4, webm, etc.)
+                          if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(item.video_url)) {
+                            return <video src={item.video_url} controls style={{ width: "100%", height: "100%", display: "block" }} />;
+                          }
+                          // Unrecognised URL — show a fallback link
+                          return (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12, padding: 24 }}>
+                              <i className="ti ti-video-off" style={{ fontSize: 40, color: "#64748b" }} />
+                              <p style={{ color: "#94a3b8", fontSize: 13, margin: 0 }}>Preview not available</p>
+                              <a href={item.video_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#1e293b", color: "#e2e8f0", borderRadius: 8, padding: "8px 16px", fontSize: 13, textDecoration: "none" }}>
+                                <i className="ti ti-external-link" /> Open video
+                              </a>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {item.duration_secs && (

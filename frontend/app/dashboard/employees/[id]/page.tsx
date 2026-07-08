@@ -21,6 +21,7 @@ import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
 import { EmployeePickerInline } from "./_components/ReportingManagerCard";
 import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
+import { WishesTab } from "./_components/WishesTab";
 
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -291,13 +292,43 @@ export default function EmployeeProfilePage({
     setJustSaved(false);
     try {
       const employeePayload = {
-        department:           values.department  || null,
-        designation:          values.designation || null,
-        branch:               values.branch      || null,
-        role:                 ROLE_SLUG[values.ssRole] || null,
-        is_active:            employee?.status !== "inactive",
-        reporting_manager_id: values.reportingManagerId || null,
-        hr_id:                values.hrId || null,
+        // Employment fields
+        department:             values.department            || null,
+        designation:            values.designation           || null,
+        branch:                 values.branch                || null,
+        role:                   ROLE_SLUG[values.ssRole]     || null,
+        is_active:              employee?.status !== "inactive",
+        reporting_manager_id:   values.reportingManagerId   || null,
+        hr_id:                  values.hrId                  || null,
+        // Personal fields
+        date_of_birth:          values.dateOfBirth          || null,
+        gender:                 values.gender               || null,
+        marital_status:         values.maritalStatus?.toLowerCase() || null,
+        father_name:            values.fatherName           || null,
+        blood_group:            values.bloodGroup           || null,
+        current_address:        values.currentAddress       || null,
+        permanent_address:      values.permanentAddress     || null,
+        // Education & experience
+        highest_qualification:  values.highestQualification || null,
+        institution:            values.institution          || null,
+        year_of_passing:        values.yearOfPassing        || null,
+        specialization:         values.specialization       || null,
+        total_experience_years: values.totalExperienceYears || null,
+        previous_employer:      values.previousEmployer     || null,
+        previous_designation:   values.previousDesignation  || null,
+        leaving_reason:         values.leavingReason        || null,
+        // Bank details
+        account_holder_name:    values.accountHolderName    || null,
+        account_type:           values.accountType          || null,
+        account_number:         values.accountNumber        || null,
+        ifsc_code:              values.ifscCode             || null,
+        bank_name:              values.bankName             || null,
+        bank_branch_name:       values.bankBranch           || null,
+        // Emergency contact
+        emergency_name:         values.emergencyName        || null,
+        emergency_relationship: values.emergencyRelationship || null,
+        emergency_phone:        values.emergencyPhone       || null,
+        emergency_email:        values.emergencyEmail       || null,
       };
 
       await clientApi.put(API.employees.detail(id), employeePayload);
@@ -408,6 +439,14 @@ export default function EmployeeProfilePage({
         </div>
       ) : tab === "approval" ? (
         <ApprovalMatrixTab employeeCode={id} branch={values.branch ?? ""} />
+      ) : tab === "wishes" ? (
+        <WishesTab
+          employeeId={id}
+          employeeName={employee.firstName + (employee.lastName ? " " + employee.lastName : "")}
+          employeeEmail={employee.email}
+          dateOfBirth={employee.dateOfBirth}
+          dateOfJoining={employee.dateOfJoining}
+        />
       ) : (
         <TabPlaceholder icon={activeTab.icon} label={activeTab.label} />
       )}

@@ -119,25 +119,33 @@ export function proxy(request: NextRequest) {
   }
 
   if (isAuthenticated) {
-    const onboardingStatus = getOnboardingStatus(request);
-    const assessmentStatus = getAssessmentStatus(request);
-    const needsOnboarding  = onboardingStatus !== "complete";
-    const needsAssessments = !needsOnboarding && assessmentStatus === "pending";
+    const onboardingStatus  = getOnboardingStatus(request);
+    const assessmentStatus  = getAssessmentStatus(request);
     const isAssessmentsPage = pathname.startsWith("/onboarding/assessments");
+
+    // "approved" means HR has approved the onboarding form; only then can
+    // the employee access the assessment portal.
+    const needsOnboarding  = onboardingStatus !== "complete" && onboardingStatus !== "approved";
+    const needsAssessments = onboardingStatus === "approved" && assessmentStatus === "pending";
+
+    // Block /onboarding/assessments until HR has approved the onboarding form.
+    // Without this explicit check the route slips through because isOnboarding
+    // is true for any /onboarding/* path, masking the needsOnboarding guard below.
+    if (isAssessmentsPage && needsOnboarding) {
+      return NextResponse.redirect(new URL("/onboarding", request.url));
+    }
 
     // Onboarding-incomplete users must stay on /onboarding
     if (needsOnboarding && !isOnboarding) {
       return NextResponse.redirect(new URL("/onboarding", request.url));
     }
 
-    // Employees with pending assessments must go to /onboarding/assessments
+    // Employees with a pending assessment must go to /onboarding/assessments
     if (needsAssessments && !isAssessmentsPage) {
       return NextResponse.redirect(new URL("/onboarding/assessments", request.url));
     }
 
-    // Fully onboarded users must not access /onboarding — but let
-    // /onboarding/assessments through; the page itself checks the API
-    // and handles the no-assessments case without a backend status field.
+    // Fully onboarded or approved users must not linger on /onboarding base page
     if (!needsOnboarding && isOnboarding && !needsAssessments && !isAssessmentsPage) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }

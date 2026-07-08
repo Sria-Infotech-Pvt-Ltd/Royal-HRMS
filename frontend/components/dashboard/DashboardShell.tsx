@@ -41,6 +41,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/approvals": "Team Approvals",
   "/dashboard/branches":                    "Branch Management",
   "/dashboard/settings/attendance-config":  "Attendance Rules",
+  "/dashboard/referrals":                   "My Referrals",
+  "/dashboard/settings/referral-rules":     "Referral Rules",
 };
 
 

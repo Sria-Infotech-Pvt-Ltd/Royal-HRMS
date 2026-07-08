@@ -40,7 +40,8 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
     ? API.leave.requests
     : API.leave.requests + "?status=pending,l2_pending";
 
-  const { data: requests, refetch: refetchRequests, loading } = useFetch<LeaveRequest[]>(requestsUrl);
+  const { data: requestsData, refetch: refetchRequests, loading } =
+    useFetch<{ results: LeaveRequest[] }>(requestsUrl);
 
   const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(
     API.leave.stats + `?year=${currentYear}`
@@ -48,9 +49,10 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
 
+  const allRequests = requestsData?.results ?? [];
   const visibleRequests = selectedBranches.length === 0
-    ? (requests ?? [])
-    : (requests ?? []).filter(r => selectedBranches.includes(r.employee_branch));
+    ? allRequests
+    : allRequests.filter(r => selectedBranches.includes(r.employee_branch));
 
   async function approve(id: string) {
     setActioning(id);
@@ -82,7 +84,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
 
   // ── Employee layout ────────────────────────────────────────────────────────
   if (isEmployee) {
-    const ownPending = (requests ?? []).filter(
+    const ownPending = allRequests.filter(
       r => r.status === "pending" || r.status === "l2_pending"
     ).length;
 
@@ -144,7 +146,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
               <div style={{ padding: "40px 20px", textAlign: "center" }}>
                 <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
               </div>
-            ) : (requests ?? []).length === 0 ? (
+            ) : allRequests.length === 0 ? (
               <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
                 No leave requests yet. Click <strong>Apply Leave</strong> to get started.
               </div>
@@ -162,7 +164,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                   </tr>
                 </thead>
                 <tbody>
-                  {(requests ?? []).map(r => (
+                  {allRequests.map(r => (
                     <tr key={r.id}>
                       <td>{r.leave_type_display}</td>
                       <td>{fmtShortDate(r.start_date)}</td>

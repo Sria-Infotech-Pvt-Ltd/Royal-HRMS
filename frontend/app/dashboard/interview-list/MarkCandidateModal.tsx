@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
-import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailPreview";
-import { Candidate, EmailTemplate, RECRUITMENT_API } from "./_data";
+import { buildEmailPreview, CompanyInfo, normalizeExtraContext, renderTemplateVars } from "@/lib/emailPreview";
+import { Candidate, EmailTemplate, MODE_LABELS, RECRUITMENT_API } from "./_data";
 import clientApi from "@/lib/clientApi";
 
 interface Props {
@@ -13,7 +13,14 @@ interface Props {
   onConfirmed:  (updated: Candidate) => void;
 }
 
-const AUTO_KEYS = new Set(["FULL_NAME", "FNAME", "LNAME", "EMAIL", "POSITION", "COMPANY"]);
+const AUTO_KEYS = new Set([
+  "candidate_name", "full_name", "first_name", "last_name",
+  "email", "position_applied", "position",
+  "branch", "branch_name",
+  "interview_date", "interview_mode", "interview_mode_display",
+  "company_name",
+  "full_name", "fname", "lname", "email", "position", "company",
+]);
 
 export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirmed }: Props) {
   const isSelect = targetStatus === "selected";
@@ -53,26 +60,44 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
       .finally(() => setLoadingTemplates(false));
   }, [isSelect]);
 
-  function previewVars(): Record<string, string> {
-    const parts = candidate.name.trim().split(/\s+/);
+  function candidateVars(): Record<string, string> {
+    const parts      = candidate.name.trim().split(/\s+/);
+    const firstName  = parts[0] ?? candidate.name;
+    const lastName   = parts.length > 1 ? parts[parts.length - 1] : "";
+    const companyName = company?.company_name ?? "[Company]";
     return {
-      FULL_NAME: candidate.name,
-      FNAME:     parts[0] ?? candidate.name,
-      LNAME:     parts.length > 1 ? parts[parts.length - 1] : "",
-      EMAIL:     candidate.email,
-      POSITION:  candidate.position_applied,
-      COMPANY:   company?.company_name ?? "[Company]",
+      // Snake-case keys matching Django model fields and template placeholders
+      candidate_name:   candidate.name,
+      full_name:        candidate.name,
+      first_name:       firstName,
+      last_name:        lastName,
+      email:            candidate.email,
+      position_applied:      candidate.position_applied,
+      position:              candidate.position_applied,
+      branch:                candidate.branch_name ?? "",
+      branch_name:           candidate.branch_name ?? "",
+      interview_date:        candidate.interview_date ?? "",
+      interview_mode:        candidate.interview_mode ?? "",
+      interview_mode_display: MODE_LABELS[candidate.interview_mode] ?? candidate.interview_mode ?? "",
+      company_name:     companyName,
+      // Legacy uppercase keys for templates that still use them
+      FULL_NAME:        candidate.name,
+      FNAME:            firstName,
+      LNAME:            lastName,
+      EMAIL:            candidate.email,
+      POSITION:         candidate.position_applied,
+      COMPANY:          companyName,
     };
   }
 
   function previewSubject(): string {
     if (!selectedTemplate) return "";
-    return renderTemplateVars(selectedTemplate.subject, previewVars());
+    return renderTemplateVars(selectedTemplate.subject, candidateVars());
   }
 
   function previewHtml(): string {
     if (!selectedTemplate) return "";
-    const body = renderTemplateVars(selectedTemplate.body, previewVars());
+    const body = renderTemplateVars(selectedTemplate.body, candidateVars());
     return buildEmailPreview(body, company);
   }
 
@@ -81,10 +106,17 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
     setApiError("");
     try {
       const res = await RECRUITMENT_API.setStatus(candidate.id, {
-        status:        targetStatus,
+        status:  targetStatus,
         remarks,
-        template_name: selectedTemplate?.name,
       });
+
+      if (selectedTemplate) {
+        await RECRUITMENT_API.sendEmail(candidate.id, {
+          template_name: selectedTemplate.name,
+          extra_context: normalizeExtraContext(candidateVars()),
+        });
+      }
+
       onConfirmed(res.data.data);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -95,7 +127,7 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
   }
 
   const hasManualVars = (selectedTemplate?.available_variables ?? [])
-    .some(v => !AUTO_KEYS.has(v.toUpperCase()));
+    .some(v => !AUTO_KEYS.has(v.toLowerCase()));
 
   return (
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>

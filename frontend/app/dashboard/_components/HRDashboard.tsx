@@ -1,5 +1,6 @@
 import type { SessionPayload } from "@/lib/session";
-import ClockInButton from "@/components/ClockInButton";
+import ClockInButton    from "@/components/ClockInButton";
+import BirthdayWidget   from "@/components/dashboard/BirthdayWidget";
 
 interface Props { session: SessionPayload }
 
@@ -83,54 +84,7 @@ export default function HRDashboard({ session }: Props) {
             </div>
           </div>
 
-          {/* Today's Birthdays */}
-          <div className="card mb-16">
-            <div className="card-header">
-              <div className="card-title"><i className="ti ti-cake" /> Today&apos;s Birthdays</div>
-            </div>
-            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div className="bday-card">
-                <div className="bday-cake">🎂</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Meena Iyer</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Finance Manager · Turning 38</div>
-                </div>
-                <button className="btn btn-outline btn-sm"><i className="ti ti-cake" /> Send Wish</button>
-              </div>
-              <div className="bday-card">
-                <div className="bday-cake">🎂</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Vikram Das</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Interview today · Software Engineer</div>
-                </div>
-                <button className="btn btn-outline btn-sm"><i className="ti ti-cake" /> Send Wish</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Work Anniversaries */}
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title"><i className="ti ti-confetti" /> Work Anniversaries — This Month</div>
-            </div>
-            <div style={{ padding: 0 }}>
-              {[
-                { initials: "AM", name: "Arjun Mehta",  detail: "Completed 4 years · Engineering",  badge: "4 yrs" },
-                { initials: "MI", name: "Meena Iyer",   detail: "Completes 6 years on Aug 5 · Finance", badge: "6 yrs" },
-              ].map(a => (
-                <div key={a.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--bg-high)" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                    {a.initials}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{a.name}</div>
-                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{a.detail}</div>
-                  </div>
-                  <span className="badge badge-primary">{a.badge}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <BirthdayWidget />
         </div>
 
         {/* Right */}
