@@ -23,15 +23,15 @@ export default function MyAttendancePage() {
 
   const { stats, summary, calendar, history, isLoading, refetch } = useAttendanceDashboard({ month, year });
 
-  const isCurrentMonth = month === initMonth && year === initYear;
-
   function prev() {
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
     else { setMonth(m => m - 1); }
   }
 
+  // Forward navigation is intentionally unbounded, same as prev() — employees
+  // need to browse into future months to see upcoming holidays before
+  // deciding when to apply for leave, not just review past attendance.
   function next() {
-    if (isCurrentMonth) return;
     if (month === 12) { setMonth(1); setYear(y => y + 1); }
     else { setMonth(m => m + 1); }
   }
@@ -154,7 +154,6 @@ export default function MyAttendancePage() {
         calendar={calendar}
         history={history}
         isLoading={isLoading}
-        isCurrentMonth={isCurrentMonth}
         onPrev={prev}
         onNext={next}
         onRegularize={date => setCorrectionDate(date)}

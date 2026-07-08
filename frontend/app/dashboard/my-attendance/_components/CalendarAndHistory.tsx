@@ -11,7 +11,6 @@ interface Props {
   calendar:     Record<string, DayRecord>;
   history:      HistoryRow[];
   isLoading:    boolean;
-  isCurrentMonth: boolean;
   onPrev:       () => void;
   onNext:       () => void;
   onRegularize: (date: string) => void;
@@ -31,7 +30,7 @@ const LEGEND = [
 
 type Tab = "calendar" | "history";
 
-export default function CalendarAndHistory({ month, year, calendar, history, isLoading, isCurrentMonth, onPrev, onNext, onRegularize }: Props) {
+export default function CalendarAndHistory({ month, year, calendar, history, isLoading, onPrev, onNext, onRegularize }: Props) {
   const [tab, setTab] = useState<Tab>("calendar");
 
   return (
@@ -69,7 +68,7 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)", minWidth: 130, textAlign: "center" }}>
             {isLoading ? "Loading…" : `${MONTH_NAMES[month - 1]} ${year}`}
           </span>
-          <button className="btn btn-ghost btn-sm" onClick={onNext} disabled={isLoading || isCurrentMonth}>
+          <button className="btn btn-ghost btn-sm" onClick={onNext} disabled={isLoading}>
             <i className="ti ti-chevron-right" />
           </button>
         </div>

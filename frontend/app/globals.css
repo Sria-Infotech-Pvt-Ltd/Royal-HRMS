@@ -441,6 +441,21 @@ textarea.field-input {
   min-height: 90px;
 }
 
+/* Custom dropdown arrow for <select class="field-input field-select"> —
+   replaces the native arrow so it matches the rest of the field styling.
+   Previously duplicated as an inline `style` object wherever a themed
+   select was needed; centralised here so no page needs to repeat it. */
+.field-select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 15px;
+  padding-right: 2.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
 .field-input.field-error {
   border-color: var(--error);
 }

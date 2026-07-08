@@ -188,10 +188,15 @@ export default function LeaveRequestDetailModal({
             Close
           </button>
           {/* This list only ever contains the caller's own requests, so status is
-              a safe stand-in until the backend returns can_cancel on every row. */}
+              a safe stand-in on rows the backend hasn't attached can_cancel to. */}
           {onCancelRequest && (r.can_cancel ?? (r.status === "pending" || r.status === "l2_pending")) && (
             <button
-              onClick={() => { onCancelRequest(); onClose(); }}
+              onClick={() => {
+                if (window.confirm("Are you sure you want to cancel this leave request?")) {
+                  onCancelRequest();
+                  onClose();
+                }
+              }}
               className="px-5 py-2.5 rounded-xl border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
             >
               Cancel Request

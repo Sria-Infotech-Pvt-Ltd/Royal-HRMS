@@ -1468,3 +1468,104 @@ Remain client-side — they filter the results returned for the current page + s
 - **`SendWishModal` uses `recruitment.sendEmail(employeeId)`** — the endpoint is `/recruitment/candidates/{id}/send-email/`. It works for employee IDs (strings) because `sendEmail` was widened to `number | string`. The backend must accept an employee UUID/code at that route; verify this if wish emails start failing.
 - **Employee total stat is accurate; Active/Onboarding/Departments are per-page only** — to fix, ask the backend to add a `GET /employees/stats/` endpoint returning `{ total, active, onboarding, departments }`, then call it in parallel with `fetchEmployees` (same pattern as `RECRUITMENT_API.stats()` in the interview list).
 - **`BONUS_STAGES` in `referrals/page.tsx` is hardcoded** — update when actual bonus policy is confirmed.
+
+---
+
+## Session 19 — Rithwika (08 July 2026)
+
+**Branch:** `frontend/08-07`
+
+---
+
+### 1. Settings → Holiday Calendar — Wired to Real Backend
+
+`app/dashboard/settings/holiday-calendar/page.tsx` was pure mock (hardcoded `SEED` array, all CRUD just mutated local state). Given a real API contract (`GET/POST /leave/holidays/`, `GET/PATCH/DELETE /leave/holidays/<id>/`), rebuilt fully against it.
+
+- **`lib/api/endpoints.ts`** — added `leave.holidays` / `leave.holidayDetail(id)`.
+- **`types/holidays.ts`** (new) — `Holiday`, `HolidayListData`, `HolidayFormPayload` typed to the real response/request shapes (`holiday_type_display`, `mandatory_optional`, `branch`/`branch_name`, etc.).
+- Split into 5 files to stay under this repo's 200/300-line guidelines (a single-file version would have been ~480 lines):
+  - `page.tsx` (278 lines) — state, fetching, filters
+  - `_components/HolidayFormModal.tsx` — Add/Edit
+  - `_components/HolidayViewModal.tsx` — View
+  - `_components/DeleteHolidayModal.tsx` — Delete confirm
+  - `_components/HolidayListView.tsx` / `HolidayCalendarView.tsx` — List table / calendar grid
+- Add/Edit/Delete/status-toggle all call the real endpoints via `clientApi`, surfacing the backend's own `message` through `useToast` (same pattern as every other CRUD page this branch touched).
+- Branch dropdown (top filter + Add/Edit form) sourced from real `GET /branch/branches/`, not a hardcoded list.
+
+---
+
+### 2. Holiday Calendar — List/Calendar Filtering Fix
+
+Two bugs found after the initial build, both in `page.tsx`:
+
+**a) List view filters were client-side-only, not hitting the server.** Given contract: `?year=&month=&type=&optional=true`. Fixed by splitting into two fetches — `yearData` (fetched once per year, feeds Calendar view + tab-count stats, so navigating months never re-calls the API) and `listData` (built from a `useMemo`'d query string including `month`/`type`/`optional`, refetched whenever those filters change). Branch/search stay client-side on top of the server-filtered list since they aren't part of the given query contract.
+
+**b) Month dropdown and Calendar view were disconnected.** Picking "August" in the "All Months" dropdown updated the List view correctly but the Calendar view stayed on January — `fMonth` (dropdown) and `calMonth` (calendar's displayed month) were two independent states with nothing syncing them. Fixed with `changeFMonth`/`changeCalMonth` wrapper handlers that keep both in sync in either direction (dropdown → calendar, and calendar's own prev/next arrows → dropdown).
+
+---
+
+### 3. My Attendance — Calendar Couldn't Navigate Past the Current Month
+
+Reported symptom: the "My Attendance" calendar was stuck at July 2026 — employees need to browse forward to see upcoming holidays before deciding when to apply for leave.
+
+Root cause in `app/dashboard/my-attendance/page.tsx`: `next()` had `if (isCurrentMonth) return;`, and `CalendarAndHistory.tsx` separately disabled the Next button on the same flag. Both removed — forward navigation is now unbounded, matching `prev()` (which already had no limit). The now-dead `isCurrentMonth` prop was removed from `CalendarAndHistory.tsx` entirely.
+
+---
+
+### 4. `my-requests/page.tsx` — Field Contract Fix, Then Full Rebuild Against Shared Leave Types
+
+**First pass:** `NewLeaveModal` was still sending `from_date`/`to_date` (no `duration` field at all) instead of the real `start_date`/`end_date`/`duration` contract — every submission through this page failed validation. Fixed to match `approvals/page.tsx`'s already-correct equivalent modal exactly, including adding the missing Duration dropdown. Also fixed `"lop"` → `"lwp"` for the Loss-of-Pay leave type value (confirmed via `backend/apps/hrms/models.py`: `LEAVE_LWP = 'lwp'`) — this typo existed in both `my-requests` and `approvals` pages and would have failed validation the moment the date-field fix let requests actually reach the backend.
+
+**Inline CSS removal:** per instruction, converted every inline `style={{...}}` in this file to global CSS classes or Tailwind utilities. Reused several exact pre-existing global classes the page wasn't using (`.badge`/`.badge-warn`/etc., `.table-wrap`, `.tabs`/`.tab`/`.tab.active`), added one new reusable global class (`.field-select` in `app/globals.css`, replacing the duplicated inline chevron-background-image object on every themed `<select>`), and used Tailwind arbitrary values (`text-[var(--error)]`, etc.) for one-offs with no existing class. Also fixed `.btn-primary` → `.btn-filled` on every button in this file — `.btn-primary` doesn't exist anywhere in `globals.css`, so those buttons were rendering with no background color at all.
+
+**Read-side field mismatch + pagination bug:** the table's local `LeaveRequest` interface used stale field names (`from_date`/`to_date`/`days`/`applied_on`/`remarks`) that don't exist on the real API response, and `useFetch<LeaveRequest[]>(...)` treated the paginated envelope (`{count, results, ...}`) as a bare array — the same "written before pagination was added" bug already fixed in three other leave components back in Session 16, just never caught here. Fixed by dropping the local type entirely in favor of the shared `LeaveRequest`/`PaginatedResponse`/`fmtDate` from `../leave/_data`, and switching the Status column to the shared `StatusCell` component.
+
+---
+
+### 5. Cancel Leave Request — Added in All Three "My Leave Requests" Locations
+
+Turned out there are three separate places in the app where an employee can see and click into their own leave request, and none of them had a way to cancel:
+
+1. `app/dashboard/my-requests/page.tsx`
+2. `app/dashboard/approvals/page.tsx` → `MyRequestsSection` ("My Requests" tab)
+3. `app/dashboard/leave/_components/LeaveDashboard.tsx` → employee branch ("Leave Management" sidebar page)
+
+**Shared button, one place:** `LeaveRequestDetailModal.tsx` already had a Cancel button gated on `onCancelRequest && (r.can_cancel ?? (r.status === "pending" || r.status === "l2_pending"))` — reads the backend's `can_cancel` field first, falls back to a status check only if it's absent. Added a `window.confirm("Are you sure you want to cancel this leave request?")` guard before firing `onCancelRequest`, so every page using this modal gets the confirmation dialog for free.
+
+**Per-page wiring** (each page owns its own `cancelRequest`/`cancelMine` function calling `clientApi.patch(API.leave.requestDetail(id))` — no body — then shows the backend's response `message` via `useToast` and refetches):
+- `my-requests/page.tsx` — new `cancelRequest(id)` in `LeaveTab`, passed as `onCancelRequest`.
+- `approvals/page.tsx` — new `cancelRequest(id)` in `MyRequestsSection`, passed the same way.
+- `LeaveDashboard.tsx` — `cancelMine(id)` **already existed** and was already correctly wired for the approver's own "My Leave Requests" tab (`tab === "mine"`), but the plain-employee branch's modal call never passed `onCancelRequest` at all — the exact bug behind the reported screenshot. Wired it in, and fixed `cancelMine` itself: it previously swallowed all errors silently and only refetched a list the employee branch doesn't even read from (`refetchMine`, not `refetchRequests`). Now shows toast feedback on both success/error and refetches both lists.
+
+---
+
+### Key Files Changed / Created (08 July 2026 — Session 19)
+
+| File | Change |
+|------|--------|
+| `lib/api/endpoints.ts` | Added `leave.holidays`, `leave.holidayDetail(id)` |
+| `types/holidays.ts` | **NEW** |
+| `app/dashboard/settings/holiday-calendar/page.tsx` | Full rewrite — real API, split into 5 files; server-side List filtering; month dropdown/Calendar view sync fix |
+| `app/dashboard/settings/holiday-calendar/_components/HolidayFormModal.tsx` | **NEW** |
+| `app/dashboard/settings/holiday-calendar/_components/HolidayViewModal.tsx` | **NEW** |
+| `app/dashboard/settings/holiday-calendar/_components/DeleteHolidayModal.tsx` | **NEW** |
+| `app/dashboard/settings/holiday-calendar/_components/HolidayListView.tsx` | **NEW** |
+| `app/dashboard/settings/holiday-calendar/_components/HolidayCalendarView.tsx` | **NEW** |
+| `app/dashboard/my-attendance/page.tsx` | Removed the `isCurrentMonth` block on forward calendar navigation |
+| `app/dashboard/my-attendance/_components/CalendarAndHistory.tsx` | Removed dead `isCurrentMonth` prop; Next button no longer disabled at the current month |
+| `app/globals.css` | Added `.field-select` (reusable select-chevron background, replaces per-file inline style objects) |
+| `app/dashboard/my-requests/page.tsx` | `NewLeaveModal` sends `start_date`/`end_date`/`duration` (was `from_date`/`to_date`); `"lop"` → `"lwp"`; all inline styles converted to global/Tailwind classes; `.btn-primary` → `.btn-filled`; switched to shared `LeaveRequest`/`PaginatedResponse`/`fmtDate`/`StatusCell`/`LeaveRequestDetailModal` (fixes a Session-16-pattern pagination bug); added row-click detail modal + Cancel Request wiring |
+| `app/dashboard/approvals/page.tsx` | `MyRequestsSection` — added `cancelRequest(id)`, wired `onCancelRequest` into its `LeaveRequestDetailModal` call |
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | Employee branch's detail modal now passes `onCancelRequest={() => cancelMine(...)}`; `cancelMine` gained toast feedback and now refetches both `requestsUrl` and the mine-list |
+| `app/dashboard/leave/_components/LeaveRequestDetailModal.tsx` | Cancel Request button now shows a `window.confirm` prompt before firing |
+
+---
+
+### Notes for Next Developer
+
+- **`.btn-primary` still doesn't exist anywhere in `globals.css`** — only fixed the instances in `my-requests/page.tsx` this session. Grep for `btn-primary` across the rest of the app (`approvals/page.tsx` still uses it in several places, confirmed while reading this session — not fixed, out of scope for the task given) — every one of those buttons is currently rendering with no background color.
+- **`my-requests/page.tsx`'s `className="settings-card"` wrapper div also references an undefined class** — only `.settings-card-tile`/`.settings-card-icon`/etc. exist in `globals.css`, not a bare `.settings-card`. Flagged, not fixed (unrelated to the inline-style task given).
+- **Custom leave types still can't be applied for, and now we know exactly why**: `LeaveRequestCreateSerializer.validate_leave_type` (`backend/apps/hrms/views/leave.py`) has logic to accept custom types via a `LeavePolicy` lookup, but it's dead code — `LeaveRequest.leave_type` is a model `CharField(choices=LEAVE_TYPE_CHOICES)`, so DRF's auto-generated `ChoiceField` rejects anything outside the fixed six before that validator ever runs. Backend fix needed: widen or drop the model-level `choices=`.
+- **The `Q()`/`F()` bug in `_deduct_balance_safe` flagged in Session 18 is confirmed fixed** — `leave.py:212` already uses `F('used_days') + days` correctly. No longer an open item.
+- **Holiday Calendar's branch field type mismatch**: the given API spec described `branch` as a UUID, but this app's real `GET /branch/branches/` returns numeric `id`s (confirmed via `BranchManagement.tsx`). Implemented using whatever `id` the branches endpoint actually returns (`number | null`) rather than forcing a UUID type that doesn't match reality — flag to the backend/spec owner if this becomes a real mismatch once tested against the live server.
+- **Three "My Leave Requests" views now all support Cancel, but each still has its own separate `cancelRequest`/`cancelMine` function** — not shared, since each page's data-fetching/refetch shape differs slightly. If a fourth such view is ever added, consider extracting a `useCancelLeaveRequest()` hook instead of copy-pasting a fourth time.
