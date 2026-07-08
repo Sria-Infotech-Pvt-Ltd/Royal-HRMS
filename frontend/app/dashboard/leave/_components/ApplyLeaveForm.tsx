@@ -5,24 +5,12 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
-import StatusCell from "./StatusCell";
-import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 import {
-  LeaveBalance, LeavePolicy, LeaveRequest, PaginatedResponse,
-  LeaveTypeKey, DurationKey, ReqStatus,
-  LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG, STATUS_LABEL,
-  calcWorkingDays, fmtDate, fmtShortDate,
+  LeaveBalance, LeavePolicy, LeaveRequest,
+  LeaveTypeKey, DurationKey,
+  LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
+  calcWorkingDays, fmtDate,
 } from "../_data";
-
-// Labels come from the shared STATUS_LABEL map so the chips always match the
-// status badges shown in the table — a manager's own requests start at
-// l2_pending, not pending, so "All" (no status filter) is the only sane default.
-const STATUS_FILTERS: Array<{ key: "all" | ReqStatus; label: string }> = [
-  { key: "all", label: "All" },
-  // Safe cast: STATUS_LABEL is typed Record<ReqStatus, string>, so its keys are
-  // exactly the ReqStatus union — Object.keys just widens them to string[].
-  ...(Object.keys(STATUS_LABEL) as ReqStatus[]).map(key => ({ key, label: STATUS_LABEL[key] })),
-];
 
 interface LeaveForm {
   leave_type:          LeaveTypeKey;
@@ -70,33 +58,10 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const [submitting,    setSubmitting]    = useState(false);
   const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
   const [docFile,       setDocFile]       = useState<File | null>(null);
-  const [historyFilter, setHistoryFilter] = useState<"all" | ReqStatus>("all");
-  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
 
   const currentYear = new Date().getFullYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
-  // Own leave history — always the bare endpoint, no scope, no status/year filter,
-  // regardless of role (employee/manager/HR all see their own requests here).
-  // scope=team is exclusively for the Approval Queue page.
-  const { data: myRequests, refetch: refetchMine } = useFetch<PaginatedResponse<LeaveRequest>>(
-    API.leave.requests
-  );
-  const myRequestList = myRequests?.results ?? [];
-  const visibleHistory = historyFilter === "all"
-    ? myRequestList
-    : myRequestList.filter(r => r.status === historyFilter);
-
-  async function handleCancelRequest(id: string) {
-    try {
-      await clientApi.patch(API.leave.requestDetail(id));
-      refetchMine();
-      showToast("Leave request cancelled.", "success");
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      showToast(msg || "Failed to cancel leave request.", "error");
-    }
-  }
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
   const policyMap  = Object.fromEntries((policies ?? []).map(p => [p.leave_type, p]));
@@ -104,10 +69,19 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const ltConfig   = LEAVE_TYPE_CONFIG[form.leave_type];
   const balance    = balanceMap[form.leave_type];
   const policy     = policyMap[form.leave_type];
-  const isHalfDay  = form.duration !== "full_day";
-  const workDays   = useMemo(() => calcWorkingDays(form.from_date, form.to_date, form.duration), [form.from_date, form.to_date, form.duration]);
-  const available  = balance ? Number(balance.available_days) : 0;
-  const overLimit  = !ltConfig.isLwp && workDays > available && workDays > 0;
+  const isHalfDay       = form.duration !== "full_day";
+  const sandwichEnabled = policy?.sandwich_leave_enabled ?? false;
+  const workDays        = useMemo(
+    () => calcWorkingDays(form.from_date, form.to_date, form.duration, sandwichEnabled),
+    [form.from_date, form.to_date, form.duration, sandwichEnabled]
+  );
+  const available     = balance ? Number(balance.available_days) : 0;
+  const convertToLop   = policy?.convert_to_lop ?? false;
+  const exceedsBalance = !ltConfig.isLwp && workDays > available && workDays > 0;
+  // With convert_to_lop on, exceeding balance is allowed — the shortfall is
+  // processed as LOP by the backend rather than blocking submission.
+  const overLimit = exceedsBalance && !convertToLop;
+  const lopDays   = exceedsBalance && convertToLop ? workDays - available : 0;
 
   function setField<K extends keyof LeaveForm>(key: K, val: LeaveForm[K]) {
     setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
@@ -146,7 +120,6 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
       const res = await clientApi.post(API.leave.requests, fd);
       setSubmitted(res.data.data as LeaveRequest);
-      refetchMine();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       showToast(msg || "Failed to submit leave request. Please try again.", "error");
@@ -302,20 +275,48 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               </div>
 
               {workDays > 0 && (
-                <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
-                  overLimit ? "bg-red-50 border-red-200" : "border-blue-100"].join(" ")}
-                  style={overLimit ? {} : { background: "rgba(30,78,140,0.05)" }}>
-                  <div className="flex items-center gap-2">
-                    <i className={`ti ${overLimit ? "ti-alert-triangle text-red-500" : "ti-calendar-check"} text-sm`}
-                      style={overLimit ? {} : { color: "#1e4e8c" }} />
-                    <span className={`text-sm font-bold ${overLimit ? "text-red-600" : "text-blue-800"}`}>
-                      {workDays} working day{workDays !== 1 ? "s" : ""}
-                    </span>
+                <div className="flex flex-col gap-3">
+                  <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
+                    overLimit ? "bg-red-50 border-red-200" : lopDays > 0 ? "bg-amber-50 border-amber-200" : "border-blue-100"].join(" ")}
+                    style={overLimit || lopDays > 0 ? {} : { background: "rgba(30,78,140,0.05)" }}>
+                    <div className="flex items-center gap-2">
+                      <i className={`ti ${overLimit ? "ti-alert-triangle text-red-500" : lopDays > 0 ? "ti-alert-circle text-amber-600" : "ti-calendar-check"} text-sm`}
+                        style={!overLimit && lopDays === 0 ? { color: "#1e4e8c" } : {}} />
+                      <span className={`text-sm font-bold ${overLimit ? "text-red-600" : lopDays > 0 ? "text-amber-700" : "text-blue-800"}`}>
+                        {workDays} working day{workDays !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    {!ltConfig.isLwp && (
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${overLimit ? "bg-red-100 text-red-700" : lopDays > 0 ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
+                        {overLimit
+                          ? `Exceeds balance by ${workDays - available}d`
+                          : lopDays > 0
+                            ? `${lopDays}d will be LOP`
+                            : `${available - workDays}d will remain`}
+                      </span>
+                    )}
                   </div>
-                  {!ltConfig.isLwp && (
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${overLimit ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
-                      {overLimit ? `Exceeds balance by ${workDays - available}d` : `${available - workDays}d will remain`}
-                    </span>
+
+                  {lopDays > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-col gap-3">
+                      <div className="grid grid-cols-2 gap-y-1.5 text-sm">
+                        <span className="text-gray-500">Available {ltConfig.label}</span>
+                        <span className="font-semibold text-gray-800 text-right">{available} Days</span>
+                        <span className="text-gray-500">Requested Leave</span>
+                        <span className="font-semibold text-gray-800 text-right">{workDays} Days</span>
+                        <span className="text-gray-500">{ltConfig.label} Used</span>
+                        <span className="font-semibold text-gray-800 text-right">{workDays - lopDays} Days</span>
+                        <span className="text-gray-500">LOP Days</span>
+                        <span className="font-semibold text-amber-700 text-right">{lopDays} Days</span>
+                      </div>
+                      <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-100 rounded-lg px-3 py-2">
+                        <i className="ti ti-info-circle mt-0.5 flex-shrink-0" />
+                        <span>
+                          Your available leave balance will be exhausted. The remaining {lopDays} day{lopDays !== 1 ? "s" : ""} will
+                          be treated as Leave Without Pay (LOP) if this request is approved.
+                        </span>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -446,77 +447,6 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
       </div>
 
-    {/* ── My Leave Requests history ─────────────────────────────────────── */}
-    {myRequestList.length > 0 && (
-      <div className="card" style={{ marginTop: 20 }}>
-        <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
-          <div className="card-title">
-            <i className="ti ti-history" /> My Leave Requests
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {STATUS_FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => setHistoryFilter(f.key)}
-                className={["btn", "btn-sm", historyFilter === f.key ? "btn-primary" : "btn-ghost"].join(" ")}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Leave Type</th>
-                <th>From</th>
-                <th>To</th>
-                <th style={{ textAlign: "center" }}>Days</th>
-                <th>Approver</th>
-                <th>Applied On</th>
-                <th style={{ textAlign: "center" }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: "center", color: "var(--on-variant)", padding: 20 }}>
-                    No requests match this filter.
-                  </td>
-                </tr>
-              ) : visibleHistory.map(r => (
-                <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
-                  <td>{r.leave_type_display}</td>
-                  <td>{fmtShortDate(r.start_date)}</td>
-                  <td>{fmtShortDate(r.end_date)}</td>
-                  <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
-                  <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
-                    {r.approved_by || "—"}
-                    {r.approved_at
-                      ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
-                      : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
-                  </td>
-                  <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <StatusCell request={r} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )}
-
-    {detailRequest && (
-      <LeaveRequestDetailModal
-        requestId={detailRequest.id}
-        initialData={detailRequest}
-        onClose={() => setDetailRequest(null)}
-        onCancelRequest={() => handleCancelRequest(detailRequest.id)}
-      />
-    )}
     </div>
   );
 }

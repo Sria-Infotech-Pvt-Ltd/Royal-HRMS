@@ -1,0 +1,84 @@
+"use client";
+
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import { MultiCheckRow, type PolicyRuleFields } from "./LeavePoliciesTab";
+
+interface BranchOption      { id: number; branch_name: string }
+interface DepartmentOption  { id: number; name: string }
+interface DesignationOption { id: number; name: string }
+
+// No employment-type concept exists anywhere in this system yet (checked
+// accounts.models — no field, no choices). Kept as a static placeholder list
+// matching the exact values the backend's PUT example uses ("Full-time",
+// "Part-time") until a real backend enum exists to source it from.
+const EMPLOYMENT_TYPE_OPTIONS = ["Full-time", "Part-time", "Contract", "Intern", "Consultant"];
+
+// Exactly the three values the backend accepts — confirmed from the field
+// reference table (all / male / female, no "other").
+const GENDER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all",    label: "All" },
+  { value: "male",   label: "Male" },
+  { value: "female", label: "Female" },
+];
+
+interface Props {
+  rules: PolicyRuleFields;
+  setField: <K extends keyof PolicyRuleFields>(key: K, value: PolicyRuleFields[K]) => void;
+}
+
+export default function EligibilitySection({ rules, setField }: Props) {
+  const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(`${API.branches.list}?page_size=100`);
+  const { data: deptData }   = useFetch<DepartmentOption[] | { results: DepartmentOption[] }>(API.departments.list);
+  const { data: desigData }  = useFetch<DesignationOption[] | { results: DesignationOption[] }>(API.designations.list);
+
+  const branches     = Array.isArray(branchData) ? branchData : (branchData?.results ?? []);
+  const departments  = Array.isArray(deptData)   ? deptData   : (deptData?.results ?? []);
+  const designations = Array.isArray(desigData)  ? desigData  : (desigData?.results ?? []);
+
+  return (
+    <div className="card mb-20">
+      <div className="card-header">
+        <div className="card-title"><i className="ti ti-users-group" /> Eligibility Rules</div>
+      </div>
+      <div style={{ padding: "20px 24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
+          <MultiCheckRow
+            label="Applicable Branches"
+            options={branches.map(b => b.branch_name)}
+            selected={rules.applicable_branches}
+            onChange={v => setField("applicable_branches", v)}
+          />
+          <MultiCheckRow
+            label="Departments"
+            options={departments.map(d => d.name)}
+            selected={rules.applicable_departments}
+            onChange={v => setField("applicable_departments", v)}
+          />
+          <MultiCheckRow
+            label="Designations"
+            options={designations.map(d => d.name)}
+            selected={rules.applicable_designations}
+            onChange={v => setField("applicable_designations", v)}
+          />
+          <MultiCheckRow
+            label="Employment Types"
+            options={EMPLOYMENT_TYPE_OPTIONS}
+            selected={rules.applicable_employment_types}
+            onChange={v => setField("applicable_employment_types", v)}
+          />
+          <div className="field-group mb-16">
+            <label className="field-label">Gender</label>
+            <select className="field-input" value={rules.applicable_gender} onChange={e => setField("applicable_gender", e.target.value)}>
+              {GENDER_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+          </div>
+          <div className="field-group mb-16">
+            <label className="field-label">Minimum Service Period (months)</label>
+            <input className="field-input" type="number" min={0} value={rules.minimum_service_period} onChange={e => setField("minimum_service_period", Number(e.target.value))} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

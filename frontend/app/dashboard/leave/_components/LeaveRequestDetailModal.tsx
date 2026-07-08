@@ -105,10 +105,19 @@ export default function LeaveRequestDetailModal({
             </p>
           </div>
 
-          <div className="flex items-center justify-between border-t border-gray-100 pt-4">
-            <span className="text-xs text-gray-500">
-              {fmtDate(r.start_date)} → {fmtDate(r.end_date)} · {r.total_days} day{r.total_days !== 1 ? "s" : ""}
-            </span>
+          <div className="flex items-start justify-between border-t border-gray-100 pt-4">
+            <div className="text-xs text-gray-500">
+              <p>{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</p>
+              {r.lop_days > 0 ? (
+                <div className="mt-1.5 flex flex-col gap-0.5">
+                  <span>{r.leave_type_display}: {r.total_days - r.lop_days} day{(r.total_days - r.lop_days) !== 1 ? "s" : ""}</span>
+                  <span className="text-amber-600 font-medium">LOP: {r.lop_days} day{r.lop_days !== 1 ? "s" : ""}</span>
+                  <span className="text-gray-700 font-semibold">Total: {r.total_days} day{r.total_days !== 1 ? "s" : ""}</span>
+                </div>
+              ) : (
+                <span>{r.total_days} day{r.total_days !== 1 ? "s" : ""}</span>
+              )}
+            </div>
             <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
           </div>
 

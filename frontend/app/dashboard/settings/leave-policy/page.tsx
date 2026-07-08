@@ -4,17 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import PolicyTab from "./_components/PolicyTab";
 import CreditTab from "./_components/CreditTab";
+import LeavePoliciesTab from "./_components/LeavePoliciesTab";
 
-type Tab = "policy" | "credit";
+type Tab = "types" | "policies" | "credit";
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: "policy", icon: "ti-beach",  label: "Leave Policy"  },
-  { id: "credit", icon: "ti-coin",   label: "Credit Rules"  },
+  { id: "types",    icon: "ti-beach",      label: "Leave Types"  },
+  { id: "policies", icon: "ti-settings-2", label: "Leave Policy" },
+  { id: "credit",   icon: "ti-coin",       label: "Credit Rules" },
 ];
 
 export default function LeavePolicyPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("policy");
+  const [tab, setTab] = useState<Tab>("types");
 
   return (
     <>
@@ -51,8 +53,9 @@ export default function LeavePolicyPage() {
         ))}
       </div>
 
-      {tab === "policy" && <PolicyTab />}
-      {tab === "credit" && <CreditTab />}
+      {tab === "types"    && <PolicyTab />}
+      {tab === "policies" && <LeavePoliciesTab />}
+      {tab === "credit"   && <CreditTab />}
     </>
   );
 }

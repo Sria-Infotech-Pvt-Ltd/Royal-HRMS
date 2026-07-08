@@ -160,4 +160,11 @@ export const API = {
     corrections:       "/attendance/corrections/",
     correctionReview:  (id: string) => `/attendance/corrections/${id}/review/`,
   },
+
+  notifications: {
+    list:        "/notifications/",
+    unreadCount: "/notifications/unread-count/",
+    markRead:    (id: string) => `/notifications/${id}/read/`,
+    markAllRead: "/notifications/read-all/",
+  },
 } as const;
