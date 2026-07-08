@@ -264,7 +264,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         model  = LeaveRequest
         fields = [
             'id', 'leave_type', 'leave_type_display', 'duration', 'duration_display',
-            'start_date', 'end_date', 'total_days', 'reason', 'status', 'is_lwp',
+            'start_date', 'end_date', 'total_days', 'lop_days', 'reason', 'status', 'is_lwp',
             'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
             'l1_approver_name', 'l1_status', 'l1_remarks', 'l1_actioned_at',
             'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',

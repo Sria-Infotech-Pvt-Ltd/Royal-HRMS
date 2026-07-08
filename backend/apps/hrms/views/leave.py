@@ -493,6 +493,7 @@ class LeaveRequestListCreateView(APIView):
 
         # Balance check + creation wrapped in a transaction with row-level lock
         # to prevent double-booking when the same employee submits concurrent requests.
+        lop_days = 0.0
         with transaction.atomic():
             if leave_type != LEAVE_LWP:
                 balance = (
@@ -506,7 +507,8 @@ class LeaveRequestListCreateView(APIView):
                 available = float(balance.total_days - balance.used_days)
                 if total_days > available:
                     if policy and policy.convert_to_lop:
-                        leave_type = LEAVE_LWP
+                        # Use available balance; excess days become LOP — leave_type stays unchanged
+                        lop_days = round(total_days - available, 1)
                     elif policy and policy.allow_negative_balance:
                         pass  # allow overdraft
                     else:
@@ -531,6 +533,7 @@ class LeaveRequestListCreateView(APIView):
                 start_date=start,
                 end_date=end,
                 total_days=total_days,
+                lop_days=lop_days,
                 reason=data.get('reason', ''),
                 contact_during_leave=data.get('contact_during_leave', ''),
                 handover_to=data.get('handover_to', ''),
@@ -684,14 +687,17 @@ class LeaveApprovalView(APIView):
 
 
 def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
-    if leave_request.is_lwp or leave_request.leave_type == LEAVE_LWP:
+    if leave_request.is_lwp:  # pure LWP request — no leave balance record to deduct
         return
     year = leave_request.start_date.year
-    LeaveBalance.objects.filter(
-        employee=leave_request.employee,
-        leave_type=leave_request.leave_type,
-        year=year,
-    ).update(used_days=F('used_days') + float(leave_request.total_days))
+    lop = float(getattr(leave_request, 'lop_days', 0) or 0)
+    earned_days = float(leave_request.total_days) - lop
+    if earned_days > 0:
+        LeaveBalance.objects.filter(
+            employee=leave_request.employee,
+            leave_type=leave_request.leave_type,
+            year=year,
+        ).update(used_days=F('used_days') + earned_days)
 
 
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────

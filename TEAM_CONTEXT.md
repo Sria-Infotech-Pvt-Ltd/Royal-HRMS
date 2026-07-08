@@ -617,6 +617,79 @@ backend/config/
 
 ---
 
+## Session Log — 2026-07-08
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Convert Insufficient Balance to LOP — Full Backend Implementation**
+
+Implemented the split-balance logic so that when `convert_to_lop=True` on a `LeavePolicy`, leave requests that exceed the available balance are allowed — available balance is consumed first, and only the excess days become LOP.
+
+**Business rule implemented:**
+- `convert_to_lop=OFF`: block submission if balance insufficient (unchanged)
+- `convert_to_lop=ON`: allow submission; record `lop_days = requested - available`; `leave_type` stays as original (e.g. `earned`) — NOT converted to LWP
+
+**Example (from requirement):**
+- Earned Leave available: 15 days
+- Requested: 18 working days
+- `lop_days = 3.0`, `leave_type = earned`, `total_days = 18`
+- On final approval: 15 days deducted from earned balance, 3 days treated as LOP
+
+**Old behaviour (wrong):**
+```python
+if policy.convert_to_lop:
+    leave_type = LEAVE_LWP  # converted entire leave to LWP
+```
+
+**New behaviour (correct):**
+```python
+if policy.convert_to_lop:
+    lop_days = round(total_days - available, 1)  # only excess; leave_type unchanged
+```
+
+**Approval deduction fix:**
+`_deduct_balance_safe()` now deducts only `total_days - lop_days` from the original leave balance. Previously it deducted `total_days` which would over-deduct.
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  models.py            — Added lop_days DecimalField(default=0) to LeaveRequest
+  serializers.py       — Added lop_days to LeaveRequestSerializer.Meta.fields
+  views/leave.py       — Balance check: lop_days computed instead of switching leave_type to LWP
+                         _deduct_balance_safe(): deducts (total_days - lop_days) on approval
+  migrations/
+    0010_leaverequest_lop_days.py  — AddField lop_days to hrms_leave_requests (applied ✅)
+```
+
+### API Response (new fields)
+
+```json
+{
+  "leave_type": "earned",
+  "total_days": 18.0,
+  "lop_days": 3.0,
+  "is_lwp": false
+}
+```
+
+Frontend derives: `earned_leave_used = total_days - lop_days`
+
+### Frontend Changes Needed (not yet done)
+
+- Leave application form: when `convert_to_lop=true` and requested > available, show breakdown panel instead of "Exceeds balance by Nd"
+- Detail/history card: show split `Earned Leave: 15d / LOP: 3d / Total: 18d` when `lop_days > 0`
+- HR/approver view: same split display so approver sees what will be deducted
+
+### Pending
+
+- Frontend UI for LOP breakdown (described above)
+- Leave integration — auto-mark employee `on_leave` in attendance when leave is approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

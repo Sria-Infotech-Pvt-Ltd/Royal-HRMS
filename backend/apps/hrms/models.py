@@ -227,6 +227,7 @@ class LeaveRequest(models.Model):
     start_date = models.DateField()
     end_date   = models.DateField()
     total_days = models.DecimalField(max_digits=4, decimal_places=1)
+    lop_days   = models.DecimalField(max_digits=4, decimal_places=1, default=0)
     reason     = models.TextField()
     status     = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
     is_lwp     = models.BooleanField(default=False)
