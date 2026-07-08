@@ -1,20 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import {
-  LeaveBalance, LeaveRequest, LeaveStats,
-  LEAVE_TYPE_CONFIG, STATUS_BADGE, STATUS_LABEL,
+  LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
+  LEAVE_TYPE_CONFIG,
   fmtShortDate,
 } from "../_data";
 import RejectModal from "./RejectModal";
+import StatusCell from "./StatusCell";
+import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 
 interface Props {
-  role:             string;
-  onApply:          () => void;
-  selectedBranches: string[];
+  role:    string;
+  onApply: () => void;
+  branch:  string;
 }
 
 const BALANCE_DISPLAY = [
@@ -23,11 +25,16 @@ const BALANCE_DISPLAY = [
   { key: "sick"   as const, icon: "ti-stethoscope",  iconClass: "si-info",     barColor: "var(--info)"    },
 ];
 
-export default function LeaveDashboard({ role, onApply, selectedBranches }: Props) {
+export default function LeaveDashboard({ role, onApply, branch }: Props) {
   const isEmployee = role === "employee";
 
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
-  const [actioning,    setActioning]    = useState<string | null>(null);
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
+  const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<"pending" | "mine">("pending");
+
+  // Branch filter changed — the current page no longer means the same thing.
+  useEffect(() => { setPage(1); }, [branch]);
 
   const currentYear = new Date().getFullYear();
 
@@ -35,39 +42,51 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
     API.leave.balance + `?year=${currentYear}`
   );
 
-  // Employee: all their own requests; Approver: pending approval queue (backend scopes by role, excludes own)
+  // Employee: all their own requests, no scope/status/branch/page — this list
+  // is never paginated in the UI today and is always small (one person's own
+  // requests). Approver: the queue — one URL for every approver role; backend
+  // returns pending for managers and l2_pending for HR automatically. Never
+  // hardcode a status filter here. branch/page are system_admin-only (branch
+  // is always "" for manager/hr_admin, who are already branch-scoped server-side).
   const requestsUrl = isEmployee
     ? API.leave.requests
-    : API.leave.requests + "?status=pending,l2_pending";
+    : API.leave.requests
+      + "?scope=team"
+      + (branch ? `&branch=${encodeURIComponent(branch)}` : "")
+      + `&page=${page}`;
 
-  const { data: requests, refetch: refetchRequests, loading } = useFetch<LeaveRequest[]>(requestsUrl);
+  const { data: requests, refetch: refetchRequests, loading } = useFetch<PaginatedResponse<LeaveRequest>>(requestsUrl);
 
-  const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(
-    API.leave.stats + `?year=${currentYear}`
+  // Approver's own leave requests — a separate "My Leave Requests" tab. Never
+  // mixed into requestsUrl above: scope=team explicitly excludes the approver's
+  // own rows, so this is always the bare endpoint (no scope param = own requests).
+  const { data: myRequests, refetch: refetchMine, loading: loadingMine } = useFetch<PaginatedResponse<LeaveRequest>>(
+    isEmployee ? null : API.leave.requests
   );
+  const myRequestList = myRequests?.results ?? [];
+
+  const statsUrl = isEmployee
+    ? API.leave.stats + `?year=${currentYear}&scope=own`
+    : API.leave.stats + `?year=${currentYear}&scope=team`;
+
+  const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(statsUrl);
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
 
-  const visibleRequests = selectedBranches.length === 0
-    ? (requests ?? [])
-    : (requests ?? []).filter(r => selectedBranches.includes(r.employee_branch));
+  const requestList = requests?.results ?? [];
 
   async function approve(id: string) {
-    setActioning(id);
     try {
       await clientApi.post(API.leave.approve(id), { action: "approve" });
       refetchRequests();
       refetchStats();
     } catch {
       // silently handled
-    } finally {
-      setActioning(null);
     }
   }
 
   async function handleReject(reason: string) {
     if (!rejectTarget) return;
-    setActioning(rejectTarget.id);
     try {
       await clientApi.post(API.leave.approve(rejectTarget.id), { action: "reject", remarks: reason });
       refetchRequests();
@@ -75,14 +94,22 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
     } catch {
       // silently handled
     } finally {
-      setActioning(null);
       setRejectTarget(null);
+    }
+  }
+
+  async function cancelMine(id: string) {
+    try {
+      await clientApi.patch(API.leave.requestDetail(id));
+      refetchMine();
+    } catch {
+      // silently handled
     }
   }
 
   // ── Employee layout ────────────────────────────────────────────────────────
   if (isEmployee) {
-    const ownPending = (requests ?? []).filter(
+    const ownPending = requestList.filter(
       r => r.status === "pending" || r.status === "l2_pending"
     ).length;
 
@@ -144,7 +171,7 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
               <div style={{ padding: "40px 20px", textAlign: "center" }}>
                 <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
               </div>
-            ) : (requests ?? []).length === 0 ? (
+            ) : requestList.length === 0 ? (
               <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
                 No leave requests yet. Click <strong>Apply Leave</strong> to get started.
               </div>
@@ -162,16 +189,21 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                   </tr>
                 </thead>
                 <tbody>
-                  {(requests ?? []).map(r => (
-                    <tr key={r.id}>
+                  {requestList.map(r => (
+                    <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
                       <td>{r.leave_type_display}</td>
                       <td>{fmtShortDate(r.start_date)}</td>
                       <td>{fmtShortDate(r.end_date)}</td>
                       <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
                       <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
-                      <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{r.l1_approver_name || "—"}</td>
+                      <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                        {r.approved_by || "—"}
+                        {r.approved_at
+                          ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
+                          : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
+                      </td>
                       <td style={{ textAlign: "center" }}>
-                        <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+                        <StatusCell request={r} />
                       </td>
                     </tr>
                   ))}
@@ -180,6 +212,14 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
             )}
           </div>
         </div>
+
+        {detailRequest && (
+          <LeaveRequestDetailModal
+            requestId={detailRequest.id}
+            initialData={detailRequest}
+            onClose={() => setDetailRequest(null)}
+          />
+        )}
       </div>
     );
   }
@@ -235,15 +275,23 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
       </div>
 
       <div className="card">
-        <div className="card-header">
-          <div className="card-title">
-            <i className="ti ti-list-details" />
-            Pending Approvals
-            {selectedBranches.length > 0 && (
-              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
-                · {visibleRequests.length} shown
-              </span>
-            )}
+        <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              className={`btn btn-sm ${tab === "pending" ? "btn-filled" : "btn-ghost"}`}
+              onClick={() => setTab("pending")}
+            >
+              <i className="ti ti-list-details" /> Pending Approvals
+              {requests && requests.count > 0 && (
+                <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>· {requests.count}</span>
+              )}
+            </button>
+            <button
+              className={`btn btn-sm ${tab === "mine" ? "btn-filled" : "btn-ghost"}`}
+              onClick={() => setTab("mine")}
+            >
+              <i className="ti ti-user" /> My Leave Requests
+            </button>
           </div>
           <button className="btn btn-filled btn-sm" onClick={onApply}>
             <i className="ti ti-plus" /> Apply My Leave
@@ -251,11 +299,11 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
         </div>
 
         <div className="table-wrap">
-          {loading ? (
+          {(tab === "pending" ? loading : loadingMine) ? (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
             </div>
-          ) : (
+          ) : tab === "pending" ? (
             <table>
               <thead>
                 <tr>
@@ -266,21 +314,20 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                   <th>To</th>
                   <th style={{ textAlign: "center" }}>Days</th>
                   <th style={{ textAlign: "center" }}>Status</th>
-                  <th style={{ textAlign: "center" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleRequests.length === 0 ? (
+                {requestList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: "center", padding: "40px 20px" }}>
+                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
                       <i className="ti ti-building" style={{ fontSize: 28, display: "block", marginBottom: 8, color: "var(--outline-v)" }} />
                       <span style={{ color: "var(--on-variant)", fontSize: 13 }}>
-                        {selectedBranches.length > 0 ? "No requests for the selected branch." : "No pending leave requests."}
+                        {branch ? "No requests for the selected branch." : "No pending leave requests."}
                       </span>
                     </td>
                   </tr>
-                ) : visibleRequests.map(r => (
-                  <tr key={r.id}>
+                ) : requestList.map(r => (
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
                     <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
                     <td><span className="badge badge-neutral">{r.employee_branch || "—"}</span></td>
                     <td>{r.leave_type_display}</td>
@@ -288,36 +335,68 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
                     <td>{fmtShortDate(r.end_date)}</td>
                     <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
                     <td style={{ textAlign: "center" }}>
-                      <span className={STATUS_BADGE[r.status]} style={{ textTransform: "capitalize" }}>
-                        {STATUS_LABEL[r.status]}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => approve(r.id)}
-                          disabled={actioning === r.id}
-                          title="Approve"
-                          style={{ padding: "4px 10px" }}
-                        >
-                          {actioning === r.id ? <i className="ti ti-loader-2" /> : <i className="ti ti-check" />}
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => setRejectTarget({ id: r.id, employee: r.employee_name, type: r.leave_type_display })}
-                          disabled={actioning === r.id}
-                          title="Reject"
-                          style={{ padding: "4px 10px" }}
-                        >
-                          <i className="ti ti-x" />
-                        </button>
-                      </div>
+                      <StatusCell request={r} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Leave Type</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th style={{ textAlign: "center" }}>Days</th>
+                  <th>Applied On</th>
+                  <th>Approver</th>
+                  <th style={{ textAlign: "center" }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myRequestList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
+                      <span style={{ color: "var(--on-variant)", fontSize: 13 }}>
+                        You have not applied for any leave yet.
+                      </span>
+                    </td>
+                  </tr>
+                ) : myRequestList.map(r => (
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
+                    <td>{r.leave_type_display}</td>
+                    <td>{fmtShortDate(r.start_date)}</td>
+                    <td>{fmtShortDate(r.end_date)}</td>
+                    <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
+                    <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
+                    <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                      {r.approved_by || "—"}
+                      {r.approved_at
+                        ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
+                        : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <StatusCell request={r} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {tab === "pending" && requests && requests.total_pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
+              <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {requests.page} of {requests.total_pages}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
+                  <i className="ti ti-chevron-left" /> Prev
+                </button>
+                <button className="btn btn-ghost btn-sm" disabled={page >= requests.total_pages} onClick={() => setPage(p => Math.min(p + 1, requests.total_pages))}>
+                  Next <i className="ti ti-chevron-right" />
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -328,6 +407,17 @@ export default function LeaveDashboard({ role, onApply, selectedBranches }: Prop
           leaveType={rejectTarget.type}
           onCancel={() => setRejectTarget(null)}
           onConfirm={handleReject}
+        />
+      )}
+
+      {detailRequest && (
+        <LeaveRequestDetailModal
+          requestId={detailRequest.id}
+          initialData={detailRequest}
+          onClose={() => setDetailRequest(null)}
+          onApprove={tab === "pending" ? () => approve(detailRequest.id) : undefined}
+          onReject={tab === "pending" ? () => setRejectTarget({ id: detailRequest.id, employee: detailRequest.employee_name, type: detailRequest.leave_type_display }) : undefined}
+          onCancelRequest={tab === "mine" ? () => cancelMine(detailRequest.id) : undefined}
         />
       )}
     </div>

@@ -177,6 +177,29 @@ export interface InvalidPunch {
   branch:          string;
 }
 
+export interface AttendanceAuditEntry {
+  event:        string;
+  performed_by: string;
+  performed_at: string;
+  old_value:    string;
+  new_value:    string;
+  action:       string;
+  remarks:      string;
+}
+
+export interface InvalidPunchAssignPayload {
+  assigned_to: string;
+}
+
+export interface InvalidPunchDiscardPayload {
+  remarks: string;
+}
+
+export interface InvalidPunchConvertPayload {
+  target_punch_type: "IN" | "OUT";
+  target_time:        string;
+}
+
 export interface UnpunchRow {
   employee_id:         string;
   name:                string;
@@ -224,7 +247,9 @@ export interface OvertimeCreatePayload {
 export interface ImportRowError {
   row:    number;
   data:   Record<string, string>;
-  errors: string;
+  // Backend sends a plain string for exceptions, but a DRF serializer errors
+  // dict (e.g. { date: ["Invalid format."] }) for per-field validation failures.
+  errors: string | Record<string, string[]>;
 }
 
 export interface ImportResult {

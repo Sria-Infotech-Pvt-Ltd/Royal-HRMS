@@ -149,11 +149,22 @@ export const API = {
     record:         (id: string) => `/attendance/records/${id}/`,
     overtime:       "/attendance/overtime/",
     overtimeCreate: "/attendance/overtime/create/",
-    invalidPunches: "/attendance/invalid-punches/",
+    invalidPunches:       "/attendance/invalid-punches/",
+    invalidPunchAssign:   (id: string) => `/attendance/invalid-punches/${id}/assign/`,
+    invalidPunchDiscard:  (id: string) => `/attendance/invalid-punches/${id}/discard/`,
+    invalidPunchConvert:  (id: string) => `/attendance/invalid-punches/${id}/convert/`,
+    recordAudit:          (id: string) => `/attendance/records/${id}/audit/`,
     unPunches:      "/attendance/un-punches/",
     import:         "/attendance/import/",
     export:         "/attendance/export/",
     corrections:       "/attendance/corrections/",
     correctionReview:  (id: string) => `/attendance/corrections/${id}/review/`,
+  },
+
+  notifications: {
+    list:        "/notifications/",
+    unreadCount: "/notifications/unread-count/",
+    markRead:    (id: string) => `/notifications/${id}/read/`,
+    markAllRead: "/notifications/read-all/",
   },
 } as const;

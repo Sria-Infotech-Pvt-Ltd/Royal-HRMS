@@ -5,7 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
-import type { AttendanceDetail, CorrectionReviewAction, CorrectionStatus, PaginatedCorrections, PunchType } from "@/types/attendance";
+import type { AttendanceAuditEntry, AttendanceDetail, CorrectionReviewAction, CorrectionStatus, PaginatedCorrections, PunchType } from "@/types/attendance";
 
 interface Props {
   recordId: string;
@@ -35,6 +35,27 @@ const PUNCH_TYPE_LABEL: Record<PunchType, string> = {
   BOTH: "Both IN & OUT",
 };
 
+const AUDIT_EVENT_BADGE: Record<string, string> = {
+  CLOCK_IN:                "badge badge-success",
+  CLOCK_OUT:               "badge badge-info",
+  CORRECTION_REQUESTED:    "badge badge-warn",
+  CORRECTION_APPROVED:     "badge badge-success",
+  CORRECTION_REJECTED:     "badge badge-error",
+  IMPORTED:                "badge badge-primary",
+  EDITED:                  "badge badge-warn",
+  RECALCULATED:            "badge badge-info",
+  INVALID_PUNCH_ASSIGNED:  "badge badge-primary",
+  INVALID_PUNCH_DISCARDED: "badge badge-error",
+  INVALID_PUNCH_CONVERTED: "badge badge-success",
+};
+
+function formatEventLabel(event: string): string {
+  return event
+    .split("_")
+    .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function SectionTitle({ icon, title }: { icon: string; title: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", marginTop: 22, marginBottom: 10 }}>
@@ -58,6 +79,12 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose }: Prop
   const corrections = (correctionsData?.results ?? []).filter(
     c => c.employee_id === data?.employee_id && c.date === date
   );
+
+  const { data: auditData, loading: auditLoading, error: auditError } =
+    useFetch<AttendanceAuditEntry[]>(API.attendance.recordAudit(recordId));
+  const auditEntries = (auditData ?? [])
+    .slice()
+    .sort((a, b) => b.performed_at.localeCompare(a.performed_at));
 
   async function handleReview(correctionId: string, action: CorrectionReviewAction) {
     setReviewingId(correctionId);
@@ -213,11 +240,52 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose }: Prop
               </div>
 
               {/* Audit log */}
-              <SectionTitle icon="ti-history" title="Audit Log" />
-              <p style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                Record-level audit history isn&apos;t available yet — this section will show who
-                imported, edited, or corrected this record once that endpoint is available.
-              </p>
+              <SectionTitle icon="ti-history" title="Audit History" />
+              {auditLoading && (
+                <p style={{ fontSize: 12, color: "var(--on-variant)" }}>Loading audit history…</p>
+              )}
+              {auditError && (
+                <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {auditError}</div>
+              )}
+              {!auditLoading && !auditError && auditEntries.length === 0 && (
+                <p style={{ fontSize: 12, color: "var(--on-variant)" }}>No audit history for this record yet.</p>
+              )}
+              {auditEntries.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {auditEntries.map((entry, idx) => (
+                    <div key={idx} style={{ display: "flex", gap: 10 }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 10 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--primary)", marginTop: 4, flexShrink: 0 }} />
+                        {idx < auditEntries.length - 1 && (
+                          <div style={{ flex: 1, width: 1, background: "var(--outline-v)", marginTop: 2 }} />
+                        )}
+                      </div>
+                      <div style={{ paddingBottom: 16, flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span className={AUDIT_EVENT_BADGE[entry.event] ?? "badge badge-neutral"}>
+                            {formatEventLabel(entry.event)}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 600 }}>{entry.performed_by}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 4 }}>
+                          {entry.performed_at}
+                        </div>
+                        <div style={{ fontSize: 12 }}>{entry.action}</div>
+                        {entry.old_value && entry.new_value && (
+                          <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+                            {entry.old_value} <i className="ti ti-arrow-right" /> {entry.new_value}
+                          </div>
+                        )}
+                        {entry.remarks && (
+                          <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2, fontStyle: "italic" }}>
+                            &ldquo;{entry.remarks}&rdquo;
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>

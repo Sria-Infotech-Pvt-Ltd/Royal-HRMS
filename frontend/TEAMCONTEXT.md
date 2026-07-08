@@ -485,3 +485,392 @@ Confirmed with a full `tsc --noEmit` afterward — this was the only remaining t
 - `clientApi` used with `withCredentials: true`
 - No `localStorage` for tokens
 - No `any` types — all shapes explicitly typed
+
+---
+
+## Session 16 — Rithwika (03 July 2026)
+
+**Branch:** `frontend/Leavemanagement`                                                                                                                                                   
+---
+
+### 1. Leave Module — Pagination Envelope Bug (production crash fix)
+
+`GET /leave/requests/` was switched to a paginated response (`{count, page, page_size, total_pages, results}`, the same envelope every other list endpoint uses) at some point, but three leave components were still written as if the endpoint returned a bare array. Once real data loaded, `requests`/`pending`/`l2pending`/`history`/`myRequests` held the paginated **object**, not an array, so `.map()`/`.filter()` threw `TypeError: ... is not a function` / `... is not iterable` at runtime.
+
+Fixed by adding a `PaginatedResponse<T>` type to `app/dashboard/leave/_data.ts` (same shape already used in `types/attendance.ts` and `app/dashboard/approvals/page.tsx`) and reading `.results` everywhere:
+
+- **`LeaveDashboard.tsx`** — `requests` (both the employee's own list and the approver's pending queue use the same endpoint) now typed `PaginatedResponse<LeaveRequest>`; introduced `requestList = requests?.results ?? []` and replaced every direct array read with it.
+- **`LeaveApprovals.tsx`** — same fix for `pending`, `l2pending`, `history` (this was the component that actually crashed first, in the Approvals tab).
+- **`ApplyLeaveForm.tsx`** — same latent bug in the "My Leave Requests" history table at the bottom of the Apply Leave form; fixed proactively since it hits the identical endpoint.
+
+All three consumers of `API.leave.requests` are now consistent. No backend changes — the backend's pagination envelope is correct and matches every other list endpoint; the bug was purely stale frontend typing from before pagination was added.
+
+---
+
+### 2. Attendance — "View" Button on Absent Employees (UX fix)
+
+**File:** `app/dashboard/attendance/_components/AttendanceTab.tsx`
+
+The **View** button was `disabled` whenever a row had no `record_id` (absent employees have no `AttendanceRecord` for the day, so `record_id` is `null`). A disabled button fires no click handler, so users got zero feedback — it just looked broken/frozen.
+
+Button is now always clickable:
+```tsx
+onClick={() => {
+  if (r.record_id) {
+    setViewingId(r.record_id);
+  } else {
+    showToast("No attendance record to view — employee was absent this day.", "info");
+  }
+}}
+```
+
+---
+
+### 3. Attendance Import — Crash on Row Validation Errors
+
+**Files:** `types/attendance.ts`, `app/dashboard/attendance/_components/ImportModal.tsx`
+
+Reported error: `Objects are not valid as a React child (found: object with keys {date})`, thrown when opening the CSV import result's row-error table.
+
+**Root cause (backend, not changed — frontend-only fix per instruction):** `services_hr_ops.py`'s `import_attendance_csv()` puts the raw DRF `ser.errors` dict (e.g. `{"date": ["Date has wrong format..."]}`) into each failed row's `errors` field instead of flattening it with the project's existing `first_error()` helper (used everywhere else in the codebase). The frontend type declared `ImportRowError.errors: string` and rendered it directly as `<td>{e.errors}</td>` — when a row failed only on its `date` column, React tried to render that object and crashed.
+
+Fixed defensively on the frontend instead of touching the backend:
+- `ImportRowError.errors` retyped to `string | Record<string, string[]>`.
+- Added `formatRowError()` in `ImportModal.tsx` — passes strings through, flattens a field-errors object into `field: message` lines joined with `·`.
+- `<td>{e.errors}</td>` → `<td>{formatRowError(e.errors)}</td>`.
+
+> **Flagged, not fixed at the source:** the real fix is a one-line backend change (`'errors': first_error(ser.errors)` instead of `'errors': ser.errors`) to make the API actually match its documented contract. Worth doing whenever backend changes are back in scope — until then, any *other* frontend code that reads `ImportRowError.errors` as a plain string needs the same defensive handling.
+
+---
+
+### 4. Leave — Self-Approval Prevention
+
+**Files:** `LeaveDashboard.tsx`, `LeaveApprovals.tsx`
+
+Reported bug: an approver (manager/hr_admin) could see Approve/Reject buttons on their **own** leave request row in both the Leave Dashboard's "Pending Approvals" table and the Approvals tab's "Pending" table, and clicking them presumably no-ops or worse.
+
+Fix: in both components' pending-approvals row rendering, compare the row against the logged-in user (`useCurrentUser()`) and swap the action buttons for a disabled "Not applicable" label when it's their own request:
+
+```tsx
+{r.employee_name === currentUser?.name ? (
+  <span title="You cannot approve your own leave request.">Not applicable</span>
+) : (
+  /* existing Approve/Reject buttons */
+)}
+```
+
+> **Known limitation — no stable ID to match on.** `LeaveRequest` only exposes `employee_name`/`employee_code` (the employee's HR code, e.g. `EMP001`), and `UserInfo` (`lib/auth.ts`) only carries `userId` (an internal UUID), `email`, and `name` — there's no field shared between the two that isn't a display value. Matched on `employee_name === currentUser.name` since both trace back to the same `full_name` field, but this breaks if two employees ever share an exact full name. A robust fix needs the leave request payload to expose a stable employee identifier (e.g. the employee's user UUID) that can be compared to `UserInfo.userId` — that's a backend serializer change, out of scope for this frontend-only pass.
+
+---
+
+### 5. Attendance — Audit History + Invalid Punch Actions (frontend wired ahead of backend)
+
+Given a spec for three new backend endpoints, but **none of them exist yet** in `apps/attendance/` (checked `urls.py`, all views, all services, and all 14 migrations — confirmed absent). Per explicit instruction, implemented the frontend to the given contract anyway so it's ready the moment the backend ships; this will 404 until then.
+
+**Endpoints wired (`lib/api/endpoints.ts`):**
+```
+attendance.recordAudit(id)          → GET  /attendance/records/<id>/audit/
+attendance.invalidPunchAssign(id)   → POST /attendance/invalid-punches/<id>/assign/
+attendance.invalidPunchDiscard(id)  → POST /attendance/invalid-punches/<id>/discard/
+attendance.invalidPunchConvert(id)  → POST /attendance/invalid-punches/<id>/convert/
+```
+
+**Types added (`types/attendance.ts`):** `AttendanceAuditEntry`, `InvalidPunchAssignPayload`, `InvalidPunchDiscardPayload`, `InvalidPunchConvertPayload`.
+
+**`AttendanceDetailDrawer.tsx`** — replaced the "not available yet" Audit Log placeholder (see Session 15 §2) with a real vertical timeline: fetches on drawer open, sorts newest-first, color-coded event badge (`CLOCK_IN`/`CORRECTION_APPROVED`/etc. mapped to badge classes, unknown events fall back to neutral), shows `performed_by` + `performed_at` + `action`, an `old_value → new_value` line only when both are non-empty, and italicized `remarks` when present.
+
+**`InvalidPunchesTab.tsx`** — un-stubbed from the "Coming Soon" state (Session 15 §5) back to a real table; restored the previously-commented-out fetch/table code and added an **Actions** column with Assign / Convert / Discard buttons. Added an `onMutated` prop (same pattern as `AttendanceTab`) wired to `page.tsx`'s `refetchDashboard` so the "Invalid Punches" tab badge count updates after a resolution.
+
+**New modal components** (`app/dashboard/attendance/_components/`):
+- `AssignPunchModal.tsx` — HR-user dropdown sourced from the existing `API.employees.hrList` (`/employees/hrs/`, returns `{id, employee_id, full_name, ...}` per user — used `id` as `assigned_to` since that's the actual UUID, not the `employee_id` code).
+- `DiscardPunchModal.tsx` — optional remarks textarea, 500-char limit.
+- `ConvertPunchModal.tsx` — punch type select (IN/OUT) + `<input type="time">` for target time.
+
+All three: show the response `message` via the existing `useToast` on error; on success, refetch the invalid-punches list, call `onMutated?.()`, and close.
+
+> **Do not trust the exact response/error shapes until the backend actually ships** — they were inferred from the spec, not verified against a running endpoint.
+
+---
+
+### Key Files Changed / Created (03 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/leave/_data.ts` | Added `PaginatedResponse<T>` |
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | Fixed paginated-envelope bug; added self-approval guard |
+| `app/dashboard/leave/_components/LeaveApprovals.tsx` | Fixed paginated-envelope bug; added self-approval guard |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx` | Fixed paginated-envelope bug (proactive, same endpoint) |
+| `app/dashboard/attendance/_components/AttendanceTab.tsx` | "View" button on absent-employee rows now shows an info toast instead of being disabled |
+| `types/attendance.ts` | `ImportRowError.errors` retyped to `string \| Record<string, string[]>`; added `AttendanceAuditEntry`, `InvalidPunchAssignPayload`, `InvalidPunchDiscardPayload`, `InvalidPunchConvertPayload` |
+| `app/dashboard/attendance/_components/ImportModal.tsx` | Added `formatRowError()` to safely render string-or-dict row errors |
+| `lib/api/endpoints.ts` | Added `attendance.recordAudit`, `invalidPunchAssign`, `invalidPunchDiscard`, `invalidPunchConvert` |
+| `app/dashboard/attendance/_components/AttendanceDetailDrawer.tsx` | Audit Log placeholder replaced with a real fetched timeline |
+| `app/dashboard/attendance/_components/InvalidPunchesTab.tsx` | Un-stubbed; real table + Actions column (Assign/Convert/Discard); added `onMutated` prop |
+| `app/dashboard/attendance/_components/AssignPunchModal.tsx` | **NEW** |
+| `app/dashboard/attendance/_components/DiscardPunchModal.tsx` | **NEW** |
+| `app/dashboard/attendance/_components/ConvertPunchModal.tsx` | **NEW** |
+| `app/dashboard/attendance/page.tsx` | Passes `refetchDashboard` into `InvalidPunchesTab` as `onMutated` |
+
+---
+
+### Notes for Next Developer
+
+- **Three attendance endpoints are frontend-ready but backend-absent**: `GET /attendance/records/<id>/audit/`, `POST /attendance/invalid-punches/<id>/{assign,discard,convert}/`. Build these next — the frontend contract (request/response shapes) is already committed in `types/attendance.ts`, verify it matches whatever the backend actually implements before calling this "done."
+- **Invalid Punches is live again** (Session 15 §5's "Coming Soon" state is gone) — but every action button will 404 until the three endpoints above exist.
+- **The real fix for the Import row-error crash is still pending on the backend** — `services_hr_ops.py:145` should use `first_error(ser.errors)` instead of raw `ser.errors`, matching every other `error()` call in the codebase. The frontend defensive fix (§3 above) means it won't crash either way, but the backend contract is still technically wrong.
+- **Self-approval guard matches on employee full name, not a stable ID** (§4) — revisit if the backend ever adds a comparable employee/user identifier to the leave request payload.
+- **Leave module's pagination bug (§1) suggests checking other older leave/approvals pages** for the same "written before pagination was added" pattern if similar crashes turn up elsewhere.
+
+---
+
+## Session 17 — Rithwika (06 July 2026)
+
+**Branch:** `frontend/Leavemanagement`
+
+---
+
+### 1. HR/Manager Approval Queue — `scope=team`, No Hardcoded Status
+
+`LeaveDashboard.tsx` (Dashboard tab, approver view), `LeaveApprovals.tsx` (Approvals tab), and `TeamApprovalsSection` in `app/dashboard/approvals/page.tsx` all now call:
+
+```
+GET /leave/requests/?scope=team
+```
+
+**One URL, two results** — the backend returns `pending` requests for managers and `l2_pending` for HR automatically, based on the caller's role. `status=pending`/`status=l2_pending` must never be hardcoded on this call again; per an explicit backend contract, the server already enforces it. `LeaveApprovals.tsx`'s history sub-tab is the one exception — `?scope=team&status=approved,rejected,cancelled` stays explicit there since that's a user-selected filter, not an auto-enforced queue state.
+
+### 2. Employee's Own "My Leave Requests" — Bare Endpoint, Every Role
+
+After several rounds of back-and-forth on this, the final, correct contract is:
+
+```
+GET /leave/requests/          ← own requests, NO scope param, NO status/year filter
+```
+
+used identically for **every role** — employee, manager, and HR — in `ApplyLeaveForm.tsx`. This matters because managers and HR also apply for their own leave through this same screen; routing them through `scope=own` or any role-based branching would be redundant at best and wrong the moment the backend's default-scope logic changes.
+
+> **Manager applying for their own leave** routes through the same `EmployeeApprovalOverride`/`ApprovalWorkflowRule` resolution as anyone else — L1 goes to *their own* `reporting_manager` (not their direct reports), L2 to their assigned `hr`. A senior manager with no `reporting_manager` set has no valid L1 approver except the `system_admin` catch-all — worth an override if that gap matters.
+
+**`LeaveDashboard.tsx`'s Dashboard tab is intentionally different for approvers** — it shows the "Pending Approvals" queue (other people's requests needing action), never the approver's own submitted leave. Confirmed with the user this stays as-is; their own requests only show on the "Apply Leave" tab.
+
+### 3. Full Request Detail — Click Any Row, Not Just the Status
+
+Built `LeaveRequestDetailModal.tsx` (new): on open, fetches the individual request fresh via `GET /leave/requests/<id>/` (`useFetch`), rendering the row's already-known data immediately and swapping in the fresh response once it resolves (no blank flash, and reflects any change since the list loaded). Shows:
+
+- Employee name/code/dept/branch
+- Dates, days, reason, status badge
+- **Approval Flow** — a `DecisionRow` per level (Manager, HR) with approver name, decision (colour-coded dot), remarks in quotes, and timestamp. This is what surfaces *why* a request was rejected — `approved_by`/`approved_at` (see §4) can't carry that, only a name and a timestamp.
+- Handover/contact info, and a document link when present
+
+**Every leave table restructured** (`ApplyLeaveForm.tsx`, both branches of `LeaveDashboard.tsx`, `LeaveApprovals.tsx`, both sections of `approvals/page.tsx`) so the **entire `<tr>`** opens this modal — not just the status cell. Approve/Reject/Cancel moved out of per-row buttons into the modal's footer, gated by `can_approve`/`can_cancel`:
+
+```
+(r.can_approve ?? true) && onApprove   /* approval-queue context only — onApprove is never passed to an own-requests view */
+(r.can_cancel ?? statusIsPendingOrL2Pending) && onCancelRequest
+```
+
+The `?? true` / status-based fallback exists because this repo's backend doesn't return `can_approve`/`can_cancel` yet — once it does, the real field takes over automatically with zero frontend changes needed. `TeamApprovalsSection`'s Approve/Reject still opens the existing `ApprovalModal` (template-selection support) rather than duplicating a simpler reject flow.
+
+`StatusCell.tsx` is back to a plain, non-interactive badge — the row owns the click now.
+
+### 4. `approved_by` / `approved_at` Fields
+
+Added to `LeaveRequest`. The "Approver" column in list tables and a compact line in the detail modal read these two fields directly — **no frontend logic picks between `l1_approver_name`/`l2_approver_name` based on status anymore**, per an explicit backend contract change. The granular per-level "Approval Flow" breakdown (§3) was deliberately kept, since it's a different, richer feature (remarks/audit trail) that these two fields can't replace.
+
+### 5. Status Labels
+
+`STATUS_LABEL` in `_data.ts`:
+
+```
+pending:    "Pending Manager Approval"
+l2_pending: "Pending HR Approval"
+```
+
+Applied everywhere via this single map — including the "My Leave Requests" filter chips, which used to have their own separate, unaligned text ("Pending", "Pending L2"). Chips are now generated directly from `STATUS_LABEL` so they can't drift out of sync with the table badges again.
+
+### 6. `clientApi.ts` — Root-Cause Fix for Swallowed Error Messages
+
+Found a **systemic bug**, not limited to leave: `normaliseError()` in `lib/clientApi.ts` ran on every non-401 error and returned a flat `{ message, status, data }` object with **no `.response` property**. Every `catch` block across the whole app was written expecting the raw axios shape (`err.response.data.message`), so that read always silently returned `undefined` and fell back to a generic message — regardless of what the backend actually said.
+
+Fixed at the one shared location instead of touching every consumer:
+
+```typescript
+// lib/clientApi.ts — normaliseError()
+return { message, status, data, response: { data: { message, data } } };
+```
+
+This means every existing `err.response?.data?.message` read across the entire app (leave, expenses, attendance, onboarding, etc.) started working correctly with this one change — no other files needed touching for this part.
+
+### 7. Duplicate-Leave-Request Error — Toast, Not Inline
+
+With §6 fixed, the backend's `"You already have a leave request for the selected date(s)..."` message now actually reaches the frontend. Converted all three leave-creation forms to show it as a **toast** instead of an inline banner:
+
+- `ApplyLeaveForm.tsx` — removed the `submitErr` state/banner entirely, replaced with `showToast(msg, "error")`
+- `my-requests/page.tsx`'s `NewLeaveModal` — added `useToast`; API errors → toast, client-side "required fields" validation stays inline
+- `approvals/page.tsx`'s `NewLeaveModal` — same split
+
+### 8. System Admin — Branch Filter + Pagination
+
+`LeaveDashboard.tsx`'s approver query now supports real server-side filtering and paging:
+
+```
+GET /leave/requests/?scope=team&branch=<name>&page=<n>
+```
+
+- Replaced the old `BranchDropdown.tsx` (hardcoded 6-branch list, multi-select, client-side `.filter()` after fetching everything) with the **already-existing shared** `components/BranchFilterSelect.tsx` (same component already used by Attendance/OT/Corrections) — fetches real branches from `GET /api/branches/`. `BranchDropdown.tsx` was deleted as dead code once nothing referenced it.
+- Single-select; empty string = "All Branches" = no `branch` param.
+- Selecting a branch resets to page 1.
+- Prev/Next + "Page X of Y" footer, shown when `total_pages > 1` — same pattern as `AttendanceTab.tsx`.
+- Branch filter only renders for `system_admin` — HR/manager are already branch-scoped server-side and don't need it.
+
+> **Known discrepancy, not resolved**: the backend spec's example URL for this feature included `&status=pending,l2_pending`, which directly conflicts with §1's "never hardcode status" rule. Kept the standing no-hardcode behavior and treated the status in that example as incidental. Flag to the backend/spec owner if system_admin is actually supposed to get an explicit status param.
+
+---
+
+### Key Files Changed / Created (06 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/leave/_data.ts` | `STATUS_LABEL` updated; added `approved_by`/`approved_at`, `can_approve`/`can_cancel` to `LeaveRequest` |
+| `app/dashboard/leave/_components/LeaveRequestDetailModal.tsx` | **NEW** — full request detail, fetched live, houses Approve/Reject/Cancel |
+| `app/dashboard/leave/_components/StatusCell.tsx` | Reverted to a plain badge (no click/modal logic — the row owns that now) |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx` | Bare endpoint for own requests (all roles); row-click detail modal; Cancel moved into modal; toast on submit error; filter chips derived from `STATUS_LABEL` |
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | `scope=team` (no status) for approvers; row-click detail modal; Approve/Reject moved into modal; branch (`branch` prop, was `selectedBranches`) + pagination |
+| `app/dashboard/leave/_components/LeaveApprovals.tsx` | Collapsed two status-filtered fetches into one `?scope=team` call; row-click detail modal; Approve/Reject moved into modal |
+| `app/dashboard/leave/_client.tsx` | Branch state single-select (`branch: string`); fetches real branches; uses shared `BranchFilterSelect` |
+| `app/dashboard/leave/_components/BranchDropdown.tsx` | **DELETED** — dead code, superseded by shared `BranchFilterSelect` |
+| `app/dashboard/approvals/page.tsx` | Replaced local mismatched `LeaveRequest` type with the shared one from `leave/_data.ts` (fixed several already-broken columns — see Notes); row-click detail modal on both leave tables; `NewLeaveModal` fixed to send `duration`/`start_date`/`end_date` instead of the wrong field names; toast on submit error |
+| `lib/clientApi.ts` | `normaliseError()` now preserves a `response.data.message`-compatible shape — root-cause fix for app-wide swallowed error messages |
+| `app/dashboard/my-requests/page.tsx` | Added `useToast`; API submit errors → toast |
+| `components/BranchFilterSelect.tsx` | No change — reused as-is from the attendance module |
+
+---
+
+### Notes for Next Developer
+
+- **`LeaveApprovals.tsx` has no branch filter or pagination** — only `LeaveDashboard.tsx`'s Dashboard-tab queue got that treatment this session. If system_admin uses the Approvals tab as their main queue, it still loads everything on one page.
+- **`LeaveAnalytics.tsx`** still calls `/leave/stats/` without an explicit `scope=team` for approvers (relies on backend default same-as-team behavior). Never explicitly requested, left as-is.
+- **`my-requests/page.tsx`'s `NewLeaveModal` still sends `from_date`/`to_date`** instead of `start_date`/`end_date`/`duration` — the identical bug was fixed in `approvals/page.tsx`'s equivalent modal this session, but this one was only flagged, not fixed. Its submissions are very likely failing serializer validation server-side.
+- **`LeaveTypes.tsx`** is still dead mock code (fabricated `SEED` data, wrong shape vs. the real `LeavePolicy` type), not linked into any tab, not wired to the real `/leave/policy/` CRUD endpoints that already exist on the backend.
+- **Duplicated reject-modal logic** — `LeaveDashboard.tsx` and `LeaveApprovals.tsx` each maintain their own separate reject-reason modal state/UI instead of sharing one.
+- **File length**: `ApplyLeaveForm.tsx` and `LeaveDashboard.tsx` both exceed this repo's own 200-line component guideline; `backend/apps/hrms/views/leave.py` exceeds the 300-line file guideline. Flagged repeatedly, never split.
+- **Backend items observed but out of frontend scope** (status depends on whichever backend branch is authoritative — this repo's local copy may be stale): a `Q()`/`F()` bug in `_deduct_balance_safe` that would raise `TypeError` on every balance deduction; `leave.approve` is one overloaded permission gating approve + balance-adjust + policy-edit; custom leave types created via the policy API still can't be selected when applying (`LeaveRequestCreateSerializer` only accepts the fixed six); no server-side enforcement that a required document was actually attached for sick/maternity/paternity leave.
+- **`can_approve`/`can_cancel` fallbacks** (§3) are silently doing real work right now — if the backend ships these fields with different semantics than assumed (e.g. `can_approve: false` meaning something other than "not your own request"), every approval queue's buttons need re-checking.
+
+---
+
+## Session 18 — Rithwika (08 July 2026)
+
+**Branch:** `frontend/Leavemanagement`
+
+---
+
+### 1. Dashboard "My Leave Requests" — Corrected Location After a False Start
+
+First attempt put a new "Pending Approvals / My Leave Requests" tabbed card on the **main app Dashboard** (`ManagerDashboard.tsx`/`HRDashboard.tsx`, the `/dashboard` homepage) — wrong location. The user's "Dashboard" meant the **Dashboard tab inside Leave Management** (`/dashboard/leave`, the tab `LeaveDashboard.tsx` already renders for approvers). Reverted the homepage change completely and deleted the misplaced `LeaveRequestsCard.tsx`.
+
+Correct fix, in `LeaveDashboard.tsx`'s approver layout only:
+
+- The single "Pending Approvals" card header is now two tab buttons: **Pending Approvals** (existing `scope=team` table, unchanged) and **My Leave Requests** (the approver's *own* submitted leave — fetched with no `scope` param, since `scope=team` explicitly excludes the approver's own rows server-side).
+- Detail modal's `onApprove`/`onReject` only show on the Pending tab; `onCancelRequest` only shows on the My Leave Requests tab — a manager can't approve/reject their own request (backend already blocks it; this just keeps the button from appearing at all).
+- This is also why the **history table was removed from `ApplyLeaveForm.tsx`** ("My Leave Requests" section at the bottom) — that data now lives on this Dashboard tab instead, per explicit instruction not to show it in both places.
+
+### 2. Notification Bell — Built, Debugged, One Feature Reverted
+
+Built from a full frontend spec (endpoints, types, hook, component) that assumed a live `/api/notifications/` backend. **It didn't exist in this repo** — confirmed via `config/urls.py`, no `Notification` model anywhere. Root cause of the confusion: this frontend's real backend runs at `NEXT_PUBLIC_API_URL` (`http://192.168.0.174:8000` per `.env`/`.env.local`), a separate deployed server — the local `backend/` folder here is not guaranteed to match what's actually running there. Built the frontend to the given contract anyway (same "ready ahead of backend" pattern as Session 16 §5), then the real backend turned out to already exist on that live server once tested.
+
+**Files (all new unless noted):**
+- `lib/api/endpoints.ts` — `notifications.{list, unreadCount, markRead(id), markAllRead}`
+- `types/notifications.ts` — `Notification`, `NotificationListResponse`, `UnreadCountResponse`
+- `hooks/useNotifications.ts` — polls unread count every 60s; `fetchNotifications`/`markRead`/`markAllRead`, all fail silently on error so a missing/404 backend never breaks the UI
+- `components/NotificationBell.tsx` — bell + red badge (hidden at 0, capped "99+"), dropdown panel, click-outside-to-close, row click → mark read → `router.push` via a `MODULE_ROUTES` map
+- `components/dashboard/DashboardShell.tsx` — swapped the old hardcoded, non-functional bell (static red dot, no handler) for `<NotificationBell />`
+
+**Bug found and fixed once real data existed:** the badge count was read from a separate `unread_count` field in the list response, while each row's dot color came from that row's own `is_read` — these could disagree. Fixed by deriving the badge count directly from the loaded rows (`results.filter(n => !n.is_read).length`) so it can never drift from what the panel actually shows.
+
+**`markAllRead` now surfaces the backend's own message** via the existing `useToast` (both success and error paths) instead of just updating state silently — e.g. shows *"All notifications marked as read."* verbatim.
+
+> **Reverted**: a "remove/erase notification" feature (DELETE endpoint guess, `deleteNotification` in the hook, an × button per row) was built, then fully reverted per instruction — not part of the current spec. All three files are back to their pre-delete state; confirmed via `tsc`/`eslint` clean.
+
+**Known gap, not a frontend bug**: an employee submitting a leave request does not appear to notify the manager — only the employee gets a self-confirmation. The notification *mechanism* (badge/list rendering) is generic and works for any row the backend sends; there's just no evidence the backend creates that specific row today. Needs verification directly against the live server (DevTools Network tab), not something fixable from the frontend.
+
+### 3. Settings → Leave Management — New "Leave Policy" Tab
+
+`app/dashboard/settings/leave-policy/page.tsx` now has **three** tabs, in this exact order: **Leave Types** (renamed from "Leave Policy" — same component, `PolicyTab.tsx`, untouched otherwise, renamed only to disambiguate from the new tab), **Leave Policy** (new), **Credit Rules** (untouched).
+
+New files:
+- `app/dashboard/settings/leave-policy/_components/LeavePoliciesTab.tsx` — leave-type dropdown (from the same `GET /leave/policy/` list `PolicyTab.tsx` already uses — no second fetch), sections for Application Rules, Holiday & Week-off Rules, Documentation Rules, Leave Restrictions, Additional Rules; dependent fields only render when their parent toggle is on; Save/Discard footer.
+- `app/dashboard/settings/leave-policy/_components/EligibilitySection.tsx` — split out since it needs its own data (branches/departments/designations fetched for real; employment types are a static list — no such concept exists anywhere in `accounts.models`, confirmed by search).
+- `components/ToggleSwitch.tsx` — **new shared component**, promoted from the one-off inline `ToggleSwitch` in `BranchManagement.tsx`, per that file's own note from Session 15 ("if a second toggle is needed anywhere else, promote it to `components/ToggleSwitch.tsx`"). `BranchManagement.tsx` itself left untouched — its local copy still duplicates this, out of scope to refactor here.
+
+**First draft used invented field names and an invented endpoint** (`/leave/policy-rules/<type>/`) before the real API contract was given. Once given, it turned out the real backend just added dozens of fields directly onto the *existing* `LeavePolicy` resource — same `GET /leave/policy/` and `PUT /leave/policy/<type>/` that Leave Types already uses. Rewrote to match exactly:
+
+- Field names corrected wholesale (`minimum_leave_duration`, `maximum_future_days`, `convert_to_lop`, `allow_leave_cancellation`, `allow_probation_leave`, `allow_leave_combination`, etc. — every guessed name was wrong).
+- Removed two invented sandwich-leave sub-toggles ("Apply on Holidays"/"on Week-offs") — the real API has one flag, `sandwich_leave_enabled`.
+- Gender dropdown fixed to exactly `all`/`male`/`female` (no `other` — different from the general user-profile gender field, which does have one).
+- Selecting a leave type no longer triggers a second network call — the full rule set is already in the list response, so it's just a lookup by `leave_type`.
+- PUT payload sends **only** the rule fields — never `annual_days`/`can_carry_forward`/`policy_note`/`is_active`, which stay exclusively owned by the Leave Types tab.
+- An `eslint-disable` used in the first draft was removed in favor of actually fixing the effect's dependencies (depend on `policies` directly, not a derived `list` array) — zero suppressions, zero warnings.
+
+> **Not implemented, flagged instead of guessed**: an "Approval Workflow" section was mentioned in the original prose spec but had zero fields listed for it anywhere in the text. Confirmed a separate, already-existing settings page (`/dashboard/settings/approval-rules`, wired to `GET/PATCH /settings/approval-rules/`) already owns this concern — left alone rather than duplicating it.
+>
+> **"Delete Custom Leave Type"** — the backend endpoint (`DELETE /leave/policy/<type>/`) was documented in the API spec, but no UI exists anywhere for it (`PolicyTab.tsx` only has Create + Edit). Not built this session since it means modifying the Leave Types tab, which was explicitly off-limits for this task.
+
+### 4. Sandwich Leave — Day-Counter Fix
+
+`app/dashboard/leave/_data.ts`:
+- `LeavePolicy` gained `sandwich_leave_enabled: boolean` (API already returned it; just wasn't typed).
+- `calcWorkingDays(from, to, dur, sandwichEnabled = false)` — new 4th param. When `true`, counts **every** calendar day in the range (no weekend skip at all), matching the backend's own sandwich-leave day count regardless of which days are configured as week-offs. Default `false` preserves all existing call sites/behavior — confirmed via search this function has exactly one caller.
+
+`ApplyLeaveForm.tsx` — `sandwichEnabled` is read off the already-fetched `policy` for the selected leave type (no new fetch) and threaded into the `workDays` `useMemo`'s deps.
+
+### 5. LOP (Loss of Pay) Summary UI
+
+Backend now returns `lop_days` on every leave request and validates against `convert_to_lop` on submission. Frontend changes:
+
+`app/dashboard/leave/_data.ts` — added `convert_to_lop: boolean` to `LeavePolicy`, `lop_days: number` to `LeaveRequest`.
+
+`ApplyLeaveForm.tsx` — the old binary `overLimit` became three states:
+```
+exceedsBalance = workDays > available
+overLimit      = exceedsBalance && !convertToLop   // still blocks submission
+lopDays        = exceedsBalance && convertToLop ? workDays - available : 0   // no longer blocks
+```
+When `lopDays > 0`, the summary bar turns amber ("Xd will be LOP") and a breakdown card appears (Available / Requested / Used / LOP Days) plus the exact info banner text specified ("...will be treated as Leave Without Pay (LOP) if this request is approved.").
+
+`LeaveRequestDetailModal.tsx` — shared by both the employee's own history and the approver's queue, so one change covered both required views: when `lop_days > 0`, shows the split (`{Leave Type}: X days` / `LOP: Y days` / `Total: Z days`) instead of a flat total.
+
+---
+
+### Key Files Changed / Created (08 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | Approver layout: card header replaced with Pending Approvals / My Leave Requests tabs; own-requests table added; detail modal props gated per tab |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx` | Removed "My Leave Requests" history table (moved to Dashboard tab, see §1); sandwich-aware `workDays`; three-state balance/LOP summary + breakdown card |
+| `app/dashboard/leave/_components/LeaveRequestDetailModal.tsx` | Shows Leave Type/LOP/Total split when `lop_days > 0` |
+| `app/dashboard/leave/_data.ts` | Added `sandwich_leave_enabled`, `convert_to_lop` to `LeavePolicy`; `lop_days` to `LeaveRequest`; `calcWorkingDays` gained `sandwichEnabled` param |
+| `lib/api/endpoints.ts` | Added `notifications.{list, unreadCount, markRead, markAllRead}` |
+| `types/notifications.ts` | **NEW** |
+| `hooks/useNotifications.ts` | **NEW** |
+| `components/NotificationBell.tsx` | **NEW** |
+| `components/dashboard/DashboardShell.tsx` | Hardcoded bell replaced with `<NotificationBell />` |
+| `components/ToggleSwitch.tsx` | **NEW** — promoted shared component (see §3) |
+| `app/dashboard/settings/leave-policy/page.tsx` | Third tab added ("Leave Policy"); first tab relabeled "Leave Types" (same component) |
+| `app/dashboard/settings/leave-policy/_components/LeavePoliciesTab.tsx` | **NEW** |
+| `app/dashboard/settings/leave-policy/_components/EligibilitySection.tsx` | **NEW** |
+| `app/dashboard/_components/ManagerDashboard.tsx`, `HRDashboard.tsx` | Reverted to original — see §1's false start |
+
+---
+
+### Notes for Next Developer
+
+- **Manager doesn't get notified when an employee submits leave** (§2) — needs verification against the live backend, not a frontend fix.
+- **"Delete Custom Leave Type" has a documented backend endpoint and zero UI** (§3) — needs a trash icon in `PolicyTab.tsx`, deliberately not added this session (out of scope).
+- **No Holiday calendar model exists anywhere in the backend** — undercuts two Leave Policy toggles now live in the UI: "Count Holidays as Leave" and "Sandwich Leave Enabled" (sandwich logic needs to know which days are holidays) have no real data source to compute against yet.
+- **Custom leave types still can't be applied for** — `LeaveRequestCreateSerializer` only accepts the six built-in types (Session 17 note, re-confirmed this session — unchanged).
+- **Re-confirmed, still unfixed**: the `Q()`/`F()` bug in `_deduct_balance_safe` (`backend/apps/hrms/views/leave.py`) — `Q('used_days') + float(...)` should be `F('used_days') + float(...)`. This runs on every final leave approval for a non-LWP type. Same caveat as before: verify against the actually-deployed server, not just this local file.
+- **Re-confirmed, still unfixed**: `my-requests/page.tsx`'s "New Leave Request" modal still sends `from_date`/`to_date` instead of `start_date`/`end_date`/`duration` — every submission through this specific page fails validation.
+- **Re-confirmed, still dead code**: `LeaveTypes.tsx` — fabricated `SEED` data, confirmed not imported anywhere in `app/`.
+- **`CreditTab.tsx`'s "Accrual Rules" table is still pure local mock state** ("Automation coming soon") — only the "Credit All Employees" button above it is real.
+- **`LeavePoliciesTab.tsx` is ~270 lines**, over this repo's own 200-line component guideline — same standing exception as `ApplyLeaveForm.tsx`/`LeaveDashboard.tsx`, flagged rather than silently ignored.

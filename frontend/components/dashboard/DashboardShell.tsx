@@ -11,6 +11,7 @@ import {
   type NavItem,
 } from "@/lib/navConfig";
 import { ToastProvider } from "@/components/ToastProvider";
+import { NotificationBell } from "@/components/NotificationBell";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -274,14 +275,7 @@ export default function DashboardShell({
             </button>
 
             {/* Notifications */}
-            <button
-              className="relative w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-transparent text-[var(--outline)] border-none cursor-pointer hover:bg-[var(--bg-mid)]"
-              title="Notifications"
-              suppressHydrationWarning
-            >
-              <i className="ti ti-bell text-[18px]" />
-              <span className="absolute top-[6px] right-[6px] w-[7px] h-[7px] rounded-full border-[1.5px] border-white bg-[var(--error)]" />
-            </button>
+            <NotificationBell />
 
             {/* Logout */}
             <button

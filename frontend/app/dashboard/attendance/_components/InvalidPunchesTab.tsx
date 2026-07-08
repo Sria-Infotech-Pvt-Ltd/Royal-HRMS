@@ -1,35 +1,43 @@
 "use client";
 
-// Invalid Punches is on hold until the resolution workflow (Fix action, endpoints
-// for assign/convert/discard) is finalized with backend. The table below is kept
-// commented out so it can be restored once that contract is defined.
+import { useState } from "react";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import type { InvalidPunch, PaginatedInvalidPunches } from "@/types/attendance";
+import AssignPunchModal from "./AssignPunchModal";
+import DiscardPunchModal from "./DiscardPunchModal";
+import ConvertPunchModal from "./ConvertPunchModal";
 
-// import { useState } from "react";
-// import { useFetch } from "@/hooks/useFetch";
-// import { API } from "@/lib/api/endpoints";
-// import type { PaginatedInvalidPunches } from "@/types/attendance";
+interface Props {
+  onMutated?: () => void;
+}
 
-// const ISSUE_BADGE: Record<string, string> = {
-//   "no-match":  "badge badge-error",
-//   duplicate:   "badge badge-warn",
-//   future:      "badge badge-error",
-// };
+const ISSUE_BADGE: Record<string, string> = {
+  "no-match":  "badge badge-error",
+  duplicate:   "badge badge-warn",
+  future:      "badge badge-error",
+};
 
-export default function InvalidPunchesTab() {
-  // const [page, setPage] = useState(1);
-  // const { data, loading, error } =
-  //   useFetch<PaginatedInvalidPunches>(`${API.attendance.invalidPunches}?page=${page}&page_size=20`);
-  // const rows = data?.results ?? [];
+type ModalState =
+  | { type: "assign";  punch: InvalidPunch }
+  | { type: "discard"; punch: InvalidPunch }
+  | { type: "convert"; punch: InvalidPunch }
+  | null;
 
-  return (
-    <div className="empty-state card">
-      <i className="ti ti-tools" />
-      <h3>Coming Soon</h3>
-      <p>Invalid punch resolution is being finalized and will be available here soon.</p>
-    </div>
-  );
+export default function InvalidPunchesTab({ onMutated }: Props) {
+  const [page, setPage]   = useState(1);
+  const [modal, setModal] = useState<ModalState>(null);
 
-  /*
+  const { data, loading, error, refetch } =
+    useFetch<PaginatedInvalidPunches>(`${API.attendance.invalidPunches}?page=${page}&page_size=20`);
+  const rows = data?.results ?? [];
+
+  function handleResolved() {
+    setModal(null);
+    refetch();
+    onMutated?.();
+  }
+
   return (
     <>
       <div className="alert alert-info mb-16">
@@ -76,9 +84,29 @@ export default function InvalidPunchesTab() {
                   <td style={{ color: "var(--on-variant)", fontSize: 12 }}>{p.suggested_match}</td>
                   <td>{p.branch}</td>
                   <td>
-                    <button className="btn btn-outline btn-sm" style={{ padding: "3px 10px", fontSize: 11 }}>
-                      <i className="ti ti-tool" /> Fix
-                    </button>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: "3px 10px", fontSize: 11 }}
+                        onClick={() => setModal({ type: "assign", punch: p })}
+                      >
+                        <i className="ti ti-user-check" /> Assign
+                      </button>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: "3px 10px", fontSize: 11 }}
+                        onClick={() => setModal({ type: "convert", punch: p })}
+                      >
+                        <i className="ti ti-replace" /> Convert
+                      </button>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: "3px 10px", fontSize: 11, color: "var(--error)" }}
+                        onClick={() => setModal({ type: "discard", punch: p })}
+                      >
+                        <i className="ti ti-trash" /> Discard
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -100,7 +128,16 @@ export default function InvalidPunchesTab() {
           </div>
         )}
       </div>
+
+      {modal?.type === "assign" && (
+        <AssignPunchModal punch={modal.punch} onClose={() => setModal(null)} onAssigned={handleResolved} />
+      )}
+      {modal?.type === "discard" && (
+        <DiscardPunchModal punch={modal.punch} onClose={() => setModal(null)} onDiscarded={handleResolved} />
+      )}
+      {modal?.type === "convert" && (
+        <ConvertPunchModal punch={modal.punch} onClose={() => setModal(null)} onConverted={handleResolved} />
+      )}
     </>
   );
-  */
 }

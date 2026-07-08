@@ -3,11 +3,21 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { ImportResult } from "@/types/attendance";
+import type { ImportResult, ImportRowError } from "@/types/attendance";
 
 interface Props {
   onClose:    () => void;
   onImported: (result: ImportResult) => void;
+}
+
+// Backend sends a plain string for exceptions, but a DRF serializer errors
+// dict (e.g. { date: ["Invalid format."] }) for per-field validation failures.
+// Flatten either shape to a single displayable line.
+function formatRowError(errors: ImportRowError["errors"]): string {
+  if (typeof errors === "string") return errors;
+  return Object.entries(errors)
+    .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(" ") : String(messages)}`)
+    .join(" · ");
 }
 
 export default function ImportModal({ onClose, onImported }: Props) {
@@ -122,7 +132,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
                           {result.errors.map(e => (
                             <tr key={e.row}>
                               <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{e.row}</td>
-                              <td style={{ fontSize: 12 }}>{e.errors}</td>
+                              <td style={{ fontSize: 12 }}>{formatRowError(e.errors)}</td>
                             </tr>
                           ))}
                         </tbody>

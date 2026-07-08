@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ const LEAVE_TYPES: LeaveType[] = [
 ];
 
 function NewLeaveModal({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) {
+  const { showToast } = useToast();
   const [form, setForm] = useState({ leave_type: "", from_date: "", to_date: "", reason: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
@@ -88,7 +90,7 @@ function NewLeaveModal({ onClose, onSubmitted }: { onClose: () => void; onSubmit
       onClose();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Failed to submit request.");
+      showToast(msg || "Failed to submit request.", "error");
     } finally {
       setSaving(false);
     }

@@ -37,6 +37,8 @@ export interface LeavePolicy {
   max_carry_forward_days: number;
   policy_note:           string;
   is_active:             boolean;
+  sandwich_leave_enabled: boolean;
+  convert_to_lop:        boolean;
   updated_at:            string;
 }
 
@@ -61,6 +63,7 @@ export interface LeaveRequest {
   start_date:         string;
   end_date:           string;
   total_days:         number;
+  lop_days:           number;
   reason:             string;
   status:             ReqStatus;
   is_lwp:             boolean;
@@ -81,6 +84,18 @@ export interface LeaveRequest {
   handover_notes:     string;
   document_url:       string | null;
   created_at:         string;
+  can_approve?:       boolean;
+  can_cancel?:        boolean;
+  approved_by:        string | null;
+  approved_at:        string | null;
+}
+
+export interface PaginatedResponse<T> {
+  count:       number;
+  page:        number;
+  page_size:   number;
+  total_pages: number;
+  results:     T[];
 }
 
 export interface LeaveStats {
@@ -112,8 +127,8 @@ export const STATUS_BADGE: Record<ReqStatus, string> = {
 };
 
 export const STATUS_LABEL: Record<ReqStatus, string> = {
-  pending:    "Pending",
-  l2_pending: "Pending L2",
+  pending:    "Pending Manager Approval",
+  l2_pending: "Pending HR Approval",
   approved:   "Approved",
   rejected:   "Rejected",
   cancelled:  "Cancelled",
@@ -129,7 +144,7 @@ export function fmtShortDate(iso: string): string {
   return new Date(iso + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-export function calcWorkingDays(from: string, to: string, dur: DurationKey): number {
+export function calcWorkingDays(from: string, to: string, dur: DurationKey, sandwichEnabled = false): number {
   if (!from) return 0;
   if (dur !== "full_day") return 0.5;
   const a = new Date(from + "T12:00:00");
@@ -138,7 +153,10 @@ export function calcWorkingDays(from: string, to: string, dur: DurationKey): num
   let count = 0;
   const cur = new Date(a);
   while (cur <= b) {
-    if (cur.getDay() !== 0 && cur.getDay() !== 6) count++;
+    // Sandwich leave counts every calendar day in the range (weekends and
+    // holidays included) — matches the backend's own sandwich-leave day
+    // count, regardless of which days are configured as week-offs.
+    if (sandwichEnabled || (cur.getDay() !== 0 && cur.getDay() !== 6)) count++;
     cur.setDate(cur.getDate() + 1);
   }
   return count;

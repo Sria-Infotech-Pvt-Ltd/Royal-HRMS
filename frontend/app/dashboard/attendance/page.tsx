@@ -157,7 +157,7 @@ export default function AttendancePage() {
       <div>
         {active === "attendance" && <AttendanceTab onMutated={refetchDashboard} />}
         {active === "ot"         && <OtEntryTab />}
-        {active === "invalid"    && <InvalidPunchesTab />}
+        {active === "invalid"    && <InvalidPunchesTab onMutated={refetchDashboard} />}
         {active === "unpunches"  && <UnpunchesTab />}
       </div>
     </div>
