@@ -87,6 +87,7 @@ def approve_correction(correction_id: str, reviewed_by) -> dict:
         correction.reviewed_at = timezone.now()
         correction.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
+        _write_correction_audit(correction, reviewed_by, approved=True)
         logger.info(
             'Correction %s approved by %s (employee=%s date=%s)',
             correction.pk, reviewed_by.pk, correction.employee_id, correction.date,
@@ -104,6 +105,7 @@ def reject_correction(correction_id: str, reviewed_by) -> dict:
         correction.reviewed_at = timezone.now()
         correction.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
 
+        _write_correction_audit(correction, reviewed_by, approved=False)
         logger.info(
             'Correction %s rejected by %s (employee=%s date=%s)',
             correction.pk, reviewed_by.pk, correction.employee_id, correction.date,
@@ -140,6 +142,40 @@ def _create_punch(
             'source':          AttendancePunch.SOURCE_MANUAL,
             'attendance_mode': AttendancePunch.MODE_OFFICE,
         },
+    )
+
+
+def _write_correction_audit(correction: AttendanceCorrection, reviewed_by, *, approved: bool) -> None:
+    """Write CORRECTION_APPROVED or CORRECTION_REJECTED audit entry."""
+    from apps.attendance.models import AttendanceAuditLog, AttendanceRecord
+    from apps.attendance.services_audit_log import write_audit_log
+
+    record = AttendanceRecord.objects.filter(
+        employee=correction.employee, date=correction.date,
+    ).first()
+
+    if approved:
+        parts = []
+        if correction.requested_in_time:
+            parts.append(f'IN {correction.requested_in_time.strftime("%H:%M")}')
+        if correction.requested_out_time:
+            parts.append(f'OUT {correction.requested_out_time.strftime("%H:%M")}')
+        new_value = ', '.join(parts) if parts else ''
+        event  = AttendanceAuditLog.EVENT_CORRECTION_APPROVED
+        action = 'Attendance correction approved by HR'
+    else:
+        new_value = ''
+        event  = AttendanceAuditLog.EVENT_CORRECTION_REJECTED
+        action = 'Attendance correction rejected by HR'
+
+    write_audit_log(
+        employee=correction.employee,
+        date=correction.date,
+        event=event,
+        performed_by=reviewed_by,
+        record=record,
+        new_value=new_value,
+        action=action,
     )
 
 

@@ -127,7 +127,11 @@ class ExpenseReceipt(models.Model):
 
 # ─── Leave Policy ─────────────────────────────────────────────────────────────
 
+GENDER_CHOICES = [('all', 'All'), ('male', 'Male'), ('female', 'Female')]
+
+
 class LeavePolicy(models.Model):
+    # ── Type & Credit ──
     leave_type             = models.CharField(max_length=50, unique=True)
     leave_type_label       = models.CharField(max_length=100, blank=True, default='')
     annual_days            = models.DecimalField(max_digits=5, decimal_places=1, default=0)
@@ -135,8 +139,50 @@ class LeavePolicy(models.Model):
     max_carry_forward_days = models.PositiveIntegerField(default=0)
     policy_note            = models.TextField(blank=True, default='')
     is_active              = models.BooleanField(default=True)
-    created_at             = models.DateTimeField(auto_now_add=True)
-    updated_at             = models.DateTimeField(auto_now=True)
+
+    # ── Leave Application Rules ──
+    minimum_leave_duration   = models.DecimalField(max_digits=4, decimal_places=1, default=0.5)
+    maximum_leave_duration   = models.PositiveIntegerField(default=0)   # 0 = unlimited
+    maximum_consecutive_days = models.PositiveIntegerField(default=0)   # 0 = unlimited
+    minimum_notice_period    = models.PositiveIntegerField(default=0)   # days advance
+    allow_half_day           = models.BooleanField(default=True)
+    allow_backdated_leave    = models.BooleanField(default=False)
+    maximum_backdated_days   = models.PositiveIntegerField(default=0)   # 0 = unlimited
+    allow_future_leave       = models.BooleanField(default=True)
+    maximum_future_days      = models.PositiveIntegerField(default=0)   # 0 = unlimited
+
+    # ── Holiday & Week-off Rules ──
+    sandwich_leave_enabled   = models.BooleanField(default=False)
+    count_holidays_as_leave  = models.BooleanField(default=False)
+    count_weekoffs_as_leave  = models.BooleanField(default=False)
+
+    # ── Eligibility Rules ──
+    applicable_branches         = models.JSONField(default=list, blank=True)
+    applicable_departments      = models.JSONField(default=list, blank=True)
+    applicable_designations     = models.JSONField(default=list, blank=True)
+    applicable_employment_types = models.JSONField(default=list, blank=True)
+    applicable_gender           = models.CharField(max_length=10, choices=GENDER_CHOICES, default='all')
+    minimum_service_period      = models.PositiveIntegerField(default=0)  # months
+
+    # ── Documentation Rules ──
+    attachment_required            = models.BooleanField(default=False)
+    medical_certificate_required   = models.BooleanField(default=False)
+    medical_certificate_after_days = models.PositiveIntegerField(default=3)
+
+    # ── Leave Restrictions ──
+    allow_negative_balance     = models.BooleanField(default=False)
+    convert_to_lop             = models.BooleanField(default=False)
+    allow_leave_cancellation   = models.BooleanField(default=True)
+    cancellation_allowed_until = models.PositiveIntegerField(default=0)  # days before start
+
+    # ── Additional Rules ──
+    allow_probation_leave     = models.BooleanField(default=False)
+    allow_notice_period_leave = models.BooleanField(default=False)
+    allow_leave_extension     = models.BooleanField(default=False)
+    allow_leave_combination   = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'hrms_leave_policies'
@@ -181,6 +227,7 @@ class LeaveRequest(models.Model):
     start_date = models.DateField()
     end_date   = models.DateField()
     total_days = models.DecimalField(max_digits=4, decimal_places=1)
+    lop_days   = models.DecimalField(max_digits=4, decimal_places=1, default=0)
     reason     = models.TextField()
     status     = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
     is_lwp     = models.BooleanField(default=False)

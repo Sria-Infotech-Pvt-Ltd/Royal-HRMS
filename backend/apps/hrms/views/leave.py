@@ -2,7 +2,7 @@ import logging
 from datetime import date
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -75,18 +75,35 @@ def _role_name(user) -> str:
     return user.role.name if user.role else 'employee'
 
 
+def _user_branch(user) -> str:
+    return (getattr(user, 'branch', '') or '').strip()
+
+
+def _can_hr_access_request(hr_user, leave_request) -> bool:
+    """Branch guard for hr_admin: True when no branch set (no restriction) or branches match."""
+    branch = _user_branch(hr_user)
+    if not branch:
+        return True
+    return (getattr(leave_request.employee, 'branch', '') or '').strip() == branch
+
+
 def _approval_scope_filter(user) -> 'Q':
     """
-    Scope filter for the approval queue — always excludes the approver's own requests.
-    system_admin → all; hr_admin → employees where hr=user (L2); manager → direct reports (L1); employee → own.
+    Scope filter for the approval queue — enforces both role and status visibility.
+    manager   → pending requests from direct reports only (L1 queue)
+    hr_admin  → l2_pending requests from same branch only (L2 queue)
+    system_admin → all statuses, all employees except own
     """
     role = _role_name(user)
     if role == 'system_admin':
         return ~Q(employee=user)
     if role == 'hr_admin':
-        return Q(employee__hr=user) & ~Q(employee=user)
+        branch = _user_branch(user)
+        if branch:
+            return Q(employee__branch=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
+        return Q(employee__hr=user, status=REQ_L2_PENDING) & ~Q(employee=user)
     if role == 'manager':
-        return Q(employee__reporting_manager=user) & ~Q(employee=user)
+        return Q(employee__reporting_manager=user, status=REQ_PENDING) & ~Q(employee=user)
     return Q(employee=user)
 
 
@@ -105,17 +122,86 @@ def _calendar_scope_filter(user) -> 'Q':
     return Q()  # employee: see all approved leaves to plan around absences
 
 
-def _calc_working_days(start: date, end: date, duration: str) -> float:
+def _calc_working_days(start: date, end: date, duration: str, policy=None) -> float:
     if duration != 'full_day':
         return 0.5
+    off_days    = _get_weekly_off_days()
+    count_offs  = getattr(policy, 'count_weekoffs_as_leave', False)
+    sandwich    = getattr(policy, 'sandwich_leave_enabled', False)
     count = 0
     current = start
     from datetime import timedelta
     while current <= end:
-        if current.weekday() < 5:
+        is_off = current.strftime('%A').lower() in off_days
+        if sandwich or count_offs or not is_off:
             count += 1
         current += timedelta(days=1)
     return float(count)
+
+
+def _get_weekly_off_days() -> set:
+    """Return configured weekly-off day names (lowercase) from DB config."""
+    try:
+        from apps.attendance.models import WeeklyDayPolicy
+        policy = WeeklyDayPolicy.objects.filter(is_active=True, is_default=True).first()
+        if policy:
+            return set(policy.weekly_off_days)
+    except Exception:
+        pass
+    try:
+        from apps.attendance.models import AttendanceSettings
+        cfg = AttendanceSettings.objects.select_related('weekly_off').first()
+        if cfg and getattr(cfg, 'weekly_off', None):
+            _days = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+            return {d for d in _days if getattr(cfg.weekly_off, d, False)}
+    except Exception:
+        pass
+    return {'saturday', 'sunday'}
+
+
+def _validate_leave_policy(policy, employee, duration, total_days, start, end, document, today) -> str | None:
+    """Validate a leave request against policy rules. Returns error string or None."""
+    if duration != 'full_day' and not policy.allow_half_day:
+        return 'Half-day leave is not allowed for this leave type.'
+    if policy.minimum_leave_duration and total_days < float(policy.minimum_leave_duration):
+        return f'Minimum {policy.minimum_leave_duration} day(s) required for this leave type.'
+    if policy.maximum_leave_duration and total_days > policy.maximum_leave_duration:
+        return f'Maximum {policy.maximum_leave_duration} day(s) allowed for this leave type.'
+    if policy.maximum_consecutive_days and total_days > policy.maximum_consecutive_days:
+        return f'Maximum {policy.maximum_consecutive_days} consecutive day(s) allowed for this leave type.'
+    if policy.minimum_notice_period and (start - today).days < policy.minimum_notice_period:
+        return f'This leave type requires {policy.minimum_notice_period} day(s) advance notice.'
+    if start < today:
+        if not policy.allow_backdated_leave:
+            return 'Backdated leave applications are not allowed for this leave type.'
+        if policy.maximum_backdated_days and (today - start).days > policy.maximum_backdated_days:
+            return f'Backdated leave is limited to {policy.maximum_backdated_days} day(s) in the past.'
+    if start > today:
+        if not policy.allow_future_leave:
+            return 'Future-dated leave applications are not allowed for this leave type.'
+        if policy.maximum_future_days and (start - today).days > policy.maximum_future_days:
+            return f'Leave can only be applied {policy.maximum_future_days} day(s) in advance.'
+    if policy.attachment_required and not document:
+        return 'An attachment is required for this leave type.'
+    if policy.applicable_branches:
+        emp_branch = (getattr(employee, 'branch', '') or '').strip()
+        if emp_branch and emp_branch not in policy.applicable_branches:
+            return 'You are not eligible for this leave type (branch restriction).'
+    if policy.applicable_departments:
+        emp_dept = (getattr(employee, 'department', '') or '').strip()
+        if emp_dept and emp_dept not in policy.applicable_departments:
+            return 'You are not eligible for this leave type (department restriction).'
+    if policy.applicable_gender != 'all':
+        emp_gender = (getattr(employee, 'gender', '') or '').lower().strip()
+        if emp_gender and emp_gender != policy.applicable_gender:
+            return 'You are not eligible for this leave type (gender restriction).'
+    if policy.minimum_service_period:
+        joining = getattr(employee, 'date_of_joining', None) or getattr(employee, 'joining_date', None)
+        if joining:
+            months = (today.year - joining.year) * 12 + (today.month - joining.month)
+            if months < policy.minimum_service_period:
+                return f'This leave type requires {policy.minimum_service_period} month(s) of service.'
+    return None
 
 
 def _deduct_balance(employee, leave_type: str, days: float, year: int) -> None:
@@ -173,20 +259,27 @@ class LeavePolicyView(APIView):
         serializer = LeavePolicyCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
-        data = serializer.validated_data
-        label = data['leave_type_label']
+        data  = serializer.validated_data
+        label = data.pop('leave_type_label')
         leave_type_key = label.lower().replace(' ', '_').replace('-', '_')
         policy = LeavePolicy.objects.create(
-            leave_type=leave_type_key,
-            leave_type_label=label,
-            annual_days=data['annual_days'],
-            can_carry_forward=data['can_carry_forward'],
-            max_carry_forward_days=data['max_carry_forward_days'],
-            policy_note=data.get('policy_note', ''),
-            is_active=data['is_active'],
+            leave_type=leave_type_key, leave_type_label=label, **data
         )
         logger.info('Created leave type "%s" by %s', leave_type_key, request.user.email)
         return success('Leave type created.', LeavePolicySerializer(policy).data, http_status=status.HTTP_201_CREATED)
+
+    def delete(self, request, leave_type: str):
+        if not (_has_perm(request.user, 'settings.edit') or _has_perm(request.user, 'leave.approve')):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        _BUILTIN = {'casual', 'earned', 'sick', 'lwp', 'maternity', 'paternity'}
+        if leave_type in _BUILTIN:
+            return error('Built-in leave types cannot be deleted.', http_status=status.HTTP_400_BAD_REQUEST)
+        policy = LeavePolicy.objects.filter(leave_type=leave_type).first()
+        if not policy:
+            return error('Leave type not found.', http_status=status.HTTP_404_NOT_FOUND)
+        policy.delete()
+        logger.info('Deleted leave type "%s" by %s', leave_type, request.user.email)
+        return success('Leave type deleted.')
 
 
 # ─── Leave Balance ─────────────────────────────────────────────────────────────
@@ -313,12 +406,12 @@ class LeaveRequestListCreateView(APIView):
 
         qs_base = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver')
 
-        if scope == 'own' or not has_approve:
-            # Always return the requesting user's own requests only
-            queryset = qs_base.filter(employee=request.user)
-        else:
+        if scope == 'team' and has_approve:
             # Approval queue — scoped by role, own requests excluded
             queryset = qs_base.filter(_approval_scope_filter(request.user))
+        else:
+            # Default: return the requesting user's own requests only
+            queryset = qs_base.filter(employee=request.user)
 
         leave_type = request.query_params.get('leave_type')
         if leave_type:
@@ -332,6 +425,12 @@ class LeaveRequestListCreateView(APIView):
         year = request.query_params.get('year')
         if year:
             queryset = queryset.filter(start_date__year=year)
+
+        branch = request.query_params.get('branch')
+        if branch and _role_name(request.user) == 'system_admin':
+            queryset = queryset.filter(employee__branch__iexact=branch)
+
+        queryset = queryset.order_by('-created_at')
 
         page_obj, paginator = paginate(queryset, request, default_page_size=20)
         serializer = LeaveRequestSerializer(page_obj.object_list, many=True, context={'request': request})
@@ -347,15 +446,54 @@ class LeaveRequestListCreateView(APIView):
         end        = data['end_date']
         duration   = data.get('duration', 'full_day')
         leave_type = data['leave_type']
-        total_days = _calc_working_days(start, end, duration)
+
+        policy     = LeavePolicy.objects.filter(leave_type=leave_type, is_active=True).first()
+        total_days = _calc_working_days(start, end, duration, policy)
 
         if total_days <= 0:
             return error('Selected date range results in zero working days.')
+
+        from datetime import timedelta
+        weekly_off = _get_weekly_off_days()
+        count_offs = getattr(policy, 'count_weekoffs_as_leave', False)
+        sandwich   = getattr(policy, 'sandwich_leave_enabled', False)
+        if weekly_off and not count_offs and not sandwich:
+            cur = start
+            while cur <= end:
+                if cur.strftime('%A').lower() in weekly_off:
+                    return error(
+                        f'{cur.strftime("%A")} ({cur}) is a configured week-off day. '
+                        'Leave cannot be applied on a week-off day.'
+                    )
+                cur += timedelta(days=1)
+
+        if policy:
+            today   = timezone.localdate()
+            err_msg = _validate_leave_policy(
+                policy, request.user, duration, total_days,
+                start, end, data.get('document'), today,
+            )
+            if err_msg:
+                return error(err_msg)
+
+        _ACTIVE_STATUSES = (REQ_PENDING, REQ_L2_PENDING, REQ_APPROVED)
+        overlap = LeaveRequest.objects.filter(
+            employee=request.user,
+            status__in=_ACTIVE_STATUSES,
+            start_date__lte=end,
+            end_date__gte=start,
+        ).exists()
+        if overlap:
+            return error(
+                'You already have a leave request for the selected date(s). '
+                'Please modify or cancel the existing request before applying again.'
+            )
 
         year = start.year
 
         # Balance check + creation wrapped in a transaction with row-level lock
         # to prevent double-booking when the same employee submits concurrent requests.
+        lop_days = 0.0
         with transaction.atomic():
             if leave_type != LEAVE_LWP:
                 balance = (
@@ -368,27 +506,44 @@ class LeaveRequestListCreateView(APIView):
                     return error(f'No leave balance found for {leave_type} in {year}. Contact HR.')
                 available = float(balance.total_days - balance.used_days)
                 if total_days > available:
-                    return error(f'Insufficient balance. You have {available} day(s) available.')
+                    if policy and policy.convert_to_lop:
+                        # Use available balance; excess days become LOP — leave_type stays unchanged
+                        lop_days = round(total_days - available, 1)
+                    elif policy and policy.allow_negative_balance:
+                        pass  # allow overdraft
+                    else:
+                        return error(f'Insufficient balance. You have {available} day(s) available.')
 
             l1, l2 = _resolve_approval_chain(request.user)
 
+            # Managers skip L1 — their leave routes directly to HR (L2)
+            if _role_name(request.user) == 'manager':
+                initial_status = REQ_L2_PENDING
+                l1_approver    = None
+                l2_approver    = l2
+            else:
+                initial_status = REQ_PENDING
+                l1_approver    = l1
+                l2_approver    = l2
+
             leave_request = LeaveRequest.objects.create(
-            employee=request.user,
-            leave_type=leave_type,
-            duration=duration,
-            start_date=start,
-            end_date=end,
-            total_days=total_days,
-            reason=data.get('reason', ''),
-            contact_during_leave=data.get('contact_during_leave', ''),
-            handover_to=data.get('handover_to', ''),
-            handover_notes=data.get('handover_notes', ''),
-            document=data.get('document'),
-            is_lwp=(leave_type == LEAVE_LWP),
-            l1_approver=l1,
-            l2_approver=l2,
-            status=REQ_PENDING,
-        )
+                employee=request.user,
+                leave_type=leave_type,
+                duration=duration,
+                start_date=start,
+                end_date=end,
+                total_days=total_days,
+                lop_days=lop_days,
+                reason=data.get('reason', ''),
+                contact_during_leave=data.get('contact_during_leave', ''),
+                handover_to=data.get('handover_to', ''),
+                handover_notes=data.get('handover_notes', ''),
+                document=data.get('document'),
+                is_lwp=(leave_type == LEAVE_LWP),
+                l1_approver=l1_approver,
+                l2_approver=l2_approver,
+                status=initial_status,
+            )
 
         logger.info('Leave request %s created by %s (%s, %s days)', leave_request.id, request.user.email, leave_type, total_days)
         out = LeaveRequestSerializer(leave_request, context={'request': request})
@@ -408,6 +563,8 @@ class LeaveRequestDetailView(APIView):
 
         has_approve = _has_perm(user, 'leave.approve')
         if not has_approve and leave_request.employee_id != user.id:
+            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        if has_approve and _role_name(user) == 'hr_admin' and not _can_hr_access_request(user, leave_request):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         return leave_request, None
@@ -469,6 +626,8 @@ class LeaveApprovalView(APIView):
             ).get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _role_name(request.user) == 'hr_admin' and not _can_hr_access_request(request.user, leave_request):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return success(
             'Leave request retrieved.',
             LeaveRequestSerializer(leave_request, context={'request': request}).data,
@@ -479,15 +638,17 @@ class LeaveApprovalView(APIView):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            leave_request = LeaveRequest.objects.select_related('employee').get(id=request_id)
+            leave_request = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver').get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if leave_request.employee_id == request.user.id:
             return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
+        if _role_name(request.user) == 'hr_admin' and not _can_hr_access_request(request.user, leave_request):
+            return error('You can only approve leave requests for employees in your branch.', http_status=status.HTTP_403_FORBIDDEN)
 
         action  = request.data.get('action')
-        remarks = request.data.get('remarks', '').strip()
+        remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()
 
         if action not in ('approve', 'reject'):
             return error('Action must be "approve" or "reject".')
@@ -526,14 +687,17 @@ class LeaveApprovalView(APIView):
 
 
 def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
-    if leave_request.is_lwp or leave_request.leave_type == LEAVE_LWP:
+    if leave_request.is_lwp:  # pure LWP request — no leave balance record to deduct
         return
     year = leave_request.start_date.year
-    LeaveBalance.objects.filter(
-        employee=leave_request.employee,
-        leave_type=leave_request.leave_type,
-        year=year,
-    ).update(used_days=Q('used_days') + float(leave_request.total_days))
+    lop = float(getattr(leave_request, 'lop_days', 0) or 0)
+    earned_days = float(leave_request.total_days) - lop
+    if earned_days > 0:
+        LeaveBalance.objects.filter(
+            employee=leave_request.employee,
+            leave_type=leave_request.leave_type,
+            year=year,
+        ).update(used_days=F('used_days') + earned_days)
 
 
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────
@@ -545,7 +709,7 @@ class LeaveStatsView(APIView):
         has_approve = _has_perm(request.user, 'leave.approve')
         year        = int(request.query_params.get('year', _current_year()))
         scope       = request.query_params.get('scope', '')
-        own_scope   = scope == 'own' or not has_approve
+        own_scope = not (scope == 'team' and has_approve)
 
         if own_scope:
             qs = LeaveRequest.objects.filter(employee=request.user, start_date__year=year)

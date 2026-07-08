@@ -349,6 +349,347 @@ assessments/0004_candidateassignment_attempt_count  ✅ applied
 
 ---
 
+## Session Log — 2026-07-03
+**Author: Teerdaveni**
+**Branch: backend/attendance-leave**
+
+### Bug Fixes Shipped
+
+**1. Attendance Calendar — incomplete month coverage**
+- Root cause: `get_calendar()` only iterated over existing `AttendanceRecord` rows — days with no record (weekly off, future, absent days) were missing from the response
+- Fix: Full month iteration using `calendar.monthrange()`; 4 up-front queries (records, leaves, pending corrections, weekly-off policy) replace N+1 per-day queries
+- Status priority order: Holiday > Weekly Off > On Leave > record status > Absent; future days with no special status are omitted
+- `STATUS_INCOMPLETE` now maps to label `"Missing Clock Out"` with `regularization_required: true`
+- Added `_STATUS_COLOR` module constant mapping each status to a hex color
+- New static methods on `AttendanceDashboardService`: `_build_day()`, `_weekly_off_days()`, `_leave_dates()`, `_pending_correction_dates()`
+- `_weekly_off_days()`: reads `WeeklyDayPolicy` default → falls back to legacy `AttendanceWeeklyOff` → defaults to Saturday + Sunday
+- `_leave_dates()`: single query for approved `LeaveRequest` rows in month range, expanded to set of dates
+- `_pending_correction_dates()`: batch query replacing N per-day `_has_pending_correction()` calls
+- File: `backend/apps/attendance/services_attendance.py`
+
+**2. `DayRecordSerializer` — new fields added**
+- Added `date` (YYYY-MM-DD string), `color` (hex), `regularization_required` (bool)
+- File: `backend/apps/attendance/serializers_my_attendance.py`
+
+**3. Assessment portal — 404 for non-candidate users**
+- Root cause: `/api/assessments/my/` returned 404 when logged-in user had no linked `Candidate` record (employees, managers, HR admins)
+- Fix: Returns `200 {assignments: [], all_complete: true}` instead of 404; also auto-corrects stale `assessment_status` to `complete` for these users
+- Fixed `safurasamreen2003@gmail.com` — employee/manager account had stale `assessment_status: pending`
+- File: `backend/apps/assessments/views/portal.py`
+
+**4. Leave requests — managers/HR can't see their own pending requests**
+- Root cause: `LeaveRequestListCreateView.get()` defaulted to the approval queue for any user with `leave.approve` permission — their own pending leaves were invisible
+- Fix: Default scope changed to own requests for all users; `?scope=team` now required to see the approval queue
+- Same fix applied to `LeaveStatsView.get()` — stats now reflect own requests by default
+- File: `backend/apps/hrms/views/leave.py`
+
+**5. Approve/reject buttons showing to leave applicant**
+- Root cause: Serializer had no action flags — frontend used JWT role to decide button visibility
+- Fix: Added `can_approve` and `can_cancel` boolean fields to `LeaveRequestSerializer`
+  - `can_approve`: True only if requester has `leave.approve` perm AND is NOT the leave owner AND status is pending/l2_pending
+  - `can_cancel`: True only if requester IS the leave owner AND status is pending/l2_pending
+- Frontend should render action buttons based on these fields, not on role from JWT
+- File: `backend/apps/hrms/serializers.py`
+
+### Debugging Done
+
+- **`/api/assessments/my/` 404**: Used Django shell + temporary debug print to trace the request user (`safurasamreen2003@gmail.com`, role=manager, RSS00008) — confirmed no `Candidate` linked
+- **Candidate `portal_user` not found**: Shell confirmed `Candidate.objects.filter(portal_user=user)` returns correct result; issue was wrong email used in test (`@email.com` vs `@gmail.com`)
+- **Leave not showing for Safura**: Shell confirmed she has 1 pending leave; root cause was scope defaulting to approval queue for approvers
+
+### Data Fixes Applied
+
+| User | Fix |
+|---|---|
+| `safurasamreen2003@gmail.com` | `assessment_status` corrected to `complete` |
+| `taskforce1569@gmail.com` (Samreen) | `assessment_status` corrected to `complete` |
+| `safurasamreenshaik@gmail.com` (Samreen) | `assessment_status` corrected to `complete` |
+| Candidate ID 7 (G. Durga Prasad) | `portal_user` linked to `rithwikaveera@gmail.com` for testing |
+
+### API Behaviour Changes
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/leave/requests/` | Managers/HR → approval queue | Everyone → own requests |
+| `GET /api/leave/requests/?scope=team` | — | Approval queue for approvers |
+| `GET /api/leave/stats/` | Managers/HR → team stats | Own stats |
+| `GET /api/leave/stats/?scope=team` | — | Team stats for approvers |
+| `GET /api/assessments/my/` | 404 for non-candidate users | 200 with empty assignments |
+| `GET /api/attendance/calendar/` | Only days with records returned | All month days; weekly off + leaves included |
+
+### Files Modified
+
+```
+backend/apps/attendance/
+  services_attendance.py     — get_calendar() rewritten; _STATUS_COLOR added; 4 new static helpers
+  serializers_my_attendance.py — DayRecordSerializer: date, color, regularization_required added
+
+backend/apps/assessments/
+  views/portal.py            — MyAssessmentView: 404 → 200 empty for non-candidate users
+
+backend/apps/hrms/
+  views/leave.py             — LeaveRequestListCreateView + LeaveStatsView: scope default fixed
+  serializers.py             — LeaveRequestSerializer: can_approve + can_cancel fields added
+```
+
+---
+
+## Session Log — 2026-07-06
+**Author: Teerdaveni**
+**Branch: attendance/back/03**
+
+### Features Shipped
+
+**1. Branch-wise leave visibility for HR users**
+- `_approval_scope_filter(user)` now returns branch-scoped Q filter for `hr_admin` — if HR has a branch set, only employees in that branch are visible; otherwise falls back to `employee__hr=user`
+- `_user_branch(user)` helper added — safely reads `user.branch` CharField
+- `_can_hr_access_request(hr_user, leave_request)` guard added — used in `_get_request`, `LeaveApprovalView.get()`, and `LeaveApprovalView.post()` to block cross-branch access with 403
+- File: `backend/apps/hrms/views/leave.py`
+
+**2. Two-level leave approval workflow (Manager L1 → HR L2)**
+- `_resolve_approval_chain(employee)` — checks `EmployeeApprovalOverride` first, falls back to `ApprovalWorkflowRule`; returns `(l1_approver, l2_approver)`
+- `_resolve_approver(role_str, employee)` — maps rule role string to actual User FK
+- `LeaveApprovalView.post()` — handles both `REQ_PENDING` (L1) and `REQ_L2_PENDING` (L2) states; promotes to l2_pending after L1 approval if l2_approver exists; deducts balance only on final approval
+- File: `backend/apps/hrms/views/leave.py`
+
+**3. Manager applies leave → routes directly to HR (skip L1)**
+- Managers skip L1 — their leave is created with `status=REQ_L2_PENDING`, `l1_approver=None`, `l2_approver=HR`
+- Other employees follow normal L1 → L2 path
+- File: `backend/apps/hrms/views/leave.py` (`LeaveRequestListCreateView.post()`)
+
+**4. `approved_by` / `approved_at` fields in leave response**
+- `LeaveRequestSerializer` now has `approved_by` and `approved_at` computed fields
+- `approved_by`: shows L2 approver name if L2 has acted, else L1 approver name
+- `approved_at`: shows `l2_actioned_at` if available, else `l1_actioned_at`
+- File: `backend/apps/hrms/serializers.py`
+
+**5. Duplicate leave date validation**
+- Before creating a new leave request, checks for overlapping dates in any active status (`pending`, `l2_pending`, `approved`)
+- Uses `start_date__lte=end, end_date__gte=start` overlap query
+- Rejected or cancelled leaves do not block re-application for the same dates
+- File: `backend/apps/hrms/views/leave.py` (`LeaveRequestListCreateView.post()`)
+
+**6. System admin pagination + branch-wise filtering**
+- `GET /api/leave/requests/` now paginates with `default_page_size=20` for all roles
+- `?branch=<branch_name>` query param supported for `system_admin` only — case-insensitive filter
+- Same branch filter added to `LeaveCalendarView.get()`
+- File: `backend/apps/hrms/views/leave.py`
+
+**7. Week-off validation on leave application**
+- `_get_weekly_off_days()` helper reads current DB config:
+  1. `WeeklyDayPolicy` (is_active=True, is_default=True) → `weekly_off_days` property
+  2. Falls back to legacy `AttendanceSettings → AttendanceWeeklyOff`
+  3. Defaults to `{'saturday', 'sunday'}` if no DB config
+- `LeaveRequestListCreateView.post()` iterates every date in the selected range; if any date is a configured week-off day, returns error: `"{Day} ({date}) is a configured week-off day. Leave cannot be applied on a week-off day."`
+- Config changes take effect immediately (reads DB on every request, no server restart needed)
+- File: `backend/apps/hrms/views/leave.py`
+
+### Bug Fixes Shipped
+
+**8. `_deduct_balance_safe` TypeError — Q vs F expression**
+- Root cause: `Q('used_days') + days` — Q objects are filter expressions, not field references
+- Fix: Changed to `F('used_days') + float(leave_request.total_days)`
+- Added `F` to imports (`from django.db.models import Count, F, Q`)
+- File: `backend/apps/hrms/views/leave.py`
+
+**9. Rejection remarks not saving**
+- Root cause: Backend read `request.data.get('remarks')` but Postman/frontend sent `reason`
+- Fix: `remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()` — accepts both field names
+- File: `backend/apps/hrms/views/leave.py`
+
+### API Behaviour Changes
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/leave/requests/` | No pagination | Paginated (20/page) |
+| `GET /api/leave/requests/?scope=team` | HR sees all statuses | HR sees only `l2_pending`; manager sees only `pending` |
+| `GET /api/leave/requests/?branch=X` | Not supported | system_admin only — filters by branch |
+| `POST /api/leave/requests/` | No week-off check | Blocks if any selected date falls on configured week-off day |
+| `POST /api/leave/requests/approve/` | L1 approve → straight to approved | L1 approve → l2_pending (if l2 exists); L2 approve → approved + balance deducted |
+| `POST /api/leave/requests/approve/` | Only reads `remarks` | Accepts `remarks` or `reason` (both work) |
+| `GET /api/leave/requests/<id>/` | Response has no approver info | Returns `approved_by` (name) and `approved_at` (timestamp) |
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  views/leave.py   — _user_branch, _can_hr_access_request, _approval_scope_filter (branch+status scoped),
+                     _resolve_approver, _resolve_approval_chain, _get_weekly_off_days,
+                     LeaveRequestListCreateView (duplicate check, week-off validation, manager routing, pagination, branch filter),
+                     LeaveApprovalView (two-level flow, branch guard, remarks fix),
+                     _deduct_balance_safe (F() fix)
+  serializers.py   — LeaveRequestSerializer: approved_by + approved_at fields added
+```
+
+### Pending
+
+- Leave integration — auto-mark employee as `on_leave` in attendance when leave approved
+- Frontend leave pages — prompts not yet given this session
+- Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-07
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. Celery Beat `unknown command HELLO` crash loop**
+- Root cause 1: Previous session added `?protocol=2` to Redis URL — kombu rejected it with `TypeError: Connection._init_params() got an unexpected keyword argument 'protocol'`
+- Fix: Removed `protocol=2` suffix from `_celery_redis_url()` in `settings.py`
+- Root cause 2 (original HELLO error): redis-py ≥ 4.0 sends `HELLO 3` to Redis server < 6.0 which does not support it
+- Fix: Downgrade redis-py — `pip install "redis>=3.5.3,<4.0"`
+- File: `backend/config/settings.py`
+
+**2. Sandwich Leave calculation counted only working days**
+- Root cause: `_calc_working_days()` used hardcoded `weekday() < 5` (Mon–Fri) — weekends always skipped regardless of policy
+- Fix: Rewrote `_calc_working_days()` to read `_get_weekly_off_days()` from DB and accept optional `policy` param; when `sandwich_leave_enabled=True`, all calendar days in range are counted (including weekends and holidays)
+- Week-off blocking validation is now skipped when `sandwich_leave_enabled=True` or `count_weekoffs_as_leave=True`
+- File: `backend/apps/hrms/views/leave.py`
+
+### Features Shipped
+
+**3. Leave Policies Module — Full Implementation**
+
+Extended existing `LeavePolicy` model with 30 new fields across 5 rule sections. No new model or service files created — all changes in existing files only.
+
+**New fields on `LeavePolicy` model:**
+
+| Section | Fields |
+|---|---|
+| Leave Application Rules | `minimum_leave_duration`, `maximum_leave_duration`, `maximum_consecutive_days`, `minimum_notice_period`, `allow_half_day`, `allow_backdated_leave`, `maximum_backdated_days`, `allow_future_leave`, `maximum_future_days` |
+| Holiday & Week-off Rules | `sandwich_leave_enabled`, `count_holidays_as_leave`, `count_weekoffs_as_leave` |
+| Eligibility Rules | `applicable_branches`, `applicable_departments`, `applicable_designations`, `applicable_employment_types`, `applicable_gender`, `minimum_service_period` |
+| Documentation Rules | `attachment_required`, `medical_certificate_required`, `medical_certificate_after_days` |
+| Leave Restrictions | `allow_negative_balance`, `convert_to_lop`, `allow_leave_cancellation`, `cancellation_allowed_until` |
+| Additional Rules | `allow_probation_leave`, `allow_notice_period_leave`, `allow_leave_extension`, `allow_leave_combination` |
+
+**New APIs:**
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | `/api/leave/policy/` | Returns all 30 new fields per policy |
+| PUT/PATCH | `/api/leave/policy/<leave_type>/` | Updates all fields with cross-field validation |
+| POST | `/api/leave/policy/` | Creates custom leave type with all fields |
+| DELETE | `/api/leave/policy/<leave_type>/` | Custom types only — built-in 6 are protected |
+
+**Leave application validation wired to policy:**
+- `_validate_leave_policy()` helper (47 lines) validates every leave request against the saved policy
+- Validates: half-day eligibility, min/max duration, max consecutive days, notice period, backdated/future date rules, attachment requirement, eligibility (branch/dept/gender/service period)
+- `convert_to_lop=True`: auto-converts leave type to LWP when balance is insufficient instead of rejecting
+- `allow_negative_balance=True`: allows overdraft without error
+- Custom leave types now accepted in `LeaveRequestCreateSerializer.validate_leave_type()` (checks `LeavePolicy` for non-built-in types)
+
+**Migration:** `hrms/0009_leavepolicy_application_rules` — applied ✅
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  models.py                   — 30 new fields on LeavePolicy; GENDER_CHOICES constant added
+  serializers.py              — LeavePolicySerializer, LeavePolicyCreateSerializer,
+                                LeavePolicyUpdateSerializer extended with all 30 fields;
+                                _POLICY_RULE_FIELDS shared list; cross-field validation added;
+                                LeaveRequestCreateSerializer.validate_leave_type accepts custom types
+  views/leave.py              — _calc_working_days() updated (policy param, sandwich/weekoff aware);
+                                _validate_leave_policy() helper added;
+                                LeavePolicyView.delete() added;
+                                LeavePolicyView.post() uses **data spread for new fields;
+                                LeaveRequestListCreateView.post() wired to policy validation,
+                                LOP conversion, allow_negative_balance
+  migrations/
+    0009_leavepolicy_application_rules.py  — 30 AddField operations (applied)
+backend/config/
+  settings.py                 — _celery_redis_url() protocol=2 suffix removed
+```
+
+### Frontend Prompts Given
+
+- **Leave Policy APIs**: Full request/response format for all 5 endpoints with field reference table, conditional UI rules (show/hide dependent fields), and leave application error messages
+- **Sandwich Leave preview fix**: `calcWorkingDays()` must count all calendar days (not skip weekends) when `sandwich_leave_enabled=True`; read flag from `GET /api/leave/policy/` response for the selected leave type
+
+### Pending
+
+- Frontend implementation of Leave Policies settings page (UI from screenshots provided)
+- Frontend day counter fix — "2 working days" preview should show "4 days" when sandwich leave is on
+- Leave integration — auto-mark employee `on_leave` in attendance when leave is approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-08
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Convert Insufficient Balance to LOP — Full Backend Implementation**
+
+Implemented the split-balance logic so that when `convert_to_lop=True` on a `LeavePolicy`, leave requests that exceed the available balance are allowed — available balance is consumed first, and only the excess days become LOP.
+
+**Business rule implemented:**
+- `convert_to_lop=OFF`: block submission if balance insufficient (unchanged)
+- `convert_to_lop=ON`: allow submission; record `lop_days = requested - available`; `leave_type` stays as original (e.g. `earned`) — NOT converted to LWP
+
+**Example (from requirement):**
+- Earned Leave available: 15 days
+- Requested: 18 working days
+- `lop_days = 3.0`, `leave_type = earned`, `total_days = 18`
+- On final approval: 15 days deducted from earned balance, 3 days treated as LOP
+
+**Old behaviour (wrong):**
+```python
+if policy.convert_to_lop:
+    leave_type = LEAVE_LWP  # converted entire leave to LWP
+```
+
+**New behaviour (correct):**
+```python
+if policy.convert_to_lop:
+    lop_days = round(total_days - available, 1)  # only excess; leave_type unchanged
+```
+
+**Approval deduction fix:**
+`_deduct_balance_safe()` now deducts only `total_days - lop_days` from the original leave balance. Previously it deducted `total_days` which would over-deduct.
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  models.py            — Added lop_days DecimalField(default=0) to LeaveRequest
+  serializers.py       — Added lop_days to LeaveRequestSerializer.Meta.fields
+  views/leave.py       — Balance check: lop_days computed instead of switching leave_type to LWP
+                         _deduct_balance_safe(): deducts (total_days - lop_days) on approval
+  migrations/
+    0010_leaverequest_lop_days.py  — AddField lop_days to hrms_leave_requests (applied ✅)
+```
+
+### API Response (new fields)
+
+```json
+{
+  "leave_type": "earned",
+  "total_days": 18.0,
+  "lop_days": 3.0,
+  "is_lwp": false
+}
+```
+
+Frontend derives: `earned_leave_used = total_days - lop_days`
+
+### Frontend Changes Needed (not yet done)
+
+- Leave application form: when `convert_to_lop=true` and requested > available, show breakdown panel instead of "Exceeds balance by Nd"
+- Detail/history card: show split `Earned Leave: 15d / LOP: 3d / Total: 18d` when `lop_days > 0`
+- HR/approver view: same split display so approver sees what will be deducted
+
+### Pending
+
+- Frontend UI for LOP breakdown (described above)
+- Leave integration — auto-mark employee `on_leave` in attendance when leave is approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |

@@ -167,12 +167,15 @@ class DayRecordSerializer(serializers.Serializer):
     One day's data for the CalendarGrid.
     Field names match DayRecord interface in CalendarGrid.tsx exactly.
     """
-    status        = serializers.CharField()
-    clockIn       = serializers.CharField(allow_null=True)
-    clockOut      = serializers.CharField(allow_null=True)
-    hours         = serializers.CharField(allow_null=True)
-    note          = serializers.CharField(allow_null=True)
-    canRegularize = serializers.BooleanField()
+    date                    = serializers.CharField()
+    status                  = serializers.CharField()
+    color                   = serializers.CharField()
+    clockIn                 = serializers.CharField(allow_null=True)
+    clockOut                = serializers.CharField(allow_null=True)
+    hours                   = serializers.CharField(allow_null=True)
+    note                    = serializers.CharField(allow_null=True)
+    canRegularize           = serializers.BooleanField()
+    regularization_required = serializers.BooleanField()
 
 
 class CalendarSerializer(serializers.Serializer):

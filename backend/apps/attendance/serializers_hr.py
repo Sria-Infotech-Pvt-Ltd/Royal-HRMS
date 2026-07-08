@@ -218,12 +218,56 @@ class ImportRowSerializer(serializers.Serializer):
     """Validates a single row from the uploaded CSV."""
     employee_id = serializers.CharField()
     date        = serializers.DateField()
-    punch_in    = serializers.TimeField()
+    punch_in    = serializers.TimeField(required=False, allow_null=True, default=None)
     punch_out   = serializers.TimeField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs: dict) -> dict:
-        if attrs.get('punch_out') and attrs['punch_out'] <= attrs['punch_in']:
-            raise serializers.ValidationError(
-                {'punch_out': 'Punch out must be after punch in.'}
-            )
+        punch_in  = attrs.get('punch_in')
+        punch_out = attrs.get('punch_out')
+        if punch_in and punch_out and punch_out <= punch_in:
+            raise serializers.ValidationError({
+                'punch_out': (
+                    f'Punch out ({punch_out.strftime("%H:%M")}) must be after '
+                    f'punch in ({punch_in.strftime("%H:%M")}). '
+                    'Use 24-hour format — e.g. 14:00 for 2 PM.'
+                )
+            })
         return attrs
+
+
+# ── Audit log serializers ─────────────────────────────────────────────────────
+
+class AuditLogEntrySerializer(serializers.Serializer):
+    """One row in the attendance record audit history."""
+    event        = serializers.CharField()
+    performed_by = serializers.CharField()
+    performed_at = serializers.CharField()
+    old_value    = serializers.CharField(allow_null=True)
+    new_value    = serializers.CharField(allow_null=True)
+    action       = serializers.CharField()
+    remarks      = serializers.CharField()
+
+
+# ── Invalid punch action serializers ─────────────────────────────────────────
+
+class InvalidPunchAssignSerializer(serializers.Serializer):
+    assigned_to = serializers.UUIDField(
+        help_text='UUID of the HR user to assign this punch to.',
+    )
+
+
+class InvalidPunchDiscardSerializer(serializers.Serializer):
+    remarks = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default='',
+        help_text='Optional reason for discarding.',
+    )
+
+
+class InvalidPunchConvertSerializer(serializers.Serializer):
+    target_punch_type = serializers.ChoiceField(
+        choices=['IN', 'OUT'],
+        help_text='The correct punch type to create.',
+    )
+    target_time = serializers.TimeField(
+        help_text='The correct punch time in HH:MM format.',
+    )
