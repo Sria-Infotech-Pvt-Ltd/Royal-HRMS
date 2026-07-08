@@ -66,7 +66,7 @@ export default function SettingsPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Settings</div>
-          <div className="page-sub">Configure all Royal HRMS modules from one place</div>
+          <div className="page-sub">Configure all AIRA modules from one place</div>
         </div>
       </div>
 

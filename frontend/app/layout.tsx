@@ -10,11 +10,11 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Royal HRMS",
-  description: "Royal Human Resource Management System — By SRIA",
+  title: "AIRA",
+  description: "Adaptive Intelligence for Resource Automation — AI-Powered HRMS & Workforce Intelligence Platform",
   icons: {
-    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
-    shortcut: [{ url: "/logo.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/logo.png", type: "image/png" }],
+    shortcut: [{ url: "/logo.png", type: "image/png" }],
     apple: [{ url: "/logo.png", type: "image/png" }],
   },
 };
@@ -25,9 +25,8 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ height: "100%" }} suppressHydrationWarning>
       <head>
-        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
         <link rel="icon" type="image/png" href="/logo.png" sizes="any" />
-        <link rel="shortcut icon" href="/logo.svg" />
+        <link rel="shortcut icon" href="/logo.png" />
         <link rel="apple-touch-icon" href="/logo.png" />
         <link
           rel="stylesheet"

@@ -63,7 +63,7 @@ export default function DashboardShell({
   const [searchVal, setSearchVal] = useState("");
 
   const pageTitle = PAGE_TITLES[pathname]
-    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "Royal HRMS");
+    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "AIRA");
   const visibleNav = buildNav(session.permissions ?? []);
 
   function toggleTheme() {
@@ -120,14 +120,14 @@ export default function DashboardShell({
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src="/logo.png"
-                alt="Royal HRMS"
+                alt="AIRA"
                 className="sidebar-logo-collapsed"
               />
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src="/logo.png"
-                alt="Royal HRMS"
+                alt="AIRA"
                 className="sidebar-logo-expanded"
               />
             )}

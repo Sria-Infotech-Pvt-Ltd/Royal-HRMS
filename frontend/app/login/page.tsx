@@ -74,7 +74,7 @@ export default function LoginPage() {
         <div className="login-image-panel">
           <Image
             src="/login.jpg"
-            alt="Royal HRMS"
+            alt="AIRA"
             fill
             className="login-image"
             sizes="60vw"
@@ -91,7 +91,7 @@ export default function LoginPage() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.png"
-                alt="Royal HRMS"
+                alt="AIRA"
                 width={240}
                 height={160}
                 style={{ width: 240, height: "auto" }}
@@ -99,7 +99,7 @@ export default function LoginPage() {
             </div>
 
             <h2 className="login-title">Welcome back</h2>
-            <p className="login-subtitle">Sign in to your Royal HRMS account</p>
+            <p className="login-subtitle">Sign in to your AIRA account</p>
 
             {/* Error banner */}
             {error && (
@@ -190,7 +190,7 @@ export default function LoginPage() {
             )}
 
             <p className="login-footer-text">
-              Protected by Royal HRMS · Enterprise SSO available
+              Protected by AIRA · Enterprise SSO available
             </p>
 
           </div>
