@@ -150,6 +150,8 @@ class RespondToItemView(APIView):
             return err
         if assignment.status == CandidateAssignment.STATUS_COMPLETE:
             return error('This assessment is already completed.', http_status=status.HTTP_409_CONFLICT)
+        if assignment.deadline and timezone.now() > assignment.deadline:
+            return error('The deadline for this assessment has passed.', http_status=status.HTTP_403_FORBIDDEN)
         try:
             item = assignment.assessment.items.get(pk=item_id)
         except AssessmentItem.DoesNotExist:
@@ -242,6 +244,8 @@ class CompleteAssessmentView(APIView):
             return err
         if assignment.status == CandidateAssignment.STATUS_COMPLETE:
             return error('Assignment already completed.', http_status=status.HTTP_409_CONFLICT)
+        if assignment.deadline and timezone.now() > assignment.deadline:
+            return error('The deadline for this assessment has passed.', http_status=status.HTTP_403_FORBIDDEN)
 
         video_item_ids = list(
             assignment.assessment.items

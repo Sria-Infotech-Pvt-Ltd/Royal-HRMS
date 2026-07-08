@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -243,19 +244,21 @@ class AttendanceCorrectionView(APIView):
         data     = serializer.validated_data
         employee = request.user
 
-        # Guard: no duplicate pending correction for same date
-        if AttendanceCorrection.objects.filter(
-            employee=employee,
-            date=data['date'],
-            status=AttendanceCorrection.STATUS_PENDING,
-        ).exists():
-            return error(
-                'A correction request is already pending for this date. '
-                'Please wait for it to be reviewed before submitting another.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
+        with transaction.atomic():
+            # select_for_update prevents a race where two concurrent submissions
+            # both pass the exists() check before either creates the record.
+            if AttendanceCorrection.objects.select_for_update().filter(
+                employee=employee,
+                date=data['date'],
+                status=AttendanceCorrection.STATUS_PENDING,
+            ).exists():
+                return error(
+                    'A correction request is already pending for this date. '
+                    'Please wait for it to be reviewed before submitting another.',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
 
-        correction = AttendanceCorrection.objects.create(
+            correction = AttendanceCorrection.objects.create(
             employee=employee,
             date=data['date'],
             punch_type=data['punch_type'],

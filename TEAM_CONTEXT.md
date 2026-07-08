@@ -1061,3 +1061,156 @@ assessments/0009_assessmentsection_assessmentitem_section             ✅ applie
 - Fix: added UUID format check before routing — if `candidate_id` is not a valid UUID, it is automatically treated as an `employee_id` and routed to the employee lookup path (`User.objects.get(employee_id=...)`)
 - No migration required — view-only change
 - File: `assessments/views/admin.py` `AssignAssessmentView.post()`
+
+---
+
+## Session Log — 07-07-2026
+**Author: G.Durga Prasad**
+**Branch: Backend/Assignment-Update**
+
+### Features Shipped
+
+**1. Referral endpoints — 5 new API routes**
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/recruitment/referrals/` | List referrals submitted by the logged-in employee (paginated) |
+| POST | `/api/recruitment/referrals/` | Employee submits a new referral |
+| GET | `/api/recruitment/referrals/all/` | Admin views all referrals across all employees (paginated) |
+| GET | `/api/recruitment/referral-rules/` | List active referral rules (public, for portal) |
+| POST | `/api/recruitment/referral-rules/` | Admin creates a new referral rule |
+| PATCH | `/api/recruitment/referral-rules/<id>/` | Admin updates a referral rule |
+| DELETE | `/api/recruitment/referral-rules/<id>/` | Admin deletes a referral rule |
+
+**2. `ReferralRule` model added**
+- New model in `recruitment/models.py` — `icon`, `title`, `body`, `order`, `is_active`
+- Uses `AutoField` (int PK) — intentional exception to UUID rule; these are static reference rows
+- `db_table = 'referral_rule'`, `ordering = ['order']`
+- Migration `0004_referralrule` created ✅
+
+**3. Referral rule seed data**
+- Migration `0005_referralrule_seed` seeds 6 default rules (Eligibility, Referral Bonus, No Self-Referral, Cooling Period, Active Referral Limit, Tax & Payroll) using `get_or_create` ✅
+
+**4. Referral email templates seeded**
+- Migration `0006_referral_email_templates` seeds 4 templates using `get_or_create`:
+  - `referral_submitted_referrer` — sent to referrer when their referral is received
+  - `referral_submitted_candidate` — sent to referred candidate confirming referral
+  - `referral_interview_scheduled_candidate` — sent to referred candidate when interview is scheduled
+  - `referral_interview_scheduled_referrer` — sent to referrer when their referral is shortlisted
+
+**5. Interview scheduled email template for direct candidates**
+- Migration `0007_interview_scheduled_email_template` seeds `interview_scheduled_candidate` template — sent to any non-referred candidate when HR schedules their interview ✅
+
+**6. Email triggers — referral submission**
+- `_send_referral_submission_emails(candidate)` fires in background thread when a referred candidate is created via `POST /api/recruitment/candidates/`
+- Sends 2 emails: one to referrer (`referral_submitted_referrer`), one to candidate (`referral_submitted_candidate`)
+
+**7. Email triggers — interview scheduled**
+- `_fire_interview_date_emails_if_needed(candidate, old_interview_date)` fires after any create or update that sets or changes `interview_date`
+- Referred candidates → `_send_interview_scheduled_emails()` — 2 emails (candidate + referrer)
+- Non-referred candidates → `_send_interview_scheduled_email_general()` — 1 email (candidate only)
+- Triggered on: PUT, PATCH of existing candidate, and also on POST (candidate created with interview_date already set)
+- Reschedule detection: any change where new `interview_date` is non-null AND different from old value triggers emails (not just null → value transitions)
+
+### Bug Fixes Shipped
+
+**8. Email templates sending variable placeholders instead of values**
+- Root cause: migrations 0006 and 0007 used `get_or_create` — if the templates already existed in DB (from a previous dev session or manual creation), the correct bodies in `defaults` were silently skipped
+- Fix: migration `0008_fix_email_template_bodies` uses `update_or_create` to force-overwrite subject, body, and `available_variables` for all 5 recruitment email templates regardless of prior DB state ✅
+
+### Files Modified
+
+```
+backend/apps/recruitment/
+  models.py           — ReferralRule model added
+  serializers.py      — ReferralRuleSerializer added
+  views.py            — _send_referral_email(), _send_referral_submission_emails(),
+                        _send_interview_scheduled_emails(),
+                        _send_interview_scheduled_email_general(),
+                        _fire_interview_date_emails_if_needed() helpers added;
+                        ReferralListCreateView, ReferralAllView,
+                        ReferralRuleListCreateView, ReferralRuleDetailView added;
+                        interview email triggers wired into POST, PUT, PATCH
+  urls.py             — 4 new referral URL patterns added
+
+backend/apps/recruitment/migrations/
+  0004_referralrule.py                    — creates referral_rule table ✅
+  0005_referralrule_seed.py               — seeds 6 default referral rules ✅
+  0006_referral_email_templates.py        — seeds 4 referral email templates ✅
+  0007_interview_scheduled_email_template.py — seeds interview_scheduled_candidate template ✅
+  0008_fix_email_template_bodies.py       — force-updates all 5 template bodies via update_or_create ✅
+```
+
+### Context Keys Sent by Each Email Helper
+
+| Template | Context Keys Sent |
+|---|---|
+| `referral_submitted_referrer` | `referrer_name`, `candidate_name`, `position_applied`, `branch_name`, `company_name` |
+| `referral_submitted_candidate` | `candidate_name`, `referrer_name`, `position_applied`, `company_name` |
+| `referral_interview_scheduled_candidate` | `candidate_name`, `position_applied`, `interview_date`, `interview_mode_display`, `branch_name`, `company_name` |
+| `referral_interview_scheduled_referrer` | `referrer_name`, `candidate_name`, `position_applied`, `interview_date`, `company_name` |
+| `interview_scheduled_candidate` | `candidate_name`, `position_applied`, `interview_date`, `interview_mode_display`, `branch_name`, `company_name` |
+
+---
+
+## Session Log — 07-07-2026
+**Author: G.Durga Prasad**
+**Branch: Backend/referral**
+
+### Features Shipped
+
+**1. Referral bonus URL wiring — 4 missing routes added**
+- `GET  /api/recruitment/referral-bonuses/` — list all referral bonus records (paginated, HR view)
+- `GET  /api/recruitment/referral-bonuses/<pk>/` — single bonus record detail
+- `POST /api/recruitment/referral-bonuses/<pk>/approve/` — HR approves a pending bonus
+- `POST /api/recruitment/referral-bonuses/<pk>/pay/` — HR marks a bonus as paid
+- Views (`ReferralBonusListView`, `ReferralBonusDetailView`, `ReferralBonusApproveView`, `ReferralBonusPayView`) already existed in `views.py`; they were just not wired in `urls.py`
+- File: `backend/apps/recruitment/urls.py`
+
+**2. Referral bonus migration — `ReferralBonus` model**
+- Migration `0009_referralbonus` creates the `referral_bonus` table (OneToOne → Candidate, FK → referrer User, bonus_amount, status, approved_by, paid_by, timestamps)
+
+### Bug Fixes Shipped
+
+**3. `birthday_wish_sent_year` AttributeError — 500 on `/api/hrms/birthdays/`**
+- Root cause: migration `0038_employeeprofile_birthday_wish_sent_year` had been applied (DB column existed), but the field was never added to the `EmployeeProfile` model class in `models.py`
+- Python raised `AttributeError: 'EmployeeProfile' object has no attribute 'birthday_wish_sent_year'` on every birthdays request
+- Fix: added `birthday_wish_sent_year = models.PositiveSmallIntegerField(null=True, blank=True)` to `EmployeeProfile` in `accounts/models.py` — no new migration needed (column already exists)
+- File: `backend/apps/accounts/models.py`
+
+### Backend Audit — Full Codebase Review
+
+Comprehensive audit of all 7 Django apps completed. **115+ findings** identified across models, serializers, and views. Key categories:
+
+| Severity | Count | Examples |
+|---|---|---|
+| Critical | 6 | `error(…, status=X)` TypeError in attendance views → 500; `return first_error()` returns string not Response → 500; `paginate()` called with wrong arg order → 500 |
+| High | 28 | Missing `@transaction.atomic` on branch HR cascade / delete / geofence; leave approval not atomic; expense_number race condition; assessments PUT without `partial=True` |
+| Medium | 52 | Wrong HTTP status codes (400 vs 409, 400 vs 404); permission checks using view perms for write ops; MIME type trusted from Content-Type header; unguarded service calls → 500 |
+| Low | 35 | Missing `updated_at` on several models; integer PKs instead of UUIDs; `getLogger('branch')` instead of `__name__`; non-RESTful POST-aliases-PUT patterns |
+
+**Files with critical/high findings:**
+
+| File | Key Findings |
+|---|---|
+| `attendance/views/absence_alert.py` | `error(…, status=)` TypeError → 500; wrong `paginate()` arg order; `first_error()` returns string not Response; wrong permission system (`has_perm()` vs role-based) |
+| `attendance/views/late_mark_lop.py` | Same 4 critical bugs as above |
+| `attendance/views/settings_view.py` | PUT/PATCH use `settings.view` instead of `settings.edit` — view-only users can write |
+| `attendance/views/hr_attendance.py` | Bare `except Exception: return False` swallows all DB errors; raw `list(page_obj)` without serializer |
+| `assessments/views/admin.py` | PUT without `partial=True` resets boolean fields to defaults; unhandled ValueError for invalid UUID |
+| `branch/views.py` | `_cascade_hr` + `branch.delete()` + geofencing save all missing `@transaction.atomic` |
+| `branch/views_access.py` | Raw integer HTTP status codes (403, 409, 404) — `rest_framework.status` not imported |
+| `announcements/views.py` | HTTP 204 response with JSON body (RFC violation); case-sensitive visibility queries |
+| `hrms/views/expenses.py` | `select_for_update().aggregate()` doesn't lock rows → expense_number race → IntegrityError 500 |
+| `hrms/views/leave.py` | Leave approval + balance deduction not in `transaction.atomic()`; L2 approver bypass |
+| `recruitment/views.py` | HR reject makes no DB change; ₹0 bonus can be approved/paid; no status transition rules |
+| `accounts/views.py` | JWT tokens returned in response body (Critical security violation); uncaught DoesNotExist → 500s |
+
+**Fixes are pending — to be applied in the next session.**
+
+### Files Changed
+
+```
+backend/apps/accounts/models.py      — birthday_wish_sent_year field added to EmployeeProfile
+backend/apps/recruitment/urls.py     — 4 referral bonus URL patterns added
+```

@@ -138,3 +138,68 @@ class CandidateEmail(models.Model):
 
     def __str__(self):
         return f'{self.subject} → {self.to_email}'
+
+
+class ReferralRule(models.Model):
+    icon      = models.CharField(max_length=50)
+    title     = models.CharField(max_length=150)
+    body      = models.TextField()
+    order     = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'referral_rule'
+        ordering = ['order']
+
+    def __str__(self):
+        return self.title
+
+
+class ReferralBonus(models.Model):
+    STATUS_PENDING  = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_PAID     = 'paid'
+    STATUS_CHOICES  = [
+        (STATUS_PENDING,  'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_PAID,     'Paid'),
+    ]
+
+    candidate    = models.OneToOneField(
+                       Candidate,
+                       on_delete=models.CASCADE,
+                       related_name='referral_bonus',
+                   )
+    referrer     = models.ForeignKey(
+                       settings.AUTH_USER_MODEL,
+                       on_delete=models.PROTECT,
+                       related_name='referral_bonuses_earned',
+                   )
+    bonus_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    approved_by  = models.ForeignKey(
+                       settings.AUTH_USER_MODEL,
+                       on_delete=models.SET_NULL,
+                       null=True, blank=True,
+                       related_name='referral_bonuses_approved',
+                   )
+    approved_at  = models.DateTimeField(null=True, blank=True)
+    paid_by      = models.ForeignKey(
+                       settings.AUTH_USER_MODEL,
+                       on_delete=models.SET_NULL,
+                       null=True, blank=True,
+                       related_name='referral_bonuses_paid',
+                   )
+    paid_at      = models.DateTimeField(null=True, blank=True)
+    notes        = models.TextField(blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'referral_bonus'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.referrer.full_name} — {self.bonus_amount} ({self.status})'
