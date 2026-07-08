@@ -1197,9 +1197,10 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
 # ─── My Profile (authenticated employee view) ─────────────────────────────────
 
 class MyProfileSerializer(serializers.ModelSerializer):
-    role_name    = serializers.CharField(source='role.name',         read_only=True, default='')
-    role_display = serializers.CharField(source='role.display_name', read_only=True, default='')
-    profile      = EmployeeProfileSerializer(read_only=True)
+    role_name       = serializers.CharField(source='role.name',         read_only=True, default='')
+    role_display    = serializers.CharField(source='role.display_name', read_only=True, default='')
+    profile         = EmployeeProfileSerializer(read_only=True)
+    assessment_status = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -1210,6 +1211,27 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'onboarding_status', 'assessment_status',
             'profile',
         ]
+
+    def get_assessment_status(self, obj):
+        from apps.assessments.models import CandidateAssignment
+        from apps.recruitment.models import Candidate
+
+        pending_statuses = [CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS]
+
+        # Always check candidate-based assignments (covers former candidates who became employees)
+        candidate = Candidate.objects.filter(portal_user=obj).first()
+        if candidate:
+            if CandidateAssignment.objects.filter(candidate=candidate, status__in=pending_statuses).exists():
+                return 'pending'
+
+        # For role-bearing users also check employee-based assignments
+        if obj.role_id:
+            if CandidateAssignment.objects.filter(employee=obj, status__in=pending_statuses).exists():
+                return 'pending'
+            return 'complete'
+
+        # Portal candidate with no pending candidate assignments
+        return 'complete'
 
 
 class MyProfileUpdateSerializer(serializers.Serializer):

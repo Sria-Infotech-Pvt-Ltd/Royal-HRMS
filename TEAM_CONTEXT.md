@@ -947,3 +947,117 @@ frontend/
   components/
     ClockInButton.tsx                     — updated to new hook shape + CorrectionModal
 ```
+
+---
+
+## Session Log — 03-07-2026
+**Author: G.Durga Prasad**
+**Branch: Backend/Assignment-Update**
+
+### Bug Fixes Shipped
+
+**1. Employee portal blocked on all assessment actions**
+- `RespondToItemView`, `CompleteAssessmentView`, `RetryAssessmentView` all returned 404 for users without a `Candidate` profile (i.e. existing employees)
+- Fix: added `_resolve_assignment(user, assignment_id)` helper that checks candidate first, then falls back to `employee=user`
+- All three views now use this helper — employee path works identically to candidate path
+
+**2. Naive datetime crash with `USE_TZ=True`**
+- `parse_datetime("2026-08-31T23:59:59")` returns a timezone-naive datetime
+- Django raises `ValueError` when saving with `USE_TZ=True`
+- Fix: added `tz.make_aware(deadline)` guard — `if tz.is_naive(deadline): deadline = tz.make_aware(deadline)`
+- File: `assessments/views/admin.py` `AssignAssessmentView`
+
+**3. `CandidateAssignment.__str__` crash when `candidate=None`**
+- Employee assignments have `candidate=None`; the original `__str__` dereferenced `self.candidate.name` unconditionally → `AttributeError`
+- Fix: `if/elif` branch — candidate → `candidate.name`; employee → `employee.email`; else → `'Unknown'`
+
+**4. `CandidateResponse.__str__` crash — same root cause**
+- Same unconditional deref pattern in `CandidateResponse.__str__`
+- Fix: same `if/elif` branch pattern applied
+
+**5. N+1 on assessment list**
+- `AssessmentSerializer.get_candidates()` called `obj.assignments.select_related(...)` directly, bypassing the prefetch cache — every assessment triggered a fresh query
+- Fix: added `Prefetch('assignments', queryset=assignments_qs)` in `AssessmentListCreateView.get()` and changed `get_candidates()` to use `obj.assignments.all()` to read from the prefetch cache
+
+### Features Shipped
+
+**6. Assessment Settings API** (global defaults — configure once, apply everywhere)
+- New `AssessmentSettings` singleton model (db_table=`assessments_settings`, pk=1)
+- Fields: `default_pass_percentage` (default 70), `max_attempts` (default 3, 0=unlimited), `time_limit_mins` (nullable, None=no limit)
+- `AssessmentSettings.load()` classmethod — `get_or_create(pk=1)` singleton pattern
+- `GET /api/assessments/settings/` — retrieve global defaults (requires `assessments.view`)
+- `PUT /api/assessments/settings/` — update global defaults (requires `assessments.edit`)
+- Per-assessment overrides: `max_attempts` (nullable) and `time_limit_mins` (nullable) added to `Assessment` model
+- `Assessment.effective_max_attempts(settings)` and `Assessment.effective_time_limit_mins(settings)` — return per-assessment override if set, else global default
+- Files: `assessments/views/settings.py` (new), `AssessmentSettingsSerializer` added to serializers
+
+**7. Portal enforces max attempts and tracks `started_at`**
+- `RetryAssessmentView` checks `effective_max_attempts(settings)` and returns 403 if attempts exhausted (0=unlimited bypasses check)
+- `RespondToItemView` sets `assignment.started_at = timezone.now()` on the first response; resets to None on retry
+- `PortalAssignmentSerializer` now returns `effective_max_attempts`, `attempts_remaining`, `time_limit_mins`, `time_remaining_secs`, `started_at`
+
+**8. Per-section scoring**
+- New `AssessmentSection` model (db_table=`assessments_section`) — `title`, `order`, `score` (total marks for the section)
+- `section` nullable FK added to `AssessmentItem` → `AssessmentSection` (SET_NULL on delete — items become unsectioned, not deleted)
+- `Assessment.compute_max_score()` — sums section scores if sections exist; falls back to raw quiz count for unsectioned assessments (backwards compatible)
+- `AssignAssessmentView` now uses `assessment.compute_max_score()` instead of hardcoded quiz count
+- `CompleteAssessmentView` calls `_compute_weighted_result(assignment)`: `round((correct_in_section / total_in_section) × section.score)` per section; writes weighted values to `assignment.score` and `assignment.max_score`
+- Unsectioned quiz items fall back to 1 mark each (backwards compatible)
+- `sections_breakdown` in `ResultsAssignmentSerializer` and `AssessmentCandidateSerializer` (completed only): `{section_id, title, max_score, achieved_score, correct_answers, total_questions, percentage}`
+
+**9. Section CRUD endpoints**
+- `GET  /api/assessments/<id>/sections/` — list sections with item counts
+- `POST /api/assessments/<id>/sections/` — create a section
+- `PUT    /api/assessments/<id>/sections/<section_id>/` — update section title/order/score
+- `DELETE /api/assessments/<id>/sections/<section_id>/` — delete section (items unlinked, not deleted)
+- Files: `assessments/views/sections.py` (new)
+
+### New Files
+
+```
+backend/apps/assessments/
+  views/settings.py              — AssessmentSettingsView (GET/PUT)
+  views/sections.py              — AssessmentSectionListCreateView, AssessmentSectionDetailView
+```
+
+### Files Modified
+
+```
+backend/apps/assessments/
+  models.py                      — AssessmentSettings; max_attempts + time_limit_mins on Assessment;
+                                   compute_max_score(); AssessmentSection; section FK on AssessmentItem;
+                                   started_at on CandidateAssignment; fixed __str__ crashes on both models
+  serializers.py                 — AssessmentSettingsSerializer; AssessmentSectionSerializer (+Create);
+                                   _section_breakdown() helper; PortalAssignmentSerializer (time/attempts);
+                                   ResultsAssignmentSerializer + AssessmentCandidateSerializer (sections_breakdown)
+  views/admin.py                 — Prefetch fix (N+1); naive datetime fix; settings context to serializers;
+                                   compute_max_score() for assign; sections prefetch on CandidateResultsView
+  views/portal.py                — _resolve_assignment(); _sync_user_assessment_status();
+                                   _compute_weighted_result(); started_at tracking; max_attempts on retry
+  urls.py                        — settings/, <id>/sections/, <id>/sections/<sid>/ routes added
+```
+
+### API Changes
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/assessments/settings/` | Retrieve global assessment defaults |
+| PUT | `/api/assessments/settings/` | Update global defaults (pass%, max_attempts, time_limit) |
+| GET | `/api/assessments/<id>/sections/` | List sections for an assessment |
+| POST | `/api/assessments/<id>/sections/` | Create a section |
+| PUT | `/api/assessments/<id>/sections/<sid>/` | Update section |
+| DELETE | `/api/assessments/<id>/sections/<sid>/` | Delete section (items unlinked, not deleted) |
+
+### Migrations Applied
+
+```
+assessments/0008_assessmentsettings_assessment_max_attempts_and_more  ✅ applied
+assessments/0009_assessmentsection_assessmentitem_section             ✅ applied
+```
+
+**10. `AssignAssessmentView` — employee ID sent as `candidate_id` crashes with 500**
+- Root cause: frontend was sending `candidate_id: "RSS00025"` (an employee code string) because the assign modal used the same field for both candidates and employees
+- Backend did `Candidate.objects.get(pk="RSS00025")` — Django tried to cast `"RSS00025"` to an integer/UUID, raised `ValueError`, returned 500
+- Fix: added UUID format check before routing — if `candidate_id` is not a valid UUID, it is automatically treated as an `employee_id` and routed to the employee lookup path (`User.objects.get(employee_id=...)`)
+- No migration required — view-only change
+- File: `assessments/views/admin.py` `AssignAssessmentView.post()`
