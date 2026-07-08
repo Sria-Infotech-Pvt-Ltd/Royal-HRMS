@@ -106,7 +106,16 @@ export function proxy(request: NextRequest) {
   }
 
   if (isAuthenticated && isLoginPage) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const token = request.cookies.get(ACCESS_COOKIE)?.value;
+    const isTokenValid = (() => {
+      if (!token) return false;
+      try {
+        const payload = decodeJwtPayload(token);
+        const exp = payload.exp as number | undefined;
+        return exp ? exp * 1000 > Date.now() : true;
+      } catch { return false; }
+    })();
+    if (isTokenValid) return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   if (isAuthenticated) {

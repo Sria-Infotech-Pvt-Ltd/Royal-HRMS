@@ -12,6 +12,7 @@ const SETTINGS_ITEMS = [
   { id: "holiday-calendar",   cat: "modules", icon: "ti-calendar-event",  iconClass: "sc-modules", label: "Holiday Calendar",      desc: "Manage national, regional and company holidays" },
   { id: "payroll-config",     cat: "modules", icon: "ti-report-money",    iconClass: "sc-modules", label: "Payroll Rules",         desc: "Salary components, tax slabs and statutory" },
   { id: "attendance-config",  cat: "modules", icon: "ti-clock",           iconClass: "sc-modules", label: "Attendance Rules",      desc: "Shift timings, late marks and overtime" },
+  { id: "assessment-config",  cat: "modules", icon: "ti-clipboard-check", iconClass: "sc-modules", label: "Assessment Config",     desc: "Pass percentage, attempt limits and time settings" },
   { id: "recruitment-config", cat: "modules", icon: "ti-users",           iconClass: "sc-modules", label: "Recruitment Config",    desc: "Interview stages, evaluation criteria" },
   { id: "email-templates",    cat: "comm",    icon: "ti-mail",            iconClass: "sc-comm",    label: "Email Templates",       desc: "Customize all transactional emails" },
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
@@ -43,6 +44,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "approval-rules":       "/dashboard/settings/approval-rules",
   "attendance-config":    "/dashboard/settings/attendance-config",
   "payroll-config":       "/dashboard/settings/payroll-config",
+  "assessment-config":    "/dashboard/settings/assessment-config",
   "recruitment-config":   "/dashboard/settings/recruitment-config",
   "notifications":        "/dashboard/settings/notifications",
 };

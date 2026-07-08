@@ -1,18 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import ItemsModal from "./_components/ItemsModal";
 
+interface AssessmentSettings {
+  default_pass_percentage: number;
+  max_attempts:            number;
+  time_limit_mins:         number | null;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface AssessmentSection {
+  id: string;
+  title: string;
+  order: number;
+  score: number;
+  item_count: number;
+}
 
 export interface AssessmentItem {
   id: string;
   item_type: "video" | "quiz";
   title: string;
   order: number;
+  section: string | null;   // sent on POST/PUT
+  section_id: string | null; // returned by GET
   video_url: string;
   duration_secs: number | null;
   question: string;
@@ -22,16 +38,28 @@ export interface AssessmentItem {
   created_at: string;
 }
 
+interface SectionBreakdown {
+  title: string;
+  max_score: number;
+  achieved_score: number;
+  correct_answers: number;
+  total_questions: number;
+  percentage: string;
+}
+
 export interface AssessmentCandidate {
   id: string;
-  candidate_id: number;
-  candidate_name: string;
-  candidate_email: string;
+  assignee_type: string;
+  assignee_id: number;
+  assignee_name: string;
+  assignee_email: string;
   status: "pending" | "in_progress" | "complete";
   attempt_count: number;
   pass_score: number;
   score_awarded: number;
   pass_percentage: string;
+  passed: boolean | null;
+  sections_breakdown: SectionBreakdown[];
   completed_at: string | null;
   created_at: string;
 }
@@ -50,12 +78,26 @@ export interface Assessment {
   candidates: AssessmentCandidate[];
   items: AssessmentItem[];
   created_at: string;
+  // per-assessment overrides (null = inherit global)
+  pass_percentage:          number;
+  max_attempts:             number | null;
+  time_limit_mins:          number | null;
+  effective_max_attempts:   number;
+  effective_time_limit_mins: number | null;
 }
 
-interface ReviewCandidate { id: string; name: string; email: string; }
+interface AssignEmployee { id: string; employee_id: string; full_name: string; email: string; department: string; }
 
-interface AssessmentForm { title: string; description: string; is_active: boolean; is_default: boolean; }
-const EMPTY: AssessmentForm = { title: "", description: "", is_active: true, is_default: false };
+interface AssessmentForm {
+  title: string; description: string; is_active: boolean; is_default: boolean;
+  pass_percentage: string;
+  max_attempts: string;        // "" = inherit global (null), "0" = unlimited
+  time_limit_mins: string;     // "" = no limit (null)
+}
+const EMPTY: AssessmentForm = {
+  title: "", description: "", is_active: true, is_default: false,
+  pass_percentage: "70", max_attempts: "", time_limit_mins: "",
+};
 
 function apiErr(e: unknown) {
   return (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Action failed.";
@@ -78,6 +120,8 @@ export default function AssessmentsPage() {
   const { data, loading, error, refetch } = useFetch<{ results: Assessment[] }>(API.assessments.list);
   const assessments = data?.results ?? [];
 
+  const { data: settingsData } = useFetch<AssessmentSettings>(API.settings.assessmentConfig);
+
   const [formModal, setFormModal] = useState<{ open: boolean; target: Assessment | null }>({ open: false, target: null });
   const [form,      setForm]      = useState<AssessmentForm>(EMPTY);
   const [saving,    setSaving]    = useState(false);
@@ -85,19 +129,27 @@ export default function AssessmentsPage() {
 
   const [itemsFor,    setItemsFor]    = useState<Assessment | null>(null);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
+  const [expandedBreakdown, setExpandedBreakdown] = useState<string | null>(null);
 
   function toggleResults(id: string) { setExpandedId(prev => prev === id ? null : id); }
 
-  const [assignFor, setAssignFor] = useState<Assessment | null>(null);
-  const [assignCid, setAssignCid] = useState("");
-  const [assigning, setAssigning] = useState(false);
-  const [assignErr, setAssignErr] = useState("");
-  const [assignOk,  setAssignOk]  = useState("");
+  const [assignFor,    setAssignFor]    = useState<Assessment | null>(null);
+  const [assignCids,   setAssignCids]   = useState<string[]>([]);
+  const [assignSearch, setAssignSearch] = useState("");
+  const [assigning,    setAssigning]    = useState(false);
+  const [assignErr,    setAssignErr]    = useState("");
+  const [assignOk,     setAssignOk]     = useState("");
 
-  const { data: candData } = useFetch<{ results: ReviewCandidate[] }>(
-    assignFor ? API.recruitment.review : null
+  const { data: empData } = useFetch<{ results: AssignEmployee[] }>(
+    assignFor ? `${API.employees.list}?page_size=500` : null
   );
-  const reviewCandidates = candData?.results ?? [];
+  const assignEmployees = empData?.results ?? [];
+  const filteredEmployees = assignEmployees.filter(e =>
+    assignSearch === "" ||
+    e.full_name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+    e.email.toLowerCase().includes(assignSearch.toLowerCase()) ||
+    e.employee_id.toLowerCase().includes(assignSearch.toLowerCase())
+  );
 
   // ── Overall stats ──────────────────────────────────────────────────────────
 
@@ -108,19 +160,41 @@ export default function AssessmentsPage() {
 
   // ── Assessment CRUD ────────────────────────────────────────────────────────
 
-  function openCreate() { setForm(EMPTY); setFormErr(""); setFormModal({ open: true, target: null }); }
+  function openCreate() {
+    setForm({
+      ...EMPTY,
+      pass_percentage: String(settingsData?.default_pass_percentage ?? 70),
+      max_attempts:    "",
+      time_limit_mins: settingsData?.time_limit_mins ? String(settingsData.time_limit_mins) : "",
+    });
+    setFormErr(""); setFormModal({ open: true, target: null });
+  }
   function openEdit(a: Assessment) {
-    setForm({ title: a.title, description: a.description, is_active: a.is_active, is_default: a.is_default });
+    setForm({
+      title: a.title, description: a.description, is_active: a.is_active, is_default: a.is_default,
+      pass_percentage: String(a.pass_percentage),
+      max_attempts:    a.max_attempts != null ? String(a.max_attempts) : "",
+      time_limit_mins: a.time_limit_mins != null ? String(a.time_limit_mins) : "",
+    });
     setFormErr(""); setFormModal({ open: true, target: a });
   }
 
   async function saveAssessment() {
     if (!form.title.trim()) { setFormErr("Title is required."); return; }
     setSaving(true); setFormErr("");
+    const payload = {
+      title:          form.title,
+      description:    form.description,
+      is_active:      form.is_active,
+      is_default:     form.is_default,
+      pass_percentage: Number(form.pass_percentage) || 70,
+      max_attempts:   form.max_attempts !== "" ? Number(form.max_attempts) : null,
+      time_limit_mins: form.time_limit_mins !== "" ? Number(form.time_limit_mins) : null,
+    };
     try {
       formModal.target
-        ? await clientApi.put(API.assessments.detail(formModal.target.id), form)
-        : await clientApi.post(API.assessments.list, form);
+        ? await clientApi.put(API.assessments.detail(formModal.target.id), payload)
+        : await clientApi.post(API.assessments.list, payload);
       refetch();
       setFormModal({ open: false, target: null });
     } catch (e) { setFormErr(apiErr(e)); }
@@ -136,17 +210,38 @@ export default function AssessmentsPage() {
   // ── Assign ─────────────────────────────────────────────────────────────────
 
   function openAssign(a: Assessment) {
-    setAssignFor(a); setAssignCid(""); setAssignErr(""); setAssignOk("");
+    setAssignFor(a); setAssignCids([]); setAssignSearch(""); setAssignErr(""); setAssignOk("");
+  }
+
+  function toggleAssignCid(id: string) {
+    setAssignCids(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  function toggleSelectAll() {
+    setAssignCids(prev =>
+      prev.length === filteredEmployees.length ? [] : filteredEmployees.map(e => e.id)
+    );
   }
 
   async function doAssign() {
-    if (!assignCid) { setAssignErr("Select a candidate."); return; }
+    if (assignCids.length === 0) { setAssignErr("Select at least one employee."); return; }
     setAssigning(true); setAssignErr(""); setAssignOk("");
-    try {
-      await clientApi.post(API.assessments.assign, { candidate_id: assignCid, assessment_id: assignFor!.id });
-      setAssignOk("Assessment assigned successfully!"); setAssignCid("");
-    } catch (e) { setAssignErr(apiErr(e)); }
-    finally { setAssigning(false); }
+    let ok = 0;
+    const errors: string[] = [];
+    for (const empId of assignCids) {
+      try {
+        await clientApi.post(API.assessments.assign, { candidate_id: empId, assessment_id: assignFor!.id });
+        ok++;
+      } catch (e) { errors.push(apiErr(e)); }
+    }
+    setSaving(false);
+    if (errors.length === 0) {
+      setAssignOk(`Assigned to ${ok} employee${ok !== 1 ? "s" : ""} successfully!`);
+      setAssignCids([]);
+    } else {
+      setAssignErr(`${ok} succeeded, ${errors.length} failed: ${errors[0]}`);
+    }
+    setAssigning(false);
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -214,14 +309,19 @@ export default function AssessmentsPage() {
                       {a.is_active  && <span className="badge badge-success">Active</span>}
                       {a.is_default && <span className="badge badge-info">Default</span>}
                     </div>
-                    {a.description && <p className="text-sm text-[var(--on-variant)] mb-0">{a.description}</p>}
+                    {a.description && <p className="text-sm text-[var(--on-variant)] mb-4">{a.description}</p>}
+                    <div className="flex items-center gap-12 flex-wrap" style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                      <span><i className="ti ti-percentage mr-4" />{a.pass_percentage}% pass</span>
+                      <span><i className="ti ti-refresh mr-4" />{a.effective_max_attempts === 0 ? "Unlimited" : `${a.effective_max_attempts} attempt${a.effective_max_attempts !== 1 ? "s" : ""}`}{a.max_attempts == null ? " (global)" : ""}</span>
+                      <span><i className="ti ti-clock mr-4" />{a.effective_time_limit_mins ? `${a.effective_time_limit_mins} min` : "No limit"}{a.time_limit_mins == null && a.effective_time_limit_mins ? " (global)" : ""}</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-8 flex-wrap shrink-0">
                     <button className="btn btn-ghost btn-sm" onClick={() => toggleResults(a.id)}>
                       <i className={`ti ${expandedId === a.id ? "ti-chevron-up" : "ti-chevron-down"}`} /> Results
                     </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setItemsFor(a)}>
-                      <i className="ti ti-list-details" /> Items
+                      <i className="ti ti-layout-list" /> Sections
                     </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => openAssign(a)}>
                       <i className="ti ti-user-plus" /> Assign
@@ -264,21 +364,30 @@ export default function AssessmentsPage() {
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                             <thead>
                               <tr style={{ background: "var(--bg-mid, #f8fafc)" }}>
-                                {["Candidate", "Status", "Score", "Pass %", "Attempts", "Assigned", "Completed"].map(h => (
+                                {["Candidate", "Status", "Result", "Pass %", "Attempts", "Assigned", "Completed", ""].map(h => (
                                   <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap", fontSize: 12 }}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {a.candidates.map((c, idx) => (
-                                <tr key={c.id} style={{ borderTop: "1px solid var(--outline-v)", background: idx % 2 === 1 ? "var(--bg-mid, #fafafa)" : "transparent" }}>
+                              {a.candidates.map((c, idx) => {
+                                const breakdownOpen = expandedBreakdown === c.id;
+                                const hasBreakdown  = c.status === "complete" && c.sections_breakdown?.length > 0;
+                                return (
+                                <Fragment key={c.id}>
+                                <tr style={{ borderTop: "1px solid var(--outline-v)", background: idx % 2 === 1 ? "var(--bg-mid, #fafafa)" : "transparent" }}>
                                   <td style={{ padding: "10px 12px" }}>
-                                    <div className="font-medium text-[var(--on-bg)]">{c.candidate_name}</div>
-                                    <div className="text-xs text-[var(--on-variant)]">{c.candidate_email}</div>
+                                    <div className="font-medium text-[var(--on-bg)]">{c.assignee_name}</div>
+                                    <div className="text-xs text-[var(--on-variant)]">{c.assignee_email}</div>
                                   </td>
                                   <td style={{ padding: "10px 12px" }}><StatusBadge status={c.status} /></td>
-                                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>
-                                    {c.status === "complete" ? `${c.score_awarded} / ${c.pass_score}` : "—"}
+                                  <td style={{ padding: "10px 12px" }}>
+                                    {c.status !== "complete"
+                                      ? <span style={{ color: "var(--on-variant)" }}>—</span>
+                                      : c.passed === true
+                                        ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "#15803d", background: "#dcfce7", padding: "2px 10px", borderRadius: 20, fontSize: 12 }}><i className="ti ti-circle-check" style={{ fontSize: 13 }} />Passed</span>
+                                        : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "#dc2626", background: "#fee2e2", padding: "2px 10px", borderRadius: 20, fontSize: 12 }}><i className="ti ti-circle-x" style={{ fontSize: 13 }} />Failed</span>
+                                    }
                                   </td>
                                   <td style={{ padding: "10px 12px" }}>
                                     <span style={{ fontWeight: 600, color: c.pass_percentage === "N/A" ? "var(--on-variant)" : parseInt(c.pass_percentage) >= 100 ? "#16a34a" : "#dc2626" }}>
@@ -288,8 +397,49 @@ export default function AssessmentsPage() {
                                   <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 500 }}>{c.attempt_count}</td>
                                   <td style={{ padding: "10px 12px", color: "var(--on-variant)", whiteSpace: "nowrap" }}>{fmt(c.created_at)}</td>
                                   <td style={{ padding: "10px 12px", color: "var(--on-variant)", whiteSpace: "nowrap" }}>{fmt(c.completed_at)}</td>
+                                  <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                                    {hasBreakdown && (
+                                      <button
+                                        className="btn btn-ghost"
+                                        style={{ padding: "3px 8px", fontSize: 11 }}
+                                        onClick={() => setExpandedBreakdown(breakdownOpen ? null : c.id)}
+                                      >
+                                        <i className={`ti ${breakdownOpen ? "ti-chevron-up" : "ti-chart-bar"}`} />
+                                        {breakdownOpen ? "" : " Breakdown"}
+                                      </button>
+                                    )}
+                                  </td>
                                 </tr>
-                              ))}
+                                {breakdownOpen && (
+                                  <tr key={`${c.id}-breakdown`} style={{ background: "var(--bg-mid, #f8fafc)" }}>
+                                    <td colSpan={8} style={{ padding: "0 12px 12px 12px" }}>
+                                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 8 }}>
+                                        <thead>
+                                          <tr style={{ borderBottom: "1px solid var(--outline-v)" }}>
+                                            {["Section", "Score", "Correct", "Percentage"].map(h => (
+                                              <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--on-variant)" }}>{h}</th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {c.sections_breakdown.map((s, si) => (
+                                            <tr key={si} style={{ borderBottom: "1px solid var(--outline-v)" }}>
+                                              <td style={{ padding: "6px 10px", fontWeight: 500, color: "var(--on-bg)" }}>{s.title}</td>
+                                              <td style={{ padding: "6px 10px", fontWeight: 600 }}>{s.achieved_score} / {s.max_score}</td>
+                                              <td style={{ padding: "6px 10px", color: "var(--on-variant)" }}>{s.correct_answers} / {s.total_questions}</td>
+                                              <td style={{ padding: "6px 10px", fontWeight: 700, color: parseInt(s.percentage) >= 100 ? "#16a34a" : parseInt(s.percentage) >= 50 ? "#d97706" : "#dc2626" }}>
+                                                {s.percentage}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                )}
+                                </Fragment>
+                              );
+                            })}
                             </tbody>
                           </table>
                         </div>
@@ -328,6 +478,32 @@ export default function AssessmentsPage() {
                 <textarea className="field-input" rows={2} value={form.description}
                   onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
               </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div className="field-group mb-0">
+                  <label className="field-label">Pass % *</label>
+                  <input type="number" min={1} max={100} className="field-input"
+                    value={form.pass_percentage}
+                    onChange={e => setForm(p => ({ ...p, pass_percentage: e.target.value }))}
+                    placeholder="70" />
+                </div>
+                <div className="field-group mb-0">
+                  <label className="field-label">Max Attempts</label>
+                  <input type="number" min={0} className="field-input"
+                    value={form.max_attempts}
+                    onChange={e => setForm(p => ({ ...p, max_attempts: e.target.value }))}
+                    placeholder="Use global (0=∞)" />
+                </div>
+                <div className="field-group mb-0">
+                  <label className="field-label">Time Limit (min)</label>
+                  <input type="number" min={1} className="field-input"
+                    value={form.time_limit_mins}
+                    onChange={e => setForm(p => ({ ...p, time_limit_mins: e.target.value }))}
+                    placeholder="None" />
+                </div>
+              </div>
+              <div style={{ fontSize: ".72rem", color: "var(--on-variant)", marginBottom: 12 }}>
+                Leave Max Attempts / Time Limit blank to inherit the global default from Settings → Assessment Config.
+              </div>
               <div className="flex gap-20">
                 <label className="flex items-center gap-8 cursor-pointer text-sm">
                   <input type="checkbox" checked={form.is_active}
@@ -354,7 +530,7 @@ export default function AssessmentsPage() {
       {/* ── Assign modal ── */}
       {assignFor && (
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setAssignFor(null)}>
-          <div className="modal" style={{ maxWidth: 460 }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <div className="modal-title">Assign — {assignFor.title}</div>
               <button className="modal-close" onClick={() => setAssignFor(null)}><i className="ti ti-x" /></button>
@@ -362,20 +538,77 @@ export default function AssessmentsPage() {
             <div className="modal-body">
               {assignErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{assignErr}</div></div>}
               {assignOk  && <div className="alert alert-success mb-12"><i className="ti ti-check" /><div>{assignOk}</div></div>}
-              <div className="field-group">
-                <label className="field-label">Candidate *</label>
-                <select className="field-input field-select" value={assignCid} onChange={e => setAssignCid(e.target.value)}>
-                  <option value="">— Select candidate —</option>
-                  {reviewCandidates.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} · {c.email}</option>
-                  ))}
-                </select>
+
+              {/* Search */}
+              <div className="field-group mb-8">
+                <div style={{ position: "relative" }}>
+                  <i className="ti ti-search" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--on-variant)", fontSize: 14, pointerEvents: "none" }} />
+                  <input
+                    className="field-input"
+                    style={{ paddingLeft: 32 }}
+                    placeholder="Search by name, email or ID…"
+                    value={assignSearch}
+                    onChange={e => setAssignSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Select All / count */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 12, padding: "2px 8px" }}
+                  onClick={toggleSelectAll}
+                  disabled={filteredEmployees.length === 0}
+                >
+                  {assignCids.length === filteredEmployees.length && filteredEmployees.length > 0 ? "Deselect All" : "Select All"}
+                </button>
+                <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                  {assignCids.length} selected · {filteredEmployees.length} shown
+                </span>
+              </div>
+
+              {/* Employee checklist */}
+              <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
+                {filteredEmployees.length === 0 && (
+                  <div style={{ padding: "20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
+                    {assignEmployees.length === 0 ? <><i className="ti ti-loader-2 spin mr-6" />Loading…</> : "No employees match."}
+                  </div>
+                )}
+                {filteredEmployees.map((e, idx) => {
+                  const checked = assignCids.includes(e.id);
+                  return (
+                    <label
+                      key={e.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "9px 12px", cursor: "pointer",
+                        borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
+                        background: checked ? "var(--primary-c, rgba(30,78,140,0.07))" : "transparent",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleAssignCid(e.id)}
+                        style={{ flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{e.full_name}</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{e.employee_id} · {e.email}{e.department ? ` · ${e.department}` : ""}</div>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </div>
+
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setAssignFor(null)}>Close</button>
-              <button className="btn btn-primary" onClick={doAssign} disabled={assigning || !assignCid}>
-                {assigning ? <><i className="ti ti-loader-2 spin" /> Assigning…</> : <><i className="ti ti-user-plus" /> Assign</>}
+              <button className="btn btn-primary" onClick={doAssign} disabled={assigning || assignCids.length === 0}>
+                {assigning
+                  ? <><i className="ti ti-loader-2 spin" /> Assigning…</>
+                  : <><i className="ti ti-user-plus" /> Assign{assignCids.length > 1 ? ` (${assignCids.length})` : ""}</>}
               </button>
             </div>
           </div>

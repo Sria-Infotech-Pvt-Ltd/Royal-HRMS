@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { setAssessmentStatus } from "@/lib/auth";
+import { setAssessmentStatus, clearAuth } from "@/lib/auth";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,6 +30,12 @@ interface Assignment {
   score: number; max_score: number; passed?: boolean;
   total_items: number; completed_items: number; completed_at: string | null;
   attempt_number: number; items: AssignmentItem[]; responses: ItemResponse[]; attempts: AttemptRecord[];
+  attempt_count:          number;
+  effective_max_attempts: number;   // 0 = unlimited
+  attempts_remaining:     number | null;
+  started_at:             string | null;
+  time_limit_mins:        number | null;
+  time_remaining_secs:    number | null;
 }
 interface MyAssessmentsData { all_complete: boolean; assignments: Assignment[]; }
 interface RespondData {
@@ -124,6 +130,53 @@ export default function AssessmentsPage() {
   const [panelSelected, setPanelSelected]   = useState("");
   const [panelRunScore, setPanelRunScore]   = useState(0);
 
+  // Countdown timers (seconds remaining per assignment, initialised from API)
+  const [timers, setTimers]         = useState<Record<string, number>>({});
+  const timerRef                    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSubmitting              = useRef<Set<string>>(new Set());
+
+  // Initialise timers once data arrives (only for timed assignments that have started)
+  useEffect(() => {
+    if (!data) return;
+    setTimers(prev => {
+      const next = { ...prev };
+      for (const a of data.assignments) {
+        if (a.time_remaining_secs != null && !(a.id in next)) {
+          next[a.id] = a.time_remaining_secs;
+        }
+      }
+      return next;
+    });
+  }, [data]);
+
+  // Tick every second; auto-submit any assignment whose timer hits 0
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setTimers(prev => {
+        const next = { ...prev };
+        let changed = false;
+        for (const id of Object.keys(next)) {
+          if (next[id] > 0) { next[id]--; changed = true; }
+          if (next[id] === 0 && !autoSubmitting.current.has(id)) {
+            autoSubmitting.current.add(id);
+            // fire-and-forget auto-submit
+            clientApi.post(API.assessments.complete(id))
+              .then(() => refetch())
+              .catch(() => { /* silent — user sees completed state on next refetch */ });
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [refetch]);
+
+  function fmtTimer(secs: number): string {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  }
+
   // Completion/retake state
   const [completing, setCompleting]           = useState<string | null>(null);
   const [finalResults, setFinalResults]       = useState<Record<string, CompleteData>>({});
@@ -135,6 +188,14 @@ export default function AssessmentsPage() {
   useEffect(() => { if (data?.all_complete) setAssessmentStatus("complete"); }, [data?.all_complete]);
 
   const assignments = data?.assignments ?? [];
+
+  const [loggingOut, setLoggingOut] = useState(false);
+  async function handleLogout() {
+    setLoggingOut(true);
+    try { await clientApi.post(API.auth.logout, {}); } catch { /* ignore */ }
+    clearAuth();
+    router.push("/login");
+  }
 
   // ── Panel helpers ──
 
@@ -212,9 +273,6 @@ export default function AssessmentsPage() {
 
   const selectedAssignment = selectedPanel ? assignments.find(a => a.id === selectedPanel.assignmentId) : null;
   const selectedItemResponse = selectedAssignment?.responses.find(r => r.item_id === selectedPanel?.item.id);
-  const isSelectedDone = selectedPanel && selectedAssignment
-    ? isItemDone(selectedPanel.item, selectedAssignment.responses)
-    : false;
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#f0f4f8" }}>
@@ -233,12 +291,19 @@ export default function AssessmentsPage() {
             <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>Royal HRMS — Pre-Onboarding</p>
           </div>
         </div>
-        {data?.all_complete && (
-          <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
-            style={{ padding: "8px 18px", borderRadius: 9, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
-            Go to Dashboard <i className="ti ti-arrow-right" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {data?.all_complete && (
+            <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
+              style={{ padding: "8px 18px", borderRadius: 9, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+              Go to Dashboard <i className="ti ti-arrow-right" />
+            </button>
+          )}
+          <button suppressHydrationWarning onClick={handleLogout} disabled={loggingOut}
+            style={{ padding: "8px 16px", borderRadius: 9, background: "transparent", color: "#64748b", fontWeight: 500, fontSize: 13, border: "1px solid #e2e8f0", cursor: loggingOut ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: loggingOut ? 0.6 : 1 }}>
+            {loggingOut ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-logout" />}
+            {loggingOut ? "Logging out…" : "Logout"}
           </button>
-        )}
+        </div>
       </header>
 
       {/* Body: sidebar + main */}
@@ -287,11 +352,28 @@ export default function AssessmentsPage() {
               <div key={assignment.id} style={{ borderBottom: aIdx < assignments.length - 1 ? "1px solid #f1f5f9" : "none" }}>
                 {/* Assessment section header */}
                 <div style={{ padding: "12px 18px 8px" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{assignment.assessment_title}</span>
                     {isDone && (
                       <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: isPassed === false ? "#fee2e2" : "#dcfce7", color: isPassed === false ? "#dc2626" : "#16a34a", flexShrink: 0 }}>
                         {isPassed === false ? "Failed" : "Done"}
+                      </span>
+                    )}
+                  </div>
+                  {/* Attempts remaining + countdown */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontSize: 11, color: "#64748b" }}>
+                    {assignment.effective_max_attempts > 0 && (
+                      <span>
+                        <i className="ti ti-refresh" style={{ fontSize: 9, marginRight: 3 }} />
+                        {assignment.attempts_remaining != null
+                          ? `${assignment.attempts_remaining} attempt${assignment.attempts_remaining !== 1 ? "s" : ""} left`
+                          : `${assignment.effective_max_attempts} max`}
+                      </span>
+                    )}
+                    {timers[assignment.id] != null && !isDone && (
+                      <span style={{ fontWeight: 700, color: timers[assignment.id] < 60 ? "#dc2626" : "#d97706", marginLeft: "auto" }}>
+                        <i className="ti ti-clock" style={{ fontSize: 9, marginRight: 3 }} />
+                        {fmtTimer(timers[assignment.id])}
                       </span>
                     )}
                   </div>

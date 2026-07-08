@@ -58,11 +58,12 @@ export const API = {
   },
 
   settings: {
-    audit:          "/settings/audit/",
-    company:        "/settings/company/",
-    employeeCode:   "/settings/employee-code/",
-    emailTemplates: "/settings/email-templates/",
-    approvalRules:  "/settings/approval-rules/",
+    audit:            "/settings/audit/",
+    company:          "/settings/company/",
+    employeeCode:     "/settings/employee-code/",
+    emailTemplates:   "/settings/email-templates/",
+    approvalRules:    "/settings/approval-rules/",
+    assessmentConfig: "/assessments/settings/",
   },
 
   recruitment: {
@@ -115,6 +116,8 @@ export const API = {
     detail:           (id: string) => `/assessments/${id}/`,
     items:            (assessmentId: string) => `/assessments/${assessmentId}/items/`,
     itemDetail:       (itemId: string) => `/assessments/items/${itemId}/`,
+    sections:         (assessmentId: string) => `/assessments/${assessmentId}/sections/`,
+    sectionDetail:    (assessmentId: string, sectionId: string) => `/assessments/${assessmentId}/sections/${sectionId}/`,
     assign:           "/assessments/assign/",
     results:          (assessmentId: string) => `/assessments/${assessmentId}/results/`,
     candidateResults: (candidateId: string) => `/assessments/candidates/${candidateId}/results/`,

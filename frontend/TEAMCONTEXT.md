@@ -746,6 +746,186 @@ GET /leave/requests/?scope=team&branch=<name>&page=<n>
 
 ---
 
+## Session — Safura Samreen (03 July 2026)
+
+**Branch:** `Frontend/Assessment-Update`
+
+---
+
+### 1. Assessment Settings Page (new) — `app/dashboard/settings/assessment-config/page.tsx`
+
+Built the global assessment configuration sub-page under Settings.
+
+- Three configurable fields: Default Pass Percentage, Maximum Attempts (0 = unlimited), Time Limit (null = no limit)
+- Table layout matching the `approval-rules` pattern — per-row Edit buttons opening an inline modal
+- `GET /assessments/settings/` on load; `PUT` on save (full object — no PATCH)
+- "Last updated" timestamp shown below the table
+- `time_limit_enabled` is UI-only state derived from whether `time_limit_mins !== null`
+- Added `settings.assessmentConfig` to `lib/api/endpoints.ts` (corrected URL from `/settings/assessments/` → `/assessments/settings/`)
+
+---
+
+### 2. Assessment Management Page — `app/dashboard/assessments/page.tsx`
+
+Extended assessments to carry per-assessment overrides and richer candidate results.
+
+#### Per-assessment overrides
+- New form fields: `pass_percentage`, `max_attempts` (blank = inherit global), `time_limit_mins` (blank = no limit)
+- Blank values send `null` to backend — backend falls back to global default
+- Card metadata shows effective values with `(global)` label when the field is `null`
+- `openCreate` pre-fills form from `GET /assessments/settings/` so new assessments default to the current global config
+
+#### Candidate results table
+- **Score column replaced with Result** — shows a green "Passed" or red "Failed" badge
+  - Reads `passed: boolean | null` directly from backend (no client-side derivation)
+  - Shows `—` when `status !== "complete"` (pending/in-progress candidates have no result yet)
+- **Sections Breakdown** — expandable sub-row per completed candidate
+  - Renders `sections_breakdown[]` with section title, score, correct answers, percentage
+  - Percentage coloured green ≥ 100 / amber ≥ 50 / red < 50
+
+#### Other fixes
+- "Items" button on each assessment card renamed to **"Sections"** (icon changed to `ti-layout-list`)
+- Fixed React `key` warning in candidates map — replaced `<>` shorthand with `<Fragment key={c.id}>` from React (shorthand does not accept a `key` prop)
+- Fixed TypeScript errors in `AssessmentResultsModal.tsx` — fields `candidate_name` / `candidate_email` renamed to `assignee_name` / `assignee_email` to match the updated `AssessmentCandidate` interface
+
+#### New types added
+```typescript
+interface AssessmentSettings {
+  default_pass_percentage: number;
+  max_attempts: number;
+  time_limit_mins: number | null;
+}
+
+// Additions to AssessmentCandidate:
+passed: boolean | null;
+sections_breakdown: SectionBreakdown[];
+attempt_count: number;
+
+// Additions to Assessment:
+pass_percentage: number;
+max_attempts: number | null;
+time_limit_mins: number | null;
+effective_max_attempts: number;
+effective_time_limit_mins: number | null;
+
+interface SectionBreakdown {
+  title: string;
+  max_score: number;
+  achieved_score: number;
+  correct_answers: number;
+  total_questions: number;
+  percentage: string;
+}
+```
+
+---
+
+### 3. Sections Modal — `app/dashboard/assessments/_components/ItemsModal.tsx`
+
+Full rewrite from video-order-based section grouping to explicit backend section objects.
+
+#### Architecture change
+- **Old:** Sections were inferred by treating each video item as a section header, with quiz items following it grouped under it.
+- **New:** Sections are first-class backend objects (`POST/GET/PUT/DELETE /assessments/<id>/sections/`). Items are assigned to sections via a `section_id` field.
+
+#### Fetching
+- `useFetch<AssessmentSection[]>(API.assessments.sections(assessment.id))` — sections
+- `useFetch<AssessmentItem[]>(API.assessments.items(assessment.id))` — items
+- Fallback: if items fetch returns non-array (e.g. paginated wrapper), falls back to `assessment.items` from the list response
+
+#### Section CRUD
+- Add / Edit / Delete sections via `POST`, `PUT`, `DELETE` on the sections endpoint
+- Each section header row has an edit (pencil) and delete (trash) button — full inline form below the list
+- Section form fields: Title, Order, Score (marks allocated)
+
+#### Item-to-section mapping fix
+- Backend returns `section_id` in GET responses but the old interface had `section: string | null`
+- Filtering `i.section === sectionId` always returned `false` → all items fell into unsectioned
+- Fixed: `AssessmentItem` interface gains `section_id: string | null`; filters updated to `(i.section_id ?? i.section) === sectionId`
+- POST/PUT still sends `section: forSectionId` (what the backend accepts for writes)
+
+#### Empty-state logic fix
+- "No sections yet" message was appearing alongside the unsectioned items list, which was confusing
+- Fixed condition: empty state only shown when both `sections.length === 0` AND `items.length === 0`
+- Unsectioned items header shows a neutral "Items" label (grey, list icon) when no sections exist; only shows the orange warning triangle when sections exist but some items are unassigned
+
+#### Video display
+- Added `VideoLink` helper — renders a clickable external link for video items in the item list
+- Added `VideoPreview` helper — renders a 16:9 embedded iframe (YouTube/Vimeo) or `<video>` tag in the edit form
+- `toEmbedUrl()` converts share URLs (youtu.be, youtube.com/watch, vimeo.com) to embed format
+
+#### New section endpoint keys in `lib/api/endpoints.ts`
+```typescript
+sections:      (assessmentId: string) => `/assessments/${assessmentId}/sections/`
+sectionDetail: (assessmentId: string, sectionId: string) => `/assessments/${assessmentId}/sections/${sectionId}/`
+```
+
+---
+
+### 4. Candidate Portal — `app/onboarding/assessments/page.tsx`
+
+Extended the assignment interface and added a countdown timer with auto-submit.
+
+#### New assignment fields
+```typescript
+attempt_count:          number;
+effective_max_attempts: number;    // 0 = unlimited
+attempts_remaining:     number | null;
+started_at:             string | null;
+time_limit_mins:        number | null;
+time_remaining_secs:    number | null;
+```
+
+#### Countdown timer
+- Initialised once from `time_remaining_secs` in API response (not recalculated client-side)
+- Single `setInterval` ticks all active assignment timers in one pass
+- Timer turns red when under 60 seconds
+- Auto-submits via `POST /assessments/<id>/complete/` when timer hits zero
+- `autoSubmitting` ref (a `Set<string>`) prevents duplicate submissions when the interval fires multiple times at `0`
+- Sidebar shows attempts remaining and a `MM:SS` formatted countdown
+
+---
+
+### 5. Assign Assessment Modal — Multi-select with Search (`app/dashboard/assessments/page.tsx`)
+
+Replaced the single-candidate dropdown with a searchable multi-select employee list.
+
+#### What changed
+- **API source**: `GET /recruitment/candidates/review/` → `GET /employees/?page_size=500`
+  - Previous endpoint only returned candidates in the recruitment review stage; assessments can now be assigned to any active employee
+- **Interface**: `ReviewCandidate { id, name, email }` → `AssignEmployee { id, employee_id, full_name, email, department }`
+- **State**: `assignCid: string` → `assignCids: string[]` + `assignSearch: string`
+
+#### UI
+- Search input filters by `full_name`, `email`, or `employee_id` in real time
+- Scrollable checkbox list (max height 260px) — each row shows name, employee ID, email, department
+- "Select All / Deselect All" button operates on the currently filtered set (not the full list)
+- Counter: `N selected · M shown`
+- Assign button shows the count when > 1 selected: "Assign (5)"
+
+#### Multi-assign logic
+```typescript
+for (const empId of assignCids) {
+  await clientApi.post(API.assessments.assign, { candidate_id: empId, assessment_id: assignFor.id });
+}
+```
+Loops sequentially; counts successes and first error message. Shows `"Assigned to N employees successfully!"` on full success, or `"N succeeded, M failed: <reason>"` on partial failure.
+
+---
+
+### Key Files Changed (03 July 2026)
+
+| File | Change |
+|------|--------|
+| `lib/api/endpoints.ts` | Settings URL corrected; `sections` and `sectionDetail` endpoints added |
+| `app/dashboard/settings/assessment-config/page.tsx` | **NEW** — global assessment config settings page |
+| `app/dashboard/assessments/page.tsx` | Per-assessment overrides; Pass/Fail badge; sections breakdown; Fragment key fix; "Sections" button rename; assign modal rewritten to multi-select employees |
+| `app/dashboard/assessments/_components/ItemsModal.tsx` | Full rewrite — explicit sections, video display, empty-state fix, `section_id` mapping fix |
+| `app/dashboard/assessments/_components/AssessmentResultsModal.tsx` | `candidate_name`/`candidate_email` → `assignee_name`/`assignee_email` |
+| `app/onboarding/assessments/page.tsx` | Countdown timer, auto-submit, attempts remaining display |
+
+---
+
 ### Notes for Next Developer
 
 - **`LeaveApprovals.tsx` has no branch filter or pagination** — only `LeaveDashboard.tsx`'s Dashboard-tab queue got that treatment this session. If system_admin uses the Approvals tab as their main queue, it still loads everything on one page.
@@ -874,3 +1054,13 @@ When `lopDays > 0`, the summary bar turns amber ("Xd will be LOP") and a breakdo
 - **Re-confirmed, still dead code**: `LeaveTypes.tsx` — fabricated `SEED` data, confirmed not imported anywhere in `app/`.
 - **`CreditTab.tsx`'s "Accrual Rules" table is still pure local mock state** ("Automation coming soon") — only the "Credit All Employees" button above it is real.
 - **`LeavePoliciesTab.tsx` is ~270 lines**, over this repo's own 200-line component guideline — same standing exception as `ApplyLeaveForm.tsx`/`LeaveDashboard.tsx`, flagged rather than silently ignored.
+
+---
+
+- **`section_id` vs `section`** — backend GET responses use `section_id`; POST/PUT bodies use `section`. Both fields are on `AssessmentItem` with a `??` fallback for compatibility. If the backend normalises to one name, remove the fallback.
+- **`passed` comes from backend** — do not derive it client-side from `pass_percentage`. The backend calculates it and sends `true`/`false`/`null`.
+- **Countdown timer does not re-sync with backend** — it starts from `time_remaining_secs` on first load and counts down locally. On page refresh, the API re-sends the fresh `time_remaining_secs` and the timer re-initialises. Do not add a re-sync interval.
+- **`autoSubmitting` ref** — this `Set<string>` is intentionally a ref (not state) so that adding to it does not trigger a re-render. Do not convert it to state.
+- **Assign multi-send is sequential, not parallel** — `for...of` loop with `await` per request. If the backend adds a bulk-assign endpoint (`POST /assessments/assign/bulk/`), replace the loop with a single request.
+- **"Select All" operates on filtered set** — if the user has searched for "Roh" and clicks Select All, only the visible filtered employees are selected, not all 500. This is intentional.
+- **`tsc --noEmit` was clean at end of session** — only errors were stale IDE diagnostics.
