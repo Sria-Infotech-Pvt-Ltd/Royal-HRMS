@@ -7,6 +7,9 @@ interface Props {
   month:        number;  // 1-indexed
   data:         Record<string, DayRecord>;
   onRegularize: (date: string) => void;
+  // Hides the Regularize action — used when viewing another employee's
+  // calendar, since the correction flow always submits against request.user.
+  readOnly?:    boolean;
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -21,7 +24,7 @@ const STATUS_CONFIG: Record<string, { bg: string; color: string; label: string }
   on_leave:   { bg: "rgba(168,85,247,0.12)",     color: "#a855f7",          label: "OL" },
 };
 
-export default function AttendanceCalendar({ year, month, data, onRegularize }: Props) {
+export default function AttendanceCalendar({ year, month, data, onRegularize, readOnly = false }: Props) {
   const jsMonth    = month - 1;  // convert to 0-indexed for Date API
   const firstDay   = new Date(year, jsMonth, 1).getDay();
   const daysInMonth = new Date(year, jsMonth + 1, 0).getDate();
@@ -95,7 +98,7 @@ export default function AttendanceCalendar({ year, month, data, onRegularize }: 
                     </div>
                   )}
 
-                  {record?.canRegularize && (
+                  {!readOnly && record?.canRegularize && (
                     <button
                       onClick={() => onRegularize(dateStr(day))}
                       title="Request correction for this day"

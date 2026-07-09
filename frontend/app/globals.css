@@ -2418,3 +2418,7 @@ body.dark-mode {
 .onboarding-step--done .onboarding-step-num { background: var(--success); }
 .onboarding-card { background: var(--surface); border-radius: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.08); padding: 2rem; max-width: 680px; width: 100%; }
 .field-group-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 0; }
+
+/* Scope banner — signals that every section below it applies only to the
+   currently selected record (e.g. one leave type), not to all records. */
+.scope-banner { margin-bottom: 20px; padding: 18px 24px; background: rgba(30, 78, 140, 0.05); border: 1px solid var(--primary); border-radius: var(--radius-lg); }

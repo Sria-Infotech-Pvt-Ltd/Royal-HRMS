@@ -254,13 +254,26 @@ export default function LeavePoliciesTab() {
 
   return (
     <>
-      <div className="field-group mb-20" style={{ maxWidth: 320 }}>
-        <label className="field-label">Leave Type</label>
-        <select className="field-input" value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-          {list.map(t => (
-            <option key={t.leave_type} value={t.leave_type}>{t.leave_type_display}</option>
-          ))}
-        </select>
+      <div className="scope-banner flex items-center gap-4 flex-wrap">
+        <i className="ti ti-info-circle text-[22px] text-[var(--primary)] flex-shrink-0" />
+        <div className="flex-1 min-w-[240px]">
+          <div className="text-[13px] font-semibold text-[var(--on-bg)]">
+            Configuring rules for one leave type at a time
+          </div>
+          <div className="text-xs text-[var(--on-variant)] mt-0.5">
+            Every section below — Leave Application Rules, Holiday &amp; Week-off Rules, Eligibility Rules,
+            Documentation Rules, Leave Restrictions, and Additional Rules — applies only to the leave type
+            selected here, not to any other leave type.
+          </div>
+        </div>
+        <div className="field-group min-w-[260px]">
+          <label className="field-label">Leave Type</label>
+          <select className="field-input" value={selectedType} onChange={e => setSelectedType(e.target.value)}>
+            {list.map(t => (
+              <option key={t.leave_type} value={t.leave_type}>{t.leave_type_display}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {loadingList || !rules ? (

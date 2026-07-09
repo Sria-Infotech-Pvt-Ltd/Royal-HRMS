@@ -5,6 +5,9 @@ import type { HistoryRow } from "@/types/attendance";
 interface Props {
   data:         HistoryRow[];
   onRegularize: (date: string) => void;
+  // Hides the Regularize action — used when viewing another employee's
+  // history, since the correction flow always submits against request.user.
+  readOnly?:    boolean;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -27,7 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
   on_leave:   "On Leave",
 };
 
-export default function AttendanceHistoryTable({ data, onRegularize }: Props) {
+export default function AttendanceHistoryTable({ data, onRegularize, readOnly = false }: Props) {
   if (data.length === 0) {
     return (
       <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>
@@ -75,7 +78,7 @@ export default function AttendanceHistoryTable({ data, onRegularize }: Props) {
                     )}
                   </td>
                   <td>
-                    {row.canRegularize && (
+                    {!readOnly && row.canRegularize && (
                       <button
                         onClick={() => onRegularize(row.date)}
                         className="btn btn-ghost btn-sm"

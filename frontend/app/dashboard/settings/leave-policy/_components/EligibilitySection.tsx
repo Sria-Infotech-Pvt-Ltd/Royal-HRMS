@@ -22,6 +22,15 @@ const GENDER_OPTIONS: { value: string; label: string }[] = [
   { value: "female", label: "Female" },
 ];
 
+// The four checkbox-group fields this section's single "Select All" toggle
+// controls together — Gender and Minimum Service Period are not checkbox
+// groups, so they're excluded.
+type EligibilityListKey =
+  | "applicable_branches"
+  | "applicable_departments"
+  | "applicable_designations"
+  | "applicable_employment_types";
+
 interface Props {
   rules: PolicyRuleFields;
   setField: <K extends keyof PolicyRuleFields>(key: K, value: PolicyRuleFields[K]) => void;
@@ -36,10 +45,39 @@ export default function EligibilitySection({ rules, setField }: Props) {
   const departments  = Array.isArray(deptData)   ? deptData   : (deptData?.results ?? []);
   const designations = Array.isArray(desigData)  ? desigData  : (desigData?.results ?? []);
 
+  const groups: { key: EligibilityListKey; options: string[] }[] = [
+    { key: "applicable_branches",         options: branches.map(b => b.branch_name) },
+    { key: "applicable_departments",      options: departments.map(d => d.name) },
+    { key: "applicable_designations",     options: designations.map(d => d.name) },
+    { key: "applicable_employment_types", options: EMPLOYMENT_TYPE_OPTIONS },
+  ];
+  const eligibleGroups = groups.filter(g => g.options.length > 0);
+  const allSelected = eligibleGroups.length > 0 && eligibleGroups.every(g => rules[g.key].length === g.options.length);
+  const anySelected = eligibleGroups.some(g => rules[g.key].length > 0);
+  const isPartial   = anySelected && !allSelected;
+
+  function toggleAllGroups(checked: boolean) {
+    // Checked → mark every branch/department/designation/employment type
+    // explicitly, so the admin can then uncheck just the ones this leave
+    // type should NOT apply to. Unchecked → clear all back to [], which the
+    // backend treats as "no restriction" (applies to all).
+    groups.forEach(g => setField(g.key, checked ? [...g.options] : []));
+  }
+
   return (
     <div className="card mb-20">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-users-group" /> Eligibility Rules</div>
+        <label className="module-check text-xs">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            disabled={eligibleGroups.length === 0}
+            ref={el => { if (el) el.indeterminate = isPartial; }}
+            onChange={e => toggleAllGroups(e.target.checked)}
+          />
+          <span>Select All</span>
+        </label>
       </div>
       <div style={{ padding: "20px 24px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>

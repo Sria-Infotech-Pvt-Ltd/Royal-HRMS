@@ -35,17 +35,24 @@ export default function LeaveAnalytics({ role = "employee" }: Props) {
       {/* Summary stats */}
       <div className="stats-grid" style={{ marginBottom: 0 }}>
         {[
-          { label: "Total Requests",   value: totalAll,      icon: "ti-clipboard-list", cls: "si-primary"  },
-          { label: "Approved",         value: totalApproved, icon: "ti-circle-check",   cls: "si-success"  },
-          { label: "Pending Approval", value: totalPending,  icon: "ti-clock",          cls: "si-warn"     },
-          { label: "Rejected",         value: stats?.rejected ?? 0, icon: "ti-x-circle", cls: "si-error"   },
+          { label: "Total Requests",   value: totalAll,      icon: "ti-clipboard-list", cls: "si-primary", sub: `This year (${currentYear})` },
+          { label: "Approved",         value: totalApproved, icon: "ti-circle-check",   cls: "si-success", sub: `This year (${currentYear})` },
+          { label: "Pending Approval", value: totalPending,  icon: "ti-clock",          cls: "si-warn",    sub: `This year (${currentYear})` },
+          { label: "Rejected",         value: stats?.rejected ?? 0, icon: "ti-x-circle", cls: "si-error",  sub: `This year (${currentYear})` },
+          {
+            label: "Loss of Pay (LOP)",
+            value: stats?.lop_days ?? 0,
+            icon: "ti-coin-off",
+            cls: "si-warn",
+            sub: `${stats?.lop_requests ?? 0} request${(stats?.lop_requests ?? 0) !== 1 ? "s" : ""} in ${currentYear}`,
+          },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
               <div>
                 <div className="stat-label">{s.label}</div>
                 <div className="stat-value">{s.value}</div>
-                <div className="stat-sub">This year ({currentYear})</div>
+                <div className="stat-sub">{s.sub}</div>
               </div>
               <div className={`stat-icon ${s.cls}`} style={{ float: "none", margin: 0 }}>
                 <i className={`ti ${s.icon}`} />

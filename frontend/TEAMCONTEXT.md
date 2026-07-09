@@ -1686,3 +1686,133 @@ Turned out there are three separate places in the app where an employee can see 
 - **The `Q()`/`F()` bug in `_deduct_balance_safe` flagged in Session 18 is confirmed fixed** — `leave.py:212` already uses `F('used_days') + days` correctly. No longer an open item.
 - **Holiday Calendar's branch field type mismatch**: the given API spec described `branch` as a UUID, but this app's real `GET /branch/branches/` returns numeric `id`s (confirmed via `BranchManagement.tsx`). Implemented using whatever `id` the branches endpoint actually returns (`number | null`) rather than forcing a UUID type that doesn't match reality — flag to the backend/spec owner if this becomes a real mismatch once tested against the live server.
 - **Three "My Leave Requests" views now all support Cancel, but each still has its own separate `cancelRequest`/`cancelMine` function** — not shared, since each page's data-fetching/refetch shape differs slightly. If a fourth such view is ever added, consider extracting a `useCancelLeaveRequest()` hook instead of copy-pasting a fourth time.
+
+---
+
+## Session 20 — Rithwika (09 July 2026)
+
+**Branch:** `Frontend/Attendance-Leave`
+
+---
+
+### 1. Employee Profile — Leave & Attendance Tabs (System Admin → Employees → profile detail)
+
+The employee profile detail page (`app/dashboard/employees/[id]/page.tsx`) had a generic "wired and ready for its content" placeholder for both the Leave and Attendance tabs. Built real tabs against the existing endpoints, scoped to the viewed employee via `?employee_id=<code>`:
+
+- **`hooks/useEmployeeLeave.ts`** (new) — `GET /leave/requests/` + `GET /leave/stats/`, both with `employee_id`/`year`/`page`; year navigation + pagination state.
+- **`hooks/useEmployeeAttendance.ts`** (new) — `GET /attendance/{stats,summary,calendar}/`, all with `employee_id`/`month`/`year`; month navigation state.
+- **`app/dashboard/employees/[id]/_components/LeaveTab.tsx`** (new) — balance stat cards, Pending stat, LOP stat, year-scoped requests table with pagination, row-click opens the existing `LeaveRequestDetailModal`.
+- **`app/dashboard/employees/[id]/_components/AttendanceTab.tsx`** (new) — the four attendance stat cards, 6-cell monthly summary grid, Calendar/History view (reuses `CalendarAndHistory`).
+- **`AttendanceCalendar.tsx` / `AttendanceHistoryTable.tsx` / `CalendarAndHistory.tsx`** — added an optional `readOnly` prop (default `false`, so `/dashboard/my-attendance` is unaffected) that hides the "Regularize" button. The correction flow always submits against `request.user`, so leaving it active while an admin views someone else's calendar would silently submit the correction under the *admin's* account instead of the viewed employee's.
+
+> **Flag — backend support unconfirmed at time of writing.** None of the 5 endpoints above actually read an `employee_id` query param server-side when checked (`backend/apps/hrms/views/leave.py` / `backend/apps/attendance/views/my_attendance.py`) — only `GET /leave/balance/` does. Per explicit instruction, backend was not touched to add this. Until it ships, these two tabs will show the logged-in admin's **own** leave/attendance data instead of the viewed employee's.
+
+---
+
+### 2. Apply Leave — Server-Side Preview Panel
+
+**File:** `app/dashboard/leave/_components/ApplyLeaveForm.tsx`, `app/dashboard/leave/_data.ts`
+
+Wired `GET /leave/requests/?action=preview&leave_type=&start_date=&end_date=&duration=`, triggered once `leave_type` + `start_date` + effective `end_date` are all set. Two rounds of runtime crashes once the real response was seen, both fixed by correcting the assumed shape rather than guessing again:
+
+- `holidays` doesn't exist in the real response — the field is `company_holidays`, and each holiday's `date` is a **pre-formatted display string** (`"15 Aug"`), not ISO. Rendered as-is now; passing it through `fmtDate` produced `"Invalid Date"`.
+- `week_offs` entries are `{date, day}` objects, not plain date strings — `key={d}` on every row collapsed to the same `"[object Object]"` key and crashed with a duplicate-key error. Chips now key/display off `w.date` / `w.day` directly.
+
+Added `LeavePreview`, `LeavePreviewHoliday`, `LeavePreviewWeekOff` to `_data.ts` matching the confirmed response exactly (`calendar_days`, `company_holidays`, `company_holiday_count`, `week_offs`, `week_off_count`, `sandwich_leave_enabled`, `actual_leave_days`, `available_balance`, `earned_leave_used`, `lop_days`, `lop_enabled`, `sufficient_balance`, `warning`).
+
+Also **removed the old duplicate client-only estimate box** — it was showing different numbers side-by-side with the new server panel (the exact bug reported). The client-side `calcWorkingDays` estimate now only renders while the server preview is loading (`!preview && workDays > 0`); once `preview` resolves, that authoritative panel takes over completely, including gating submission (`insufficientBalance = !preview.sufficient_balance && !preview.lop_enabled`).
+
+---
+
+### 3. Loss of Pay (LOP) Surfaced Across Every Leave-Stats View
+
+Backend added `lop_days` (number of days) and `lop_requests` (count of requests) to the existing `GET /leave/stats/` response — confirmed by the user, not independently verified against a running backend.
+
+- **`_data.ts`** — added both fields to `LeaveStats`.
+- **`hooks/useEmployeeLeave.ts`** — added `lop_requests` to `EmployeeLeaveStats` (`lop_days` already existed there from Session 19-adjacent work).
+- **`app/dashboard/leave/_components/LopBadge.tsx`** (new) — renders `LOP {n}d` next to a request's day count whenever `request.lop_days > 0`; mirrors the existing plain-badge pattern in `StatusCell.tsx` (takes the whole `LeaveRequest`, no `"use client"` needed).
+- **`LeaveDashboard.tsx`** — new "Loss of Pay (LOP)" stat card in both the employee and approver stat-grids; `<LopBadge>` added to all three requests tables (My Leave Requests, Pending Approvals, Approver's My Leave Requests).
+- **`LeaveAnalytics.tsx`** — same stat card added to the summary grid.
+- **`employees/[id]/_components/LeaveTab.tsx`** — existing LOP stat card (added in an earlier pass this session, see §1) now also shows the request count; `<LopBadge>` added to its table.
+
+---
+
+### 4. Modal Backdrop Not Blurring the Sidebar — z-index Root Cause
+
+Reported via screenshot: `LeaveRequestDetailModal`'s backdrop blur covered the main content but not the sidebar. Root cause: the sidebar in `components/dashboard/DashboardShell.tsx` sits at `z-[200]`. Most modals in the app use the shared `.modal-overlay` CSS class, already correctly set to `z-index: 1000` (above the sidebar). But **7 modals bypassed that shared class** and hardcoded Tailwind's `fixed inset-0 z-50` on their own backdrop instead — since `50 < 200`, the sidebar rendered on top of them, unblurred.
+
+Fixed by bumping `z-50` → `z-[1000]` (matching the existing app-wide standard) in exactly these 7 files, no other logic touched:
+`LeaveRequestDetailModal.tsx`, `LeaveTypes.tsx`, `RejectModal.tsx`, `settings/holiday-calendar/_components/DeleteHolidayModal.tsx`, `.../HolidayFormModal.tsx`, `.../HolidayViewModal.tsx`, `settings/payroll-config/page.tsx`.
+
+---
+
+### 5. Leave Policy Settings — Scope Clarity + Single "Select All"
+
+**Files:** `app/dashboard/settings/leave-policy/_components/LeavePoliciesTab.tsx`, `EligibilitySection.tsx`, `app/globals.css`
+
+Two UX fixes, both driven directly from screenshots:
+
+**a) Leave Type scope confusion.** The small "Leave Type" `<select>` looked like it scoped only the card directly below it ("Leave Application Rules") — users assumed the other cards (Holiday & Week-off Rules, Eligibility Rules, Documentation Rules, Leave Restrictions, Additional Rules) applied to *all* leave types instead of just the selected one. Replaced the small select with a full-width banner (new `.scope-banner` class in `globals.css` — tinted background + primary-colored border) that explicitly states every section below applies only to the selected leave type.
+
+**b) Eligibility Rules "Select All."** First pass added a separate "Select All" checkbox to each of the four checkbox groups (Branches/Departments/Designations/Employment Types) — rejected. Final version: **one** master "Select All" in the `EligibilitySection` card header that marks all four groups at once (checked → every option across all four explicitly checked, so specific ones can then be unchecked per leave type; unchecked → all four cleared to `[]`, which the backend already treats as "no restriction"). Shows indeterminate when some but not all are selected.
+
+> Per explicit instruction: no inline `style={{}}` on any newly-added markup in this pass — used Tailwind utility classes plus the one new global CSS class instead. Pre-existing inline styles already in these files (from before this session) were left untouched, per "fix only what's needed, don't refactor unrelated code."
+
+---
+
+### 6. Leave Approvals — Branch/Department/Status Filters
+
+**Files:** `app/dashboard/leave/_components/LeaveApprovals.tsx` (rewritten), `StatusMultiSelect.tsx` (new), `app/dashboard/leave/_client.tsx`
+
+Given contract: System Admin gets Branch + Department + Status filters above the approvals table; HR Admin gets Department + Status only (no Branch); Status already accepts comma-separated values server-side (`pending,l2_pending,approved,rejected,cancelled`), just needed a multi-select UI.
+
+- **Branch** — `system_admin` only, options from the existing `API.branches.list` (same endpoint `_client.tsx`'s own `BranchFilterSelect` already uses — no new "distinct values" endpoint needed).
+- **Department** — `system_admin` + `hr_admin`, options from the existing `API.departments.list` (same endpoint already used on the employee profile page).
+- **Status** — new `StatusMultiSelect.tsx` (click-outside-to-close checkbox dropdown), built off the already-existing `STATUS_LABEL`/`ReqStatus` in `_data.ts` — no new labels invented.
+- `LeaveApprovals` now takes a `role` prop, threaded in from `_client.tsx`.
+- **Replaced the old Pending/History tab toggle with one filtered table.** The two represented the same underlying status dimension and would otherwise contradict each other (e.g. "History" tab active while Status filter says "Pending"). Empty status selection reproduces the old "Pending" tab exactly (no `status` param → backend infers the queue for the caller's role, same as before); selecting Approved/Rejected/Cancelled reproduces the old "History" tab.
+
+> **Flag — `department` param unconfirmed.** Only `branch` was directly confirmed in `backend/apps/hrms/views/leave.py` (gated to `system_admin`, matches this task's spec exactly). Could not verify `department` support or the exact `?action=filter_options` question the task raised, since further backend inspection was explicitly blocked mid-session. Branch/Department dropdown *options* don't depend on this either way (sourced from the pre-existing branches/departments endpoints), but if department filtering doesn't actually narrow results yet, that's a backend gap, not a frontend one.
+
+---
+
+### Key Files Changed / Created (09 July 2026 — Session 20)
+
+| File | Change |
+|------|--------|
+| `hooks/useEmployeeLeave.ts` | **NEW** — leave requests + stats for a specific `employee_id`, with `lop_requests` added later in the session |
+| `hooks/useEmployeeAttendance.ts` | **NEW** — attendance stats/summary/calendar for a specific `employee_id` |
+| `app/dashboard/employees/[id]/_components/LeaveTab.tsx` | **NEW** |
+| `app/dashboard/employees/[id]/_components/AttendanceTab.tsx` | **NEW** |
+| `app/dashboard/employees/[id]/page.tsx` | Wired in `LeaveTab`/`AttendanceTab` for `tab === "leave"`/`"attendance"` |
+| `app/dashboard/my-attendance/_components/AttendanceCalendar.tsx` | Added optional `readOnly` prop — hides Regularize button |
+| `app/dashboard/my-attendance/_components/AttendanceHistoryTable.tsx` | Added optional `readOnly` prop — hides Regularize button |
+| `app/dashboard/my-attendance/_components/CalendarAndHistory.tsx` | Threads `readOnly` through to both children |
+| `app/dashboard/leave/_data.ts` | Added `LeavePreview`/`LeavePreviewHoliday`/`LeavePreviewWeekOff`; added `lop_days`/`lop_requests` to `LeaveStats` |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx` | Wired live leave preview; removed duplicate client-only estimate box; submit now gated on server `sufficient_balance`/`lop_enabled` |
+| `app/dashboard/leave/_components/LopBadge.tsx` | **NEW** |
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | Added LOP stat card (both layouts) + `<LopBadge>` in all 3 tables |
+| `app/dashboard/leave/_components/LeaveAnalytics.tsx` | Added LOP stat card |
+| `app/dashboard/leave/_components/LeaveRequestDetailModal.tsx` | `z-50` → `z-[1000]` (sidebar-blur fix) |
+| `app/dashboard/leave/_components/LeaveTypes.tsx` | `z-50` → `z-[1000]` |
+| `app/dashboard/leave/_components/RejectModal.tsx` | `z-50` → `z-[1000]` |
+| `app/dashboard/settings/holiday-calendar/_components/DeleteHolidayModal.tsx` | `z-50` → `z-[1000]` |
+| `app/dashboard/settings/holiday-calendar/_components/HolidayFormModal.tsx` | `z-50` → `z-[1000]` |
+| `app/dashboard/settings/holiday-calendar/_components/HolidayViewModal.tsx` | `z-50` → `z-[1000]` |
+| `app/dashboard/settings/payroll-config/page.tsx` | `z-50` → `z-[1000]` |
+| `app/globals.css` | Added `.scope-banner` (tinted/bordered banner for "everything below applies only to X" context) |
+| `app/dashboard/settings/leave-policy/_components/LeavePoliciesTab.tsx` | Leave Type selector replaced with full-width scope banner |
+| `app/dashboard/settings/leave-policy/_components/EligibilitySection.tsx` | Added single master "Select All" for all four checkbox groups |
+| `app/dashboard/leave/_components/LeaveApprovals.tsx` | Rewritten — Branch/Department/Status filter bar, `role` prop, single filtered table replaces old Pending/History tabs |
+| `app/dashboard/leave/_components/StatusMultiSelect.tsx` | **NEW** |
+| `app/dashboard/leave/_client.tsx` | Passes `role` into `<LeaveApprovals>` |
+
+---
+
+### Notes for Next Developer
+
+- **No backend files were touched this entire session.** Several read-only backend investigations happened early on (confirming `employee_id`/`branch` param support in `leave.py`) but were explicitly halted once the user objected to backend inspection generally — treat every backend-shape assumption flagged above (§1, §6) as **unverified against the current backend**, not confirmed.
+- **Employee profile Leave/Attendance tabs will silently show the wrong person's data** until the backend adds `employee_id` support to the 5 endpoints listed in §1 — they won't error, they'll just show the logged-in admin's own leave/attendance instead of the viewed employee's. Easy to miss in manual testing if the admin's own data happens to look plausible.
+- **`LeaveApprovals.tsx`'s Pending/History tabs are gone**, replaced by the Status multi-select (§6). If the team wants the two-tab UI back instead of a unified filtered table, that's a UI preference call, not a bug — flag before reverting.
+- **LOP fields (`lop_days`/`lop_requests`) are rendered everywhere assuming the backend's `/leave/stats/` response always includes them** — no `?? 0` fallback gaps were found needed during this session, but if a future response omits them for some role/scope combination, watch for `undefined` rendering in the new stat cards (§3).
+- **`ApplyLeaveForm.tsx`'s preview panel field names were wrong twice before being confirmed correct** (§2) — if the preview endpoint's response shape changes again, the type in `_data.ts` (`LeavePreview`) and the JSX bindings in `ApplyLeaveForm.tsx` are the only two places that need updating.
