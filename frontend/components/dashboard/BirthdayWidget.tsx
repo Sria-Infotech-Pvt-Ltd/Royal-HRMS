@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { SendWishModal, type SendWishTarget } from "./SendWishModal";
+import { SendAllBirthdayModal } from "./SendAllBirthdayModal";
 
-interface BirthdayEntry {
+export interface BirthdayEntry {
   employee_id:   string;
   name:          string;
   department:    string;
@@ -92,8 +93,9 @@ function EntryRow({
 export default function BirthdayWidget() {
   const [data,    setData]    = useState<{ today: BirthdayEntry[]; upcoming: BirthdayEntry[] } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
-  const [modal,   setModal]   = useState<SendWishTarget | null>(null);
+  const [sentIds,     setSentIds]     = useState<Set<string>>(new Set());
+  const [modal,       setModal]       = useState<SendWishTarget | null>(null);
+  const [showSendAll, setShowSendAll] = useState(false);
 
   useEffect(() => {
     clientApi
@@ -117,9 +119,19 @@ export default function BirthdayWidget() {
         <div className="card-header">
           <div className="card-title"><i className="ti ti-cake" /> Today&apos;s Birthdays</div>
           {!loading && todayList.length > 0 && (
-            <span className="badge" style={{ background: "rgba(229,62,62,0.12)", color: "#e53e3e" }}>
-              {todayList.length} today
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="badge" style={{ background: "rgba(229,62,62,0.12)", color: "#e53e3e" }}>
+                {todayList.length} today
+              </span>
+              <button
+                className="btn btn-outline btn-sm"
+                style={{ borderColor: "#e53e3e", color: "#e53e3e" }}
+                onClick={() => setShowSendAll(true)}
+                suppressHydrationWarning
+              >
+                <i className="ti ti-confetti" /> Send All
+              </button>
+            </div>
           )}
         </div>
 
@@ -176,6 +188,18 @@ export default function BirthdayWidget() {
           onSent={() => {
             markSent(modal.employeeId);
             setModal(null);
+          }}
+        />
+      )}
+
+      {/* Send All modal */}
+      {showSendAll && (
+        <SendAllBirthdayModal
+          entries={todayList}
+          onClose={() => setShowSendAll(false)}
+          onAllSent={ids => {
+            setSentIds(s => new Set([...s, ...ids]));
+            setShowSendAll(false);
           }}
         />
       )}

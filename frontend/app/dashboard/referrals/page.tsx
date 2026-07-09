@@ -17,6 +17,19 @@ interface ReferralRule {
   is_active: boolean;
 }
 
+interface ReferralStats {
+  total_referred: number;
+  in_pipeline:    number;
+  selected:       number;
+  converted:      number;
+}
+
+interface ReferralListResponse {
+  results:     Candidate[];
+  count:       number;
+  stats:       ReferralStats;
+}
+
 // ── Status display ─────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<CandidateStatus, { label: string; cls: string }> = {
@@ -175,9 +188,9 @@ export default function ReferralsPage() {
   }, []);
 
   const { data: myData,  loading: myLoading,  error: myError,  refetch: myRefetch  } =
-    useFetch<{ results: Candidate[]; count: number }>(API.referrals.list);
+    useFetch<ReferralListResponse>(API.referrals.list);
   const { data: allData, loading: allLoading, error: allError } =
-    useFetch<{ results: Candidate[]; count: number }>(isAdmin ? API.referrals.all : null);
+    useFetch<ReferralListResponse>(isAdmin ? API.referrals.all : null);
   const { data: branchData } =
     useFetch<{ results: Branch[] }>(`${API.branches.list}?status=active&page_size=100`);
   const { data: rulesData, loading: rulesLoading } =
@@ -188,11 +201,31 @@ export default function ReferralsPage() {
   const branches     = branchData?.results ?? [];
   const rules        = [...(rulesData?.results ?? [])].sort((a, b) => a.order - b.order).filter(r => r.is_active);
 
+  // Prefer backend stats from the /all/ endpoint (includes org-wide totals).
+  // Fall back to computing from the current user's list when not available.
+  const backendStats = allData?.stats ?? myData?.stats;
+
   const statCards = [
-    { label: "Total Referred", value: myReferrals.length,                                                             icon: "ti-users",      cls: "si-primary" },
-    { label: "In Pipeline",    value: myReferrals.filter(c => !["rejected","converted"].includes(c.status)).length,   icon: "ti-clock",      cls: "si-warn"    },
-    { label: "Selected",       value: myReferrals.filter(c => ["selected","offer_sent"].includes(c.status)).length,   icon: "ti-user-check", cls: "si-success" },
-    { label: "Converted",      value: myReferrals.filter(c => c.status === "converted").length,                       icon: "ti-award",      cls: "si-primary" },
+    {
+      label: "Total Referred",
+      value: backendStats?.total_referred ?? myReferrals.length,
+      icon: "ti-users", cls: "si-primary",
+    },
+    {
+      label: "In Pipeline",
+      value: backendStats?.in_pipeline ?? myReferrals.filter(c => !["rejected", "converted"].includes(c.status)).length,
+      icon: "ti-clock", cls: "si-warn",
+    },
+    {
+      label: "Selected",
+      value: backendStats?.selected ?? myReferrals.filter(c => ["selected", "offer_sent"].includes(c.status)).length,
+      icon: "ti-user-check", cls: "si-success",
+    },
+    {
+      label: "Converted",
+      value: backendStats?.converted ?? myReferrals.filter(c => c.status === "converted").length,
+      icon: "ti-award", cls: "si-primary",
+    },
   ];
 
   function setField(key: keyof typeof EMPTY_FORM, value: string) {

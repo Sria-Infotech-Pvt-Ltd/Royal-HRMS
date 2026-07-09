@@ -1468,3 +1468,130 @@ Remain client-side — they filter the results returned for the current page + s
 - **`SendWishModal` uses `recruitment.sendEmail(employeeId)`** — the endpoint is `/recruitment/candidates/{id}/send-email/`. It works for employee IDs (strings) because `sendEmail` was widened to `number | string`. The backend must accept an employee UUID/code at that route; verify this if wish emails start failing.
 - **Employee total stat is accurate; Active/Onboarding/Departments are per-page only** — to fix, ask the backend to add a `GET /employees/stats/` endpoint returning `{ total, active, onboarding, departments }`, then call it in parallel with `fetchEmployees` (same pattern as `RECRUITMENT_API.stats()` in the interview list).
 - **`BONUS_STAGES` in `referrals/page.tsx` is hardcoded** — update when actual bonus policy is confirmed.
+
+---
+
+## Session — Safura Samreen (08 July 2026)
+
+**Branch:** `Fix/Login_Send`
+
+---
+
+### 1. Birthday Widget — "Send All" Button
+
+#### `components/dashboard/BirthdayWidget.tsx`
+
+Added a **Send All** button to the Today's Birthdays card header. The button only renders when `todayList.length > 0` and sits alongside the existing `X today` badge.
+
+- `showSendAll: boolean` state gates the modal
+- On click → opens `SendAllBirthdayModal` with the full `todayList` as `entries`
+- On completion → all successfully sent employee IDs are merged into `sentIds` so their individual row buttons flip to "Resend"
+- `BirthdayEntry` interface promoted from `interface` to `export interface` so `SendAllBirthdayModal` can import it
+
+#### `components/dashboard/SendAllBirthdayModal.tsx` (NEW)
+
+Shared "send to everyone" variant of `SendWishModal`. Kept in a separate file to stay within the 200-line component guideline.
+
+**Flow:**
+1. Fetches all active email templates (`GET /settings/email-templates/`) and company info (`GET /settings/company/`) on mount — same two calls as `SendWishModal`
+2. Pre-selects the first template whose `name` contains `"birthday"`; falls back to the first active template
+3. Shows a recipients summary (`alert-info`) listing all employee names
+4. Template picker dropdown — disabled once sending starts
+5. **Send to All** button triggers `handleSendAll()`:
+   - Iterates `entries` sequentially with `for...of`
+   - Each iteration calls `POST /recruitment/candidates/{employee_id}/send-email/` with `{ template_name, extra_context: normalizeExtraContext(buildVars(entry)) }`
+   - Progress bar updates after each send: `done / total`
+   - Failed names are collected in `errors[]`
+6. On finish — calls `onAllSent(sentIds)` then closes automatically if all succeeded; if any failed, stays open and shows an error summary
+
+**`buildVars(entry)`** — mirrors `employeeVars()` from `SendWishModal` but takes a `BirthdayEntry` object instead of component props. Sends the same full alias set: `employee_name`, `full_name`, `first_name`, `last_name`, `fname`, `lname`, `department`, `designation`, `company_name`, `company`, plus uppercase variants. Wrapped with `normalizeExtraContext()` before POST.
+
+**UX details:**
+- Overlay click is blocked while sending is in progress (`!sending` guard on the backdrop click handler)
+- Close button hidden during sending
+- Footer shows Cancel + "Send to All N" before start; switches to a single "Close" once done
+
+---
+
+### 2. Referral Stats — Use Backend `data.stats`
+
+**File:** `app/dashboard/referrals/page.tsx`
+
+The stat cards (Total Referred / In Pipeline / Selected / Converted) were previously computed from the local `myReferrals` array — which is page-scoped and does not reflect all-time totals for admins.
+
+#### What changed
+
+Added `ReferralListResponse` and `ReferralStats` interfaces:
+```typescript
+interface ReferralStats {
+  total_referred: number;
+  in_pipeline:    number;
+  selected:       number;
+  converted:      number;
+}
+
+interface ReferralListResponse {
+  results:     Candidate[];
+  count:       number;
+  stats:       ReferralStats;
+}
+```
+
+Both `useFetch` calls updated to use `ReferralListResponse`:
+```typescript
+useFetch<ReferralListResponse>(API.referrals.list)
+useFetch<ReferralListResponse>(isAdmin ? API.referrals.all : null)
+```
+
+`backendStats` reads `allData?.stats ?? myData?.stats`:
+- For admins: `allData.stats` provides org-wide totals from `GET /recruitment/referrals/all/`
+- For non-admins: falls back to `myData.stats` if the list endpoint provides it
+- If neither has stats: falls back to computing from `myReferrals` (original behaviour)
+
+```typescript
+const backendStats = allData?.stats ?? myData?.stats;
+const statCards = [
+  { label: "Total Referred", value: backendStats?.total_referred ?? myReferrals.length, ... },
+  { label: "In Pipeline",    value: backendStats?.in_pipeline    ?? myReferrals.filter(...).length, ... },
+  { label: "Selected",       value: backendStats?.selected       ?? myReferrals.filter(...).length, ... },
+  { label: "Converted",      value: backendStats?.converted      ?? myReferrals.filter(...).length, ... },
+];
+```
+
+---
+
+### 3. Login Error — Dismiss on Input Focus
+
+**File:** `app/login/page.tsx`
+
+The error banner was permanent — it stayed until the user entered correct credentials or refreshed the page.
+
+#### What changed
+
+Removed the auto-dismiss timer entirely. Added `onFocus={() => setError("")}` to both inputs:
+- **Email input** — focusing the email field clears the error
+- **Password input** — focusing the password field clears the error
+
+This means the error disappears the moment the user clicks or tabs into either field to try again — natural UX, no arbitrary timeout.
+
+`useRef` import removed (was only needed for the timer). No other changes to the login flow.
+
+---
+
+### Key Files Changed (08 July 2026)
+
+| File | Change |
+|------|--------|
+| `components/dashboard/BirthdayWidget.tsx` | `BirthdayEntry` exported; `showSendAll` state; "Send All" button in Today's card header; `SendAllBirthdayModal` rendered with `onAllSent` callback |
+| `components/dashboard/SendAllBirthdayModal.tsx` | **NEW** — batch wish sender; sequential send loop; live progress bar; error summary; `buildVars()` mirrors `SendWishModal.employeeVars()` |
+| `app/dashboard/referrals/page.tsx` | `ReferralStats` + `ReferralListResponse` interfaces; both `useFetch` calls typed; `backendStats = allData?.stats ?? myData?.stats`; stat cards use backend values with computed fallbacks |
+| `app/login/page.tsx` | `onFocus={() => setError("")}` on email and password inputs; removed timer ref and `setTimeout`; `useRef` import removed |
+
+---
+
+### Notes for Next Developer
+
+- **`SendAllBirthdayModal` sends sequentially, not in parallel** — each POST awaits before the next starts. If the backend adds a bulk-send endpoint, replace the `for...of` loop with a single request.
+- **`backendStats` prefers `allData.stats`** — `allData` is only fetched when `isAdmin === true`, which is set asynchronously from the cookie. On first render the stat cards will briefly show computed values until `allData` resolves; this is a flash of ~1 network round-trip, not a permanent state.
+- **`referrals/page.tsx` fallback computing remains** — the `?? myReferrals.filter(...)` chains are intentional. Remove them only once you've confirmed both list and all endpoints always return a `stats` object.
+- **Login error clears on focus, not on change** — clearing on the first keystroke (`onChange`) would also work but feels abrupt; focus was chosen because it matches the intent ("user is about to try again").

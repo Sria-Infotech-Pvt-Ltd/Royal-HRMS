@@ -129,6 +129,7 @@ export default function LoginPage() {
                     placeholder="you@company.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
+                    onFocus={() => setError("")}
                     required
                     autoComplete="email"
                     suppressHydrationWarning
@@ -158,6 +159,7 @@ export default function LoginPage() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
+                      onFocus={() => setError("")}
                       required
                       autoComplete="current-password"
                       suppressHydrationWarning
