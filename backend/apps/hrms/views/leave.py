@@ -2,7 +2,7 @@ import logging
 from datetime import date
 
 from django.db import transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -122,18 +122,42 @@ def _calendar_scope_filter(user) -> 'Q':
     return Q()  # employee: see all approved leaves to plan around absences
 
 
-def _calc_working_days(start: date, end: date, duration: str, policy=None) -> float:
+def _get_holiday_dates(start: date, end: date, branch_name: str = '') -> set:
+    """Return active holiday dates between start and end for the given branch."""
+    from ..models import Holiday
+    from django.db.models import Q
+    qs = Holiday.objects.filter(date__gte=start, date__lte=end, is_active=True)
+    if branch_name:
+        qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
+    else:
+        qs = qs.filter(branch__isnull=True)
+    return set(qs.values_list('date', flat=True))
+
+
+def _calc_working_days(start: date, end: date, duration: str, policy=None, employee=None) -> float:
     if duration != 'full_day':
         return 0.5
-    off_days    = _get_weekly_off_days()
-    count_offs  = getattr(policy, 'count_weekoffs_as_leave', False)
-    sandwich    = getattr(policy, 'sandwich_leave_enabled', False)
+    off_days       = _get_weekly_off_days()
+    count_offs     = getattr(policy, 'count_weekoffs_as_leave', False)
+    sandwich       = getattr(policy, 'sandwich_leave_enabled', False)
+    count_holidays = getattr(policy, 'count_holidays_as_leave', False)
+    branch_name    = (getattr(employee, 'branch', '') or '') if employee else ''
+    holiday_dates  = _get_holiday_dates(start, end, branch_name)
+
     count = 0
     current = start
     from datetime import timedelta
     while current <= end:
-        is_off = current.strftime('%A').lower() in off_days
-        if sandwich or count_offs or not is_off:
+        is_off     = current.strftime('%A').lower() in off_days
+        is_holiday = current in holiday_dates
+
+        if sandwich:
+            count += 1                        # sandwich: all calendar days count
+        elif is_holiday and not count_holidays:
+            pass                              # holiday excluded from leave count
+        elif is_off and not count_offs:
+            pass                              # week-off excluded
+        else:
             count += 1
         current += timedelta(days=1)
     return float(count)
@@ -412,7 +436,16 @@ class LeaveRequestListCreateView(APIView):
 
         qs_base = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver')
 
-        if scope == 'team' and has_approve:
+        employee_id_param = request.query_params.get('employee_id')
+        if employee_id_param:
+            if not (_has_perm(request.user, 'employees.view') or has_approve):
+                return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+            from apps.accounts.models import User
+            target_user = User.objects.filter(employee_id=employee_id_param).first()
+            if not target_user:
+                return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+            queryset = qs_base.filter(employee=target_user)
+        elif scope == 'team' and has_approve:
             # Approval queue — scoped by role, own requests excluded
             queryset = qs_base.filter(_approval_scope_filter(request.user))
         else:
@@ -454,7 +487,7 @@ class LeaveRequestListCreateView(APIView):
         leave_type = data['leave_type']
 
         policy     = LeavePolicy.objects.filter(leave_type=leave_type, is_active=True).first()
-        total_days = _calc_working_days(start, end, duration, policy)
+        total_days = _calc_working_days(start, end, duration, policy, request.user)
 
         if total_days <= 0:
             return error('Selected date range results in zero working days.')
@@ -717,11 +750,25 @@ class LeaveStatsView(APIView):
             year = int(request.query_params.get('year', _current_year()))
         except (TypeError, ValueError):
             return error('year must be a valid integer.')
+
         scope = request.query_params.get('scope', '')
-        own_scope   = scope == 'own' or not has_approve
+
+        # HR/manager viewing another employee's stats
+        employee_id_param = request.query_params.get('employee_id')
+        stats_user = None
+        if employee_id_param:
+            if not (_has_perm(request.user, 'employees.view') or has_approve):
+                return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+            from apps.accounts.models import User
+            stats_user = User.objects.filter(employee_id=employee_id_param).first()
+            if not stats_user:
+                return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        own_scope = scope == 'own' or not has_approve or stats_user is not None
+        target = stats_user or request.user
 
         if own_scope:
-            qs = LeaveRequest.objects.filter(employee=request.user, start_date__year=year)
+            qs = LeaveRequest.objects.filter(employee=target, start_date__year=year)
         else:
             qs = LeaveRequest.objects.filter(
                 _approval_scope_filter(request.user), start_date__year=year
@@ -733,12 +780,13 @@ class LeaveStatsView(APIView):
             approved  = Count('id', filter=Q(status=REQ_APPROVED)),
             rejected  = Count('id', filter=Q(status=REQ_REJECTED)),
             cancelled = Count('id', filter=Q(status=REQ_CANCELLED)),
+            lop_total = Sum('lop_days'),
         )
 
-        # Balance breakdown only for own-scope views (employee or ?scope=own)
+        # Balance breakdown only for own-scope views (employee or ?scope=own or ?employee_id=)
         balance_data = []
         if own_scope:
-            balances = LeaveBalance.objects.filter(employee=request.user, year=year)
+            balances = LeaveBalance.objects.filter(employee=target, year=year)
             balance_data = [
                 {
                     'leave_type':         b.leave_type,
@@ -756,6 +804,7 @@ class LeaveStatsView(APIView):
             'approved':  agg['approved']  or 0,
             'rejected':  agg['rejected']  or 0,
             'cancelled': agg['cancelled'] or 0,
+            'lop_days':  float(agg['lop_total'] or 0),
             'year':      year,
             'balances':  balance_data,
         })

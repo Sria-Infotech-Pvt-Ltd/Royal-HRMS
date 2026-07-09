@@ -7,6 +7,8 @@ from .views import (
     ExpenseListCreateView,
     ExpenseStatsView,
     ExpenseStatusListView,
+    HolidayDetailView,
+    HolidayListCreateView,
     LeaveApprovalView,
     LeaveBalanceAdjustView,
     LeaveBalanceView,
@@ -45,4 +47,8 @@ urlpatterns = [
     # Leave — stats & calendar
     path('leave/stats/',    LeaveStatsView.as_view(),    name='leave-stats'),
     path('leave/calendar/', LeaveCalendarView.as_view(), name='leave-calendar'),
+
+    # Holiday Calendar
+    path('leave/holidays/',              HolidayListCreateView.as_view(), name='holiday-list'),
+    path('leave/holidays/<str:holiday_id>/', HolidayDetailView.as_view(), name='holiday-detail'),
 ]

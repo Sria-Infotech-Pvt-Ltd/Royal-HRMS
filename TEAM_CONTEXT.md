@@ -682,9 +682,134 @@ Frontend derives: `earned_leave_used = total_days - lop_days`
 - Detail/history card: show split `Earned Leave: 15d / LOP: 3d / Total: 18d` when `lop_days > 0`
 - HR/approver view: same split display so approver sees what will be deducted
 
+---
+
+**2. Holiday Calendar — Phase 1 Backend Implementation**
+
+New `Holiday` model and full CRUD API. Wired into leave day calculation.
+
+**Model fields:**
+- `id` (UUID PK), `name`, `date`, `holiday_type` (national/regional/company), `is_optional` (bool — separate from type), `description`, `branch` (FK, null = company-wide), `is_active`, `created_at`, `updated_at`
+- `is_optional=True` means employee-choice restricted holiday — NOT a fourth holiday type
+
+**API endpoints added:**
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | `/api/leave/holidays/` | Filters: `year`, `month`, `type`, `optional=true`, `branch` |
+| POST | `/api/leave/holidays/` | Requires `settings.edit` or `leave.approve` |
+| GET | `/api/leave/holidays/<id>/` | Single holiday detail |
+| PUT/PATCH | `/api/leave/holidays/<id>/` | Same permission as POST |
+| DELETE | `/api/leave/holidays/<id>/` | Same permission |
+
+**GET response shape:**
+```json
+{
+  "holidays": [
+    {
+      "id": "...", "name": "Independence Day", "date": "2026-08-15",
+      "day": "Sat", "holiday_type": "national", "is_optional": false,
+      "mandatory_optional": "Mandatory", "branch_name": null
+    }
+  ],
+  "total": 6
+}
+```
+
+**Leave calculation integration:**
+- `_get_holiday_dates(start, end, branch_name)` — returns set of `date` objects for active holidays in range (branch-scoped)
+- `_calc_working_days()` updated: when `count_holidays_as_leave=False`, holiday dates are excluded from the day count (same as week-off exclusion)
+- Sandwich leave still overrides all exclusions — sandwich day is always counted
+
+**Seed data (6 records created via Django shell):**
+
+| Name | Date | Type | Optional |
+|---|---|---|---|
+| Republic Day | 2026-01-26 | national | No |
+| Holi | 2026-03-25 | regional | No |
+| Good Friday | 2026-04-03 | national | No |
+| Ugadi | 2026-04-06 | regional | Yes |
+| Independence Day | 2026-08-15 | national | No |
+| Diwali | 2026-10-20 | company | No |
+
+### Files Modified
+
+```
+backend/apps/hrms/
+  models.py              — Holiday model + HOLIDAY_TYPE_CHOICES added;
+                           lop_days DecimalField added to LeaveRequest
+  serializers.py         — HolidaySerializer (day, mandatory_optional computed fields);
+                           HolidayCreateSerializer; lop_days in LeaveRequestSerializer
+  views/leave.py         — _get_holiday_dates() helper added;
+                           _calc_working_days() updated (count_holidays_as_leave wired);
+                           LOP balance split logic implemented;
+                           _deduct_balance_safe() deducts (total_days - lop_days)
+  views/holidays.py      — NEW FILE: HolidayListCreateView, HolidayDetailView
+  views/__init__.py      — HolidayListCreateView, HolidayDetailView exported
+  urls.py                — /leave/holidays/ and /leave/holidays/<id>/ routes added
+  migrations/
+    0010_leaverequest_lop_days.py  — AddField lop_days ✅
+    0011_holiday.py                — CreateModel Holiday ✅
+    0012_holiday_is_optional.py    — AddField is_optional, removed 'optional' from holiday_type choices ✅
+```
+
+---
+
+**3. Employee Profile — Leave & Attendance API Integration**
+
+Added `?employee_id=EMP001` support to 5 existing endpoints so HR can view another employee's full Leave and Attendance profile. No new APIs, no new models — extensions of existing views only.
+
+**Endpoints extended:**
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/leave/requests/` | Own requests only | `?employee_id=` returns that employee's full leave history |
+| `GET /api/leave/stats/` | Own stats | `?employee_id=` returns target employee's stats + balances + new `lop_days` field |
+| `GET /api/attendance/stats/` | Own stats | `?employee_id=` returns target employee's attendance stat cards |
+| `GET /api/attendance/summary/` | Own summary | `?employee_id=` returns target employee's monthly summary grid |
+| `GET /api/attendance/calendar/` | Own calendar | `?employee_id=` returns target employee's calendar + history |
+
+**Permission gate:** caller must have `employees.view` or `attendance.view` (attendance endpoints) / `leave.approve` (leave endpoints) to use `employee_id` param.
+
+**No change needed for:**
+- `GET /api/leave/balance/?employee_id=` — already worked
+- `GET /api/employees/<id>/approval-matrix/` — already worked
+
+**New field in leave stats response:**
+```json
+{ "lop_days": 3.0, "balances": [...] }
+```
+
+### Files Modified
+
+```
+backend/apps/hrms/views/leave.py
+  — Sum added to django.db.models imports
+  — LeaveRequestListCreateView.get(): employee_id param resolves target user
+  — LeaveStatsView.get(): employee_id param + lop_days aggregate added to response
+
+backend/apps/attendance/views/my_attendance.py
+  — _has_perm() helper added (role-based permission check)
+  — _resolve_target_user() helper added (resolves employee_id or falls back to request.user)
+  — AttendanceStatsView.get(): passes target to service
+  — AttendanceSummaryView.get(): passes target to service
+  — AttendanceCalendarView.get(): passes target to service
+```
+
+### Frontend Changes Needed (for Employee Profile page)
+
+Pass `?employee_id=EMP001` when HR opens another employee's profile tab:
+- Leave tab → `GET /api/leave/requests/?employee_id=EMP001`
+- Leave tab → `GET /api/leave/stats/?employee_id=EMP001&year=2026` (includes `lop_days` field now)
+- Attendance tab → `GET /api/attendance/stats/?employee_id=EMP001&month=7&year=2026`
+- Attendance tab → `GET /api/attendance/summary/?employee_id=EMP001&month=7&year=2026`
+- Attendance tab → `GET /api/attendance/calendar/?employee_id=EMP001&month=7&year=2026`
+- When viewing own profile: omit `employee_id` — endpoints fall back to `request.user`
+
 ### Pending
 
-- Frontend UI for LOP breakdown (described above)
+- Frontend UI for LOP breakdown display
+- Frontend Employee Profile page — wire `?employee_id=` to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave is approved
 - Attendance reports — CSV/PDF export for HR
 
