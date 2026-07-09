@@ -457,6 +457,7 @@ function NewExpenseModal({ onClose, onSubmitted }: { onClose: () => void; onSubm
 // ─── My Requests section ──────────────────────────────────────────────────────
 
 function MyRequestsSection() {
+  const { showToast } = useToast();
   const [type, setType]     = useState<RequestType>("leave");
   const [filter, setFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
@@ -470,6 +471,17 @@ function MyRequestsSection() {
 
   const leaveItems:   LeaveRequest[]   = leaveRaw?.results   ?? [];
   const expenseItems: ExpenseRequest[] = expenseRaw?.results ?? [];
+
+  async function cancelRequest(id: string) {
+    try {
+      const res = await clientApi.patch<{ message: string }>(API.leave.requestDetail(id));
+      showToast(res.data.message, "success");
+      refetchLeave();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast(msg || "Failed to cancel leave request.", "error");
+    }
+  }
 
   return (
     <>
@@ -526,6 +538,7 @@ function MyRequestsSection() {
           requestId={detailRequest.id}
           initialData={detailRequest}
           onClose={() => setDetailRequest(null)}
+          onCancelRequest={() => cancelRequest(detailRequest.id)}
         />
       )}
 

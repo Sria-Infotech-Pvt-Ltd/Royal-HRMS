@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useToast } from "@/components/ToastProvider";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
   LEAVE_TYPE_CONFIG,
@@ -26,6 +27,7 @@ const BALANCE_DISPLAY = [
 ];
 
 export default function LeaveDashboard({ role, onApply, branch }: Props) {
+  const { showToast } = useToast();
   const isEmployee = role === "employee";
 
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
@@ -100,10 +102,13 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
 
   async function cancelMine(id: string) {
     try {
-      await clientApi.patch(API.leave.requestDetail(id));
+      const res = await clientApi.patch<{ message: string }>(API.leave.requestDetail(id));
+      showToast(res.data.message, "success");
+      refetchRequests();
       refetchMine();
-    } catch {
-      // silently handled
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast(msg || "Failed to cancel leave request.", "error");
     }
   }
 
@@ -218,6 +223,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
             requestId={detailRequest.id}
             initialData={detailRequest}
             onClose={() => setDetailRequest(null)}
+            onCancelRequest={() => cancelMine(detailRequest.id)}
           />
         )}
       </div>
