@@ -134,6 +134,30 @@ def _get_holiday_dates(start: date, end: date, branch_name: str = '') -> set:
     return set(qs.values_list('date', flat=True))
 
 
+def _get_holidays_with_names(start: date, end: date, branch_name: str = '') -> list:
+    """Return [{'date': date, 'name': str}] for active holidays in range."""
+    from ..models import Holiday
+    from django.db.models import Q
+    qs = Holiday.objects.filter(date__gte=start, date__lte=end, is_active=True)
+    if branch_name:
+        qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
+    else:
+        qs = qs.filter(branch__isnull=True)
+    return list(qs.order_by('date').values('date', 'name'))
+
+
+def _get_weekoffs_in_range(start: date, end: date) -> list:
+    """Return [{'date': 'YYYY-MM-DD', 'day': str}] for week-off days in range."""
+    from datetime import timedelta
+    off_days = _get_weekly_off_days()
+    result, cur = [], start
+    while cur <= end:
+        if cur.strftime('%A').lower() in off_days:
+            result.append({'date': cur.strftime('%Y-%m-%d'), 'day': cur.strftime('%A')})
+        cur += timedelta(days=1)
+    return result
+
+
 def _calc_working_days(start: date, end: date, duration: str, policy=None, employee=None) -> float:
     if duration != 'full_day':
         return 0.5
@@ -151,10 +175,10 @@ def _calc_working_days(start: date, end: date, duration: str, policy=None, emplo
         is_off     = current.strftime('%A').lower() in off_days
         is_holiday = current in holiday_dates
 
-        if sandwich:
-            count += 1                        # sandwich: all calendar days count
-        elif is_holiday and not count_holidays:
-            pass                              # holiday excluded from leave count
+        if is_holiday and not count_holidays:
+            pass                              # holiday excluded regardless of sandwich setting
+        elif sandwich:
+            count += 1                        # sandwich: all remaining days count
         elif is_off and not count_offs:
             pass                              # week-off excluded
         else:
@@ -183,6 +207,43 @@ def _get_weekly_off_days() -> set:
     return {'saturday', 'sunday'}
 
 
+def _zero_working_days_reason(start: date, end: date, policy=None, employee=None) -> str:
+    """Return a user-friendly message explaining why a date range has no working days."""
+    from datetime import timedelta
+    off_days       = _get_weekly_off_days()
+    count_offs     = getattr(policy, 'count_weekoffs_as_leave', False)
+    count_holidays = getattr(policy, 'count_holidays_as_leave', False)
+    branch_name    = (getattr(employee, 'branch', '') or '') if employee else ''
+    holiday_dates  = _get_holiday_dates(start, end, branch_name)
+
+    holiday_count = weekoff_count = total = 0
+    cur = start
+    while cur <= end:
+        total += 1
+        if cur in holiday_dates and not count_holidays:
+            holiday_count += 1
+        elif cur.strftime('%A').lower() in off_days and not count_offs:
+            weekoff_count += 1
+        cur += timedelta(days=1)
+
+    if start == end:
+        if holiday_count:
+            return 'The selected date is a public holiday. Please choose a working day.'
+        if weekoff_count:
+            return f'The selected date falls on a weekly off ({start.strftime("%A")}). Please choose a working day.'
+
+    if holiday_count == total:
+        return 'All selected dates are public holidays. Please select at least one working day to apply for leave.'
+    if weekoff_count == total:
+        return 'All selected dates fall on weekly off days. Please select at least one working day to apply for leave.'
+    if holiday_count + weekoff_count == total:
+        return (
+            'The selected date range contains only holidays and weekly off days. '
+            'Please select at least one working day to apply for leave.'
+        )
+    return 'The selected date range contains no working days. Please select at least one working day to apply for leave.'
+
+
 def _validate_leave_policy(policy, employee, duration, total_days, start, end, document, today) -> str | None:
     """Validate a leave request against policy rules. Returns error string or None."""
     if duration != 'full_day' and not policy.allow_half_day:
@@ -192,7 +253,9 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
     if policy.maximum_leave_duration and total_days > policy.maximum_leave_duration:
         return f'Maximum {policy.maximum_leave_duration} day(s) allowed for this leave type.'
     if policy.maximum_consecutive_days and total_days > policy.maximum_consecutive_days:
-        return f'Maximum {policy.maximum_consecutive_days} consecutive day(s) allowed for this leave type.'
+        if not getattr(policy, 'convert_to_lop', False):
+            return f'Maximum {policy.maximum_consecutive_days} consecutive day(s) allowed for this leave type.'
+        # convert_to_lop is enabled — excess days become LOP; preview shows the warning, POST proceeds
     if policy.minimum_notice_period and (start - today).days < policy.minimum_notice_period:
         return f'This leave type requires {policy.minimum_notice_period} day(s) advance notice.'
     if start < today:
@@ -424,6 +487,75 @@ class LeaveBalanceAdjustView(APIView):
         )
 
 
+def _leave_preview(request):
+    """Read-only calculation for GET /api/leave/requests/?action=preview."""
+    from datetime import date as date_cls
+    params     = request.query_params
+    leave_type = params.get('leave_type', '')
+    duration   = params.get('duration', 'full_day')
+    try:
+        start = date_cls.fromisoformat(params['start_date'])
+        end   = date_cls.fromisoformat(params['end_date'])
+    except (KeyError, ValueError):
+        return error('start_date and end_date are required in YYYY-MM-DD format.')
+    if end < start:
+        return error('end_date must be on or after start_date.')
+
+    policy       = LeavePolicy.objects.filter(leave_type=leave_type, is_active=True).first()
+    actual_days  = _calc_working_days(start, end, duration, policy, request.user)
+    branch_name  = (getattr(request.user, 'branch', '') or '')
+    holidays     = _get_holidays_with_names(start, end, branch_name)
+    week_offs    = _get_weekoffs_in_range(start, end)
+    calendar_days = (end - start).days + 1
+
+    holidays_out  = [{'date': h['date'].strftime('%d %b'), 'name': h['name']} for h in holidays]
+    week_offs_out = [{'date': w['date'], 'day': w['day']} for w in week_offs]
+
+    available      = 0.0
+    convert_to_lop = getattr(policy, 'convert_to_lop', False)
+    if leave_type and leave_type != LEAVE_LWP:
+        bal = LeaveBalance.objects.filter(
+            employee=request.user, leave_type=leave_type, year=start.year
+        ).first()
+        if bal:
+            available = float(bal.total_days - bal.used_days)
+
+    lop_days    = round(max(0.0, actual_days - available), 1) if convert_to_lop and leave_type != LEAVE_LWP else 0.0
+    earned_used = round(actual_days - lop_days, 1)
+
+    warning = None
+    max_consec = getattr(policy, 'maximum_consecutive_days', None)
+    if max_consec and actual_days > max_consec:
+        if convert_to_lop and lop_days > 0:
+            warning = (
+                f'The selected leave exceeds the maximum consecutive leave limit of {max_consec} day(s). '
+                f'Your available {leave_type} balance will be used first. '
+                f'The remaining {lop_days} day(s) will be treated as Leave Without Pay (LOP), subject to approval.'
+            )
+        else:
+            warning = f'The selected leave exceeds the maximum consecutive leave limit of {max_consec} day(s).'
+
+    return success('Leave preview calculated.', {
+        'leave_type':             leave_type,
+        'start_date':             start.strftime('%Y-%m-%d'),
+        'end_date':               end.strftime('%Y-%m-%d'),
+        'duration':               duration,
+        'calendar_days':          calendar_days,
+        'company_holidays':       holidays_out,
+        'company_holiday_count':  len(holidays_out),
+        'week_offs':              week_offs_out,
+        'week_off_count':         len(week_offs_out),
+        'sandwich_leave_enabled': getattr(policy, 'sandwich_leave_enabled', False),
+        'actual_leave_days':      actual_days,
+        'available_balance':      available,
+        'earned_leave_used':      earned_used,
+        'lop_days':               lop_days,
+        'lop_enabled':            convert_to_lop,
+        'sufficient_balance':     actual_days <= available,
+        'warning':                warning,
+    })
+
+
 # ─── Leave Requests ────────────────────────────────────────────────────────────
 
 class LeaveRequestListCreateView(APIView):
@@ -431,6 +563,9 @@ class LeaveRequestListCreateView(APIView):
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
+        if request.query_params.get('action') == 'preview':
+            return _leave_preview(request)
+
         has_approve = _has_perm(request.user, 'leave.approve')
         scope       = request.query_params.get('scope', '')
 
@@ -469,6 +604,10 @@ class LeaveRequestListCreateView(APIView):
         if branch and _role_name(request.user) == 'system_admin':
             queryset = queryset.filter(employee__branch__iexact=branch)
 
+        department = request.query_params.get('department')
+        if department and has_approve:
+            queryset = queryset.filter(employee__department__iexact=department)
+
         queryset = queryset.order_by('-created_at')
 
         page_obj, paginator = paginate(queryset, request, default_page_size=20)
@@ -490,21 +629,7 @@ class LeaveRequestListCreateView(APIView):
         total_days = _calc_working_days(start, end, duration, policy, request.user)
 
         if total_days <= 0:
-            return error('Selected date range results in zero working days.')
-
-        from datetime import timedelta
-        weekly_off = _get_weekly_off_days()
-        count_offs = getattr(policy, 'count_weekoffs_as_leave', False)
-        sandwich   = getattr(policy, 'sandwich_leave_enabled', False)
-        if weekly_off and not count_offs and not sandwich:
-            cur = start
-            while cur <= end:
-                if cur.strftime('%A').lower() in weekly_off:
-                    return error(
-                        f'{cur.strftime("%A")} ({cur}) is a configured week-off day. '
-                        'Leave cannot be applied on a week-off day.'
-                    )
-                cur += timedelta(days=1)
+            return error(_zero_working_days_reason(start, end, policy, request.user))
 
         if policy:
             today   = timezone.localdate()
@@ -775,12 +900,13 @@ class LeaveStatsView(APIView):
             )
 
         agg = qs.aggregate(
-            total     = Count('id'),
-            pending   = Count('id', filter=Q(status__in=[REQ_PENDING, REQ_L2_PENDING])),
-            approved  = Count('id', filter=Q(status=REQ_APPROVED)),
-            rejected  = Count('id', filter=Q(status=REQ_REJECTED)),
-            cancelled = Count('id', filter=Q(status=REQ_CANCELLED)),
-            lop_total = Sum('lop_days'),
+            total        = Count('id'),
+            pending      = Count('id', filter=Q(status__in=[REQ_PENDING, REQ_L2_PENDING])),
+            approved     = Count('id', filter=Q(status=REQ_APPROVED)),
+            rejected     = Count('id', filter=Q(status=REQ_REJECTED)),
+            cancelled    = Count('id', filter=Q(status=REQ_CANCELLED)),
+            lop_total    = Sum('lop_days', filter=Q(status=REQ_APPROVED)),
+            lop_requests = Count('id', filter=Q(status=REQ_APPROVED, lop_days__gt=0)),
         )
 
         # Balance breakdown only for own-scope views (employee or ?scope=own or ?employee_id=)
@@ -804,8 +930,9 @@ class LeaveStatsView(APIView):
             'approved':  agg['approved']  or 0,
             'rejected':  agg['rejected']  or 0,
             'cancelled': agg['cancelled'] or 0,
-            'lop_days':  float(agg['lop_total'] or 0),
-            'year':      year,
+            'lop_days':     float(agg['lop_total'] or 0),
+            'lop_requests': agg['lop_requests'] or 0,
+            'year':         year,
             'balances':  balance_data,
         })
 

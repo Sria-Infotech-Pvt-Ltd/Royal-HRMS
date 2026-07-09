@@ -11,15 +11,21 @@ interface Props {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const STATUS_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
-  present:    { bg: "var(--success-c)",          color: "var(--success)",   label: "P"  },
-  late:       { bg: "var(--warn-c)",             color: "var(--warn)",      label: "L"  },
-  absent:     { bg: "var(--error-c)",            color: "var(--error)",     label: "A"  },
-  half_day:   { bg: "rgba(251,146,60,0.15)",     color: "#ea580c",          label: "H"  },
-  weekly_off: { bg: "var(--bg-low)",             color: "var(--outline)",   label: "W"  },
-  holiday:    { bg: "rgba(59,130,246,0.12)",     color: "#3b82f6",          label: "Ho" },
-  on_leave:   { bg: "rgba(168,85,247,0.12)",     color: "#a855f7",          label: "OL" },
+// Keyed by the display strings the backend sends (STATUS_DISPLAY_MAP capitalises all values)
+const STATUS_LABELS: Record<string, string> = {
+  'Present':           'P',
+  'Late':              'L',
+  'Absent':            'A',
+  'Half Day':          'H',
+  'Weekly Off':        'W',
+  'Holiday':           'Ho',
+  'On Leave':          'OL',
+  'Incomplete':        '!',
+  'Missing Clock Out': '!',
 };
+
+// Non-working days: hide clock-in/out times (no punches expected)
+const NON_WORKING = new Set(['Weekly Off', 'Holiday']);
 
 export default function AttendanceCalendar({ year, month, data, onRegularize }: Props) {
   const jsMonth    = month - 1;  // convert to 0-indexed for Date API
@@ -51,12 +57,14 @@ export default function AttendanceCalendar({ year, month, data, onRegularize }: 
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
         {cells.map((day, idx) => {
-          const record = day ? data[String(day)] : null;
-          const cfg    = record ? STATUS_CONFIG[record.status] : null;
+          const record  = day ? data[String(day)] : null;
+          const status  = record?.status ?? '';
+          const label   = STATUS_LABELS[status] ?? '';
+          // Use hex color from backend (_STATUS_COLOR); bg is the same color at 15% opacity
+          const fg      = record?.color ?? 'var(--outline-v)';
+          const bg      = record?.color ? record.color + '26' : 'transparent';
           const isToday = isCurrentMonth && day === today;
           const col     = idx % 7;
-          const showRight = col !== 6;
-          const showBot   = idx < cells.length - 7;
 
           return (
             <div
@@ -64,9 +72,9 @@ export default function AttendanceCalendar({ year, month, data, onRegularize }: 
               style={{
                 minHeight: 72,
                 padding: "8px 6px",
-                background: cfg ? cfg.bg : "transparent",
-                borderRight:  showRight ? "1px solid var(--outline-v)" : "none",
-                borderBottom: showBot   ? "1px solid var(--outline-v)" : "none",
+                background: bg,
+                borderRight:  col !== 6            ? "1px solid var(--outline-v)" : "none",
+                borderBottom: idx < cells.length - 7 ? "1px solid var(--outline-v)" : "none",
               }}
             >
               {day && (
@@ -75,20 +83,20 @@ export default function AttendanceCalendar({ year, month, data, onRegularize }: 
                     <div style={{
                       width: 22, height: 22, borderRadius: "50%",
                       background: isToday ? "var(--primary)" : "transparent",
-                      color: isToday ? "#fff" : cfg ? cfg.color : "var(--outline-v)",
+                      color: isToday ? "#fff" : (record ? fg : "var(--outline-v)"),
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 11, fontWeight: isToday ? 700 : 500,
                     }}>
                       {day}
                     </div>
-                    {cfg && (
-                      <span style={{ fontSize: 8, fontWeight: 700, color: cfg.color, letterSpacing: "0.04em" }}>
-                        {cfg.label}
+                    {label && (
+                      <span style={{ fontSize: 8, fontWeight: 700, color: fg, letterSpacing: "0.04em" }}>
+                        {label}
                       </span>
                     )}
                   </div>
 
-                  {record?.clockIn && (
+                  {record?.clockIn && !NON_WORKING.has(status) && (
                     <div style={{ fontSize: 9, color: "var(--on-variant)", fontFamily: "Menlo, Consolas, monospace", lineHeight: 1.5 }}>
                       <div>{record.clockIn}</div>
                       {record.clockOut && <div>{record.clockOut}</div>}

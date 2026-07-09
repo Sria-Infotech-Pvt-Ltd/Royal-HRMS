@@ -815,6 +815,180 @@ Pass `?employee_id=EMP001` when HR opens another employee's profile tab:
 
 ---
 
+## Session Log — 2026-07-09
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Attendance Calendar — Frontend Holiday Integration**
+
+Fixed a long-standing silent breakage: `STATUS_CONFIG` used lowercase keys (`'holiday'`, `'present'`) but `STATUS_DISPLAY_MAP` on the backend sends capitalised display strings (`'Holiday'`, `'Present'`). Every `STATUS_CONFIG[record.status]` lookup returned `undefined`, making all calendar cells transparent with no status labels.
+
+Fixes applied:
+- `DayRecord` interface updated — added `color: string`, `date: string`, `regularization_required: boolean`; `status` widened from narrow lowercase union to `string`
+- `AttendanceCalendar.tsx` — replaced `STATUS_CONFIG` entirely with `STATUS_LABELS` (keyed by capitalised display strings); uses `record.color` (hex from `_STATUS_COLOR` on backend) for foreground; background derived as `record.color + '26'` (15% opacity); `NON_WORKING` set suppresses clock-in/out on Holiday and Weekly Off cells; `canRegularize` already `false` for holidays from backend
+- `CalendarAndHistory.tsx` — fixed swapped legend colours: Holiday is `#a855f7` (purple), On Leave is `#3b82f6` (blue) — was reversed
+
+Files changed:
+```
+frontend/types/attendance.ts                              — DayRecord interface updated
+frontend/app/dashboard/my-attendance/_components/
+  AttendanceCalendar.tsx                                  — STATUS_LABELS, record.color, NON_WORKING
+  CalendarAndHistory.tsx                                  — legend colours corrected
+```
+
+---
+
+**2. Leave Validation — Improved Zero-Working-Days Error Messages**
+
+Replaced the generic `"Selected date range results in zero working days."` error with specific user-friendly messages.
+
+New helper `_zero_working_days_reason(start, end, policy, employee)` in `leave.py` diagnoses why a range has no working days:
+
+| Scenario | Message |
+|---|---|
+| Single day — holiday | "The selected date is a public holiday. Please choose a working day." |
+| Single day — week-off | "The selected date falls on a weekly off (Sunday). Please choose a working day." |
+| Range — all holidays | "All selected dates are public holidays. Please select at least one working day…" |
+| Range — all week-offs | "All selected dates fall on weekly off days. Please select at least one working day…" |
+| Range — mixed | "The selected date range contains only holidays and weekly off days. Please select…" |
+
+Policy flags (`count_weekoffs_as_leave`, `count_holidays_as_leave`) are respected — if a policy counts holidays as leave days, holidays are not blamed in the message.
+
+---
+
+**3. LOP Calculation Bug Fix — Spurious Week-off Block Removed**
+
+Root cause: A validation block (lines 532–544 in old code) rejected any leave request whose date range spanned a week-off day when `count_offs=False && sandwich=False`. This prevented Scenario 2 (employee selects 20 calendar days spanning 3 week-offs and 2 holidays; policy excludes them → 15 actual working days → zero LOP).
+
+Fix: removed the entire block. `_calc_working_days()` already correctly excludes week-offs when `count_offs=False`. The existing `total_days <= 0` check handles the edge case where ALL selected days are week-offs.
+
+Business rule order confirmed:
+1. `_calc_working_days()` applies sandwich / holiday / week-off policy → actual leave days
+2. Compare actual leave days with available balance
+3. LOP = `max(0, actual_days - available)` — never uses raw calendar days
+
+---
+
+**4. Leave Preview Endpoint — `GET /api/leave/requests/?action=preview`**
+
+New read-only calculation branch added to the existing `LeaveRequestListCreateView.get()`. No new URL, no new file.
+
+**Query params:** `action=preview`, `leave_type`, `start_date` (YYYY-MM-DD), `end_date`, `duration`
+
+**Response shape:**
+```json
+{
+  "leave_type": "EL",
+  "calendar_days": 20,
+  "company_holidays": [
+    { "date": "15 Aug", "name": "Independence Day" },
+    { "date": "19 Aug", "name": "Sri Krishna Janmashtami" }
+  ],
+  "company_holiday_count": 2,
+  "week_offs": [
+    { "date": "2026-08-09", "day": "Sunday" }
+  ],
+  "week_off_count": 4,
+  "sandwich_leave_enabled": true,
+  "actual_leave_days": 20,
+  "available_balance": 15.0,
+  "earned_leave_used": 15.0,
+  "lop_days": 5.0,
+  "lop_enabled": true,
+  "sufficient_balance": false,
+  "warning": "The selected leave exceeds the maximum consecutive leave limit of 15 day(s). Your available EL balance will be used first…"
+}
+```
+
+New helpers added to `leave.py` (no new files):
+- `_get_holidays_with_names(start, end, branch_name)` — returns `[{date, name}]` for named holidays in range
+- `_get_weekoffs_in_range(start, end)` — returns `[{date, day}]` for week-off dates in range
+- `_leave_preview(request)` — orchestrates full calculation and builds response
+
+---
+
+**5. Max Consecutive Days — No Longer Blocks When LOP Enabled**
+
+`_validate_leave_policy()` previously hard-blocked any request exceeding `maximum_consecutive_days`, even when `convert_to_lop=True`. This was confusing — employees with LOP conversion enabled expected the excess to become LOP, not a rejection.
+
+Fix: when `convert_to_lop=True`, the max consecutive days check is skipped (treated as informational). The preview endpoint's `warning` field already informs the employee of what will happen. When `convert_to_lop=False`, the hard block still applies.
+
+---
+
+**6. LOP Statistics Added to Leave Stats API**
+
+`LeaveStatsView` aggregate extended with two new fields — approved requests only:
+
+```python
+lop_total    = Sum('lop_days', filter=Q(status=REQ_APPROVED))
+lop_requests = Count('id', filter=Q(status=REQ_APPROVED, lop_days__gt=0))
+```
+
+Response now includes:
+```json
+{ "lop_days": 5.0, "lop_requests": 2 }
+```
+
+Pending requests are excluded. Previously `lop_total` summed all statuses (including pending) — now correctly scoped to approved only.
+
+---
+
+**7. Role-Based Department Filter for Leave Approvals**
+
+Added `department` filter to `GET /api/leave/requests/`:
+
+| Filter | Param | System Admin | HR Admin |
+|---|---|---|---|
+| Branch | `?branch=HQ` | ✅ Filters freely | ❌ Ignored (branch-scoped by `_approval_scope_filter`) |
+| Department | `?department=IT` | ✅ Filters freely | ✅ Filters within their branch |
+| Status (multi) | `?status=pending,approved` | ✅ | ✅ |
+
+`department` filter uses `employee__department__iexact=department` — only available when caller has `leave.approve`. HR admin's branch restriction is already enforced by `_approval_scope_filter`, so department filter stacks on top correctly.
+
+Example:
+```
+GET /api/leave/requests/?scope=team&branch=HQ&department=IT&status=pending,approved   # system_admin
+GET /api/leave/requests/?scope=team&department=IT&status=pending,l2_pending           # hr_admin
+```
+
+---
+
+### Files Modified This Session
+
+```
+backend/apps/hrms/views/leave.py
+  — _zero_working_days_reason() helper added
+  — Spurious week-off validation block removed (LOP Scenario 2 fix)
+  — _get_holidays_with_names() helper added
+  — _get_weekoffs_in_range() helper added
+  — _leave_preview() function added
+  — LeaveRequestListCreateView.get(): ?action=preview branch wired
+  — _validate_leave_policy(): max_consecutive_days skipped when convert_to_lop=True
+  — LeaveStatsView: lop_total filtered to REQ_APPROVED; lop_requests count added
+  — LeaveRequestListCreateView.get(): department filter added
+
+frontend/types/attendance.ts
+  — DayRecord: color, date, regularization_required added; status widened to string
+
+frontend/app/dashboard/my-attendance/_components/AttendanceCalendar.tsx
+  — STATUS_CONFIG replaced by STATUS_LABELS + record.color (backend hex)
+  — NON_WORKING set added (Holiday, Weekly Off suppress clock times)
+
+frontend/app/dashboard/my-attendance/_components/CalendarAndHistory.tsx
+  — LEGEND Holiday/On Leave colours corrected (were swapped)
+```
+
+### Pending
+
+- Frontend: Leave application preview summary panel (call `?action=preview`, display holidays/week-offs breakdown + LOP warning)
+- Frontend: Leave stats page — display `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns (filter-options endpoint may be needed for dropdown population)
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
 ## Key Architectural Decisions
 
 | Decision | Reason |
