@@ -143,8 +143,8 @@ export default function AssessmentsPage() {
   const { data: empData } = useFetch<{ results: AssignEmployee[] }>(
     assignFor ? `${API.employees.list}?page_size=500` : null
   );
-  const assignEmployees = empData?.results ?? [];
-  const filteredEmployees = assignEmployees.filter(e =>
+  const assignCandidates = empData?.results ?? [];
+  const filteredCandidates = assignCandidates.filter(e =>
     assignSearch === "" ||
     e.full_name.toLowerCase().includes(assignSearch.toLowerCase()) ||
     e.email.toLowerCase().includes(assignSearch.toLowerCase()) ||
@@ -219,7 +219,7 @@ export default function AssessmentsPage() {
 
   function toggleSelectAll() {
     setAssignCids(prev =>
-      prev.length === filteredEmployees.length ? [] : filteredEmployees.map(e => e.id)
+      prev.length === filteredCandidates.length ? [] : filteredCandidates.map(e => e.id)
     );
   }
 
@@ -559,23 +559,23 @@ export default function AssessmentsPage() {
                   className="btn btn-ghost"
                   style={{ fontSize: 12, padding: "2px 8px" }}
                   onClick={toggleSelectAll}
-                  disabled={filteredEmployees.length === 0}
+                  disabled={filteredCandidates.length === 0}
                 >
-                  {assignCids.length === filteredEmployees.length && filteredEmployees.length > 0 ? "Deselect All" : "Select All"}
+                  {assignCids.length === filteredCandidates.length && filteredCandidates.length > 0 ? "Deselect All" : "Select All"}
                 </button>
                 <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  {assignCids.length} selected · {filteredEmployees.length} shown
+                  {assignCids.length} selected · {filteredCandidates.length} shown
                 </span>
               </div>
 
               {/* Employee checklist */}
               <div style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
-                {filteredEmployees.length === 0 && (
+                {filteredCandidates.length === 0 && (
                   <div style={{ padding: "20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                    {assignEmployees.length === 0 ? <><i className="ti ti-loader-2 spin mr-6" />Loading…</> : "No employees match."}
+                    {assignCandidates.length === 0 ? <><i className="ti ti-loader-2 spin mr-6" />Loading…</> : "No employees match."}
                   </div>
                 )}
-                {filteredEmployees.map((e, idx) => {
+                {filteredCandidates.map((e, idx) => {
                   const checked = assignCids.includes(e.id);
                   return (
                     <label

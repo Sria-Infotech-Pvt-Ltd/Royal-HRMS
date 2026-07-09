@@ -1686,3 +1686,158 @@ Turned out there are three separate places in the app where an employee can see 
 - **The `Q()`/`F()` bug in `_deduct_balance_safe` flagged in Session 18 is confirmed fixed** — `leave.py:212` already uses `F('used_days') + days` correctly. No longer an open item.
 - **Holiday Calendar's branch field type mismatch**: the given API spec described `branch` as a UUID, but this app's real `GET /branch/branches/` returns numeric `id`s (confirmed via `BranchManagement.tsx`). Implemented using whatever `id` the branches endpoint actually returns (`number | null`) rather than forcing a UUID type that doesn't match reality — flag to the backend/spec owner if this becomes a real mismatch once tested against the live server.
 - **Three "My Leave Requests" views now all support Cancel, but each still has its own separate `cancelRequest`/`cancelMine` function** — not shared, since each page's data-fetching/refetch shape differs slightly. If a fourth such view is ever added, consider extracting a `useCancelLeaveRequest()` hook instead of copy-pasting a fourth time.
+
+---
+
+## Session — Safura Samreen (09 July 2026)
+
+**Branch:** `Frontend/Assessment_Issue`
+
+---
+
+### 1. Assessment Portal — "All Done" Button Showing With Zero Assignments
+
+**File:** `app/onboarding/assessments/page.tsx`
+
+**Symptom:** An employee with `assessment_status: "pending"` (visible in the login API response) was landing on `/onboarding/assessments`, seeing "0 tests assigned / No Assessments Yet", but the green "All Done — Go to Dashboard" button was still visible and clickable. Clicking it let them bypass the assessment gate entirely.
+
+**Root cause:** The backend returns `all_complete: true` when `assignments` is an empty array — vacuously true (zero out of zero complete). The page was checking only `data?.all_complete` to show the button and to call `setAssessmentStatus("complete")`, which writes to the `royal_hrms_user` cookie and tells the proxy to stop redirecting.
+
+**Fix:**
+```typescript
+// Before — triggers on vacuous all_complete
+useEffect(() => { if (data?.all_complete) setAssessmentStatus("complete"); }, [data?.all_complete]);
+
+// After — requires at least one assignment to exist
+const assignments = data?.assignments ?? [];
+const allComplete = data?.all_complete === true && assignments.length > 0;
+useEffect(() => { if (allComplete) setAssessmentStatus("complete"); }, [allComplete]);
+```
+
+All three places that previously read `data?.all_complete` now read `allComplete`:
+- `useEffect` that calls `setAssessmentStatus("complete")` — no longer fires on empty list
+- Header "Go to Dashboard" button — no longer renders
+- Main content "All Done — Go to Dashboard" button — no longer renders
+
+When `assignments.length === 0` the page correctly shows only "No Assessments Yet — Your HR team will assign assessments before you can proceed to the dashboard." with no escape route.
+
+---
+
+### 2. Assessment Assign Modal — ID Mismatch Investigation
+
+**File:** `app/dashboard/assessments/page.tsx`
+
+Three rounds of debugging to find the correct ID to send to `POST /api/assessments/assign/`.
+
+#### Round 1 — Status quo (employee UUID sent as `candidate_id`)
+The assign modal was already sending `e.id` from `GET /employees/?page_size=500` — the employee's UUID — as `candidate_id`. The assignment stored successfully (no error from the backend), but when the assigned employee logged in and called `GET /assessments/my/`, it returned empty for some employees despite the assignment existing in the admin view.
+
+#### Round 2 — Switched to candidate integer ID
+Changed source to `GET /recruitment/candidates/?page_size=500` to send the proper `Candidate.id` (integer). Result: `{"status": "error", "message": "Employee not found.", "data": {}}`. The backend's assign endpoint is not a candidate FK lookup — it looks up an **Employee** by the UUID sent, and an integer candidate ID is not a valid Employee UUID.
+
+#### Round 3 — Reverted to employee UUID
+Reverted back to `GET /employees/?page_size=500` sending employee UUID. This correctly resolves the "Employee not found" error. The empty `my/` issue for some employees is a separate backend bug (see §3).
+
+**Current state of the file:** source is `GET /employees/?page_size=500`, `candidate_id` field sends `e.id` (employee UUID). No net change from the starting state — the back-and-forth confirmed the original approach was correct for the assign step.
+
+---
+
+### 3. Root Cause Analysis — `GET /assessments/my/` Returns Empty for Some Employees
+
+**Read-only investigation** — no code was changed. All findings are in backend files.
+
+#### Models (`backend/apps/assessments/models.py`)
+
+`CandidateAssignment` has **two separate FK fields**, only one of which is populated per row:
+
+```python
+candidate = ForeignKey('recruitment.Candidate', null=True, blank=True, …)
+employee  = ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, …)
+```
+
+`candidate` → links to the recruitment `Candidate` model (for new-joiners going through the hiring pipeline).
+`employee` → links directly to the `User` model (for existing employees assigned via UUID/department).
+
+#### Assign endpoint (`backend/apps/assessments/views/admin.py` lines 225–332)
+
+The view routes to one FK or the other based on what is sent:
+
+```python
+if candidate_id and not _UUID_RE.match(str(candidate_id)):
+    employee_id  = candidate_id   # non-UUID string → re-route to employee path
+    candidate_id = None
+
+# UUID path → writes CandidateAssignment(candidate=<Candidate record>)
+# employee_id / UUID path → writes CandidateAssignment(employee=<User>)
+```
+
+When the frontend sends a **UUID** as `candidate_id`, the backend runs `Candidate.objects.get(pk=candidate_id)`. If no `Candidate` row has that UUID (because the UUID is an Employee's UUID, not a Candidate's), it raises "Employee not found" or stores an orphaned assignment.
+
+#### `my/` endpoint (`backend/apps/assessments/views/portal.py` lines 108–122)
+
+```python
+def get(self, request):
+    candidate = _get_candidate(request.user)
+    if candidate:
+        assignments = base_qs.filter(candidate=candidate)   # path A
+    else:
+        assignments = base_qs.filter(employee=request.user) # path B
+```
+
+`_get_candidate(user)` does:
+```python
+return Candidate.objects.filter(portal_user=user).first()
+```
+
+This is an **exclusive OR** — it never queries both FKs at once. The path taken depends entirely on whether a `Candidate` row exists with `portal_user` pointing to the logged-in user.
+
+#### The mismatch
+
+| Employee type | Has `Candidate` row with `portal_user` set | Assignment stored on | `my/` queries | Result |
+|---|---|---|---|---|
+| Directly added (never went through recruitment) | No | `employee = user` | `employee = user` (path B) | ✅ Visible |
+| Came through recruitment pipeline (onboarded) | Yes | `employee = user` (UUID sent from employees list) | `candidate = candidate` (path A) | ❌ Empty |
+| Came through recruitment, assigned via Candidate UUID | Yes | `candidate = candidate` | `candidate = candidate` (path A) | ✅ Visible |
+
+Employees who went through recruitment have their `Candidate.portal_user` set to their user account. So `_get_candidate` always finds them and forces path A. But the assignment was written to `employee=user` (path B) because the frontend sends the employee UUID. The two paths never overlap — the assignment is invisible.
+
+This is why the bug is **intermittent**: it only affects employees who have both a `Candidate` record with `portal_user` set AND were assigned via the employees list (UUID path).
+
+#### Where the backend fix must go
+
+`backend/apps/assessments/views/portal.py` lines 119–122. The exclusive OR must become a union:
+
+```python
+# Current (broken for recruited employees assigned via UUID):
+if candidate:
+    assignments = base_qs.filter(candidate=candidate)
+else:
+    assignments = base_qs.filter(employee=request.user)
+
+# Fix — query both FKs and union the results:
+candidate = _get_candidate(request.user)
+q = base_qs.filter(employee=request.user)
+if candidate:
+    q = q | base_qs.filter(candidate=candidate)
+assignments = q.distinct()
+```
+
+This is a **backend-only fix** — one file, ~4 lines. No frontend change can resolve this because the mismatch is entirely inside the backend's read query.
+
+---
+
+### Key Files Changed (09 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/onboarding/assessments/page.tsx` | `allComplete` derived variable guards `setAssessmentStatus` and both "Go to Dashboard" buttons against vacuous `all_complete: true` when `assignments.length === 0` |
+| `app/dashboard/assessments/page.tsx` | Reverted to employee UUID source after round-trip debugging confirmed original approach was correct for assign endpoint; no net change from session start |
+
+---
+
+### Notes for Next Developer
+
+- **Backend fix is pending and blocking** — `backend/apps/assessments/views/portal.py` lines 119–122 must union both FK paths. Until this is deployed, employees who came through the recruitment pipeline will always see "No assessments assigned" when assigned via the employee UUID path. This is not a frontend bug — do not attempt to work around it in the frontend.
+- **Existing broken assignments need to be deleted and re-assigned** — any assignment that was stored with the wrong FK (either a dangling Candidate UUID or the wrong path) will not surface even after the backend fix, because those rows are orphaned. HR must delete them from the admin view and re-assign.
+- **`allComplete` replaces all three `data?.all_complete` references** — do not use `data?.all_complete` directly anywhere in `app/onboarding/assessments/page.tsx`. Always read from `allComplete` so the `assignments.length > 0` guard is enforced.
+- **The assign endpoint's UUID routing logic** (`admin.py` lines 225–227) means a non-UUID string (e.g. `"RSS00016"`) sent as `candidate_id` is silently re-routed to the `employee_id` path. This re-routing is silent — there is no error if the re-route happens unexpectedly. Always send a UUID from `GET /employees/` as `candidate_id`, never an `employee_id` code string.
