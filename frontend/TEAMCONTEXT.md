@@ -1468,3 +1468,73 @@ Remain client-side — they filter the results returned for the current page + s
 - **`SendWishModal` uses `recruitment.sendEmail(employeeId)`** — the endpoint is `/recruitment/candidates/{id}/send-email/`. It works for employee IDs (strings) because `sendEmail` was widened to `number | string`. The backend must accept an employee UUID/code at that route; verify this if wish emails start failing.
 - **Employee total stat is accurate; Active/Onboarding/Departments are per-page only** — to fix, ask the backend to add a `GET /employees/stats/` endpoint returning `{ total, active, onboarding, departments }`, then call it in parallel with `fetchEmployees` (same pattern as `RECRUITMENT_API.stats()` in the interview list).
 - **`BONUS_STAGES` in `referrals/page.tsx` is hardcoded** — update when actual bonus policy is confirmed.
+
+---
+
+## Session — G.Durga Prasad (09 July 2026)
+
+**Branch:** `Backend/Assesments-issues`
+
+---
+
+### 1. `GET /api/assessments/my/` — Empty Assignments Bug Fix
+
+**File:** `backend/apps/assessments/views/portal.py`
+
+**Problem:** Employees who joined through the recruitment pipeline (they have a `Candidate` row with `portal_user` linked to their `User`) were getting an empty list from `GET /api/assessments/my/` even though an assessment had been assigned to them.
+
+**Root cause:** `MyAssessmentView.get()` used an `if/else` — if `_get_candidate(user)` returned a `Candidate` object (non-None), it only queried `CandidateAssignment.objects.filter(candidate=candidate)`. The assign flow (`AssignAssessmentView`) stores the assignment on the `employee` FK when a User UUID is passed in. So users who are *both* a portal candidate and an active employee had their assignment stored on `employee=user`, but the view only looked at `candidate=candidate` — permanently returning zero results.
+
+**Who is affected:** Any employee who came through recruitment (has a `Candidate` record with `portal_user` set) and was assigned via the employee path (their User UUID was used in the assign call, not their Candidate integer PK).
+
+**Fix:** Changed the filter to union both FKs with a `Q` query when the user is a portal candidate.
+
+```python
+# Before (bug):
+if candidate:
+    assignments = base_qs.filter(candidate=candidate)
+else:
+    assignments = base_qs.filter(employee=request.user)
+
+# After (fix):
+if candidate:
+    # User may have assignments on either FK — check both paths
+    assignments = base_qs.filter(Q(candidate=candidate) | Q(employee=request.user))
+else:
+    assignments = base_qs.filter(employee=request.user)
+```
+
+The same bug existed in `_resolve_assignment()` (used by the respond, complete, and retry endpoints) — a portal candidate trying to submit a response or complete an assessment would also get 404 if their assignment was on the `employee` FK. Fixed with the same `Q` union:
+
+```python
+# Before (bug):
+filter_kwargs = {'id': assignment_id}
+if candidate:
+    filter_kwargs['candidate'] = candidate
+else:
+    filter_kwargs['employee'] = user
+
+# After (fix):
+if candidate:
+    lookup = Q(candidate=candidate) | Q(employee=user)
+else:
+    lookup = Q(employee=user)
+assignment = CandidateAssignment.objects.select_related('assessment').get(lookup, id=assignment_id)
+```
+
+---
+
+### Key Files Changed (09 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/assessments/views/portal.py` | `MyAssessmentView.get()` — filter changed to `Q(candidate=candidate) \| Q(employee=request.user)` when user is a portal candidate |
+| `backend/apps/assessments/views/portal.py` | `_resolve_assignment()` — same Q union fix; also covers respond, complete, and retry endpoints |
+
+---
+
+### Notes for Next Developer
+
+- **The assign endpoint stores on either `candidate` or `employee` FK** — which FK gets used depends on what the frontend sends as `candidate_id`. If it is a Candidate integer PK → stored on `candidate`. If it is a User UUID (employee) → stored on `employee`. The portal read endpoints now handle both cases correctly.
+- **`_get_candidate(user)` returning non-None does NOT mean all assignments are on the candidate FK** — do not revert to the `if/else` pattern. A user can be a portal candidate AND have assignments on the employee path simultaneously.
+- **No frontend changes in this session** — the fix is entirely in `backend/apps/assessments/views/portal.py`.

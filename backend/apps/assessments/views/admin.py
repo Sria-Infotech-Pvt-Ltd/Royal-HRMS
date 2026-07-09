@@ -257,14 +257,53 @@ class AssignAssessmentView(APIView):
         company_name = company.company_name if company else ''
         portal_url   = (company.portal_url if company else '') or ''
 
-        # ── Single candidate (new joiner) ─────────────────────────────────────
+        # ── Single candidate (new joiner) or employee sent as candidate_id ──────
         if candidate_id:
             from apps.recruitment.models import Candidate
+            from apps.accounts.models import User
+
+            candidate = None
             try:
                 candidate = Candidate.objects.get(pk=candidate_id)
-            except Candidate.DoesNotExist:
-                return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+            except (Candidate.DoesNotExist, ValueError):
+                # candidate_id is not a Candidate PK — the employee-assign UI
+                # sends the User UUID here, so fall through to the employee path.
+                pass
 
+            if candidate is None:
+                # Try resolving as a User UUID (primary key)
+                try:
+                    employee = User.objects.get(pk=candidate_id)
+                except (User.DoesNotExist, ValueError):
+                    return error('Candidate or employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+                assignment, created = CandidateAssignment.objects.get_or_create(
+                    employee=employee,
+                    assessment=assessment,
+                    defaults={'assigned_by': request.user, 'max_score': max_score, 'deadline': deadline},
+                )
+                if not created:
+                    return error('Assessment already assigned to this employee.', http_status=status.HTTP_409_CONFLICT)
+
+                if employee.email:
+                    import threading
+                    ctx = {
+                        'candidate_name': employee.full_name or employee.email,
+                        'assessment_title': assessment.title,
+                        'company_name': company_name,
+                        'portal_url': portal_url,
+                        'deadline': str(deadline) if deadline else '',
+                    }
+                    threading.Thread(
+                        target=_send_assessment_email,
+                        args=(employee.email, ctx),
+                        daemon=True,
+                    ).start()
+
+                logger.info('Assessment "%s" assigned to employee %s by %s', assessment.title, employee.employee_id, request.user.email)
+                return success('Assessment assigned to employee.', {'assignment_id': str(assignment.id)}, http_status=status.HTTP_201_CREATED)
+
+            # ── Candidate (new joiner) path ───────────────────────────────────
             assignment, created = CandidateAssignment.objects.get_or_create(
                 candidate=candidate,
                 assessment=assessment,
@@ -274,7 +313,6 @@ class AssignAssessmentView(APIView):
                 return error('Assessment already assigned to this candidate.', http_status=status.HTTP_409_CONFLICT)
 
             if candidate.portal_user_id:
-                from apps.accounts.models import User
                 User.objects.filter(
                     pk=candidate.portal_user_id, assessment_status=User.ASSESSMENT_COMPLETE
                 ).update(assessment_status=User.ASSESSMENT_PENDING)
