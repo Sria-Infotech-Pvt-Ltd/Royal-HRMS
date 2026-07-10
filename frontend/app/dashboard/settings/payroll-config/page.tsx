@@ -158,7 +158,7 @@ export default function PayrollConfigPage() {
 
       {/* Edit modal */}
       {editing && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setEditing(null)}>
+        <div className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setEditing(null)}>
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div className="font-semibold text-gray-900">Edit Rule — {editing.draft.name}</div>

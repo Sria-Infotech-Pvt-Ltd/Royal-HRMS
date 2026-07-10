@@ -4,41 +4,64 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
-import { LeaveRequest, PaginatedResponse, fmtShortDate } from "../_data";
+import { LeaveRequest, PaginatedResponse, ReqStatus, STATUS_LABEL, fmtShortDate } from "../_data";
 import StatusCell from "./StatusCell";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
+import StatusMultiSelect, { type StatusOption } from "./StatusMultiSelect";
 
-type Tab = "pending" | "history";
+interface BranchOption     { id: number; branch_name: string }
+interface DepartmentOption { id: number; name: string }
 
-export default function LeaveApprovals() {
-  const [tab,       setTab]       = useState<Tab>("pending");
+const STATUS_OPTIONS: StatusOption[] = (Object.keys(STATUS_LABEL) as ReqStatus[]).map(value => ({
+  value,
+  label: STATUS_LABEL[value],
+}));
+
+interface Props {
+  role: string;
+}
+
+export default function LeaveApprovals({ role }: Props) {
+  const isSystemAdmin = role === "system_admin";
+  const canFilterDept  = role === "system_admin" || role === "hr_admin";
+
+  const [branch,     setBranch]     = useState("");
+  const [department, setDepartment] = useState("");
+  const [statuses,   setStatuses]   = useState<string[]>([]);
   const [actioning, setActioning] = useState<string | null>(null);
   const [rejectId,  setRejectId]  = useState<string | null>(null);
   const [remarks,   setRemarks]   = useState("");
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
 
-  // One URL for every approver role — the backend returns pending for managers
-  // and l2_pending for HR automatically. No status param: never hardcode it here.
-  const { data: pending, refetch: refetchPending, loading: loadingPending } =
-    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?scope=team");
+  const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(
+    isSystemAdmin ? `${API.branches.list}?page_size=100` : null
+  );
+  const branches = Array.isArray(branchData) ? branchData : (branchData?.results ?? []);
 
-  const { data: history, refetch: refetchHistory, loading: loadingHistory } =
-    useFetch<PaginatedResponse<LeaveRequest>>(API.leave.requests + "?scope=team&status=approved,rejected,cancelled");
+  const { data: deptData } = useFetch<DepartmentOption[] | { results: DepartmentOption[] }>(
+    canFilterDept ? API.departments.list : null
+  );
+  const departments = Array.isArray(deptData) ? deptData : (deptData?.results ?? []);
 
-  const allPending = pending?.results ?? [];
-  const rows       = tab === "pending" ? allPending : (history?.results ?? []);
-  const loading    = tab === "pending" ? loadingPending : loadingHistory;
+  const params = new URLSearchParams({ scope: "team" });
+  if (isSystemAdmin && branch)        params.set("branch", branch);
+  if (canFilterDept && department)    params.set("department", department);
+  if (statuses.length > 0)            params.set("status", statuses.join(","));
 
-  function refetchAll() {
-    refetchPending();
-    refetchHistory();
-  }
+  // No status param → backend infers the pending queue for the caller's role
+  // (pending for managers, l2_pending for HR). Selecting terminal statuses
+  // (approved/rejected/cancelled) turns this into a history view instead —
+  // one filtered table replaces the old separate Pending/History tabs.
+  const { data, refetch, loading } = useFetch<PaginatedResponse<LeaveRequest>>(
+    `${API.leave.requests}?${params.toString()}`
+  );
+  const rows = data?.results ?? [];
 
   async function act(id: string, action: "approve" | "reject", rejectRemarks = "") {
     setActioning(id);
     try {
       await clientApi.post(API.leave.approve(id), { action, remarks: rejectRemarks });
-      refetchAll();
+      refetch();
     } finally {
       setActioning(null);
       setRejectId(null);
@@ -49,22 +72,31 @@ export default function LeaveApprovals() {
   return (
     <div className="flex flex-col gap-5">
 
-      {/* Sub-tabs */}
-      <div className="flex gap-2">
-        {(["pending", "history"] as const).map(t => (
-          <button key={t}
-            onClick={() => setTab(t)}
-            className={["px-4 py-1.5 rounded-full text-sm font-medium border transition-all",
-              tab === t ? "bg-blue-700 text-white border-blue-700" : "bg-white text-gray-500 border-gray-200 hover:border-blue-600 hover:text-blue-600"].join(" ")}>
-            {t === "pending" ? "Pending" : "History"}
-            {t === "pending" && allPending.length > 0 && (
-              <span className={["ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold",
-                tab === "pending" ? "bg-white text-blue-700" : "bg-amber-100 text-amber-700"].join(" ")}>
-                {allPending.length}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {isSystemAdmin && (
+          <select
+            value={branch}
+            onChange={e => setBranch(e.target.value)}
+            suppressHydrationWarning
+            className="px-3 py-1.5 text-[13px] rounded-lg border border-[var(--outline-v)] bg-white text-[var(--on-bg)] min-w-[160px]"
+          >
+            <option value="">All Branches</option>
+            {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
+          </select>
+        )}
+        {canFilterDept && (
+          <select
+            value={department}
+            onChange={e => setDepartment(e.target.value)}
+            suppressHydrationWarning
+            className="px-3 py-1.5 text-[13px] rounded-lg border border-[var(--outline-v)] bg-white text-[var(--on-bg)] min-w-[160px]"
+          >
+            <option value="">All Departments</option>
+            {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+        )}
+        <StatusMultiSelect options={STATUS_OPTIONS} selected={statuses} onChange={setStatuses} />
       </div>
 
       {/* Table */}
@@ -76,7 +108,9 @@ export default function LeaveApprovals() {
             </div>
           ) : rows.length === 0 ? (
             <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-              {tab === "pending" ? "No pending leave requests." : "No leave history yet."}
+              {statuses.length === 0 && !branch && !department
+                ? "No pending leave requests."
+                : "No leave requests match the selected filters."}
             </div>
           ) : (
             <table>

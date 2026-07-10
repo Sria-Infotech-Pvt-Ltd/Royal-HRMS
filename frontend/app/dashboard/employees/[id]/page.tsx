@@ -22,6 +22,8 @@ import ProfileForm from "./_components/ProfileForm";
 import { EmployeePickerInline } from "./_components/ReportingManagerCard";
 import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
 import { WishesTab } from "./_components/WishesTab";
+import { LeaveTab } from "./_components/LeaveTab";
+import { AttendanceTab } from "./_components/AttendanceTab";
 
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -437,6 +439,10 @@ export default function EmployeeProfilePage({
             />
           </div>
         </div>
+      ) : tab === "leave" ? (
+        <LeaveTab employeeId={id} />
+      ) : tab === "attendance" ? (
+        <AttendanceTab employeeId={id} />
       ) : tab === "approval" ? (
         <ApprovalMatrixTab employeeCode={id} branch={values.branch ?? ""} />
       ) : tab === "wishes" ? (

@@ -99,13 +99,15 @@ export interface PaginatedResponse<T> {
 }
 
 export interface LeaveStats {
-  total:     number;
-  pending:   number;
-  approved:  number;
-  rejected:  number;
-  cancelled: number;
-  year:      number;
-  balances:  BalanceSummary[];
+  total:        number;
+  pending:      number;
+  approved:     number;
+  rejected:     number;
+  cancelled:    number;
+  lop_days:     number;
+  lop_requests: number;
+  year:         number;
+  balances:     BalanceSummary[];
 }
 
 export interface BalanceSummary {
@@ -114,6 +116,40 @@ export interface BalanceSummary {
   total_days:         number;
   used_days:          number;
   available:          number;
+}
+
+export interface LeavePreviewHoliday {
+  // Pre-formatted by the backend (e.g. "15 Aug") — display as-is, do not
+  // pass through fmtDate (it expects an ISO date and would render "Invalid Date").
+  date: string;
+  name: string;
+}
+
+export interface LeavePreviewWeekOff {
+  date: string;  // ISO — safe to pass through fmtDate
+  day:  string;  // e.g. "Sunday" — backend-supplied, no need to recompute
+}
+
+// Confirmed shape of GET /leave/requests/?action=preview&... — see
+// LeavePreview usage in ApplyLeaveForm.tsx for the full field list.
+export interface LeavePreview {
+  leave_type:             LeaveTypeKey;
+  start_date:             string;
+  end_date:               string;
+  duration:               DurationKey;
+  calendar_days:          number;
+  company_holidays:       LeavePreviewHoliday[];
+  company_holiday_count:  number;
+  week_offs:              LeavePreviewWeekOff[];
+  week_off_count:         number;
+  sandwich_leave_enabled: boolean;
+  actual_leave_days:      number;
+  available_balance:      number;
+  earned_leave_used:      number;
+  lop_days:               number;
+  lop_enabled:            boolean;
+  sufficient_balance:     boolean;
+  warning:                string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -73,7 +73,7 @@ export default function LeavePageClient({ role }: Props) {
           />
         )}
         {active === "apply"     && <ApplyLeaveForm onCancel={() => setActive("dashboard")} />}
-        {active === "approvals" && <LeaveApprovals />}
+        {active === "approvals" && <LeaveApprovals role={role} />}
         {active === "calendar"  && <TeamCalendar />}
         {active === "analytics" && <LeaveAnalytics role={role} />}
       </div>

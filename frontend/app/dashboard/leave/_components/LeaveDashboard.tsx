@@ -12,6 +12,7 @@ import {
 } from "../_data";
 import RejectModal from "./RejectModal";
 import StatusCell from "./StatusCell";
+import LopBadge from "./LopBadge";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 
 interface Props {
@@ -160,6 +161,20 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
             </div>
             <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
           </div>
+
+          <div className="stat-card">
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+              <div>
+                <div className="stat-label">Loss of Pay (LOP)</div>
+                <div className="stat-value" style={{ color: "var(--warn)" }}>{stats?.lop_days ?? 0}</div>
+                <div className="stat-sub">{stats?.lop_requests ?? 0} request{(stats?.lop_requests ?? 0) !== 1 ? "s" : ""} in {currentYear}</div>
+              </div>
+              <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
+                <i className="ti ti-coin-off" />
+              </div>
+            </div>
+            <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
+          </div>
         </div>
 
         <div className="card">
@@ -199,7 +214,10 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                       <td>{r.leave_type_display}</td>
                       <td>{fmtShortDate(r.start_date)}</td>
                       <td>{fmtShortDate(r.end_date)}</td>
-                      <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
+                      <td style={{ textAlign: "center", fontWeight: 700 }}>
+                        {r.total_days}
+                        <LopBadge request={r} />
+                      </td>
                       <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
                       <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
                         {r.approved_by || "—"}
@@ -249,6 +267,20 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
             </div>
             <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
               <i className="ti ti-checks" />
+            </div>
+          </div>
+          <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
+        </div>
+
+        <div className="stat-card">
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <div className="stat-label">Loss of Pay (LOP)</div>
+              <div className="stat-value" style={{ color: "var(--warn)" }}>{stats?.lop_days ?? 0}</div>
+              <div className="stat-sub">{stats?.lop_requests ?? 0} request{(stats?.lop_requests ?? 0) !== 1 ? "s" : ""} · {scopeLabel}</div>
+            </div>
+            <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
+              <i className="ti ti-coin-off" />
             </div>
           </div>
           <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
@@ -339,7 +371,10 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                     <td>{r.leave_type_display}</td>
                     <td>{fmtShortDate(r.start_date)}</td>
                     <td>{fmtShortDate(r.end_date)}</td>
-                    <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
+                    <td style={{ textAlign: "center", fontWeight: 700 }}>
+                      {r.total_days}
+                      <LopBadge request={r} />
+                    </td>
                     <td style={{ textAlign: "center" }}>
                       <StatusCell request={r} />
                     </td>
@@ -374,7 +409,10 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                     <td>{r.leave_type_display}</td>
                     <td>{fmtShortDate(r.start_date)}</td>
                     <td>{fmtShortDate(r.end_date)}</td>
-                    <td style={{ textAlign: "center", fontWeight: 700 }}>{r.total_days}</td>
+                    <td style={{ textAlign: "center", fontWeight: 700 }}>
+                      {r.total_days}
+                      <LopBadge request={r} />
+                    </td>
                     <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
                     <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
                       {r.approved_by || "—"}

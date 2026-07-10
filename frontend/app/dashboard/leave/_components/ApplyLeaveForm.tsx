@@ -6,7 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import {
-  LeaveBalance, LeavePolicy, LeaveRequest,
+  LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
   LeaveTypeKey, DurationKey,
   LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
   calcWorkingDays, fmtDate,
@@ -79,9 +79,27 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const convertToLop   = policy?.convert_to_lop ?? false;
   const exceedsBalance = !ltConfig.isLwp && workDays > available && workDays > 0;
   // With convert_to_lop on, exceeding balance is allowed — the shortfall is
-  // processed as LOP by the backend rather than blocking submission.
+  // processed as LOP by the backend rather than blocking submission. This is
+  // only the instant client estimate; once the server preview loads it takes over.
   const overLimit = exceedsBalance && !convertToLop;
-  const lopDays   = exceedsBalance && convertToLop ? workDays - available : 0;
+
+  // Server-side preview — fires once leave_type, start_date, and end_date are
+  // all selected. Gives the authoritative breakdown (holidays, week-offs,
+  // balance) that the client-side calcWorkingDays estimate above can't see.
+  const previewEndDate = isHalfDay ? form.from_date : form.to_date;
+  const canPreview      = !!(form.leave_type && form.from_date && previewEndDate);
+  const previewUrl = canPreview
+    ? `${API.leave.requests}?action=preview`
+      + `&leave_type=${encodeURIComponent(form.leave_type)}`
+      + `&start_date=${encodeURIComponent(form.from_date)}`
+      + `&end_date=${encodeURIComponent(previewEndDate)}`
+      + `&duration=${encodeURIComponent(form.duration)}`
+    : null;
+  const { data: preview, loading: previewLoading } = useFetch<LeavePreview>(previewUrl);
+
+  const previewHolidays = preview?.company_holidays ?? [];
+  const previewWeekOffs = preview?.week_offs ?? [];
+  const insufficientBalance = !!preview && !preview.sufficient_balance && !preview.lop_enabled;
 
   function setField<K extends keyof LeaveForm>(key: K, val: LeaveForm[K]) {
     setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
@@ -97,8 +115,11 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     if (!form.reason.trim())                                e.reason    = "Please provide a reason.";
     if (form.reason.trim().length < 10)                     e.reason    = "Reason must be at least 10 characters.";
     if (ltConfig.requiresDoc && !docFile)                   e.doc       = "Supporting document is required for this leave type.";
-    if (overLimit)                                          e.from_date = `Only ${available} working day(s) available.`;
+    // Once the server preview has loaded, it's authoritative — defer to
+    // insufficientBalance below instead of this local, holiday-blind estimate.
+    if (!preview && overLimit)                              e.from_date = `Only ${available} working day(s) available.`;
     if (workDays <= 0 && form.from_date)                    e.from_date = "Selected date range has no working days.";
+    if (insufficientBalance)                                e.from_date = "Insufficient leave balance for the selected dates.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -274,50 +295,103 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                 </div>
               </div>
 
-              {workDays > 0 && (
-                <div className="flex flex-col gap-3">
-                  <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
-                    overLimit ? "bg-red-50 border-red-200" : lopDays > 0 ? "bg-amber-50 border-amber-200" : "border-blue-100"].join(" ")}
-                    style={overLimit || lopDays > 0 ? {} : { background: "rgba(30,78,140,0.05)" }}>
-                    <div className="flex items-center gap-2">
-                      <i className={`ti ${overLimit ? "ti-alert-triangle text-red-500" : lopDays > 0 ? "ti-alert-circle text-amber-600" : "ti-calendar-check"} text-sm`}
-                        style={!overLimit && lopDays === 0 ? { color: "#1e4e8c" } : {}} />
-                      <span className={`text-sm font-bold ${overLimit ? "text-red-600" : lopDays > 0 ? "text-amber-700" : "text-blue-800"}`}>
-                        {workDays} working day{workDays !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    {!ltConfig.isLwp && (
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${overLimit ? "bg-red-100 text-red-700" : lopDays > 0 ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
-                        {overLimit
-                          ? `Exceeds balance by ${workDays - available}d`
-                          : lopDays > 0
-                            ? `${lopDays}d will be LOP`
-                            : `${available - workDays}d will remain`}
+              {/* Instant client-side estimate — shown only until the authoritative
+                  server preview below arrives, so the two never disagree on screen. */}
+              {!preview && workDays > 0 && (
+                <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
+                  overLimit ? "bg-red-50 border-red-200" : "border-blue-100"].join(" ")}
+                  style={overLimit ? {} : { background: "rgba(30,78,140,0.05)" }}>
+                  <div className="flex items-center gap-2">
+                    <i className={`ti ${overLimit ? "ti-alert-triangle text-red-500" : "ti-calendar-check"} text-sm`}
+                      style={!overLimit ? { color: "#1e4e8c" } : {}} />
+                    <span className={`text-sm font-bold ${overLimit ? "text-red-600" : "text-blue-800"}`}>
+                      {workDays} working day{workDays !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  {!ltConfig.isLwp && overLimit && (
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                      Exceeds balance by {workDays - available}d
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {previewLoading && canPreview && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <i className="ti ti-loader-2 animate-spin" /> Checking balance and holidays…
+                </div>
+              )}
+
+              {preview && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={["text-sm font-bold", preview.lop_days > 0 ? "text-amber-700" : "text-blue-800"].join(" ")}>
+                      {preview.actual_leave_days} working day{preview.actual_leave_days !== 1 ? "s" : ""}
+                    </span>
+                    {preview.lop_days > 0 && (
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                        {preview.lop_days}d will be LOP
                       </span>
                     )}
                   </div>
 
-                  {lopDays > 0 && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-col gap-3">
-                      <div className="grid grid-cols-2 gap-y-1.5 text-sm">
-                        <span className="text-gray-500">Available {ltConfig.label}</span>
-                        <span className="font-semibold text-gray-800 text-right">{available} Days</span>
-                        <span className="text-gray-500">Requested Leave</span>
-                        <span className="font-semibold text-gray-800 text-right">{workDays} Days</span>
-                        <span className="text-gray-500">{ltConfig.label} Used</span>
-                        <span className="font-semibold text-gray-800 text-right">{workDays - lopDays} Days</span>
-                        <span className="text-gray-500">LOP Days</span>
-                        <span className="font-semibold text-amber-700 text-right">{lopDays} Days</span>
-                      </div>
-                      <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-100 rounded-lg px-3 py-2">
-                        <i className="ti ti-info-circle mt-0.5 flex-shrink-0" />
-                        <span>
-                          Your available leave balance will be exhausted. The remaining {lopDays} day{lopDays !== 1 ? "s" : ""} will
-                          be treated as Leave Without Pay (LOP) if this request is approved.
-                        </span>
+                  <div className="grid grid-cols-2 gap-y-1.5 text-sm border-t border-gray-200 pt-3">
+                    <span className="text-gray-500">Calendar Days</span>
+                    <span className="font-semibold text-gray-800 text-right">{preview.calendar_days}</span>
+                    <span className="text-gray-500">Actual Leave Days</span>
+                    <span className="font-semibold text-gray-800 text-right">{preview.actual_leave_days}</span>
+                    <span className="text-gray-500">Available Balance</span>
+                    <span className="font-semibold text-gray-800 text-right">{preview.available_balance}</span>
+                    <span className="text-gray-500">Earned Leave Used</span>
+                    <span className="font-semibold text-gray-800 text-right">{preview.earned_leave_used}</span>
+                    <span className="text-gray-500">LOP Days</span>
+                    <span className={["font-semibold text-right", preview.lop_days > 0 ? "text-amber-700" : "text-gray-800"].join(" ")}>
+                      {preview.lop_days}
+                    </span>
+                  </div>
+
+                  {previewHolidays.length > 0 && (
+                    <div className="border-t border-gray-200 pt-2.5">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Company Holidays</p>
+                      <div className="flex flex-col gap-1">
+                        {previewHolidays.map(h => (
+                          <div key={`${h.date}-${h.name}`} className="flex items-center justify-between text-xs text-gray-600">
+                            <span>{h.name}</span>
+                            {/* Backend sends a pre-formatted display string (e.g. "15 Aug"),
+                                not an ISO date — render as-is, do not pass through fmtDate. */}
+                            <span className="text-gray-400">{h.date}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
+
+                  {previewWeekOffs.length > 0 && (
+                    <div className="border-t border-gray-200 pt-2.5">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Week-Offs</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {previewWeekOffs.map(w => (
+                          <span key={w.date} className="text-xs text-gray-600 bg-white border border-gray-200 rounded-full px-2.5 py-0.5">
+                            {fmtDate(w.date)} · {w.day}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {preview?.warning && (
+                <div className="flex items-start gap-2 text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3.5 py-2.5">
+                  <i className="ti ti-info-circle mt-0.5 flex-shrink-0" />
+                  <span>{preview.warning}</span>
+                </div>
+              )}
+
+              {insufficientBalance && (
+                <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5">
+                  <i className="ti ti-alert-triangle mt-0.5 flex-shrink-0" />
+                  <span>Insufficient leave balance for the selected dates. This request cannot be submitted.</span>
                 </div>
               )}
             </div>
@@ -405,9 +479,9 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">
               Cancel
             </button>
-            <button onClick={handleSubmit} disabled={submitting}
+            <button onClick={handleSubmit} disabled={submitting || insufficientBalance}
               className="flex items-center gap-2 px-7 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md"
-              style={{ background: submitting ? "#7fa3c8" : "#1e4e8c", cursor: submitting ? "not-allowed" : "pointer" }}>
+              style={{ background: submitting || insufficientBalance ? "#7fa3c8" : "#1e4e8c", cursor: submitting || insufficientBalance ? "not-allowed" : "pointer" }}>
               {submitting
                 ? <><i className="ti ti-loader-2" /> Submitting…</>
                 : <><i className="ti ti-send" /> Submit Request</>}
