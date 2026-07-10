@@ -1,5 +1,6 @@
 import logging
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -67,16 +68,16 @@ def _get_candidate(user):
 def _resolve_assignment(user, assignment_id):
     """
     Returns (assignment, error_response). Works for both candidate and employee paths.
+    A user may be both a portal candidate and an employee, so check both FKs.
     """
     candidate = _get_candidate(user)
-    filter_kwargs = {'id': assignment_id}
     if candidate:
-        filter_kwargs['candidate'] = candidate
+        lookup = Q(candidate=candidate) | Q(employee=user)
     else:
-        filter_kwargs['employee'] = user
+        lookup = Q(employee=user)
     try:
         return (
-            CandidateAssignment.objects.select_related('assessment').get(**filter_kwargs),
+            CandidateAssignment.objects.select_related('assessment').get(lookup, id=assignment_id),
             None,
         )
     except CandidateAssignment.DoesNotExist:
@@ -117,7 +118,8 @@ class MyAssessmentView(APIView):
                                        )
         )
         if candidate:
-            assignments = base_qs.filter(candidate=candidate)
+            # User may have assignments on either FK — check both paths
+            assignments = base_qs.filter(Q(candidate=candidate) | Q(employee=request.user))
         else:
             assignments = base_qs.filter(employee=request.user)
 

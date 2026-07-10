@@ -1555,7 +1555,55 @@ const statCards = [
   { label: "In Pipeline",    value: backendStats?.in_pipeline    ?? myReferrals.filter(...).length, ... },
   { label: "Selected",       value: backendStats?.selected       ?? myReferrals.filter(...).length, ... },
   { label: "Converted",      value: backendStats?.converted      ?? myReferrals.filter(...).length, ... },
-];
+];`n`n---`n`n## Session — G.Durga Prasad (09 July 2026)
+
+**Branch:** `Backend/Assesments-issues`
+
+---
+
+### 1. `GET /api/assessments/my/` — Empty Assignments Bug Fix
+
+**File:** `backend/apps/assessments/views/portal.py`
+
+**Problem:** Employees who joined through the recruitment pipeline (they have a `Candidate` row with `portal_user` linked to their `User`) were getting an empty list from `GET /api/assessments/my/` even though an assessment had been assigned to them.
+
+**Root cause:** `MyAssessmentView.get()` used an `if/else` — if `_get_candidate(user)` returned a `Candidate` object (non-None), it only queried `CandidateAssignment.objects.filter(candidate=candidate)`. The assign flow (`AssignAssessmentView`) stores the assignment on the `employee` FK when a User UUID is passed in. So users who are *both* a portal candidate and an active employee had their assignment stored on `employee=user`, but the view only looked at `candidate=candidate` — permanently returning zero results.
+
+**Who is affected:** Any employee who came through recruitment (has a `Candidate` record with `portal_user` set) and was assigned via the employee path (their User UUID was used in the assign call, not their Candidate integer PK).
+
+**Fix:** Changed the filter to union both FKs with a `Q` query when the user is a portal candidate.
+
+```python
+# Before (bug):
+if candidate:
+    assignments = base_qs.filter(candidate=candidate)
+else:
+    assignments = base_qs.filter(employee=request.user)
+
+# After (fix):
+if candidate:
+    # User may have assignments on either FK — check both paths
+    assignments = base_qs.filter(Q(candidate=candidate) | Q(employee=request.user))
+else:
+    assignments = base_qs.filter(employee=request.user)
+```
+
+The same bug existed in `_resolve_assignment()` (used by the respond, complete, and retry endpoints) — a portal candidate trying to submit a response or complete an assessment would also get 404 if their assignment was on the `employee` FK. Fixed with the same `Q` union:
+
+```python
+# Before (bug):
+filter_kwargs = {'id': assignment_id}
+if candidate:
+    filter_kwargs['candidate'] = candidate
+else:
+    filter_kwargs['employee'] = user
+
+# After (fix):
+if candidate:
+    lookup = Q(candidate=candidate) | Q(employee=user)
+else:
+    lookup = Q(employee=user)
+assignment = CandidateAssignment.objects.select_related('assessment').get(lookup, id=assignment_id)
 ```
 
 ---
@@ -1671,7 +1719,12 @@ Turned out there are three separate places in the app where an employee can see 
 | `app/dashboard/my-requests/page.tsx` | `NewLeaveModal` sends `start_date`/`end_date`/`duration` (was `from_date`/`to_date`); `"lop"` → `"lwp"`; all inline styles converted to global/Tailwind classes; `.btn-primary` → `.btn-filled`; switched to shared `LeaveRequest`/`PaginatedResponse`/`fmtDate`/`StatusCell`/`LeaveRequestDetailModal` (fixes a Session-16-pattern pagination bug); added row-click detail modal + Cancel Request wiring |
 | `app/dashboard/approvals/page.tsx` | `MyRequestsSection` — added `cancelRequest(id)`, wired `onCancelRequest` into its `LeaveRequestDetailModal` call |
 | `app/dashboard/leave/_components/LeaveDashboard.tsx` | Employee branch's detail modal now passes `onCancelRequest={() => cancelMine(...)}`; `cancelMine` gained toast feedback and now refetches both `requestsUrl` and the mine-list |
-| `app/dashboard/leave/_components/LeaveRequestDetailModal.tsx` | Cancel Request button now shows a `window.confirm` prompt before firing |
+| `app/dashboard/leave/_components/LeaveRequestDetailModal.tsx` | Cancel Request button now shows a `window.confirm` prompt before firing |`n`n---`n`n### Key Files Changed (09 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/assessments/views/portal.py` | `MyAssessmentView.get()` — filter changed to `Q(candidate=candidate) \| Q(employee=request.user)` when user is a portal candidate |
+| `backend/apps/assessments/views/portal.py` | `_resolve_assignment()` — same Q union fix; also covers respond, complete, and retry endpoints |
 
 ---
 
@@ -1685,4 +1738,6 @@ Turned out there are three separate places in the app where an employee can see 
 - **Custom leave types still can't be applied for, and now we know exactly why**: `LeaveRequestCreateSerializer.validate_leave_type` (`backend/apps/hrms/views/leave.py`) has logic to accept custom types via a `LeavePolicy` lookup, but it's dead code — `LeaveRequest.leave_type` is a model `CharField(choices=LEAVE_TYPE_CHOICES)`, so DRF's auto-generated `ChoiceField` rejects anything outside the fixed six before that validator ever runs. Backend fix needed: widen or drop the model-level `choices=`.
 - **The `Q()`/`F()` bug in `_deduct_balance_safe` flagged in Session 18 is confirmed fixed** — `leave.py:212` already uses `F('used_days') + days` correctly. No longer an open item.
 - **Holiday Calendar's branch field type mismatch**: the given API spec described `branch` as a UUID, but this app's real `GET /branch/branches/` returns numeric `id`s (confirmed via `BranchManagement.tsx`). Implemented using whatever `id` the branches endpoint actually returns (`number | null`) rather than forcing a UUID type that doesn't match reality — flag to the backend/spec owner if this becomes a real mismatch once tested against the live server.
-- **Three "My Leave Requests" views now all support Cancel, but each still has its own separate `cancelRequest`/`cancelMine` function** — not shared, since each page's data-fetching/refetch shape differs slightly. If a fourth such view is ever added, consider extracting a `useCancelLeaveRequest()` hook instead of copy-pasting a fourth time.
+- **Three "My Leave Requests" views now all support Cancel, but each still has its own separate `cancelRequest`/`cancelMine` function** — not shared, since each page's data-fetching/refetch shape differs slightly. If a fourth such view is ever added, consider extracting a `useCancelLeaveRequest()` hook instead of copy-pasting a fourth time.`n`n---`n`n- **The assign endpoint stores on either `candidate` or `employee` FK** — which FK gets used depends on what the frontend sends as `candidate_id`. If it is a Candidate integer PK → stored on `candidate`. If it is a User UUID (employee) → stored on `employee`. The portal read endpoints now handle both cases correctly.
+- **`_get_candidate(user)` returning non-None does NOT mean all assignments are on the candidate FK** — do not revert to the `if/else` pattern. A user can be a portal candidate AND have assignments on the employee path simultaneously.
+- **No frontend changes in this session** — the fix is entirely in `backend/apps/assessments/views/portal.py`.
