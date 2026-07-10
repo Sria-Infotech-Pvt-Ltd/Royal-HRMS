@@ -215,9 +215,13 @@ export default function AssessmentsPage() {
   const [retaking, setRetaking]               = useState<string | null>(null);
   const [retakeError, setRetakeError]         = useState<Record<string, string>>({});
 
-  useEffect(() => { if (data?.all_complete) setAssessmentStatus("complete"); }, [data?.all_complete]);
-
   const assignments = data?.assignments ?? [];
+
+  // Only mark complete when the backend confirms AND there is at least one assignment.
+  // all_complete is vacuously true when assignments is empty — do not unlock the proxy in that case.
+  const allComplete = data?.all_complete === true && assignments.length > 0;
+
+  useEffect(() => { if (allComplete) setAssessmentStatus("complete"); }, [allComplete]);
 
   const [loggingOut, setLoggingOut] = useState(false);
   async function handleLogout() {
@@ -322,7 +326,7 @@ export default function AssessmentsPage() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {data?.all_complete && (
+          {allComplete && (
             <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
               style={{ padding: "8px 18px", borderRadius: 9, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
               Go to Dashboard <i className="ti ti-arrow-right" />
@@ -618,7 +622,7 @@ export default function AssessmentsPage() {
                       ? "Your HR team will assign assessments before you can proceed to the dashboard."
                       : "Click on any question or video in the sidebar on the left to start your assessment."}
                   </p>
-                  {data?.all_complete && (
+                  {allComplete && (
                     <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
                       style={{ marginTop: 24, padding: "11px 28px", borderRadius: 10, background: "#16a34a", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
                       All Done — Go to Dashboard <i className="ti ti-arrow-right" />
