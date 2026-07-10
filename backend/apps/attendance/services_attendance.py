@@ -276,15 +276,28 @@ class AttendanceProcessorService:
     @classmethod
     def process_day(cls, employee, for_date: date) -> AttendanceRecord:
         """Build or update the AttendanceRecord for this employee on this date."""
-        cfg = _get_settings()
-        punches = list(
+        cfg         = _get_settings()
+        branch_name = getattr(employee, 'branch', '') or ''
+        punches     = list(
             AttendancePunch.objects
             .filter(employee=employee, punched_at__date=for_date)
             .order_by('punched_at')
         )
 
+        # Holiday check takes priority over weekly off and punch calculation
+        if cls._is_holiday(for_date, branch_name):
+            record_data = {
+                'status':                AttendanceRecord.STATUS_HOLIDAY,
+                'first_punch_in':        None,
+                'last_punch_out':        None,
+                'total_working_minutes': 0,
+                'overtime_minutes':      0,
+                'is_late':               False,
+                'is_early_exit':         False,
+                'note':                  'Holiday',
+            }
         # Weekly off with no punches → mark weekly_off, not absent
-        if not punches and cls._is_weekly_off(for_date, cfg):
+        elif not punches and cls._is_weekly_off(for_date, cfg):
             record_data = {
                 'status':                AttendanceRecord.STATUS_WEEKLY_OFF,
                 'first_punch_in':        None,
@@ -304,6 +317,18 @@ class AttendanceProcessorService:
             defaults=record_data,
         )
         return record
+
+    @staticmethod
+    def _is_holiday(for_date: date, branch_name: str = '') -> bool:
+        """Return True if for_date is an active holiday for this branch."""
+        from apps.hrms.models import Holiday
+        from django.db.models import Q
+        qs = Holiday.objects.filter(date=for_date, is_active=True)
+        if branch_name:
+            qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
+        else:
+            qs = qs.filter(branch__isnull=True)
+        return qs.exists()
 
     @staticmethod
     def _is_weekly_off(for_date: date, cfg) -> bool:
@@ -487,13 +512,20 @@ class AttendanceDashboardService:
         """
         Powers the four stat cards on the My Attendance page.
         """
-        records = cls._month_records(employee, year, month)
+        import calendar as _cal
+        _, days_in_month = _cal.monthrange(year, month)
+        month_start   = date(year, month, 1)
+        month_end     = date(year, month, days_in_month)
+        branch_name   = getattr(employee, 'branch', '') or ''
+        records       = cls._month_records(employee, year, month)
+        holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
+
         working_records = [
             r for r in records
             if r.status not in (
                 AttendanceRecord.STATUS_WEEKLY_OFF,
                 AttendanceRecord.STATUS_HOLIDAY,
-            )
+            ) and r.date not in holiday_dates
         ]
         days_present  = sum(1 for r in records if r.status in (
             AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE,
@@ -510,7 +542,9 @@ class AttendanceDashboardService:
         )
 
         lop_pending = sum(
-            1 for r in records if r.status == AttendanceRecord.STATUS_ABSENT
+            1 for r in records
+            if r.status == AttendanceRecord.STATUS_ABSENT
+            and r.date not in holiday_dates
         )
 
         return {
@@ -527,16 +561,28 @@ class AttendanceDashboardService:
         """
         Powers the Monthly Summary grid (6-cell grid on the page).
         """
-        import calendar as cal_module
-        records = cls._month_records(employee, year, month)
+        import calendar as _cal
+        _, days_in_month = _cal.monthrange(year, month)
+        month_start   = date(year, month, 1)
+        month_end     = date(year, month, days_in_month)
+        branch_name   = getattr(employee, 'branch', '') or ''
+        records       = cls._month_records(employee, year, month)
+        holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
 
-        working_days = sum(1 for r in records if r.status not in (
-            AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY,
-        ))
+        working_days = sum(
+            1 for r in records
+            if r.status not in (
+                AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY,
+            ) and r.date not in holiday_dates
+        )
         days_present = sum(1 for r in records if r.status in (
             AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE,
         ))
-        days_absent  = sum(1 for r in records if r.status == AttendanceRecord.STATUS_ABSENT)
+        days_absent  = sum(
+            1 for r in records
+            if r.status == AttendanceRecord.STATUS_ABSENT
+            and r.date not in holiday_dates
+        )
         leave_days   = sum(1 for r in records if r.status == AttendanceRecord.STATUS_ON_LEAVE)
         half_days    = sum(1 for r in records if r.status == AttendanceRecord.STATUS_HALF_DAY)
         ot_minutes   = sum(r.overtime_minutes for r in records)
@@ -563,15 +609,18 @@ class AttendanceDashboardService:
         month_start   = date(year, month, 1)
         month_end     = date(year, month, days_in_month)
         today         = timezone.localdate()
+        branch_name   = getattr(employee, 'branch', '') or ''
         records       = {r.date: r for r in cls._month_records(employee, year, month)}
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
+        holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
         off_days      = cls._weekly_off_days()
         pending_dates = cls._pending_correction_dates(employee, year, month)
 
         days: dict[int, dict] = {}
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
-                day_num, year, month, records, leave_dates, off_days, pending_dates, today,
+                day_num, year, month, records, leave_dates, off_days,
+                pending_dates, today, holiday_dates,
             )
             if entry is not None:
                 days[day_num] = entry
@@ -679,17 +728,31 @@ class AttendanceDashboardService:
         return {'saturday', 'sunday'}
 
     @staticmethod
+    def _holiday_dates(month_start: date, month_end: date, branch_name: str = '') -> set:
+        """Returns set of active holiday dates in [month_start, month_end] for the branch."""
+        from apps.hrms.models import Holiday
+        from django.db.models import Q
+        qs = Holiday.objects.filter(date__gte=month_start, date__lte=month_end, is_active=True)
+        if branch_name:
+            qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
+        else:
+            qs = qs.filter(branch__isnull=True)
+        return set(qs.values_list('date', flat=True))
+
+    @staticmethod
     def _build_day(
         day_num: int, year: int, month: int,
         records: dict, leave_dates: set, off_days: set,
         pending_dates: set, today: date,
+        holiday_dates: set = None,
     ) -> dict | None:
         """Builds the response dict for one calendar day; returns None for blank future days."""
-        cur = date(year, month, day_num)
-        day = cur.strftime('%A').lower()
-        rec = records.get(cur)
+        cur           = date(year, month, day_num)
+        day           = cur.strftime('%A').lower()
+        rec           = records.get(cur)
+        holiday_dates = holiday_dates or set()
 
-        if rec and rec.status == AttendanceRecord.STATUS_HOLIDAY:
+        if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
             key = AttendanceRecord.STATUS_HOLIDAY
         elif day in off_days or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
             key = AttendanceRecord.STATUS_WEEKLY_OFF

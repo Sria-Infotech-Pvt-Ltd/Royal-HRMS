@@ -22,10 +22,10 @@ const LEGEND = [
   { label: "Present",    bg: "var(--success-c)",          color: "var(--success)"   },
   { label: "Late",       bg: "var(--warn-c)",             color: "var(--warn)"      },
   { label: "Absent",     bg: "var(--error-c)",            color: "var(--error)"     },
-  { label: "On Leave",   bg: "rgba(168,85,247,0.12)",     color: "#a855f7"          },
+  { label: "On Leave",   bg: "rgba(59,130,246,0.12)",     color: "#3b82f6"          },
   { label: "Half Day",   bg: "rgba(251,146,60,0.15)",     color: "#ea580c"          },
   { label: "Weekly Off", bg: "var(--bg-low)",             color: "var(--outline)"   },
-  { label: "Holiday",    bg: "rgba(59,130,246,0.12)",     color: "#3b82f6"          },
+  { label: "Holiday",    bg: "rgba(168,85,247,0.12)",     color: "#a855f7"          },
 ];
 
 type Tab = "calendar" | "history";

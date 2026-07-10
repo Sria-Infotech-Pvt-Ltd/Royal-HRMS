@@ -34,12 +34,15 @@ export interface MonthlySummary {
 }
 
 export interface DayRecord {
-  status:        "present" | "late" | "absent" | "half_day" | "weekly_off" | "holiday" | "on_leave";
-  clockIn:       string | null;
-  clockOut:      string | null;
-  hours:         string | null;
-  note:          string | null;
-  canRegularize: boolean;
+  date:                    string;
+  status:                  string;       // display string from backend: "Present", "Holiday", etc.
+  color:                   string;       // hex color supplied by backend
+  clockIn:                 string | null;
+  clockOut:                string | null;
+  hours:                   string | null;
+  note:                    string | null;
+  canRegularize:           boolean;
+  regularization_required: boolean;
 }
 
 export interface CalendarResponse {
