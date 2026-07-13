@@ -4,6 +4,7 @@ import { useState, Fragment } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 import ItemsModal from "./_components/ItemsModal";
 
 interface AssessmentSettings {
@@ -117,6 +118,10 @@ function StatusBadge({ status }: { status: AssessmentCandidate["status"] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AssessmentsPage() {
+  const canCreate = usePermission("recruitment.create");
+  const canEdit   = usePermission("recruitment.edit");
+  const canDelete = usePermission("recruitment.delete");
+
   const { data, loading, error, refetch } = useFetch<{ results: Assessment[] }>(API.assessments.list);
   const assessments = data?.results ?? [];
 
@@ -255,9 +260,11 @@ export default function AssessmentsPage() {
           <h2 className="page-title">Assessment Management</h2>
           <p className="page-subtitle">Build pre-onboarding assessments and assign them to candidates</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          <i className="ti ti-plus" /> New Assessment
-        </button>
+        {canCreate && (
+          <button className="btn btn-primary" onClick={openCreate}>
+            <i className="ti ti-plus" /> New Assessment
+          </button>
+        )}
       </div>
 
       {/* Overall stats */}
@@ -293,7 +300,7 @@ export default function AssessmentsPage() {
           <i className="ti ti-clipboard" />
           <h3>No assessments yet</h3>
           <p>Create your first assessment to assign to candidates during onboarding.</p>
-          <button className="btn btn-primary mt-12" onClick={openCreate}>Create Assessment</button>
+          {canCreate && <button className="btn btn-primary mt-12" onClick={openCreate}>Create Assessment</button>}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -320,18 +327,26 @@ export default function AssessmentsPage() {
                     <button className="btn btn-ghost btn-sm" onClick={() => toggleResults(a.id)}>
                       <i className={`ti ${expandedId === a.id ? "ti-chevron-up" : "ti-chevron-down"}`} /> Results
                     </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setItemsFor(a)}>
-                      <i className="ti ti-layout-list" /> Sections
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openAssign(a)}>
-                      <i className="ti ti-user-plus" /> Assign
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(a)}>
-                      <i className="ti ti-pencil" />
-                    </button>
-                    <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteAssessment(a.id)}>
-                      <i className="ti ti-trash" />
-                    </button>
+                    {canEdit && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => setItemsFor(a)}>
+                        <i className="ti ti-layout-list" /> Sections
+                      </button>
+                    )}
+                    {canCreate && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => openAssign(a)}>
+                        <i className="ti ti-user-plus" /> Assign
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(a)}>
+                        <i className="ti ti-pencil" />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteAssessment(a.id)}>
+                        <i className="ti ti-trash" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

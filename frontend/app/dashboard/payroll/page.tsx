@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePermission } from "@/hooks/usePermission";
 import PayrollDashboard from "./_components/PayrollDashboard";
 import RunPayrollWizard from "./_components/RunPayrollWizard";
 import PayrollReports   from "./_components/PayrollReports";
@@ -15,6 +16,7 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 export default function PayrollPage() {
+  const canCreate   = usePermission("payroll.create");
   const [active,     setActive]     = useState<TabId>("dashboard");
   const [runWizard,  setRunWizard]  = useState(false);
 
@@ -30,9 +32,11 @@ export default function PayrollPage() {
             <button className="btn btn-ghost btn-sm">
               <i className="ti ti-history" /> View History
             </button>
-            <button className="btn btn-filled btn-sm" onClick={() => setRunWizard(true)}>
-              <i className="ti ti-player-play" /> Run Payroll
-            </button>
+            {canCreate && (
+              <button className="btn btn-filled btn-sm" onClick={() => setRunWizard(true)}>
+                <i className="ti ti-player-play" /> Run Payroll
+              </button>
+            )}
           </div>
         )}
       </div>

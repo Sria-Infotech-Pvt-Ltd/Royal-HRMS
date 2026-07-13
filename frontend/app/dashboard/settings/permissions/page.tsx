@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 import AddRoleModal  from "./_components/AddRoleModal";
 import EditRoleModal from "./_components/EditRoleModal";
 import {
@@ -12,7 +13,8 @@ import {
 } from "./_data";
 
 export default function RolesPermissionsPage() {
-  const router = useRouter();
+  const router   = useRouter();
+  const canEdit  = usePermission("settings.edit");
 
   const [roles,          setRoles]          = useState<ApiRole[]>([]);
   const [permissionsMap, setPermissionsMap] = useState<PermissionsMap>({});
@@ -149,9 +151,11 @@ export default function RolesPermissionsPage() {
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
             <i className="ti ti-arrow-left" /> Back
           </button>
-          <button className="btn btn-filled" onClick={() => setShowAddModal(true)}>
-            <i className="ti ti-plus" /> Add Role
-          </button>
+          {canEdit && (
+            <button className="btn btn-filled" onClick={() => setShowAddModal(true)}>
+              <i className="ti ti-plus" /> Add Role
+            </button>
+          )}
         </div>
       </div>
 
@@ -191,33 +195,36 @@ export default function RolesPermissionsPage() {
                   </td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2 }}>
-                      {/* Edit */}
-                      <button
-                        className="btn btn-ghost btn-sm icon-tooltip"
-                        onClick={() => setEditingRole(role)}
-                        data-tip="Edit role"
-                        style={{ padding: "5px 8px" }}
-                      >
-                        <i className="ti ti-pencil" style={{ fontSize: 16 }} />
-                      </button>
-
-                      {/* Active / Inactive toggle */}
-                      <button
-                        className="btn btn-ghost btn-sm icon-tooltip"
-                        onClick={() => toggleActive(role)}
-                        disabled={togglingId === role.id}
-                        data-tip={role.is_active ? "Active" : "Inactive"}
-                        style={{ padding: "5px 8px" }}
-                      >
-                        {togglingId === role.id ? (
-                          <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite", color: "var(--outline)" }} />
-                        ) : (
-                          <i
-                            className={`ti ${role.is_active ? "ti-toggle-right" : "ti-toggle-left"}`}
-                            style={{ fontSize: 20, color: role.is_active ? "var(--success)" : "var(--outline)" }}
-                          />
-                        )}
-                      </button>
+                      {canEdit ? (
+                        <>
+                          <button
+                            className="btn btn-ghost btn-sm icon-tooltip"
+                            onClick={() => setEditingRole(role)}
+                            data-tip="Edit role"
+                            style={{ padding: "5px 8px" }}
+                          >
+                            <i className="ti ti-pencil" style={{ fontSize: 16 }} />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm icon-tooltip"
+                            onClick={() => toggleActive(role)}
+                            disabled={togglingId === role.id}
+                            data-tip={role.is_active ? "Active" : "Inactive"}
+                            style={{ padding: "5px 8px" }}
+                          >
+                            {togglingId === role.id ? (
+                              <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite", color: "var(--outline)" }} />
+                            ) : (
+                              <i
+                                className={`ti ${role.is_active ? "ti-toggle-right" : "ti-toggle-left"}`}
+                                style={{ fontSize: 20, color: role.is_active ? "var(--success)" : "var(--outline)" }}
+                              />
+                            )}
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>View only</span>
+                      )}
                     </div>
                   </td>
                 </tr>

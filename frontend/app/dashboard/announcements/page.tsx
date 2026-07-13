@@ -89,7 +89,8 @@ const EMPTY_FORM: FormState = {
   is_pinned: false, send_email: true,
 };
 
-const POSTER_ROLES = new Set(["hr_admin", "system_admin", "manager"]);
+// Kept for reference — no longer used; canPost is now permission-based
+// const POSTER_ROLES = new Set(["hr_admin", "system_admin", "manager"]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -143,9 +144,10 @@ export default function AnnouncementsPage() {
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
   useEffect(() => { setCurrentUser(getStoredUser()); }, []);
 
-  const canPost = currentUser ? POSTER_ROLES.has(currentUser.role) : false;
-  const isAdmin = currentUser?.role === "system_admin";
-  const isHR    = currentUser?.role === "hr_admin";
+  const canPost  = currentUser?.permissions.includes("announcements.create") || currentUser?.role === "system_admin" || false;
+  const canEdit  = currentUser?.permissions.includes("announcements.edit")   || currentUser?.role === "system_admin" || false;
+  const isAdmin  = currentUser?.role === "system_admin";
+  const isHR     = currentUser?.role === "hr_admin";
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [meta,    setMeta]    = useState<PageMeta | null>(null);
@@ -727,7 +729,7 @@ export default function AnnouncementsPage() {
                   Pin this announcement
                 </label>
 
-                {(isAdmin || isHR) && (
+                {canPost && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
                     <input
                       type="checkbox"

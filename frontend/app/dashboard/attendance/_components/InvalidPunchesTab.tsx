@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import type { InvalidPunch, PaginatedInvalidPunches } from "@/types/attendance";
 import AssignPunchModal from "./AssignPunchModal";
@@ -25,6 +26,7 @@ type ModalState =
   | null;
 
 export default function InvalidPunchesTab({ onMutated }: Props) {
+  const canEdit         = usePermission("attendance.edit");
   const [page, setPage]   = useState(1);
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -84,29 +86,31 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
                   <td style={{ color: "var(--on-variant)", fontSize: 12 }}>{p.suggested_match}</td>
                   <td>{p.branch}</td>
                   <td>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ padding: "3px 10px", fontSize: 11 }}
-                        onClick={() => setModal({ type: "assign", punch: p })}
-                      >
-                        <i className="ti ti-user-check" /> Assign
-                      </button>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ padding: "3px 10px", fontSize: 11 }}
-                        onClick={() => setModal({ type: "convert", punch: p })}
-                      >
-                        <i className="ti ti-replace" /> Convert
-                      </button>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ padding: "3px 10px", fontSize: 11, color: "var(--error)" }}
-                        onClick={() => setModal({ type: "discard", punch: p })}
-                      >
-                        <i className="ti ti-trash" /> Discard
-                      </button>
-                    </div>
+                    {canEdit && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: "3px 10px", fontSize: 11 }}
+                          onClick={() => setModal({ type: "assign", punch: p })}
+                        >
+                          <i className="ti ti-user-check" /> Assign
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: "3px 10px", fontSize: 11 }}
+                          onClick={() => setModal({ type: "convert", punch: p })}
+                        >
+                          <i className="ti ti-replace" /> Convert
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          style={{ padding: "3px 10px", fontSize: 11, color: "var(--error)" }}
+                          onClick={() => setModal({ type: "discard", punch: p })}
+                        >
+                          <i className="ti ti-trash" /> Discard
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

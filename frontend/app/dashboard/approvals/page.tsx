@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useAnyPermission } from "@/hooks/usePermission";
 import { ApprovalModal } from "./ApprovalModal";
 import StatusCell from "../leave/_components/StatusCell";
 import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModal";
@@ -763,10 +764,11 @@ function TeamApprovalsSection() {
 
 export default function ApprovalsPage() {
   const [section, setSection] = useState<Section>("my-requests");
+  const canApprove = useAnyPermission("leave.approve", "expenses.approve");
 
   const sections: { key: Section; label: string; icon: string }[] = [
     { key: "my-requests", label: "My Requests",    icon: "ti-inbox"  },
-    { key: "approvals",   label: "Team Approvals", icon: "ti-checks" },
+    ...(canApprove ? [{ key: "approvals" as Section, label: "Team Approvals", icon: "ti-checks" }] : []),
   ];
 
   return (
@@ -795,7 +797,7 @@ export default function ApprovalsPage() {
 
       <div className="settings-card">
         {section === "my-requests" && <MyRequestsSection />}
-        {section === "approvals"   && <TeamApprovalsSection />}
+        {section === "approvals" && canApprove && <TeamApprovalsSection />}
       </div>
     </div>
   );

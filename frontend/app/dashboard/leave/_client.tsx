@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import LeaveDashboard from "./_components/LeaveDashboard";
 import LeaveApprovals from "./_components/LeaveApprovals";
@@ -17,18 +18,18 @@ type TabId = "dashboard" | "apply" | "approvals" | "calendar" | "analytics";
 interface Props { role: string }
 
 export default function LeavePageClient({ role }: Props) {
-  const isEmployee    = role === "employee";
   const isSystemAdmin = role === "system_admin";
+  const canApprove    = usePermission("leave.approve");
 
-  const ALL_TABS: { id: TabId; label: string; hideForEmployee?: boolean }[] = [
-    { id: "dashboard",  label: "Dashboard"      },
-    { id: "apply",      label: "Apply Leave"    },
-    { id: "approvals",  label: "Approvals",     hideForEmployee: true },
-    { id: "calendar",   label: "Team Calendar"  },
-    { id: "analytics",  label: "Analytics"      },
+  const ALL_TABS: { id: TabId; label: string }[] = [
+    { id: "dashboard",  label: "Dashboard"   },
+    { id: "apply",      label: "Apply Leave" },
+    ...(canApprove ? [{ id: "approvals" as TabId, label: "Approvals" }] : []),
+    { id: "calendar",   label: "Team Calendar" },
+    { id: "analytics",  label: "Analytics"    },
   ];
 
-  const tabs = ALL_TABS.filter(t => !(isEmployee && t.hideForEmployee));
+  const tabs = ALL_TABS;
 
   const [active, setActive] = useState<TabId>("dashboard");
   const [branch, setBranch] = useState("");

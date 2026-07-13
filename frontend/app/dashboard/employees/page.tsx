@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
+import { usePermission } from "@/hooks/usePermission";
 import {
   fullName,
   initials,
@@ -89,6 +90,9 @@ const SEL_STYLE = {
 
 export default function EmployeesPage() {
   const router = useRouter();
+
+  const canCreate = usePermission("employees.create");
+  const canEdit   = usePermission("employees.edit");
 
   const [isAdmin,    setIsAdmin]    = useState(false);
   const [userBranch, setUserBranch] = useState("");
@@ -226,11 +230,13 @@ export default function EmployeesPage() {
               suppressHydrationWarning
             />
           </div>
-          <button onClick={() => setShowModal(true)} suppressHydrationWarning
-            className="btn btn-filled" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <i className="ti ti-plus" style={{ fontSize: 15 }} />
-            Add Employee
-          </button>
+          {canCreate && (
+            <button onClick={() => setShowModal(true)} suppressHydrationWarning
+              className="btn btn-filled" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <i className="ti ti-plus" style={{ fontSize: 15 }} />
+              Add Employee
+            </button>
+          )}
         </div>
       </div>
 
@@ -384,25 +390,27 @@ export default function EmployeesPage() {
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
                             <i className="ti ti-eye text-[14px]" /> View
                           </button>
-                          <button
-                            onClick={() => toggleStatus(e)}
-                            disabled={toggling === e.id}
-                            suppressHydrationWarning
-                            className={[
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors",
-                              e.status === "inactive"
-                                ? "border-[var(--success)] text-[var(--success)] bg-white hover:bg-[var(--success-c)]"
-                                : "border-[var(--error)] text-[var(--error)] bg-white hover:bg-[var(--error-c)]",
-                              toggling === e.id ? "opacity-50 cursor-not-allowed" : "",
-                            ].join(" ")}
-                          >
-                            {toggling === e.id
-                              ? <i className="ti ti-loader-2 animate-spin text-[14px]" />
-                              : e.status === "inactive"
-                                ? <><i className="ti ti-user-check text-[14px]" /> Activate</>
-                                : <><i className="ti ti-user-off text-[14px]" /> Deactivate</>
-                            }
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => toggleStatus(e)}
+                              disabled={toggling === e.id}
+                              suppressHydrationWarning
+                              className={[
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors",
+                                e.status === "inactive"
+                                  ? "border-[var(--success)] text-[var(--success)] bg-white hover:bg-[var(--success-c)]"
+                                  : "border-[var(--error)] text-[var(--error)] bg-white hover:bg-[var(--error-c)]",
+                                toggling === e.id ? "opacity-50 cursor-not-allowed" : "",
+                              ].join(" ")}
+                            >
+                              {toggling === e.id
+                                ? <i className="ti ti-loader-2 animate-spin text-[14px]" />
+                                : e.status === "inactive"
+                                  ? <><i className="ti ti-user-check text-[14px]" /> Activate</>
+                                  : <><i className="ti ti-user-off text-[14px]" /> Deactivate</>
+                              }
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 
 interface RoleInfo    { name: string; display_name: string }
 interface Department  {
@@ -36,7 +37,8 @@ function Spin() {
 }
 
 export default function DepartmentsPage() {
-  const router = useRouter();
+  const router    = useRouter();
+  const canEdit   = usePermission("settings.edit");
 
   const [departments,  setDepartments]  = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -186,9 +188,11 @@ export default function DepartmentsPage() {
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
             <i className="ti ti-arrow-left" /> Back
           </button>
-          <button className="btn btn-filled" onClick={openAddDept}>
-            <i className="ti ti-building-plus" /> Add Department
-          </button>
+          {canEdit && (
+            <button className="btn btn-filled" onClick={openAddDept}>
+              <i className="ti ti-building-plus" /> Add Department
+            </button>
+          )}
         </div>
       </div>
 
@@ -304,22 +308,24 @@ export default function DepartmentsPage() {
                       {/* Status + actions */}
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }} onClick={e => e.stopPropagation()}>
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: dept.is_active ? "var(--success)" : "var(--outline)" }} />
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button
-                            className="btn btn-ghost"
-                            style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
-                            title="Edit" onClick={() => openEditDept(dept)}
-                          >
-                            <i className="ti ti-edit" style={{ fontSize: 12 }} />
-                          </button>
-                          <button
-                            className="btn btn-ghost"
-                            style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
-                            title="Delete" onClick={() => deleteDept(dept)}
-                          >
-                            <i className="ti ti-trash" style={{ fontSize: 12 }} />
-                          </button>
-                        </div>
+                        {canEdit && (
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
+                              title="Edit" onClick={() => openEditDept(dept)}
+                            >
+                              <i className="ti ti-edit" style={{ fontSize: 12 }} />
+                            </button>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
+                              title="Delete" onClick={() => deleteDept(dept)}
+                            >
+                              <i className="ti ti-trash" style={{ fontSize: 12 }} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -389,14 +395,16 @@ export default function DepartmentsPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="dept-hero-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEditDept(selected)}>
-                      <i className="ti ti-edit" /> Edit
-                    </button>
-                    <button className="btn btn-filled btn-sm" onClick={openAddDesig}>
-                      <i className="ti ti-plus" /> Add Designation
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="dept-hero-actions">
+                      <button className="btn btn-ghost btn-sm" onClick={() => openEditDept(selected)}>
+                        <i className="ti ti-edit" /> Edit
+                      </button>
+                      <button className="btn btn-filled btn-sm" onClick={openAddDesig}>
+                        <i className="ti ti-plus" /> Add Designation
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -432,9 +440,11 @@ export default function DepartmentsPage() {
                   <div style={{ textAlign: "center", padding: "36px 0", color: "var(--on-variant)", border: "1.5px dashed var(--outline-v)", borderRadius: "var(--radius-lg)" }}>
                     <i className="ti ti-id-badge" style={{ fontSize: 32, display: "block", marginBottom: 8, color: "var(--outline)" }} />
                     <p style={{ fontSize: 13, margin: 0 }}>No designations yet</p>
-                    <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={openAddDesig}>
-                      <i className="ti ti-plus" /> Add the first one
-                    </button>
+                    {canEdit && (
+                      <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={openAddDesig}>
+                        <i className="ti ti-plus" /> Add the first one
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(210px, 100%), 1fr))" }}>
@@ -453,22 +463,24 @@ export default function DepartmentsPage() {
                           <div style={{ width: 34, height: 34, borderRadius: 9, background: c.bg, color: c.fg, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 }}>
                             {d.name.charAt(0).toUpperCase()}
                           </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button
-                              className="btn btn-ghost"
-                              style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, background: "var(--surface)" }}
-                              title="Edit" onClick={() => openEditDesig(d)}
-                            >
-                              <i className="ti ti-edit" style={{ fontSize: 12 }} />
-                            </button>
-                            <button
-                              className="btn btn-ghost"
-                              style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)", background: "var(--surface)" }}
-                              title="Delete" onClick={() => deleteDesig(d)}
-                            >
-                              <i className="ti ti-trash" style={{ fontSize: 12 }} />
-                            </button>
-                          </div>
+                          {canEdit && (
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, background: "var(--surface)" }}
+                                title="Edit" onClick={() => openEditDesig(d)}
+                              >
+                                <i className="ti ti-edit" style={{ fontSize: 12 }} />
+                              </button>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ width: 26, height: 26, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)", background: "var(--surface)" }}
+                                title="Delete" onClick={() => deleteDesig(d)}
+                              >
+                                <i className="ti ti-trash" style={{ fontSize: 12 }} />
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Name */}

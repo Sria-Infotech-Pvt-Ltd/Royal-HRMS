@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface StateObj {
   id: number;
@@ -80,6 +82,10 @@ type Envelope<T> = { status: string; message: string; data: T };
 type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
 export default function BranchManagement() {
+  const canEdit   = usePermission("settings.edit");
+  const user      = useCurrentUser();
+  const isHrAdmin = user?.role === "hr_admin";
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [stats, setStats] = useState<BranchStats>({ total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
   const [distribution, setDistribution] = useState<BranchDistribution[]>([]);
@@ -264,6 +270,11 @@ export default function BranchManagement() {
     }
   };
 
+  // HR admins see only their own branch; system_admin / others see all.
+  const visibleBranches = isHrAdmin && user?.branch
+    ? branches.filter(b => b.branch_name === user.branch)
+    : branches;
+
   if (isLoading && branches.length === 0) {
     return <div className="p-8 text-center text-[var(--on-variant)]">Loading branches...</div>;
   }
@@ -273,21 +284,23 @@ export default function BranchManagement() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Branches</h1>
-          <p className="page-sub">Manage all company branch locations</p>
+          <p className="page-sub">{isHrAdmin ? "Your branch details" : "Manage all company branch locations"}</p>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => {
-            setSaveError(null);
-            setModalMode("add");
-            setFieldErrors({});
-            setEditForm({
-              id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false,
-              geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
-            });
-          }}>
-            <i className="ti ti-plus" /> Add Branch
-          </button>
-        </div>
+        {canEdit && (
+          <div className="page-actions">
+            <button className="btn btn-filled" onClick={() => {
+              setSaveError(null);
+              setModalMode("add");
+              setFieldErrors({});
+              setEditForm({
+                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false,
+                geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
+              });
+            }}>
+              <i className="ti ti-plus" /> Add Branch
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -319,9 +332,9 @@ export default function BranchManagement() {
         </div>
       </div>
 
-      {branches.length > 0 ? (
+      {visibleBranches.length > 0 ? (
         <div className="grid-2 mb-24">
-          {branches.map(branch => (
+          {visibleBranches.map(branch => (
             <div key={branch.id} className="card" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
@@ -376,40 +389,42 @@ export default function BranchManagement() {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
-                    onClick={() => {
-                      setSaveError(null);
-                      setFieldErrors({});
-                      setModalMode("edit");
-                      setEditForm({
-                        id:             branch.id,
-                        branch_code:    branch.branch_code,
-                        branch_name:    branch.branch_name,
-                        address:        branch.address,
-                        state:          branch.state.toString(),
-                        city:           branch.city.toString(),
-                        status:         branch.status.toLowerCase(),
-                        is_headquarter: branch.is_headquarter,
-                        geofencing_enabled:    branch.geofencing_enabled ?? false,
-                        latitude:              branch.latitude?.toString() ?? "",
-                        longitude:             branch.longitude?.toString() ?? "",
-                        allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
-                      });
-                    }}
-                  >
-                    <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
-                  </button>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
-                    onClick={() => handleDelete(branch.id)}
-                  >
-                    <i className="ti ti-trash" style={{ fontSize: "16px" }} />
-                  </button>
-                </div>
+                {canEdit && (
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
+                      onClick={() => {
+                        setSaveError(null);
+                        setFieldErrors({});
+                        setModalMode("edit");
+                        setEditForm({
+                          id:             branch.id,
+                          branch_code:    branch.branch_code,
+                          branch_name:    branch.branch_name,
+                          address:        branch.address,
+                          state:          branch.state.toString(),
+                          city:           branch.city.toString(),
+                          status:         branch.status.toLowerCase(),
+                          is_headquarter: branch.is_headquarter,
+                          geofencing_enabled:    branch.geofencing_enabled ?? false,
+                          latitude:              branch.latitude?.toString() ?? "",
+                          longitude:             branch.longitude?.toString() ?? "",
+                          allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
+                        });
+                      }}
+                    >
+                      <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
+                      onClick={() => handleDelete(branch.id)}
+                    >
+                      <i className="ti ti-trash" style={{ fontSize: "16px" }} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

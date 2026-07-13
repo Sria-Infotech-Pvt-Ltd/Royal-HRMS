@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
@@ -31,6 +32,7 @@ export default function OtEntryTab() {
   const { showToast } = useToast();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
+  const canCreate       = usePermission("attendance.create");
   const effectiveBranch = getEffectiveBranch(user);
 
   const [form, setForm]             = useState<OvertimeCreatePayload>(EMPTY_FORM);
@@ -148,11 +150,13 @@ export default function OtEntryTab() {
               onChange={e => setField("reason", e.target.value)}
             />
           </div>
-          <div style={{ textAlign: "right" }}>
-            <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? <><i className="ti ti-loader-2" /> Adding…</> : <><i className="ti ti-plus" /> Add OT Entry</>}
-            </button>
-          </div>
+          {canCreate && (
+            <div style={{ textAlign: "right" }}>
+              <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? <><i className="ti ti-loader-2" /> Adding…</> : <><i className="ti ti-plus" /> Add OT Entry</>}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

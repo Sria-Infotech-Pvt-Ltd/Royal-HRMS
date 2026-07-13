@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDepartmentOptions } from "@/hooks/useDepartmentOptions";
+import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
@@ -56,6 +57,8 @@ export default function AttendanceTab({ onMutated }: Props) {
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
+  const canExport       = usePermission("attendance.export");
+  const canImport       = usePermission("attendance.create");
 
   const [date, setDate]                 = useState(todayISO());
   const [branchInput, setBranchInput]   = useState("");
@@ -141,12 +144,16 @@ export default function AttendanceTab({ onMutated }: Props) {
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <div style={{ flex: 1 }} />
-        <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={exporting}>
-          <i className="ti ti-download" /> {exporting ? "Exporting…" : "Export CSV"}
-        </button>
-        <button className="btn btn-filled btn-sm" onClick={() => setShowImport(true)}>
-          <i className="ti ti-upload" /> Import Attendance
-        </button>
+        {canExport && (
+          <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={exporting}>
+            <i className="ti ti-download" /> {exporting ? "Exporting…" : "Export CSV"}
+          </button>
+        )}
+        {canImport && (
+          <button className="btn btn-filled btn-sm" onClick={() => setShowImport(true)}>
+            <i className="ti ti-upload" /> Import Attendance
+          </button>
+        )}
       </div>
 
       {/* Summary chips */}

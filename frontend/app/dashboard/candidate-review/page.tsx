@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 import { fmtDate, initials } from "../interview-list/_data";
 import OnboardingDrawer, { ApprovalUser } from "./_components/OnboardingDrawer";
 
 export default function CandidateReviewPage() {
-  const router = useRouter();
+  const router       = useRouter();
+  const canApprove   = usePermission("employees.approve");
 
   const [rows,    setRows]    = useState<ApprovalUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,14 +140,14 @@ export default function CandidateReviewPage() {
                           >
                             Awaiting resubmission
                           </span>
-                        ) : (
+                        ) : canApprove ? (
                           <button
                             className="btn btn-ghost btn-sm"
                             onClick={() => { setDrawer(row); setRemarks(""); setActionErr(null); }}
                           >
                             Review
                           </button>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   );

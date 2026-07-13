@@ -4,6 +4,7 @@ import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
@@ -171,6 +172,7 @@ export default function EmployeeProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const canEdit = usePermission("employees.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
 
@@ -459,7 +461,7 @@ export default function EmployeeProfilePage({
                 return null;
               }}
               readOnly={!isEditing}
-              onEdit={() => setIsEditing(true)}
+              onEdit={canEdit ? () => setIsEditing(true) : undefined}
               onFieldChange={onFieldChange}
               onRowsChange={onRowsChange}
               onSave={onSave}
