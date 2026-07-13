@@ -2264,12 +2264,6 @@ class EmployeeListCreateView(APIView):
             .prefetch_related('employee_documents')
             .filter(is_active__in=[True, False])
             .exclude(employee_id='')   # portal candidates have no employee_id until onboarding is approved
-            # Only show fully approved employees, plus legacy employees who were never
-            # put through the onboarding portal (pending + must_change_password=False).
-            .filter(
-                Q(onboarding_status=User.ONBOARDING_COMPLETE) |
-                Q(onboarding_status=User.ONBOARDING_PENDING, must_change_password=False)
-            )
             .order_by('-date_joined')
         )
 
@@ -2454,16 +2448,12 @@ class EmployeeListCreateView(APIView):
 
 
 def _get_employee(identifier: str):
-    """Look up an approved employee by employee_id code (e.g. EMP001)."""
+    """Look up an employee by employee_id code (e.g. EMP001)."""
     try:
         return (
             User.objects
             .select_related('role', 'profile', 'reporting_manager')
             .prefetch_related('employee_documents')
-            .filter(
-                Q(onboarding_status=User.ONBOARDING_COMPLETE) |
-                Q(onboarding_status=User.ONBOARDING_PENDING, must_change_password=False)
-            )
             .get(employee_id=identifier)
         )
     except User.DoesNotExist:
