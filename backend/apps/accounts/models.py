@@ -91,11 +91,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     ONBOARDING_DRAFT     = 'draft'
     ONBOARDING_SUBMITTED = 'submitted'
     ONBOARDING_COMPLETE  = 'complete'
+    ONBOARDING_REJECTED  = 'rejected'
     ONBOARDING_CHOICES   = [
         (ONBOARDING_PENDING,   'Pending'),
         (ONBOARDING_DRAFT,     'In Progress'),
         (ONBOARDING_SUBMITTED, 'Submitted — awaiting approval'),
         (ONBOARDING_COMPLETE,  'Complete'),
+        (ONBOARDING_REJECTED,  'Needs Revision'),
     ]
 
     ASSESSMENT_PENDING  = 'pending'

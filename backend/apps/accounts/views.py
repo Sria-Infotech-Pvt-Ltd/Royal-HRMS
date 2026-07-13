@@ -256,8 +256,9 @@ def _employee_dict(user: User) -> dict:
             'id':   str(_hr.id)   if _hr else None,
             'name': _hr.full_name if _hr else None,
         },
-        'profile':        profile_data,
-        'documents':      documents,
+        'profile':            profile_data,
+        'documents':          documents,
+        'onboarding_status':  user.onboarding_status,
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
@@ -3618,7 +3619,7 @@ class OnboardingApprovalView(APIView):
             return success(f'{target.full_name} onboarding approved.')
 
         else:
-            target.onboarding_status = User.ONBOARDING_PENDING
+            target.onboarding_status = User.ONBOARDING_REJECTED
             target.save(update_fields=['onboarding_status'])
             AuditLog.objects.create(
                 user=request.user, action='onboarding_rejected', module='accounts',
@@ -3704,7 +3705,7 @@ class OnboardingApprovalView(APIView):
         role_name = request.user.role.name if request.user.role else ''
         qs = (
             User.objects
-            .filter(onboarding_status=User.ONBOARDING_SUBMITTED)
+            .filter(onboarding_status__in=[User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED])
             .select_related('role', 'profile')
             .prefetch_related('employee_documents')
             .order_by('date_joined')
