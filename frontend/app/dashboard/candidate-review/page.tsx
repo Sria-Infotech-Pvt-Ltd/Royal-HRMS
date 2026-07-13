@@ -130,12 +130,22 @@ export default function CandidateReviewPage() {
                       <td className="col-hide-md" style={{ fontSize: ".85rem" }}>{fmtDate(row.date_joined)}</td>
                       <td><span className={`badge ${statusCls}`} style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
                       <td>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => { setDrawer(row); setRemarks(""); setActionErr(null); }}
-                        >
-                          Review
-                        </button>
+                        {row.onboarding_status === "rejected" ? (
+                          <span
+                            className="badge badge-neutral"
+                            title="Waiting for the employee to correct and resubmit"
+                            style={{ cursor: "default", userSelect: "none" }}
+                          >
+                            Awaiting resubmission
+                          </span>
+                        ) : (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => { setDrawer(row); setRemarks(""); setActionErr(null); }}
+                          >
+                            Review
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

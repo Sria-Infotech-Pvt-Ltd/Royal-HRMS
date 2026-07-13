@@ -174,10 +174,9 @@ export default function EmployeeProfilePage({
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
 
-  const [employee,          setEmployee]          = useState<Employee | null>(null);
-  const [onboardingStatus,  setOnboardingStatus]  = useState<string>("");
-  const [loading,           setLoading]           = useState(true);
-  const [notFound,          setNotFound]          = useState(false);
+  const [employee,  setEmployee]  = useState<Employee | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [notFound,  setNotFound]  = useState(false);
 
   const [values,     setValues]     = useState<DetailValues>({});
   const [tables,     setTables]     = useState<Record<string, TableRow[]>>({});
@@ -234,7 +233,6 @@ export default function EmployeeProfilePage({
         const raw = data.data;
         const emp = apiToEmployee(raw);
         setEmployee(emp);
-        setOnboardingStatus(raw.onboarding_status ?? "");
         setValues({ ...emp.details });
         setBaseValues({ ...emp.details });
         setTables({});
@@ -356,59 +354,26 @@ export default function EmployeeProfilePage({
   }
 
   const activeTab = PROFILE_TABS.find(t => t.id === tab)!;
-  const isPendingOnboarding = onboardingStatus === "pending" || onboardingStatus === "draft";
 
   return (
     <div>
       <ProfileHeader employee={employee} />
-      {isPendingOnboarding && (
-        <div style={{
-          display: "flex", alignItems: "flex-start", gap: 12,
-          padding: "14px 18px", marginBottom: 16,
-          background: "var(--warn-c)", border: "1px solid var(--warn)",
-          borderRadius: 10, color: "var(--warn-dark, var(--warn))",
-        }}>
-          <i className="ti ti-clock-hour-4" style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "0.88rem", marginBottom: 3 }}>
-              Onboarding in progress
-            </div>
-            <div style={{ fontSize: "0.82rem", opacity: 0.85 }}>
-              This employee has not yet submitted their onboarding form for approval.
-              Profile details and tabs will be available once the form is submitted and approved.
-            </div>
-          </div>
-        </div>
-      )}
-      {!isPendingOnboarding && <ProfileTabBar active={tab} onChange={setTab} />}
+      <ProfileTabBar active={tab} onChange={setTab} />
 
-      {!isPendingOnboarding && justSaved && (
+      {justSaved && (
         <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-[var(--success-c)] text-[var(--success)] text-[13px] font-medium">
           <i className="ti ti-circle-check text-[16px]" />
           Changes saved successfully.
         </div>
       )}
-      {!isPendingOnboarding && saveError && (
+      {saveError && (
         <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-[var(--error-c)] text-[var(--error)] text-[13px] font-medium">
           <i className="ti ti-alert-circle text-[16px]" />
           Failed to save changes. Please try again.
         </div>
       )}
 
-      {isPendingOnboarding ? (
-        <div className="bg-white rounded-xl border border-[var(--outline-v)] p-14 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-[var(--bg-mid)] flex items-center justify-center mx-auto mb-4">
-            <i className="ti ti-user-check text-[26px] text-[var(--primary)]" />
-          </div>
-          <h3 className="text-[16px] font-semibold text-[var(--on-bg)] mb-1.5">
-            Awaiting onboarding submission
-          </h3>
-          <p className="text-[13px] text-[var(--on-variant)] max-w-sm mx-auto">
-            The employee has not yet submitted their onboarding form.
-            Profile details will appear here once they submit and HR approves the application.
-          </p>
-        </div>
-      ) : tab === "profile" ? (
+      {tab === "profile" ? (
         <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
           <div style={{ width: "220px", flexShrink: 0 }}>
             <ProfileSidebar active={sectionId} onChange={setSectionId} />
