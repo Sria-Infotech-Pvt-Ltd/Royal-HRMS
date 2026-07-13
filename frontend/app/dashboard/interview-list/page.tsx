@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
+import { usePermission } from "@/hooks/usePermission";
 import {
   Branch,
   Candidate,
@@ -107,7 +108,9 @@ function Avatar({ name, size = 32 }: { name: string; size?: number }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InterviewListPage() {
-  const { showToast } = useToast();
+  const { showToast }  = useToast();
+  const canCreate      = usePermission("recruitment.create");
+  const canEditRec     = usePermission("recruitment.edit");
   const [candidates,    setCandidates]    = useState<Candidate[]>([]);
   const [stats,         setStats]         = useState<RecruitmentStats | null>(null);
   const [loading,       setLoading]       = useState(true);
@@ -287,9 +290,11 @@ export default function InterviewListPage() {
             />
           </div>
 
-          <button className="btn btn-filled" onClick={() => setShowAdd(true)}>
-            <i className="ti ti-plus" /> Add Candidate
-          </button>
+          {canCreate && (
+            <button className="btn btn-filled" onClick={() => setShowAdd(true)}>
+              <i className="ti ti-plus" /> Add Candidate
+            </button>
+          )}
         </div>
       </div>
 
@@ -402,7 +407,7 @@ export default function InterviewListPage() {
                         </button>
 
                         {/* Set Details — only for referred candidates missing branch or interview date */}
-                        {c.referral_by !== null && (!c.branch || !c.interview_date) && (
+                        {canEditRec && c.referral_by !== null && (!c.branch || !c.interview_date) && (
                           <button className="btn btn-ghost btn-sm" onClick={() => setEditTarget(c)} suppressHydrationWarning
                             style={{ color: "var(--warn)" }}>
                             <i className="ti ti-pencil" /> Set Details
@@ -410,7 +415,7 @@ export default function InterviewListPage() {
                         )}
 
                         {/* Status dropdown — only for pre-selection pipeline */}
-                        {c.status !== "converted" && c.status !== "selected" && c.status !== "offer_sent" && (
+                        {canEditRec && c.status !== "converted" && c.status !== "selected" && c.status !== "offer_sent" && (
                           <StatusDropdown
                             candidate={c}
                             choices={statusChoices}
@@ -420,7 +425,7 @@ export default function InterviewListPage() {
                         )}
 
                         {/* Selected: send onboarding portal login */}
-                        {c.status === "selected" && (
+                        {canEditRec && c.status === "selected" && (
                           <button
                             className="btn btn-filled btn-sm"
                             style={{ fontSize: ".78rem" }}

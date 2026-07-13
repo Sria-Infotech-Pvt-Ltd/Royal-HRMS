@@ -82,9 +82,10 @@ type Envelope<T> = { status: string; message: string; data: T };
 type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
 export default function BranchManagement() {
-  const canEdit   = usePermission("settings.edit");
   const user      = useCurrentUser();
   const isHrAdmin = user?.role === "hr_admin";
+  // hr_admin must never edit branches regardless of DB permissions — business rule
+  const canEdit   = usePermission("settings.edit") && !isHrAdmin;
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [stats, setStats] = useState<BranchStats>({ total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
