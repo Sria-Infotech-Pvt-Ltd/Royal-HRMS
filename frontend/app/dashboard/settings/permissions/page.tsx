@@ -40,7 +40,7 @@ export default function RolesPermissionsPage() {
         clientApi.get(API.permissions.list),
       ]);
       setRoles(rolesRes.data.data?.results ?? []);
-      setPermissionsMap(permsRes.data.data ?? {});
+      setPermissionsMap(permsRes.data.data?.results ?? {});
     } catch (err: unknown) {
       const e = err as { message?: string };
       setError(e.message ?? "Failed to load data");
