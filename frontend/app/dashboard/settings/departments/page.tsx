@@ -65,7 +65,7 @@ export default function DepartmentsPage() {
     setLoading(true); setPageError(null);
     try {
       const res = await clientApi.get(API.departments.list);
-      const raw = res.data?.data;
+      const raw = res.data?.data?.results;
       const data: Department[] = Array.isArray(raw) ? raw : [];
       setDepartments(data);
       if (selected) {
@@ -81,7 +81,7 @@ export default function DepartmentsPage() {
     setDesigLoading(true);
     try {
       const res = await clientApi.get(API.designations.list, { params: { department: id } });
-      const raw = res.data?.data;
+      const raw = res.data?.data?.results;
       setDesignations(Array.isArray(raw) ? raw : []);
     } catch { setDesignations([]); }
     finally  { setDesigLoading(false); }
