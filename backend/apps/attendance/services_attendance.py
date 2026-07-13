@@ -38,16 +38,8 @@ logger = logging.getLogger(__name__)
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _get_settings() -> Optional[AttendanceSettings]:
-    return (
-        AttendanceSettings.objects
-        .select_related(
-            'working_hours', 'weekly_off',
-            'punch_rules', 'overtime_rules',
-        )
-        .filter(is_active=True)
-        .order_by('-created_at')
-        .first()
-    )
+    from core.cache_service import AttendanceSettingsCacheService
+    return AttendanceSettingsCacheService.get()
 
 
 def _minutes_to_display(minutes: int) -> str:
@@ -707,37 +699,13 @@ class AttendanceDashboardService:
 
     @staticmethod
     def _weekly_off_days() -> set[str]:
-        """
-        Returns lowercase day names that are weekly off per the active default policy.
-        Falls back to legacy AttendanceWeeklyOff, then Saturday + Sunday.
-        """
-        from apps.attendance.models import WeeklyDayPolicy
-        try:
-            policy = WeeklyDayPolicy.objects.filter(is_active=True, is_default=True).first()
-            if policy:
-                return set(policy.weekly_off_days)
-        except Exception:
-            pass
-        try:
-            cfg = AttendanceSettings.objects.select_related('weekly_off').first()
-            if cfg and getattr(cfg, 'weekly_off', None):
-                _days = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
-                return {d for d in _days if getattr(cfg.weekly_off, d, False)}
-        except Exception:
-            pass
-        return {'saturday', 'sunday'}
+        from core.cache_service import WeeklyOffCacheService
+        return WeeklyOffCacheService.get()
 
     @staticmethod
     def _holiday_dates(month_start: date, month_end: date, branch_name: str = '') -> set:
-        """Returns set of active holiday dates in [month_start, month_end] for the branch."""
-        from apps.hrms.models import Holiday
-        from django.db.models import Q
-        qs = Holiday.objects.filter(date__gte=month_start, date__lte=month_end, is_active=True)
-        if branch_name:
-            qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
-        else:
-            qs = qs.filter(branch__isnull=True)
-        return set(qs.values_list('date', flat=True))
+        from core.cache_service import HolidayCacheService
+        return HolidayCacheService.get_holiday_dates(month_start, month_end, branch_name)
 
     @staticmethod
     def _build_day(

@@ -1513,3 +1513,106 @@ Comprehensive audit of all 7 Django apps completed. **115+ findings** identified
 backend/apps/accounts/models.py      — birthday_wish_sent_year field added to EmployeeProfile
 backend/apps/recruitment/urls.py     — 4 referral bonus URL patterns added
 ```
+
+---
+
+## Session Log — 2026-07-13
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Redis Caching Layer — Master/Configuration Data**
+
+Implemented read-through Redis caching for all frequently-accessed master/configuration data. Cache never stores transactional data (leave requests, attendance records, balances, payroll). All operations wrapped in try/except — if Redis is unavailable, falls back to DB transparently.
+
+**Cache services created in `core/cache_service.py`:**
+
+| Service | Cache Key | TTL | Invalidated By |
+|---|---|---|---|
+| `LeavePolicyCacheService` | `leave_policy:{leave_type}` | 6h | `LeavePolicy` save/delete |
+| `HolidayCacheService` | `holiday:{branch_slug}:{year}` | 24h | `Holiday` save/delete |
+| `WeeklyOffCacheService` | `weekly_off` | 24h | `WeeklyDayPolicy`, `AttendanceWeeklyOff` save/delete |
+| `ApprovalWorkflowCacheService` | `approval_workflow:{workflow_type}` | 6h | `ApprovalWorkflowRule` save/delete |
+| `AttendanceSettingsCacheService` | `attendance_settings` | 6h | `AttendanceSettings` + all 4 child models save/delete |
+| `BranchCacheService` | `branches:all` | 12h | `Branch` save/delete |
+| `DepartmentCacheService` | `departments:all` | 12h | `Department` save/delete |
+| `DesignationCacheService` | `designations:all` | 12h | `Designation` save/delete |
+
+**Holiday cache design:**
+- Caches full year of holidays per branch in a single key (no per-request range queries)
+- `get_holiday_dates(start, end, branch_name)` filters by range in Python — O(n) over ~20 holidays vs DB round-trip
+- Company-wide holiday change (branch=None) → `invalidate_year(year)` → deletes company key + all branch keys for that year
+- Branch-specific holiday change → invalidates that branch's key only
+- Date ranges spanning 2 years (rare) fall back to direct DB query
+
+**Signals wired for immediate invalidation on every CUD operation:**
+- `apps/hrms/signals.py` — `Holiday`, `LeavePolicy`
+- `apps/attendance/signals.py` — `WeeklyDayPolicy`, `AttendanceWeeklyOff`, `AttendanceSettings`, `AttendanceWorkingHours`, `AttendancePunchRules`, `AttendanceOvertimeRules`
+- `apps/branch/signals.py` — `Branch`
+- `apps/accounts/signals.py` — `Department`, `Designation`, `ApprovalWorkflowRule`
+- All signals registered via `AppConfig.ready()` using string sender labels (e.g. `'hrms.Holiday'`) — no circular import risk
+
+**Call sites updated — leave.py helpers now delegate to cache:**
+- `_get_holiday_dates()` → `HolidayCacheService.get_holiday_dates()`
+- `_get_holidays_with_names()` → `HolidayCacheService.get_holidays_with_names()`
+- `_get_weekly_off_days()` → `WeeklyOffCacheService.get()`
+- `_resolve_approval_chain()` → `ApprovalWorkflowCacheService.get_rule('leave')`
+- `_leave_preview()` LeavePolicy lookup → `LeavePolicyCacheService.get(leave_type)`
+- `LeaveRequestListCreateView.post()` LeavePolicy lookup → `LeavePolicyCacheService.get(leave_type)`
+
+**Call sites updated — services_attendance.py delegates to cache:**
+- `_get_settings()` → `AttendanceSettingsCacheService.get()`
+- `AttendanceDashboardService._weekly_off_days()` → `WeeklyOffCacheService.get()`
+- `AttendanceDashboardService._holiday_dates()` → `HolidayCacheService.get_holiday_dates()`
+
+**What is NOT cached (by design):**
+- `LeaveBalance`, `LeaveRequest`, `AttendanceRecord`, `AttendancePunch`, `AttendanceCorrection`
+- Payroll transactions, notifications, approval status, employee clock-in state
+- `EmployeeApprovalOverride` — per-employee override, not global config
+
+### New Files
+
+```
+backend/core/
+  cache_service.py            — 8 cache service classes + CacheTTL constants
+
+backend/apps/hrms/
+  signals.py                  — Holiday + LeavePolicy cache invalidation
+
+backend/apps/attendance/
+  signals.py                  — WeeklyDayPolicy, AttendanceWeeklyOff, AttendanceSettings,
+                                AttendanceWorkingHours, AttendancePunchRules,
+                                AttendanceOvertimeRules cache invalidation
+
+backend/apps/branch/
+  signals.py                  — Branch cache invalidation
+
+backend/apps/accounts/
+  signals.py                  — Department, Designation, ApprovalWorkflowRule cache invalidation
+```
+
+### Files Modified
+
+```
+backend/apps/hrms/apps.py         — ready() added → imports hrms.signals
+backend/apps/attendance/apps.py   — ready() added → imports attendance.signals
+backend/apps/branch/apps.py       — ready() added → imports branch.signals
+backend/apps/accounts/apps.py     — ready() added → imports accounts.signals
+
+backend/apps/hrms/views/leave.py  — 4 helper functions + 2 LeavePolicy lookups delegate to cache
+backend/apps/attendance/
+  services_attendance.py          — _get_settings(), _weekly_off_days(), _holiday_dates() delegate to cache
+```
+
+### Infrastructure Note
+
+Redis is already configured: `django-redis==5.4.0`, `redis==8.0.1`, CACHES block in `settings.py` points to `REDIS_URL` env var. Falls back to `LocMemCache` (in-process, no sharing between workers) if `REDIS_URL` is not set — caching still works in development without Redis running.
+
+### Pending
+
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
