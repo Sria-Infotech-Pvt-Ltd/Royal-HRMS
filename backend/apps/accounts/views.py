@@ -635,7 +635,9 @@ class ChangePasswordView(APIView):
 # ─── Role management ──────────────────────────────────────────────────────────
 
 class RoleListCreateView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    # GET is open to any authenticated user (needed for role-selector dropdowns
+    # on the employee profile page). POST/mutating actions still require CanManageRoles.
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = (
@@ -654,6 +656,8 @@ class RoleListCreateView(APIView):
         ))
 
     def post(self, request):
+        if not CanManageRoles().has_permission(request, self):
+            return error('You do not have permission to create roles.', http_status=status.HTTP_403_FORBIDDEN)
         serializer = RoleSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)

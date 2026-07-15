@@ -196,25 +196,30 @@ export default function EmployeeProfilePage({
   const [roleOptions,     setRoleOptions]     = useState<FieldOption[]>([]);
   const [branchOptions,   setBranchOptions]   = useState<FieldOption[]>([]);
 
-  // fetch dropdown lists once on mount
+  // fetch dropdown lists once on mount — use allSettled so one 403 (e.g. roles for
+  // non-admin users) does not block departments/designations/branches from loading
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       clientApi.get<{ data: { results: { id: number; name: string }[] } }>(API.departments.list),
       clientApi.get<{ data: unknown }>(API.designations.list),
       clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
     ]).then(([depts, desigs, roles, branches]) => {
-      setDeptOptions(depts.data.data.results.map(d => ({ value: d.name, label: d.name })));
-      const desigData = desigs.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
-      const desigArray = Array.isArray(desigData) ? desigData : (desigData.results ?? []);
-      setAllDesigs(desigArray);
-      setRoleOptions(
-        roles.data.data.results
-          .filter(r => r.name !== "system_admin")
-          .map(r => ({ value: r.display_name, label: r.display_name }))
-      );
-      setBranchOptions(branches.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
-    }).catch(() => {});
+      if (depts.status === "fulfilled")
+        setDeptOptions(depts.value.data.data.results.map(d => ({ value: d.name, label: d.name })));
+      if (desigs.status === "fulfilled") {
+        const desigData = desigs.value.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
+        setAllDesigs(Array.isArray(desigData) ? desigData : (desigData.results ?? []));
+      }
+      if (roles.status === "fulfilled")
+        setRoleOptions(
+          roles.value.data.data.results
+            .filter(r => r.name !== "system_admin")
+            .map(r => ({ value: r.display_name, label: r.display_name }))
+        );
+      if (branches.status === "fulfilled")
+        setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
+    });
   }, []);
 
   // filter designations whenever the selected department changes
