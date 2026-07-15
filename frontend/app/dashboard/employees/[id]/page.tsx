@@ -416,7 +416,13 @@ export default function EmployeeProfilePage({
               saving={saving}
               liveDocuments={sectionId === "documents" ? employee.documents : undefined}
               fieldOptions={{
-                department:  [{ value: "", label: "Select department" }, ...deptOptions],
+                department: [
+                  { value: "", label: "Select department" },
+                  ...(values.department && !deptOptions.find(o => o.value === values.department)
+                    ? [{ value: values.department, label: values.department }]
+                    : []),
+                  ...deptOptions,
+                ],
                 designation: [
                   { value: "", label: desigOptions.length || values.designation ? "Select designation" : "Select a department first" },
                   ...(values.designation && !desigOptions.find(o => o.value === values.designation)
@@ -424,8 +430,20 @@ export default function EmployeeProfilePage({
                     : []),
                   ...desigOptions,
                 ],
-                ssRole:      [{ value: "", label: "Select role" }, ...roleOptions],
-                branch:      [{ value: "", label: "Select branch" }, ...branchOptions],
+                ssRole: [
+                  { value: "", label: "Select role" },
+                  ...(values.ssRole && !roleOptions.find(o => o.value === values.ssRole)
+                    ? [{ value: values.ssRole, label: values.ssRole }]
+                    : []),
+                  ...roleOptions,
+                ],
+                branch: [
+                  { value: "", label: "Select branch" },
+                  ...(values.branch && !branchOptions.find(o => o.value === values.branch)
+                    ? [{ value: values.branch, label: values.branch }]
+                    : []),
+                  ...branchOptions,
+                ],
               }}
               fieldSlot={(key, disabled) => {
                 if (key === "reportingManager") {
@@ -453,7 +471,7 @@ export default function EmployeeProfilePage({
                       value={values.hr}
                       selectedId={values.hrId ?? ""}
                       disabled={false}
-                      listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : API.employees.hrList}
+                      listEndpoint={API.employees.hrList}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, hr: name ?? "", hrId: uuid ?? "" }))
                       }
