@@ -2483,6 +2483,11 @@ class EmployeeDetailView(APIView):
         employee = _get_employee(employee_id)
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        # Auto-assign: if the viewing user is an hr_admin and no HR is set, assign them now.
+        if (request.user.role and request.user.role.name == 'hr_admin'
+                and employee.hr_id is None and employee.pk != request.user.pk):
+            employee.hr = request.user
+            employee.save(update_fields=['hr', 'updated_at'])
         return success('Employee retrieved.', data=_employee_dict(employee))
 
     def put(self, request, employee_id: str):
@@ -3839,6 +3844,17 @@ class HRListView(APIView):
              'department': u.department, 'branch': u.branch}
             for u in hrs
         ]
+        # If the requesting user is hr_admin but not in the results (e.g. role FK mismatch),
+        # include them so the picker always has at least the current HR visible.
+        requester_is_hr = (request.user.role and request.user.role.name == 'hr_admin')
+        if requester_is_hr and not any(d['id'] == str(request.user.id) for d in data):
+            data.insert(0, {
+                'id': str(request.user.id),
+                'employee_id': request.user.employee_id,
+                'full_name': request.user.full_name,
+                'department': request.user.department,
+                'branch': request.user.branch,
+            })
         return success('HR users retrieved.', data=data)
 
 
