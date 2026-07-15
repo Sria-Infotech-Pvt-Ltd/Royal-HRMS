@@ -78,17 +78,30 @@ export default function FormField({
         );
 
       case "select":
+        // In read-only mode render as a plain text input so the value always shows
+        // regardless of whether the options array has loaded yet.
+        if (disabled) {
+          const displayLabel = field.options?.find(o => o.value === value)?.label ?? value;
+          return (
+            <input
+              id={`fld-${field.key}`}
+              value={displayLabel || "—"}
+              disabled
+              suppressHydrationWarning
+              className={INPUT + " cursor-not-allowed"}
+              style={{ borderColor: BORDER, background: "#eff2f8", color: "#1e4e8c", fontWeight: 600 }}
+            />
+          );
+        }
         return (
           <select
             id={`fld-${field.key}`}
             value={value}
             onChange={(e) => set(e.target.value)}
-            disabled={disabled}
             suppressHydrationWarning
-            className={INPUT + " appearance-none pr-9" + (disabled ? " cursor-not-allowed" : " cursor-pointer")}
+            className={INPUT + " appearance-none pr-9 cursor-pointer"}
             style={{
-              borderColor: disabled ? BORDER : borderColor,
-              backgroundColor: disabled ? "#eff2f8" : undefined,
+              borderColor: borderColor,
               backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
               backgroundRepeat: "no-repeat",
               backgroundPosition: "right 10px center",

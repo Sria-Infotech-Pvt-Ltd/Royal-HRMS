@@ -3839,8 +3839,8 @@ class HRListView(APIView):
 
 
 class ManagerListView(APIView):
-    """GET list of active managers for a given branch — for the reporting manager dropdown.
-    Query param: branch (required) — e.g. ?branch=Mumbai HQ
+    """GET list of active managers — optionally filtered by branch.
+    Query param: branch (optional) — e.g. ?branch=Mumbai HQ
     """
     permission_classes = [IsAuthenticated]
 
@@ -3848,14 +3848,10 @@ class ManagerListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         branch = (request.query_params.get('branch') or '').strip()
-        if not branch:
-            return error('branch query parameter is required.')
-        managers = (
-            User.objects
-            .filter(role__name='manager', is_active=True, branch__iexact=branch)
-            .select_related('role')
-            .order_by('full_name')
-        )
+        managers = User.objects.filter(role__name='manager', is_active=True).select_related('role')
+        if branch:
+            managers = managers.filter(branch__iexact=branch)
+        managers = managers.order_by('full_name')
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}
