@@ -429,7 +429,8 @@ export default function EmployeeProfilePage({
               }}
               fieldSlot={(key, disabled) => {
                 if (key === "reportingManager") {
-                  if (!values.reportingManager) return "hidden";
+                  // hide only in read mode when no manager is assigned; always show picker in edit mode
+                  if (!values.reportingManager && disabled) return "hidden";
                   return (
                     <EmployeePickerInline
                       label="Reporting Manager"
@@ -444,7 +445,8 @@ export default function EmployeeProfilePage({
                   );
                 }
                 if (key === "hr") {
-                  if (!values.hr) return "hidden";
+                  // hide only in read mode when no HR is assigned; always show picker in edit mode
+                  if (!values.hr && disabled) return "hidden";
                   return (
                     <EmployeePickerInline
                       label="Branch HR"

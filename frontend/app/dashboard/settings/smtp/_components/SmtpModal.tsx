@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   EMPTY_SMTP_FORM, apiEntryToForm, validateSmtpForm,
-  type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors,
+  type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type SmtpType,
 } from "../_data";
 
 interface Props {
@@ -59,12 +59,55 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
         </div>
 
         <div className="modal-body">
+
+          {/* ── Type switcher ─────────────────────────────────────────────── */}
+          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderRadius: 8, overflow: "hidden", border: "1px solid var(--outline-v)" }}>
+            {([ ["local", "ti-mail", "Basic SMTP / Gmail"], ["server", "ti-server", "Dedicated Server"] ] as [SmtpType, string, string][]).map(([val, icon, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => patch({
+                  smtpType: val,
+                  host:     val === "local" ? (form.host || "") : (form.host || ""),
+                  port:     val === "local" ? (form.port === 25 ? 587 : form.port) : (form.port === 587 ? 25 : form.port),
+                })}
+                style={{
+                  flex: 1, padding: "10px 0", border: "none", cursor: "pointer",
+                  fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: 7, transition: "background 0.15s",
+                  background: form.smtpType === val ? "var(--primary)" : "var(--bg-low)",
+                  color:      form.smtpType === val ? "#fff"           : "var(--on-variant)",
+                }}
+              >
+                <i className={`ti ${icon}`} style={{ fontSize: 15 }} />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Helper note per type */}
+          <div style={{ fontSize: 12, color: "var(--on-variant)", background: "var(--bg-low)", borderRadius: 6, padding: "8px 12px", marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <i className={`ti ${form.smtpType === "local" ? "ti-brand-gmail" : "ti-server"}`} style={{ fontSize: 15, marginTop: 1, flexShrink: 0 }} />
+            {form.smtpType === "local" ? (
+              <span>
+                <strong>Gmail:</strong> use <code>smtp.gmail.com</code>, port <code>587</code>, TLS enabled, and a Google <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>App Password</a>.
+                For <strong>Zoho / Outlook / others</strong> use their SMTP host and credentials.
+              </span>
+            ) : (
+              <span>
+                <strong>Dedicated mail server</strong> (Postfix, Sendmail, corporate relay).
+                Typical settings: host <code>mail.yourdomain.com</code>, port <code>25</code> or <code>465</code>.
+              </span>
+            )}
+          </div>
+
           <div className="smtp-form-grid">
 
             {/* Configuration Name — full width */}
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label">Configuration Name <span style={{ color: "var(--error)" }}>*</span></label>
-              <input className="field-input" placeholder="e.g. Gmail SMTP, Corporate Mail"
+              <input className="field-input"
+                placeholder={form.smtpType === "local" ? "e.g. Gmail SMTP, Zoho Mail" : "e.g. Corporate Mail Server"}
                 value={form.name}
                 onChange={e => { patch({ name: e.target.value }); clearErr("name"); }}
                 suppressHydrationWarning />
@@ -74,7 +117,8 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
             {/* Host */}
             <div className="field-group">
               <label className="field-label">SMTP Host <span style={{ color: "var(--error)" }}>*</span></label>
-              <input className="field-input" placeholder="smtp.gmail.com"
+              <input className="field-input"
+                placeholder={form.smtpType === "local" ? "smtp.gmail.com" : "mail.yourdomain.com"}
                 value={form.host}
                 onChange={e => { patch({ host: e.target.value }); clearErr("host"); }}
                 suppressHydrationWarning />

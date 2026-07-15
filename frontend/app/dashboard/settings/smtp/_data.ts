@@ -38,7 +38,10 @@ export interface ApiSmtpResponse {
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 
+export type SmtpType = "local" | "server";
+
 export interface SmtpForm {
+  smtpType:            SmtpType;
   name:                string;
   host:                string;
   port:                number;
@@ -55,6 +58,7 @@ export interface SmtpForm {
 export type SmtpFormErrors = Partial<Record<keyof SmtpForm, string>>;
 
 export const EMPTY_SMTP_FORM: SmtpForm = {
+  smtpType:          "local",
   name:              "",
   host:              "",
   port:              587,
@@ -72,6 +76,7 @@ export const EMPTY_SMTP_FORM: SmtpForm = {
 
 export function apiEntryToForm(entry: ApiSmtpEntry): SmtpForm {
   return {
+    smtpType:          (entry.smtp_type as SmtpType) || "local",
     name:              entry.name,
     host:              entry.host,
     port:              entry.port,
@@ -88,6 +93,7 @@ export function apiEntryToForm(entry: ApiSmtpEntry): SmtpForm {
 
 export function formToPayload(form: SmtpForm): Record<string, unknown> {
   return {
+    smtp_type:           form.smtpType,
     name:                form.name,
     host:                form.host,
     port:                form.port,

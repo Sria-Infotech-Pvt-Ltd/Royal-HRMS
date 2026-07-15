@@ -28,6 +28,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
+from core.permissions import HasSettingsPermission
 from core.responses import error, first_error, get_client_ip, success
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -930,7 +931,7 @@ class PermissionDetailView(APIView):
 # ─── Organisation Structure ────────────────────────────────────────────────────
 
 class DepartmentListCreateView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    permission_classes = [IsAuthenticated, HasSettingsPermission]
 
     def get(self, request):
         qs = Department.objects.prefetch_related('designations').all()
@@ -988,7 +989,7 @@ class DepartmentListCreateView(APIView):
 
 
 class DepartmentDetailView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    permission_classes = [IsAuthenticated, HasSettingsPermission]
 
     def _get(self, pk: int) -> Department | None:
         try:
@@ -1106,7 +1107,7 @@ class DepartmentDetailView(APIView):
 
 
 class DesignationListCreateView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    permission_classes = [IsAuthenticated, HasSettingsPermission]
 
     def get(self, request):
         qs = Designation.objects.select_related('department').all()
@@ -1152,7 +1153,7 @@ class DesignationListCreateView(APIView):
 
 
 class DesignationDetailView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    permission_classes = [IsAuthenticated, HasSettingsPermission]
 
     def _get(self, pk: int) -> Designation | None:
         try:

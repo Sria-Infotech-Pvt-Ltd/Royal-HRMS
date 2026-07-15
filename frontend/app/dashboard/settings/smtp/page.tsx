@@ -145,6 +145,7 @@ export default function SmtpSettingsPage() {
   }
 
   const FIELDS = (entry: ApiSmtpEntry) => [
+    { icon: "ti-mail",         label: "Type",        value: entry.smtp_type_display || "—" },
     { icon: "ti-server-2",     label: "Host",        value: entry.host || "—" },
     { icon: "ti-plug",         label: "Port",        value: `${entry.port}${entry.use_tls ? " · TLS" : ""}` },
     { icon: "ti-mail",         label: "From Email",  value: entry.from_email || "—" },
