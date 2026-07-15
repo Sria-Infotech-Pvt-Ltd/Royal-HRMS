@@ -429,14 +429,14 @@ export default function EmployeeProfilePage({
               }}
               fieldSlot={(key, disabled) => {
                 if (key === "reportingManager") {
-                  // hide only in read mode when no manager is assigned; always show picker in edit mode
-                  if (!values.reportingManager && disabled) return "hidden";
+                  // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
+                  if (disabled) return null;
                   return (
                     <EmployeePickerInline
                       label="Reporting Manager"
                       value={values.reportingManager}
                       selectedId={values.reportingManagerId ?? ""}
-                      disabled={disabled}
+                      disabled={false}
                       listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
@@ -445,14 +445,14 @@ export default function EmployeeProfilePage({
                   );
                 }
                 if (key === "hr") {
-                  // hide only in read mode when no HR is assigned; always show picker in edit mode
-                  if (!values.hr && disabled) return "hidden";
+                  // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
+                  if (disabled) return null;
                   return (
                     <EmployeePickerInline
                       label="Branch HR"
                       value={values.hr}
                       selectedId={values.hrId ?? ""}
-                      disabled={disabled}
+                      disabled={false}
                       listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : API.employees.hrList}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, hr: name ?? "", hrId: uuid ?? "" }))

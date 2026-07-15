@@ -87,6 +87,8 @@ logger = logging.getLogger(__name__)
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False
+    if user.role.name == 'system_admin':
+        return True
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
@@ -2385,6 +2387,11 @@ class EmployeeListCreateView(APIView):
                 onboarding_status    = User.ONBOARDING_PENDING,
             )
             auto_fields = _auto_assign_managers(user)
+            # Auto-assign creating HR admin as the employee's branch HR
+            if (request.user.role and request.user.role.name == 'hr_admin'
+                    and user.hr_id is None and user.pk != request.user.pk):
+                user.hr = request.user
+                auto_fields.append('hr')
             if auto_fields:
                 user.save(update_fields=[*auto_fields, 'updated_at'])
             AuditLog.objects.create(
