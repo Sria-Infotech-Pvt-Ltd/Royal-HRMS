@@ -1,0 +1,543 @@
+import logging
+import os
+
+from django.conf import settings as django_settings
+from django.core.cache import cache
+from django.db import connection as db_connection
+from django.db.models import Count, Sum
+from django.utils import timezone
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+
+from core.responses import error, success
+
+logger = logging.getLogger(__name__)
+_DENIED = 'You do not have permission to perform this action.'
+
+_TTL_HEADCOUNT = 12 * 3600   # 12 h
+_TTL_FUNNEL    = 10 * 60     # 10 min
+
+
+def _is_system_admin(user):
+    return bool(user and user.role and user.role.name == 'system_admin')
+
+
+def _is_hr_or_admin(user):
+    return bool(user and user.role and user.role.name in ('hr', 'system_admin'))
+
+
+def _headcount_data():
+    """Shared department headcount — cached 12 h, used by both dashboards."""
+    rows = cache.get('dashboard:hr:headcount')
+    if rows is None:
+        from apps.accounts.models import User
+        rows = list(
+            User.objects.filter(is_active=True).exclude(department='')
+            .values('department').annotate(count=Count('id')).order_by('-count')
+        )
+        cache.set('dashboard:hr:headcount', rows, _TTL_HEADCOUNT)
+    return rows
+
+
+# ─── System Admin KPIs ────────────────────────────────────────────────────────
+
+class SystemAdminKPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_system_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import User, SMTPSettings
+        from apps.branch.models import Branch
+        from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
+
+        total_employees = User.objects.filter(is_active=True).count()
+
+        leave_pending        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
+        expense_pending      = Expense.objects.filter(status='pending').count()
+        onboarding_submitted = User.objects.filter(
+            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
+        ).count()
+        pending_approvals = leave_pending + expense_pending + onboarding_submitted
+
+        employees_onboarding = User.objects.filter(
+            onboarding_status__in=[
+                User.ONBOARDING_PENDING,
+                User.ONBOARDING_DRAFT,
+                User.ONBOARDING_SUBMITTED,
+            ],
+            is_active=True,
+        ).count()
+
+        active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
+
+        try:
+            db_connection.ensure_connection()
+            database_status = True
+        except Exception:
+            database_status = False
+
+        mail_status    = SMTPSettings.get_active() is not None
+        storage_status = bool(
+            os.environ.get('CLOUDINARY_URL') or
+            os.path.isdir(str(getattr(django_settings, 'MEDIA_ROOT', '')))
+        )
+
+        return success('KPIs retrieved.', data={
+            'total_employees':      total_employees,
+            'pending_approvals':    pending_approvals,
+            'employees_onboarding': employees_onboarding,
+            'active_branches':      active_branches,
+            'api_status':           True,
+            'database_status':      database_status,
+            'mail_status':          mail_status,
+            'storage_status':       storage_status,
+        })
+
+
+# ─── System Admin Announcement ────────────────────────────────────────────────
+
+class SystemAdminAnnouncementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_system_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.announcements.models import Announcement
+
+        ann = Announcement.objects.select_related('posted_by').first()
+        if ann is None:
+            return success('No announcements found.', data=None)
+
+        return success('Latest announcement retrieved.', data={
+            'id':         ann.id,
+            'title':      ann.title,
+            'body':       ann.body,
+            'category':   ann.category,
+            'visibility': ann.visibility,
+            'is_pinned':  ann.is_pinned,
+            'posted_by':  ann.posted_by.full_name if ann.posted_by else None,
+            'created_at': ann.created_at.isoformat(),
+        })
+
+
+# ─── System Admin Pending Approvals ──────────────────────────────────────────
+
+class SystemAdminPendingApprovalsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_system_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import User
+        from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
+
+        leave_requests     = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
+        expense_claims     = Expense.objects.filter(status='pending').count()
+        onboarding_reviews = User.objects.filter(
+            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
+        ).count()
+        separation_requests = 0  # model not yet implemented
+
+        return success('Pending approvals retrieved.', data={
+            'leave_requests':      leave_requests,
+            'expense_claims':      expense_claims,
+            'onboarding_reviews':  onboarding_reviews,
+            'separation_requests': separation_requests,
+            'total_pending':       leave_requests + expense_claims + onboarding_reviews,
+        })
+
+
+# ─── Department Headcount (shared) ───────────────────────────────────────────
+
+class SystemAdminDepartmentHeadcountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_system_admin(request.user):
+            return error(_DENIED, http_status=403)
+        return success('Department headcount retrieved.', data=_headcount_data())
+
+
+class HRDepartmentHeadcountView(APIView):
+    """Shared headcount endpoint — HR and System Admin."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+        return success('Department headcount retrieved.', data=_headcount_data())
+
+
+# ─── HR KPIs ──────────────────────────────────────────────────────────────────
+
+class HRKPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import User
+        from apps.attendance.models import AttendanceRecord, AttendanceCorrection
+        from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
+        from apps.recruitment.models import Candidate
+
+        today = timezone.localdate()
+
+        total_workforce = cache.get('dashboard:hr:kpis:workforce')
+        if total_workforce is None:
+            total_workforce = User.objects.filter(is_active=True).count()
+            cache.set('dashboard:hr:kpis:workforce', total_workforce, 5 * 60)
+
+        active_interviews = cache.get('dashboard:hr:kpis:interviews')
+        if active_interviews is None:
+            active_interviews = Candidate.objects.filter(
+                status__in=[Candidate.STATUS_INTERVIEW_SCHEDULED, Candidate.STATUS_INTERVIEW_DONE]
+            ).count()
+            cache.set('dashboard:hr:kpis:interviews', active_interviews, _TTL_FUNNEL)
+
+        # Real-time counts — not cached per spec
+        leave_pending      = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
+        expense_pending    = Expense.objects.filter(status='pending').count()
+        onboarding_pending = User.objects.filter(
+            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
+        ).count()
+        correction_pending = AttendanceCorrection.objects.filter(
+            status=AttendanceCorrection.STATUS_PENDING
+        ).count()
+        pending_actions = leave_pending + expense_pending + onboarding_pending
+
+        # Requesting user's own attendance today
+        record = AttendanceRecord.objects.filter(employee=request.user, date=today).first()
+        today_attendance = None
+        if record:
+            today_attendance = {
+                'status':                record.status,
+                'first_punch_in':        str(record.first_punch_in) if record.first_punch_in else None,
+                'last_punch_out':        str(record.last_punch_out) if record.last_punch_out else None,
+                'total_working_minutes': record.total_working_minutes,
+            }
+        clocked_in = bool(
+            today_attendance and
+            today_attendance['first_punch_in'] and
+            not today_attendance['last_punch_out']
+        )
+
+        return success('HR dashboard KPIs fetched successfully.', data={
+            'total_workforce':               total_workforce,
+            'pending_actions':               pending_actions,
+            'active_interviews':             active_interviews,
+            'employees_on_probation':        0,
+            'clocked_in':                    clocked_in,
+            'today_attendance':              today_attendance,
+            'attendance_correction_pending': correction_pending,
+        })
+
+
+# ─── HR Action Queue ──────────────────────────────────────────────────────────
+
+class HRActionQueueView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import User
+        from apps.attendance.models import AttendanceCorrection
+        from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
+        from apps.recruitment.models import Candidate
+
+        candidate_reviews      = Candidate.objects.filter(
+            status=Candidate.STATUS_SELECTED, details_filled=True, hr_approved=False,
+        ).count()
+        leave_approvals        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
+        attendance_corrections = AttendanceCorrection.objects.filter(
+            status=AttendanceCorrection.STATUS_PENDING
+        ).count()
+        expense_claims         = Expense.objects.filter(status='pending').count()
+        onboarding_reviews     = User.objects.filter(
+            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
+        ).count()
+
+        total = candidate_reviews + leave_approvals + attendance_corrections + expense_claims + onboarding_reviews
+
+        return success('Action queue retrieved.', data={
+            'total_pending':           total,
+            'candidate_reviews':       candidate_reviews,
+            'leave_approvals':         leave_approvals,
+            'attendance_corrections':  attendance_corrections,
+            'expense_claims':          expense_claims,
+            'onboarding_reviews':      onboarding_reviews,
+            'separation_requests':     0,
+        })
+
+
+# ─── HR Recruitment Funnel ────────────────────────────────────────────────────
+
+class HRRecruitmentFunnelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        cached = cache.get('dashboard:hr:recruitment:funnel')
+        if cached is not None:
+            return success('Recruitment funnel retrieved.', data=cached)
+
+        from apps.recruitment.models import Candidate
+
+        data = {
+            'interviews_scheduled': Candidate.objects.filter(status=Candidate.STATUS_INTERVIEW_SCHEDULED).count(),
+            'interviewed':          Candidate.objects.filter(status=Candidate.STATUS_INTERVIEW_DONE).count(),
+            'selected':             Candidate.objects.filter(status=Candidate.STATUS_SELECTED).count(),
+            'details_submitted':    Candidate.objects.filter(details_filled=True).count(),
+            'onboarded':            Candidate.objects.filter(status=Candidate.STATUS_CONVERTED).count(),
+        }
+        cache.set('dashboard:hr:recruitment:funnel', data, _TTL_FUNNEL)
+        return success('Recruitment funnel retrieved.', data=data)
+
+
+# ─── HR Attendance Summary ────────────────────────────────────────────────────
+
+class HRAttendanceSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.attendance.models import AttendanceRecord
+
+        today = timezone.localdate()
+        counts = dict(
+            AttendanceRecord.objects
+            .filter(date=today)
+            .values('status')
+            .annotate(n=Count('id'))
+            .values_list('status', 'n')
+        )
+
+        return success('Attendance summary retrieved.', data={
+            'present':    counts.get(AttendanceRecord.STATUS_PRESENT, 0) +
+                          counts.get(AttendanceRecord.STATUS_INCOMPLETE, 0),
+            'absent':     counts.get(AttendanceRecord.STATUS_ABSENT, 0),
+            'late':       counts.get(AttendanceRecord.STATUS_LATE, 0),
+            'leave':      counts.get(AttendanceRecord.STATUS_ON_LEAVE, 0),
+            'weekly_off': counts.get(AttendanceRecord.STATUS_WEEKLY_OFF, 0),
+            'holiday':    counts.get(AttendanceRecord.STATUS_HOLIDAY, 0),
+        })
+
+
+# ─── Shared Announcement (all authenticated users) ───────────────────────────
+
+class SharedAnnouncementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.announcements.models import Announcement
+
+        ann = Announcement.objects.select_related('posted_by').first()
+        if ann is None:
+            return success('No announcements found.', data=None)
+
+        return success('Latest announcement retrieved.', data={
+            'id':         ann.id,
+            'title':      ann.title,
+            'body':       ann.body,
+            'category':   ann.category,
+            'visibility': ann.visibility,
+            'is_pinned':  ann.is_pinned,
+            'posted_by':  ann.posted_by.full_name if ann.posted_by else None,
+            'created_at': ann.created_at.isoformat(),
+        })
+
+
+# ─── Employee KPIs ────────────────────────────────────────────────────────────
+
+class EmployeeKPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.models import EmployeeProfile, EmployeeDocument
+        from apps.attendance.models import AttendanceRecord, AttendanceCorrection
+        from apps.attendance.services_attendance import AttendanceDashboardService
+        from apps.hrms.models import Expense
+
+        employee = request.user
+        today    = timezone.localdate()
+
+        # Monthly summary — cached per employee (5 min)
+        cache_key = f'dashboard:employee:kpis:{employee.id}'
+        summary   = cache.get(cache_key)
+        if summary is None:
+            summary = AttendanceDashboardService.get_monthly_summary(employee, today.year, today.month)
+            cache.set(cache_key, summary, 5 * 60)
+
+        # Real-time counts — never cached
+        pending_corrections    = AttendanceCorrection.objects.filter(
+            employee=employee, status=AttendanceCorrection.STATUS_PENDING
+        ).count()
+        pending_expense_claims = Expense.objects.filter(employee=employee, status='pending').count()
+
+        # Profile completeness
+        profile = EmployeeProfile.objects.filter(user=employee).first()
+        if profile is None or not all([
+            profile.date_of_birth, profile.gender, profile.current_address,
+            profile.account_number, profile.ifsc_code,
+            profile.emergency_name, profile.emergency_phone,
+        ]):
+            profile_incomplete = 1
+        else:
+            profile_incomplete = 0
+
+        # Missing required documents
+        required_docs = {'pan_card', 'aadhaar_card'}
+        uploaded_docs = set(
+            EmployeeDocument.objects.filter(user=employee).values_list('document_type', flat=True)
+        )
+        pending_documents    = len(required_docs - uploaded_docs)
+        pending_action_items = profile_incomplete + pending_corrections
+
+        # Today's attendance
+        record = AttendanceRecord.objects.filter(employee=employee, date=today).first()
+        today_attendance = None
+        if record:
+            today_attendance = {
+                'status':                record.status,
+                'first_punch_in':        str(record.first_punch_in) if record.first_punch_in else None,
+                'last_punch_out':        str(record.last_punch_out) if record.last_punch_out else None,
+                'total_working_minutes': record.total_working_minutes,
+            }
+        is_clocked_in = bool(
+            today_attendance and
+            today_attendance['first_punch_in'] and
+            not today_attendance['last_punch_out']
+        )
+
+        return success('Employee dashboard KPIs fetched successfully.', data={
+            'days_present':           summary.get('days_present', 0),
+            'working_days':           summary.get('working_days', 0),
+            'absent_days':            summary.get('days_absent', 0),
+            'pending_action_items':   pending_action_items,
+            'pending_expense_claims': pending_expense_claims,
+            'pending_documents':      pending_documents,
+            'clocked_in':             is_clocked_in,
+            'today_attendance':       today_attendance,
+        })
+
+
+# ─── Employee Leave Balances ──────────────────────────────────────────────────
+
+class EmployeeLeaveBalanceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.hrms.models import LeaveBalance, LeaveRequest, REQ_APPROVED
+
+        employee = request.user
+        try:
+            year = int(request.query_params.get('year', timezone.localdate().year))
+        except (ValueError, TypeError):
+            year = timezone.localdate().year
+
+        cache_key = f'dashboard:employee:leave_balance:{employee.id}'
+        cached    = cache.get(cache_key)
+        if cached is not None:
+            return success('Leave balances retrieved.', data=cached)
+
+        balances  = LeaveBalance.objects.filter(employee=employee, year=year).order_by('leave_type')
+        lop_total = (
+            LeaveRequest.objects
+            .filter(employee=employee, status=REQ_APPROVED, start_date__year=year, lop_days__gt=0)
+            .aggregate(total=Sum('lop_days'))['total'] or 0
+        )
+
+        result = {
+            'year': year,
+            'balances': [
+                {
+                    'leave_type':      b.leave_type,
+                    'total_days':      float(b.total_days),
+                    'used_days':       float(b.used_days),
+                    'remaining':       float(b.available_days),
+                    'carried_forward': float(b.carried_forward),
+                }
+                for b in balances
+            ],
+            'lop_days': float(lop_total),
+        }
+        cache.set(cache_key, result, 10 * 60)
+        return success('Leave balances retrieved.', data=result)
+
+
+# ─── Employee Attendance Summary ──────────────────────────────────────────────
+
+class EmployeeAttendanceSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.attendance.services_attendance import AttendanceDashboardService
+
+        today    = timezone.localdate()
+        employee = request.user
+        try:
+            year  = int(request.query_params.get('year',  today.year))
+            month = int(request.query_params.get('month', today.month))
+        except (ValueError, TypeError):
+            year, month = today.year, today.month
+
+        stats   = AttendanceDashboardService.get_stats(employee, year, month)
+        summary = AttendanceDashboardService.get_monthly_summary(employee, year, month)
+
+        return success('Attendance summary retrieved.', data={
+            'year':                  year,
+            'month':                 month,
+            'present_days':          stats.get('days_present', 0),
+            'absent_days':           summary.get('days_absent', 0),
+            'late_marks':            stats.get('late_arrivals', 0),
+            'lop_pending':           stats.get('lop_pending', 0),
+            'half_days':             summary.get('half_days', 0),
+            'leave_days':            summary.get('leave_days', 0),
+            'working_days':          summary.get('working_days', 0),
+            'avg_hours_per_day':     stats.get('avg_hours_per_day', 0),
+            'attendance_percentage': stats.get('attendance_percentage', 0),
+            'ot_hours':              summary.get('ot_hours', '0h'),
+        })
+
+
+# ─── Employee Attendance Status (today) ──────────────────────────────────────
+
+class EmployeeAttendanceStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.attendance.models import AttendanceRecord
+
+        today    = timezone.localdate()
+        employee = request.user
+        record   = AttendanceRecord.objects.filter(employee=employee, date=today).first()
+
+        if record:
+            clock_in_time   = str(record.first_punch_in)[:5]  if record.first_punch_in  else None
+            clock_out_time  = str(record.last_punch_out)[:5]  if record.last_punch_out   else None
+            working_minutes = record.total_working_minutes or 0
+            is_clocked_in   = bool(record.first_punch_in and not record.last_punch_out)
+        else:
+            clock_in_time, clock_out_time, working_minutes, is_clocked_in = None, None, 0, False
+
+        hours, minutes = divmod(working_minutes, 60)
+
+        return success('Attendance status retrieved.', data={
+            'clocked_in':     is_clocked_in,
+            'clock_in_time':  clock_in_time,
+            'clock_out_time': clock_out_time,
+            'working_hours':  f'{hours:02d}:{minutes:02d}',
+            'can_clock_in':   not is_clocked_in,
+            'can_clock_out':  is_clocked_in,
+        })

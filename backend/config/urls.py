@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/attendance/',    include('apps.attendance.urls')),
     path('api/assessments/',   include('apps.assessments.urls')),
     path('api/notifications/', include('apps.notifications.urls')),
+    path('api/dashboard/',     include('apps.dashboard.urls')),
 ]
 
 if settings.DEBUG:
