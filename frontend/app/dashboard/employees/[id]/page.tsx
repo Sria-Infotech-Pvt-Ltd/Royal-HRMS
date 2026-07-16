@@ -457,7 +457,7 @@ export default function EmployeeProfilePage({
                   return (
                     <EmployeePickerInline
                       label="Reporting Manager"
-                      value={values.reportingManager}
+                      value={values.reportingManager ?? ""}
                       selectedId={values.reportingManagerId ?? ""}
                       disabled={false}
                       listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
@@ -473,7 +473,7 @@ export default function EmployeeProfilePage({
                   return (
                     <EmployeePickerInline
                       label="Branch HR"
-                      value={values.hr}
+                      value={values.hr ?? ""}
                       selectedId={values.hrId ?? ""}
                       disabled={false}
                       listEndpoint={API.employees.hrList}
@@ -499,7 +499,12 @@ export default function EmployeeProfilePage({
       ) : tab === "attendance" ? (
         <AttendanceTab employeeId={id} />
       ) : tab === "approval" ? (
-        <ApprovalMatrixTab employeeCode={id} branch={values.branch ?? ""} />
+        <ApprovalMatrixTab
+          employeeCode={id}
+          branch={values.branch ?? ""}
+          defaultManagerId={values.reportingManagerId ?? ""}
+          defaultHrId={values.hrId ?? ""}
+        />
       ) : tab === "wishes" ? (
         <WishesTab
           employeeId={id}

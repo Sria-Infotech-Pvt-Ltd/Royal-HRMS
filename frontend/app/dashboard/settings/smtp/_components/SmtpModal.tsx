@@ -13,6 +13,21 @@ interface Props {
   onSave:  (form: SmtpForm) => Promise<void>;
 }
 
+const SMTP_TYPES: { value: SmtpType; label: string; sub: string; icon: string }[] = [
+  {
+    value: "local",
+    label: "Local (Gmail / Custom SMTP)",
+    sub:   "Connect via SMTP with host, port and credentials",
+    icon:  "ti-mail-cog",
+  },
+  {
+    value: "server",
+    label: "Server Mail",
+    sub:   "Use the server's built-in mail system (no credentials needed)",
+    icon:  "ti-server",
+  },
+];
+
 export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
   const isAddMode = entry === null;
 
@@ -21,8 +36,15 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
   );
   const [errors, setErrors] = useState<SmtpFormErrors>({});
 
+  const isLocal = form.smtpType === "local";
+
   function patch(p: Partial<SmtpForm>) { setForm(prev => ({ ...prev, ...p })); }
   function clearErr(k: keyof SmtpForm) { setErrors(prev => ({ ...prev, [k]: undefined })); }
+
+  function handleTypeChange(t: SmtpType) {
+    patch({ smtpType: t });
+    setErrors({});
+  }
 
   async function handleSave() {
     const errs = validateSmtpForm(form, isAddMode);
@@ -103,6 +125,47 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
 
           <div className="smtp-form-grid">
 
+            {/* ── SMTP Type selector — full width ── */}
+            <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label">SMTP Type <span style={{ color: "var(--error)" }}>*</span></label>
+              <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+                {SMTP_TYPES.map(opt => {
+                  const active = form.smtpType === opt.value;
+                  return (
+                    <label
+                      key={opt.value}
+                      style={{
+                        flex: 1, display: "flex", alignItems: "flex-start", gap: 10,
+                        padding: "12px 14px", borderRadius: 8, cursor: "pointer",
+                        border: `1.5px solid ${active ? "var(--primary)" : "var(--outline-v)"}`,
+                        background: active ? "rgba(30,78,140,0.05)" : "#fff",
+                        transition: "border-color 0.15s, background 0.15s",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="smtpType"
+                        value={opt.value}
+                        checked={active}
+                        onChange={() => handleTypeChange(opt.value)}
+                        style={{ accentColor: "var(--primary)", marginTop: 2, flexShrink: 0 }}
+                        suppressHydrationWarning
+                      />
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <i className={`ti ${opt.icon}`} style={{ fontSize: 14, color: active ? "var(--primary)" : "var(--on-variant)" }} />
+                          <span style={{ fontSize: 13, fontWeight: 600, color: active ? "var(--primary)" : "var(--on-bg)" }}>
+                            {opt.label}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>{opt.sub}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Configuration Name — full width */}
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label">Configuration Name <span style={{ color: "var(--error)" }}>*</span></label>
@@ -114,34 +177,65 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
               {errors.name && <span className="field-error">{errors.name}</span>}
             </div>
 
-            {/* Host */}
-            <div className="field-group">
-              <label className="field-label">SMTP Host <span style={{ color: "var(--error)" }}>*</span></label>
-              <input className="field-input"
-                placeholder={form.smtpType === "local" ? "smtp.gmail.com" : "mail.yourdomain.com"}
-                value={form.host}
-                onChange={e => { patch({ host: e.target.value }); clearErr("host"); }}
-                suppressHydrationWarning />
-              {errors.host && <span className="field-error">{errors.host}</span>}
-            </div>
-
-            {/* Port + TLS */}
-            <div className="field-group">
-              <label className="field-label">Port</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <input className="field-input" type="number" value={form.port}
-                  onChange={e => patch({ port: Number(e.target.value) })}
-                  style={{ flex: 1 }}
-                  suppressHydrationWarning />
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  <input type="checkbox" checked={form.useTls}
-                    onChange={e => patch({ useTls: e.target.checked })}
-                    style={{ accentColor: "var(--primary)" }}
+            {/* ── Local-only fields ── */}
+            {isLocal && (
+              <>
+                {/* Host */}
+                <div className="field-group">
+                  <label className="field-label">SMTP Host <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input className="field-input" placeholder="smtp.gmail.com"
+                    value={form.host}
+                    onChange={e => { patch({ host: e.target.value }); clearErr("host"); }}
                     suppressHydrationWarning />
-                  Use TLS
-                </label>
-              </div>
-            </div>
+                  {errors.host && <span className="field-error">{errors.host}</span>}
+                </div>
+
+                {/* Port + TLS */}
+                <div className="field-group">
+                  <label className="field-label">Port</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <input className="field-input" type="number" value={form.port}
+                      onChange={e => patch({ port: Number(e.target.value) })}
+                      style={{ flex: 1 }}
+                      suppressHydrationWarning />
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      <input type="checkbox" checked={form.useTls}
+                        onChange={e => patch({ useTls: e.target.checked })}
+                        style={{ accentColor: "var(--primary)" }}
+                        suppressHydrationWarning />
+                      Use TLS
+                    </label>
+                  </div>
+                </div>
+
+                {/* Username */}
+                <div className="field-group">
+                  <label className="field-label">Username <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input className="field-input" placeholder="login username / email"
+                    value={form.username}
+                    onChange={e => { patch({ username: e.target.value }); clearErr("username"); }}
+                    suppressHydrationWarning />
+                  {errors.username && <span className="field-error">{errors.username}</span>}
+                </div>
+
+                {/* Password */}
+                <div className="field-group">
+                  <label className="field-label">
+                    Password
+                    {isAddMode
+                      ? <span style={{ color: "var(--error)", marginLeft: 4 }}>*</span>
+                      : <span style={{ fontSize: 11, color: "var(--outline)", marginLeft: 6 }}>leave blank to keep current</span>
+                    }
+                  </label>
+                  <input className="field-input" type="password"
+                    placeholder={isAddMode ? "SMTP password / App password" : "New password (optional)"}
+                    value={form.password}
+                    onChange={e => { patch({ password: e.target.value }); clearErr("password"); }}
+                    suppressHydrationWarning />
+                  {errors.password && <span className="field-error">{errors.password}</span>}
+                </div>
+              </>
+            )}
 
             {/* Sender Name */}
             <div className="field-group">
@@ -160,33 +254,6 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                 onChange={e => { patch({ fromEmail: e.target.value }); clearErr("fromEmail"); }}
                 suppressHydrationWarning />
               {errors.fromEmail && <span className="field-error">{errors.fromEmail}</span>}
-            </div>
-
-            {/* Username */}
-            <div className="field-group">
-              <label className="field-label">Username <span style={{ color: "var(--error)" }}>*</span></label>
-              <input className="field-input" placeholder="login username / email"
-                value={form.username}
-                onChange={e => { patch({ username: e.target.value }); clearErr("username"); }}
-                suppressHydrationWarning />
-              {errors.username && <span className="field-error">{errors.username}</span>}
-            </div>
-
-            {/* Password */}
-            <div className="field-group">
-              <label className="field-label">
-                Password
-                {isAddMode
-                  ? <span style={{ color: "var(--error)", marginLeft: 4 }}>*</span>
-                  : <span style={{ fontSize: 11, color: "var(--outline)", marginLeft: 6 }}>leave blank to keep current</span>
-                }
-              </label>
-              <input className="field-input" type="password"
-                placeholder={isAddMode ? "SMTP password / App password" : "New password (optional)"}
-                value={form.password}
-                onChange={e => { patch({ password: e.target.value }); clearErr("password"); }}
-                suppressHydrationWarning />
-              {errors.password && <span className="field-error">{errors.password}</span>}
             </div>
 
             {/* BCC */}

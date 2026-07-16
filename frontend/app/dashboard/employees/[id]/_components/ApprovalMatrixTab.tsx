@@ -18,16 +18,18 @@ interface PickerEmployee {
 // ─── Override Editor Modal ────────────────────────────────────────────────────
 
 interface OverrideEditorProps {
-  row:          WorkflowMatrixRow;
-  employeeCode: string;
-  branch:       string;
-  onSaved:      (updated: WorkflowMatrixRow) => void;
-  onClose:      () => void;
+  row:              WorkflowMatrixRow;
+  employeeCode:     string;
+  branch:           string;
+  defaultManagerId: string;
+  defaultHrId:      string;
+  onSaved:          (updated: WorkflowMatrixRow) => void;
+  onClose:          () => void;
 }
 
-function OverrideEditor({ row, employeeCode, branch, onSaved, onClose }: OverrideEditorProps) {
-  const [l1Id,    setL1Id]    = useState<string>(row.l1_is_override ? (row.l1_approver_id ?? "") : "");
-  const [l2Id,    setL2Id]    = useState<string>(row.l2_is_override ? (row.l2_approver_id ?? "") : "");
+function OverrideEditor({ row, employeeCode, branch, defaultManagerId, defaultHrId, onSaved, onClose }: OverrideEditorProps) {
+  const [l1Id,    setL1Id]    = useState<string>(row.l1_is_override ? (row.l1_approver_id ?? "") : (defaultManagerId ?? ""));
+  const [l2Id,    setL2Id]    = useState<string>(row.l2_is_override ? (row.l2_approver_id ?? "") : (defaultHrId ?? ""));
   const [saving,  setSaving]  = useState(false);
   const [apiError, setApiError] = useState("");
 
@@ -209,11 +211,13 @@ function ApproverCell({ name, label, isOverride }: {
 // ─── Main Tab ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  employeeCode: string;
-  branch:       string;
+  employeeCode:     string;
+  branch:           string;
+  defaultManagerId?: string;
+  defaultHrId?:      string;
 }
 
-export function ApprovalMatrixTab({ employeeCode, branch }: Props) {
+export function ApprovalMatrixTab({ employeeCode, branch, defaultManagerId = "", defaultHrId = "" }: Props) {
   const { data, loading, error, refetch } = useFetch<WorkflowMatrixRow[]>(
     API.employees.approvalMatrix(employeeCode),
   );
@@ -317,6 +321,8 @@ export function ApprovalMatrixTab({ employeeCode, branch }: Props) {
           row={editing}
           employeeCode={employeeCode}
           branch={branch}
+          defaultManagerId={defaultManagerId}
+          defaultHrId={defaultHrId}
           onSaved={handleSaved}
           onClose={() => setEditing(null)}
         />

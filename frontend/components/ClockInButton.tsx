@@ -23,15 +23,16 @@ export default function ClockInButton() {
           onClick={() => punch(isClockedIn ? "OUT" : "IN")}
           disabled={isBusy}
           style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            padding: "10px 24px", borderRadius: 28, border: "none",
+            display: "inline-flex", alignItems: "center", gap: 7,
+            padding: "7px 16px", borderRadius: 6,
+            border: `1.5px solid ${isClockedIn ? "rgba(248,113,113,0.45)" : "rgba(74,222,128,0.45)"}`,
             cursor: isBusy ? "not-allowed" : "pointer",
-            fontSize: 14, fontWeight: 700,
-            background: "#ffffff",
-            color: isClockedIn ? "#dc2626" : "#16a34a",
-            opacity: isBusy ? 0.7 : 1,
-            boxShadow: isClockedIn ? "0 4px 16px rgba(220,38,38,0.25)" : "0 4px 16px rgba(22,163,74,0.25)",
-            transition: "box-shadow 0.15s, transform 0.1s, opacity 0.15s",
+            fontSize: 13, fontWeight: 700,
+            background: isClockedIn ? "rgba(220,38,38,0.18)" : "rgba(22,163,74,0.18)",
+            color: "#fff",
+            opacity: isBusy ? 0.6 : 1,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+            transition: "background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.15s",
             letterSpacing: "0.01em", whiteSpace: "nowrap",
           }}
           onMouseEnter={e => { if (!isBusy) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
@@ -39,18 +40,17 @@ export default function ClockInButton() {
         >
           {isPunching ? (
             <>
-              <i className="ti ti-loader-2" style={{ fontSize: 15, animation: "spin 1s linear infinite" }} />
+              <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
               Please wait…
             </>
           ) : (
             <>
               <span style={{
-                width: 9, height: 9, borderRadius: "50%",
-                background: isClockedIn ? "#dc2626" : "#16a34a",
-                display: "inline-block", flexShrink: 0,
+                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                background: isClockedIn ? "#f87171" : "#4ade80",
                 animation: !isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none",
               }} />
-              <i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} style={{ fontSize: 15 }} />
+              <i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} style={{ fontSize: 14 }} />
               {isClockedIn ? "Clock Out" : "Clock In"}
             </>
           )}
