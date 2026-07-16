@@ -1,6 +1,10 @@
+import re
+
 from rest_framework import serializers
 
-from .models import Candidate, CandidateEmail, CandidateLog
+from .models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
+
+_PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
 
 
 class CandidateLogSerializer(serializers.ModelSerializer):
@@ -31,11 +35,13 @@ class CandidateListSerializer(serializers.ModelSerializer):
     interviewer_name = serializers.SerializerMethodField()
     added_by_name    = serializers.SerializerMethodField()
     referral_by_name = serializers.SerializerMethodField()
+    branch_name      = serializers.SerializerMethodField()
 
     class Meta:
         model  = Candidate
         fields = [
             'id', 'name', 'email', 'phone', 'position_applied',
+            'branch', 'branch_name',
             'interview_date', 'interviewer', 'interviewer_name', 'interview_mode',
             'notes', 'status', 'referral_by', 'referral_by_name',
             'details_filled', 'hr_approved', 'portal_credentials_sent',
@@ -57,6 +63,9 @@ class CandidateListSerializer(serializers.ModelSerializer):
             return obj.referral_by.full_name or obj.referral_by.email
         return ''
 
+    def get_branch_name(self, obj):
+        return obj.branch.branch_name if obj.branch else ''
+
 
 class CandidateDetailSerializer(CandidateListSerializer):
     logs = CandidateLogSerializer(many=True, read_only=True)
@@ -66,9 +75,186 @@ class CandidateDetailSerializer(CandidateListSerializer):
 
 
 class CandidateCreateSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=True, max_length=254)
+
     class Meta:
         model  = Candidate
         fields = [
             'name', 'email', 'phone', 'position_applied',
-            'interview_date', 'interviewer', 'interview_mode', 'notes',
+            'branch', 'interview_date', 'interviewer', 'interview_mode', 'notes',
         ]
+        extra_kwargs = {
+            'name':             {'required': True},
+            'position_applied': {'required': True},
+        }
+
+    def validate_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Candidate name is required.')
+        if len(value) > 200:
+            raise serializers.ValidationError('Candidate name must be 200 characters or fewer.')
+        return value
+
+    def validate_email(self, value: str) -> str:
+        value = value.strip().lower()
+        if not value:
+            raise serializers.ValidationError('Email address is required.')
+        return value
+
+    def validate_phone(self, value: str) -> str:
+        if not value:
+            return value
+        value = value.strip()
+        if len(value) > 20:
+            raise serializers.ValidationError('Phone number must be 20 characters or fewer.')
+        if not _PHONE_RE.match(value):
+            raise serializers.ValidationError(
+                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
+            )
+        return value
+
+    def validate_position_applied(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Position applied is required.')
+        if len(value) > 200:
+            raise serializers.ValidationError('Position applied must be 200 characters or fewer.')
+        return value
+
+    def validate_interview_mode(self, value: str) -> str:
+        valid_modes = [choice[0] for choice in Candidate.MODE_CHOICES]
+        if value and value not in valid_modes:
+            raise serializers.ValidationError(
+                f'Interview mode must be one of: {", ".join(valid_modes)}.'
+            )
+        return value
+
+    def validate_notes(self, value: str) -> str:
+        if value and len(value) > 2000:
+            raise serializers.ValidationError('Notes must be 2000 characters or fewer.')
+        return value
+
+
+class ReferralRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = ReferralRule
+        fields = ['id', 'icon', 'title', 'body', 'order', 'is_active', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'icon':  {'required': True},
+            'title': {'required': True},
+            'body':  {'required': True},
+        }
+
+
+class ReferralBonusSerializer(serializers.ModelSerializer):
+    referrer_name      = serializers.SerializerMethodField()
+    referrer_id        = serializers.SerializerMethodField()
+    candidate_name     = serializers.SerializerMethodField()
+    candidate_position = serializers.SerializerMethodField()
+    approved_by_name   = serializers.SerializerMethodField()
+    paid_by_name       = serializers.SerializerMethodField()
+    status_display     = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model  = ReferralBonus
+        fields = [
+            'id', 'candidate', 'candidate_name', 'candidate_position',
+            'referrer', 'referrer_name', 'referrer_id',
+            'bonus_amount', 'status', 'status_display', 'notes',
+            'approved_by', 'approved_by_name', 'approved_at',
+            'paid_by', 'paid_by_name', 'paid_at',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'status', 'approved_by', 'approved_at', 'paid_by', 'paid_at',
+            'created_at', 'updated_at',
+        ]
+
+    def get_referrer_name(self, obj):
+        return obj.referrer.full_name or obj.referrer.email
+
+    def get_referrer_id(self, obj):
+        return obj.referrer.employee_id or ''
+
+    def get_candidate_name(self, obj):
+        return obj.candidate.name
+
+    def get_candidate_position(self, obj):
+        return obj.candidate.position_applied
+
+    def get_approved_by_name(self, obj):
+        return (obj.approved_by.full_name or obj.approved_by.email) if obj.approved_by else ''
+
+    def get_paid_by_name(self, obj):
+        return (obj.paid_by.full_name or obj.paid_by.email) if obj.paid_by else ''
+
+
+class CandidateUpdateSerializer(serializers.ModelSerializer):
+    """Used for PUT / PATCH on an existing candidate.
+    email is intentionally excluded — it cannot be changed after creation.
+    """
+
+    class Meta:
+        model  = Candidate
+        fields = [
+            'name', 'phone', 'position_applied',
+            'branch', 'interview_date', 'interviewer', 'interview_mode', 'notes',
+            'referral_by',
+        ]
+        extra_kwargs = {
+            'name':             {'required': True},
+            'position_applied': {'required': True},
+            # FK and date fields are optional — allow explicit null to clear
+            'branch':         {'required': False, 'allow_null': True},
+            'interview_date': {'required': False, 'allow_null': True},
+            'interviewer':    {'required': False, 'allow_null': True},
+            'referral_by':    {'required': False, 'allow_null': True},
+            # Text fields are optional — allow blank to clear
+            'phone':          {'required': False, 'allow_blank': True},
+            'interview_mode': {'required': False, 'allow_blank': True},
+            'notes':          {'required': False, 'allow_blank': True},
+        }
+
+    def validate_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Candidate name is required.')
+        if len(value) > 200:
+            raise serializers.ValidationError('Candidate name must be 200 characters or fewer.')
+        return value
+
+    def validate_phone(self, value: str) -> str:
+        if not value:
+            return value
+        value = value.strip()
+        if len(value) > 20:
+            raise serializers.ValidationError('Phone number must be 20 characters or fewer.')
+        if not _PHONE_RE.match(value):
+            raise serializers.ValidationError(
+                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
+            )
+        return value
+
+    def validate_position_applied(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Position applied is required.')
+        if len(value) > 200:
+            raise serializers.ValidationError('Position applied must be 200 characters or fewer.')
+        return value
+
+    def validate_interview_mode(self, value: str) -> str:
+        if not value:
+            return value
+        valid_modes = [choice[0] for choice in Candidate.MODE_CHOICES]
+        if value not in valid_modes:
+            raise serializers.ValidationError(
+                f'Interview mode must be one of: {", ".join(valid_modes)}.'
+            )
+        return value
+
+    def validate_notes(self, value: str) -> str:
+        if value and len(value) > 2000:
+            raise serializers.ValidationError('Notes must be 2000 characters or fewer.')
+        return value

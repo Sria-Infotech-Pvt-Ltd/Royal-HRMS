@@ -41,8 +41,8 @@ export default function SmtpSettingsPage() {
     setError(null);
     try {
       const res = await clientApi.get(SMTP_BASE);
-      const arr = (res.data.data ?? res.data) as ApiSmtpResponse;
-      setEntries(Array.isArray(arr) ? arr : []);
+      const envelope = res.data?.data as ApiSmtpResponse;
+      setEntries(envelope?.results ?? []);
     } catch (err: unknown) {
       setError((err as { message?: string }).message ?? "Failed to load SMTP configurations");
     } finally {
@@ -144,17 +144,23 @@ export default function SmtpSettingsPage() {
     }
   }
 
-  const FIELDS = (entry: ApiSmtpEntry) => [
-    { icon: "ti-server-2",     label: "Host",        value: entry.host || "—" },
-    { icon: "ti-plug",         label: "Port",        value: `${entry.port}${entry.use_tls ? " · TLS" : ""}` },
-    { icon: "ti-mail",         label: "From Email",  value: entry.from_email || "—" },
-    { icon: "ti-user",         label: "Sender Name", value: entry.sender_name || "—" },
-    { icon: "ti-at",           label: "Username",    value: entry.username || "—" },
-    { icon: "ti-lock",         label: "Password",    value: entry.password_display },
-    { icon: "ti-mail-forward", label: "BCC Email",   value: entry.bcc_email || "—" },
-    { icon: "ti-flag",         label: "Priority",    value: entry.priority ? entry.priority.charAt(0).toUpperCase() + entry.priority.slice(1) : "—" },
-    { icon: "ti-inbox",        label: "Receiver",    value: entry.receiver_email_type === "personal_email_id" ? "Personal Email" : "Email ID" },
-  ];
+  const FIELDS = (entry: ApiSmtpEntry) => {
+    const isLocal = entry.smtp_type === "local" || !entry.smtp_type;
+    return [
+      { icon: "ti-toggle-right",  label: "Type",        value: entry.smtp_type_display || "—" },
+      ...(isLocal ? [
+        { icon: "ti-server-2",    label: "Host",        value: entry.host || "—" },
+        { icon: "ti-plug",        label: "Port",        value: `${entry.port}${entry.use_tls ? " · TLS" : ""}` },
+        { icon: "ti-at",          label: "Username",    value: entry.username || "—" },
+        { icon: "ti-lock",        label: "Password",    value: entry.password_display },
+      ] : []),
+      { icon: "ti-mail",         label: "From Email",  value: entry.from_email || "—" },
+      { icon: "ti-user",         label: "Sender Name", value: entry.sender_name || "—" },
+      { icon: "ti-mail-forward", label: "BCC Email",   value: entry.bcc_email || "—" },
+      { icon: "ti-flag",         label: "Priority",    value: entry.priority ? entry.priority.charAt(0).toUpperCase() + entry.priority.slice(1) : "—" },
+      { icon: "ti-inbox",        label: "Receiver",    value: entry.receiver_email_type === "personal_email_id" ? "Personal Email" : "Email ID" },
+    ];
+  };
 
   const isAddMode    = editing === "add";
   const editEntry    = editing && editing !== "add" ? editing as ApiSmtpEntry : null;

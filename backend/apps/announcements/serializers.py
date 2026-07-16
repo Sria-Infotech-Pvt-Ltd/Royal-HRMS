@@ -85,7 +85,7 @@ class AnnouncementWriteSerializer(serializers.Serializer):
     """Write serializer — validates POST/PUT payloads."""
 
     title             = serializers.CharField(max_length=300)
-    body              = serializers.CharField()
+    body              = serializers.CharField(max_length=10000)
     category          = serializers.ChoiceField(
                             choices=[c[0] for c in Announcement.CATEGORY_CHOICES]
                         )
@@ -102,6 +102,18 @@ class AnnouncementWriteSerializer(serializers.Serializer):
                         )
     is_pinned         = serializers.BooleanField(default=False, required=False)
     send_email        = serializers.BooleanField(default=False, required=False)
+
+    def validate_title(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Announcement title is required.')
+        return value
+
+    def validate_body(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Announcement body is required.')
+        return value
 
     def validate(self, data: dict) -> dict:
         visibility = data.get('visibility', Announcement.VISIBILITY_ALL)

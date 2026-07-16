@@ -118,10 +118,6 @@ function Se({ v, set, children }: { v: string; set: (x: string) => void; childre
   return <select value={v} onChange={e => set(e.target.value)} className={SEL} style={SS} suppressHydrationWarning>{children}</select>;
 }
 
-function G2({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3">{children}</div>;
-}
-
 function Divider({ icon, title }: { icon: string; title: string }) {
   return (
     <div className="flex items-center gap-2 mt-4 mb-3">
@@ -335,7 +331,7 @@ function Step7({ form, goTo, declaration, setDeclaration, declErr }: {
     <div>
       <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg mb-4" style={{ background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.22)" }}>
         <i className="ti ti-circle-check text-[14px] mt-0.5 flex-shrink-0" style={{ color: "var(--success)" }} />
-        <p className="text-[12.5px] font-medium" style={{ color: "#15803d" }}>Almost done! Please review all the details below. You won't be able to edit after submission until HR reviews and approves.</p>
+        <p className="text-[12.5px] font-medium" style={{ color: "#15803d" }}>Almost done! Please review all the details below. You won&apos;t be able to edit after submission until HR reviews and approves.</p>
       </div>
       <ReviewSection title="Personal Information" icon="ti-user"          onEdit={() => goTo(1)} rows={[{ label:"Full Name", value:`${p.firstName} ${p.lastName}`.trim() }, { label:"Date of Birth", value:p.dob }, { label:"Gender", value:p.gender }, { label:"Phone", value:p.phone }, { label:"PAN", value:p.pan }, { label:"Aadhaar", value:p.aadhaar }, { label:"Emergency Contact", value:`${p.ecName} ${p.ecPhone}`.trim() }, { label:"Marital Status", value:p.marital }]} />
       <ReviewSection title="Employment Details"   icon="ti-id"            onEdit={() => goTo(2)} rows={[{ label:"Department", value:em.department }, { label:"Designation", value:em.designation }, { label:"Branch", value:em.branch }, { label:"Employee Type", value:em.employeeType }, { label:"Date of Joining", value:em.dateOfJoining }, { label:"Shift", value:em.shift }, { label:"Work Type", value:em.workType }, { label:"Weekly Days", value:em.weeklyDays }]} />

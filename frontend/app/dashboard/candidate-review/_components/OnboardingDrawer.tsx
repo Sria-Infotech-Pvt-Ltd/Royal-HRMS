@@ -1,0 +1,300 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import DocPreviewModal from "@/components/DocPreviewModal";
+
+interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
+
+interface ProfileData {
+  date_of_birth?: string; gender?: string; marital_status?: string;
+  father_name?: string; blood_group?: string;
+  current_address?: string; permanent_address?: string;
+  highest_qualification?: string; institution?: string;
+  year_of_passing?: number; specialization?: string;
+  total_experience_years?: string; previous_employer?: string;
+  previous_designation?: string;
+  account_number?: string; ifsc_code?: string; bank_name?: string;
+  bank_branch_name?: string; account_holder_name?: string; account_type?: string;
+  emergency_name?: string; emergency_relationship?: string;
+  emergency_phone?: string; emergency_email?: string;
+}
+
+export interface ApprovalUser {
+  id: string; full_name: string; email: string; phone: string;
+  department: string; designation: string; branch: string;
+  role_name: string; role_display: string; employee_id: string;
+  onboarding_status: string; date_joined: string;
+  profile: ProfileData | null;
+  documents: OnboardingDocument[];
+}
+
+interface ApiDept  { id: number; name: string; }
+interface ApiDesig { id: number; name: string; department_name: string; }
+
+interface Props {
+  user:            ApprovalUser;
+  remarks:         string;
+  acting:          boolean;
+  actionErr:       string | null;
+  onRemarksChange: (v: string) => void;
+  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string }) => void;
+  onClose:         () => void;
+}
+
+function Row({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: ".3rem 0", fontSize: ".85rem", borderBottom: "1px solid var(--outline-v)" }}>
+      <span style={{ color: "var(--on-variant)" }}>{label}</span>
+      <span style={{ fontWeight: 500 }}>{value}</span>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: "1.25rem" }}>
+      <div style={{ fontWeight: 700, fontSize: ".8rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--on-variant)", marginBottom: ".5rem" }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function OnboardingDrawer({ user, remarks, acting, actionErr, onRemarksChange, onAction, onClose }: Props) {
+  const [showAssign, setShowAssign] = useState(false);
+  const [depts,      setDepts]      = useState<ApiDept[]>([]);
+  const [desigs,     setDesigs]     = useState<ApiDesig[]>([]);
+  const [selDept,    setSelDept]    = useState(user.department || "");
+  const [selDesig,   setSelDesig]   = useState(user.designation || "");
+  const [loadDepts,  setLoadDepts]  = useState(false);
+  const [assignErr,  setAssignErr]  = useState("");
+  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
+
+  // Fetch departments the first time the assign section appears
+  useEffect(() => {
+    if (!showAssign || depts.length > 0) return;
+    setLoadDepts(true);
+    clientApi
+      .get<{ data: unknown }>(API.departments.list, { params: { page_size: 100 } })
+      .then(r => {
+        const raw = r.data?.data;
+        const list: ApiDept[] = Array.isArray(raw)
+          ? (raw as ApiDept[])
+          : ((raw as { results?: ApiDept[] })?.results ?? []);
+        setDepts(list);
+      })
+      .catch(() => setDepts([]))
+      .finally(() => setLoadDepts(false));
+  }, [showAssign, depts.length]);
+
+  // Refresh designations whenever selected department changes
+  useEffect(() => {
+    if (!selDept) { setDesigs([]); return; }
+    clientApi
+      .get<{ data: unknown }>(API.designations.list, { params: { page_size: 100 } })
+      .then(r => {
+        const raw = r.data?.data;
+        const all: ApiDesig[] = Array.isArray(raw)
+          ? (raw as ApiDesig[])
+          : ((raw as { results?: ApiDesig[] })?.results ?? []);
+        setDesigs(all.filter(d => d.department_name === selDept));
+      })
+      .catch(() => setDesigs([]));
+  }, [selDept]);
+
+  function handleApproveClick() {
+    setShowAssign(true);
+    setAssignErr("");
+  }
+
+  function handleConfirm() {
+    if (!selDept || !selDesig) {
+      setAssignErr("Please select both Department and Designation before confirming.");
+      return;
+    }
+    setAssignErr("");
+    onAction(user.id, "approve", { department: selDept, designation: selDesig });
+  }
+
+  return (
+    <>
+    {previewDoc && previewDoc.file_url && (
+      <DocPreviewModal
+        name={previewDoc.document_type_display}
+        fileName={previewDoc.file_name}
+        fileUrl={previewDoc.file_url}
+        fileSize={previewDoc.file_size}
+        onClose={() => setPreviewDoc(null)}
+      />
+    )}
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">Review — {user.full_name}</div>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+
+        <div className="modal-body">
+          {actionErr && <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{actionErr}</div>}
+
+          <Section title="Basic Info">
+            <Row label="Email"       value={user.email} />
+            <Row label="Phone"       value={user.phone} />
+            <Row label="Department"  value={user.department} />
+            <Row label="Designation" value={user.designation} />
+            <Row label="Branch"      value={user.branch} />
+            <Row label="Role"        value={user.role_display || "Candidate"} />
+          </Section>
+
+          {user.profile && (
+            <>
+              <Section title="Personal">
+                <Row label="DOB"             value={user.profile.date_of_birth} />
+                <Row label="Gender"          value={user.profile.gender} />
+                <Row label="Marital Status"  value={user.profile.marital_status} />
+                <Row label="Father Name"     value={user.profile.father_name} />
+                <Row label="Blood Group"     value={user.profile.blood_group} />
+                <Row label="Current Address" value={user.profile.current_address} />
+              </Section>
+              <Section title="Education & Experience">
+                <Row label="Qualification"    value={user.profile.highest_qualification} />
+                <Row label="Institution"      value={user.profile.institution} />
+                <Row label="Year of Passing"  value={user.profile.year_of_passing?.toString()} />
+                <Row label="Experience (yrs)" value={user.profile.total_experience_years} />
+                <Row label="Prev Employer"    value={user.profile.previous_employer} />
+              </Section>
+              <Section title="Bank Details">
+                <Row label="Account Holder" value={user.profile.account_holder_name} />
+                <Row label="Account No."    value={user.profile.account_number ? `••••${user.profile.account_number.slice(-4)}` : undefined} />
+                <Row label="IFSC"           value={user.profile.ifsc_code} />
+                <Row label="Bank"           value={user.profile.bank_name} />
+                <Row label="Branch"         value={user.profile.bank_branch_name} />
+                <Row label="Account Type"   value={user.profile.account_type} />
+              </Section>
+              <Section title="Emergency Contact">
+                <Row label="Name"         value={user.profile.emergency_name} />
+                <Row label="Relationship" value={user.profile.emergency_relationship} />
+                <Row label="Phone"        value={user.profile.emergency_phone} />
+              </Section>
+            </>
+          )}
+
+          <Section title={`Documents (${user.documents.length})`}>
+            {user.documents.length === 0
+              ? <p style={{ color: "var(--on-variant)", fontSize: ".85rem" }}>No documents uploaded.</p>
+              : user.documents.map(d => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: ".4rem 0", borderBottom: "1px solid var(--outline-v)", fontSize: ".85rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <i className="ti ti-file-text" style={{ color: "var(--primary)", fontSize: 16, flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600 }}>{d.document_type_display}</div>
+                      <div style={{ color: "var(--on-variant)", fontSize: ".78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{d.file_name}</div>
+                    </div>
+                  </div>
+                  {d.file_url
+                    ? <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ flexShrink: 0 }}
+                        onClick={() => setPreviewDoc(d)}
+                        title="Preview"
+                      >
+                        <i className="ti ti-eye" style={{ fontSize: 15 }} />
+                      </button>
+                    : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>No link</span>
+                  }
+                </div>
+              ))
+            }
+          </Section>
+
+          <div className="field-group" style={{ marginTop: "1rem" }}>
+            <label className="field-label">Remarks (optional)</label>
+            <textarea
+              className="field-input"
+              rows={3}
+              value={remarks}
+              onChange={e => onRemarksChange(e.target.value)}
+              placeholder="Notes for the employee or for record…"
+            />
+          </div>
+
+          {/* Assign dept/designation — revealed on approve click */}
+          {showAssign && (
+            <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: 8, border: "1px solid var(--outline-v)", background: "var(--bg-mid)" }}>
+              <div style={{ fontWeight: 700, fontSize: ".82rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--primary)", marginBottom: ".75rem" }}>
+                <i className="ti ti-user-check" style={{ marginRight: 6 }} />Assign Role
+              </div>
+
+              {assignErr && (
+                <div className="alert alert-error" style={{ marginBottom: ".75rem", padding: "6px 10px", fontSize: ".82rem" }}>
+                  <i className="ti ti-alert-circle" /><span>{assignErr}</span>
+                </div>
+              )}
+
+              <div className="field-group" style={{ marginBottom: ".75rem" }}>
+                <label className="field-label">Department <span style={{ color: "var(--error)" }}>*</span></label>
+                {loadDepts ? (
+                  <div style={{ fontSize: ".85rem", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> Loading…</div>
+                ) : (
+                  <select
+                    className="field-input field-select"
+                    value={selDept}
+                    onChange={e => { setSelDept(e.target.value); setSelDesig(""); setAssignErr(""); }}
+                  >
+                    <option value="">— Select Department —</option>
+                    {depts.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">Designation <span style={{ color: "var(--error)" }}>*</span></label>
+                <select
+                  className="field-input field-select"
+                  value={selDesig}
+                  onChange={e => { setSelDesig(e.target.value); setAssignErr(""); }}
+                  disabled={!selDept}
+                >
+                  <option value="">— Select Designation —</option>
+                  {desigs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+                {selDept && desigs.length === 0 && !loadDepts && (
+                  <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>No designations found for this department.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button
+            className="btn btn-ghost"
+            style={{ color: "var(--error)", borderColor: "var(--error)" }}
+            onClick={() => onAction(user.id, "reject")}
+            disabled={acting}
+          >
+            {acting ? "…" : "Send Back for Corrections"}
+          </button>
+
+          {showAssign ? (
+            <button className="btn btn-filled" onClick={handleConfirm} disabled={acting}>
+              {acting
+                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
+                : <><i className="ti ti-check" /> Confirm & Activate</>
+              }
+            </button>
+          ) : (
+            <button className="btn btn-filled" onClick={handleApproveClick} disabled={acting}>
+              Approve & Activate ✓
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+    </>
+  );
+}

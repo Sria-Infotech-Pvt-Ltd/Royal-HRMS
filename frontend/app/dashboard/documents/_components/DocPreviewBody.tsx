@@ -50,7 +50,6 @@ function DocxPreview({ fileUrl }: { fileUrl: string }) {
     }
     render();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileUrl]);
 
   if (err) return (
@@ -105,7 +104,6 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
     }
     render();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileUrl]);
 
   if (err) return (

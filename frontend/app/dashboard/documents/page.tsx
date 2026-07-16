@@ -91,8 +91,9 @@ export default function DocumentCenterPage() {
       if (category) params.category = category;
       if (q.trim()) params.search   = q.trim();
       const res = await clientApi.get(DOCUMENTS_BASE, { params });
-      const data = res.data.data ?? res.data;
-      setDocuments(Array.isArray(data) ? data : []);
+      const envelope = res.data.data ?? res.data;
+      const data = Array.isArray(envelope) ? envelope : (envelope?.results ?? []);
+      setDocuments(data);
     } catch (err: unknown) {
       setError((err as { message?: string }).message ?? "Failed to load documents");
     } finally {

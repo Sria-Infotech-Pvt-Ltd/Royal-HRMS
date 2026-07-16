@@ -99,19 +99,20 @@ export default function AddEmployeeModal({
   const [depts,    setDepts]    = useState<ApiDept[]>([]);
   const [desigs,   setDesigs]   = useState<ApiDesig[]>([]);
   const [branches, setBranches] = useState<ApiBranch[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [loading,     setLoading]     = useState(true);
+  const [desigLoading, setDesigLoading] = useState(false);
 
   /* fetch roles, departments, branches on mount */
   useEffect(() => {
     Promise.all([
-      clientApi.get<{ data: ApiRole[]   }>(API.roles.list),
-      clientApi.get<{ data: ApiDept[]   }>(API.departments.list),
-      clientApi.get<{ data: ApiBranch[] }>(API.employees.branches),
+      clientApi.get<{ data: { results: ApiRole[]   } }>(API.roles.list,            { params: { page_size: 100 } }),
+      clientApi.get<{ data: { results: ApiDept[]   } }>(API.departments.list,   { params: { page_size: 100 } }),
+      clientApi.get<{ data: { results: ApiBranch[] } }>(API.employees.branches,    { params: { page_size: 100 } }),
     ])
       .then(([r, d, b]) => {
-        setRoles(r.data.data.filter(x => x.name !== "system_admin"));
-        setDepts(d.data.data);
-        setBranches(b.data.data);
+        setRoles(r.data.data.results.filter(x => x.name !== "system_admin"));
+        setDepts(d.data.data?.results ?? []);
+        setBranches(b.data.data.results);
       })
       .catch(() => {/* silently degrade to empty lists */})
       .finally(() => setLoading(false));
@@ -120,10 +121,14 @@ export default function AddEmployeeModal({
   /* fetch designations whenever department changes */
   useEffect(() => {
     if (!form.department) { setDesigs([]); return; }
-    clientApi.get<{ data: ApiDesig[] }>(API.designations.list)
-      .then(r => setDesigs(r.data.data.filter(d => d.department_name === form.department)))
-      .catch(() => setDesigs([]));
-  }, [form.department]);
+    const dept = depts.find(d => d.name === form.department);
+    if (!dept) { setDesigs([]); return; }
+    setDesigLoading(true);
+    clientApi.get(API.designations.list, { params: { department: dept.id, page_size: 100 } })
+      .then(r => setDesigs(r.data?.data?.results ?? []))
+      .catch(() => setDesigs([]))
+      .finally(() => setDesigLoading(false));
+  }, [form.department, depts]);
 
   function set(k: keyof Form, v: string) {
     setForm(f => {
@@ -264,18 +269,19 @@ export default function AddEmployeeModal({
                       </Sel>
                     </Field>
                     <Field label="Designation" required error={errs.designation}>
-                      {desigs.length > 0 ? (
-                        <Sel v={form.designation} set={v => set("designation", v)} err={!!errs.designation} disabled={!form.department}>
-                          <option value="">— Select Designation —</option>
-                          {desigs.map(d => (
-                            <option key={d.id} value={d.name}>{d.name}</option>
-                          ))}
-                        </Sel>
-                      ) : (
-                        <Inp v={form.designation} set={v => set("designation", v)}
-                          ph={form.department ? "e.g. Software Engineer" : "Select department first"}
-                          err={!!errs.designation} />
-                      )}
+                      <Sel
+                        v={form.designation}
+                        set={v => set("designation", v)}
+                        err={!!errs.designation}
+                        disabled={!form.department || desigLoading}
+                      >
+                        <option value="">
+                          {!form.department ? "Select department first" : desigLoading ? "Loading…" : desigs.length === 0 ? "No designations available" : "— Select Designation —"}
+                        </option>
+                        {desigs.map(d => (
+                          <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                      </Sel>
                     </Field>
                     <Field label="Branch" required error={errs.branch}>
                       <Sel v={form.branch} set={v => set("branch", v)} err={!!errs.branch}>

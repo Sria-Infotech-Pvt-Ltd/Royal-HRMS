@@ -17,13 +17,15 @@ export default function FormField({
   field,
   value,
   onChange,
+  disabled,
 }: {
   field: FieldDef;
   value: string;
   onChange: (key: string, val: string) => void;
+  disabled?: boolean;
 }) {
-  const set     = (v: string) => onChange(field.key, v);
-  const invalid = field.required && field.type !== "readonly" && !value.trim();
+  const set     = (v: string) => { if (!disabled) onChange(field.key, v); };
+  const invalid = !disabled && field.required && field.type !== "readonly" && !value.trim();
   const borderColor = invalid ? BORDER_ERR : BORDER;
 
   return (
@@ -76,6 +78,21 @@ export default function FormField({
         );
 
       case "select":
+        // In read-only mode render as a plain text input so the value always shows
+        // regardless of whether the options array has loaded yet.
+        if (disabled) {
+          const displayLabel = field.options?.find(o => o.value === value)?.label ?? value;
+          return (
+            <input
+              id={`fld-${field.key}`}
+              value={displayLabel || "—"}
+              disabled
+              suppressHydrationWarning
+              className={INPUT + " cursor-not-allowed"}
+              style={{ borderColor: BORDER, background: "#eff2f8", color: "#1e4e8c", fontWeight: 600 }}
+            />
+          );
+        }
         return (
           <select
             id={`fld-${field.key}`}
@@ -84,7 +101,7 @@ export default function FormField({
             suppressHydrationWarning
             className={INPUT + " appearance-none pr-9 cursor-pointer"}
             style={{
-              borderColor,
+              borderColor: borderColor,
               backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
               backgroundRepeat: "no-repeat",
               backgroundPosition: "right 10px center",
@@ -103,7 +120,7 @@ export default function FormField({
             {field.options?.map((o) => (
               <label
                 key={o.value}
-                className="flex items-center gap-1.5 cursor-pointer text-[13px] select-none"
+                className={"flex items-center gap-1.5 text-[13px] select-none" + (disabled ? " cursor-not-allowed opacity-70" : " cursor-pointer")}
                 style={{ color: "var(--on-bg)" }}
               >
                 <input
@@ -112,8 +129,9 @@ export default function FormField({
                   value={o.value}
                   checked={value === o.value}
                   onChange={() => set(o.value)}
+                  disabled={disabled}
                   suppressHydrationWarning
-                  className="w-4 h-4 cursor-pointer"
+                  className={"w-4 h-4" + (disabled ? " cursor-not-allowed" : " cursor-pointer")}
                   style={{ accentColor: "var(--primary)" }}
                 />
                 {o.label}
@@ -130,9 +148,10 @@ export default function FormField({
             rows={3}
             placeholder={field.placeholder}
             onChange={(e) => set(e.target.value)}
+            disabled={disabled}
             suppressHydrationWarning
-            className={INPUT + " resize-none"}
-            style={{ borderColor }}
+            className={INPUT + " resize-none" + (disabled ? " cursor-not-allowed" : "")}
+            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "#eff2f8" : undefined }}
           />
         );
 
@@ -143,9 +162,10 @@ export default function FormField({
             type="date"
             value={value}
             onChange={(e) => set(e.target.value)}
+            disabled={disabled}
             suppressHydrationWarning
-            className={INPUT}
-            style={{ borderColor }}
+            className={INPUT + (disabled ? " cursor-not-allowed" : "")}
+            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "#eff2f8" : undefined }}
           />
         );
 
@@ -162,9 +182,10 @@ export default function FormField({
             value={value}
             placeholder={field.placeholder}
             onChange={(e) => set(e.target.value)}
+            disabled={disabled}
             suppressHydrationWarning
-            className={INPUT}
-            style={{ borderColor }}
+            className={INPUT + (disabled ? " cursor-not-allowed" : "")}
+            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "#eff2f8" : undefined }}
           />
         );
     }

@@ -10,33 +10,40 @@ import {
   buildNav, isSection,
   type NavItem,
 } from "@/lib/navConfig";
+import { ToastProvider } from "@/components/ToastProvider";
+import { NotificationBell } from "@/components/NotificationBell";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
 const PAGE_TITLES: Record<string, string> = {
-  "/dashboard":                          "Dashboard",
-  "/dashboard/settings":                 "Settings",
-  "/dashboard/profile":                  "My Profile",
-  "/dashboard/settings/permissions":     "Roles & Permissions",
-  "/dashboard/employees":                "Employees",
-  "/dashboard/employees/new":            "Add New Employee",
-  "/dashboard/attendance":               "Attendance & Time",
-  "/dashboard/payroll":                  "Payroll Management",
-  "/dashboard/leave":                    "Leave Management",
-  "/dashboard/expenses":                 "Expense Claims",
-  "/dashboard/documents":                "Document Center",
-  "/dashboard/separation":               "Separation & FnF",
-  "/dashboard/interview-list":           "Interview List",
-  "/dashboard/candidate-review":         "Candidate Review",
-  "/dashboard/email-logs":               "Email Logs",
-  "/dashboard/org-chart":               "Organisation Chart",
-  "/dashboard/announcements":            "Announcements",
-  "/dashboard/my-payslip":              "My Payslips",
-  "/dashboard/my-requests":             "My Requests",
-  "/dashboard/approvals":               "Team Approvals",
-  "/dashboard/branches":                "Branch Management",
+  "/dashboard": "Dashboard",
+  "/dashboard/settings": "Settings",
+  "/dashboard/profile": "My Profile",
+  "/dashboard/settings/permissions": "Roles & Permissions",
+  "/dashboard/employees": "Employees",
+  "/dashboard/employees/new": "Add New Employee",
+  "/dashboard/attendance": "Attendance & Time",
+  "/dashboard/my-attendance": "My Attendance",
+  "/dashboard/payroll": "Payroll Management",
+  "/dashboard/leave": "Leave Management",
+  "/dashboard/expenses": "Expense Claims",
+  "/dashboard/documents": "Document Center",
+  "/dashboard/separation": "Separation & FnF",
+  "/dashboard/interview-list": "Interview List",
+  "/dashboard/candidate-review": "Candidate Review & Onboarding",
+  "/dashboard/assessments":      "Assessment Management",
+  "/dashboard/email-logs": "Email Logs",
+  "/dashboard/org-chart": "Organisation Chart",
+  "/dashboard/announcements": "Announcements",
+  "/dashboard/my-payslip": "My Payslips",
+  "/dashboard/my-requests": "My Requests",
+  "/dashboard/approvals": "Team Approvals",
+  "/dashboard/branches":                    "Branch Management",
+  "/dashboard/settings/attendance-config":  "Attendance Rules",
+  "/dashboard/referrals":                   "My Referrals",
+  "/dashboard/settings/referral-rules":     "Referral Rules",
 };
 
 
@@ -47,15 +54,15 @@ export default function DashboardShell({
   session: SessionPayload;
   children: React.ReactNode;
 }) {
-  const router   = useRouter();
+  const router = useRouter();
   const pathname = usePathname();
 
-  const [collapsed,  setCollapsed]  = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [darkMode,   setDarkMode]   = useState(false);
-  const [searchVal,  setSearchVal]  = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+  const [searchVal, setSearchVal] = useState("");
 
-  const pageTitle  = PAGE_TITLES[pathname]
+  const pageTitle = PAGE_TITLES[pathname]
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "Royal HRMS");
   const visibleNav = buildNav(session.permissions ?? []);
 
@@ -81,6 +88,7 @@ export default function DashboardShell({
   }
 
   return (
+    <ToastProvider>
     <div className="flex h-screen overflow-hidden">
 
       {/* Mobile overlay */}
@@ -106,15 +114,22 @@ export default function DashboardShell({
         ].join(" ")}
       >
         {/* Sidebar header */}
-        <div className="h-14 px-3 flex items-center gap-2.5 border-b border-[var(--outline-v)] flex-shrink-0">
-          <div className="flex items-center gap-2 flex-1 overflow-hidden">
-            <div className="w-[30px] h-[30px] rounded-[6px] flex items-center justify-center text-sm text-white flex-shrink-0 bg-[var(--primary)]">
-              <i className="ti ti-building-skyscraper" />
-            </div>
-            {!collapsed && (
-              <span className="text-sm font-bold whitespace-nowrap tracking-tight overflow-hidden text-[var(--on-bg)]">
-                Royal HRMS
-              </span>
+        <div className="h-[68px] px-3 pr-2 flex items-center gap-2 border-b border-[var(--outline-v)] flex-shrink-0">
+          <div className="flex items-center flex-1 min-w-0">
+            {collapsed ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src="/logo.png"
+                alt="Royal HRMS"
+                className="sidebar-logo-collapsed"
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src="/logo.png"
+                alt="Royal HRMS"
+                className="sidebar-logo-expanded"
+              />
             )}
           </div>
           <button
@@ -143,7 +158,29 @@ export default function DashboardShell({
               );
             }
             const item = entry as NavItem;
-            const isActive = pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"));
+            const isActive = !item.comingSoon && (pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/")));
+            if (item.comingSoon) {
+              return (
+                <div key={item.id} className="px-2 mb-px">
+                  <div
+                    className="flex items-center gap-2.5 px-2 py-2 rounded-lg w-full text-[13px] whitespace-nowrap"
+                    style={{ color: "var(--outline)", cursor: "not-allowed", opacity: 0.6 }}
+                    title={collapsed ? `${item.label} — Coming Soon` : undefined}
+                    suppressHydrationWarning
+                  >
+                    <i className={`ti ${item.icon} text-[18px] flex-shrink-0`} />
+                    {!collapsed && (
+                      <>
+                        <span className="overflow-hidden text-ellipsis whitespace-nowrap flex-1">{item.label}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, background: "var(--outline-v)", color: "var(--outline)", padding: "1px 5px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.04em" }}>
+                          SOON
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={item.id} className="px-2 mb-px">
                 <button
@@ -240,14 +277,7 @@ export default function DashboardShell({
             </button>
 
             {/* Notifications */}
-            <button
-              className="relative w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-transparent text-[var(--outline)] border-none cursor-pointer hover:bg-[var(--bg-mid)]"
-              title="Notifications"
-              suppressHydrationWarning
-            >
-              <i className="ti ti-bell text-[18px]" />
-              <span className="absolute top-[6px] right-[6px] w-[7px] h-[7px] rounded-full border-[1.5px] border-white bg-[var(--error)]" />
-            </button>
+            <NotificationBell />
 
             {/* Logout */}
             <button
@@ -267,5 +297,6 @@ export default function DashboardShell({
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }

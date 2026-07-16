@@ -6,11 +6,14 @@ export const USER_COOKIE = "royal_hrms_user";
 const COOKIE_MAX_AGE = 60 * 60 * 8; // 8 hours
 
 export interface UserInfo {
-  userId:      string;
-  email:       string;
-  name:        string;
-  role:        string;
-  permissions: string[];
+  userId:            string;
+  email:             string;
+  name:              string;
+  role:              string;
+  branch:            string;
+  permissions:       string[];
+  onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
+  assessment_status: string;   // 'pending' | 'complete'
 }
 
 export function saveAuth(user: UserInfo) {
@@ -25,6 +28,16 @@ export function clearAuth() {
   document.cookie = `${USER_COOKIE}=; path=/; max-age=0`;
 }
 
+export function setOnboardingStatus(newStatus: string) {
+  const user = getStoredUser();
+  if (user) saveAuth({ ...user, onboarding_status: newStatus });
+}
+
+export function setAssessmentStatus(newStatus: string) {
+  const user = getStoredUser();
+  if (user) saveAuth({ ...user, assessment_status: newStatus });
+}
+
 export function getStoredUser(): UserInfo | null {
   if (typeof window === "undefined") return null;
   try {
@@ -37,4 +50,16 @@ export function getStoredUser(): UserInfo | null {
   } catch {
     return null;
   }
+}
+
+// Branch scoping — the backend already enforces this server-side for hr_admin
+// (it ignores/overrides any ?branch= param and returns only that user's branch).
+// These helpers exist so the UI stays consistent with what the API actually
+// returns, rather than showing an "All Branches" option that silently no-ops.
+export function isUnrestrictedUser(user: UserInfo | null): boolean {
+  return user?.role === "system_admin";
+}
+
+export function getEffectiveBranch(user: UserInfo | null): string {
+  return isUnrestrictedUser(user) ? "" : (user?.branch ?? "");
 }

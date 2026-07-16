@@ -8,6 +8,8 @@ def seed_categories(apps, schema_editor):
         {'name': 'reminder',     'display_name': 'Reminders',     'order': 2},
         {'name': 'notification', 'display_name': 'Notifications', 'order': 3},
         {'name': 'document',     'display_name': 'Documents',     'order': 4},
+        {'name': 'recruitment',  'display_name': 'Recruitment',   'order': 5},
+        {'name': 'onboarding',   'display_name': 'Onboarding',    'order': 6},
     ]
     for d in defaults:
         EmailTemplateCategory.objects.get_or_create(

@@ -1,19 +1,17 @@
 import environ
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
 
 env = environ.Env(DEBUG=(bool, False))
-env_file = BASE_DIR / '.env'
-if not env_file.exists():
-    env_file = ROOT_DIR / '.env'
-environ.Env.read_env(env_file)
+environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -32,6 +30,11 @@ INSTALLED_APPS = [
     'apps.branch',
     'apps.announcements',
     'apps.recruitment',
+    'apps.hrms',
+    'apps.attendance',
+    'apps.assessments',
+    'apps.notifications',
+    'apps.dashboard',
 ]
 
 MIDDLEWARE = [
@@ -131,6 +134,47 @@ else:
         }
     }
 
+# ─── Celery ──────────────────────────────────────────────────────────────────
+# Broker: reuse the same Redis URL used by the cache layer.
+# Falls back to localhost Redis in development when REDIS_URL is not set.
+# rediss:// (SSL) requires ssl_cert_reqs; append it when the URL uses that scheme.
+def _celery_redis_url(default: str) -> str:
+    url = env('REDIS_URL', default=default)
+    if url.startswith('rediss://') and 'ssl_cert_reqs' not in url:
+        sep = '&' if '?' in url else '?'
+        url = f'{url}{sep}ssl_cert_reqs=CERT_REQUIRED'
+    return url
+
+CELERY_BROKER_URL        = _celery_redis_url('redis://localhost:6379/1')
+CELERY_RESULT_BACKEND    = _celery_redis_url('redis://localhost:6379/1')
+CELERY_TIMEZONE          = 'Asia/Kolkata'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_SERIALIZER   = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT    = ['json']
+
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    # Runs every 5 minutes — detects employees past shift_end + grace with no clock-out.
+    'check-missing-clockouts': {
+        'task':     'apps.attendance.tasks.check_missing_clockouts',
+        'schedule': 300.0,  # seconds
+    },
+    # Runs once daily at 09:00 IST — fires absence alerts for employees absent N+ consecutive days.
+    'check-absence-alerts': {
+        'task':     'apps.attendance.tasks.check_absence_alerts',
+        'schedule': crontab(hour=9, minute=0),
+    },
+    # Runs daily at 9:00 AM IST — sends birthday wish emails to employees.
+    'send-birthday-wishes': {
+        'task':     'apps.hrms.tasks.send_birthday_wishes',
+        'schedule': crontab(hour=9, minute=0),
+    },
+}
+
 # ─── DRF ─────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -146,7 +190,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon':            '300/hour',
         'user':            '3000/hour',
-        'login':           '10/hour',
+        'login':           '20/hour',
         'forgot_password': '5/hour',
         'otp_verify':      '10/hour',
     },
@@ -163,12 +207,11 @@ SIMPLE_JWT = {
 }
 
 # ─── Email ───────────────────────────────────────────────────────────────────
-EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = env('EMAIL_HOST', default='')
-EMAIL_PORT = env.int('EMAIL_PORT', default=587)
-EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
-EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_BACKEND      = (
+    'django.core.mail.backends.console.EmailBackend'
+    if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend'
+)
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Royal Staffing HRMS <noreply@hrms.com>')
 
 OTP_EXPIRY_MINUTES = 10
@@ -189,6 +232,13 @@ if DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES = [
         r'^http://localhost(:\d+)?$',
         r'^http://192\.168\.\d+\.\d+(:\d+)?$',
+    ]
+    # Allow Django admin CSRF from localhost (any port) in development.
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:8000',
+        'http://localhost:8008',
+        'http://127.0.0.1:8000',
+        'http://127.0.0.1:8008',
     ]
 
 # ─── Upload limits ────────────────────────────────────────────────────────────

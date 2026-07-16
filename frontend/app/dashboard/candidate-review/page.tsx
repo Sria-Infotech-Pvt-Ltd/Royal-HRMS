@@ -1,281 +1,83 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  Candidate,
-  CandidateLog,
-  LogType,
-  RECRUITMENT_API,
-  fmtDate,
-  fmtDateTime,
-  initials,
-} from "../interview-list/_data";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function Avatar({ name, size = 32 }: { name: string; size?: number }) {
-  return (
-    <div className="user-avatar" style={{ width: size, height: size, fontSize: size * 0.38, flexShrink: 0 }}>
-      {initials(name)}
-    </div>
-  );
-}
-
-const LOG_ICON: Record<LogType, string> = {
-  success: "ti-check",
-  error:   "ti-x",
-  info:    "ti-info-circle",
-  warn:    "ti-alert-triangle",
-};
-
-// ─── HR Decision Modal ────────────────────────────────────────────────────────
-
-interface HRModalProps {
-  candidate: Candidate;
-  decision:  "approve" | "reject";
-  onClose:   () => void;
-  onDone:    (updated: Candidate) => void;
-}
-
-function HRDecisionModal({ candidate, decision, onClose, onDone }: HRModalProps) {
-  const [remarks, setRemarks] = useState("");
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState("");
-  const isApprove = decision === "approve";
-
-  async function handleConfirm() {
-    setSaving(true);
-    setError("");
-    try {
-      const res = await RECRUITMENT_API.hrDecision(candidate.id, { decision, remarks });
-      onDone(res.data.data);
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Action failed.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-header">
-          <div className="modal-title">{isApprove ? "Approve & Onboard" : "Request Revision"} — {candidate.name}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-        <div className="modal-body">
-          {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>}
-          <div className={`alert ${isApprove ? "alert-success" : "alert-warn"} mb-16`}>
-            <i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} />
-            <div>
-              {isApprove
-                ? <>Approving <strong>{candidate.name}</strong> will onboard them as an employee and send a welcome email.</>
-                : <>A revision request will be sent to <strong>{candidate.name}</strong> to resubmit their details.</>
-              }
-            </div>
-          </div>
-          <div className="field-group">
-            <label className="field-label">HR Remarks {isApprove ? "(optional)" : "(required)"}</label>
-            <input
-              className="field-input"
-              placeholder={isApprove ? "Any onboarding notes…" : "Specify what needs to be corrected…"}
-              value={remarks}
-              onChange={e => setRemarks(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
-            onClick={handleConfirm}
-            disabled={saving || (!isApprove && !remarks.trim())}
-          >
-            {saving
-              ? <><i className="ti ti-loader-2 spin" /> Processing…</>
-              : isApprove
-                ? <><i className="ti ti-check" /> Approve & Onboard</>
-                : <><i className="ti ti-alert-triangle" /> Request Revision</>
-            }
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Candidate Accordion Item ─────────────────────────────────────────────────
-
-interface AccordionItemProps {
-  candidate: Candidate;
-  onDecision: (c: Candidate, d: "approve" | "reject") => void;
-  onUpdated:  (c: Candidate) => void;
-}
-
-function CandidateAccordionItem({ candidate: initial, onDecision }: AccordionItemProps) {
-  const [open, setOpen] = useState(false);
-  const c = initial;
-
-  const filled   = c.details_filled;
-  const approved = c.hr_approved;
-
-  let badge: React.ReactNode;
-  if (approved)      badge = <span className="badge badge-success">HR Approved</span>;
-  else if (filled)   badge = <span className="badge badge-warn">Details Submitted — Review</span>;
-  else               badge = <span className="badge badge-neutral">Awaiting Details</span>;
-
-  const mockDocs = ["Aadhaar Card", "PAN Card", "Degree Certificate", "Offer Letter Signed", "Photograph"];
-
-  return (
-    <div className="accordion-item mb-12">
-      {/* Header */}
-      <div
-        className={`accordion-header ${open ? "open" : ""}`}
-        onClick={() => setOpen(o => !o)}
-      >
-        <Avatar name={c.name} size={32} />
-        <div className="flex-1">
-          <div className="text-sm font-medium">{c.name}</div>
-          <div className="text-xs text-[var(--on-variant)]">{c.position_applied} • Applied {fmtDate(c.interview_date)}</div>
-        </div>
-        {badge}
-        <i className={`ti ti-chevron-down accordion-toggle ${open ? "rotated" : ""}`} />
-      </div>
-
-      {/* Body */}
-      {open && (
-        <div className="accordion-body">
-
-          {/* ── Details submitted, not yet approved ── */}
-          {filled && !approved && (
-            <>
-              <div className="grid-2 mb-16">
-                <div>
-                  <div className="settings-card-title mb-8">Personal Details</div>
-                  <div className="text-[13px] leading-loose text-[var(--on-variant)]">
-                    <strong className="text-[var(--on-bg)]">Full Name:</strong> {c.name}<br />
-                    <strong className="text-[var(--on-bg)]">Email:</strong> {c.email}<br />
-                    <strong className="text-[var(--on-bg)]">Phone:</strong> {c.phone || "—"}<br />
-                    <strong className="text-[var(--on-bg)]">Position:</strong> {c.position_applied}
-                  </div>
-                </div>
-                <div>
-                  <div className="settings-card-title mb-8">Uploaded Documents</div>
-                  {mockDocs.map(d => (
-                    <div key={d} className="flex items-center gap-2 py-1.5 border-b border-[var(--outline-v)]">
-                      <i className="ti ti-file-check text-[var(--success)]" />
-                      <span className="text-[13px]">{d}</span>
-                      <button className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}><i className="ti ti-eye" /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-end flex-wrap gap-3">
-                <button className="btn btn-danger" onClick={() => onDecision(c, "reject")}>
-                  <i className="ti ti-refresh" /> Request Revision
-                </button>
-                <button className="btn btn-success" onClick={() => onDecision(c, "approve")}>
-                  <i className="ti ti-check" /> Approve & Onboard
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ── Already approved ── */}
-          {approved && (
-            <div className="alert alert-success">
-              <i className="ti ti-check" />
-              <div>Approved and onboarded as employee. Welcome email sent.</div>
-            </div>
-          )}
-
-          {/* ── Still waiting for details ── */}
-          {!filled && !approved && (
-            <div className="alert alert-info">
-              <i className="ti ti-info-circle" />
-              <div>Candidate has been selected and emailed login credentials. Waiting for them to fill and submit their details.</div>
-            </div>
-          )}
-
-          {/* ── Activity log ── */}
-          {c.logs && c.logs.length > 0 && (
-            <div className="mt-16">
-              <div className="settings-card-title flex items-center gap-1 mb-8"><i className="ti ti-history" />Activity Log</div>
-              <div className="timeline">
-                {c.logs.map((l: CandidateLog) => (
-                  <div key={l.id} className="tl-item">
-                    <div className={`tl-dot tl-${l.log_type}`}><i className={`ti ${LOG_ICON[l.log_type]}`} /></div>
-                    <div className="tl-body">
-                      <div className="tl-title">{l.title}</div>
-                      {l.description && <div className="tl-desc">{l.description}</div>}
-                      <div className="tl-time">{fmtDateTime(l.created_at)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+import { useRouter } from "next/navigation";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
+import { fmtDate, initials } from "../interview-list/_data";
+import OnboardingDrawer, { ApprovalUser } from "./_components/OnboardingDrawer";
 
 export default function CandidateReviewPage() {
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState("");
-  const [modal,      setModal]      = useState<{ candidate: Candidate; decision: "approve" | "reject" } | null>(null);
+  const router       = useRouter();
+  const canApprove   = usePermission("employees.approve");
 
-  const fetchReview = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const [rows,    setRows]    = useState<ApprovalUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
+
+  const [drawer,    setDrawer]    = useState<ApprovalUser | null>(null);
+  const [remarks,   setRemarks]   = useState("");
+  const [acting,    setActing]    = useState(false);
+  const [actionErr, setActionErr] = useState<string | null>(null);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true); setError("");
     try {
-      const res = await RECRUITMENT_API.reviewList();
-      const raw = res.data?.data;
-      setCandidates(Array.isArray(raw) ? raw : []);
+      const res = await clientApi.get(API.onboarding.approvals);
+      setRows(res.data?.data?.results ?? []);
     } catch {
-      setError("Failed to load candidates for review.");
+      setError("Failed to load onboarding submissions.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchReview(); }, [fetchReview]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
-  function handleDecision(c: Candidate, d: "approve" | "reject") {
-    setModal({ candidate: c, decision: d });
+  async function handleOnboardingAction(
+    userId: string,
+    decision: "approve" | "reject",
+    extras?: { department: string; designation: string },
+  ) {
+    setActing(true); setActionErr(null);
+    try {
+      await clientApi.post(API.onboarding.approve(userId), { decision, remarks, ...extras });
+      setDrawer(null); setRemarks("");
+      if (decision === "approve") {
+        router.push("/dashboard/employees");
+      } else {
+        loadAll();
+      }
+    } catch (err: unknown) {
+      setActionErr((err as { message?: string })?.message ?? "Action failed.");
+    } finally {
+      setActing(false);
+    }
   }
 
-  function handleDone(updated: Candidate) {
-    setCandidates(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
-    setModal(null);
-  }
-
-  const pendingReview  = candidates.filter(c => c.details_filled && !c.hr_approved).length;
-  const awaitingSubmit = candidates.filter(c => !c.details_filled).length;
-  const approved       = candidates.filter(c => c.hr_approved).length;
+  const STATUS_MAP: Record<string, [string, string]> = {
+    submitted: ["Submitted",      "badge-warn"   ],
+    approved:  ["Approved",       "badge-success"],
+    rejected:  ["Needs Revision", "badge-error"  ],
+  };
 
   return (
     <>
-      {/* Header */}
       <div className="page-header">
         <div>
-          <div className="page-title">Candidate Review</div>
-          <div className="page-sub">Review submitted details and approve candidates for employee onboarding</div>
+          <div className="page-title">Onboarding Approvals</div>
+          <div className="page-sub">Review and approve employee onboarding submissions</div>
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="stats-grid">
+      {/* Stats */}
+      <div className="stats-grid" style={{ marginBottom: 20 }}>
         {[
-          { label: "Total Selected",     value: candidates.length, icon: "ti-users",      iconCls: "si-primary" },
-          { label: "Pending Review",      value: pendingReview,     icon: "ti-eye",        iconCls: "si-warn" },
-          { label: "Awaiting Submission", value: awaitingSubmit,    icon: "ti-clock",      iconCls: "si-info" },
-          { label: "Approved",            value: approved,          icon: "ti-user-check", iconCls: "si-success" },
+          { label: "Total",        value: rows.length,                                                       icon: "ti-users",     iconCls: "si-primary" },
+          { label: "Pending",      value: rows.filter(r => r.onboarding_status === "submitted").length,      icon: "ti-eye",       iconCls: "si-warn"    },
+          { label: "Approved",     value: rows.filter(r => r.onboarding_status === "approved").length,       icon: "ti-check",     iconCls: "si-success" },
+          { label: "Needs Revision", value: rows.filter(r => r.onboarding_status === "rejected").length,    icon: "ti-refresh",   iconCls: "si-error"   },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div className={`stat-icon ${s.iconCls}`}><i className={`ti ${s.icon}`} /></div>
@@ -285,35 +87,91 @@ export default function CandidateReviewPage() {
         ))}
       </div>
 
-      {/* Content */}
       {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>}
 
       {loading ? (
         <div className="text-center py-16"><i className="ti ti-loader-2 spin text-3xl" /></div>
-      ) : !Array.isArray(candidates) || candidates.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="empty-state">
-          <i className="ti ti-user-check" />
-          <h3>No pending reviews</h3>
-          <p>Selected candidates who have filled their details will appear here.</p>
+          <i className="ti ti-user-plus" />
+          <h3>No onboarding submissions</h3>
+          <p>Onboarding submissions from new employees will appear here.</p>
         </div>
       ) : (
-        candidates.map(c => (
-          <CandidateAccordionItem
-            key={c.id}
-            candidate={c}
-            onDecision={handleDecision}
-            onUpdated={handleDone}
-          />
-        ))
+        <div className="card" style={{ overflow: "visible" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table className="data-table" style={{ minWidth: 560 }}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th className="col-hide-sm">Role / Designation</th>
+                  <th className="col-hide-md">Branch</th>
+                  <th className="col-hide-md">Joined</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => {
+                  const [statusLabel, statusCls] = STATUS_MAP[row.onboarding_status] ?? ["Pending", "badge-neutral"];
+                  return (
+                    <tr key={row.id}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div className="user-avatar" style={{ width: 32, height: 32, fontSize: 12, flexShrink: 0 }}>
+                            {initials(row.full_name)}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: ".88rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>{row.full_name}</div>
+                            <div style={{ fontSize: ".76rem", color: "var(--on-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>{row.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="col-hide-sm" style={{ fontSize: ".85rem" }}>{row.designation || "—"}</td>
+                      <td className="col-hide-md" style={{ fontSize: ".85rem" }}>{row.branch || "—"}</td>
+                      <td className="col-hide-md" style={{ fontSize: ".85rem" }}>{fmtDate(row.date_joined)}</td>
+                      <td><span className={`badge ${statusCls}`} style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
+                      <td>
+                        {row.onboarding_status === "rejected" ? (
+                          <span
+                            className="badge badge-neutral"
+                            title="Waiting for the employee to correct and resubmit"
+                            style={{ cursor: "default", userSelect: "none" }}
+                          >
+                            Awaiting resubmission
+                          </span>
+                        ) : canApprove ? (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => { setDrawer(row); setRemarks(""); setActionErr(null); }}
+                          >
+                            Review
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
-      {/* HR Decision Modal */}
-      {modal && (
-        <HRDecisionModal
-          candidate={modal.candidate}
-          decision={modal.decision}
-          onClose={() => setModal(null)}
-          onDone={handleDone}
+      <style>{`
+        @media (max-width: 768px) { .col-hide-md { display: none; } }
+        @media (max-width: 560px) { .col-hide-sm { display: none; } }
+      `}</style>
+
+      {drawer && (
+        <OnboardingDrawer
+          user={drawer}
+          remarks={remarks}
+          acting={acting}
+          actionErr={actionErr}
+          onRemarksChange={setRemarks}
+          onAction={handleOnboardingAction}
+          onClose={() => setDrawer(null)}
         />
       )}
     </>

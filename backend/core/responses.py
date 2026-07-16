@@ -27,12 +27,26 @@ def error(
 
 
 def first_error(serializer_errors: dict) -> str:
-    """Return the first human-readable message from a DRF serializer errors dict."""
-    for field_errors in serializer_errors.values():
+    """Return the first human-readable message from a DRF serializer errors dict.
+
+    Includes the field name so callers know which field is invalid,
+    e.g. "employee_id: This field is required."
+    """
+    for field, field_errors in serializer_errors.items():
         if isinstance(field_errors, list) and field_errors:
-            return str(field_errors[0])
+            item = field_errors[0]
+            if isinstance(item, dict):
+                result = first_error(item)
+                if result != 'Validation error.':
+                    return result
+            else:
+                return f'{field}: {item}'
         if isinstance(field_errors, str):
-            return field_errors
+            return f'{field}: {field_errors}'
+        if isinstance(field_errors, dict):
+            result = first_error(field_errors)
+            if result != 'Validation error.':
+                return result
     return 'Validation error.'
 
 

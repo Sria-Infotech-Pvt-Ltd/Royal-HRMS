@@ -1,0 +1,85 @@
+"use client";
+
+import { useState } from "react";
+import { useClockWidget } from "@/hooks/useClockWidget";
+import CorrectionModal from "@/app/dashboard/my-attendance/_components/CorrectionModal";
+
+function todayString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export default function ClockInButton() {
+  const { session, isLoading, isPunching, punch } = useClockWidget();
+  const [showModal, setShowModal] = useState(false);
+
+  const isClockedIn = session?.is_clocked_in ?? false;
+  const isBusy      = isLoading || isPunching;
+
+  return (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <button
+          onClick={() => punch(isClockedIn ? "OUT" : "IN")}
+          disabled={isBusy}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 7,
+            padding: "7px 16px", borderRadius: 6,
+            border: `1.5px solid ${isClockedIn ? "rgba(248,113,113,0.45)" : "rgba(74,222,128,0.45)"}`,
+            cursor: isBusy ? "not-allowed" : "pointer",
+            fontSize: 13, fontWeight: 700,
+            background: isClockedIn ? "rgba(220,38,38,0.18)" : "rgba(22,163,74,0.18)",
+            color: "#fff",
+            opacity: isBusy ? 0.6 : 1,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+            transition: "background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.15s",
+            letterSpacing: "0.01em", whiteSpace: "nowrap",
+          }}
+          onMouseEnter={e => { if (!isBusy) (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
+        >
+          {isPunching ? (
+            <>
+              <i className="ti ti-loader-2" style={{ fontSize: 14, animation: "spin 1s linear infinite" }} />
+              Please wait…
+            </>
+          ) : (
+            <>
+              <span style={{
+                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                background: isClockedIn ? "#f87171" : "#4ade80",
+                animation: !isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none",
+              }} />
+              <i className={`ti ${isClockedIn ? "ti-clock-out" : "ti-clock-in"}`} style={{ fontSize: 14 }} />
+              {isClockedIn ? "Clock Out" : "Clock In"}
+            </>
+          )}
+        </button>
+
+        <button
+          onClick={() => setShowModal(true)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            padding: 0, border: "none", background: "transparent",
+            cursor: "pointer", fontSize: 11, fontWeight: 500,
+            color: "rgba(255,255,255,0.65)",
+            textDecoration: "underline", textDecorationColor: "rgba(255,255,255,0.3)",
+            textUnderlineOffset: "2px", transition: "color 0.15s",
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.95)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.65)"; }}
+        >
+          <i className="ti ti-flag-3" style={{ fontSize: 11 }} />
+          Request Attendance Correction
+        </button>
+      </div>
+
+      <CorrectionModal
+        isOpen={showModal}
+        date={todayString()}
+        onClose={() => setShowModal(false)}
+        onSuccess={() => setShowModal(false)}
+      />
+    </>
+  );
+}

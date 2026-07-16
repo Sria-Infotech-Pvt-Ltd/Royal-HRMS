@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import {
-  validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug,
+  validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug, catValue,
   ATTACHMENT_ACCEPT_ATTR, fileKind, FILE_KIND_META, formatBytes,
   EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplateAttachmentDetail, parseAvailableVars,
   type ApiAttachment, type ApiEmailTemplate, type ApiTemplateCategory, type TemplateForm, type TemplateFormErrors,
@@ -282,10 +282,6 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
   function removeExistingAttachment(id: number) {
     setExistingAttachments(prev => prev.filter(a => a.id !== id));
     setRemovedAttachmentIds(prev => [...prev, id]);
-  }
-
-  function catValue(cat: ApiTemplateCategory) {
-    return cat.code ?? cat.slug ?? cat.name.toLowerCase().replace(/\s+templates?$/i, "").trim();
   }
 
   async function handleCreateCategory() {
@@ -869,6 +865,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                     borderRadius: 20, flexShrink: 0, maxWidth: 200,
                   }}>
                     {isImg ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={URL.createObjectURL(file)} alt={file.name}
                         style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                     ) : (

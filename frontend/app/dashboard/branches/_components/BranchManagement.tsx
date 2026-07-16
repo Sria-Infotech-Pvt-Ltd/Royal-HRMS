@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface StateObj {
   id: number;
@@ -26,6 +28,40 @@ interface Branch {
   city_name:      string;
   employees_count: number;
   status:         string;
+  geofencing_enabled:    boolean;
+  latitude:              number | null;
+  longitude:             number | null;
+  allowed_radius_meters: number | null;
+  has_coordinates:       boolean;
+}
+
+function geofenceBadge(branch: Branch): { label: string; cls: string } {
+  if (!branch.geofencing_enabled) return { label: "Disabled", cls: "badge-neutral" };
+  if (!branch.has_coordinates)    return { label: "No Coordinates", cls: "badge-warn" };
+  return { label: "Active", cls: "badge-success" };
+}
+
+function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
+  return (
+    <label style={{ display: "inline-flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+      <span
+        onClick={() => onChange(!checked)}
+        style={{
+          position: "relative", width: "38px", height: "22px", borderRadius: "11px", flexShrink: 0,
+          background: checked ? "var(--primary)" : "var(--outline-v)", transition: "background 0.15s",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute", top: "2px", left: checked ? "18px" : "2px",
+            width: "18px", height: "18px", borderRadius: "50%", background: "#fff",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.3)", transition: "left 0.15s",
+          }}
+        />
+      </span>
+      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--on-bg)" }}>{label}</span>
+    </label>
+  );
 }
 
 interface BranchStats {
@@ -43,8 +79,14 @@ interface BranchDistribution {
 }
 
 type Envelope<T> = { status: string; message: string; data: T };
+type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
 export default function BranchManagement() {
+  const user      = useCurrentUser();
+  const isHrAdmin = user?.role === "hr_admin";
+  // hr_admin must never edit branches regardless of DB permissions — business rule
+  const canEdit   = usePermission("settings.edit") && !isHrAdmin;
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [stats, setStats] = useState<BranchStats>({ total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
   const [distribution, setDistribution] = useState<BranchDistribution[]>([]);
@@ -72,6 +114,10 @@ export default function BranchManagement() {
     city:           "",
     status:         "Active",
     is_headquarter: false,
+    geofencing_enabled:    false,
+    latitude:              "",
+    longitude:             "",
+    allowed_radius_meters: "150",
   });
 
   const fetchData = useCallback(async () => {
@@ -79,12 +125,12 @@ export default function BranchManagement() {
     setError(null);
     try {
       const [branchesRes, statsRes, distRes, statesRes] = await Promise.all([
-        clientApi.get<Envelope<Branch[]>>(API.branches.list),
+        clientApi.get<Envelope<Paginated<Branch>>>(API.branches.list),
         clientApi.get<Envelope<BranchStats>>(API.branches.stats),
         clientApi.get<Envelope<BranchDistribution[]>>(API.branches.distribution),
         clientApi.get<Envelope<StateObj[]>>(API.branches.states),
       ]);
-      setBranches(branchesRes.data.data ?? []);
+      setBranches(branchesRes.data.data?.results ?? []);
       setStats(statsRes.data.data ?? { total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
       setDistribution(distRes.data.data ?? []);
       setStates(statesRes.data.data ?? []);
@@ -141,6 +187,26 @@ export default function BranchManagement() {
     if (modalMode === "add" && !editForm.branch_code && !codeLoading)
                                errs.branch_code = "Branch code could not be generated. Try re-selecting the city.";
 
+    if (editForm.geofencing_enabled) {
+      const lat = editForm.latitude.trim();
+      const lon = editForm.longitude.trim();
+
+      if (!lat && !lon) {
+        errs.latitude = "Latitude and longitude are required to enable geofencing.";
+      } else if (!lat || !lon) {
+        if (!lat) errs.latitude  = "Both latitude and longitude must be provided together.";
+        if (!lon) errs.longitude = "Both latitude and longitude must be provided together.";
+      } else {
+        if (isNaN(Number(lat))) errs.latitude  = "Latitude must be a valid number.";
+        if (isNaN(Number(lon))) errs.longitude = "Longitude must be a valid number.";
+      }
+
+      const radius = editForm.allowed_radius_meters.trim();
+      if (!radius) errs.allowed_radius_meters = "Allowed radius is required.";
+      else if (isNaN(Number(radius)) || Number(radius) < 10 || Number(radius) > 5000)
+                    errs.allowed_radius_meters = "Allowed radius must be between 10 and 5000 metres.";
+    }
+
     return errs;
   };
 
@@ -154,11 +220,15 @@ export default function BranchManagement() {
       city:           editForm.city,
       status:         editForm.status,
       is_headquarter: editForm.is_headquarter,
+      geofencing_enabled:    editForm.geofencing_enabled,
+      latitude:              editForm.geofencing_enabled ? Number(editForm.latitude)  : null,
+      longitude:             editForm.geofencing_enabled ? Number(editForm.longitude) : null,
+      allowed_radius_meters: editForm.geofencing_enabled ? Number(editForm.allowed_radius_meters) : null,
     };
     setSaving(true);
     try {
       if (modalMode === "edit") {
-        await clientApi.put(API.branches.detail(editForm.id), payload);
+        await clientApi.patch(API.branches.detail(editForm.id), payload);
       } else {
         await clientApi.post(API.branches.list, payload);
       }
@@ -201,6 +271,11 @@ export default function BranchManagement() {
     }
   };
 
+  // HR admins see only their own branch; system_admin / others see all.
+  const visibleBranches = isHrAdmin && user?.branch
+    ? branches.filter(b => b.branch_name === user.branch)
+    : branches;
+
   if (isLoading && branches.length === 0) {
     return <div className="p-8 text-center text-[var(--on-variant)]">Loading branches...</div>;
   }
@@ -210,18 +285,23 @@ export default function BranchManagement() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Branches</h1>
-          <p className="page-sub">Manage all company branch locations</p>
+          <p className="page-sub">{isHrAdmin ? "Your branch details" : "Manage all company branch locations"}</p>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => {
-            setSaveError(null);
-            setModalMode("add");
-            setFieldErrors({});
-            setEditForm({ id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false });
-          }}>
-            <i className="ti ti-plus" /> Add Branch
-          </button>
-        </div>
+        {canEdit && (
+          <div className="page-actions">
+            <button className="btn btn-filled" onClick={() => {
+              setSaveError(null);
+              setModalMode("add");
+              setFieldErrors({});
+              setEditForm({
+                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false,
+                geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
+              });
+            }}>
+              <i className="ti ti-plus" /> Add Branch
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -253,9 +333,9 @@ export default function BranchManagement() {
         </div>
       </div>
 
-      {branches.length > 0 ? (
+      {visibleBranches.length > 0 ? (
         <div className="grid-2 mb-24">
-          {branches.map(branch => (
+          {visibleBranches.map(branch => (
             <div key={branch.id} className="card" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
@@ -298,38 +378,54 @@ export default function BranchManagement() {
                       {branch.status.charAt(0).toUpperCase() + branch.status.slice(1)}
                     </div>
                   </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Geofencing</div>
+                    <span className={`badge ${geofenceBadge(branch).cls}`}>{geofenceBadge(branch).label}</span>
+                    {branch.geofencing_enabled && branch.has_coordinates && (
+                      <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
+                        {branch.allowed_radius_meters} m radius<br />
+                        {branch.latitude}, {branch.longitude}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
-                    onClick={() => {
-                      setSaveError(null);
-                      setFieldErrors({});
-                      setModalMode("edit");
-                      setEditForm({
-                        id:             branch.id,
-                        branch_code:    branch.branch_code,
-                        branch_name:    branch.branch_name,
-                        address:        branch.address,
-                        state:          branch.state.toString(),
-                        city:           branch.city.toString(),
-                        status:         branch.status.toLowerCase(),
-                        is_headquarter: branch.is_headquarter,
-                      });
-                    }}
-                  >
-                    <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
-                  </button>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
-                    onClick={() => handleDelete(branch.id)}
-                  >
-                    <i className="ti ti-trash" style={{ fontSize: "16px" }} />
-                  </button>
-                </div>
+                {canEdit && (
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
+                      onClick={() => {
+                        setSaveError(null);
+                        setFieldErrors({});
+                        setModalMode("edit");
+                        setEditForm({
+                          id:             branch.id,
+                          branch_code:    branch.branch_code,
+                          branch_name:    branch.branch_name,
+                          address:        branch.address,
+                          state:          branch.state.toString(),
+                          city:           branch.city.toString(),
+                          status:         branch.status.toLowerCase(),
+                          is_headquarter: branch.is_headquarter,
+                          geofencing_enabled:    branch.geofencing_enabled ?? false,
+                          latitude:              branch.latitude?.toString() ?? "",
+                          longitude:             branch.longitude?.toString() ?? "",
+                          allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
+                        });
+                      }}
+                    >
+                      <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
+                      onClick={() => handleDelete(branch.id)}
+                    >
+                      <i className="ti ti-trash" style={{ fontSize: "16px" }} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -525,6 +621,78 @@ export default function BranchManagement() {
                   </label>
                 </div>
               </div>
+
+              <div className="form-row">
+                <div className="field-group" style={{ paddingBottom: "2px" }}>
+                  <ToggleSwitch
+                    label="Enable Geofencing"
+                    checked={editForm.geofencing_enabled}
+                    onChange={checked => {
+                      setFieldErrors(prev => { const n = {...prev}; delete n.latitude; delete n.longitude; delete n.allowed_radius_meters; return n; });
+                      setEditForm({ ...editForm, geofencing_enabled: checked });
+                    }}
+                  />
+                </div>
+              </div>
+
+              {editForm.geofencing_enabled && (
+                <>
+                  <div className="form-row cols-2">
+                    <div className="field-group">
+                      <label className="field-label">Latitude *</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className={`field-input${fieldErrors.latitude ? " field-error" : ""}`}
+                        value={editForm.latitude}
+                        onChange={e => {
+                          setFieldErrors(prev => { const n = {...prev}; delete n.latitude; return n; });
+                          setEditForm({ ...editForm, latitude: e.target.value });
+                        }}
+                        placeholder="e.g. 19.0760"
+                      />
+                      {fieldErrors.latitude && <p className="field-error-msg">{fieldErrors.latitude}</p>}
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Longitude *</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className={`field-input${fieldErrors.longitude ? " field-error" : ""}`}
+                        value={editForm.longitude}
+                        onChange={e => {
+                          setFieldErrors(prev => { const n = {...prev}; delete n.longitude; return n; });
+                          setEditForm({ ...editForm, longitude: e.target.value });
+                        }}
+                        placeholder="e.g. 72.8777"
+                      />
+                      {fieldErrors.longitude && <p className="field-error-msg">{fieldErrors.longitude}</p>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "-8px", marginBottom: "16px" }}>
+                    <i className="ti ti-info-circle" style={{ marginRight: "4px" }} />
+                    Enter the GPS coordinates of the office entrance. Use Google Maps — right-click the location and copy the coordinates.
+                  </div>
+
+                  <div className="form-row">
+                    <div className="field-group">
+                      <label className="field-label">Allowed Radius (metres) *</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={5000}
+                        className={`field-input${fieldErrors.allowed_radius_meters ? " field-error" : ""}`}
+                        value={editForm.allowed_radius_meters}
+                        onChange={e => {
+                          setFieldErrors(prev => { const n = {...prev}; delete n.allowed_radius_meters; return n; });
+                          setEditForm({ ...editForm, allowed_radius_meters: e.target.value });
+                        }}
+                      />
+                      {fieldErrors.allowed_radius_meters && <p className="field-error-msg">{fieldErrors.allowed_radius_meters}</p>}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setModalMode(null)}>Cancel</button>

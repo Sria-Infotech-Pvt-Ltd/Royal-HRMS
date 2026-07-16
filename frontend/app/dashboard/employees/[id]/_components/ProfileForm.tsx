@@ -1,14 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import type {
   DetailValues,
   DocEntry,
+  FieldOption,
   ProfileSection,
   TableColumn,
   TableRow,
 } from "../../_data";
 import FormField from "../../_components/FormField";
+import DocPreviewModal from "@/components/DocPreviewModal";
 
 /* ── shared cell input style ────────────────────────────────── */
 const CELL =
@@ -21,19 +23,31 @@ export default function ProfileForm({
   values,
   rows,
   dirty,
+  saving,
+  liveDocuments,
+  fieldOptions,
+  fieldSlot,
+  readOnly,
   onFieldChange,
   onRowsChange,
   onSave,
   onCancel,
+  onEdit,
 }: {
   section: ProfileSection;
   values: DetailValues;
   rows: TableRow[];
   dirty: boolean;
+  saving?: boolean;
+  liveDocuments?: DocEntry[];
+  fieldOptions?: Record<string, FieldOption[]>;
+  fieldSlot?: (key: string, disabled: boolean) => React.ReactNode | null | "hidden";
+  readOnly?: boolean;
   onFieldChange: (key: string, val: string) => void;
   onRowsChange: (rows: TableRow[]) => void;
   onSave: () => void;
   onCancel: () => void;
+  onEdit?: () => void;
 }) {
   return (
     <div
@@ -52,6 +66,17 @@ export default function ProfileForm({
         <div className="flex items-center gap-1">
           <HeaderBtn icon="ti-upload" title="Import" />
           <HeaderBtn icon="ti-download" title="Export" />
+          {readOnly && onEdit && (
+            <button
+              onClick={onEdit}
+              suppressHydrationWarning
+              title="Edit"
+              className="flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white/90 border border-white/30 hover:bg-white/15 transition-colors"
+            >
+              <i className="ti ti-pencil text-[13px]" />
+              Edit
+            </button>
+          )}
         </div>
       </div>
 
@@ -59,14 +84,24 @@ export default function ProfileForm({
       <div className="p-7 flex-1">
         {section.kind === "grid" && (
           <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-            {section.fields.map((f) => (
-              <FormField
-                key={f.key}
-                field={f}
-                value={values[f.key] ?? ""}
-                onChange={onFieldChange}
-              />
-            ))}
+            {section.fields.map((f) => {
+              const slot = fieldSlot?.(f.key, readOnly ?? true);
+              if (slot === "hidden") return null;
+              if (slot != null) {
+                return <div key={f.key}>{slot}</div>;
+              }
+              const overrideOpts = fieldOptions?.[f.key];
+              const mergedField = overrideOpts ? { ...f, options: overrideOpts } : f;
+              return (
+                <FormField
+                  key={f.key}
+                  field={mergedField}
+                  value={values[f.key] ?? ""}
+                  onChange={onFieldChange}
+                  disabled={readOnly}
+                />
+              );
+            })}
           </div>
         )}
 
@@ -76,35 +111,38 @@ export default function ProfileForm({
 
         {section.kind === "docs" && (
           section.variant === "table"
-            ? <DocsTable documents={section.documents} />
-            : <DocsCards documents={section.documents} />
+            ? <DocsTable documents={liveDocuments ?? section.documents} />
+            : <DocsCards documents={liveDocuments ?? section.documents} />
         )}
       </div>
 
-      {/* ── Footer ──────────────────────────────────────────── */}
-      <div
-        className="flex items-center justify-end gap-3 px-6 py-3 border-t"
-        style={{ borderColor: "var(--outline-v)", background: "var(--bg-low)" }}
-      >
-        <button
-          onClick={onCancel}
-          disabled={!dirty}
-          suppressHydrationWarning
-          className="px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+      {/* ── Footer — hidden in read-only mode ───────────────── */}
+      {!readOnly && (
+        <div
+          className="flex items-center justify-end gap-3 px-6 py-3 border-t"
+          style={{ borderColor: "var(--outline-v)", background: "var(--bg-low)" }}
         >
-          Cancel
-        </button>
-        <button
-          onClick={onSave}
-          suppressHydrationWarning
-          className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors shadow-sm"
-          style={{ background: "var(--primary)" }}
-        >
-          <i className="ti ti-device-floppy text-[15px]" />
-          Save
-        </button>
-      </div>
+          <button
+            onClick={onCancel}
+            disabled={!dirty}
+            suppressHydrationWarning
+            className="px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            suppressHydrationWarning
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            style={{ background: "var(--primary)" }}
+          >
+            <i className={`ti ${saving ? "ti-loader-2 animate-spin" : "ti-device-floppy"} text-[15px]`} />
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -363,64 +401,116 @@ function CellInput({
   );
 }
 
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /* ── Employee Documents — 4-col card grid ───────────────────── */
 function DocsCards({ documents }: { documents: DocEntry[] }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-5">
-        <p className="text-[13px]" style={{ color: "var(--on-variant)" }}>
-          All documents uploaded by the employee or{" "}
-          <span className="font-semibold" style={{ color: "var(--primary)" }}>HR</span>
-        </p>
-        <label
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-colors hover:bg-[var(--bg-mid)]"
-          style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "#fff" }}
-        >
-          <i className="ti ti-upload text-[14px]" />
-          Upload Document
-          <input type="file" className="hidden" />
-        </label>
-      </div>
+  const [preview, setPreview] = useState<DocEntry | null>(null);
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
-        {documents.map((doc) => (
-          <div
-            key={doc.name}
-            className="flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-white"
-            style={{ borderColor: "var(--outline-v)" }}
+  return (
+    <>
+      {preview && preview.fileUrl && (
+        <DocPreviewModal
+          name={preview.name}
+          fileName={preview.fileName}
+          fileUrl={preview.fileUrl}
+          fileSize={preview.fileSize}
+          onClose={() => setPreview(null)}
+        />
+      )}
+
+      <div>
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-[13px]" style={{ color: "var(--on-variant)" }}>
+            All documents uploaded by the employee or{" "}
+            <span className="font-semibold" style={{ color: "var(--primary)" }}>HR</span>
+          </p>
+          <label
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-colors hover:bg-[var(--bg-mid)]"
+            style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "#fff" }}
           >
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: "rgba(27,138,107,0.10)" }}
-            >
-              <i className="ti ti-file-check text-[18px]" style={{ color: "#1b8a6b" }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold truncate leading-snug" style={{ color: "var(--on-bg)" }}>
-                {doc.name}
-              </p>
-              <p className="text-[11.5px] leading-snug" style={{ color: "var(--on-variant)" }}>
-                {doc.uploadedOn ? `Uploaded ${doc.uploadedOn}` : "Not uploaded"}
-              </p>
-            </div>
-            <button
-              title="View"
-              suppressHydrationWarning
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0"
-              style={{ color: "var(--on-variant)" }}
-            >
-              <i className="ti ti-eye text-[15px]" />
-            </button>
-          </div>
-        ))}
+            <i className="ti ti-upload text-[14px]" />
+            Upload Document
+            <input type="file" className="hidden" />
+          </label>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+          {documents.map((doc) => {
+            const uploaded = !!doc.fileUrl;
+            return (
+              <div
+                key={doc.name}
+                className="flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-white"
+                style={{ borderColor: "var(--outline-v)" }}
+              >
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: uploaded ? "rgba(27,138,107,0.10)" : "var(--bg-mid)" }}
+                >
+                  <i
+                    className={`ti ${uploaded ? "ti-file-check" : "ti-file-off"} text-[18px]`}
+                    style={{ color: uploaded ? "#1b8a6b" : "var(--on-variant)" }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold truncate leading-snug" style={{ color: "var(--on-bg)" }}>
+                    {doc.name}
+                  </p>
+                  <p className="text-[11.5px] leading-snug" style={{ color: "var(--on-variant)" }}>
+                    {uploaded
+                      ? `${doc.uploadedOn}${doc.fileSize ? ` · ${fmtBytes(doc.fileSize)}` : ""}`
+                      : "Not uploaded"}
+                  </p>
+                </div>
+                {uploaded && (
+                  <label
+                    title="Replace document"
+                    suppressHydrationWarning
+                    className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 cursor-pointer transition-colors"
+                    style={{ color: "var(--on-variant)" }}
+                  >
+                    <i className="ti ti-refresh text-[15px]" />
+                    <input type="file" className="hidden" />
+                  </label>
+                )}
+                <button
+                  title={uploaded ? "Preview document" : "Not uploaded"}
+                  disabled={!uploaded}
+                  onClick={() => uploaded && setPreview(doc)}
+                  suppressHydrationWarning
+                  className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  style={{ color: uploaded ? "var(--primary)" : "var(--on-variant)" }}
+                >
+                  <i className="ti ti-eye text-[15px]" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 /* ── Joining Document — table with Verified / Pending status ── */
 function DocsTable({ documents }: { documents: DocEntry[] }) {
+  const [preview, setPreview] = useState<DocEntry | null>(null);
   return (
+    <>
+      {preview && preview.fileUrl && (
+        <DocPreviewModal
+          name={preview.name}
+          fileName={preview.fileName}
+          fileUrl={preview.fileUrl}
+          fileSize={preview.fileSize}
+          onClose={() => setPreview(null)}
+        />
+      )}
     <div>
       {/* Info banner */}
       <div
@@ -507,7 +597,9 @@ function DocsTable({ documents }: { documents: DocEntry[] }) {
                 <td className="px-4 py-3.5">
                   <button
                     suppressHydrationWarning
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-colors hover:bg-[var(--bg-mid)]"
+                    disabled={!doc.fileUrl}
+                    onClick={() => doc.fileUrl && setPreview(doc)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-colors hover:bg-[var(--bg-mid)] disabled:opacity-30 disabled:cursor-not-allowed"
                     style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
                   >
                     <i className="ti ti-eye text-[13px]" />
@@ -520,5 +612,6 @@ function DocsTable({ documents }: { documents: DocEntry[] }) {
         </table>
       </div>
     </div>
+    </>
   );
 }

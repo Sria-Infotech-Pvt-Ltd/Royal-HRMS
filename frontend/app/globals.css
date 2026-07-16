@@ -103,6 +103,27 @@ a {
    COMPONENTS (utility classes — safe alongside CSS Modules)
    ============================================================ */
 
+/* Sidebar Logo */
+.sidebar-logo-expanded {
+  width: 100%;
+  height: auto;
+  max-height: 56px;
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+  display: block;
+}
+
+.sidebar-logo-collapsed {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  object-fit: cover;
+  object-position: center center;
+  border-radius: 8px;
+  display: block;
+}
+
 /* Cards */
 .card {
   background: #fff;
@@ -399,6 +420,7 @@ tr:hover td {
 }
 
 .field-input {
+  width: 100%;
   padding: 9px 12px;
   border: 1.5px solid var(--outline-v);
   border-radius: var(--radius);
@@ -406,6 +428,7 @@ tr:hover td {
   color: var(--on-bg);
   font-size: 13px;
   transition: border-color 0.15s;
+  box-sizing: border-box;
 }
 
 .field-input:focus {
@@ -416,6 +439,21 @@ tr:hover td {
 textarea.field-input {
   resize: vertical;
   min-height: 90px;
+}
+
+/* Custom dropdown arrow for <select class="field-input field-select"> —
+   replaces the native arrow so it matches the rest of the field styling.
+   Previously duplicated as an inline `style` object wherever a themed
+   select was needed; centralised here so no page needs to repeat it. */
+.field-select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 15px;
+  padding-right: 2.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
 }
 
 .field-input.field-error {
@@ -847,7 +885,7 @@ textarea.field-input {
 /* Toast */
 .toast-container {
   position: fixed;
-  bottom: 24px;
+  top: 24px;
   right: 24px;
   z-index: 9999;
   display: flex;
@@ -885,6 +923,11 @@ textarea.field-input {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
+}
+
+@keyframes clockPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); }
 }
 
 @keyframes slideIn {
@@ -1522,6 +1565,363 @@ textarea.field-input {
 }
 
 /* ============================================================
+   LOGIN PAGE LAYOUT
+   ============================================================ */
+
+/* ── Desktop (default — two-column: image | form) ── */
+.login-page-root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.login-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  width: 100%;
+  height: 100%;
+}
+
+.login-image-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-form-panel {
+  background: #fff;
+  padding: 48px 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.login-form-inner {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* ── Login: guaranteed input style (no Tailwind purge risk) ── */
+.login-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--outline-v);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  color: var(--on-bg);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.login-input:focus {
+  border-color: var(--primary);
+  background: #fff;
+}
+
+.login-input-pwd {
+  padding-right: 46px;
+}
+
+/* ── Login: guaranteed submit button style ── */
+.login-submit-btn {
+  width: 100%;
+  padding: 14px 20px;
+  background: #1e4e8c;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+
+.login-submit-btn:hover {
+  background: #163d6e;
+}
+
+.login-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ── Forgot-password "Back to Sign In" button ── */
+.forgot-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin-bottom: 24px;
+  border: 1.5px solid var(--outline-v);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--on-variant);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.forgot-back-btn:hover {
+  background: var(--bg-low);
+  border-color: var(--outline);
+  color: var(--on-bg);
+}
+
+.forgot-back-arrow {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ── Login: brand icon ── */
+.login-brand-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.login-brand-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(30, 78, 140, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+/* ── Login: typography ── */
+.login-title {
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+  color: var(--on-bg);
+  letter-spacing: -0.01em;
+}
+
+.login-subtitle {
+  font-size: 13px;
+  text-align: center;
+  margin-bottom: 28px;
+  color: var(--on-variant);
+}
+
+/* ── Login: error banner ── */
+.login-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--error-c);
+  color: var(--error);
+  border: 1px solid #ffb3ae;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ── Login: form field wrappers ── */
+.login-field {
+  margin-bottom: 16px;
+}
+
+.login-field-pwd {
+  margin-bottom: 24px;
+}
+
+/* ── Login: labels ── */
+.login-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--on-bg);
+}
+
+.login-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+/* ── Login: forgot password inline link-button ── */
+.login-forgot-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  font-family: inherit;
+}
+
+.login-forgot-btn:hover {
+  text-decoration: underline;
+}
+
+/* ── Login: password input wrapper + eye toggle ── */
+.login-pwd-wrap {
+  position: relative;
+}
+
+.login-pwd-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+  color: var(--outline);
+}
+
+/* ── Login: cover image ── */
+.login-image {
+  object-fit: cover;
+}
+
+/* ── Login: footer text ── */
+.login-footer-text {
+  font-size: 11px;
+  text-align: center;
+  margin-top: 20px;
+  color: var(--outline);
+}
+
+/* ── Login: button spinner ── */
+.login-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  display: inline-block;
+  flex-shrink: 0;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Mobile: single column, content always fully visible ── */
+@media (max-width: 768px) {
+  /* Remove the fixed viewport lock on mobile so content is never clipped */
+  .login-page-root {
+    width: 100%;
+    height: auto;
+    min-height: 100svh;   /* svh = small viewport height, excludes mobile browser chrome */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .login-layout {
+    grid-template-columns: 1fr;   /* single column */
+    height: auto;
+    min-height: 100svh;
+  }
+
+  /* No image on mobile — pure form */
+  .login-image-panel {
+    display: none;
+  }
+
+  /* Use flex-start + padding on inner div instead of justify-content:center
+     so content can never be clipped at the bottom on small viewports */
+  .login-form-panel {
+    justify-content: flex-start;
+    align-items: center;
+    padding: 0 24px;
+    min-height: 100svh;
+    overflow-y: auto;
+  }
+
+  .login-form-inner {
+    max-width: 100%;
+    width: 100%;
+    padding-top: 48px;
+    padding-bottom: 40px;
+  }
+}
+
+@media (max-width: 400px) {
+  .login-form-panel {
+    padding: 0 20px;
+  }
+
+  .login-form-inner {
+    padding-top: 40px;
+    padding-bottom: 32px;
+  }
+}
+
+/* ============================================================
+   EMPLOYEE PROFILE LAYOUT (sidebar + form, collapses on mobile)
+   ============================================================ */
+.profile-layout {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.profile-sidebar-col {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.profile-main-col {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .profile-layout {
+    flex-direction: column;
+  }
+
+  .profile-sidebar-col {
+    width: 100%;
+  }
+
+  /* Make sidebar items scroll horizontally on mobile */
+  .profile-sidebar-col nav {
+    position: static !important; /* disable sticky on mobile */
+    padding: 4px 8px;
+  }
+
+  .profile-sidebar-col nav ul {
+    flex-direction: row !important;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .profile-sidebar-col nav ul li {
+    flex-shrink: 0;
+  }
+
+  .profile-sidebar-col nav ul li button {
+    padding: 6px 12px !important;
+  }
+}
+
+/* ============================================================
    DARK MODE
    ============================================================ */
 body.dark-mode {
@@ -1587,6 +1987,85 @@ body.dark-mode {
 }
 
 /* ============================================================
+   ANNOUNCEMENT LAYOUT UTILITIES
+   ============================================================ */
+
+/* Category filter tabs bar */
+.ann-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+/* List of announcement cards */
+.ann-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Inner padding for each announcement card */
+.ann-card-body {
+  padding: 16px 20px;
+}
+
+/* Footer row inside each card (reactions, views) */
+.ann-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--outline-v);
+  flex-wrap: wrap;
+}
+
+/* Pagination row */
+.ann-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+
+.ann-pagination-info {
+  font-size: 12px;
+  color: var(--on-variant);
+}
+
+.ann-page-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   FILTER-SCROLL — horizontally scrollable filter bar
+   (use for bars with 4+ icon+text buttons to prevent squishing)
+   ============================================================ */
+.filter-scroll {
+  overflow-x: auto;
+  flex-wrap: nowrap !important;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 3px;
+  scrollbar-width: none;
+}
+
+.filter-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-scroll .btn {
+  flex-shrink: 0 !important;
+  flex: none !important;
+  white-space: nowrap;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 768px) {
@@ -1611,10 +2090,46 @@ body.dark-mode {
 
   .page-actions {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .page-actions .btn {
     flex: 1;
+    justify-content: center;
+  }
+
+  /* card-header: title + filter-bar stack vertically on mobile */
+  .card-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .card-header .filter-bar {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .card-header .filter-bar .field-select,
+  .card-header .filter-bar select {
+    flex: 1;
+    min-width: 0;
+    width: auto !important;
+  }
+
+  .card-header .filter-bar .search-bar {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Announcement category filter — buttons wrap and share space */
+  .ann-filter-bar .btn {
+    flex: 1;
+    min-width: 80px;
+    justify-content: center;
+  }
+
+  /* Announcement pagination — center on small screens */
+  .ann-pagination {
     justify-content: center;
   }
 
@@ -1665,7 +2180,7 @@ body.dark-mode {
   }
 
   .toast-container {
-    bottom: 80px;
+    top: 16px;
     right: 12px;
     left: 12px;
   }
@@ -1743,6 +2258,40 @@ body.dark-mode {
     flex: 1;
     justify-content: center;
   }
+
+  /* Filter bars → wrap and full-width on mobile */
+  .filter-bar {
+    gap: 6px;
+  }
+
+  .filter-bar .btn,
+  .filter-bar select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Page-actions select (e.g. branch dropdown) → same as .btn */
+  .page-actions select {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+
+  /* Expense / payslip list rows → stack amount+status+buttons below details */
+  .expense-row-meta {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Drawer → full width on mobile */
+  .drawer {
+    width: 100vw;
+  }
+
+  /* Grid layouts */
+  .module-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1757,6 +2306,30 @@ body.dark-mode {
 
   .stat-value {
     font-size: 20px;
+  }
+
+  /* Tighten filter-scroll buttons on small phones */
+  .filter-scroll .btn {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  /* Page-header actions stack cleanly on small screens */
+  .page-actions {
+    gap: 6px;
+  }
+
+  /* Modal full-bleed on tiny screens */
+  .modal {
+    width: 100vw;
+    max-height: 96vh;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    align-self: flex-end;
+  }
+
+  .modal-overlay.open {
+    align-items: flex-end;
   }
 
   .doc-grid {
@@ -1829,3 +2402,23 @@ body.dark-mode {
 .drawer-close:hover { background: var(--bg-mid); color: var(--on-bg); }
 .drawer-body { padding: 24px; flex: 1; overflow-y: auto; }
 .drawer-footer { padding: 16px 24px; border-top: 1px solid var(--outline-v); display: flex; justify-content: flex-end; gap: 10px; background: var(--surface); flex-shrink: 0; }
+
+/* ── Onboarding Wizard ───────────────────────────────────────────────────── */
+.onboarding-root { min-height: 100vh; background: var(--bg-low); display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem 4rem; }
+.onboarding-header { text-align: center; margin-bottom: 1.5rem; }
+.onboarding-title { font-size: 1.5rem; font-weight: 700; color: var(--on-bg); margin-bottom: .25rem; }
+.onboarding-subtitle { color: var(--text-secondary); font-size: .9rem; }
+.onboarding-steps { display: flex; gap: .25rem; margin-bottom: 1.5rem; background: var(--surface); border-radius: 12px; padding: .5rem; box-shadow: 0 1px 4px rgba(0,0,0,.06); max-width: 680px; width: 100%; flex-wrap: wrap; }
+.onboarding-step { flex: 1; min-width: 120px; display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: 8px; border: none; background: transparent; cursor: pointer; color: var(--text-muted); font-size: .82rem; transition: all .15s; }
+.onboarding-step:hover { background: var(--bg-low); color: var(--on-bg); }
+.onboarding-step--active { background: var(--primary-container); color: var(--primary); font-weight: 600; }
+.onboarding-step--done { color: var(--success); }
+.onboarding-step-num { width: 22px; height: 22px; border-radius: 50%; background: currentColor; color: #fff; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; flex-shrink: 0; }
+.onboarding-step--active .onboarding-step-num { background: var(--primary); }
+.onboarding-step--done .onboarding-step-num { background: var(--success); }
+.onboarding-card { background: var(--surface); border-radius: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.08); padding: 2rem; max-width: 680px; width: 100%; }
+.field-group-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 0; }
+
+/* Scope banner — signals that every section below it applies only to the
+   currently selected record (e.g. one leave type), not to all records. */
+.scope-banner { margin-bottom: 20px; padding: 18px 24px; background: rgba(30, 78, 140, 0.05); border: 1px solid var(--primary); border-radius: var(--radius-lg); }

@@ -1,10 +1,29 @@
 import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CandidateStatus = "pending" | "selected" | "rejected";
-export type InterviewMode   = "in_person" | "video_call" | "phone";
-export type LogType         = "success" | "error" | "info" | "warn";
+export interface CandidateDocument {
+  id: number;
+  document_type: string;
+  document_type_display: string;
+  file_url: string;
+  file_name: string;
+  file_size?: number;
+}
+
+export type CandidateStatus =
+  | "pending"
+  | "screening"
+  | "interview_scheduled"
+  | "interview_done"
+  | "selected"
+  | "offer_sent"
+  | "rejected"
+  | "converted";
+
+export type InterviewMode = "in_person" | "video_call" | "phone";
+export type LogType       = "success" | "error" | "info" | "warn";
 
 export interface CandidateLog {
   id:          number;
@@ -14,12 +33,23 @@ export interface CandidateLog {
   created_at:  string;
 }
 
+export interface Branch {
+  id:          number;
+  branch_name: string;
+  branch_code: string;
+  status:      string;
+}
+
+export type AssessmentStatus = "pending" | "complete";
+
 export interface Candidate {
   id:                       number;
   name:                     string;
   email:                    string;
   phone:                    string;
   position_applied:         string;
+  branch:                   number | null;
+  branch_name:              string;
   interview_date:           string | null;
   interviewer:              number | null;
   interviewer_name:         string;
@@ -31,10 +61,13 @@ export interface Candidate {
   details_filled:           boolean;
   hr_approved:              boolean;
   portal_credentials_sent:  boolean;
+  portal_user:              string | null;
+  assessment_status:        AssessmentStatus | null;
   added_by_name:            string;
   created_at:               string;
   updated_at:               string;
   logs?:                    CandidateLog[];
+  documents?:               CandidateDocument[];
 }
 
 export interface CandidateEmail {
@@ -50,6 +83,16 @@ export interface CandidateEmail {
   candidate_position: string;
 }
 
+export interface EmailTemplate {
+  id:                  number;
+  name:                string;
+  display_name:        string;
+  subject:             string;
+  body:                string;
+  available_variables: string[];
+  is_active:           boolean;
+}
+
 export interface RecruitmentStats {
   total:          number;
   pending:        number;
@@ -58,24 +101,49 @@ export interface RecruitmentStats {
   pending_review: number;
 }
 
+export interface PaginatedCandidates {
+  count:          number;
+  page:           number;
+  page_size:      number;
+  total_pages:    number;
+  status_choices: { value: CandidateStatus; label: string }[];
+  results:        Candidate[];
+}
+
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 export const RECRUITMENT_API = {
-  stats:       () => clientApi.get<{ data: RecruitmentStats }>("/recruitment/candidates/stats/"),
-  list:        (params?: { status?: string; search?: string }) =>
-                 clientApi.get<{ data: Candidate[] }>("/recruitment/candidates/", { params }),
+  stats:       () =>
+    clientApi.get<{ data: RecruitmentStats }>(API.recruitment.stats),
+  list:        (params?: { status?: string; search?: string; branch?: number; page?: number }) =>
+    clientApi.get<{ data: PaginatedCandidates }>(API.recruitment.candidates, { params }),
   create:      (body: Partial<Candidate>) =>
-                 clientApi.post<{ data: Candidate }>("/recruitment/candidates/", body),
+    clientApi.post<{ data: Candidate }>(API.recruitment.candidates, body),
   detail:      (id: number) =>
-                 clientApi.get<{ data: Candidate }>(`/recruitment/candidates/${id}/`),
-  setStatus:   (id: number, body: { status: CandidateStatus; remarks?: string }) =>
-                 clientApi.patch<{ data: Candidate }>(`/recruitment/candidates/${id}/status/`, body),
-  hrDecision:  (id: number, body: { decision: "approve" | "reject"; remarks?: string }) =>
-                 clientApi.patch<{ data: Candidate }>(`/recruitment/candidates/${id}/hr-decision/`, body),
-  reviewList:  () =>
-                 clientApi.get<{ data: Candidate[] }>("/recruitment/candidates/review/"),
-  emailLogs:   (params?: { search?: string }) =>
-                 clientApi.get<{ data: CandidateEmail[] }>("/recruitment/emails/", { params }),
+    clientApi.get<{ data: Candidate }>(API.recruitment.detail(id)),
+  getStatuses: () =>
+    clientApi.get<{ data: { value: CandidateStatus; label: string }[] }>(API.recruitment.status),
+  setStatus:   (id: number, body: { status: CandidateStatus; remarks?: string; template_name?: string; extra_context?: Record<string, string> }) =>
+    clientApi.patch<{ data: Candidate }>(API.recruitment.candidateStatus(id), body),
+  hrDecision:  (id: number, body: {
+    decision:       "approve" | "reject";
+    remarks?:       string;
+    template_name?: string;
+    extra_context?: Record<string, string>;
+  }) =>
+    clientApi.patch<{ data: Candidate }>(API.recruitment.hrDecision(id), body),
+  reviewList:     () =>
+    clientApi.get<{ data: PaginatedCandidates }>(API.recruitment.review),
+  emailTemplates: () =>
+    clientApi.get<{ data: { results: Record<string, EmailTemplate[]> } }>(API.settings.emailTemplates),
+  emailLogs:      (params?: { search?: string }) =>
+    clientApi.get<{ data: CandidateEmail[] }>(API.recruitment.emailLogs, { params }),
+  sendPortalLogin: (id: number) =>
+    clientApi.post<{ message: string }>(API.recruitment.sendPortalLogin(id)),
+  sendEmail: (id: number, body: { template_name: string; extra_context?: Record<string, string> }) =>
+    clientApi.post<{ success: boolean; message: string; data: null }>(API.recruitment.sendEmail(id), body),
+  update: (id: number, body: Partial<Pick<Candidate, "branch" | "interview_date" | "interview_mode" | "position_applied" | "notes">> & { extra_context?: Record<string, string> }) =>
+    clientApi.patch<{ data: Candidate }>(API.recruitment.detail(id), body),
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

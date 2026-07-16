@@ -18,6 +18,7 @@ export interface TableRow {
 
 export interface Employee {
   id: string;            // route id (== employee code), e.g. "RSS00001D"
+  uuid?: string;         // backend UUID — used for API calls (activate/deactivate etc.)
   code: string;
   firstName: string;
   middleName: string;
@@ -35,6 +36,8 @@ export interface Employee {
   details: DetailValues;
   /** repeatable sections, keyed by TableSection.id */
   tables: Record<string, TableRow[]>;
+  /** real uploaded documents from the API */
+  documents?: DocEntry[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -87,6 +90,9 @@ export interface DocEntry {
   required: boolean;
   status?: DocStatus;
   uploadedOn?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
 }
 export interface DocSection {
   id: string;
@@ -99,10 +105,7 @@ export interface DocSection {
 export type ProfileSection = GridSection | TableSection | DocSection;
 
 // ── shared option sets ──────────────────────────────────────
-const YES_NO: FieldOption[] = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-];
+
 const opt = (...vals: string[]): FieldOption[] =>
   vals.map(v => ({ value: v, label: v }));
 
@@ -120,105 +123,68 @@ export const DESIGNATION_OPTIONS = DESIGNATIONS;
 // ────────────────────────────────────────────────────────────
 
 export const PROFILE_SECTIONS: ProfileSection[] = [
-  {
-    id: "basic",
-    label: "Basic Detail",
-    icon: "ti-list-details",
-    kind: "grid",
-    fields: [
-      { key: "code", label: "Employee Code", type: "readonly", required: true },
-      { key: "firstName", label: "First Name", type: "text", required: true },
-      { key: "middleName", label: "Middle Name", type: "text", placeholder: "—" },
-      { key: "lastName", label: "Last Name", type: "text", required: true },
-      {
-        key: "gender", label: "Gender", type: "radio", required: true,
-        options: [{ value: "male", label: "Male" }, { value: "female", label: "Female" }, { value: "transgender", label: "Transgender" }]
-      },
-      { key: "category", label: "Category", type: "select", required: true, options: opt("General", "OBC", "SC", "ST", "EWS") },
-      { key: "profTaxLocation", label: "Prof Tax Location", type: "select", options: [{ value: "", label: "— Select —" }, ...opt("Karnataka", "Maharashtra", "Tamil Nadu", "Telangana", "West Bengal")] },
-      { key: "dateOfBirth", label: "Date Of Birth", type: "date", required: true },
-      { key: "dateOfJoining", label: "Date of Joining", type: "date", required: true },
-      { key: "esiLocation", label: "ESI Location", type: "select", required: true, options: opt("Corporate", "Branch", "N/A") },
-      { key: "metroTds", label: "Metro/Non-Metro (TDS)", type: "select", required: true, options: opt("Metro", "Non-Metro") },
-      { key: "esiDispensary", label: "ESI Dispensary", type: "select", required: true, options: opt("N/A", "Dispensary A", "Dispensary B") },
-      { key: "contractPeriod", label: "Contract Period", type: "text", placeholder: "e.g. Permanent / 6 months", full: true },
-    ],
-  },
-  {
-    id: "employee",
-    label: "Employee Detail",
-    icon: "ti-id",
-    kind: "grid",
-    fields: [
-      { key: "department", label: "Department", type: "select", required: true, options: opt(...DEPARTMENTS) },
-      { key: "designation", label: "Designation", type: "text", required: true, placeholder: "e.g. Sr. Manager" },
-      { key: "reportingTo", label: "Reporting Manager", type: "select", required: true, options: opt("Arjun Mehta", "Sunil Varghese", "Kavitha Rajan", "Meena Iyer") },
-      { key: "employmentType", label: "Employment Type", type: "select", required: true, options: opt("Full-time", "Part-time", "Contract", "Intern") },
-      { key: "workLocation", label: "Work Location", type: "select", options: opt("Bengaluru HQ", "Chennai Branch", "Mumbai Branch", "Pune Branch", "Head Office") },
-      { key: "costCentre", label: "Cost Centre", type: "text", placeholder: "e.g. CC-ENG-001" },
-      { key: "probationEnd", label: "Probation End", type: "date" },
-      { key: "confirmationStatus", label: "Confirmation Status", type: "select", options: opt("Confirmed", "On Probation", "Not Confirmed") },
-      { key: "grade", label: "Grade", type: "select", options: opt("L1", "L2", "L3", "L4", "M1", "M2", "M3") },
-      { key: "band", label: "Band", type: "select", options: opt("B1", "B2", "B3", "B4", "B5") },
-    ],
-  },
+  // ── Onboarding steps (same order & labels as the candidate wizard) ────────
   {
     id: "personal",
-    label: "Personal Detail",
+    label: "Personal",
     icon: "ti-user",
     kind: "grid",
     fields: [
-      { key: "maritalStatus", label: "Marital Status", type: "select", options: opt("Single", "Married", "Divorced", "Widowed") },
-      { key: "spouseName", label: "Spouse Name", type: "text", placeholder: "—" },
-      { key: "nationality", label: "Nationality", type: "select", required: true, options: opt("Indian", "NRI", "Foreign National") },
-      { key: "religion", label: "Religion", type: "select", options: opt("Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist", "Others") },
-      { key: "bloodGroup", label: "Blood Group", type: "select", options: opt("A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-") },
-      { key: "differentlyAbled", label: "Differently Abled", type: "radio", options: YES_NO },
-      { key: "personalEmail", label: "Personal Email", type: "email", placeholder: "personal@email.com" },
-      { key: "mobileNumber", label: "Mobile Number", type: "tel", required: true, placeholder: "+91 XXXXX XXXXX" },
-      { key: "pan", label: "PAN", type: "text", required: true, placeholder: "ABCDE1234F" },
-      { key: "aadhaar", label: "Aadhaar", type: "text", required: true, placeholder: "XXXX-XXXX-XXXX" },
+      // ── read-only identity fields (set by system, not editable) ──
+      { key: "code",          label: "Employee ID",    type: "readonly" },
+      { key: "firstName",     label: "First Name",     type: "readonly" },
+      { key: "lastName",      label: "Last Name",      type: "readonly" },
+      { key: "dateOfJoining", label: "Date of Joining", type: "readonly" },
+      { key: "loginEmail",    label: "Login Email",    type: "readonly" },
+      { key: "mobileNumber",  label: "Phone",          type: "readonly" },
+      // ── editable employment fields (options injected at runtime from API) ──
+      { key: "department",  label: "Department",  type: "select", required: true, options: [] },
+      { key: "designation", label: "Designation", type: "select", required: true, options: [] },
+      { key: "ssRole",      label: "Role",        type: "select", required: true, options: [] },
+      { key: "branch",            label: "Branch",           type: "select",   options: [] },
+      { key: "reportingManager", label: "Reporting Manager", type: "readonly" },
+      { key: "hr",               label: "Branch HR",         type: "readonly" },
+      // ── personal details ─────────────────────────────────────────
+      { key: "dateOfBirth",    label: "Date of Birth",   type: "date",     required: true },
+      {
+        key: "gender", label: "Gender", type: "radio", required: true,
+        options: [{ value: "male", label: "Male" }, { value: "female", label: "Female" }, { value: "other", label: "Other / Prefer not to say" }],
+      },
+      { key: "maritalStatus",  label: "Marital Status",  type: "select",   options: opt("Single", "Married", "Divorced", "Widowed") },
+      { key: "fatherName",     label: "Father's Name",   type: "text",     placeholder: "Father's full name" },
+      { key: "bloodGroup",     label: "Blood Group",     type: "select",   options: opt("A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-") },
+      { key: "currentAddress",   label: "Current Address",   type: "textarea", full: true, placeholder: "House / Flat no., Street, City, State, PIN" },
+      { key: "permanentAddress", label: "Permanent Address", type: "textarea", full: true, placeholder: "Leave blank if same as current" },
     ],
   },
   {
-    id: "udf",
-    label: "User Defined Fields",
-    icon: "ti-forms",
+    id: "education",
+    label: "Education & Experience",
+    icon: "ti-school",
     kind: "grid",
     fields: [
-      { key: "preferredName", label: "Preferred Name", type: "text" },
-      { key: "tshirtSize", label: "T-Shirt Size", type: "select", options: opt("XS", "S", "M", "L", "XL", "XXL") },
-      { key: "vehicleNumber", label: "Vehicle Number", type: "text" },
-      { key: "hobbies", label: "Hobbies", type: "text" },
-      { key: "linkedin", label: "LinkedIn URL", type: "text", full: true },
+      { key: "highestQualification", label: "Highest Qualification",  type: "text",     placeholder: "e.g. B.Tech, MBA" },
+      { key: "specialization",       label: "Specialization",         type: "text",     placeholder: "e.g. Computer Science" },
+      { key: "institution",          label: "Institution / University", type: "text",   full: true, placeholder: "College or university name" },
+      { key: "yearOfPassing",        label: "Year of Passing",         type: "text",    placeholder: "e.g. 2020" },
+      { key: "totalExperienceYears", label: "Total Experience (yrs)",  type: "text",    placeholder: "e.g. 3.5" },
+      { key: "previousEmployer",     label: "Previous Employer",       type: "text",    placeholder: "Company name (if any)" },
+      { key: "previousDesignation",  label: "Previous Designation",    type: "text",    placeholder: "Job title (if any)" },
+      { key: "leavingReason",        label: "Reason for Leaving",      type: "textarea", full: true, placeholder: "Optional" },
     ],
   },
   {
-    id: "family",
-    label: "Family Details",
-    icon: "ti-users",
-    kind: "table",
-    description: "Add family members for insurance and emergency records",
-    addLabel: "Add Member",
-    columns: [
-      { key: "name", label: "Name", placeholder: "Full name" },
-      { key: "relationship", label: "Relationship", type: "select", options: opt("Father", "Mother", "Spouse", "Son", "Daughter", "Brother", "Sister") },
-      { key: "dob", label: "DOB", type: "date" },
-      { key: "dependent", label: "Dependent", type: "select", options: YES_NO },
-    ],
-  },
-  {
-    id: "academic",
-    label: "Academic Details",
-    icon: "ti-school",
-    kind: "table",
-    addLabel: "Add Qualification",
-    columns: [
-      { key: "qualification", label: "Qualification", placeholder: "e.g. B.Tech" },
-      { key: "institution", label: "Institution" },
-      { key: "specialization", label: "Specialization" },
-      { key: "year", label: "Year of Passing", type: "number" },
-      { key: "score", label: "% / CGPA" },
+    id: "bank",
+    label: "Bank Details",
+    icon: "ti-building-bank",
+    kind: "grid",
+    fields: [
+      { key: "accountHolderName", label: "Account Holder Name", type: "text",   required: true, placeholder: "As printed on passbook" },
+      { key: "accountType",       label: "Account Type",        type: "select", required: true, options: [{ value: "", label: "Select" }, { value: "savings", label: "Savings" }, { value: "current", label: "Current" }] },
+      { key: "accountNumber",     label: "Account Number",      type: "text",   required: true, placeholder: "Bank account number" },
+      { key: "ifscCode",          label: "IFSC Code",           type: "text",   required: true, placeholder: "e.g. SBIN0001234" },
+      { key: "bankName",          label: "Bank Name",           type: "text",   required: true, placeholder: "e.g. State Bank of India" },
+      { key: "bankBranch",        label: "Bank Branch",         type: "text",   placeholder: "Branch city / locality" },
     ],
   },
   {
@@ -227,94 +193,27 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     icon: "ti-urgent",
     kind: "grid",
     fields: [
-      { key: "ecName", label: "Contact Name", type: "text", required: true, placeholder: "Full name" },
-      { key: "ecRelationship", label: "Relationship", type: "select", required: true, options: opt("Father", "Mother", "Spouse", "Sibling", "Friend", "Other") },
-      { key: "ecPhone", label: "Mobile", type: "tel", required: true, placeholder: "+91 XXXXX XXXXX" },
-      { key: "ecAltPhone", label: "Alternate Phone", type: "tel", placeholder: "Optional" },
-      { key: "ecEmail", label: "Email", type: "email", placeholder: "optional@email.com" },
-      { key: "ecSameAddress", label: "Same Address", type: "radio", options: YES_NO },
-    ],
-  },
-  {
-    id: "language",
-    label: "Language Known",
-    icon: "ti-language",
-    kind: "table",
-    addLabel: "Add Language",
-    columns: [
-      { key: "language", label: "Language" },
-      { key: "read", label: "Read", type: "select", options: YES_NO },
-      { key: "write", label: "Write", type: "select", options: YES_NO },
-      { key: "speak", label: "Speak", type: "select", options: YES_NO },
-    ],
-  },
-  {
-    id: "nominee",
-    label: "Nominee Details",
-    icon: "ti-user-heart",
-    kind: "table",
-    addLabel: "Add Nominee",
-    columns: [
-      { key: "name", label: "Nominee Name" },
-      { key: "relationship", label: "Relationship" },
-      { key: "share", label: "Share (%)", type: "number" },
-      { key: "dob", label: "Date of Birth", type: "date" },
-    ],
-  },
-  {
-    id: "employment",
-    label: "Employment History",
-    icon: "ti-briefcase",
-    kind: "table",
-    addLabel: "Add Experience",
-    columns: [
-      { key: "company", label: "Company" },
-      { key: "designation", label: "Designation" },
-      { key: "from", label: "From", type: "date" },
-      { key: "to", label: "To", type: "date" },
-      { key: "reason", label: "Reason for Leaving" },
+      { key: "emergencyName",         label: "Contact Name", type: "text",   required: true, placeholder: "Full name" },
+      { key: "emergencyRelationship", label: "Relationship", type: "select", required: true, options: opt("Father", "Mother", "Spouse", "Sibling", "Friend", "Other") },
+      { key: "emergencyPhone",        label: "Phone Number", type: "tel",    required: true, placeholder: "+91 XXXXX XXXXX" },
+      { key: "emergencyEmail",        label: "Email",        type: "email",  placeholder: "optional@email.com" },
     ],
   },
   {
     id: "documents",
-    label: "Employee Documents",
+    label: "Documents",
     icon: "ti-files",
     kind: "docs",
     documents: [
-      { name: "Aadhaar Card", required: true },
-      { name: "PAN Card", required: true },
-      { name: "Passport Photo", required: true },
-      { name: "Educational Certificates", required: false },
-      { name: "Experience Letter", required: false },
-      { name: "Cancelled Cheque", required: true },
+      { name: "PAN Card",                  required: true  },
+      { name: "Aadhaar Card",              required: true  },
+      { name: "Degree Certificate",        required: false },
+      { name: "Experience Letter",         required: false },
+      { name: "Passport Photo",            required: true  },
+      { name: "Cancelled Cheque",          required: true  },
     ],
   },
-  {
-    id: "selfService",
-    label: "Self Service Role",
-    icon: "ti-shield-lock",
-    kind: "grid",
-    fields: [
-      { key: "ssRole", label: "Self Service Role", type: "select", required: true, options: opt("Employee", "Manager", "HR Admin", "System Admin") },
-      { key: "loginEmail", label: "Login Email", type: "readonly" },
-      { key: "portalAccess", label: "Portal Access", type: "radio", options: [{ value: "enabled", label: "Enabled" }, { value: "disabled", label: "Disabled" }], full: true },
-    ],
-  },
-  {
-    id: "joining",
-    label: "Joining Document",
-    icon: "ti-file-text",
-    kind: "docs",
-    variant: "table",
-    documents: [
-      { name: "Signed Offer Letter",            required: true,  status: "verified",     uploadedOn: "Jun 12, 2025" },
-      { name: "Relieving Letter (prev. employer)", required: true, status: "verified",    uploadedOn: "Jun 13, 2025" },
-      { name: "Salary Slip (last 3 months)",    required: true,  status: "verified",     uploadedOn: "Jun 13, 2025" },
-      { name: "Form 16",                        required: true,  status: "pending" },
-      { name: "Address Proof",                  required: true,  status: "verified",     uploadedOn: "Jun 12, 2025" },
-      { name: "ID Proof",                       required: true,  status: "verified",     uploadedOn: "Jun 12, 2025" },
-    ],
-  },
+
 ];
 
 // ── top-level tab bar of the detail page ────────────────────
@@ -326,6 +225,7 @@ export const PROFILE_TABS = [
   { id: "attendance", label: "Attendance", icon: "ti-clock" },
   { id: "approval", label: "Approval Matrix", icon: "ti-sitemap" },
   { id: "benefit", label: "Benefit", icon: "ti-gift" },
+  { id: "wishes", label: "Send Wishes", icon: "ti-confetti" },
 ] as const;
 
 // ────────────────────────────────────────────────────────────
@@ -429,10 +329,7 @@ export function avatarColor(dept: string): string {
 
 /** Each profile section gets a distinct palette colour for its icon chip. */
 export const SECTION_TINT: Record<string, TintKey> = {
-  basic: "primary", employee: "info", personal: "success", udf: "purple",
-  family: "warn", academic: "secondary", emergency: "error", language: "info",
-  nominee: "purple", employment: "primary", documents: "warn",
-  selfService: "success", joining: "secondary",
+  personal: "success", education: "secondary", bank: "info", emergency: "error", documents: "warn",
 };
 
 // ────────────────────────────────────────────────────────────

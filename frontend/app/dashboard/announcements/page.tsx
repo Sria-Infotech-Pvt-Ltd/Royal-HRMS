@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
@@ -90,7 +89,8 @@ const EMPTY_FORM: FormState = {
   is_pinned: false, send_email: true,
 };
 
-const POSTER_ROLES = new Set(["hr_admin", "system_admin", "manager"]);
+// Kept for reference — no longer used; canPost is now permission-based
+// const POSTER_ROLES = new Set(["hr_admin", "system_admin", "manager"]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,15 +139,15 @@ function viewKey(id: number) { return `ann_viewed_${id}`; }
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AnnouncementsPage() {
-  const router = useRouter();
 
   // Read localStorage only on the client to avoid SSR/hydration mismatch.
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
   useEffect(() => { setCurrentUser(getStoredUser()); }, []);
 
-  const canPost = currentUser ? POSTER_ROLES.has(currentUser.role) : false;
-  const isAdmin = currentUser?.role === "system_admin";
-  const isHR    = currentUser?.role === "hr_admin";
+  const canPost  = currentUser?.permissions.includes("announcements.create") || currentUser?.role === "system_admin" || false;
+  const canEdit  = currentUser?.permissions.includes("announcements.edit")   || currentUser?.role === "system_admin" || false;
+  const isAdmin  = currentUser?.role === "system_admin";
+  const isHR     = currentUser?.role === "hr_admin";
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [meta,    setMeta]    = useState<PageMeta | null>(null);
@@ -365,7 +365,7 @@ export default function AnnouncementsPage() {
   function toggleExpand(id: number) {
     setExpanded(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }
@@ -412,13 +412,12 @@ export default function AnnouncementsPage() {
       </div>
 
       {/* ── Category filter tabs ─────────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+      <div className="ann-filter-bar">
         {FILTERS.map(f => (
           <button
             key={f.value}
             onClick={() => { setCategory(f.value); setPage(1); }}
             className={`btn ${category === f.value ? "btn-filled" : "btn-ghost"}`}
-            style={{ fontSize: 13 }}
             suppressHydrationWarning
           >
             {f.label}
@@ -454,7 +453,7 @@ export default function AnnouncementsPage() {
 
       {/* ── Announcement cards ───────────────────────────────────────────── */}
       {!loading && meta && meta.results.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="ann-cards-list">
           {meta.results.map(ann => {
             const av    = avatarColor(ann.posted_by_name);
             const isExp = expanded.has(ann.id);
@@ -573,11 +572,11 @@ export default function AnnouncementsPage() {
 
       {/* ── Pagination ───────────────────────────────────────────────────── */}
       {meta && meta.total_pages > 1 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20, padding: "8px 0" }}>
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+        <div className="ann-pagination">
+          <span className="ann-pagination-info">
             Page {meta.page} of {meta.total_pages}
           </span>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div className="ann-page-btns">
             <button className="btn btn-ghost btn-sm" disabled={meta.page <= 1} onClick={() => setPage(p => p - 1)} suppressHydrationWarning>
               <i className="ti ti-chevron-left" /> Prev
             </button>
@@ -730,7 +729,7 @@ export default function AnnouncementsPage() {
                   Pin this announcement
                 </label>
 
-                {(isAdmin || isHR) && (
+                {canPost && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}>
                     <input
                       type="checkbox"

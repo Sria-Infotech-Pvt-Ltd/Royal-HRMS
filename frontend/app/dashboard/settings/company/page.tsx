@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { usePermission } from "@/hooks/usePermission";
 
 // ─── Indian states / UTs ──────────────────────────────────────────────────────
 
@@ -85,7 +86,8 @@ function validate(f: CompanyData): FieldErrors {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CompanyInfoPage() {
-  const router = useRouter();
+  const router    = useRouter();
+  const canEdit   = usePermission("settings.edit");
 
   const [form,        setForm]        = useState<CompanyData>(EMPTY);
   const [errors,      setErrors]      = useState<FieldErrors>({});
@@ -246,12 +248,6 @@ export default function CompanyInfoPage() {
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
             <i className="ti ti-arrow-left" /> Back
           </button>
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-              : <><i className="ti ti-device-floppy" /> Save Changes</>
-            }
-          </button>
         </div>
       </div>
 
@@ -291,7 +287,10 @@ export default function CompanyInfoPage() {
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               {displayLogo
-                ? <img src={displayLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={displayLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                )
                 : <i className="ti ti-photo" style={{ fontSize: 28, color: "var(--outline)" }} />
               }
             </div>
@@ -300,17 +299,21 @@ export default function CompanyInfoPage() {
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
                 JPEG, PNG, WebP or SVG · Max 5 MB
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-ghost btn-sm" type="button" onClick={() => fileRef.current?.click()}>
-                  <i className="ti ti-upload" /> {displayLogo ? "Change" : "Upload"}
-                </button>
-                {displayLogo && (
-                  <button className="btn btn-ghost btn-sm" type="button" onClick={handleLogoRemove}>
-                    <i className="ti ti-trash" /> Remove
+              {canEdit && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-ghost btn-sm" type="button" onClick={() => fileRef.current?.click()}>
+                    <i className="ti ti-upload" /> {displayLogo ? "Change" : "Upload"}
                   </button>
-                )}
-              </div>
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoChange} />
+                  {displayLogo && (
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={handleLogoRemove}>
+                      <i className="ti ti-trash" /> Remove
+                    </button>
+                  )}
+                </div>
+              )}
+              {canEdit && (
+                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoChange} />
+              )}
             </div>
           </div>
 
@@ -487,14 +490,16 @@ export default function CompanyInfoPage() {
           </span>
         )}
         <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} disabled={saving}>
-          Cancel
+          {canEdit ? "Cancel" : "Back"}
         </button>
-        <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
-          {saving
-            ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-            : <><i className="ti ti-device-floppy" /> Save Changes</>
-          }
-        </button>
+        {canEdit && (
+          <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
+            {saving
+              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+              : <><i className="ti ti-device-floppy" /> Save Changes</>
+            }
+          </button>
+        )}
       </div>
     </>
   );
