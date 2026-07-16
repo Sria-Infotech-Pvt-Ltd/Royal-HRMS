@@ -189,4 +189,35 @@ export const API = {
     markRead: (id: string) => `/notifications/${id}/read/`,
     markAllRead: "/notifications/read-all/",
   },
+
+  employeeDashboard: {
+    kpis:              "/dashboard/employee/kpis/",
+    leaveBalances:     "/dashboard/employee/leave-balances/",
+    actionItems:       "/dashboard/employee/action-items/",
+    recentRequests:    "/dashboard/employee/recent-requests/",
+    attendanceSummary: "/dashboard/employee/attendance-summary/",
+    attendanceStatus:  "/dashboard/employee/attendance-status/",
+    announcement:      "/dashboard/announcement/",
+  },
+
+  dashboard: {
+    // System Admin
+    kpis:                "/dashboard/system-admin/kpis/",
+    announcement:        "/dashboard/system-admin/announcement/",
+    pendingApprovals:    "/dashboard/system-admin/pending-approvals/",
+    departmentHeadcount: "/dashboard/system-admin/department-headcount/",
+    employeeLifecycle:   "/dashboard/system-admin/employee-lifecycle/",
+    birthdaysToday:      "/dashboard/system-admin/birthdays/today/",
+    birthdaysUpcoming:   "/dashboard/system-admin/birthdays/upcoming/",
+    auditLogs:           "/dashboard/system-admin/audit-logs/",
+    // HR
+    hrKpis:                "/dashboard/hr/kpis/",
+    hrActionQueue:         "/dashboard/hr/action-queue/",
+    hrRecruitmentFunnel:   "/dashboard/hr/recruitment-funnel/",
+    hrAttendanceSummary:   "/dashboard/hr/attendance-summary/",
+    hrDepartmentHeadcount: "/dashboard/department-headcount/",
+    hrEmployeeLifecycle:   "/dashboard/hr/employee-lifecycle/",
+    hrBirthdaysToday:      "/dashboard/hr/birthdays/today/",
+    hrBirthdaysUpcoming:   "/dashboard/hr/birthdays/upcoming/",
+  },
 } as const;

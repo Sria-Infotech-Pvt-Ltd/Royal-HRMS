@@ -2020,3 +2020,354 @@ Given contract: System Admin gets Branch + Department + Status filters above the
 - **`LeaveApprovals.tsx`'s Pending/History tabs are gone**, replaced by the Status multi-select (§6). If the team wants the two-tab UI back instead of a unified filtered table, that's a UI preference call, not a bug — flag before reverting.
 - **LOP fields (`lop_days`/`lop_requests`) are rendered everywhere assuming the backend's `/leave/stats/` response always includes them** — no `?? 0` fallback gaps were found needed during this session, but if a future response omits them for some role/scope combination, watch for `undefined` rendering in the new stat cards (§3).
 - **`ApplyLeaveForm.tsx`'s preview panel field names were wrong twice before being confirmed correct** (§2) — if the preview endpoint's response shape changes again, the type in `_data.ts` (`LeavePreview`) and the JSX bindings in `ApplyLeaveForm.tsx` are the only two places that need updating.
+
+---
+
+## Session — Safura Samreen (15 July 2026)
+
+**Branch:** `Frontend/Dashboard`
+
+---
+
+### Overview
+
+All three role dashboards (System Admin, HR, Employee) were rewritten from static/hardcoded mock data to fully live API-driven layouts. Every widget is its own isolated component that fetches its own data via `useFetch`. No business logic lives in the page files — all data fetching is in hooks or inline `useFetch` calls inside widget components.
+
+---
+
+### 1. API Endpoints Added — `lib/api/endpoints.ts`
+
+Two new top-level keys added:
+
+#### `employeeDashboard`
+
+| Key | Path |
+|-----|------|
+| `kpis` | `/dashboard/employee/kpis/` |
+| `leaveBalances` | `/dashboard/employee/leave-balances/` |
+| `actionItems` | `/dashboard/employee/action-items/` |
+| `recentRequests` | `/dashboard/employee/recent-requests/` |
+| `attendanceSummary` | `/dashboard/employee/attendance-summary/` |
+| `attendanceStatus` | `/dashboard/employee/attendance-status/` |
+| `announcement` | `/dashboard/announcement/` |
+
+#### `dashboard` (System Admin + HR)
+
+| Key | Path |
+|-----|------|
+| `kpis` | `/dashboard/system-admin/kpis/` |
+| `announcement` | `/dashboard/system-admin/announcement/` |
+| `pendingApprovals` | `/dashboard/system-admin/pending-approvals/` |
+| `departmentHeadcount` | `/dashboard/system-admin/department-headcount/` |
+| `employeeLifecycle` | `/dashboard/system-admin/employee-lifecycle/` |
+| `birthdaysToday` | `/dashboard/system-admin/birthdays/today/` |
+| `birthdaysUpcoming` | `/dashboard/system-admin/birthdays/upcoming/` |
+| `auditLogs` | `/dashboard/system-admin/audit-logs/` |
+| `hrKpis` | `/dashboard/hr/kpis/` |
+| `hrActionQueue` | `/dashboard/hr/action-queue/` |
+| `hrRecruitmentFunnel` | `/dashboard/hr/recruitment-funnel/` |
+| `hrAttendanceSummary` | `/dashboard/hr/attendance-summary/` |
+| `hrDepartmentHeadcount` | `/dashboard/department-headcount/` |
+| `hrEmployeeLifecycle` | `/dashboard/hr/employee-lifecycle/` |
+| `hrBirthdaysToday` | `/dashboard/hr/birthdays/today/` |
+| `hrBirthdaysUpcoming` | `/dashboard/hr/birthdays/upcoming/` |
+
+> **Critical:** No `/api` prefix on any path — the axios `baseURL` already includes `/api`. Every other endpoint in this file follows the same convention. Adding `/api` here would produce double-prefix URLs (`/api/api/dashboard/...`).
+
+---
+
+### 2. TypeScript Types
+
+#### `types/dashboard.ts` (NEW)
+
+All System Admin and HR dashboard interfaces:
+
+```typescript
+DashboardKPIs          // system-admin KPI response; api_status/database_status/mail_status/storage_status
+                       // typed as `string | boolean` — API returns boolean true/false, not "healthy" strings
+PendingApprovals       // leave_requests, expense_claims, onboarding_reviews, separation_requests, total_pending
+DeptHeadcount          // { department: string; count: number }
+LifecycleEmployee      // all field name variants: name?, full_name?, employee_name?, id?, employee_id?
+                       // needed because the API field names differ between admin and HR endpoints
+LifecycleGroup         // { count: number; employees: LifecycleEmployee[] }
+EmployeeLifecycle      // new_joiners, notice_period, work_anniversaries
+AnnouncementData       // handles both body/content and created_at/posted_on field variants
+AuditLogEntry          // handles both actor/actor_name and ip/ip_address variants
+AuditLogsResponse      // { count: number; results: AuditLogEntry[] }
+AttendancePunch        // type: "IN"|"OUT", time, location, attendance_mode, is_inside_geofence, calculated_distance
+AttendanceToday        // is_clocked_in, punches[], total_seconds, session_seconds, date_display
+HRTodayAttendance      // status, first_punch_in, last_punch_out, total_working_minutes
+HRKPIs                 // total_workforce, pending_actions, active_interviews, clocked_in, today_attendance, attendance_correction_pending
+HRActionQueue          // total_pending + 6 individual action counts
+RecruitmentFunnel      // interviews_scheduled, interviewed, selected, details_submitted, onboarded
+AttendanceSummary      // present, absent, late, leave, weekly_off, holiday (HR team-level summary)
+HRLifecycleEmployee    // employee_id, full_name, department, designation?, date_of_joining?, years_completed?, anniversary_date?
+HREmployeeLifecycle    // new_joiners, notice_period, work_anniversaries (each with count + HRLifecycleEmployee[])
+HRBirthdayEmployee     // employee_id, full_name, email?, department, branch?, date_of_birth, days_until
+```
+
+#### `types/employeeDashboard.ts` (NEW)
+
+All Employee dashboard interfaces:
+
+```typescript
+TodayAttendance        // status, first_punch_in, last_punch_out, total_working_minutes
+EmployeeKPIs           // days_present, working_days, absent_days, pending_action_items,
+                       // pending_expense_claims, pending_documents, clocked_in, today_attendance
+LeaveBalance           // leave_type, total_days, used_days, remaining, carried_forward
+LeaveBalanceSummary    // year, lop_days, balances: LeaveBalance[]
+ActionItem             // action_type, title, description, status, navigation_url
+ActionItemsResponse    // total, action_items: ActionItem[]
+RecentRequest          // request_type ("leave"|"expense"|"attendance_correction"), title, applied_date,
+                       // status, remarks, details: Record<string, unknown>
+RecentRequestsResponse // total, requests: RecentRequest[]
+AttendanceSummary      // year, month, present_days, absent_days, late_marks, lop_pending, half_days,
+                       // leave_days, working_days, avg_hours_per_day, attendance_percentage, ot_hours
+AttendanceStatus       // clocked_in, clock_in_time, clock_out_time, working_hours, can_clock_in, can_clock_out
+Announcement           // id, title, body, category, visibility, is_pinned, posted_by, created_at
+```
+
+> **Note on `AttendanceSummary` naming collision:** `types/dashboard.ts` also exports an `AttendanceSummary` (the HR team-level per-status breakdown). The employee's `AttendanceSummary` in `types/employeeDashboard.ts` is a different shape (per-month aggregate stats). They live in separate files — always import from the correct one.
+
+---
+
+### 3. Hooks — `hooks/useEmployeeDashboard.ts` (NEW)
+
+Seven named hooks for the employee dashboard. All use `useFetch` internally:
+
+```typescript
+useEmployeeKPIs()                        // → EmployeeKPIs
+useLeaveBalances(year?: number)          // → LeaveBalanceSummary; appends ?year= when provided
+useActionItems()                         // → ActionItemsResponse
+useRecentRequests()                      // → RecentRequestsResponse
+useAttendanceSummary(month?, year?)      // → AttendanceSummary; appends ?month=&year= when both provided
+useAttendanceStatus()                    // → AttendanceStatus
+useSharedAnnouncement()                  // → Announcement | null
+```
+
+---
+
+### 4. System Admin Dashboard — Complete Rewrite
+
+#### New widget components (`components/dashboard/`)
+
+**`KpiConsole.tsx`** — Gradient banner (`#1a3a6e → #0e2447`). Fetches `API.dashboard.kpis`. Shows 4 system health pills (API / DB / Mail / Storage) and 4 KPI stat tiles (Total Employees, Pending Approvals, In Onboarding, Active Branches).
+
+- `isHealthy(status: string | boolean | undefined)` — handles both boolean `true`/`false` and string `"healthy"`/`"ok"`/`"up"` from the API. Added because the API returned booleans, not strings as originally assumed.
+
+**`PendingApprovalsWidget.tsx`** — Fetches `API.dashboard.pendingApprovals`. Shows 4 approval category counts with a total badge. Each row links to the relevant dashboard section.
+
+**`DeptHeadcountChart.tsx`** — Fetches `API.dashboard.departmentHeadcount` by default. Accepts an optional `endpoint` prop so it can be reused by HR dashboard without duplication. Renders proportional horizontal bars per department.
+
+**`AnnouncementCard.tsx`** — Fetches `API.dashboard.announcement`. Guards against null response: renders a "No announcements" empty state when `data === null`. The API returns `null` under `data` when no announcements exist — `useFetch`'s `?? r.data` fallback would otherwise return the whole envelope object.
+
+**`EmployeeLifecycleTabs.tsx`** — Fetches `API.dashboard.employeeLifecycle`. 3-tab view (New Joiners / Notice Period / Work Anniversaries). Uses resolver helpers to handle both `name`/`id` and `full_name`/`employee_id` field variants from the API:
+```typescript
+resolveName(emp) → emp.name ?? emp.full_name ?? emp.employee_name ?? "—"
+resolveId(emp, index) → emp.id ?? emp.employee_id ?? index
+```
+Uses `<Link>` from `next/link` (not `<a>`) — ESLint `no-html-link-for-pages` rule.
+
+**`AuditLogsWidget.tsx`** — Uses `clientApi` directly (not `useFetch`) because load-more requires appending to an existing list rather than replacing it. Manages own `logs[]`, `total`, `offset`, `loading`, `loadingMore` state. Module filter via `<select>`; on module change, resets and re-fetches from offset 0.
+
+#### `app/dashboard/_components/AdminDashboard.tsx` — Rewritten
+
+From ~430 lines of hardcoded mock data to ~65 lines. Layout:
+```
+Row 1: KpiConsole
+Row 2: Quick Actions (static — links only, no data)
+Row 3 grid-2: PendingApprovalsWidget + DeptHeadcountChart | AnnouncementCard + EmployeeLifecycleTabs
+Row 4 grid-2: BirthdayWidget (existing) | AuditLogsWidget
+```
+
+---
+
+### 5. HR Dashboard — Complete Rewrite
+
+#### New widget components (`components/dashboard/hr/`)
+
+**`HrConsole.tsx`** — Fetches `API.dashboard.hrKpis`. Same gradient banner pattern as `KpiConsole`. 4 KPI tiles (Total Workforce, Pending Actions, Active Interviews, Corrections Pending). Punch status pill (`clocked_in` boolean → green "Clocked In" / red "Not Clocked In"). `ClockInButton` on the right.
+
+**`HrAttendanceSummary.tsx`** — Fetches `API.dashboard.hrAttendanceSummary`. Stacked proportional horizontal bar (6 colours per status) + 6 chip grid (present=green, late=amber, absent=red, leave=blue, weekly_off=slate, holiday=purple). Refetches on `visibilitychange → visible` via `useEffect`:
+```typescript
+document.addEventListener("visibilitychange", handleVisibility);
+```
+
+**`HrActionQueue.tsx`** — Fetches `API.dashboard.hrActionQueue`. 6 rows, each a `<Link>`. Rows with `count === 0` are greyed out with `opacity: 0.45, pointerEvents: "none"` — not removed, so the full list is always visible.
+
+**`HrRecruitmentFunnel.tsx`** — Fetches `API.dashboard.hrRecruitmentFunnel`. 5 funnel stages with proportional CSS bars. Bar opacity fades from 1.0 → ~0.52 top-to-bottom to visualise the funnel narrowing.
+
+**`HrAttendanceCard.tsx`** — Fetches `API.attendance.today` (the shared per-user attendance endpoint, not the HR KPIs endpoint). Displays:
+- Status pill from `is_clocked_in`
+- 3 stat tiles: First Punch In / Last Punch Out / Total Time (from `total_seconds`, formatted as `Xh Ym`)
+- Punch log: each punch as a row with IN (green) / OUT (red) icon, `time` string, `location`, `attendance_mode` badge
+
+Response shape used:
+```typescript
+interface AttendanceToday {
+  is_clocked_in:   boolean;
+  punches:         AttendancePunch[];
+  total_seconds:   number;
+  session_seconds: number;
+  date_display:    string;
+}
+```
+
+**`HrEmployeeLifecycleTabs.tsx`** — Fetches `API.dashboard.hrEmployeeLifecycle`. Uses `HRLifecycleEmployee` (stricter types than the admin `LifecycleEmployee` — no optional field variants needed since the HR endpoint uses consistent field names). Dates formatted as `"15 Jul 2026"` via:
+```typescript
+new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+```
+
+**`HrBirthdaysWidget.tsx`** — Two `useFetch` calls in parallel: `API.dashboard.hrBirthdaysToday` + `API.dashboard.hrBirthdaysUpcoming`. Uses `HRBirthdayEmployee` type. Today section highlighted. "in X days" countdown from `days_until`.
+
+#### `DeptHeadcountChart.tsx` — Updated
+
+Added `interface Props { endpoint?: string }` with default `API.dashboard.departmentHeadcount`. HR dashboard passes `API.dashboard.hrDepartmentHeadcount` to reuse the same component without duplication.
+
+#### `app/dashboard/_components/HRDashboard.tsx` — Rewritten
+
+From ~435 lines of hardcoded data to ~60 lines. Layout:
+```
+Row 1: HrConsole
+Row 2: Quick Actions (static)
+Row 3 grid-2: (HrAttendanceSummary + HrActionQueue) | (HrRecruitmentFunnel + HrAttendanceCard)
+Row 4 grid-2: HrEmployeeLifecycleTabs | DeptHeadcountChart(endpoint=hrDepartmentHeadcount)
+Row 5 grid-2: HrBirthdaysWidget | <div /> (placeholder)
+```
+
+---
+
+### 6. Employee Dashboard — Complete Rewrite
+
+#### New widget components (`components/dashboard/employee/`)
+
+**`EmpConsole.tsx`** — Fetches `useEmployeeKPIs()` + `useAttendanceStatus()`. Gradient banner with:
+- 4 KPI tiles: `days_present / working_days`, `absent_days`, `pending_action_items`, `pending_expense_claims`
+- Attendance status pill from `today_attendance.status` (colour-coded via `ATTENDANCE_COLOR` map)
+- `ClockInButton` on the right
+- Attendance strip at the bottom: Clock In time / Clock Out time / Working hours (from `attendanceStatus` endpoint — separate from KPIs)
+
+**`EmpLeaveBalances.tsx`** — Fetches `useLeaveBalances(currentYear)`. Grid of leave type cards with progress bar (`remaining / total_days`). `leaveTypeLabel` map for display names. Shows LOP warning banner at the bottom when `lop_days > 0`.
+
+**`EmpAttendanceSummary.tsx`** — Fetches `useAttendanceSummary(month, year)`. Month selector (`<select>` with month names). Colour-coded attendance % progress bar (green ≥ 90% / amber ≥ 75% / red below). 9-stat grid: present, absent, late marks, leave days, half days, LOP pending, attendance %, avg hours/day, OT hours.
+
+**`EmpActionItems.tsx`** — Fetches `useActionItems()`. Action type icon map:
+```typescript
+profile_incomplete    → ti-user-exclamation (error)
+missing_document      → ti-file-alert       (warn)
+attendance_correction → ti-clock-exclamation (warn)
+leave_approved        → ti-circle-check     (success)
+leave_rejected        → ti-circle-x         (error)
+```
+Rows use `navigation_url` as `<Link href>`. Done items dimmed to `opacity: 0.6`.
+
+**`EmpRecentRequests.tsx`** — Fetches `useRecentRequests()`. Renders across all 3 request types (leave / expense / attendance_correction). `detailLine(req)` extracts a readable sub-line from `details: Record<string, unknown>` per request type:
+- leave → `"14 Jul – 15 Jul · 2d"`
+- expense → `"travel · ₹850"`
+- attendance_correction → `"8 Jul · OUT punch"`
+
+**`EmpAnnouncement.tsx`** — Fetches `useSharedAnnouncement()`. Renders nothing when `data === null` (API returns null when no announcements). Dismissable via local `dismissed` state. Uses `is_pinned` to choose between "Pinned Announcement" and "Latest Announcement" label. Uses `<Link>` (not `<a>`) for the "View" link.
+
+#### `app/dashboard/_components/EmployeeDashboard.tsx` — Rewritten
+
+From ~410 lines (hardcoded mock data + inline `useFetch` against wrong endpoints) to ~55 lines. Layout:
+```
+Row 1+2: EmpConsole (KPI tiles + attendance status strip)
+         Quick Actions (static — links only)
+Row 3 grid-2: EmpLeaveBalances | EmpAttendanceSummary
+Row 4 grid-2: EmpActionItems   | EmpRecentRequests
+Row 5: EmpAnnouncement (renders nothing when null)
+```
+
+The old `EmployeeDashboard.tsx` was fetching from `API.leave.balance` and `API.leave.requests` — wrong endpoints for a dashboard summary. Those endpoints are still used in the Leave module itself.
+
+---
+
+### 7. Runtime Bugs Fixed During Integration
+
+**`status.toLowerCase is not a function` in `KpiConsole.tsx`**
+API returns `api_status: true` (boolean), not `"healthy"` (string). Fixed by updating `isHealthy()`:
+```typescript
+function isHealthy(status: string | boolean | undefined): boolean {
+  if (typeof status === "boolean") return status;
+  const s = String(status).toLowerCase();
+  return s === "healthy" || s === "ok" || s === "true" || s === "up";
+}
+```
+Also updated `DashboardKPIs` interface: `api_status: string | boolean` (and same for db/mail/storage).
+
+**`emp.name.split is not a function` in `EmployeeLifecycleTabs.tsx`**
+API uses `full_name`, not `name`. Fixed with `resolveName()` helper that tries multiple field names. Also added `resolveId()` fallback for the React `key` prop warning (API uses `employee_id`, not `id`).
+
+**ESLint `no-html-link-for-pages` in `EmployeeLifecycleTabs.tsx`**
+`<a href="/dashboard/employees">` → `<Link href="/dashboard/employees">` from `next/link`.
+
+**`AnnouncementCard.tsx` rendering the envelope object**
+`useFetch` does `r.data?.data ?? r.data`. When the API returns `"data": null`, `null ?? envelope_object` evaluates to the envelope. Added explicit guard:
+```typescript
+const isValidAnnouncement = data !== null && typeof data === "object" && "title" in data;
+```
+
+---
+
+### Key Files Changed / Created (15 July 2026)
+
+| File | Status | Change |
+|------|--------|--------|
+| `lib/api/endpoints.ts` | Modified | Added `employeeDashboard` key (7 paths); added `dashboard` key (16 paths for System Admin + HR) |
+| `types/dashboard.ts` | **NEW** | All System Admin + HR dashboard interfaces (15 types) |
+| `types/employeeDashboard.ts` | **NEW** | All Employee dashboard interfaces (9 types) |
+| `hooks/useEmployeeDashboard.ts` | **NEW** | 7 hooks for employee dashboard data fetching |
+| `components/dashboard/KpiConsole.tsx` | **NEW** | System Admin gradient banner — live health pills + KPI tiles |
+| `components/dashboard/PendingApprovalsWidget.tsx` | **NEW** | 4-category approval counts, links to relevant pages |
+| `components/dashboard/DeptHeadcountChart.tsx` | **NEW** | Proportional bar chart, reusable via `endpoint` prop |
+| `components/dashboard/AnnouncementCard.tsx` | **NEW** | Live latest announcement, null guard |
+| `components/dashboard/EmployeeLifecycleTabs.tsx` | **NEW** | 3-tab lifecycle view, multi-field-name resolver helpers |
+| `components/dashboard/AuditLogsWidget.tsx` | **NEW** | Append-pattern load-more via `clientApi` directly; module filter |
+| `components/dashboard/hr/HrConsole.tsx` | **NEW** | HR gradient banner — live KPIs, punch status pill, ClockInButton |
+| `components/dashboard/hr/HrAttendanceSummary.tsx` | **NEW** | Team attendance stacked bar + chips; `visibilitychange` refetch |
+| `components/dashboard/hr/HrActionQueue.tsx` | **NEW** | 6 linked action rows; zero-count rows disabled |
+| `components/dashboard/hr/HrRecruitmentFunnel.tsx` | **NEW** | 5-stage proportional funnel bars |
+| `components/dashboard/hr/HrAttendanceCard.tsx` | **NEW** | HR's own today attendance — uses `API.attendance.today`; punch log |
+| `components/dashboard/hr/HrEmployeeLifecycleTabs.tsx` | **NEW** | 3-tab lifecycle; `HRLifecycleEmployee` types; "15 Jul 2026" date format |
+| `components/dashboard/hr/HrBirthdaysWidget.tsx` | **NEW** | Two parallel `useFetch` calls for today + upcoming birthdays |
+| `components/dashboard/employee/EmpConsole.tsx` | **NEW** | Employee banner — KPI tiles + attendance strip |
+| `components/dashboard/employee/EmpLeaveBalances.tsx` | **NEW** | Per-type progress bars + LOP warning |
+| `components/dashboard/employee/EmpAttendanceSummary.tsx` | **NEW** | Month selector + 9-stat grid + attendance % bar |
+| `components/dashboard/employee/EmpActionItems.tsx` | **NEW** | Action items by `action_type`, linked via `navigation_url` |
+| `components/dashboard/employee/EmpRecentRequests.tsx` | **NEW** | Cross-type requests list with `detailLine()` per request type |
+| `components/dashboard/employee/EmpAnnouncement.tsx` | **NEW** | Live dismissable banner; renders nothing when API returns null |
+| `app/dashboard/_components/AdminDashboard.tsx` | Modified | Full rewrite — all hardcoded data removed, live widget composition |
+| `app/dashboard/_components/HRDashboard.tsx` | Modified | Full rewrite — all hardcoded data removed, live widget composition |
+| `app/dashboard/_components/EmployeeDashboard.tsx` | Modified | Full rewrite — wrong endpoints removed, new live widget composition |
+
+---
+
+### Architecture Decisions
+
+**Why `AuditLogsWidget` uses `clientApi` directly instead of `useFetch`:**
+`useFetch` replaces data on every call. The audit log widget needs to accumulate entries across multiple load-more clicks. Using `clientApi` directly lets it append to `logs[]` instead of replacing it. This is the only component in the dashboard folder that does this — it's intentional, not an oversight.
+
+**Why `DeptHeadcountChart` accepts an `endpoint` prop:**
+Admin and HR dashboards use the same bar chart but different backend endpoints. Rather than duplicate the component, the default is the admin endpoint and HR passes the HR endpoint explicitly. Same pattern as any other parameterised component.
+
+**Why `EmpAnnouncement` renders nothing instead of a loading state:**
+The announcement is a non-critical enhancement. Showing a loading skeleton for it would draw attention to a secondary piece of UI. If the API returns null or is still loading, there is simply no banner — the layout is not reserved for it.
+
+**`useFetch` envelope unwrapping:**
+`useFetch` automatically unwraps the backend envelope via `r.data?.data ?? r.data`. Component `data` is always the inner object, never the `{status, message, data}` wrapper. Do not unwrap again inside components.
+
+---
+
+### Notes for Next Developer
+
+- **No `/api` prefix on any `dashboard.*` or `employeeDashboard.*` path** — the axios base URL already includes `/api`. Adding it would produce a double prefix. Every other path in `endpoints.ts` follows this convention.
+- **`DeptHeadcountChart` is reused across Admin and HR dashboards** — the `endpoint` prop is required only when the HR endpoint is needed. The default works for Admin. Do not create a separate `HrDeptHeadcountChart.tsx`.
+- **`EmployeeLifecycleTabs` (Admin) vs `HrEmployeeLifecycleTabs` (HR) are separate components** — the Admin version handles multiple field name variants (`name`/`full_name`/`employee_name`) because the system-admin API response shape was inconsistent. The HR version uses `HRLifecycleEmployee` with strict, consistent field names (`full_name`, `employee_id`). Do not merge them.
+- **`HrAttendanceCard` fetches from `API.attendance.today` (per-user), not from `API.dashboard.hrKpis`** — it shows the HR user's own clock-in data for today, not team data. The full punch log (`is_clocked_in`, `punches[]`, `total_seconds`) comes from this endpoint.
+- **`AttendanceSummary` exists in both type files with different shapes** — `types/dashboard.ts` exports the HR team-level per-status breakdown (present/absent/late/leave/weekly_off/holiday counts). `types/employeeDashboard.ts` exports the employee's monthly aggregate (present_days, absent_days, late_marks, attendance_percentage, etc.). Always import from the correct file.
+- **`EmpAnnouncement` uses `useSharedAnnouncement` which hits `API.employeeDashboard.announcement`** (`/dashboard/announcement/`) — this endpoint is role-agnostic (returns the latest announcement for any authenticated user). The spec noted this same endpoint can replace the admin's `API.dashboard.announcement` (`/dashboard/system-admin/announcement/`) in a future consolidation — not done this session.
+- **`AuditLogsWidget` is the only dashboard widget using `clientApi` directly** — all others use `useFetch`. This is intentional (load-more append pattern). Do not convert it to `useFetch`.
+- **The Employee Dashboard previously fetched from `API.leave.balance` and `API.leave.requests`** — these endpoints still exist and are still used in the Leave module. The dashboard now uses the dedicated `/dashboard/employee/` endpoints which return pre-summarised data shaped for the dashboard, not full paginated lists.
+- **`EmpConsole` makes two `useFetch` calls** (`useEmployeeKPIs` + `useAttendanceStatus`) and derives `loading = kpiLoading || statusLoading`. Both must resolve before the attendance strip renders. This is intentional — the strip shows `clock_in_time`/`clock_out_time` from `attendanceStatus`, which is a separate endpoint from the KPI count data.
+- **All dashboard widgets are "use client" components** — they use hooks (`useFetch`, `useState`). The page files (`AdminDashboard.tsx`, `HRDashboard.tsx`, `EmployeeDashboard.tsx`) are also `"use client"` because they receive `SessionPayload` as a prop from the server component `app/dashboard/page.tsx` and derive `firstName` from it.

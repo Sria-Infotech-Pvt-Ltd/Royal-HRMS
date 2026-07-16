@@ -38,13 +38,16 @@ export interface ApiSmtpResponse {
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 
+export type SmtpType = "local" | "server";
+
 export interface SmtpForm {
+  smtpType:            SmtpType;
   name:                string;
-  host:                string;
-  port:                number;
-  username:            string;
-  password:            string;
-  useTls:              boolean;
+  host:                string;   // local only
+  port:                number;   // local only
+  username:            string;   // local only
+  password:            string;   // local only
+  useTls:              boolean;  // local only
   senderName:          string;
   fromEmail:           string;
   bccEmail:            string;
@@ -55,6 +58,7 @@ export interface SmtpForm {
 export type SmtpFormErrors = Partial<Record<keyof SmtpForm, string>>;
 
 export const EMPTY_SMTP_FORM: SmtpForm = {
+  smtpType:          "local",
   name:              "",
   host:              "",
   port:              587,
@@ -72,6 +76,7 @@ export const EMPTY_SMTP_FORM: SmtpForm = {
 
 export function apiEntryToForm(entry: ApiSmtpEntry): SmtpForm {
   return {
+    smtpType:          (entry.smtp_type as SmtpType) || "local",
     name:              entry.name,
     host:              entry.host,
     port:              entry.port,
@@ -87,13 +92,17 @@ export function apiEntryToForm(entry: ApiSmtpEntry): SmtpForm {
 }
 
 export function formToPayload(form: SmtpForm): Record<string, unknown> {
+  const isLocal = form.smtpType === "local";
   return {
+    smtp_type:           form.smtpType,
     name:                form.name,
-    host:                form.host,
-    port:                form.port,
-    username:            form.username,
-    ...(form.password ? { password: form.password } : {}),
-    use_tls:             form.useTls,
+    ...(isLocal ? {
+      host:              form.host,
+      port:              form.port,
+      username:          form.username,
+      ...(form.password ? { password: form.password } : {}),
+      use_tls:           form.useTls,
+    } : {}),
     sender_name:         form.senderName,
     from_email:          form.fromEmail,
     bcc_email:           form.bccEmail,
@@ -107,9 +116,11 @@ export function formToPayload(form: SmtpForm): Record<string, unknown> {
 export function validateSmtpForm(form: SmtpForm, isAdd: boolean): SmtpFormErrors {
   const e: SmtpFormErrors = {};
   if (!form.name.trim())      e.name      = "Configuration name is required";
-  if (!form.host.trim())      e.host      = "Host is required";
   if (!form.fromEmail.trim()) e.fromEmail = "From email is required";
-  if (!form.username.trim())  e.username  = "Username is required";
-  if (isAdd && !form.password.trim()) e.password = "Password is required";
+  if (form.smtpType === "local") {
+    if (!form.host.trim())     e.host     = "Host is required";
+    if (!form.username.trim()) e.username = "Username is required";
+    if (isAdd && !form.password.trim()) e.password = "Password is required";
+  }
   return e;
 }

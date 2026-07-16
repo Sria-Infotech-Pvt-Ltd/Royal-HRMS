@@ -429,11 +429,10 @@ export default function EmployeeProfilePage({
               }}
               fieldSlot={(key, disabled) => {
                 if (key === "reportingManager") {
-                  if (!values.reportingManager) return "hidden";
                   return (
                     <EmployeePickerInline
                       label="Reporting Manager"
-                      value={values.reportingManager}
+                      value={values.reportingManager ?? ""}
                       selectedId={values.reportingManagerId ?? ""}
                       disabled={disabled}
                       listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
@@ -444,11 +443,10 @@ export default function EmployeeProfilePage({
                   );
                 }
                 if (key === "hr") {
-                  if (!values.hr) return "hidden";
                   return (
                     <EmployeePickerInline
                       label="Branch HR"
-                      value={values.hr}
+                      value={values.hr ?? ""}
                       selectedId={values.hrId ?? ""}
                       disabled={disabled}
                       listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : API.employees.hrList}
@@ -474,7 +472,12 @@ export default function EmployeeProfilePage({
       ) : tab === "attendance" ? (
         <AttendanceTab employeeId={id} />
       ) : tab === "approval" ? (
-        <ApprovalMatrixTab employeeCode={id} branch={values.branch ?? ""} />
+        <ApprovalMatrixTab
+          employeeCode={id}
+          branch={values.branch ?? ""}
+          defaultManagerId={values.reportingManagerId ?? ""}
+          defaultHrId={values.hrId ?? ""}
+        />
       ) : tab === "wishes" ? (
         <WishesTab
           employeeId={id}
