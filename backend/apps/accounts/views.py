@@ -3835,9 +3835,11 @@ class HRListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         branch = (request.query_params.get('branch') or '').strip()
-        hrs = User.objects.filter(role__name='hr_admin', is_active=True).select_related('role')
+        hrs = User.objects.filter(role__name='hr', is_active=True).select_related('role')
         if branch:
-            hrs = hrs.filter(branch__iexact=branch)
+            hrs = hrs.filter(
+                Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch)
+            ).distinct()
         hrs = hrs.order_by('full_name')
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,

@@ -1513,3 +1513,259 @@ Comprehensive audit of all 7 Django apps completed. **115+ findings** identified
 backend/apps/accounts/models.py      — birthday_wish_sent_year field added to EmployeeProfile
 backend/apps/recruitment/urls.py     — 4 referral bonus URL patterns added
 ```
+
+---
+
+## Session Log — 2026-07-13
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Redis Caching Layer — Master/Configuration Data**
+
+Implemented read-through Redis caching for all frequently-accessed master/configuration data. Cache never stores transactional data (leave requests, attendance records, balances, payroll). All operations wrapped in try/except — if Redis is unavailable, falls back to DB transparently.
+
+**Cache services created in `core/cache_service.py`:**
+
+| Service | Cache Key | TTL | Invalidated By |
+|---|---|---|---|
+| `LeavePolicyCacheService` | `leave_policy:{leave_type}` | 6h | `LeavePolicy` save/delete |
+| `HolidayCacheService` | `holiday:{branch_slug}:{year}` | 24h | `Holiday` save/delete |
+| `WeeklyOffCacheService` | `weekly_off` | 24h | `WeeklyDayPolicy`, `AttendanceWeeklyOff` save/delete |
+| `ApprovalWorkflowCacheService` | `approval_workflow:{workflow_type}` | 6h | `ApprovalWorkflowRule` save/delete |
+| `AttendanceSettingsCacheService` | `attendance_settings` | 6h | `AttendanceSettings` + all 4 child models save/delete |
+| `BranchCacheService` | `branches:all` | 12h | `Branch` save/delete |
+| `DepartmentCacheService` | `departments:all` | 12h | `Department` save/delete |
+| `DesignationCacheService` | `designations:all` | 12h | `Designation` save/delete |
+
+**Holiday cache design:**
+- Caches full year of holidays per branch in a single key (no per-request range queries)
+- `get_holiday_dates(start, end, branch_name)` filters by range in Python — O(n) over ~20 holidays vs DB round-trip
+- Company-wide holiday change (branch=None) → `invalidate_year(year)` → deletes company key + all branch keys for that year
+- Branch-specific holiday change → invalidates that branch's key only
+- Date ranges spanning 2 years (rare) fall back to direct DB query
+
+**Signals wired for immediate invalidation on every CUD operation:**
+- `apps/hrms/signals.py` — `Holiday`, `LeavePolicy`
+- `apps/attendance/signals.py` — `WeeklyDayPolicy`, `AttendanceWeeklyOff`, `AttendanceSettings`, `AttendanceWorkingHours`, `AttendancePunchRules`, `AttendanceOvertimeRules`
+- `apps/branch/signals.py` — `Branch`
+- `apps/accounts/signals.py` — `Department`, `Designation`, `ApprovalWorkflowRule`
+- All signals registered via `AppConfig.ready()` using string sender labels (e.g. `'hrms.Holiday'`) — no circular import risk
+
+**Call sites updated — leave.py helpers now delegate to cache:**
+- `_get_holiday_dates()` → `HolidayCacheService.get_holiday_dates()`
+- `_get_holidays_with_names()` → `HolidayCacheService.get_holidays_with_names()`
+- `_get_weekly_off_days()` → `WeeklyOffCacheService.get()`
+- `_resolve_approval_chain()` → `ApprovalWorkflowCacheService.get_rule('leave')`
+- `_leave_preview()` LeavePolicy lookup → `LeavePolicyCacheService.get(leave_type)`
+- `LeaveRequestListCreateView.post()` LeavePolicy lookup → `LeavePolicyCacheService.get(leave_type)`
+
+**Call sites updated — services_attendance.py delegates to cache:**
+- `_get_settings()` → `AttendanceSettingsCacheService.get()`
+- `AttendanceDashboardService._weekly_off_days()` → `WeeklyOffCacheService.get()`
+- `AttendanceDashboardService._holiday_dates()` → `HolidayCacheService.get_holiday_dates()`
+
+**What is NOT cached (by design):**
+- `LeaveBalance`, `LeaveRequest`, `AttendanceRecord`, `AttendancePunch`, `AttendanceCorrection`
+- Payroll transactions, notifications, approval status, employee clock-in state
+- `EmployeeApprovalOverride` — per-employee override, not global config
+
+### New Files
+
+```
+backend/core/
+  cache_service.py            — 8 cache service classes + CacheTTL constants
+
+backend/apps/hrms/
+  signals.py                  — Holiday + LeavePolicy cache invalidation
+
+backend/apps/attendance/
+  signals.py                  — WeeklyDayPolicy, AttendanceWeeklyOff, AttendanceSettings,
+                                AttendanceWorkingHours, AttendancePunchRules,
+                                AttendanceOvertimeRules cache invalidation
+
+backend/apps/branch/
+  signals.py                  — Branch cache invalidation
+
+backend/apps/accounts/
+  signals.py                  — Department, Designation, ApprovalWorkflowRule cache invalidation
+```
+
+### Files Modified
+
+```
+backend/apps/hrms/apps.py         — ready() added → imports hrms.signals
+backend/apps/attendance/apps.py   — ready() added → imports attendance.signals
+backend/apps/branch/apps.py       — ready() added → imports branch.signals
+backend/apps/accounts/apps.py     — ready() added → imports accounts.signals
+
+backend/apps/hrms/views/leave.py  — 4 helper functions + 2 LeavePolicy lookups delegate to cache
+backend/apps/attendance/
+  services_attendance.py          — _get_settings(), _weekly_off_days(), _holiday_dates() delegate to cache
+```
+
+### Infrastructure Note
+
+Redis is already configured: `django-redis==5.4.0`, `redis==8.0.1`, CACHES block in `settings.py` points to `REDIS_URL` env var. Falls back to `LocMemCache` (in-process, no sharing between workers) if `REDIS_URL` is not set — caching still works in development without Redis running.
+
+### Pending
+
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-16
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. HR & Manager List APIs returning empty data**
+
+**Endpoints affected:**
+- `GET /api/employees/hrs/?branch=<branch_name>`
+- `GET /api/employees/managers/?branch=<branch_name>`
+
+**Root causes:**
+- `HRListView` was filtering `role__name='hr_admin'` — actual DB value is `'hr'`
+- `ManagerListView` was filtering `role__name='manager'` — actual DB value is `'manager__team_lead'`
+- Branch filter was AND-only; HR users may be linked to a branch via the `Branch.hr` FK (`managed_branches` reverse relation), not just their own `user.branch` field
+
+**Fixes applied — `backend/apps/accounts/views.py`:**
+- `HRListView`: role filter → `'hr'`; branch filter → `Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch)` with `.distinct()`
+- `ManagerListView`: role filter → `'manager__team_lead'`; branch filter → `Q(branch__iexact=branch) | Q(direct_reports__branch__iexact=branch)` with `.distinct()`
+
+**Note:** Branch name is stored as full string (e.g. `"Vijayawada Branch"`) — query must pass full name, not partial.
+
+---
+
+### Features Shipped
+
+**2. System Admin Dashboard APIs (8 endpoints)**
+
+New Django app `apps/dashboard` created. All endpoints under `GET /api/dashboard/system-admin/`.
+Permission guard: `role.name == 'system_admin'` — all others get 403.
+
+| Endpoint | Description |
+|---|---|
+| `system-admin/kpis/` | Total employees, pending approvals, onboarding count, active branches, system health flags (DB/mail/storage) |
+| `system-admin/announcement/` | Latest announcement from DB |
+| `system-admin/pending-approvals/` | Leave, expense, onboarding, separation counts |
+| `system-admin/department-headcount/` | Per-department active employee count (cached 12 h) |
+| `system-admin/employee-lifecycle/` | New joiners (last 30 days) + work anniversaries this month |
+| `system-admin/birthdays/today/` | Employees whose birthday is today (cached 6 h) |
+| `system-admin/birthdays/upcoming/` | Birthdays in the next 30 days (cached 6 h) |
+| `system-admin/audit-logs/` | Paginated audit log with optional `?module=` filter |
+
+---
+
+**3. HR Dashboard APIs (9 endpoints)**
+
+All added to the existing dashboard module. Endpoints under `GET /api/dashboard/hr/`.
+Permission guard: `role.name in ('hr', 'system_admin')` — others get 403.
+
+| Endpoint | Description |
+|---|---|
+| `hr/kpis/` | Total workforce, pending actions, active interviews, correction count, requester's today attendance |
+| `hr/action-queue/` | Counts per queue: candidate reviews, leave approvals, corrections, expenses, onboarding |
+| `hr/recruitment-funnel/` | Interview → selected → onboarded funnel counts (cached 10 min) |
+| `hr/department-headcount/` | Shared headcount helper (same cached data as system-admin) |
+| `hr/employee-lifecycle/` | New joiners + work anniversaries with designation (cached 1 h) |
+| `hr/birthdays/today/` | Shared birthday helper (same cache as system-admin) |
+| `hr/birthdays/upcoming/` | Shared birthday helper |
+| `hr/attendance-summary/` | Company-wide today attendance counts by status |
+| `department-headcount/` | Shared alias at root level accessible to both HR and System Admin |
+
+---
+
+**4. Employee Dashboard APIs (7 endpoints)**
+
+All endpoints under `GET /api/dashboard/employee/` plus one shared endpoint.
+Permission: `IsAuthenticated` — no role restriction. All data is always scoped to `request.user`; cross-employee access is impossible by design.
+
+| Endpoint | Description |
+|---|---|
+| `employee/kpis/` | days_present, working_days, absent_days, pending_action_items, pending_expense_claims, pending_documents, clocked_in, today_attendance |
+| `employee/leave-balances/` | All leave type balances for the year + LOP days consumed (cached 10 min) |
+| `employee/action-items/` | Profile completeness, missing docs, pending corrections, recent leave decisions (cached 5 min) |
+| `employee/recent-requests/` | Last 10 requests across leave, expense, and attendance correction — sorted by date |
+| `employee/attendance-summary/` | Month-level stats via `AttendanceDashboardService`; supports `?month=&year=` params |
+| `employee/attendance-status/` | Today: clocked-in state, clock-in/out times (HH:MM), working hours as HH:MM |
+| `announcement/` | Shared latest announcement — accessible to all authenticated roles |
+
+**Caching:**
+- Monthly attendance summary → `dashboard:employee:kpis:{id}` — 5 min TTL
+- Leave balances → `dashboard:employee:leave_balance:{id}` — 10 min TTL
+- Action items → `dashboard:employee:action_items:{id}` — 5 min TTL
+- Attendance status, recent requests — always fresh (no cache)
+
+**Key reused services:**
+- `AttendanceDashboardService.get_stats(employee, year, month)` — returns `days_present`, `late_arrivals`, `lop_pending`, `avg_hours_per_day`, `attendance_percentage`, `working_days`
+- `AttendanceDashboardService.get_monthly_summary(employee, year, month)` — returns `working_days`, `days_present`, `days_absent`, `leave_days`, `half_days`, `ot_hours`
+- `AttendanceRecord.first_punch_in`, `last_punch_out`, `total_working_minutes` — used for attendance status
+
+---
+
+### Files Created / Modified
+
+| File | Change |
+|---|---|
+| `backend/apps/accounts/views.py` | Fixed `HRListView` and `ManagerListView` — role names + branch OR filter |
+| `backend/apps/dashboard/__init__.py` | Created (empty) |
+| `backend/apps/dashboard/apps.py` | Created — `DashboardConfig` |
+| `backend/apps/dashboard/urls.py` | Created — 25 URL patterns (System Admin + HR + Employee) |
+| `backend/apps/dashboard/views/__init__.py` | Created — exports all 23 view classes |
+| `backend/apps/dashboard/views/overview.py` | Created — System Admin KPIs, announcement, pending approvals, headcount, HR KPIs, action queue, recruitment funnel, HR attendance summary, shared announcement, all 5 employee overview views |
+| `backend/apps/dashboard/views/people.py` | Created — lifecycle, birthday, audit log (System Admin + HR), employee action items, employee recent requests |
+| `backend/config/settings.py` | Added `'apps.dashboard'` to `INSTALLED_APPS` |
+| `backend/config/urls.py` | Added `path('api/dashboard/', include('apps.dashboard.urls'))` |
+
+### All 25 Active Dashboard Routes
+
+```
+GET /api/dashboard/system-admin/kpis/
+GET /api/dashboard/system-admin/announcement/
+GET /api/dashboard/system-admin/pending-approvals/
+GET /api/dashboard/system-admin/department-headcount/
+GET /api/dashboard/system-admin/employee-lifecycle/
+GET /api/dashboard/system-admin/birthdays/today/
+GET /api/dashboard/system-admin/birthdays/upcoming/
+GET /api/dashboard/system-admin/audit-logs/
+GET /api/dashboard/department-headcount/
+GET /api/dashboard/announcement/
+GET /api/dashboard/hr/kpis/
+GET /api/dashboard/hr/action-queue/
+GET /api/dashboard/hr/recruitment-funnel/
+GET /api/dashboard/hr/department-headcount/
+GET /api/dashboard/hr/employee-lifecycle/
+GET /api/dashboard/hr/birthdays/today/
+GET /api/dashboard/hr/birthdays/upcoming/
+GET /api/dashboard/hr/attendance-summary/
+GET /api/dashboard/employee/kpis/
+GET /api/dashboard/employee/leave-balances/
+GET /api/dashboard/employee/action-items/
+GET /api/dashboard/employee/recent-requests/
+GET /api/dashboard/employee/attendance-summary/
+GET /api/dashboard/employee/attendance-status/
+```
+
+### Frontend Prompts Given
+
+Full API request/response documentation provided for:
+- System Admin Dashboard (8 endpoints) — types, hooks, layout, role-based visibility
+- HR Dashboard (9 endpoints) — types, hooks, layout
+- Employee Dashboard (7 endpoints) — types, hooks, layout, status badge colors
+
+### Pending
+
+- Frontend implementation of all 3 dashboard pages (prompts given above)
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR

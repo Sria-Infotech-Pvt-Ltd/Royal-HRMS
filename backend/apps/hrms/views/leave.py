@@ -54,7 +54,7 @@ def _resolve_approval_chain(employee):
     Return (l1_approver, l2_approver) for a leave request.
     Checks EmployeeApprovalOverride first, falls back to ApprovalWorkflowRule.
     """
-    from apps.accounts.models import EmployeeApprovalOverride, ApprovalWorkflowRule
+    from apps.accounts.models import EmployeeApprovalOverride
     override = EmployeeApprovalOverride.objects.filter(
         employee=employee, workflow_type='leave'
     ).first()
@@ -62,7 +62,8 @@ def _resolve_approval_chain(employee):
     if override:
         return override.l1_override, override.l2_override
 
-    rule = ApprovalWorkflowRule.objects.filter(workflow_type='leave').first()
+    from core.cache_service import ApprovalWorkflowCacheService
+    rule = ApprovalWorkflowCacheService.get_rule('leave')
     if not rule:
         return None, None
 
@@ -123,27 +124,13 @@ def _calendar_scope_filter(user) -> 'Q':
 
 
 def _get_holiday_dates(start: date, end: date, branch_name: str = '') -> set:
-    """Return active holiday dates between start and end for the given branch."""
-    from ..models import Holiday
-    from django.db.models import Q
-    qs = Holiday.objects.filter(date__gte=start, date__lte=end, is_active=True)
-    if branch_name:
-        qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
-    else:
-        qs = qs.filter(branch__isnull=True)
-    return set(qs.values_list('date', flat=True))
+    from core.cache_service import HolidayCacheService
+    return HolidayCacheService.get_holiday_dates(start, end, branch_name)
 
 
 def _get_holidays_with_names(start: date, end: date, branch_name: str = '') -> list:
-    """Return [{'date': date, 'name': str}] for active holidays in range."""
-    from ..models import Holiday
-    from django.db.models import Q
-    qs = Holiday.objects.filter(date__gte=start, date__lte=end, is_active=True)
-    if branch_name:
-        qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
-    else:
-        qs = qs.filter(branch__isnull=True)
-    return list(qs.order_by('date').values('date', 'name'))
+    from core.cache_service import HolidayCacheService
+    return HolidayCacheService.get_holidays_with_names(start, end, branch_name)
 
 
 def _get_weekoffs_in_range(start: date, end: date) -> list:
@@ -188,23 +175,8 @@ def _calc_working_days(start: date, end: date, duration: str, policy=None, emplo
 
 
 def _get_weekly_off_days() -> set:
-    """Return configured weekly-off day names (lowercase) from DB config."""
-    try:
-        from apps.attendance.models import WeeklyDayPolicy
-        policy = WeeklyDayPolicy.objects.filter(is_active=True, is_default=True).first()
-        if policy:
-            return set(policy.weekly_off_days)
-    except Exception:
-        pass
-    try:
-        from apps.attendance.models import AttendanceSettings
-        cfg = AttendanceSettings.objects.select_related('weekly_off').first()
-        if cfg and getattr(cfg, 'weekly_off', None):
-            _days = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
-            return {d for d in _days if getattr(cfg.weekly_off, d, False)}
-    except Exception:
-        pass
-    return {'saturday', 'sunday'}
+    from core.cache_service import WeeklyOffCacheService
+    return WeeklyOffCacheService.get()
 
 
 def _zero_working_days_reason(start: date, end: date, policy=None, employee=None) -> str:
@@ -501,7 +473,8 @@ def _leave_preview(request):
     if end < start:
         return error('end_date must be on or after start_date.')
 
-    policy       = LeavePolicy.objects.filter(leave_type=leave_type, is_active=True).first()
+    from core.cache_service import LeavePolicyCacheService
+    policy       = LeavePolicyCacheService.get(leave_type)
     actual_days  = _calc_working_days(start, end, duration, policy, request.user)
     branch_name  = (getattr(request.user, 'branch', '') or '')
     holidays     = _get_holidays_with_names(start, end, branch_name)
@@ -625,7 +598,8 @@ class LeaveRequestListCreateView(APIView):
         duration   = data.get('duration', 'full_day')
         leave_type = data['leave_type']
 
-        policy     = LeavePolicy.objects.filter(leave_type=leave_type, is_active=True).first()
+        from core.cache_service import LeavePolicyCacheService
+        policy     = LeavePolicyCacheService.get(leave_type)
         total_days = _calc_working_days(start, end, duration, policy, request.user)
 
         if total_days <= 0:
