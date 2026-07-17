@@ -38,11 +38,26 @@ export default function CandidateReviewPage() {
   async function handleOnboardingAction(
     userId: string,
     decision: "approve" | "reject",
-    extras?: { department: string; designation: string },
+    extras?: { department: string; designation: string; assessmentId?: string },
   ) {
     setActing(true); setActionErr(null);
     try {
-      await clientApi.post(API.onboarding.approve(userId), { decision, remarks, ...extras });
+      await clientApi.post(API.onboarding.approve(userId), {
+        decision,
+        remarks,
+        department:  extras?.department,
+        designation: extras?.designation,
+      });
+      if (decision === "approve" && extras?.assessmentId && drawer?.candidate_id) {
+        try {
+          await clientApi.post(API.assessments.assign, {
+            candidate_id:  drawer.candidate_id,
+            assessment_id: extras.assessmentId,
+          });
+        } catch {
+          // Approval already succeeded — assessment assignment failure is non-blocking
+        }
+      }
       setDrawer(null); setRemarks("");
       if (decision === "approve") {
         router.push("/dashboard/employees");

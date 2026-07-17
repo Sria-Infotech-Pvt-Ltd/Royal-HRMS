@@ -545,9 +545,10 @@ export default function EmailTemplatesPage() {
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
 
-        .et-cards-grid { grid-template-columns: 1fr; }
-        @media (min-width: 560px)  { .et-cards-grid { grid-template-columns: 1fr 1fr; } }
-        @media (min-width: 1100px) { .et-cards-grid { grid-template-columns: 1fr 1fr 1fr; } }
+        .et-cards-grid { grid-template-columns: minmax(0, 1fr); }
+        @media (min-width: 560px)  { .et-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (min-width: 1100px) { .et-cards-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        .et-card { min-width: 0; }
 
         .et-search-wrap { max-width: 100%; }
         @media (min-width: 560px) { .et-search-wrap { max-width: 360px; } }
