@@ -8,7 +8,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/dashboard/announcements":    "announcements.view",
   "/dashboard/interview-list":   "recruitment.view",
   "/dashboard/candidate-review":        "recruitment.view",
-  "/dashboard/assessments":            "recruitment.view",
+  "/dashboard/assessments":            "assessments.view",
   "/dashboard/onboarding-approvals":   "employees.approve",
   "/dashboard/email-logs":             "recruitment.view",
   "/dashboard/employees":        "employees.view",

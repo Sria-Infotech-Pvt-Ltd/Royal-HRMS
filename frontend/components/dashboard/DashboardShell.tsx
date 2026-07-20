@@ -64,7 +64,7 @@ export default function DashboardShell({
 
   const pageTitle = PAGE_TITLES[pathname]
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "Royal HRMS");
-  const visibleNav = buildNav(session.permissions ?? []);
+  const visibleNav = buildNav(session.permissions ?? [], session.role ?? undefined);
 
   function toggleTheme() {
     document.body.classList.toggle("dark-mode");

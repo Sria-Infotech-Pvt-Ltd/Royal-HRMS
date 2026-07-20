@@ -24,8 +24,14 @@ export default function RolesPermissionsPage() {
   const [editingRole,    setEditingRole]    = useState<ApiRole | null>(null);
   const [saving,         setSaving]         = useState(false);
   const [togglingId,     setTogglingId]     = useState<number | null>(null);
+  const [saveMsg,        setSaveMsg]        = useState<string | null>(null);
 
   const modules = Object.keys(permissionsMap);
+
+  function apiErr(err: unknown): string {
+    const e = err as { response?: { data?: { message?: string } }; message?: string };
+    return e.response?.data?.message ?? e.message ?? "Action failed.";
+  }
 
   // ─── Data loading ──────────────────────────────────────────────────────────
 
@@ -65,9 +71,9 @@ export default function RolesPermissionsPage() {
       const res = await clientApi.get(API.roles.list);
       setRoles(res.data.data?.results ?? []);
       setShowAddModal(false);
+      setSaveMsg("Role created successfully.");
     } catch (err: unknown) {
-      const e = err as { message?: string };
-      alert(e.message ?? "Failed to create role");
+      alert(apiErr(err));
     } finally {
       setSaving(false);
     }
@@ -88,9 +94,9 @@ export default function RolesPermissionsPage() {
       const res = await clientApi.get(API.roles.list);
       setRoles(res.data.data?.results ?? []);
       setEditingRole(null);
+      setSaveMsg("Permissions saved. Users in this role must log out and back in for changes to take effect.");
     } catch (err: unknown) {
-      const e = err as { message?: string };
-      alert(e.message ?? "Failed to update role");
+      alert(apiErr(err));
     } finally {
       setSaving(false);
     }
@@ -158,6 +164,20 @@ export default function RolesPermissionsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Save confirmation banner ─────────────────────────────────────── */}
+      {saveMsg && (
+        <div className="alert alert-success mb-16" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <i className="ti ti-circle-check" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>{saveMsg}</div>
+          <button
+            onClick={() => setSaveMsg(null)}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }}
+          >
+            <i className="ti ti-x" style={{ fontSize: 14 }} />
+          </button>
+        </div>
+      )}
 
       {/* ── Roles table ──────────────────────────────────────────────────── */}
       <div className="card mb-24">

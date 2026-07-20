@@ -4,7 +4,7 @@ import string
 
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -28,7 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 def _has_perm(user, codename):
-    if not user or not user.role:
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
         return False
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
@@ -956,76 +960,109 @@ class SendCandidateEmailView(APIView):
         if not isinstance(extra_context, dict):
             return error('extra_context must be an object.')
 
-        try:
-            if str(pk).isdigit():
+        # Resolve recipient — Candidate (recruited) or User (direct hire)
+        candidate   = None
+        direct_user = None
+
+        if str(pk).isdigit():
+            try:
                 candidate = Candidate.objects.select_related('branch', 'referral_by').get(id=int(pk))
-            else:
-                candidate = Candidate.objects.select_related('branch', 'referral_by').get(
-                    portal_user__employee_id=pk
-                )
-        except Candidate.DoesNotExist:
-            return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+            except Candidate.DoesNotExist:
+                return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Try recruited path: Candidate linked to a portal user with this employee_id
+            candidate = (
+                Candidate.objects
+                .select_related('branch', 'referral_by')
+                .filter(portal_user__employee_id=pk)
+                .first()
+            )
+            if not candidate:
+                # Fallback: direct-hire employee — look up User directly
+                try:
+                    direct_user = User.objects.select_related('role').get(employee_id=pk)
+                except User.DoesNotExist:
+                    return error(
+                        f'No candidate or employee found with ID "{pk}".',
+                        http_status=status.HTTP_404_NOT_FOUND,
+                    )
 
         company      = Company.objects.first()
         company_name = company.company_name if company else ''
-        branch_name  = candidate.branch.branch_name if candidate.branch else ''
-        referrer     = candidate.referral_by
-        referrer_name = (referrer.full_name or referrer.email) if referrer else ''
-        interview_date_str = (
-            candidate.interview_date.strftime('%d %b %Y')
-            if candidate.interview_date else ''
-        )
 
-        context = {
-            'candidate_name':         candidate.name,
-            'position_applied':       candidate.position_applied,
-            'company_name':           company_name,
-            'branch_name':            branch_name,
-            'interview_date':         interview_date_str,
-            'interview_mode_display': candidate.get_interview_mode_display(),
-            'status_display':         candidate.get_status_display(),
-            'referrer_name':          referrer_name,
-        }
+        if candidate:
+            recipient_email = candidate.email
+            context = {
+                'candidate_name':         candidate.name,
+                'position_applied':       candidate.position_applied,
+                'company_name':           company_name,
+                'branch_name':            candidate.branch.branch_name if candidate.branch else '',
+                'interview_date':         (
+                    candidate.interview_date.strftime('%d %b %Y')
+                    if candidate.interview_date else ''
+                ),
+                'interview_mode_display': candidate.get_interview_mode_display(),
+                'status_display':         candidate.get_status_display(),
+                'referrer_name':          (
+                    (direct_ref := candidate.referral_by) and
+                    (direct_ref.full_name or direct_ref.email) or ''
+                ),
+            }
+        else:
+            # Direct-hire employee — build context from User model
+            recipient_email = direct_user.email
+            context = {
+                'candidate_name':         direct_user.full_name or direct_user.email,
+                'position_applied':       direct_user.designation or '',
+                'company_name':           company_name,
+                'branch_name':            direct_user.branch or '',
+                'interview_date':         '',
+                'interview_mode_display': '',
+                'status_display':         '',
+                'referrer_name':          '',
+            }
+
         context.update(extra_context)
 
         sent_status = CandidateEmail.STATUS_FAILED
         try:
             send_template_email(
-                recipient_email=candidate.email,
+                recipient_email=recipient_email,
                 template_name=template_name,
                 context=context,
             )
             sent_status = CandidateEmail.STATUS_SENT
             logger.info(
-                'Manual email "%s" sent to candidate %s by %s',
-                template_name, candidate.id, request.user.email,
+                'Manual email "%s" sent to %s by %s',
+                template_name, recipient_email, request.user.email,
             )
         except LookupError as exc:
             return error(str(exc), http_status=status.HTTP_404_NOT_FOUND)
         except Exception:
             logger.exception(
-                'Manual email "%s" failed for candidate %s', template_name, candidate.id,
+                'Manual email "%s" failed for pk=%s', template_name, pk,
             )
             return error('Failed to send email. Check SMTP configuration.')
         finally:
-            CandidateEmail.objects.create(
-                candidate=candidate,
-                template_used=template_name,
-                subject=template_name,
-                to_email=candidate.email,
-                status=sent_status,
-                sent_by=request.user,
-            )
+            if candidate:
+                CandidateEmail.objects.create(
+                    candidate=candidate,
+                    template_used=template_name,
+                    subject=template_name,
+                    to_email=recipient_email,
+                    status=sent_status,
+                    sent_by=request.user,
+                )
 
         AuditLog.objects.create(
             user=request.user,
             action='manual_email_sent',
             module='recruitment',
-            object_id=str(candidate.pk),
-            changes={'template_name': template_name},
+            object_id=str(candidate.pk) if candidate else str(pk),
+            changes={'template_name': template_name, 'recipient': recipient_email},
             ip_address=get_client_ip(request),
         )
-        return success(f'Email sent to {candidate.email}.')
+        return success(f'Email sent to {recipient_email}.')
 
 
 # ─── Stats ─────────────────────────────────────────────────────────────────────
@@ -1421,14 +1458,35 @@ class ReferralAllView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'recruitment.view'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
-        queryset = (
-            Candidate.objects
-            .select_related('branch', 'interviewer', 'referral_by', 'added_by')
-            .filter(referral_by__isnull=False)
+
+        _pipeline_statuses = [
+            Candidate.STATUS_PENDING,
+            Candidate.STATUS_SCREENING,
+            Candidate.STATUS_INTERVIEW_SCHEDULED,
+            Candidate.STATUS_INTERVIEW_DONE,
+            Candidate.STATUS_OFFER_SENT,
+        ]
+
+        base_qs = Candidate.objects.filter(referral_by__isnull=False)
+
+        stats = base_qs.aggregate(
+            total_referred=Count('id'),
+            in_pipeline=Count('id', filter=Q(status__in=_pipeline_statuses)),
+            selected=Count('id', filter=Q(status=Candidate.STATUS_SELECTED)),
+            converted=Count('id', filter=Q(status=Candidate.STATUS_CONVERTED)),
         )
+
+        queryset = base_qs.select_related('branch', 'interviewer', 'referral_by', 'added_by')
         page_obj, paginator = paginate(queryset, request, default_page_size=20)
         serializer = CandidateListSerializer(page_obj.object_list, many=True)
-        return success('Referrals fetched.', paginated_data(paginator, page_obj, serializer.data))
+        data = paginated_data(paginator, page_obj, serializer.data)
+        data['stats'] = {
+            'total_referred': stats['total_referred'],
+            'in_pipeline':    stats['in_pipeline'],
+            'selected':       stats['selected'],
+            'converted':      stats['converted'],
+        }
+        return success('Referrals fetched.', data)
 
 
 # ─── Referral Rules ───────────────────────────────────────────────────────────

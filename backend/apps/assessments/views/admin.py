@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
         return False
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
@@ -221,8 +225,8 @@ class AssignAssessmentView(APIView):
         if not assessment_id:
             return error('assessment_id is required.')
 
-        # If candidate_id is not a UUID it is actually an employee_id string (e.g. "RSS00025")
-        if candidate_id and not _UUID_RE.match(str(candidate_id)):
+        # If candidate_id is not a UUID AND not a plain integer (Candidate PK), treat it as employee_id
+        if candidate_id and not _UUID_RE.match(str(candidate_id)) and not str(candidate_id).isdigit():
             employee_id  = candidate_id
             candidate_id = None
 
@@ -284,6 +288,10 @@ class AssignAssessmentView(APIView):
                 )
                 if not created:
                     return error('Assessment already assigned to this employee.', http_status=status.HTTP_409_CONFLICT)
+
+                User.objects.filter(
+                    pk=employee.pk, assessment_status=User.ASSESSMENT_COMPLETE,
+                ).update(assessment_status=User.ASSESSMENT_PENDING)
 
                 if employee.email:
                     import threading
@@ -351,6 +359,10 @@ class AssignAssessmentView(APIView):
             if not created:
                 return error('Assessment already assigned to this employee.', http_status=status.HTTP_409_CONFLICT)
 
+            User.objects.filter(
+                pk=employee.pk, assessment_status=User.ASSESSMENT_COMPLETE,
+            ).update(assessment_status=User.ASSESSMENT_PENDING)
+
             if employee.email:
                 import threading
                 ctx = {
@@ -377,10 +389,11 @@ class AssignAssessmentView(APIView):
             if not employee_qs.exists():
                 return error(f'No active employees found in department "{department}".')
 
-        employees   = list(employee_qs.only('id', 'employee_id', 'full_name', 'email'))
-        assigned    = 0
-        skipped     = 0
-        email_jobs  = []
+        employees        = list(employee_qs.only('id', 'employee_id', 'full_name', 'email'))
+        assigned         = 0
+        skipped          = 0
+        email_jobs       = []
+        newly_assigned_pks = []
 
         for emp in employees:
             _, created = CandidateAssignment.objects.get_or_create(
@@ -390,10 +403,16 @@ class AssignAssessmentView(APIView):
             )
             if created:
                 assigned += 1
+                newly_assigned_pks.append(emp.pk)
                 if emp.email:
                     email_jobs.append((emp.email, emp.full_name or emp.email))
             else:
                 skipped += 1
+
+        if newly_assigned_pks:
+            User.objects.filter(
+                pk__in=newly_assigned_pks, assessment_status=User.ASSESSMENT_COMPLETE,
+            ).update(assessment_status=User.ASSESSMENT_PENDING)
 
         # Send all notification emails in one background thread
         if email_jobs:

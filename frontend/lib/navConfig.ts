@@ -2,13 +2,14 @@ export interface NavSection {
   section: string;
 }
 export interface NavItem {
-  id:          string;
-  icon:        string;
-  label:       string;
-  badge?:      string;
-  path:        string;
-  permission:  string | null; // null = always visible
-  comingSoon?: boolean;       // true = non-clickable, shows "Soon" badge
+  id:           string;
+  icon:         string;
+  label:        string;
+  badge?:       string;
+  path:         string;
+  permission:   string | null; // null = always visible
+  comingSoon?:  boolean;       // true = non-clickable, shows "Soon" badge
+  excludeRoles?: string[];     // hidden for these role names regardless of permissions
 }
 export type NavEntry = NavSection | NavItem;
 
@@ -33,7 +34,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "branches",         icon: "ti-building-skyscraper",  label: "Branches",         path: "/dashboard/branches",         permission: "branches.view" },
 
   { section: "Time & Pay" },
-  { id: "attendance",       icon: "ti-clock",                label: "Attendance",       path: "/dashboard/attendance",       permission: "attendance.view" },
+  { id: "attendance",       icon: "ti-clock",                label: "Attendance",       path: "/dashboard/attendance",       permission: "attendance.view", excludeRoles: ["employee"] },
   { id: "payroll",          icon: "ti-report-money",         label: "Payroll",          path: "/dashboard/payroll",          permission: "payroll.view" },
   { id: "my-payslip",       icon: "ti-receipt",              label: "My Payslips",      path: "/dashboard/my-payslip",       permission: "payroll.view" },
   { id: "leave",            icon: "ti-beach",                label: "Leave Management", path: "/dashboard/leave",            permission: "leave.view" },
@@ -55,7 +56,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "settings",         icon: "ti-settings",             label: "Settings",         path: "/dashboard/settings",         permission: "settings.view" },
 ];
 
-export function buildNav(permissions: string[]): NavEntry[] {
+export function buildNav(permissions: string[], role?: string): NavEntry[] {
   const permSet = new Set(permissions);
   const result: NavEntry[] = [];
   let pendingSection: NavEntry | null = null;
@@ -67,8 +68,9 @@ export function buildNav(permissions: string[]): NavEntry[] {
       sectionHasItem = false;
     } else {
       const item = entry as NavItem;
-      const visible = item.permission === null || permSet.has(item.permission);
-      if (visible) {
+      const permVisible = item.permission === null || permSet.has(item.permission);
+      const roleVisible = !role || !item.excludeRoles || !item.excludeRoles.includes(role);
+      if (permVisible && roleVisible) {
         if (pendingSection && !sectionHasItem) result.push(pendingSection);
         result.push(item);
         sectionHasItem = true;

@@ -4,8 +4,9 @@ import { useState, Fragment } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { usePermission } from "@/hooks/usePermission";
+import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import ItemsModal from "./_components/ItemsModal";
+import EmployeeMyAssessments from "./_components/EmployeeMyAssessments";
 
 interface AssessmentSettings {
   default_pass_percentage: number;
@@ -118,14 +119,23 @@ function StatusBadge({ status }: { status: AssessmentCandidate["status"] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AssessmentsPage() {
+  // Users with recruitment permissions see the HR management view;
+  // everyone else (e.g. employees) sees their own assignments.
+  const isAdminView = useAnyPermission("recruitment.view", "recruitment.create", "recruitment.edit");
+
   const canCreate = usePermission("recruitment.create");
   const canEdit   = usePermission("recruitment.edit");
   const canDelete = usePermission("recruitment.delete");
 
-  const { data, loading, error, refetch } = useFetch<{ results: Assessment[] }>(API.assessments.list);
+  // Skip the admin list fetch for employees — useFetch(null) is a no-op.
+  const { data, loading, error, refetch } = useFetch<{ results: Assessment[] }>(
+    isAdminView ? API.assessments.list : null
+  );
   const assessments = data?.results ?? [];
 
-  const { data: settingsData } = useFetch<AssessmentSettings>(API.settings.assessmentConfig);
+  const { data: settingsData } = useFetch<AssessmentSettings>(
+    isAdminView ? API.settings.assessmentConfig : null
+  );
 
   const [formModal, setFormModal] = useState<{ open: boolean; target: Assessment | null }>({ open: false, target: null });
   const [form,      setForm]      = useState<AssessmentForm>(EMPTY);
@@ -250,6 +260,9 @@ export default function AssessmentsPage() {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  // Employees see their own assignments, not the management view.
+  if (!isAdminView) return <EmployeeMyAssessments />;
 
   return (
     <div className="page-body">

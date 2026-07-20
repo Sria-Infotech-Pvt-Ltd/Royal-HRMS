@@ -47,7 +47,11 @@ logger = logging.getLogger(__name__)
 
 
 def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
         return False
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
@@ -57,6 +61,10 @@ def _resolve_target_user(request):
     employee_id = request.query_params.get('employee_id')
     if not employee_id:
         return request.user, None
+    # Employees can only view their own attendance — looking up others is HR/manager only
+    role_name = getattr(request.user.role, 'name', '') if request.user.role else ''
+    if role_name == 'employee':
+        return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
     if not (_has_perm(request.user, 'attendance.view') or _has_perm(request.user, 'employees.view')):
         return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
     from apps.accounts.models import User

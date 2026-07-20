@@ -384,8 +384,18 @@ export default function AssessmentsPage() {
 
             return (
               <div key={assignment.id} style={{ borderBottom: aIdx < assignments.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                {/* Assessment section header */}
-                <div style={{ padding: "12px 18px 8px" }}>
+                {/* Assessment section header — clicking opens the first available item */}
+                <div
+                  onClick={() => {
+                    const target = sortedItems.find((item, idx) => {
+                      const done     = isItemDone(item, assignment.responses);
+                      const prevDone = idx === 0 || isItemDone(sortedItems[idx - 1], assignment.responses);
+                      return !done && (idx === 0 || prevDone);
+                    }) ?? sortedItems[0];
+                    if (target) openItem(target, assignment);
+                  }}
+                  style={{ padding: "12px 18px 8px", cursor: sortedItems.length > 0 ? "pointer" : "default" }}
+                >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{assignment.assessment_title}</span>
                     {isDone && (
