@@ -24,7 +24,11 @@ _PERM_DENIED = 'You do not have permission to perform this action.'
 
 def _has_perm(user, codename: str) -> bool:
     """Return True if the user's role carries the given permission codename."""
-    if not user or not user.role:
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
         return False
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 

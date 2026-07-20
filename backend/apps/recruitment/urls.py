@@ -49,3 +49,4 @@ urlpatterns = [
     path('referral-bonuses/<int:pk>/approve/',            ReferralBonusApproveView.as_view(),     name='referral-bonus-approve'),
     path('referral-bonuses/<int:pk>/pay/',                ReferralBonusPayView.as_view(),         name='referral-bonus-pay'),
 ]
+ 

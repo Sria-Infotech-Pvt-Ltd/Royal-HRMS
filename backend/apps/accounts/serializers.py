@@ -1171,6 +1171,7 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
     documents        = EmployeeDocumentSerializer(source='employee_documents', many=True, read_only=True)
     candidate_id     = serializers.SerializerMethodField()
     position_applied = serializers.SerializerMethodField()
+    branch           = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -1192,6 +1193,15 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
     def get_position_applied(self, obj):
         cand = self._candidate(obj)
         return cand.position_applied if cand else ''
+
+    def get_branch(self, obj):
+        # User.branch is set after approval; before that, read from the linked Candidate record
+        if obj.branch:
+            return obj.branch
+        cand = self._candidate(obj)
+        if cand and cand.branch:
+            return cand.branch.branch_name
+        return ''
 
 
 # ─── My Profile (authenticated employee view) ─────────────────────────────────

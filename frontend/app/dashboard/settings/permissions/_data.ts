@@ -126,9 +126,9 @@ export const PERMISSION_PRESETS: PermissionPreset[] = [
     key:         "employee",
     label:       "Employee",
     icon:        "ti-user",
-    description: "Self-service: leave, payslips, attendance, documents",
+    description: "Self-service: leave, expenses, documents, referrals",
     match:       c => {
-      const selfModules = ["leave", "attendance", "payroll", "expenses", "documents", "announcements", "referrals"];
+      const selfModules = ["leave", "expenses", "documents", "announcements", "referrals"];
       const [module, action] = c.split(".");
       return selfModules.includes(module) && ["view", "create"].includes(action);
     },

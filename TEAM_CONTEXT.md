@@ -1828,3 +1828,76 @@ backend/apps/accounts/views.py
 - Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave approved
 - Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-17
+**Author: G.Durga Prasad**
+**Branch: Testing---Fixes**
+
+### Bug Fixes Shipped
+
+**1. Assessments sidebar nav — clicking redirected to dashboard instead of opening page**
+- Root cause: `proxy.ts` had `"/dashboard/assessments": "recruitment.view"` — employees only hold `assessments.view`, so the route guard redirected them to `/dashboard` before the page could load
+- Fix: changed to `"/dashboard/assessments": "assessments.view"` to match `navConfig.ts` and the backend permission check
+- File: `frontend/proxy.ts`
+
+**2. Permissions page — save errors showed generic HTTP message instead of API validation message**
+- Root cause: Axios wraps HTTP error responses inside `err.response.data`; reading `err.message` directly gives the generic `"Request failed with status code 400"` string, hiding the actual API error
+- Fix: added `apiErr()` helper that reads `err.response?.data?.message` first, falls back to `err.message`
+- Applied to both `editRole` and `addRole` catch blocks
+- File: `frontend/app/dashboard/settings/permissions/page.tsx`
+
+**3. Permissions page — no feedback after saving role permissions**
+- Added `saveMsg` state and a dismissable success banner shown after a successful role edit
+- Banner message: "Permissions saved. Users in this role must log out and back in for changes to take effect." (informs admin of the JWT token caching behaviour)
+- File: `frontend/app/dashboard/settings/permissions/page.tsx`
+
+### Features Shipped
+
+**4. Attendance nav item hidden for employee role**
+- `NavItem` interface extended with optional `excludeRoles?: string[]` field
+- Attendance entry marked `excludeRoles: ["employee"]` — employees never see the Attendance sidebar item (they use My Attendance instead)
+- `buildNav(permissions, role?)` updated to filter by `excludeRoles` in addition to the existing permission check
+- File: `frontend/lib/navConfig.ts`
+
+**5. Employee assessments page**
+- New component `EmployeeMyAssessments` — fetches `GET /api/assessments/my/` and renders 3 stat cards (Total / Pending / Completed), a pending section with progress bars and deadline info, and a completed section with score percentage and pass/fail badges
+- `/dashboard/assessments` page now branches by role: users with any `recruitment.*` permission see the existing admin management UI; all other users (employees) see `EmployeeMyAssessments`
+- `useFetch` calls for admin-only endpoints are conditionally skipped (`null`) for employee users to avoid unnecessary requests
+- File: `frontend/app/dashboard/assessments/_components/EmployeeMyAssessments.tsx` (new)
+- File: `frontend/app/dashboard/assessments/page.tsx`
+
+### Files Changed
+
+```
+frontend/
+  proxy.ts
+    — ROUTE_PERMISSIONS: /dashboard/assessments changed from "recruitment.view" to "assessments.view"
+
+  lib/navConfig.ts
+    — NavItem interface: excludeRoles?: string[] added
+    — Attendance entry: excludeRoles: ["employee"] added
+    — buildNav(permissions, role?): role-based filtering on excludeRoles added
+
+  components/dashboard/DashboardShell.tsx
+    — buildNav() call now passes session.role as second argument
+
+  app/dashboard/assessments/
+    page.tsx
+      — isAdminView check using useAnyPermission("recruitment.view", "recruitment.create", "recruitment.edit")
+      — Early return: non-admin users render <EmployeeMyAssessments /> instead of admin UI
+      — useFetch calls for list + settings endpoints skip (null) for non-admin users
+    _components/EmployeeMyAssessments.tsx  (NEW FILE)
+      — Fetches API.assessments.my via useFetch
+      — Stat cards: Total, Pending, Completed
+      — Pending section: progress bar, deadline, attempt count, in_progress vs pending badge
+      — Completed section: score percentage, pass/fail pill badge
+
+  app/dashboard/settings/permissions/page.tsx
+    — saveMsg state added
+    — apiErr() helper added (reads err.response?.data?.message)
+    — editRole catch: uses apiErr() instead of err.message
+    — addRole catch: uses apiErr() instead of err.message
+    — Success banner rendered when saveMsg is set (dismissable)
+```

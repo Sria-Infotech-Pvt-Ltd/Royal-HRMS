@@ -90,8 +90,9 @@ def _sync_user_assessment_status(user) -> None:
     pending_statuses = [CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS]
     candidate = _get_candidate(user)
     if candidate:
+        # Check both FKs — a recruited employee may have assignments on either
         has_incomplete = CandidateAssignment.objects.filter(
-            candidate=candidate, status__in=pending_statuses,
+            Q(candidate=candidate) | Q(employee=user), status__in=pending_statuses,
         ).exists()
     else:
         has_incomplete = CandidateAssignment.objects.filter(
