@@ -121,7 +121,7 @@ def _auto_assign_managers(employee: 'User') -> list:
         hr_user = branch_obj.hr if branch_obj else None
         if not hr_user:
             hr_user = User.objects.filter(
-                role__name='hr', branch__iexact=emp_branch, is_active=True
+                role__name='hr_admin', branch__iexact=emp_branch, is_active=True
             ).first()
         if hr_user and hr_user.pk != employee.pk:
             employee.hr = hr_user
@@ -3555,16 +3555,21 @@ class OnboardingApprovalView(APIView):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
-        decision        = request.data.get('decision')
-        remarks         = request.data.get('remarks', '')
-        req_designation = (request.data.get('designation') or '').strip()
-        req_department  = (request.data.get('department')  or '').strip()
+        decision          = request.data.get('decision')
+        remarks           = request.data.get('remarks', '')
+        req_designation   = (request.data.get('designation') or '').strip()
+        req_department    = (request.data.get('department')  or '').strip()
+        req_assessment_id = request.data.get('assessment_id') or None
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
 
         company      = Company.objects.first()
         company_name = company.company_name if company else ''
         portal_url   = (company.portal_url if company else '') or ''
+        # The onboarding-approved and assessment-assigned emails must land the
+        # employee directly on the assessment page, not just the portal root —
+        # otherwise they have to manually find their way there after logging in.
+        assessments_portal_url = f'{portal_url.rstrip("/")}/onboarding/assessments' if portal_url else ''
 
         if decision == 'approve':
             from apps.recruitment.models import Candidate
@@ -3617,10 +3622,18 @@ class OnboardingApprovalView(APIView):
             from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
             from django.db.models import Q as _Q
             assigned_assessments = []
-            default_assessments = list(
+            assessments_to_assign = list(
                 Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
             )
-            for assessment in default_assessments:
+            # HR may pick a specific (possibly non-default) assessment in the approval
+            # confirmation dialog — honor that choice, not just the global defaults.
+            if req_assessment_id and not any(str(a.id) == str(req_assessment_id) for a in assessments_to_assign):
+                selected_assessment = Assessment.objects.filter(
+                    pk=req_assessment_id, is_active=True,
+                ).prefetch_related('items').first()
+                if selected_assessment:
+                    assessments_to_assign.append(selected_assessment)
+            for assessment in assessments_to_assign:
                 max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
                 if linked_candidate:
                     _, created = CandidateAssignment.objects.get_or_create(
@@ -3668,7 +3681,7 @@ class OnboardingApprovalView(APIView):
                         'designation':      target.designation or '',
                         'department':       target.department  or '',
                         'date_of_joining':  str(target.date_of_joining) if target.date_of_joining else '',
-                        'portal_url':       portal_url,
+                        'portal_url':       assessments_portal_url if has_pending else portal_url,
                         'has_assessments':  'true' if has_pending else 'false',
                         'assessment_count': str(len(assigned_assessments)),
                     },
@@ -3686,7 +3699,7 @@ class OnboardingApprovalView(APIView):
                             'candidate_name':   target.full_name,
                             'assessment_title': assessment.title,
                             'company_name':     company_name,
-                            'portal_url':       portal_url,
+                            'portal_url':       assessments_portal_url or portal_url,
                         },
                     )
                 except Exception:
