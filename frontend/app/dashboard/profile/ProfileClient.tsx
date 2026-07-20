@@ -7,28 +7,48 @@ import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
 import ChangePasswordForm from "./ChangePasswordForm";
 
+interface ProfileSub {
+  date_of_birth:          string | null;
+  gender:                 string | null;
+  marital_status:         string | null;
+  father_name:            string | null;
+  blood_group:            string | null;
+  current_address:        string | null;
+  permanent_address:      string | null;
+  highest_qualification:  string | null;
+  institution:            string | null;
+  year_of_passing:        number | null;
+  specialization:         string | null;
+  total_experience_years: string | null;
+  previous_employer:      string | null;
+  previous_designation:   string | null;
+  leaving_reason:         string | null;
+  account_number:         string | null;
+  ifsc_code:              string | null;
+  bank_name:              string | null;
+  bank_branch_name:       string | null;
+  account_holder_name:    string | null;
+  account_type:           string | null;
+  emergency_name:         string | null;
+  emergency_relationship: string | null;
+  emergency_phone:        string | null;
+  emergency_email:        string | null;
+}
+
 interface ProfileData {
-  full_name:       string;
-  email:           string;
-  phone:           string | null;
-  employee_id:     string;
-  department:      string;
-  designation:     string;
-  branch:          string;
-  role_display:    string;
-  date_of_joining: string | null;
-  profile: {
-    current_address:        string | null;
-    permanent_address:      string | null;
-    account_number:         string | null;
-    ifsc_code:              string | null;
-    bank_name:              string | null;
-    account_holder_name:    string | null;
-    emergency_name:         string | null;
-    emergency_relationship: string | null;
-    emergency_phone:        string | null;
-    emergency_email:        string | null;
-  } | null;
+  full_name:         string;
+  email:             string;
+  phone:             string | null;
+  employee_id:       string;
+  department:        string;
+  designation:       string;
+  branch:            string;
+  role_display:      string;
+  date_of_joining:   string | null;
+  date_joined:       string | null;
+  onboarding_status: string | null;
+  assessment_status: string | null;
+  profile:           ProfileSub | null;
 }
 
 interface DocumentItem {
@@ -54,6 +74,27 @@ const EMPTY: EditableFields = {
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function val(v: string | number | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "—";
+  return String(v);
+}
+
+function ReadField({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="field-group">
+      <label className="field-label">{label}</label>
+      <input className="field-input" value={val(value)} disabled suppressHydrationWarning />
+    </div>
+  );
 }
 
 export default function ProfileClient({ session }: { session: SessionPayload }) {
@@ -98,7 +139,9 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
     }
   }
 
-  const ini = initials(session.name);
+  const ini        = initials(session.name);
+  const p          = profile?.profile ?? null;
+  const joinedDate = fmtDate(profile?.date_of_joining ?? profile?.date_joined);
 
   return (
     <div>
@@ -132,46 +175,57 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
         </div>
       </div>
 
+      {/* ── Avatar + name banner ── */}
+      <div className="card mb-16" style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
+        <div style={{
+          width: 72, height: 72, borderRadius: "50%", flexShrink: 0,
+          background: "var(--primary)", color: "white",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 26, fontWeight: 700,
+        }}>{ini}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-bg)" }}>
+            {loading ? "—" : (profile?.full_name ?? session.name)}
+          </div>
+          <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 3 }}>
+            {profile?.designation && profile?.department
+              ? `${profile.designation} · ${profile.department}`
+              : (profile?.role_display ?? session.role)}
+          </div>
+          <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+            {profile?.employee_id && (
+              <span style={{ fontSize: 11, background: "rgba(30,78,140,0.1)", color: "var(--primary)", padding: "2px 10px", borderRadius: 20, fontWeight: 600 }}>
+                {profile.employee_id}
+              </span>
+            )}
+            {profile?.branch && (
+              <span style={{ fontSize: 12, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
+                <i className="ti ti-building" style={{ fontSize: 12 }} />{profile.branch}
+              </span>
+            )}
+            {joinedDate !== "—" && (
+              <span style={{ fontSize: 12, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
+                <i className="ti ti-calendar" style={{ fontSize: 12 }} />Joined {joinedDate}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="grid-2">
 
         {/* ─── LEFT COLUMN ─── */}
         <div>
+
+          {/* Personal Information */}
           <div className="card mb-16">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-user-circle" />Personal Information</span>
             </div>
             <div className="card-body">
-              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: "50%", flexShrink: 0,
-                  background: "var(--primary)", color: "white",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 22, fontWeight: 700,
-                }}>{ini}</div>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--on-bg)" }}>
-                    {loading ? "—" : (profile?.full_name ?? session.name)}
-                  </div>
-                  <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 2 }}>
-                    {profile?.role_display ?? session.role}
-                  </div>
-                  {profile?.employee_id && (
-                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                      {profile.employee_id}
-                    </div>
-                  )}
-                </div>
-              </div>
-
               <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Full Name</label>
-                  <input className="field-input" value={loading ? "" : (profile?.full_name ?? "")} disabled suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input className="field-input" value={loading ? "" : (profile?.email ?? session.email)} disabled suppressHydrationWarning />
-                </div>
+                <ReadField label="Full Name"  value={profile?.full_name} />
+                <ReadField label="Email"      value={profile?.email ?? session.email} />
               </div>
               <div className="field-group">
                 <label className="field-label">Phone</label>
@@ -179,9 +233,19 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                   onChange={e => field("phone", e.target.value)}
                   placeholder="+91 98765 43210" suppressHydrationWarning />
               </div>
+              <div className="form-row cols-2">
+                <ReadField label="Date of Birth"   value={fmtDate(p?.date_of_birth)} />
+                <ReadField label="Gender"          value={p?.gender} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="Marital Status"  value={p?.marital_status} />
+                <ReadField label="Blood Group"     value={p?.blood_group} />
+              </div>
+              <ReadField label="Father's Name"     value={p?.father_name} />
             </div>
           </div>
 
+          {/* Address */}
           <div className="card mb-16">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-map-pin" />Address</span>
@@ -202,6 +266,32 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             </div>
           </div>
 
+          {/* Education & Experience */}
+          <div className="card mb-16">
+            <div className="card-header">
+              <span className="card-title"><i className="ti ti-school" />Education &amp; Experience</span>
+            </div>
+            <div className="card-body">
+              <div className="form-row cols-2">
+                <ReadField label="Qualification"     value={p?.highest_qualification} />
+                <ReadField label="Institution"       value={p?.institution} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="Year of Passing"   value={p?.year_of_passing} />
+                <ReadField label="Specialization"    value={p?.specialization} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="Experience (yrs)"  value={p?.total_experience_years} />
+                <ReadField label="Previous Employer" value={p?.previous_employer} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="Previous Role"     value={p?.previous_designation} />
+                <ReadField label="Leaving Reason"    value={p?.leaving_reason} />
+              </div>
+            </div>
+          </div>
+
+          {/* Change Password */}
           <div className="card">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-lock" />Change Password</span>
@@ -214,38 +304,57 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
         {/* ─── RIGHT COLUMN ─── */}
         <div>
+
+          {/* Work Information */}
           <div className="card mb-16">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-briefcase" />Work Information</span>
             </div>
             <div className="card-body">
               <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Employee ID</label>
-                  <input className="field-input" value={loading ? "" : (profile?.employee_id ?? "—")} disabled suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Department</label>
-                  <input className="field-input" value={loading ? "" : (profile?.department ?? "—")} disabled suppressHydrationWarning />
-                </div>
+                <ReadField label="Employee ID"  value={profile?.employee_id} />
+                <ReadField label="Role"         value={profile?.role_display} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="Department"   value={profile?.department} />
+                <ReadField label="Designation"  value={profile?.designation} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="Branch"         value={profile?.branch} />
+                <ReadField label="Date of Joining" value={joinedDate} />
               </div>
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Designation</label>
-                  <input className="field-input" value={loading ? "" : (profile?.designation ?? "—")} disabled suppressHydrationWarning />
+                  <label className="field-label">Onboarding Status</label>
+                  <div style={{ paddingTop: 6 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
+                      background: profile?.onboarding_status === "complete" ? "rgba(22,163,74,0.12)" : "rgba(217,119,6,0.12)",
+                      color: profile?.onboarding_status === "complete" ? "var(--success)" : "var(--warn)",
+                      textTransform: "capitalize",
+                    }}>
+                      {val(profile?.onboarding_status)}
+                    </span>
+                  </div>
                 </div>
                 <div className="field-group">
-                  <label className="field-label">Branch</label>
-                  <input className="field-input" value={loading ? "" : (profile?.branch ?? "—")} disabled suppressHydrationWarning />
+                  <label className="field-label">Assessment Status</label>
+                  <div style={{ paddingTop: 6 }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
+                      background: profile?.assessment_status === "complete" ? "rgba(22,163,74,0.12)" : "rgba(217,119,6,0.12)",
+                      color: profile?.assessment_status === "complete" ? "var(--success)" : "var(--warn)",
+                      textTransform: "capitalize",
+                    }}>
+                      {val(profile?.assessment_status)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Date of Joining</label>
-                <input className="field-input" value={loading ? "" : (profile?.date_of_joining ?? "—")} disabled suppressHydrationWarning />
               </div>
             </div>
           </div>
 
+          {/* Emergency Contact */}
           <div className="card mb-16">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-phone" />Emergency Contact</span>
@@ -282,6 +391,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             </div>
           </div>
 
+          {/* Bank Details */}
           <div className="card mb-16">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-building-bank" />Bank Details</span>
@@ -291,28 +401,21 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             </div>
             <div className="card-body">
               <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Bank Name</label>
-                  <input className="field-input" value={loading ? "" : (profile?.profile?.bank_name ?? "")} disabled placeholder="—" suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Account Number</label>
-                  <input className="field-input" value={loading ? "" : (profile?.profile?.account_number ?? "")} disabled placeholder="—" suppressHydrationWarning />
-                </div>
+                <ReadField label="Bank Name"       value={p?.bank_name} />
+                <ReadField label="Account Type"    value={p?.account_type} />
               </div>
               <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">IFSC Code</label>
-                  <input className="field-input" value={loading ? "" : (profile?.profile?.ifsc_code ?? "")} disabled placeholder="—" suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Account Holder</label>
-                  <input className="field-input" value={loading ? "" : (profile?.profile?.account_holder_name ?? "")} disabled placeholder="—" suppressHydrationWarning />
-                </div>
+                <ReadField label="Account Holder"  value={p?.account_holder_name} />
+                <ReadField label="Account Number"  value={p?.account_number ? `••••${p.account_number.slice(-4)}` : null} />
+              </div>
+              <div className="form-row cols-2">
+                <ReadField label="IFSC Code"       value={p?.ifsc_code} />
+                <ReadField label="Bank Branch"     value={p?.bank_branch_name} />
               </div>
             </div>
           </div>
 
+          {/* Documents */}
           <div className="card">
             <div className="card-header">
               <span className="card-title"><i className="ti ti-file-description" />Documents</span>
@@ -337,6 +440,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               ))}
             </div>
           </div>
+
         </div>
       </div>
     </div>

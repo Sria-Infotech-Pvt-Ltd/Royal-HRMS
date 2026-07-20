@@ -5,12 +5,16 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { getStoredUser } from "@/lib/auth";
 import { fmtDate, initials } from "../interview-list/_data";
 import OnboardingDrawer, { ApprovalUser } from "./_components/OnboardingDrawer";
 
 export default function CandidateReviewPage() {
   const router       = useRouter();
-  const canApprove   = usePermission("employees.approve");
+  const canApproveEmployees  = usePermission("employees.approve");
+  const canApproveOnboarding = usePermission("onboarding.approve");
+  const canApprove           = canApproveEmployees || canApproveOnboarding;
+  const isSystemAdmin        = getStoredUser()?.role === "system_admin";
 
   const [rows,    setRows]    = useState<ApprovalUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,11 +42,26 @@ export default function CandidateReviewPage() {
   async function handleOnboardingAction(
     userId: string,
     decision: "approve" | "reject",
-    extras?: { department: string; designation: string },
+    extras?: { department: string; designation: string; assessmentId?: string },
   ) {
     setActing(true); setActionErr(null);
     try {
-      await clientApi.post(API.onboarding.approve(userId), { decision, remarks, ...extras });
+      await clientApi.post(API.onboarding.approve(userId), {
+        decision,
+        remarks,
+        department:  extras?.department,
+        designation: extras?.designation,
+      });
+      if (decision === "approve" && extras?.assessmentId && drawer?.candidate_id) {
+        try {
+          await clientApi.post(API.assessments.assign, {
+            candidate_id:  drawer.candidate_id,
+            assessment_id: extras.assessmentId,
+          });
+        } catch {
+          // Approval already succeeded — assessment assignment failure is non-blocking
+        }
+      }
       setDrawer(null); setRemarks("");
       if (decision === "approve") {
         router.push("/dashboard/employees");
@@ -105,7 +124,7 @@ export default function CandidateReviewPage() {
                 <tr>
                   <th>Name</th>
                   <th className="col-hide-sm">Role / Designation</th>
-                  <th className="col-hide-md">Branch</th>
+                  {isSystemAdmin && <th className="col-hide-md">Branch</th>}
                   <th className="col-hide-md">Joined</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -128,7 +147,7 @@ export default function CandidateReviewPage() {
                         </div>
                       </td>
                       <td className="col-hide-sm" style={{ fontSize: ".85rem" }}>{row.designation || "—"}</td>
-                      <td className="col-hide-md" style={{ fontSize: ".85rem" }}>{row.branch || "—"}</td>
+                      {isSystemAdmin && <td className="col-hide-md" style={{ fontSize: ".85rem" }}>{row.branch || "—"}</td>}
                       <td className="col-hide-md" style={{ fontSize: ".85rem" }}>{fmtDate(row.date_joined)}</td>
                       <td><span className={`badge ${statusCls}`} style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
                       <td>

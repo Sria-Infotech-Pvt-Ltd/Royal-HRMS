@@ -48,6 +48,11 @@ def _has_hr_permission(user, codename: str) -> bool:
     if user.is_superuser:
         return True
     try:
+        # Employee role must never access HR attendance views — they use /my-attendance endpoints.
+        # Migration 0029 removed attendance.view from the employee role, but this guard
+        # defends against DB state divergence or accidental re-grants.
+        if user.role and user.role.name == 'employee':
+            return False
         return user.role.role_permissions.filter(
             permission__codename=codename
         ).exists()

@@ -32,7 +32,7 @@ urlpatterns = [
 
     # Candidate portal
     path('my/',                                                          MyAssessmentView.as_view(),      name='my-assessments'),
-    path('<uuid:assignment_id>/respond/<uuid:item_id>/',                 RespondToItemView.as_view(),     name='assessment-respond'),
+    path('<uuid:assignment_id>/respond/<uuid:item_id>/',                  RespondToItemView.as_view(),     name='assessment-respond'),
     path('<uuid:assignment_id>/complete/', CompleteAssessmentView.as_view(), name='assessment-complete'),
     path('<uuid:assignment_id>/retry/',   RetryAssessmentView.as_view(),    name='assessment-retry'),
-] 
+]  

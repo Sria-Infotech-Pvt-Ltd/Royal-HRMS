@@ -17,7 +17,8 @@ import {
 } from "./_data";
 import Avatar from "./_components/Avatar";
 import StatusBadge from "./_components/StatusBadge";
-import AddEmployeeModal from "./_components/AddEmployeeModal";
+import AddEmployeeModal  from "./_components/AddEmployeeModal";
+import BulkImportModal  from "./_components/BulkImportModal";
 
 /* ── API response shape ─────────────────────────────────────── */
 interface ApiEmployee {
@@ -105,6 +106,7 @@ export default function EmployeesPage() {
   const [dept,        setDept]        = useState("all");
   const [status,      setStatus]      = useState<"all" | EmployeeStatus>("all");
   const [showModal,   setShowModal]   = useState(false);
+  const [showImport,  setShowImport]  = useState(false);
   const [toggling,    setToggling]    = useState<string | null>(null);
   const [page,        setPage]        = useState(1);
   const [totalPages,  setTotalPages]  = useState(1);
@@ -231,11 +233,18 @@ export default function EmployeesPage() {
             />
           </div>
           {canCreate && (
-            <button onClick={() => setShowModal(true)} suppressHydrationWarning
-              className="btn btn-filled" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <i className="ti ti-plus" style={{ fontSize: 15 }} />
-              Add Employee
-            </button>
+            <>
+              <button onClick={() => setShowImport(true)} suppressHydrationWarning
+                className="btn btn-ghost" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <i className="ti ti-file-upload" style={{ fontSize: 15 }} />
+                Bulk Import
+              </button>
+              <button onClick={() => setShowModal(true)} suppressHydrationWarning
+                className="btn btn-filled" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <i className="ti ti-plus" style={{ fontSize: 15 }} />
+                Add Employee
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -262,36 +271,17 @@ export default function EmployeesPage() {
 
       {/* ── Filters ── */}
       <div className="flex items-center gap-3 flex-wrap mb-4">
-        {/* Branch — system_admin sees switcher, hr_admin sees fixed label */}
-        {isAdmin ? (
-          <select
-            value={branch}
-            onChange={e => { setBranch(e.target.value); setDept("all"); }}
-            suppressHydrationWarning
-            className={SEL_CLS}
-            style={SEL_STYLE}
-          >
-            <option value="all">All Branches</option>
-            {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        ) : userBranch ? (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
-            padding: "9px 14px",
-            borderRadius: 8,
-            border: "1px solid var(--outline-v)",
-            background: "var(--bg-low)",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--on-bg)",
-            whiteSpace: "nowrap",
-          }}>
-            <i className="ti ti-building" style={{ fontSize: 13, color: "var(--primary)" }} />
-            {userBranch}
-          </div>
-        ) : null}
+        {/* Branch */}
+        <select
+          value={branch}
+          onChange={e => { setBranch(e.target.value); setDept("all"); }}
+          suppressHydrationWarning
+          className={SEL_CLS}
+          style={SEL_STYLE}
+        >
+          <option value="all">All Branches</option>
+          {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
 
         {/* Department */}
         <select
@@ -385,18 +375,19 @@ export default function EmployeesPage() {
                       <td className="px-5 py-3.5 text-[13px] text-[var(--on-variant)] whitespace-nowrap">{formatDate(e.dateOfJoining)}</td>
                       <td className="px-5 py-3.5"><StatusBadge status={e.status} /></td>
                       <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => open(e.id)} suppressHydrationWarning
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
-                            <i className="ti ti-eye text-[14px]" /> View
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => open(e.id)} suppressHydrationWarning title="View"
+                            className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
+                            <i className="ti ti-eye text-[15px]" />
                           </button>
                           {canEdit && (
                             <button
                               onClick={() => toggleStatus(e)}
                               disabled={toggling === e.id}
                               suppressHydrationWarning
+                              title={e.status === "inactive" ? "Activate" : "Deactivate"}
                               className={[
-                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border transition-colors",
+                                "flex items-center justify-center w-8 h-8 rounded-lg border transition-colors",
                                 e.status === "inactive"
                                   ? "border-[var(--success)] text-[var(--success)] bg-white hover:bg-[var(--success-c)]"
                                   : "border-[var(--error)] text-[var(--error)] bg-white hover:bg-[var(--error-c)]",
@@ -404,10 +395,10 @@ export default function EmployeesPage() {
                               ].join(" ")}
                             >
                               {toggling === e.id
-                                ? <i className="ti ti-loader-2 animate-spin text-[14px]" />
+                                ? <i className="ti ti-loader-2 animate-spin text-[15px]" />
                                 : e.status === "inactive"
-                                  ? <><i className="ti ti-user-check text-[14px]" /> Activate</>
-                                  : <><i className="ti ti-user-off text-[14px]" /> Deactivate</>
+                                  ? <i className="ti ti-user-check text-[15px]" />
+                                  : <i className="ti ti-user-off text-[15px]" />
                               }
                             </button>
                           )}
@@ -459,12 +450,23 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* ── Modal ── */}
+      {/* ── Add Employee Modal ── */}
       {showModal && (
         <AddEmployeeModal
           onClose={() => setShowModal(false)}
           onCreated={() => {
             setShowModal(false);
+            fetchEmployees(search, 1);
+          }}
+        />
+      )}
+
+      {/* ── Bulk Import Modal ── */}
+      {showImport && (
+        <BulkImportModal
+          onClose={() => setShowImport(false)}
+          onSuccess={() => {
+            setShowImport(false);
             fetchEmployees(search, 1);
           }}
         />

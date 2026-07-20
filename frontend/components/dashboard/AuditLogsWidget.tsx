@@ -5,7 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { AuditLogEntry, AuditLogsResponse } from "@/types/dashboard";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 const MODULES = ["All", "Employee", "Auth", "Leave", "Expense", "Payroll", "Settings", "Recruitment", "Attendance"];
 
 const ACTION_CHIP: Record<string, { bg: string; color: string }> = {
@@ -108,7 +108,7 @@ export default function AuditLogsWidget() {
       </div>
 
       {/* Column headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "82px 1fr 90px 80px", gap: 8, padding: "7px 16px", borderBottom: "1px solid var(--bg-high)", background: "var(--bg-low)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 90px 80px", gap: 8, padding: "7px 16px", borderBottom: "1px solid var(--bg-high)", background: "var(--bg-low)" }}>
         {["Action", "Subject / Actor", "Module", "Time"].map(h => (
           <div key={h} style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--on-variant)" }}>{h}</div>
         ))}
@@ -132,8 +132,8 @@ export default function AuditLogsWidget() {
             const ip = resolveField(log, "ip", "ip_address");
             const time = formatTimestamp(log.timestamp ?? log.created_at ?? "");
             return (
-              <div key={String(log.id)} style={{ display: "grid", gridTemplateColumns: "82px 1fr 90px 80px", gap: 8, alignItems: "center", padding: "9px 16px", borderBottom: "1px solid var(--bg-high)" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: chip.bg, color: chip.color, letterSpacing: "0.04em", display: "inline-block" }}>
+              <div key={String(log.id)} style={{ display: "grid", gridTemplateColumns: "160px 1fr 90px 80px", gap: 8, alignItems: "center", padding: "9px 16px", borderBottom: "1px solid var(--bg-high)" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: chip.bg, color: chip.color, letterSpacing: "0.04em", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {log.action.toUpperCase()}
                 </span>
                 <div style={{ minWidth: 0 }}>

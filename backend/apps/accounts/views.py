@@ -96,11 +96,12 @@ def _auto_assign_managers(employee: 'User') -> list:
     """
     Auto-assign hr and reporting_manager on the employee object (in memory only).
 
-    HR (all roles): set from the branch record if currently None.
+    HR (all roles): set from Branch.hr if available, otherwise first active hr
+    user in the same branch.
     reporting_manager (non-managers only):
       - Requires both branch and department to be set.
-      - Branch must have exactly 1 manager (ambiguous if multiple).
-      - Prefers dept manager (same branch); falls back to branch HR (same dept).
+      - Branch must have exactly 1 manager__team_lead (ambiguous if multiple).
+      - Prefers dept manager (same branch).
 
     Returns a list of field names that were modified — caller must include them in save().
     """
@@ -111,12 +112,23 @@ def _auto_assign_managers(employee: 'User') -> list:
     role_name  = (employee.role.name if employee.role else '').lower()
 
     changed = []
-    branch_obj = None
 
-    # hr auto-assign removed — Branch has no hr FK field
+    # HR assignment: try Branch.hr first, then first active hr user in same branch.
+    if employee.hr_id is None and emp_branch:
+        branch_obj = Branch.objects.select_related('hr').filter(
+            branch_name__iexact=emp_branch
+        ).first()
+        hr_user = branch_obj.hr if branch_obj else None
+        if not hr_user:
+            hr_user = User.objects.filter(
+                role__name='hr', branch__iexact=emp_branch, is_active=True
+            ).first()
+        if hr_user and hr_user.pk != employee.pk:
+            employee.hr = hr_user
+            changed.append('hr')
 
-    # Managers have no reporting manager — they ARE the reporting manager for others.
-    if role_name == 'manager':
+    # Managers are the reporting manager for others — they have none themselves.
+    if role_name == 'manager__team_lead':
         return changed
 
     # Regular employees need both branch and department for manager auto-assign.
@@ -129,7 +141,7 @@ def _auto_assign_managers(employee: 'User') -> list:
 
     # Multiple managers in branch → ambiguous, let HR assign manually.
     if User.objects.filter(
-        role__name='manager', branch__iexact=emp_branch, is_active=True
+        role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True
     ).count() != 1:
         return changed
 
@@ -256,8 +268,8 @@ def _employee_dict(user: User) -> dict:
         'is_active':      user.is_active,
         'status':         emp_status,
         'hr': {
-            'id':   str(_hr.id)   if _hr else None,
-            'name': _hr.full_name if _hr else None,
+            'id':   _hr.employee_id if _hr else None,
+            'name': _hr.full_name   if _hr else None,
         },
         'profile':            profile_data,
         'documents':          documents,
@@ -265,10 +277,10 @@ def _employee_dict(user: User) -> dict:
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if role_name != 'manager':
+    if role_name != 'manager__team_lead':
         result['reporting_manager'] = {
-            'id':   str(mgr.id)   if mgr else None,
-            'name': mgr.full_name if mgr else None,
+            'id':   mgr.employee_id if mgr else None,
+            'name': mgr.full_name   if mgr else None,
         }
 
     return result
@@ -292,24 +304,23 @@ class CanManageRoles(BasePermission):
 
 def _login_assessment_status(user) -> str:
     """Return the correct assessment_status string for the login response."""
+    from django.db.models import Q as _Q
     from apps.assessments.models import CandidateAssignment
     from apps.recruitment.models import Candidate
 
     pending_statuses = [CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS]
 
-    # Always check candidate-based assignments (covers former candidates who became employees)
     candidate = Candidate.objects.filter(portal_user=user).first()
     if candidate:
-        if CandidateAssignment.objects.filter(candidate=candidate, status__in=pending_statuses).exists():
+        # Check both FKs — a recruited employee may have assignments on either
+        if CandidateAssignment.objects.filter(
+            _Q(candidate=candidate) | _Q(employee=user), status__in=pending_statuses,
+        ).exists():
             return User.ASSESSMENT_PENDING
-
-    # For role-bearing users also check employee-based assignments
-    if user.role_id:
+    else:
         if CandidateAssignment.objects.filter(employee=user, status__in=pending_statuses).exists():
             return User.ASSESSMENT_PENDING
-        return User.ASSESSMENT_COMPLETE
 
-    # Portal candidate with no pending candidate assignments
     return User.ASSESSMENT_COMPLETE
 
 
@@ -937,9 +948,12 @@ class PermissionDetailView(APIView):
 # ─── Organisation Structure ────────────────────────────────────────────────────
 
 class DepartmentListCreateView(APIView):
-    permission_classes = [IsAuthenticated, HasSettingsPermission]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'departments.view'):
+            return error('You do not have permission to view departments.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         qs = Department.objects.prefetch_related('designations').all()
         if is_active := request.query_params.get('is_active'):
             qs = qs.filter(is_active=is_active.lower() == 'true')
@@ -972,6 +986,9 @@ class DepartmentListCreateView(APIView):
         )
 
     def post(self, request):
+        if not _has_perm(request.user, 'departments.create'):
+            return error('You do not have permission to create departments.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         serializer = DepartmentSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -995,7 +1012,7 @@ class DepartmentListCreateView(APIView):
 
 
 class DepartmentDetailView(APIView):
-    permission_classes = [IsAuthenticated, HasSettingsPermission]
+    permission_classes = [IsAuthenticated]
 
     def _get(self, pk: int) -> Department | None:
         try:
@@ -1004,6 +1021,9 @@ class DepartmentDetailView(APIView):
             return None
 
     def get(self, request, pk: int):
+        if not _has_perm(request.user, 'departments.view'):
+            return error('You do not have permission to view departments.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         dept = self._get(pk)
         if not dept:
             return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -1025,6 +1045,9 @@ class DepartmentDetailView(APIView):
             qs.filter(reporting_manager_id=old_manager_id).update(reporting_manager=None)
 
     def put(self, request, pk: int):
+        if not _has_perm(request.user, 'departments.edit'):
+            return error('You do not have permission to edit departments.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         dept = self._get(pk)
         if not dept:
             return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -1048,6 +1071,9 @@ class DepartmentDetailView(APIView):
         return success('Department updated successfully.', data=DepartmentSerializer(updated).data)
 
     def patch(self, request, pk: int):
+        if not _has_perm(request.user, 'departments.edit'):
+            return error('You do not have permission to edit departments.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         dept = self._get(pk)
         if not dept:
             return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -1071,6 +1097,9 @@ class DepartmentDetailView(APIView):
         return success('Department updated successfully.', data=DepartmentSerializer(updated).data)
 
     def delete(self, request, pk: int):
+        if not _has_perm(request.user, 'departments.delete'):
+            return error('You do not have permission to delete departments.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         dept = self._get(pk)
         if not dept:
             return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -1113,9 +1142,12 @@ class DepartmentDetailView(APIView):
 
 
 class DesignationListCreateView(APIView):
-    permission_classes = [IsAuthenticated, HasSettingsPermission]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'designations.view'):
+            return error('You do not have permission to view designations.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         qs = Designation.objects.select_related('department').all()
         if dept_id := request.query_params.get('department'):
             try:
@@ -1135,6 +1167,9 @@ class DesignationListCreateView(APIView):
         )
 
     def post(self, request):
+        if not _has_perm(request.user, 'designations.create'):
+            return error('You do not have permission to create designations.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         serializer = DesignationSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -1159,7 +1194,7 @@ class DesignationListCreateView(APIView):
 
 
 class DesignationDetailView(APIView):
-    permission_classes = [IsAuthenticated, HasSettingsPermission]
+    permission_classes = [IsAuthenticated]
 
     def _get(self, pk: int) -> Designation | None:
         try:
@@ -1168,12 +1203,18 @@ class DesignationDetailView(APIView):
             return None
 
     def get(self, request, pk: int):
+        if not _has_perm(request.user, 'designations.view'):
+            return error('You do not have permission to view designations.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         desig = self._get(pk)
         if not desig:
             return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Designation retrieved successfully.', data=DesignationSerializer(desig).data)
 
     def put(self, request, pk: int):
+        if not _has_perm(request.user, 'designations.edit'):
+            return error('You do not have permission to edit designations.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         desig = self._get(pk)
         if not desig:
             return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -1196,6 +1237,9 @@ class DesignationDetailView(APIView):
         return success('Designation updated successfully.', data=DesignationSerializer(updated).data)
 
     def patch(self, request, pk: int):
+        if not _has_perm(request.user, 'designations.edit'):
+            return error('You do not have permission to edit designations.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         desig = self._get(pk)
         if not desig:
             return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -1218,6 +1262,9 @@ class DesignationDetailView(APIView):
         return success('Designation updated successfully.', data=DesignationSerializer(updated).data)
 
     def delete(self, request, pk: int):
+        if not _has_perm(request.user, 'designations.delete'):
+            return error('You do not have permission to delete designations.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         desig = self._get(pk)
         if not desig:
             return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -2274,9 +2321,9 @@ class EmployeeListCreateView(APIView):
             .order_by('-date_joined')
         )
 
-        # hr_admin is always scoped to their own branch — cannot be overridden by query params
+        # Non-system-admin users are always scoped to their own branch — cannot be overridden by query params
         role_name = request.user.role.name if request.user.role else ''
-        if role_name == 'hr_admin':
+        if role_name != 'system_admin' and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
 
         search = request.query_params.get('search', '').strip()
@@ -2464,7 +2511,7 @@ def _get_employee(identifier: str):
     try:
         return (
             User.objects
-            .select_related('role', 'profile', 'reporting_manager')
+            .select_related('role', 'profile', 'reporting_manager', 'hr')
             .prefetch_related('employee_documents')
             .get(employee_id=identifier)
         )
@@ -2483,11 +2530,9 @@ class EmployeeDetailView(APIView):
         employee = _get_employee(employee_id)
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
-        # Auto-assign: if the viewing user is an hr_admin and no HR is set, assign them now.
-        if (request.user.role and request.user.role.name == 'hr_admin'
-                and employee.hr_id is None and employee.pk != request.user.pk):
-            employee.hr = request.user
-            employee.save(update_fields=['hr', 'updated_at'])
+        auto_changed = _auto_assign_managers(employee)
+        if auto_changed:
+            employee.save(update_fields=auto_changed + ['updated_at'])
         return success('Employee retrieved.', data=_employee_dict(employee))
 
     def put(self, request, employee_id: str):
@@ -3567,25 +3612,42 @@ class OnboardingApprovalView(APIView):
                 linked_candidate.hr_approved = True
                 linked_candidate.save(update_fields=['status', 'hr_approved', 'updated_at'])
 
-            # Auto-assign default assessments — candidate completes these to unlock full portal
+            # Auto-assign default assessments — employee must complete these to unlock full portal.
+            # Works for both recruited candidates (candidate FK) and direct hires (employee FK).
             from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
+            from django.db.models import Q as _Q
             assigned_assessments = []
-            if linked_candidate:
-                default_assessments = list(
-                    Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
-                )
-                for assessment in default_assessments:
-                    max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
+            default_assessments = list(
+                Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
+            )
+            for assessment in default_assessments:
+                max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
+                if linked_candidate:
                     _, created = CandidateAssignment.objects.get_or_create(
                         candidate=linked_candidate,
                         assessment=assessment,
                         defaults={'assigned_by': request.user, 'max_score': max_score},
                     )
-                    if created:
-                        assigned_assessments.append(assessment)
-                if assigned_assessments:
-                    target.assessment_status = User.ASSESSMENT_PENDING
-                    target.save(update_fields=['assessment_status', 'updated_at'])
+                else:
+                    _, created = CandidateAssignment.objects.get_or_create(
+                        employee=target,
+                        assessment=assessment,
+                        defaults={'assigned_by': request.user, 'max_score': max_score},
+                    )
+                if created:
+                    assigned_assessments.append(assessment)
+
+            # Set status PENDING if any assignment (new or pre-existing from recruitment step) is pending
+            pending_filter = (
+                _Q(candidate=linked_candidate) if linked_candidate else _Q(employee=target)
+            )
+            has_pending = CandidateAssignment.objects.filter(
+                pending_filter,
+                status__in=[CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS],
+            ).exists()
+            if has_pending and target.assessment_status != User.ASSESSMENT_PENDING:
+                target.assessment_status = User.ASSESSMENT_PENDING
+                target.save(update_fields=['assessment_status', 'updated_at'])
 
             AuditLog.objects.create(
                 user=request.user, action='onboarding_approved', module='accounts',
@@ -3607,7 +3669,7 @@ class OnboardingApprovalView(APIView):
                         'department':       target.department  or '',
                         'date_of_joining':  str(target.date_of_joining) if target.date_of_joining else '',
                         'portal_url':       portal_url,
-                        'has_assessments':  'true' if assigned_assessments else 'false',
+                        'has_assessments':  'true' if has_pending else 'false',
                         'assessment_count': str(len(assigned_assessments)),
                     },
                 )
@@ -3734,7 +3796,7 @@ class OnboardingApprovalView(APIView):
         user_ids = [u.pk for u in page_obj.object_list]
         candidates_by_user = {
             c.portal_user_id: c
-            for c in Candidate.objects.filter(portal_user_id__in=user_ids)
+            for c in Candidate.objects.select_related('branch').filter(portal_user_id__in=user_ids)
         }
         return success('Onboarding approvals retrieved.', data=paginated_data(
             paginator, page_obj,
@@ -3764,7 +3826,7 @@ class OnboardingApprovalView(APIView):
 
         candidates_by_user = {
             c.portal_user_id: c
-            for c in Candidate.objects.filter(portal_user=target)
+            for c in Candidate.objects.select_related('branch').filter(portal_user=target)
         }
         return success(
             'Onboarding details retrieved.',
@@ -3835,7 +3897,11 @@ class HRListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         branch = (request.query_params.get('branch') or '').strip()
-        hrs = User.objects.filter(role__name='hr', is_active=True).select_related('role')
+        # Filter by permission so any role named hr/hr_admin/etc. is included
+        hrs = User.objects.filter(
+            role__role_permissions__permission__codename='onboarding.approve',
+            is_active=True,
+        ).select_related('role').distinct()
         if branch:
             hrs = hrs.filter(
                 Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch)
@@ -3870,10 +3936,20 @@ class ManagerListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         branch = (request.query_params.get('branch') or '').strip()
-        managers = User.objects.filter(role__name='manager', is_active=True).select_related('role')
-        if branch:
-            managers = managers.filter(branch__iexact=branch)
-        managers = managers.order_by('full_name')
+        if not branch:
+            return error('branch query parameter is required.')
+        # Filter by permission so any role named manager/team_lead/etc. is included
+        managers = (
+            User.objects
+            .filter(
+                role__role_permissions__permission__codename='leave.approve',
+                is_active=True,
+                branch__iexact=branch,
+            )
+            .select_related('role')
+            .distinct()
+            .order_by('full_name')
+        )
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}
