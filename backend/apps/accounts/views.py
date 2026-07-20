@@ -96,11 +96,12 @@ def _auto_assign_managers(employee: 'User') -> list:
     """
     Auto-assign hr and reporting_manager on the employee object (in memory only).
 
-    HR (all roles): set from the branch record if currently None.
+    HR (all roles): set from Branch.hr if available, otherwise first active hr
+    user in the same branch.
     reporting_manager (non-managers only):
       - Requires both branch and department to be set.
-      - Branch must have exactly 1 manager (ambiguous if multiple).
-      - Prefers dept manager (same branch); falls back to branch HR (same dept).
+      - Branch must have exactly 1 manager__team_lead (ambiguous if multiple).
+      - Prefers dept manager (same branch).
 
     Returns a list of field names that were modified — caller must include them in save().
     """
@@ -111,12 +112,23 @@ def _auto_assign_managers(employee: 'User') -> list:
     role_name  = (employee.role.name if employee.role else '').lower()
 
     changed = []
-    branch_obj = None
 
-    # hr auto-assign removed — Branch has no hr FK field
+    # HR assignment: try Branch.hr first, then first active hr user in same branch.
+    if employee.hr_id is None and emp_branch:
+        branch_obj = Branch.objects.select_related('hr').filter(
+            branch_name__iexact=emp_branch
+        ).first()
+        hr_user = branch_obj.hr if branch_obj else None
+        if not hr_user:
+            hr_user = User.objects.filter(
+                role__name='hr', branch__iexact=emp_branch, is_active=True
+            ).first()
+        if hr_user and hr_user.pk != employee.pk:
+            employee.hr = hr_user
+            changed.append('hr')
 
-    # Managers have no reporting manager — they ARE the reporting manager for others.
-    if role_name == 'manager':
+    # Managers are the reporting manager for others — they have none themselves.
+    if role_name == 'manager__team_lead':
         return changed
 
     # Regular employees need both branch and department for manager auto-assign.
@@ -129,7 +141,7 @@ def _auto_assign_managers(employee: 'User') -> list:
 
     # Multiple managers in branch → ambiguous, let HR assign manually.
     if User.objects.filter(
-        role__name='manager', branch__iexact=emp_branch, is_active=True
+        role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True
     ).count() != 1:
         return changed
 
@@ -256,8 +268,8 @@ def _employee_dict(user: User) -> dict:
         'is_active':      user.is_active,
         'status':         emp_status,
         'hr': {
-            'id':   str(_hr.id)   if _hr else None,
-            'name': _hr.full_name if _hr else None,
+            'id':   _hr.employee_id if _hr else None,
+            'name': _hr.full_name   if _hr else None,
         },
         'profile':            profile_data,
         'documents':          documents,
@@ -265,10 +277,10 @@ def _employee_dict(user: User) -> dict:
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if role_name != 'manager':
+    if role_name != 'manager__team_lead':
         result['reporting_manager'] = {
-            'id':   str(mgr.id)   if mgr else None,
-            'name': mgr.full_name if mgr else None,
+            'id':   mgr.employee_id if mgr else None,
+            'name': mgr.full_name   if mgr else None,
         }
 
     return result
@@ -2464,7 +2476,7 @@ def _get_employee(identifier: str):
     try:
         return (
             User.objects
-            .select_related('role', 'profile', 'reporting_manager')
+            .select_related('role', 'profile', 'reporting_manager', 'hr')
             .prefetch_related('employee_documents')
             .get(employee_id=identifier)
         )
@@ -2483,11 +2495,9 @@ class EmployeeDetailView(APIView):
         employee = _get_employee(employee_id)
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
-        # Auto-assign: if the viewing user is an hr_admin and no HR is set, assign them now.
-        if (request.user.role and request.user.role.name == 'hr_admin'
-                and employee.hr_id is None and employee.pk != request.user.pk):
-            employee.hr = request.user
-            employee.save(update_fields=['hr', 'updated_at'])
+        auto_changed = _auto_assign_managers(employee)
+        if auto_changed:
+            employee.save(update_fields=auto_changed + ['updated_at'])
         return success('Employee retrieved.', data=_employee_dict(employee))
 
     def put(self, request, employee_id: str):

@@ -1769,3 +1769,62 @@ Full API request/response documentation provided for:
 - Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave approved
 - Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-20
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. `GET /api/employees/<employee_id>/` — `hr` and `reporting_manager` always returning null**
+
+**Root causes identified and fixed:**
+
+| # | Location | Bug | Fix |
+|---|---|---|---|
+| 1 | `_auto_assign_managers` | HR assignment block removed with incorrect comment "Branch has no hr FK field" — `Branch.hr` FK exists in `branch/models.py` | Restored: tries `Branch.hr` first; falls back to first active `role='hr'` user in same branch |
+| 2 | `_auto_assign_managers` | `role__name='manager'` — no DB role with that name exists; actual value is `'manager__team_lead'` — query always returned 0, `count() != 1` guard always bailed | Fixed: `'manager'` → `'manager__team_lead'` |
+| 3 | `_auto_assign_managers` | Manager guard used `role_name == 'manager'` — same wrong name; managers were not skipping the assignment loop | Fixed: `'manager'` → `'manager__team_lead'` |
+| 4 | `EmployeeDetailView.get` | Wrong inline auto-assign: only fired for `hr_admin` viewers AND assigned the viewing user as the employee's HR (wrong person) | Replaced with `_auto_assign_managers(employee)` — runs for all viewers, assigns correct branch HR |
+| 5 | `_get_employee` | `select_related` missing `'hr'` — extra DB query per GET when `_employee_dict` read `user.hr` | Added `'hr'` to `select_related` |
+| 6 | `_employee_dict` | `hr.id` and `mgr.id` returned UUID (`str(uuid)`) — expected response uses `employee_id` (e.g. `RSS00001`) | Changed `str(_hr.id)` → `_hr.employee_id`; `str(mgr.id)` → `mgr.employee_id` |
+| 7 | `_employee_dict` | `if role_name != 'manager'` — wrong role name; managers incorrectly got a `reporting_manager` field | Fixed: `'manager'` → `'manager__team_lead'` |
+
+**How assignment now works on GET:**
+1. `_get_employee()` fetches employee with `select_related('role', 'profile', 'reporting_manager', 'hr')`
+2. `_auto_assign_managers(employee)` runs (in-memory):
+   - HR: if `employee.hr_id is None`, looks up `Branch.hr` for the employee's branch; if not set, falls back to first active `role='hr'` user in same branch
+   - Reporting manager: if `employee.reporting_manager_id is None` AND exactly 1 `manager__team_lead` is in the branch, checks department manager; assigns if in same branch
+3. If any fields changed, `employee.save(update_fields=changed + ['updated_at'])` persists the assignment
+4. `_employee_dict(employee)` builds response using the now-resolved FK objects
+
+**Expected response (after fix):**
+```json
+{
+  "hr": { "id": "RSS00001", "name": "Human Resources" },
+  "reporting_manager": { "id": "RSS00002", "name": "Vignesh Kumar Saka" }
+}
+```
+
+**Note on reporting_manager:** If a branch has multiple `manager__team_lead` users (e.g. Hyderabad has 2), auto-assign correctly skips (ambiguous) — HR must assign manually in that case. This is intentional behaviour.
+
+### Files Modified
+
+```
+backend/apps/accounts/views.py
+  — _auto_assign_managers(): HR block restored; role names corrected ('manager' → 'manager__team_lead')
+  — _get_employee(): 'hr' added to select_related
+  — EmployeeDetailView.get(): wrong inline auto-assign replaced with _auto_assign_managers() call
+  — _employee_dict(): hr.id and mgr.id changed from UUID to employee_id; role guard fixed
+```
+
+### Pending
+
+- Frontend implementation of all 3 dashboard pages (prompts given above)
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
