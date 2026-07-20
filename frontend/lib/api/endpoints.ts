@@ -137,6 +137,7 @@ export const API = {
     sections: (assessmentId: string) => `/assessments/${assessmentId}/sections/`,
     sectionDetail: (assessmentId: string, sectionId: string) => `/assessments/${assessmentId}/sections/${sectionId}/`,
     assign: "/assessments/assign/",
+    emailTemplateOptions: "/assessments/email-template-options/",
     results: (assessmentId: string) => `/assessments/${assessmentId}/results/`,
     candidateResults: (candidateId: string) => `/assessments/candidates/${candidateId}/results/`,
   },

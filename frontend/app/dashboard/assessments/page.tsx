@@ -89,6 +89,7 @@ export interface Assessment {
 }
 
 interface AssignEmployee { id: string; employee_id: string; full_name: string; email: string; department: string; }
+interface EmailTemplateOption { name: string; display_name: string; }
 
 interface AssessmentForm {
   title: string; description: string; is_active: boolean; is_default: boolean;
@@ -148,17 +149,22 @@ export default function AssessmentsPage() {
 
   function toggleResults(id: string) { setExpandedId(prev => prev === id ? null : id); }
 
-  const [assignFor,    setAssignFor]    = useState<Assessment | null>(null);
-  const [assignCids,   setAssignCids]   = useState<string[]>([]);
-  const [assignSearch, setAssignSearch] = useState("");
-  const [assigning,    setAssigning]    = useState(false);
-  const [assignErr,    setAssignErr]    = useState("");
-  const [assignOk,     setAssignOk]     = useState("");
+  const [assignFor,      setAssignFor]      = useState<Assessment | null>(null);
+  const [assignCids,     setAssignCids]     = useState<string[]>([]);
+  const [assignSearch,   setAssignSearch]   = useState("");
+  const [assigning,      setAssigning]      = useState(false);
+  const [assignErr,      setAssignErr]      = useState("");
+  const [assignOk,       setAssignOk]       = useState("");
+  const [assignTemplate, setAssignTemplate] = useState("assessment_assigned");
 
   const { data: empData } = useFetch<{ results: AssignEmployee[] }>(
     assignFor ? `${API.employees.list}?page_size=500` : null
   );
   const assignCandidates = empData?.results ?? [];
+
+  const { data: emailTemplateOptions } = useFetch<EmailTemplateOption[]>(
+    assignFor ? API.assessments.emailTemplateOptions : null
+  );
   const filteredCandidates = assignCandidates.filter(e =>
     assignSearch === "" ||
     e.full_name.toLowerCase().includes(assignSearch.toLowerCase()) ||
@@ -225,7 +231,7 @@ export default function AssessmentsPage() {
   // ── Assign ─────────────────────────────────────────────────────────────────
 
   function openAssign(a: Assessment) {
-    setAssignFor(a); setAssignCids([]); setAssignSearch(""); setAssignErr(""); setAssignOk("");
+    setAssignFor(a); setAssignCids([]); setAssignSearch(""); setAssignErr(""); setAssignOk(""); setAssignTemplate("assessment_assigned");
   }
 
   function toggleAssignCid(id: string) {
@@ -245,7 +251,7 @@ export default function AssessmentsPage() {
     const errors: string[] = [];
     for (const empId of assignCids) {
       try {
-        await clientApi.post(API.assessments.assign, { candidate_id: empId, assessment_id: assignFor!.id });
+        await clientApi.post(API.assessments.assign, { candidate_id: empId, assessment_id: assignFor!.id, template_name: assignTemplate });
         ok++;
       } catch (e) { errors.push(apiErr(e)); }
     }
@@ -253,6 +259,7 @@ export default function AssessmentsPage() {
     if (errors.length === 0) {
       setAssignOk(`Assigned to ${ok} employee${ok !== 1 ? "s" : ""} successfully!`);
       setAssignCids([]);
+      refetch();
     } else {
       setAssignErr(`${ok} succeeded, ${errors.length} failed: ${errors[0]}`);
     }
@@ -566,6 +573,24 @@ export default function AssessmentsPage() {
             <div className="modal-body">
               {assignErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{assignErr}</div></div>}
               {assignOk  && <div className="alert alert-success mb-12"><i className="ti ti-check" /><div>{assignOk}</div></div>}
+
+              {/* Notification template */}
+              <div className="field-group mb-12">
+                <label className="field-label">Notification Email Template</label>
+                <select
+                  className="field-input"
+                  value={assignTemplate}
+                  onChange={e => setAssignTemplate(e.target.value)}
+                >
+                  {!emailTemplateOptions || emailTemplateOptions.length === 0 ? (
+                    <option value="assessment_assigned">Assessment Assigned (default)</option>
+                  ) : (
+                    emailTemplateOptions.map(t => (
+                      <option key={t.name} value={t.name}>{t.display_name}</option>
+                    ))
+                  )}
+                </select>
+              </div>
 
               {/* Search */}
               <div className="field-group mb-8">

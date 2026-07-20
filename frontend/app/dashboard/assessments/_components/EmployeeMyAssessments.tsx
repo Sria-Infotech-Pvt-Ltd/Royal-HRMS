@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 
@@ -30,6 +31,7 @@ function fmt(iso: string | null) {
 }
 
 export default function EmployeeMyAssessments() {
+  const router = useRouter();
   const { data, loading, error } = useFetch<MyAssessmentData>(API.assessments.my);
   const assignments = data?.assignments ?? [];
   const pending     = assignments.filter(a => a.status !== "complete");
@@ -120,10 +122,16 @@ export default function EmployeeMyAssessments() {
                             </div>
                           )}
                         </div>
-                        <div style={{ flexShrink: 0 }}>
+                        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
                           {a.status === "in_progress"
                             ? <span className="badge badge-info">In Progress</span>
                             : <span className="badge" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>Pending</span>}
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => router.push("/onboarding/assessments")}
+                          >
+                            <i className="ti ti-pencil" /> {a.status === "in_progress" ? "Continue" : "Start"}
+                          </button>
                         </div>
                       </div>
                     </div>

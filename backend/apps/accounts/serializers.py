@@ -802,9 +802,16 @@ class DocumentSerializer(serializers.ModelSerializer):
 # ─── Employee Code Settings ───────────────────────────────────────────────────
 
 class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
+    format_description = serializers.SerializerMethodField()
+
     class Meta:
         model  = EmployeeCodeSettings
-        fields = ['prefix', 'padding', 'next_sequence']
+        fields = ['prefix', 'padding', 'next_sequence', 'format_description']
+        read_only_fields = ['format_description']
+
+    def get_format_description(self, obj) -> str:
+        seq = str(obj.next_sequence).zfill(obj.padding)
+        return f'{obj.prefix}{seq}  (prefix + {obj.padding}-digit sequence, next = {obj.next_sequence})'
 
     def validate_prefix(self, value):
         value = value.strip().upper()

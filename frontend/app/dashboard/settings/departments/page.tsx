@@ -104,7 +104,7 @@ export default function DepartmentsPage() {
   function openEditDept(d: Department) {
     setSaveError(null); setDeptErrors({});
     setEditingDept(d);
-    setDeptForm({ name: d.name, description: d.description, is_active: d.is_active });
+    setDeptForm({ name: d.name, description: d.description ?? "", is_active: d.is_active });
     setDeptModal("edit");
   }
   async function saveDept() {

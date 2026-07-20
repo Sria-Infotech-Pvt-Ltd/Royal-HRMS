@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.permissions import HasCompletedOnboarding
 from core.responses import error, success
 
 logger = logging.getLogger(__name__)
@@ -361,7 +362,7 @@ class SharedAnnouncementView(APIView):
 # ─── Employee KPIs ────────────────────────────────────────────────────────────
 
 class EmployeeKPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.accounts.models import EmployeeProfile, EmployeeDocument
@@ -435,7 +436,7 @@ class EmployeeKPIView(APIView):
 # ─── Employee Leave Balances ──────────────────────────────────────────────────
 
 class EmployeeLeaveBalanceView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.hrms.models import LeaveBalance, LeaveRequest, REQ_APPROVED
@@ -479,7 +480,7 @@ class EmployeeLeaveBalanceView(APIView):
 # ─── Employee Attendance Summary ──────────────────────────────────────────────
 
 class EmployeeAttendanceSummaryView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.attendance.services_attendance import AttendanceDashboardService
@@ -514,7 +515,7 @@ class EmployeeAttendanceSummaryView(APIView):
 # ─── Employee Attendance Status (today) ──────────────────────────────────────
 
 class EmployeeAttendanceStatusView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.attendance.models import AttendanceRecord

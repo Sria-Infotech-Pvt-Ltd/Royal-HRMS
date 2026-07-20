@@ -67,7 +67,7 @@ export default function PolicyTab() {
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function openEdit(p: LeavePolicy) {
     setEditing(p);
-    setForm({ annual_days: Number(p.annual_days), can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note, is_active: p.is_active });
+    setForm({ annual_days: Number(p.annual_days), can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note ?? "", is_active: p.is_active });
     setErrors({});
     setSaveError(null);
   }

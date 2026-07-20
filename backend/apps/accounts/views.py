@@ -131,33 +131,41 @@ def _auto_assign_managers(employee: 'User') -> list:
     if role_name == 'manager__team_lead':
         return changed
 
-    # Regular employees need both branch and department for manager auto-assign.
-    if not emp_branch or not emp_dept:
+    # Need at least a branch to find a manager.
+    if not emp_branch:
         return changed
 
     # Skip if reporting_manager already set.
     if employee.reporting_manager_id is not None:
         return changed
 
-    # Multiple managers in branch → ambiguous, let HR assign manually.
-    if User.objects.filter(
-        role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True
-    ).count() != 1:
-        return changed
-
     assigned = None
 
-    dept = (
-        Department.objects.select_related('manager')
-        .filter(name__iexact=emp_dept, is_active=True)
-        .first()
-    )
-    if (
-        dept and dept.manager
-        and dept.manager_id != employee.pk
-        and (dept.manager.branch or '').strip().lower() == emp_branch.lower()
-    ):
-        assigned = dept.manager
+    # 1. Department manager in same branch (most specific — preferred).
+    if emp_dept:
+        dept = (
+            Department.objects.select_related('manager')
+            .filter(name__iexact=emp_dept, is_active=True)
+            .first()
+        )
+        if (
+            dept and dept.manager
+            and dept.manager_id != employee.pk
+            and dept.manager.is_active
+            and (dept.manager.branch or '').strip().lower() == emp_branch.lower()
+        ):
+            assigned = dept.manager
+
+    # 2. Fallback: first active manager in the branch (deterministic by id).
+    #    Handles branches with multiple managers when no dept-level manager is set.
+    if assigned is None:
+        assigned = (
+            User.objects
+            .filter(role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True)
+            .exclude(pk=employee.pk)
+            .order_by('id')
+            .first()
+        )
 
     if assigned is not None:
         employee.reporting_manager = assigned
@@ -2419,8 +2427,12 @@ class EmployeeListCreateView(APIView):
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
-        employee_id = EmployeeCodeSettings.generate_employee_id()
-        full_name   = f'{first_name} {last_name}'
+        employee_id = EmployeeCodeSettings.generate_employee_id(
+            first_name=first_name,
+            last_name=last_name,
+            date_of_joining=date_of_joining or None,
+        )
+        full_name = f'{first_name} {last_name}'
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -2445,6 +2457,34 @@ class EmployeeListCreateView(APIView):
                 auto_fields.append('hr')
             if auto_fields:
                 user.save(update_fields=[*auto_fields, 'updated_at'])
+
+            # Auto-allocate leave balances based on active leave policies
+            from apps.hrms.views.leave import _allocate_leaves_for_employee
+            _allocate_leaves_for_employee(user, user.date_of_joining)
+
+            # Auto-assign all default assessments to the new employee
+            from apps.assessments.models import (
+                Assessment as _Assessment,
+                AssessmentItem as _AssessmentItem,
+                CandidateAssignment as _CandidateAssignment,
+            )
+            _default_assessments = list(
+                _Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
+            )
+            _has_pending_assessment = False
+            for _assessment in _default_assessments:
+                _max_score = _assessment.items.filter(item_type=_AssessmentItem.TYPE_QUIZ).count()
+                _, _created = _CandidateAssignment.objects.get_or_create(
+                    employee=user,
+                    assessment=_assessment,
+                    defaults={'assigned_by': request.user, 'max_score': _max_score},
+                )
+                if _created:
+                    _has_pending_assessment = True
+            if _has_pending_assessment:
+                user.assessment_status = User.ASSESSMENT_PENDING
+                user.save(update_fields=['assessment_status', 'updated_at'])
+
             AuditLog.objects.create(
                 user=request.user, action='employee_created', module='accounts',
                 object_id=str(user.id),
@@ -2909,6 +2949,42 @@ _NULLABLE_PROFILE_FIELDS = frozenset({
 })
 
 
+def _field_filled(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return bool(value)
+
+
+def _compute_completed_steps(profile, user) -> list:
+    """
+    Derive which wizard steps (0-4) already satisfy their required fields,
+    without persisting a separate progress field — completion is always
+    recomputed from the profile/document data that is already saved.
+    """
+    completed = []
+    for step, required in _STEP_REQUIRED_FIELDS.items():
+        if step == 4 or not required:
+            continue
+        if all(_field_filled(getattr(profile, field, None)) for field in required):
+            completed.append(step)
+
+    from apps.accounts.models import EmployeeDocument as ED
+    uploaded = set(ED.objects.filter(user=user).values_list('document_type', flat=True))
+    required_docs = {ED.TYPE_PAN, ED.TYPE_AADHAAR, ED.TYPE_DEGREE}
+    has_experience = (
+        bool((profile.previous_employer or '').strip())
+        or (profile.total_experience_years is not None and profile.total_experience_years > 0)
+    )
+    if has_experience:
+        required_docs.add(ED.TYPE_EXPERIENCE)
+    if required_docs.issubset(uploaded):
+        completed.append(4)
+
+    return completed
+
+
 class EmployeeProfileView(APIView):
     """GET / PATCH the requesting user's own EmployeeProfile."""
     permission_classes = [IsAuthenticated]
@@ -2993,7 +3069,9 @@ class OnboardingView(APIView):
 
         if step is None:
             profile, _ = self._get_or_create_profile(request.user)
-            return success('Profile retrieved.', data=EmployeeProfileSerializer(profile).data)
+            data = EmployeeProfileSerializer(profile).data
+            data['completed_steps'] = _compute_completed_steps(profile, request.user)
+            return success('Profile retrieved.', data=data)
 
         if step not in self._VALID_STEPS:
             return error(
@@ -3579,11 +3657,16 @@ class OnboardingApprovalView(APIView):
                     employee_role = Role.objects.get(name='employee')
                 except Role.DoesNotExist:
                     return error('Role "employee" not found. Create it in Roles settings first.')
-                target.role        = employee_role
-                target.employee_id = EmployeeCodeSettings.generate_employee_id()
+                target.role = employee_role
                 if not target.date_of_joining:
                     from django.utils import timezone as tz
                     target.date_of_joining = tz.now().date()
+                _name_parts = (target.full_name or '').split(' ', 1)
+                target.employee_id = EmployeeCodeSettings.generate_employee_id(
+                    first_name=_name_parts[0] if _name_parts else '',
+                    last_name=_name_parts[1] if len(_name_parts) > 1 else '',
+                    date_of_joining=target.date_of_joining,
+                )
 
                 if linked_candidate and not target.branch and linked_candidate.branch:
                     target.branch = linked_candidate.branch.branch_name
@@ -3606,6 +3689,11 @@ class OnboardingApprovalView(APIView):
                 'reporting_manager', 'hr',
                 *auto_fields,
             ])))
+
+            if needs_conversion:
+                # Auto-allocate leave balances after candidate→employee conversion
+                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                _allocate_leaves_for_employee(target, target.date_of_joining)
 
             if linked_candidate:
                 linked_candidate.status      = Candidate.STATUS_CONVERTED

@@ -172,6 +172,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.hrms.tasks.send_birthday_wishes',
         'schedule': crontab(hour=9, minute=0),
     },
+    # Runs once a year on 1st Jan at 00:01 IST — resets leave balances for the new year
+    # and applies carry-forward from the previous year.
+    'reset-annual-leave-balances': {
+        'task':     'apps.hrms.tasks.reset_annual_leave_balances',
+        'schedule': crontab(hour=0, minute=1, day_of_month=1, month_of_year=1),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────

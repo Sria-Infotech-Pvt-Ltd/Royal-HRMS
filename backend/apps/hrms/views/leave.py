@@ -1,5 +1,6 @@
 import logging
 from datetime import date
+from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, F, Q, Sum
@@ -88,39 +89,155 @@ def _can_hr_access_request(hr_user, leave_request) -> bool:
     return (getattr(leave_request.employee, 'branch', '') or '').strip() == branch
 
 
+def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
+    """
+    Return True if `user` is authorised to act at the given approval stage.
+
+    - system_admin: always authorised (admin override for any stuck request).
+    - l1 stage: must be the designated l1_approver on the request.
+    - l2 stage: must be the designated l2_approver, or an hr_admin / hr in
+                the same branch when no l2 was stamped at creation time.
+
+    Enforcing the designated approver prevents any user with leave.approve from
+    jumping the queue or acting at the wrong stage.
+    """
+    role = _role_name(user)
+    if role == 'system_admin':
+        return True
+
+    if stage == 'l1':
+        if leave_request.l1_approver_id:
+            return leave_request.l1_approver_id == user.id
+        # No designated L1 — only system_admin (handled above) may unblock.
+        return False
+
+    if stage == 'l2':
+        if leave_request.l2_approver_id:
+            return leave_request.l2_approver_id == user.id
+        # No designated L2 — HR admin with branch access may step in.
+        return role in ('hr_admin', 'hr') and _can_hr_access_request(user, leave_request)
+
+    return False
+
+
+def _is_hr_role(role: str) -> bool:
+    """True for both 'hr' (current DB value) and legacy 'hr_admin' alias."""
+    return role in ('hr', 'hr_admin')
+
+
 def _approval_scope_filter(user) -> 'Q':
     """
     Scope filter for the approval queue — enforces both role and status visibility.
-    manager   → pending requests from direct reports only (L1 queue)
-    hr_admin  → l2_pending requests from same branch only (L2 queue)
-    system_admin → all statuses, all employees except own
+    manager__team_lead → REQ_PENDING requests where they are the designated L1 approver.
+    hr / hr_admin      → REQ_L2_PENDING requests in their branch.
+    system_admin       → all statuses, all employees except own.
     """
     role = _role_name(user)
     if role == 'system_admin':
         return ~Q(employee=user)
-    if role == 'hr_admin':
+    if _is_hr_role(role):
         branch = _user_branch(user)
         if branch:
             return Q(employee__branch=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
         return Q(employee__hr=user, status=REQ_L2_PENDING) & ~Q(employee=user)
-    if role == 'manager':
-        return Q(employee__reporting_manager=user, status=REQ_PENDING) & ~Q(employee=user)
+    if role == 'manager__team_lead':
+        # Show only requests where this manager is the designated L1 approver.
+        # Scoping by l1_approver (not reporting_manager) is precise — it respects
+        # per-employee overrides and avoids showing requests already past L1.
+        return Q(l1_approver=user, status=REQ_PENDING) & ~Q(employee=user)
     return Q(employee=user)
 
 
 def _calendar_scope_filter(user) -> 'Q':
     """
     Scope filter for the team calendar.
-    employee → all approved (to see who's out); manager → team + own; hr_admin → branch; system_admin → all.
+    employee           → all approved (to see who's out)
+    manager__team_lead → team + own
+    hr_admin           → branch
+    system_admin       → all
     """
     role = _role_name(user)
     if role == 'system_admin':
         return Q()
-    if role == 'hr_admin':
+    if _is_hr_role(role):
         return Q(employee__branch=user.branch) if user.branch else Q()
-    if role == 'manager':
+    if role == 'manager__team_lead':
         return Q(employee__reporting_manager=user) | Q(employee=user)
     return Q()  # employee: see all approved leaves to plan around absences
+
+
+def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
+    """
+    Auto-allocate leave balances for a new employee based on active LeavePolicy records.
+    Called on candidate→employee conversion and direct employee creation.
+
+    Pro-rata rule: joining month counts as a full month.
+    e.g. joining July → 6 months remaining → 6/12 × annual_days.
+    Skips policies with minimum_service_period > 0 (new joiner has 0 months service).
+    Idempotent: get_or_create prevents duplicates on re-runs.
+
+    Returns number of LeaveBalance records created.
+    """
+    from datetime import datetime as _dt
+    today = date.today()
+    if joining_date is None:
+        joining_date = today
+    elif isinstance(joining_date, str):
+        joining_date = _dt.strptime(joining_date, '%Y-%m-%d').date() if joining_date else today
+
+    year             = joining_date.year
+    remaining_months = 13 - joining_date.month  # Jan→12, Jul→6, Dec→1
+
+    try:
+        from apps.accounts.models import EmployeeProfile
+        profile    = EmployeeProfile.objects.filter(user=employee).first()
+        emp_gender = (profile.gender or 'all') if profile else 'all'
+    except Exception:
+        emp_gender = 'all'
+
+    created_count = 0
+
+    for policy in LeavePolicy.objects.filter(is_active=True):
+        if policy.minimum_service_period > 0:
+            continue
+
+        if policy.applicable_branches and (
+            not employee.branch or employee.branch not in policy.applicable_branches
+        ):
+            continue
+
+        if policy.applicable_departments and (
+            not employee.department or employee.department not in policy.applicable_departments
+        ):
+            continue
+
+        if policy.applicable_designations and (
+            not employee.designation or employee.designation not in policy.applicable_designations
+        ):
+            continue
+
+        if policy.applicable_gender not in ('', 'all') and emp_gender != policy.applicable_gender:
+            continue
+
+        # Round to nearest 0.5 — standard HRMS display precision
+        raw     = float(policy.annual_days) * remaining_months / 12
+        prorata = Decimal(str(round(raw * 2) / 2))
+
+        _, created = LeaveBalance.objects.get_or_create(
+            employee=employee,
+            leave_type=policy.leave_type,
+            year=year,
+            defaults={'total_days': prorata, 'carried_forward': Decimal('0')},
+        )
+        if created:
+            created_count += 1
+
+    if created_count:
+        logger.info(
+            'Auto-allocated %d leave balance(s) for %s (joining %s, year %d)',
+            created_count, employee.email, joining_date, year,
+        )
+    return created_count
 
 
 def _get_holiday_dates(start: date, end: date, branch_name: str = '') -> set:
@@ -654,8 +771,11 @@ class LeaveRequestListCreateView(APIView):
 
             l1, l2 = _resolve_approval_chain(request.user)
 
-            # Managers skip L1 — their leave routes directly to HR (L2)
-            if _role_name(request.user) == 'manager':
+            # Managers skip L1 — their leave routes directly to HR (L2).
+            # Also escalate to L2 when the employee has no reporting manager set,
+            # so the request is never orphaned with no one to act on it.
+            role = _role_name(request.user)
+            if role == 'manager__team_lead' or l1 is None:
                 initial_status = REQ_L2_PENDING
                 l1_approver    = None
                 l2_approver    = l2
@@ -702,7 +822,7 @@ class LeaveRequestDetailView(APIView):
         has_approve = _has_perm(user, 'leave.approve')
         if not has_approve and leave_request.employee_id != user.id:
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
-        if has_approve and _role_name(user) == 'hr_admin' and not _can_hr_access_request(user, leave_request):
+        if has_approve and _is_hr_role(_role_name(user)) and not _can_hr_access_request(user, leave_request):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         return leave_request, None
@@ -764,7 +884,7 @@ class LeaveApprovalView(APIView):
             ).get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
-        if _role_name(request.user) == 'hr_admin' and not _can_hr_access_request(request.user, leave_request):
+        if _is_hr_role(_role_name(request.user)) and not _can_hr_access_request(request.user, leave_request):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return success(
             'Leave request retrieved.',
@@ -782,7 +902,7 @@ class LeaveApprovalView(APIView):
 
         if leave_request.employee_id == request.user.id:
             return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
-        if _role_name(request.user) == 'hr_admin' and not _can_hr_access_request(request.user, leave_request):
+        if _is_hr_role(_role_name(request.user)) and not _can_hr_access_request(request.user, leave_request):
             return error('You can only approve leave requests for employees in your branch.', http_status=status.HTTP_403_FORBIDDEN)
 
         action  = request.data.get('action')
@@ -794,6 +914,12 @@ class LeaveApprovalView(APIView):
         now = timezone.now()
 
         if leave_request.status == REQ_PENDING:
+            if not _can_approve_at_stage(request.user, leave_request, 'l1'):
+                return error(
+                    'You are not authorised to act on this request at the L1 stage. '
+                    'Only the designated reporting manager may approve or reject it.',
+                    http_status=status.HTTP_403_FORBIDDEN,
+                )
             leave_request.l1_approver    = request.user
             leave_request.l1_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
             leave_request.l1_remarks     = remarks
@@ -804,10 +930,17 @@ class LeaveApprovalView(APIView):
             elif leave_request.l2_approver_id:
                 leave_request.status = REQ_L2_PENDING
             else:
+                # No L2 configured — L1 approval is final.
                 leave_request.status = REQ_APPROVED
                 _deduct_balance_safe(leave_request)
 
         elif leave_request.status == REQ_L2_PENDING:
+            if not _can_approve_at_stage(request.user, leave_request, 'l2'):
+                return error(
+                    'You are not authorised to act on this request at the L2 stage. '
+                    'Only the designated HR approver may approve or reject it.',
+                    http_status=status.HTTP_403_FORBIDDEN,
+                )
             leave_request.l2_approver    = request.user
             leave_request.l2_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
             leave_request.l2_remarks     = remarks

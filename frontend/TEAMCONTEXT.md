@@ -2371,3 +2371,112 @@ The announcement is a non-critical enhancement. Showing a loading skeleton for i
 - **The Employee Dashboard previously fetched from `API.leave.balance` and `API.leave.requests`** — these endpoints still exist and are still used in the Leave module. The dashboard now uses the dedicated `/dashboard/employee/` endpoints which return pre-summarised data shaped for the dashboard, not full paginated lists.
 - **`EmpConsole` makes two `useFetch` calls** (`useEmployeeKPIs` + `useAttendanceStatus`) and derives `loading = kpiLoading || statusLoading`. Both must resolve before the attendance strip renders. This is intentional — the strip shows `clock_in_time`/`clock_out_time` from `attendanceStatus`, which is a separate endpoint from the KPI count data.
 - **All dashboard widgets are "use client" components** — they use hooks (`useFetch`, `useState`). The page files (`AdminDashboard.tsx`, `HRDashboard.tsx`, `EmployeeDashboard.tsx`) are also `"use client"` because they receive `SessionPayload` as a prop from the server component `app/dashboard/page.tsx` and derive `firstName` from it.
+
+---
+
+## Session — G. Durga Prasad (20 July 2026)
+
+**Branch:** `Backend/Leaves-Auto`
+
+Backend-only session. No frontend files touched.
+
+---
+
+### 1. Assessment Assign Flow — Notification Template Selection
+
+**File:** `backend/apps/assessments/views/admin.py`
+
+`AssignAssessmentView.post()` now accepts an optional `template_name` in the request body (defaults to `assessment_assigned`) and threads it through every notification email dispatch — single employee, single candidate, and the department/company-wide bulk path. `_send_assessment_email()` signature updated to accept `template_name` as its third argument.
+
+Added `EmailTemplateOptionsView` (`GET /api/assessments/email-template-options/`) — returns a flat `[{name, display_name}]` list of all active `EmailTemplate` rows, sorted by `display_name`. This exists specifically because the existing `/settings/email-templates/` endpoint groups templates by `template_type` and is paginated — too heavy for a simple dropdown. Registered in `backend/apps/assessments/urls.py`.
+
+> **Do not gate assignment on template existence.** An earlier version of this change added a hard validation (`EmailTemplate.objects.filter(name=template_name, is_active=True).exists()` → 400 if missing) before creating the `CandidateAssignment`. Reverted — a missing/misconfigured email template must never block the actual assignment. Email failures are already logged via `logger.exception` in `_send_assessment_email` and swallowed there; that's the correct failure mode.
+
+### 2. Backend Enforcement of the Onboarding/Assessment Gate
+
+**File:** `backend/core/permissions.py` (new class), applied in `backend/apps/dashboard/views/overview.py` and `backend/apps/dashboard/views/people.py`
+
+Traced the full candidate → portal invite → 5-step wizard → HR approval → auto-assigned assessment → dashboard flow end-to-end. Confirmed it works correctly (portal credentials, wizard steps, `OnboardingApprovalView` auto-assign, dual `candidate`/`employee` FK resolution in `MyAssessmentView`), but found one real gap: **the onboarding/assessment gate only existed in the Next.js proxy** (`frontend/proxy.ts`) — every employee-dashboard API endpoint accepted any authenticated request regardless of `onboarding_status`/`assessment_status`, so a direct API call could bypass the wizard/assessment requirement entirely.
+
+Added `HasCompletedOnboarding` (`core/permissions.py`) — a shared DRF permission class mirroring the proxy's redirect logic server-side:
+
+```python
+class HasCompletedOnboarding(BasePermission):
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        role_name = user.role.name if user.role else ''
+        if role_name in _ONBOARDING_EXEMPT_ROLES or user.is_superuser:
+            return True
+        if user.onboarding_status != user.ONBOARDING_COMPLETE:
+            return False
+        if user.assessment_status == user.ASSESSMENT_PENDING:
+            return False
+        return True
+```
+
+`_ONBOARDING_EXEMPT_ROLES = frozenset(('system_admin', 'hr', 'hr_admin'))` — HR/admin roles never go through onboarding themselves and are exempt.
+
+Applied as a second entry in `permission_classes` (alongside `IsAuthenticated`, never replacing it) on the six employee-self-service dashboard endpoints:
+`EmployeeKPIView`, `EmployeeLeaveBalanceView`, `EmployeeAttendanceSummaryView`, `EmployeeAttendanceStatusView` (`overview.py`) and `EmployeeActionItemsView`, `EmployeeRecentRequestsView` (`people.py`).
+
+> **Scope note:** deliberately limited to the six `dashboard/employee/*` endpoints identified as the actual gap. Did not extend this to every business endpoint (leave, attendance, payroll) — that would be scope creep beyond the confirmed hole and risks false-positive lockouts on endpoints that were never part of the reported issue.
+
+### 3. Onboarding Wizard — Per-Step Completion, No Schema Change
+
+**File:** `backend/apps/accounts/views.py`
+
+Found that returning candidates lose their wizard step-unlock state on page reload (frontend tracks `highestSaved` in local state only, resets to `-1` every load). Rather than add a new persisted field — which would need a migration and a second source of truth that can drift from the actual data — added `_compute_completed_steps(profile, user)`:
+
+```python
+def _compute_completed_steps(profile, user) -> list:
+    completed = []
+    for step, required in _STEP_REQUIRED_FIELDS.items():
+        if step == 4 or not required:
+            continue
+        if all(_field_filled(getattr(profile, field, None)) for field in required):
+            completed.append(step)
+    # step 4 — required documents (PAN, Aadhaar, Degree, + Experience if applicable)
+    ...
+    return completed
+```
+
+Completion is always derived fresh from `EmployeeProfile` fields and uploaded `EmployeeDocument` rows — the same required-field/required-document rules already enforced in `OnboardingView._submit()`, just reused rather than duplicated. `GET /onboarding/` (the `step=None` branch) now returns `completed_steps: [0, 1, ...]` alongside the existing profile data.
+
+> **Frontend not wired to consume this yet** — per standing instruction to stay backend-only this session. The field is available at `data.completed_steps` on the existing profile response whenever the frontend team picks it up; no new endpoint was needed.
+
+### 4. Assessment Assign Modal — `refetch()` After Success
+
+**File:** `frontend/app/dashboard/assessments/page.tsx` (pre-existing bug, fixed as a one-liner while investigating a "selected templates are not there" report)
+
+`doAssign()` never called `refetch()` after a successful assignment, so the assessment card's assigned/pending counts and candidate table stayed stale until a manual page reload. Added `refetch()` in the success branch. Also added the "Notification Email Template" dropdown (fed by the new `email-template-options` endpoint from §1) above the employee search in the Assign modal.
+
+### 5. Investigated, Confirmed Not a Bug
+
+- **`CandidateHRDecisionView`** (`recruitment/views.py`) requires `candidate.status == SELECTED`, but `SendPortalLoginView` always transitions status to `OFFER_SENT` on portal invite. Confirmed these two paths can never collide in the real flow — no fix needed.
+- **Onboarding approval 400 on an already-approved employee** — `OnboardingApprovalView` correctly rejects any `target.onboarding_status != submitted`. Working as intended; the specific case investigated was a re-approval attempt on an already-`complete` employee.
+
+---
+
+### Key Files Changed (20 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/assessments/views/admin.py` | `template_name` param threaded through `AssignAssessmentView` + `_send_assessment_email`; added `EmailTemplateOptionsView` |
+| `backend/apps/assessments/urls.py` | Registered `email-template-options/` |
+| `backend/core/permissions.py` | **NEW class** — `HasCompletedOnboarding` |
+| `backend/apps/dashboard/views/overview.py` | `HasCompletedOnboarding` added to 4 employee views |
+| `backend/apps/dashboard/views/people.py` | `HasCompletedOnboarding` added to 2 employee views |
+| `backend/apps/accounts/views.py` | Added `_field_filled()`, `_compute_completed_steps()`; `OnboardingView.get()` now returns `completed_steps` |
+| `frontend/app/dashboard/assessments/page.tsx` | `refetch()` after successful assign; template dropdown wired to new endpoint |
+| `frontend/lib/api/endpoints.ts` | Added `assessments.emailTemplateOptions` |
+
+---
+
+### Notes for Next Developer
+
+- **The onboarding/assessment gate is now enforced in two places on purpose** — `frontend/proxy.ts` (UX redirect, fast) and `core/permissions.HasCompletedOnboarding` (real enforcement, cannot be bypassed via direct API call). Keep both in sync if the gate condition ever changes — they currently check the identical two fields (`onboarding_status`, `assessment_status`).
+- **`completed_steps` is computed, not stored** — if a required field or required document changes for any step, update `_STEP_REQUIRED_FIELDS` / the document-type set inside `_compute_completed_steps()` together. There is intentionally no migration to keep in sync.
+- **A known, unfixed dead-end remains in the submitted→approved handoff** (frontend-side): after HR approves in the backend, the candidate's `royal_hrms_user` cookie still reads `onboarding_status: submitted` until the client calls `setOnboardingStatus("complete")`. The waiting-screen poll in `onboarding/page.tsx` tries to navigate to `/onboarding/assessments` before updating that cookie, so `proxy.ts` bounces it back to `/onboarding`. Not fixed this session (frontend-only fix, out of scope) — flagged for whoever picks up frontend work next.
+- **Do not re-add a template-existence check to `AssignAssessmentView`** — see §1. This was tried and reverted; a missing email template should degrade to a logged failure, never block the assignment itself.

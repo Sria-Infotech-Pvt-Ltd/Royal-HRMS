@@ -2,7 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { addEmployee, DEPARTMENT_OPTIONS, type Employee, type Gender, type EmployeeStatus } from "../_data";
+import { DEPARTMENT_OPTIONS } from "../_data";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
 
 /* ══════════════════════════════════════════════════════════════
    CONSTANTS & OPTIONS
@@ -48,7 +50,7 @@ type DocKey = "aadhaar" | "pan" | "degree" | "experience" | "offer" | "photo";
 
 interface FormData {
   personal: {
-    firstName: string; lastName: string; dob: string; gender: string;
+    firstName: string; lastName: string; email: string; dob: string; gender: string;
     phone: string; altPhone: string; pan: string; aadhaar: string;
     marital: string; bloodGroup: string; ecName: string; ecPhone: string;
   };
@@ -80,7 +82,7 @@ interface FormData {
 
 const EMPTY: FormData = {
   personal: {
-    firstName: "", lastName: "", dob: "", gender: "Male",
+    firstName: "", lastName: "", email: "", dob: "", gender: "Male",
     phone: "", altPhone: "", pan: "", aadhaar: "",
     marital: "Single", bloodGroup: "B+", ecName: "", ecPhone: "",
   },
@@ -200,6 +202,11 @@ function StepPersonal({ d, set, errs }: {
         </F>
         <F label="Last Name" err={errs.lastName}>
           <Inp value={d.lastName} onChange={v => set("lastName", v)} placeholder="e.g. Sharma" err={!!errs.lastName} />
+        </F>
+      </Row>
+      <Row half>
+        <F label="Work Email" err={errs.email}>
+          <Inp type="email" value={d.email} onChange={v => set("email", v)} placeholder="e.g. priya.sharma@company.com" err={!!errs.email} />
         </F>
       </Row>
       <Row>
@@ -728,6 +735,8 @@ function validateStep(step: number, form: FormData): Record<string, string> {
     const p = form.personal;
     if (!p.firstName.trim()) e.firstName = "Required";
     if (!p.lastName.trim())  e.lastName  = "Required";
+    if (!p.email.trim())     e.email     = "Required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) e.email = "Enter a valid email address";
     if (!p.dob)              e.dob       = "Required";
     if (!p.phone.trim())     e.phone     = "Required";
     if (!p.pan.trim())       e.pan       = "Required";
@@ -765,7 +774,10 @@ export default function NewEmployeePage() {
   const [step,   setStep]   = useState(1);
   const [form,   setForm]   = useState<FormData>(EMPTY);
   const [errs,   setErrs]   = useState<StepErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted,   setSubmitted]   = useState(false);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [generatedId, setGeneratedId] = useState("");
 
   const p = form.personal;
   const displayName = [p.firstName, p.lastName].filter(Boolean).join(" ") || "New Employee";
@@ -814,34 +826,35 @@ export default function NewEmployeePage() {
   }
 
   // ── Submit ───────────────────────────────────────────────
-  function submit() {
+  async function submit() {
     if (!form.declaration) {
       setErrs({ declaration: "Please accept the declaration to proceed." });
       return;
     }
-    const code = `RSS${String(Date.now()).slice(-5)}D`;
-    const emp: Employee = {
-      id: code, code,
-      firstName:     p.firstName.trim(),
-      middleName:    "",
-      lastName:      p.lastName.trim(),
-      email:         `${p.firstName.toLowerCase()}.${p.lastName.toLowerCase()}@royal.com`,
-      phone:         p.phone.trim(),
-      department:    form.employment.department,
-      designation:   form.employment.designation.trim(),
-      dateOfJoining: form.employment.dateOfJoining,
-      dateOfBirth:   p.dob,
-      location:      form.employment.branch,
-      gender:        (p.gender.toLowerCase() as Gender),
-      status:        "onboarding" as EmployeeStatus,
-      details: (() => {
-        const { sameAsCurrent: _s, ...addrFields } = form.address;
-        return { ...p, ...form.employment, ...addrFields, ...form.education, ...form.bank, code, firstName: p.firstName, lastName: p.lastName };
-      })(),
-      tables: {},
-    };
-    addEmployee(emp);
-    setSubmitted(true);
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const response = await clientApi.post(API.employees.list, {
+        first_name:      form.personal.firstName.trim(),
+        last_name:       form.personal.lastName.trim(),
+        email:           form.personal.email.trim(),
+        phone:           form.personal.phone.trim(),
+        role:            "employee",
+        department:      form.employment.department,
+        designation:     form.employment.designation.trim(),
+        branch:          form.employment.branch,
+        date_of_joining: form.employment.dateOfJoining || null,
+      });
+      const data = response.data?.data ?? response.data;
+      setGeneratedId((data as { employee_id?: string })?.employee_id ?? "");
+      setSubmitted(true);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to create employee. Please try again.";
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // ── Success screen ───────────────────────────────────────
@@ -853,15 +866,37 @@ export default function NewEmployeePage() {
           <i className="ti ti-circle-check text-[44px]" style={{ color: "var(--success)" }} />
         </div>
         <h2 className="text-[22px] font-bold text-[var(--on-bg)] mb-2">Employee Added Successfully!</h2>
-        <p className="text-[14px] text-[var(--on-variant)] mb-8">
-          {displayName} has been added. HR team will review and activate the account.
+        <p className="text-[14px] text-[var(--on-variant)] mb-5">
+          {displayName} has been added and their login credentials have been sent by email.
         </p>
-        <button onClick={() => router.push("/dashboard/employees")} suppressHydrationWarning
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-semibold text-white shadow-md"
-          style={{ background: "var(--primary)" }}>
-          <i className="ti ti-arrow-left text-[16px]" />
-          Back to Employees
-        </button>
+        {generatedId && (
+          <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl mb-8 border"
+            style={{ background: "rgba(30,78,140,0.06)", borderColor: "rgba(30,78,140,0.2)" }}>
+            <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--primary)", opacity: 0.7 }}>
+              Employee ID
+            </span>
+            <span className="text-[28px] font-black tracking-widest" style={{ color: "var(--primary)", fontFamily: "monospace" }}>
+              {generatedId}
+            </span>
+            <span className="text-[11px]" style={{ color: "var(--on-variant)" }}>
+              Format: RSS + Initial + Joining Date + Surname
+            </span>
+          </div>
+        )}
+        <div className="flex items-center justify-center gap-3">
+          <button onClick={() => router.push("/dashboard/employees")} suppressHydrationWarning
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-semibold text-white shadow-md"
+            style={{ background: "var(--primary)" }}>
+            <i className="ti ti-arrow-left text-[16px]" />
+            Back to Employees
+          </button>
+          <button onClick={() => { setForm(EMPTY); setStep(1); setSubmitted(false); setGeneratedId(""); }} suppressHydrationWarning
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-semibold border"
+            style={{ color: "var(--on-variant)", borderColor: "var(--outline-v)" }}>
+            <i className="ti ti-plus text-[16px]" />
+            Add Another
+          </button>
+        </div>
       </div>
     );
   }
@@ -980,11 +1015,20 @@ export default function NewEmployeePage() {
               Continue <i className="ti ti-arrow-right text-[14px]" />
             </button>
           ) : (
-            <button onClick={submit} suppressHydrationWarning
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors shadow-sm"
-              style={{ background: "var(--success)" }}>
-              <i className="ti ti-send text-[14px]" /> Submit to HR
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              {submitError && (
+                <p className="text-[12px] font-medium" style={{ color: "var(--error)" }}>
+                  <i className="ti ti-alert-circle mr-1" />{submitError}
+                </p>
+              )}
+              <button onClick={submit} disabled={submitting} suppressHydrationWarning
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors shadow-sm"
+                style={{ background: submitting ? "#94a3b8" : "var(--success)", cursor: submitting ? "not-allowed" : "pointer" }}>
+                {submitting
+                  ? <><i className="ti ti-loader-2 animate-spin text-[14px]" /> Creating…</>
+                  : <><i className="ti ti-send text-[14px]" /> Create Employee</>}
+              </button>
+            </div>
           )}
         </div>
       </div>
