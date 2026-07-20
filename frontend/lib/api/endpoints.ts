@@ -85,6 +85,7 @@ export const API = {
 
   recruitment: {
     candidates: "/recruitment/candidates/",
+    bulkImport: "/recruitment/candidates/bulk-import/",
     stats: "/recruitment/candidates/stats/",
     review: "/recruitment/candidates/review/",
     detail: (id: number) => `/recruitment/candidates/${id}/`,

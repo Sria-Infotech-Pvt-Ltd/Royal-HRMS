@@ -93,6 +93,18 @@ export interface EmailTemplate {
   is_active:           boolean;
 }
 
+export interface BulkImportError {
+  row:     number;
+  field:   string;
+  message: string;
+}
+
+export interface BulkImportResult {
+  imported: number;
+  failed:   number;
+  errors:   BulkImportError[];
+}
+
 export interface RecruitmentStats {
   total:          number;
   pending:        number;
@@ -142,7 +154,7 @@ export const RECRUITMENT_API = {
     clientApi.post<{ message: string }>(API.recruitment.sendPortalLogin(id)),
   sendEmail: (id: number, body: { template_name: string; extra_context?: Record<string, string> }) =>
     clientApi.post<{ success: boolean; message: string; data: null }>(API.recruitment.sendEmail(id), body),
-  update: (id: number, body: Partial<Pick<Candidate, "branch" | "interview_date" | "interview_mode" | "position_applied" | "notes">> & { extra_context?: Record<string, string> }) =>
+  update: (id: number, body: Partial<Pick<Candidate, "name" | "branch" | "interview_date" | "interview_mode" | "position_applied" | "notes">> & { extra_context?: Record<string, string> }) =>
     clientApi.patch<{ data: Candidate }>(API.recruitment.detail(id), body),
 };
 
