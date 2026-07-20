@@ -1,3 +1,5 @@
+import csv
+import io
 import logging
 import secrets
 import string
@@ -6,6 +8,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from core.responses import error, first_error, get_client_ip, success
@@ -15,6 +18,7 @@ from apps.accounts.utils import send_template_email
 from core.pagination import paginate, paginated_data
 from .models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
 from .serializers import (
+    CandidateBulkImportRowSerializer,
     CandidateCreateSerializer,
     CandidateDetailSerializer,
     CandidateEmailSerializer,
@@ -1732,4 +1736,289 @@ class ReferralBonusPayView(APIView):
         return success(
             f'Bonus of ₹{bonus.bonus_amount} marked as paid for {bonus.referrer.full_name}.',
             ReferralBonusSerializer(bonus).data,
+        )
+
+
+# ── Bulk Candidate Import ─────────────────────────────────────────────────────
+
+_IMPORT_COL_MAP = {
+    'full name': 'name',         'full_name': 'name',
+    'candidate name': 'name',    'candidate_name': 'name',     'name': 'name',
+    'email': 'email',            'email address': 'email',     'email_address': 'email',
+    'phone': 'phone',            'mobile': 'phone',            'phone number': 'phone',
+    'mobile number': 'phone',    'phone_number': 'phone',
+    'position': 'position_applied',        'position applied': 'position_applied',
+    'position_applied': 'position_applied', 'job title': 'position_applied',
+    'role': 'position_applied',
+    'branch': 'branch_name',     'branch name': 'branch_name', 'branch_name': 'branch_name',
+    'interview date': 'interview_date',    'interview_date': 'interview_date',
+    'date': 'interview_date',
+    'interview mode': 'interview_mode',    'interview_mode': 'interview_mode',
+    'mode': 'interview_mode',
+    'notes': 'notes',            'remarks': 'notes',           'comments': 'notes',
+}
+
+_MAX_IMPORT_ROWS = 1000
+_MAX_IMPORT_BYTES = 5 * 1024 * 1024  # 5 MB
+_ALLOWED_IMPORT_ROLES = frozenset({'system_admin', 'hr', 'hr_admin'})
+
+
+def _normalize_import_headers(row_dict: dict) -> dict:
+    """Map raw CSV/XLSX column names to the serializer's expected field names."""
+    result = {}
+    for key, value in row_dict.items():
+        mapped = _IMPORT_COL_MAP.get((key or '').strip().lower(), key)
+        if mapped not in result:
+            result[mapped] = value.strip() if isinstance(value, str) else (value or '')
+    return result
+
+
+def _parse_csv_rows(file) -> tuple:
+    """Return (list_of_row_dicts, error_message_or_None)."""
+    try:
+        content = file.read().decode('utf-8-sig')
+        reader  = csv.DictReader(io.StringIO(content))
+        return [dict(row) for row in reader], None
+    except Exception as exc:
+        return [], f'Failed to read CSV file: {exc}'
+
+
+def _xlsx_cell_to_str(value) -> str:
+    """Convert an openpyxl cell value to a plain string.
+
+    Excel date/datetime cells are returned by openpyxl as Python date or
+    datetime objects. Calling str() on them produces "2026-07-15 00:00:00"
+    which fails every DateField format pattern. We normalise them to
+    YYYY-MM-DD so the serializer can parse them without issue.
+    """
+    import datetime as _dt
+    if isinstance(value, _dt.datetime):
+        return value.strftime('%Y-%m-%d')
+    if isinstance(value, _dt.date):
+        return value.strftime('%Y-%m-%d')
+    return str(value).strip() if value is not None else ''
+
+
+def _parse_xlsx_rows(file) -> tuple:
+    """Return (list_of_row_dicts, error_message_or_None)."""
+    try:
+        import openpyxl  # noqa: PLC0415
+    except ImportError:
+        return [], 'Excel support is unavailable on this server. Upload a .csv file instead.'
+    try:
+        wb       = openpyxl.load_workbook(file, read_only=True, data_only=True)
+        ws       = wb.active
+        row_iter = ws.iter_rows(values_only=True)
+        headers  = [str(h).strip() if h is not None else '' for h in next(row_iter, [])]
+        if not any(headers):
+            wb.close()
+            return [], 'The Excel file has no header row.'
+        rows = []
+        for row_values in row_iter:
+            if all(v is None for v in row_values):
+                continue
+            rows.append({
+                headers[i]: _xlsx_cell_to_str(v)
+                for i, v in enumerate(row_values)
+                if i < len(headers)
+            })
+        wb.close()
+        return rows, None
+    except Exception as exc:
+        return [], f'Failed to read Excel file: {exc}'
+
+
+class CandidateBulkImportView(APIView):
+    """POST /api/recruitment/candidates/bulk-import/
+
+    Accepts multipart/form-data with file= (.csv or .xlsx).
+    Validates every row independently and returns a full error report.
+    """
+
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser]
+
+    def post(self, request):
+        role_name = (request.user.role.name if request.user.role else '')
+        if (
+            role_name not in _ALLOWED_IMPORT_ROLES
+            and not getattr(request.user, 'is_superuser', False)
+        ):
+            return error(
+                'Only HR and System Admin users can import candidates.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        upload = request.FILES.get('file')
+        if not upload:
+            return error(
+                'No file provided. Send file= as multipart/form-data.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+        if upload.size > _MAX_IMPORT_BYTES:
+            return error(
+                'File exceeds the 5 MB limit. Split the file and try again.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        fname = upload.name.lower()
+        if fname.endswith('.csv'):
+            rows, parse_err = _parse_csv_rows(upload)
+        elif fname.endswith('.xlsx') or fname.endswith('.xls'):
+            rows, parse_err = _parse_xlsx_rows(upload)
+        else:
+            return error(
+                'Unsupported file type. Upload a .csv or .xlsx file.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if parse_err:
+            return error(parse_err, http_status=status.HTTP_400_BAD_REQUEST)
+        if not rows:
+            return error(
+                'The file contains no data rows.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(rows) > _MAX_IMPORT_ROWS:
+            return error(
+                f'File contains {len(rows)} rows. Maximum allowed per import is '
+                f'{_MAX_IMPORT_ROWS}. Split the file and upload in batches.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Pre-load branch lookup once for the entire batch.
+        from apps.branch.models import Branch
+        branch_map: dict = {}
+        for b in Branch.objects.only('id', 'branch_name', 'branch_code'):
+            branch_map[b.branch_name.strip().lower()] = b
+            if b.branch_code:
+                branch_map[b.branch_code.strip().lower()] = b
+
+        # Pre-load existing emails + phones for DB-level duplicate detection.
+        existing_emails: set = set(Candidate.objects.values_list('email', flat=True))
+        existing_phones: set = set(
+            Candidate.objects
+            .exclude(phone='')
+            .exclude(phone__isnull=True)
+            .values_list('phone', flat=True)
+        )
+
+        # Track values seen in this file for intra-file duplicate detection.
+        seen_emails: set = set()
+        seen_phones: set = set()
+
+        to_create:      list = []
+        to_create_meta: list = []
+        row_errors:     list = []
+        skipped_rows:   list = []
+
+        for i, raw in enumerate(rows, start=2):  # row 1 is the header
+            row = _normalize_import_headers(raw)
+            ser = CandidateBulkImportRowSerializer(data=row)
+
+            if not ser.is_valid():
+                for field, msgs in ser.errors.items():
+                    row_errors.append({
+                        'row':     i,
+                        'field':   field,
+                        'message': msgs[0] if isinstance(msgs, list) else str(msgs),
+                    })
+                continue
+
+            data  = ser.validated_data
+            email = data['email']
+            phone = (data.get('phone') or '').strip()
+
+            # Duplicates are skipped silently — not treated as failures.
+            if email in existing_emails or email in seen_emails:
+                skipped_rows.append({
+                    'row':        i,
+                    'identifier': email,
+                    'reason':     'Already exists',
+                })
+                continue
+
+            if phone and (phone in existing_phones or phone in seen_phones):
+                skipped_rows.append({
+                    'row':        i,
+                    'identifier': email,
+                    'reason':     'Phone number already exists',
+                })
+                continue
+
+            branch     = None
+            branch_raw = (data.get('branch_name') or '').strip()
+            if branch_raw:
+                branch = branch_map.get(branch_raw.lower())
+                if branch is None:
+                    row_errors.append({
+                        'row':        i,
+                        'field':      'branch',
+                        'identifier': email,
+                        'message':    (
+                            f'Branch "{branch_raw}" not found. '
+                            'Use an existing branch name or branch code.'
+                        ),
+                    })
+                    continue
+
+            to_create.append(Candidate(
+                name             = data['name'],
+                email            = email,
+                phone            = phone,
+                position_applied = data['position_applied'],
+                branch           = branch,
+                interview_date   = data.get('interview_date'),
+                interview_mode   = data.get('interview_mode') or '',
+                notes            = data.get('notes') or '',
+                status           = 'pending',
+                added_by         = request.user,
+            ))
+            to_create_meta.append({'row': i, 'identifier': email})
+            seen_emails.add(email)
+            if phone:
+                seen_phones.add(phone)
+
+        created_count = 0
+        created_rows  = []
+        if to_create:
+            with transaction.atomic():
+                Candidate.objects.bulk_create(to_create)
+                created_count = len(to_create)
+                created_rows  = to_create_meta
+
+        total         = len(rows)
+        skipped_count = len(skipped_rows)
+        failed        = len(row_errors)
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'bulk_candidate_import',
+            module     = 'recruitment',
+            changes    = {
+                'total_rows': total,
+                'created':    created_count,
+                'skipped':    skipped_count,
+                'failed':     failed,
+            },
+            ip_address = get_client_ip(request),
+        )
+
+        logger.info(
+            'Bulk import by %s: %d created, %d skipped, %d failed (total %d)',
+            request.user.email, created_count, skipped_count, failed, total,
+        )
+
+        return success(
+            'Bulk import completed.',
+            data={
+                'total_rows':   total,
+                'created':      created_count,
+                'skipped':      skipped_count,
+                'failed':       failed,
+                'created_rows': created_rows,
+                'skipped_rows': skipped_rows,
+                'errors':       row_errors,
+            },
+            http_status=status.HTTP_200_OK if failed == 0 else status.HTTP_207_MULTI_STATUS,
         )
