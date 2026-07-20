@@ -26,12 +26,14 @@ export interface ApprovalUser {
   department: string; designation: string; branch: string;
   role_name: string; role_display: string; employee_id: string;
   onboarding_status: string; date_joined: string;
+  candidate_id?: number | null;
   profile: ProfileData | null;
   documents: OnboardingDocument[];
 }
 
-interface ApiDept  { id: number; name: string; }
-interface ApiDesig { id: number; name: string; department_name: string; }
+interface ApiDept       { id: number; name: string; }
+interface ApiDesig      { id: number; name: string; department_name: string; }
+interface AssessmentOption { id: string; title: string; }
 
 interface Props {
   user:            ApprovalUser;
@@ -39,7 +41,7 @@ interface Props {
   acting:          boolean;
   actionErr:       string | null;
   onRemarksChange: (v: string) => void;
-  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string }) => void;
+  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; assessmentId?: string }) => void;
   onClose:         () => void;
 }
 
@@ -71,8 +73,12 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [selDept,    setSelDept]    = useState(user.department || "");
   const [selDesig,   setSelDesig]   = useState(user.designation || "");
   const [loadDepts,  setLoadDepts]  = useState(false);
-  const [assignErr,  setAssignErr]  = useState("");
-  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
+  const [assignErr,      setAssignErr]      = useState("");
+  const [previewDoc,     setPreviewDoc]     = useState<OnboardingDocument | null>(null);
+  const [showAssessment, setShowAssessment] = useState(false);
+  const [assessments,    setAssessments]    = useState<AssessmentOption[]>([]);
+  const [loadAssess,     setLoadAssess]     = useState(false);
+  const [selAssessment,  setSelAssessment]  = useState("");
 
   // Fetch departments the first time the assign section appears
   useEffect(() => {
@@ -90,6 +96,23 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       .catch(() => setDepts([]))
       .finally(() => setLoadDepts(false));
   }, [showAssign, depts.length]);
+
+  // Fetch assessments when assessment step becomes visible
+  useEffect(() => {
+    if (!showAssessment || assessments.length > 0) return;
+    setLoadAssess(true);
+    clientApi
+      .get<{ data: unknown }>(API.assessments.list, { params: { page_size: 100 } })
+      .then(r => {
+        const raw = r.data?.data;
+        const list: AssessmentOption[] = Array.isArray(raw)
+          ? (raw as AssessmentOption[])
+          : ((raw as { results?: AssessmentOption[] })?.results ?? []);
+        setAssessments(list);
+      })
+      .catch(() => setAssessments([]))
+      .finally(() => setLoadAssess(false));
+  }, [showAssessment, assessments.length]);
 
   // Refresh designations whenever selected department changes
   useEffect(() => {
@@ -117,7 +140,19 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       return;
     }
     setAssignErr("");
+    if (user.candidate_id) {
+      setShowAssessment(true);
+      return;
+    }
     onAction(user.id, "approve", { department: selDept, designation: selDesig });
+  }
+
+  function handleAssessmentConfirm() {
+    onAction(user.id, "approve", {
+      department:   selDept,
+      designation:  selDesig,
+      assessmentId: selAssessment || undefined,
+    });
   }
 
   return (
@@ -268,6 +303,32 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               </div>
             </div>
           )}
+          {/* Step 3 — Assign assessment (only for candidates from recruitment pipeline) */}
+          {showAssessment && (
+            <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: 8, border: "1px solid var(--outline-v)", background: "var(--bg-mid)" }}>
+              <div style={{ fontWeight: 700, fontSize: ".82rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--primary)", marginBottom: ".5rem" }}>
+                <i className="ti ti-clipboard-list" style={{ marginRight: 6 }} />Assign Assessment
+              </div>
+              <p style={{ fontSize: ".82rem", color: "var(--on-variant)", marginBottom: ".75rem", lineHeight: 1.5 }}>
+                This candidate came from the recruitment pipeline. You can assign an assessment for their onboarding period, or leave blank to skip.
+              </p>
+              <div className="field-group">
+                <label className="field-label">Assessment <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(optional)</span></label>
+                {loadAssess ? (
+                  <div style={{ fontSize: ".85rem", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> Loading…</div>
+                ) : (
+                  <select
+                    className="field-input field-select"
+                    value={selAssessment}
+                    onChange={e => setSelAssessment(e.target.value)}
+                  >
+                    <option value="">— No assessment —</option>
+                    {assessments.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="modal-footer">
@@ -280,11 +341,20 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
             {acting ? "…" : "Send Back for Corrections"}
           </button>
 
-          {showAssign ? (
-            <button className="btn btn-filled" onClick={handleConfirm} disabled={acting}>
+          {showAssessment ? (
+            <button className="btn btn-filled" onClick={handleAssessmentConfirm} disabled={acting || loadAssess}>
               {acting
                 ? <><i className="ti ti-loader-2 spin" /> Activating…</>
                 : <><i className="ti ti-check" /> Confirm & Activate</>
+              }
+            </button>
+          ) : showAssign ? (
+            <button className="btn btn-filled" onClick={handleConfirm} disabled={acting}>
+              {acting
+                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
+                : user.candidate_id
+                  ? <><i className="ti ti-arrow-right" /> Continue</>
+                  : <><i className="ti ti-check" /> Confirm & Activate</>
               }
             </button>
           ) : (

@@ -503,7 +503,11 @@ export default function EmployeeProfilePage({
           employeeCode={id}
           branch={values.branch ?? ""}
           defaultManagerId={values.reportingManagerId ?? ""}
+          defaultManagerName={values.reportingManager ?? ""}
           defaultHrId={values.hrId ?? ""}
+          defaultHrName={values.hr ?? ""}
+          onManagerChanged={(id, name) => setValues(v => ({ ...v, reportingManager: name, reportingManagerId: id }))}
+          onHrChanged={(id, name) => setValues(v => ({ ...v, hr: name, hrId: id }))}
         />
       ) : tab === "wishes" ? (
         <WishesTab

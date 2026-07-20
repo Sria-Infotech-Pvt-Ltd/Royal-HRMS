@@ -80,7 +80,7 @@ export default function ChangePasswordForm() {
         </div>
       </div>
 
-      <button type="submit" className="btn btn-filled w-full" disabled={loading} suppressHydrationWarning>
+      <button type="submit" className="btn btn-filled w-full" style={{ marginTop: 8 }} disabled={loading} suppressHydrationWarning>
         {loading
           ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Updating…</>
           : <><i className="ti ti-lock" /> Update password</>
