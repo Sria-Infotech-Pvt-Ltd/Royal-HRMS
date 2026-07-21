@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,12 @@ export default function CreditTab() {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!form.leave_type.trim())                  e.leave_type   = "Leave type is required.";
+    const leaveType = form.leave_type.trim();
+    if (!leaveType) e.leave_type = "Leave type is required.";
+    else if (!LEAVE_NAME_RE.test(leaveType)) e.leave_type = "Leave type can only contain letters, spaces, and hyphens — no numbers or special characters.";
+    else if (rules.some(r => r.leave_type.trim().toLowerCase() === leaveType.toLowerCase() && r.id !== editing?.id)) {
+      e.leave_type = `A credit rule for "${leaveType}" already exists.`;
+    }
     if (form.accrual_days <= 0)                   e.accrual_days = "Must be greater than 0.";
     if (form.max_balance < 1)                     e.max_balance  = "Max balance must be at least 1.";
     if (form.encashable && form.encash_limit < 1) e.encash_limit = "Encash limit must be at least 1.";
@@ -232,7 +238,7 @@ export default function CreditTab() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
                 <div className="field-group mb-16" style={{ gridColumn: "1 / -1" }}>
                   <label className="field-label">Leave Type *</label>
-                  <input className={`field-input${errors.leave_type ? " field-error" : ""}`} value={form.leave_type} onChange={e => field("leave_type", e.target.value)} placeholder="e.g. Earned Leave" autoFocus />
+                  <input className={`field-input${errors.leave_type ? " field-error" : ""}`} value={form.leave_type} onChange={e => field("leave_type", sanitizeLeaveName(e.target.value))} placeholder="e.g. Earned Leave" autoFocus />
                   {errors.leave_type && <p className="field-error-msg">{errors.leave_type}</p>}
                 </div>
                 <div className="field-group mb-16">

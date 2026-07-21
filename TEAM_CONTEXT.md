@@ -2133,3 +2133,84 @@ backend/apps/accounts/views.py
 - Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave approved
 - Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-21
+**Author: Swetha**
+
+Full-stack validation and bug-fix pass across Add Candidate, Leave Policy settings, and Holiday Calendar — reported as three separate bug lists, fixed backend + frontend together for each.
+
+### 1. Add Candidate — Field Validation
+
+**Reported:** Full Name accepted numbers; Position Applied accepted numbers/special characters; Phone accepted unlimited length plus letters/symbols; Interview Date accepted past dates.
+
+**Backend** (`backend/apps/recruitment/serializers.py`):
+- `_NAME_RE`, `_POSITION_RE` added; tightened `_PHONE_RE` to `^\+?[0-9]{10,15}$` (digits only, optional leading `+`)
+- Applied to both `CandidateCreateSerializer` (covers Add Candidate **and** the Refer & Earn submit path — same serializer) and `CandidateUpdateSerializer` (edit path had the identical bug)
+- `validate_interview_date()` added to both — rejects any date before `timezone.localdate()` (IST-aware, matches project convention)
+- Bulk CSV import serializer left untouched — imports legitimately carry historical dates
+
+**Frontend:**
+- New shared `lib/candidateValidation.ts` — `NAME_RE`, `POSITION_RE`, `PHONE_RE`, `sanitizeName/Position/Phone`, `todayDateString()` (mirrors backend regexes exactly)
+- `app/dashboard/interview-list/AddCandidateModal.tsx` — inputs sanitize on keystroke (bad chars never land in the field), `handleSave()` re-validates before the API call, date input gets `min={today}`
+- `app/dashboard/interview-list/EditCandidateModal.tsx` — same treatment for Name/Position/Interview Date (no phone field here); past-date check only fires when the date is actually *changed* — resaving a candidate with an already-past interview date (interview already happened) must not be blocked
+
+### 2. Leave Policy Settings (`/dashboard/settings/leave-policy`)
+
+**Reported:** Add Leave Type → Display Name accepted numbers/symbols; no delete/deactivate option on leave types; Max Carry Fwd behaved oddly; Add Credit Rule → Leave Type field accepted numbers/symbols and duplicate leave types.
+
+**Backend** (`backend/apps/hrms/serializers.py`):
+- `_LEAVE_NAME_RE` + `validate_leave_type_label()` on `LeavePolicyCreateSerializer` — letters/spaces/hyphens only
+- `LeavePolicyCreateSerializer.validate()` / `LeavePolicyUpdateSerializer.validate()` — when `can_carry_forward` is off, `max_carry_forward_days` is force-reset to 0 server-side (was silently keeping a stale disabled-field value); when on, must be ≥ 1
+- **Correction made mid-fix:** initially also capped `max_carry_forward_days` at `annual_days`, but the real `earned` leave policy already has `annual_days: 15` / `max_carry_forward_days: 30` (multi-year rollover cap, not a per-year figure) — that check would have broken saving existing data, confirmed against the live DB row and reverted
+- Delete (`DELETE /api/leave/policy/<leave_type>/`) and deactivate (`is_active` via PUT/PATCH) already existed server-side — the 6 built-in types were already delete-protected. No backend gap here, only frontend was missing the buttons
+
+**Frontend:**
+- New shared `lib/leaveValidation.ts` — `LEAVE_NAME_RE` / `sanitizeLeaveName`, used by both tabs below
+- `PolicyTab.tsx` — Display Name sanitizes/validates; Actions column gained a working Deactivate/Activate toggle (`ti-toggle-left/right`, same icon convention as `settings/permissions/page.tsx`) and a Delete button (disabled + tooltipped for the 6 built-in types via a local `BUILTIN_TYPES` set mirroring the backend's `_BUILTIN`); unchecking "Allow Carry Forward" now auto-resets Max Carry Fwd to 0 in both Edit and Create forms instead of leaving a stale disabled value
+- `CreditTab.tsx` — Leave Type field now sanitizes/validates the same way; duplicate leave types (case-insensitive, excluding the row being edited) now rejected client-side
+- **Note:** Credit Rules has no backend API yet — `CreditTab.tsx` is local mock state only (`SEED` array, `setTimeout` fake save), labelled "Automation coming soon" in the UI. Issues 4/5 there were necessarily frontend-only fixes; a real backend for Credit Rules is still unbuilt
+
+### 3. Holiday Calendar
+
+**Reported:** Add Holiday name field accepted numbers/symbols; same holiday name accepted with different dates; holiday name not shown on employee calendar; system admin not seeing branch-wise holidays in the system calendar or the holiday list.
+
+**Backend:**
+- `backend/apps/hrms/serializers.py` — `_HOLIDAY_NAME_RE` + `validate_name()` on `HolidayCreateSerializer` (letters/spaces/apostrophe/period/hyphen, must contain a letter); `validate()` blocks creating/renaming a holiday to a name that already exists in the same year for the same branch scope — **but skips the check entirely when editing without touching name/date/branch**, because the live DB already had 3 duplicate "Bonalu" rows for branch 10 (2026-07-23 / 07-30 / 08-19) predating this fix; without the skip, any future edit to those rows (even an unrelated field) would falsely reject as a duplicate against its own siblings
+- `backend/apps/hrms/views/holidays.py` — root cause of the two "branch holidays missing for system admin" reports: `HolidayListCreateView.get()` fell back to `qs.filter(branch__isnull=True)` (or the admin's own mismatched `.branch` string) whenever no `?branch=` param was sent. Added `_is_unrestricted(user)` (same pattern as `apps/attendance/views/hr_attendance.py`) so `system_admin`/superuser see every branch's holidays by default. Verified directly against the live `sysadmin@royal.com` account — before the fix they saw only the 1 company-wide holiday; after, all 5 (4 branch + 1 company-wide)
+- `backend/apps/attendance/services_attendance.py` + `serializers_my_attendance.py` — the attendance calendar only ever stored the literal string `"Holiday"` per day, never the actual holiday's name. Added `_holiday_name()` (used when building the `AttendanceRecord.note` for a holiday day) and `_holiday_names()` (used by `get_calendar()`, backed by the existing `HolidayCacheService.get_holidays_with_names`); new `holiday_name` field added to each calendar day and to `DayRecordSerializer`
+
+**Frontend:**
+- `app/dashboard/my-attendance/_components/AttendanceCalendar.tsx` — now renders the specific holiday name under the day cell when `status === "Holiday"`. Confirmed this is the live, wired-up employee calendar (`my-attendance/page.tsx` → `CalendarAndHistory` → `AttendanceCalendar`) — `/dashboard/my-calendar` and `_components/MyCalendarTab.tsx` are dead/mock-data code with zero real importers, left untouched
+- `types/attendance.ts` — `holiday_name?: string | null` added to `DayRecord`
+- `app/dashboard/settings/holiday-calendar/_components/HolidayFormModal.tsx` — Holiday Name field sanitizes/validates, mirroring the backend regex
+- Issues 4/5 needed **no** frontend change — `holiday-calendar/page.tsx` already calls the same `/leave/holidays/` endpoint and filters branch client-side; once the backend stopped hiding branch-specific rows, both the List and Calendar views picked them up automatically
+
+### Files Changed (2026-07-21)
+
+```
+backend/apps/recruitment/serializers.py       — name/position/phone regex, interview_date past-block
+backend/apps/hrms/serializers.py              — leave type label regex, carry-forward reset,
+                                                 holiday name regex + duplicate-name check
+backend/apps/hrms/views/holidays.py           — _is_unrestricted() branch-visibility fix
+backend/apps/attendance/services_attendance.py — _holiday_name(), _holiday_names(), holiday_name field
+backend/apps/attendance/serializers_my_attendance.py — DayRecordSerializer.holiday_name
+
+frontend/lib/candidateValidation.ts   (NEW)
+frontend/lib/leaveValidation.ts       (NEW)
+frontend/app/dashboard/interview-list/AddCandidateModal.tsx
+frontend/app/dashboard/interview-list/EditCandidateModal.tsx
+frontend/app/dashboard/settings/leave-policy/_components/PolicyTab.tsx
+frontend/app/dashboard/settings/leave-policy/_components/CreditTab.tsx
+frontend/app/dashboard/settings/holiday-calendar/_components/HolidayFormModal.tsx
+frontend/app/dashboard/my-attendance/_components/AttendanceCalendar.tsx
+frontend/types/attendance.ts
+```
+
+All backend changes verified by direct invocation against the real database (not just synthetic payloads) — including catching and reverting the annual-days carry-forward cap before it could ship and break the existing `earned` leave policy. `npx tsc --noEmit` clean after every frontend batch.
+
+### Pending
+
+- Credit Rules module still has no backend (`GET/POST/PUT/DELETE /api/leave/credit-rules/` or similar) — `CreditTab.tsx` is mock state only
+- Everything listed as Pending in the 2026-07-20 (Part 2) entry above is still outstanding

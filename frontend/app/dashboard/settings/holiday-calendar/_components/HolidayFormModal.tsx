@@ -8,6 +8,15 @@ import type { Holiday, HolidayFormPayload, HolidayType } from "@/types/holidays"
 
 interface BranchOption { id: number; branch_name: string }
 
+// Mirrors _HOLIDAY_NAME_RE enforced server-side in backend/apps/hrms/serializers.py
+// (HolidayCreateSerializer.validate_name) — letters, spaces, apostrophes, periods,
+// hyphens, and at least one letter (rejects "12345" or "@#$%^&*").
+const HOLIDAY_NAME_RE = /^(?=.*[A-Za-z])[A-Za-z .'-]+$/;
+
+function sanitizeHolidayName(value: string): string {
+  return value.replace(/[^A-Za-z .'-]/g, "");
+}
+
 interface Props {
   mode:     "add" | "edit";
   editing:  Holiday | null;
@@ -45,8 +54,10 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
 
   function validate() {
     const e: Record<string, string> = {};
-    if (!form.name.trim()) e.name = "Holiday name is required.";
-    if (!form.date)        e.date = "Date is required.";
+    const name = form.name.trim();
+    if (!name) e.name = "Holiday name is required.";
+    else if (!HOLIDAY_NAME_RE.test(name)) e.name = "Holiday name can only contain letters, spaces, apostrophes, periods, and hyphens — not just numbers or symbols.";
+    if (!form.date) e.date = "Date is required.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -90,7 +101,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Holiday Name *</label>
             <input className={errors.name ? INPUT_ERR : INPUT} value={form.name}
-              onChange={e => setField("name", e.target.value)} placeholder="e.g. Independence Day" autoFocus maxLength={80} />
+              onChange={e => setField("name", sanitizeHolidayName(e.target.value))} placeholder="e.g. Independence Day" autoFocus maxLength={80} />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">

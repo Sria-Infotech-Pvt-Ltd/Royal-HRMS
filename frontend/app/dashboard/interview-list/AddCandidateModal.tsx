@@ -3,12 +3,18 @@
 import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import {
+  NAME_RE, POSITION_RE, PHONE_RE,
+  sanitizeName, sanitizePosition, sanitizePhone, todayDateString,
+} from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
 
 interface Props {
   onClose: () => void;
   onSaved: (c: Candidate) => void;
 }
+
+const todayStr = todayDateString();
 
 export function AddCandidateModal({ onClose, onSaved }: Props) {
   const [form, setForm] = useState<{
@@ -37,8 +43,26 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
   }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.email.trim() || !form.position_applied.trim()) {
+    const name = form.name.trim();
+    const positionApplied = form.position_applied.trim();
+    if (!name || !form.email.trim() || !positionApplied) {
       setError("Name, email and position are required.");
+      return;
+    }
+    if (!NAME_RE.test(name)) {
+      setError("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.");
+      return;
+    }
+    if (!POSITION_RE.test(positionApplied)) {
+      setError("Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.");
+      return;
+    }
+    if (form.phone.trim() && !PHONE_RE.test(form.phone.trim())) {
+      setError("Enter a valid phone number (10 to 15 digits, optionally starting with +).");
+      return;
+    }
+    if (form.interview_date && form.interview_date < todayStr) {
+      setError("Interview date cannot be in the past.");
       return;
     }
     if (!form.branch) {
@@ -74,7 +98,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Full Name *</label>
-              <input className="field-input" placeholder="e.g. Anjali Sharma" value={form.name} onChange={e => set("name", e.target.value)} />
+              <input className="field-input" placeholder="e.g. Anjali Sharma" value={form.name} onChange={e => set("name", sanitizeName(e.target.value))} />
             </div>
             <div className="field-group">
               <label className="field-label">Email Address *</label>
@@ -85,11 +109,11 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Position Applied *</label>
-              <input className="field-input" placeholder="e.g. Backend Engineer" value={form.position_applied} onChange={e => set("position_applied", e.target.value)} />
+              <input className="field-input" placeholder="e.g. Backend Engineer" value={form.position_applied} onChange={e => set("position_applied", sanitizePosition(e.target.value))} />
             </div>
             <div className="field-group">
               <label className="field-label">Phone</label>
-              <input className="field-input" placeholder="+91 98765 43210" value={form.phone} onChange={e => set("phone", e.target.value)} />
+              <input className="field-input" placeholder="+91 98765 43210" value={form.phone} onChange={e => set("phone", sanitizePhone(e.target.value))} />
             </div>
           </div>
 
@@ -113,7 +137,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Interview Date</label>
-              <input className="field-input" type="date" value={form.interview_date} onChange={e => set("interview_date", e.target.value)} />
+              <input className="field-input" type="date" min={todayStr} value={form.interview_date} onChange={e => set("interview_date", e.target.value)} />
             </div>
             <div className="field-group">
               <label className="field-label">Interview Mode</label>

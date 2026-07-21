@@ -1,11 +1,14 @@
 import re
 from datetime import date
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
 
-_PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+_PHONE_RE    = re.compile(r'^\+?[0-9]{10,15}$')
+_NAME_RE     = re.compile(r"^[A-Za-z][A-Za-z .'-]*$")
+_POSITION_RE = re.compile(r"^[A-Za-z][A-Za-z .&/-]*$")
 
 
 class CandidateLogSerializer(serializers.ModelSerializer):
@@ -95,6 +98,10 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Candidate name is required.')
         if len(value) > 200:
             raise serializers.ValidationError('Candidate name must be 200 characters or fewer.')
+        if not _NAME_RE.match(value):
+            raise serializers.ValidationError(
+                'Candidate name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.'
+            )
         return value
 
     def validate_email(self, value: str) -> str:
@@ -107,11 +114,10 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
         if not value:
             return value
         value = value.strip()
-        if len(value) > 20:
-            raise serializers.ValidationError('Phone number must be 20 characters or fewer.')
         if not _PHONE_RE.match(value):
             raise serializers.ValidationError(
-                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
+                'Enter a valid phone number (10 to 15 digits, optionally starting with +). '
+                'Letters and special characters are not allowed.'
             )
         return value
 
@@ -121,6 +127,10 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Position applied is required.')
         if len(value) > 200:
             raise serializers.ValidationError('Position applied must be 200 characters or fewer.')
+        if not _POSITION_RE.match(value):
+            raise serializers.ValidationError(
+                'Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.'
+            )
         return value
 
     def validate_interview_mode(self, value: str) -> str:
@@ -129,6 +139,11 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'Interview mode must be one of: {", ".join(valid_modes)}.'
             )
+        return value
+
+    def validate_interview_date(self, value):
+        if value and value < timezone.localdate():
+            raise serializers.ValidationError('Interview date cannot be in the past.')
         return value
 
     def validate_notes(self, value: str) -> str:
@@ -302,17 +317,20 @@ class CandidateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Candidate name is required.')
         if len(value) > 200:
             raise serializers.ValidationError('Candidate name must be 200 characters or fewer.')
+        if not _NAME_RE.match(value):
+            raise serializers.ValidationError(
+                'Candidate name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.'
+            )
         return value
 
     def validate_phone(self, value: str) -> str:
         if not value:
             return value
         value = value.strip()
-        if len(value) > 20:
-            raise serializers.ValidationError('Phone number must be 20 characters or fewer.')
         if not _PHONE_RE.match(value):
             raise serializers.ValidationError(
-                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
+                'Enter a valid phone number (10 to 15 digits, optionally starting with +). '
+                'Letters and special characters are not allowed.'
             )
         return value
 
@@ -322,6 +340,10 @@ class CandidateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Position applied is required.')
         if len(value) > 200:
             raise serializers.ValidationError('Position applied must be 200 characters or fewer.')
+        if not _POSITION_RE.match(value):
+            raise serializers.ValidationError(
+                'Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.'
+            )
         return value
 
     def validate_interview_mode(self, value: str) -> str:
@@ -332,6 +354,11 @@ class CandidateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'Interview mode must be one of: {", ".join(valid_modes)}.'
             )
+        return value
+
+    def validate_interview_date(self, value):
+        if value and value < timezone.localdate():
+            raise serializers.ValidationError('Interview date cannot be in the past.')
         return value
 
     def validate_notes(self, value: str) -> str:

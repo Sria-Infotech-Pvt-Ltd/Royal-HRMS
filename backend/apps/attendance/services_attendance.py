@@ -286,7 +286,7 @@ class AttendanceProcessorService:
                 'overtime_minutes':      0,
                 'is_late':               False,
                 'is_early_exit':         False,
-                'note':                  'Holiday',
+                'note':                  cls._holiday_name(for_date, branch_name),
             }
         # Weekly off with no punches → mark weekly_off, not absent
         elif not punches and cls._is_weekly_off(for_date, cfg):
@@ -321,6 +321,13 @@ class AttendanceProcessorService:
         else:
             qs = qs.filter(branch__isnull=True)
         return qs.exists()
+
+    @staticmethod
+    def _holiday_name(for_date: date, branch_name: str = '') -> str:
+        """Returns the specific holiday's name for for_date, falling back to 'Holiday'."""
+        from core.cache_service import HolidayCacheService
+        holidays = HolidayCacheService.get_holidays_with_names(for_date, for_date, branch_name)
+        return holidays[0]['name'] if holidays else 'Holiday'
 
     @staticmethod
     def _is_weekly_off(for_date: date, cfg) -> bool:
@@ -604,7 +611,8 @@ class AttendanceDashboardService:
         branch_name   = getattr(employee, 'branch', '') or ''
         records       = {r.date: r for r in cls._month_records(employee, year, month)}
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
-        holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
+        holiday_names = cls._holiday_names(month_start, month_end, branch_name)
+        holiday_dates = set(holiday_names.keys())
         off_days      = cls._weekly_off_days()
         pending_dates = cls._pending_correction_dates(employee, year, month)
 
@@ -612,7 +620,7 @@ class AttendanceDashboardService:
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
                 day_num, year, month, records, leave_dates, off_days,
-                pending_dates, today, holiday_dates,
+                pending_dates, today, holiday_dates, holiday_names,
             )
             if entry is not None:
                 days[day_num] = entry
@@ -708,17 +716,26 @@ class AttendanceDashboardService:
         return HolidayCacheService.get_holiday_dates(month_start, month_end, branch_name)
 
     @staticmethod
+    def _holiday_names(month_start: date, month_end: date, branch_name: str = '') -> dict:
+        """Returns {date: holiday name} for the range — lets the calendar show which holiday it is."""
+        from core.cache_service import HolidayCacheService
+        holidays = HolidayCacheService.get_holidays_with_names(month_start, month_end, branch_name)
+        return {h['date']: h['name'] for h in holidays}
+
+    @staticmethod
     def _build_day(
         day_num: int, year: int, month: int,
         records: dict, leave_dates: set, off_days: set,
         pending_dates: set, today: date,
         holiday_dates: set = None,
+        holiday_names: dict = None,
     ) -> dict | None:
         """Builds the response dict for one calendar day; returns None for blank future days."""
         cur           = date(year, month, day_num)
         day           = cur.strftime('%A').lower()
         rec           = records.get(cur)
         holiday_dates = holiday_dates or set()
+        holiday_names = holiday_names or {}
 
         if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
             key = AttendanceRecord.STATUS_HOLIDAY
@@ -742,6 +759,9 @@ class AttendanceDashboardService:
             and cur not in pending_dates
         )
         label = 'Missing Clock Out' if reg_required else AttendanceRecord.STATUS_DISPLAY_MAP.get(key, key)
+        holiday_name = None
+        if key == AttendanceRecord.STATUS_HOLIDAY:
+            holiday_name = holiday_names.get(cur) or (rec.note if rec and rec.note else 'Holiday')
         return {
             'date':                    cur.strftime('%Y-%m-%d'),
             'status':                  label,
@@ -751,6 +771,7 @@ class AttendanceDashboardService:
             'hours':                   (rec.total_hours_display
                                         if rec and rec.total_working_minutes else None),
             'note':                    rec.note if rec else None,
+            'holiday_name':            holiday_name,
             'canRegularize':           can_reg,
             'regularization_required': reg_required,
         }
