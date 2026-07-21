@@ -2502,17 +2502,11 @@ class EmployeeListCreateView(APIView):
         try:
             from apps.accounts.utils import (
                 _get_smtp_connection, _build_message, _company_email_wrapper,
+                _get_company_branding,
             )
 
-            company      = Company.objects.first()
-            company_name = company.company_name if company else 'Royal HRMS'
-            logo_url     = company.logo.url if (company and company.logo) else ''
-            website      = company.website  if company else ''
-            address      = ', '.join(p for p in [
-                getattr(company, 'address', ''),
-                getattr(company, 'city',    ''),
-                getattr(company, 'state',   ''),
-            ] if p) if company else ''
+            company_name, logo_url, website, address = _get_company_branding()
+            company_name = company_name or 'Royal HRMS'
 
             body = (
                 f'<p>Hi <strong>{full_name}</strong>,</p>'
