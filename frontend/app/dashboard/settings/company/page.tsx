@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import FinancialYearSection from "./_components/FinancialYearSection";
 
 // ─── Indian states / UTs ──────────────────────────────────────────────────────
 
@@ -271,6 +272,9 @@ export default function CompanyInfoPage() {
           Last saved: {new Date(savedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
         </div>
       )}
+
+      {/* ── Financial Year Configuration (saved independently of the form below) ── */}
+      <FinancialYearSection />
 
       {/* ── Section 1: Branding ─────────────────────────────────────────── */}
       <div className="card mb-24">

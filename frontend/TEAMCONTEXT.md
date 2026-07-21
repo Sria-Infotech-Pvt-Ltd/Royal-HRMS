@@ -2581,3 +2581,125 @@ New `types/employeeBulkImport.ts` holds `EmployeeBulkImportCreatedRow`/`SkippedR
 - **The two bulk-import endpoints use two different envelope conventions** (`{success: bool}` for candidates vs `{status: "success"|"error"}` for employees) — both implemented as specified, not reconciled. Worth a backend-side decision on which is canonical.
 - **`EditCandidateModal.tsx`'s old inline-overlay pattern may exist elsewhere** — it was written before `.modal-overlay` became the established convention. Worth a quick repo-wide check for any other modal still using a raw inline-styled backdrop instead of the shared class, since it silently breaks both blur and z-index stacking against the sidebar.
 - **Employee Bulk Import's error/skipped rows key on email (`identifier`), not a stable ID** — fine for display, but if two rows in the same file share an email (which would itself be a validation error) there's nothing else to disambiguate them client-side; not an issue in practice since duplicate emails are rejected by the backend.
+
+---
+
+## Session — Rithwika (21 July 2026)
+
+**Branch:** `Frontend/21-07`
+
+---
+
+### 1. Carry Forward Leave — New Tab in Settings → Leave Policy
+
+**Files:** `lib/api/endpoints.ts`, `types/leave.ts` (new), `app/dashboard/settings/leave-policy/_components/CarryForwardTab.tsx` (new), `CarryForwardPreviewTable.tsx` (new), `CarryForwardHistoryTable.tsx` (new), `CarryForwardRunModal.tsx` (new), `app/dashboard/settings/leave-policy/page.tsx`
+
+Built the year-range → preview → run → history execution flow for carrying forward unused leave balances into the next year, as its own **"Carry Forward"** tab alongside the existing Leave Types / Leave Policy / Credit Rules tabs — placed there per explicit instruction rather than as a standalone `/dashboard/leave/carry-forward` route, so no `proxy.ts` change was needed (the whole settings/leave-policy route is already gated by `settings.view`).
+
+Added `leave.carryForward.{years,preview,run,history}` to `endpoints.ts` and all 7 request/response interfaces to a new `types/leave.ts` (this repo's leave types otherwise live in `app/dashboard/leave/_data.ts` — deliberately did **not** follow that precedent here, since `types/leave.ts` is what `CLAUDE.md` actually specifies and there was no existing file to be consistent with yet).
+
+- **`CarryForwardTab.tsx`** — From/To year selects (To Year filtered to only years greater than From Year), Preview and Run Carry Forward actions, both disabled while any request is in flight.
+- **`CarryForwardPreviewTable.tsx`** — stat chips (Total / To Process / Already Done) + row table, already-processed rows dimmed, empty state when `total_rows === 0`.
+- **`CarryForwardRunModal.tsx`** — confirmation dialog quoting `pending_count` from the last matching preview (or a generic message if the user runs without previewing first — explicitly allowed, not required to preview first).
+- **`CarryForwardHistoryTable.tsx`** — paginated audit log of past runs, always visible below the preview section.
+
+Error handling matches the given contract exactly: preview 400 → inline error below the selector; run 409 (duplicate period) → **dismissable warning banner**, not a toast, and the Run button stays enabled afterward (per instruction, so the user can pick a different year range); run 400 → inline; any other failure → generic toast.
+
+Role gate: visible only to `system_admin` / `hr_admin` / `hr`, checked client-side via `useCurrentUser()` inside the tab component itself (in addition to the page's existing `settings.view` route gate, which is broader).
+
+> **Frontend only, as instructed.** All four endpoints (`/leave/carry-forward/{years,preview,run,history}/`) are frontend-ready but not confirmed against a running backend.
+
+---
+
+### 2. Carry Forward Settings — Per-Policy Config Section (Leave Policy Edit Form)
+
+**Files:** `types/leave.ts`, `app/dashboard/settings/leave-policy/_components/LeavePoliciesTab.tsx`, `CarryForwardSettingsSection.tsx` (new)
+
+A second, related but distinct feature: **not** the execution tab above — this is the per-leave-type configuration (`can_carry_forward`, `carry_forward_type`, `max_carry_forward_days`, `carry_forward_mode`, `carry_forward_expiry_days`) that controls *how* carry-forward behaves for one leave type, added as a new "Carry Forward Settings" section inside the existing rules editor on the **Leave Policy** tab (`LeavePoliciesTab.tsx`), not the Leave Types tab.
+
+> **Reverted an earlier placement.** First pass added these 3 fields directly to `PolicyTab.tsx`'s (Leave Types tab) edit/create modals, since that tab already owned the pre-existing `can_carry_forward`/`max_carry_forward_days` fields. A follow-up spec explicitly redirected this to the Leave Policy tab instead — reverted `PolicyTab.tsx` back to its original shape entirely and rebuilt the section on `LeavePoliciesTab.tsx`, since duplicating the same 5 fields as independently-saved controls in two tabs would let one silently stomp on the other.
+
+`CarryForwardSettingsSection.tsx` — Enabled toggle (reusing the existing `ToggleRow` from `LeavePoliciesTab.tsx`), Type/Mode as radio cards (same bordered/highlighted-on-active visual pattern already used for the SMTP type picker in `SmtpModal.tsx`, not invented fresh), Max Days input (hidden but not cleared when switching to Unlimited, so the value is restored if the admin switches back), and a Never/Expire-After radio pair for expiry (`carry_forward_expiry_days`), with its own "which radio is selected" state kept separate from the numeric value since both can legitimately be `0` mid-edit.
+
+**Save behaviour:** one "Save Policy" button fires two requests in sequence — the existing `PUT` for the rule fields, then a `PATCH` with exactly the 5 carry-forward fields. Client-side validation (max days required when Limited; days required when "Expire After" is selected) blocks the request before either call fires. A 403 on the PATCH half shows a toast; a 400 shows inline under the new section specifically (not conflated with the rules-PUT's own error path).
+
+Extended `types/leave.ts` with `CarryForwardType`, `CarryForwardMode`, `LeavePolicyCarryForwardSettings` — but did **not** add a fourth parallel `LeavePolicy` interface there even though the given spec snippet showed one; this repo already has three separate local `LeavePolicy` shapes (`_data.ts`, `LeavePoliciesTab.tsx`, `PolicyTab.tsx`) for different subsets of fields, and a fourth in `types/leave.ts` would never actually get imported by anything. Extended the one `LeavePoliciesTab.tsx` already owns instead.
+
+---
+
+### 3. Financial Year Configuration — Settings → Company
+
+**Files:** `lib/fiscalYear.ts` (new), `types/company.ts` (new), `lib/api/endpoints.ts`, `app/dashboard/settings/company/page.tsx`, `app/dashboard/settings/company/_components/FinancialYearSection.tsx` (new), plus every consumer listed below
+
+Single org-wide "which year is it" configuration, so Leave Allocation / Carry Forward / Attendance / Payroll / Reports stop each independently assuming a January–December calendar year.
+
+**First pass was frontend-only** (explicit instruction) — `fiscal_year_start_month` (1–12) stored in `localStorage`, a `useFiscalYearConfig()` hook computing `currentYear`/`previousYear`/`nextYear` client-side, reactive across tabs via a custom event + `storage` listener. Flagged clearly at the time that this is per-browser, not a real org-wide setting, since the `Company` model has no field for it.
+
+**Superseded same day** once the real backend contract arrived (`GET`/`PUT /settings/company/financial-year/`, `system_admin`-only write, pre-formatted `"FY 2026-27"` style labels computed server-side). Rewrote `lib/fiscalYear.ts` to drop `localStorage` entirely and fetch via the standard `useFetch` hook instead — kept the hook's public shape (`currentYear`/`previousYear`/`nextYear` as plain numbers, parsed out of the backend's label strings with a small regex) unchanged, so **none of the already-wired consumer files needed to change again** when the backend-backed version replaced the localStorage version.
+
+`FinancialYearSection.tsx` — GET is visible to any authenticated user (read-only preview chips render the backend's labels verbatim, per its own "no need to recalculate on the frontend" note); the month-picker + Save form only renders when `user.role === "system_admin"` specifically (checked via `useCurrentUser()`), independent of the page's general `settings.edit` permission gate, since the backend enforces that exact role and nothing looser.
+
+**Wired to `currentYear`** (all previously did `new Date().getFullYear()` independently): `CreditTab.tsx` (Leave Allocation credit year), `LeaveDashboard.tsx`, `LeaveAnalytics.tsx`, `ApplyLeaveForm.tsx`, `EmpLeaveBalances.tsx`, `useEmployeeLeave.ts`. The last two (and `CreditTab.tsx`) have their own year-navigation UI, so each seeds from `fy.currentYear` once and then stops re-syncing the moment the user picks a different year themselves — same "seed once, don't fight a manual edit" pattern already used elsewhere in this codebase (e.g. `LeavePoliciesTab.tsx`'s `selectedType` default).
+
+> **Deliberately not wired:** Attendance's and Payroll's `year`/`month` fields are calendar-month selectors (attendance calendars, payroll cycle month pickers), not "which year of annual data" — forcing them onto the FY label would actually break their defaults (e.g. a payroll cycle for "Feb 2026" defaulting its year field to "2025" just because FY2025 is still open). `useFiscalYearConfig()` is exported and ready whenever either module adds a genuine annual view. Reports has no year selector in the frontend today.
+
+---
+
+### 4. Bulk Import — "Download Sample File"
+
+**Files:** `lib/csv.ts` (new), `lib/downloadFile.ts` (new), `lib/clientApi.ts`, `lib/api/endpoints.ts`, `app/dashboard/employees/_components/BulkImportModal.tsx`, `app/dashboard/interview-list/CandidateBulkImportModal.tsx`, `app/dashboard/attendance/_components/ImportModal.tsx`
+
+Reported gap: none of the three existing bulk-import modals (Employees, Interview List, Attendance — all built in the 20 July session) had a way to actually see the expected file format beyond a bullet list of column names.
+
+**First pass** generated the sample file entirely client-side — `lib/csv.ts` (`buildCsv`/`downloadCsv`, extracted from the CSV-escaping logic that already existed, duplicated, inside `BulkImportModal.tsx`'s error-report download) plus one hardcoded example row per module, with column names cross-checked against the actual backend parsers (`accounts/views.py`'s `_EMP_IMPORT_COL_MAP`, `recruitment/views.py`'s `_IMPORT_COL_MAP`, `attendance/serializers_hr.py`) rather than guessed from the modals' own instructional text.
+
+**Superseded same day** once real backend endpoints shipped (`GET .../bulk-import/sample/?format=csv|xlsx` for employees/candidates, `GET /attendance/import/sample/?format=` for attendance — each returning an actual file, not JSON). Replaced the client-generated CSV with real calls via a new shared `lib/downloadFile.ts` (`downloadBlobFile(url, params, filename)` — the same `clientApi.get(url, { responseType: "blob" })` pattern `AttendanceTab.tsx`'s "Export CSV" already used, factored out now that three more call sites need it). Each modal now shows two buttons ("Sample CSV" / "Sample XLSX") since the backend supports both formats; `lib/csv.ts` is still used, just for the employee bulk-import's error-report download, which remains client-generated.
+
+**Root-cause fix, `lib/clientApi.ts`:** any request made with `responseType: "blob"` still gets its error body delivered as a `Blob` even when the backend actually returned JSON (e.g. the 403s these sample endpoints return) — `normaliseError()` can't read `.message` off a `Blob`, so every blob-download call site (these three, plus the pre-existing attendance CSV export) was silently falling back to axios's generic `"Request failed with status code 403"` instead of the real backend message. Added `resolveBlobErrorData()` to unwrap the JSON out of the Blob before `normaliseError` runs — fixed once in `clientApi.ts` rather than patched at each call site, matching this file's existing precedent (see the Session 17 `response.data.message` fix higher up in this doc).
+
+> **Frontend only for the modal wiring**, but the three sample endpoints and their exact 403 messages are taken directly from the given API contract — worth confirming the live responses match once the backend ships, same standing caveat as every other frontend-ahead-of-backend endpoint in this doc.
+
+---
+
+### Key Files Changed / Created (21 July 2026)
+
+| File | Change |
+|------|--------|
+| `types/leave.ts` | **NEW** — carry-forward execution types (`CarryForwardYearPair`, `...PreviewResponse`, `...Log`, `...HistoryResponse`, `...Input`); later extended with `CarryForwardType`, `CarryForwardMode`, `LeavePolicyCarryForwardSettings` |
+| `lib/api/endpoints.ts` | Added `leave.carryForward.{years,preview,run,history}`, `settings.financialYear`, `employees.bulkImportSample`, `recruitment.bulkImportSample`, `attendance.importSample` |
+| `app/dashboard/settings/leave-policy/_components/CarryForwardTab.tsx` | **NEW** — year selector + action bar |
+| `app/dashboard/settings/leave-policy/_components/CarryForwardPreviewTable.tsx` | **NEW** |
+| `app/dashboard/settings/leave-policy/_components/CarryForwardHistoryTable.tsx` | **NEW** |
+| `app/dashboard/settings/leave-policy/_components/CarryForwardRunModal.tsx` | **NEW** — confirm-before-run dialog |
+| `app/dashboard/settings/leave-policy/page.tsx` | Added "Carry Forward" tab, role-gated |
+| `app/dashboard/settings/leave-policy/_components/PolicyTab.tsx` | Reverted to original shape (carry-forward fields moved to the Leave Policy tab instead — see §2) |
+| `app/dashboard/settings/leave-policy/_components/LeavePoliciesTab.tsx` | Extended `LeavePolicy` interface with 3 carry-forward fields; combined `PUT` (rules) + `PATCH` (carry-forward) save |
+| `app/dashboard/settings/leave-policy/_components/CarryForwardSettingsSection.tsx` | **NEW** — per-policy carry-forward config UI |
+| `lib/fiscalYear.ts` | **NEW**, then rewritten same session — `useFiscalYearConfig()` moved from `localStorage` to `GET /settings/company/financial-year/` |
+| `types/company.ts` | **NEW** — `FinancialYearConfig`, `MonthName` |
+| `app/dashboard/settings/company/page.tsx` | Added `<FinancialYearSection />` |
+| `app/dashboard/settings/company/_components/FinancialYearSection.tsx` | **NEW** — GET/PUT the real endpoint, `system_admin`-only edit form |
+| `app/dashboard/settings/leave-policy/_components/CreditTab.tsx` | Wired to `useFiscalYearConfig().currentYear` |
+| `app/dashboard/leave/_data.ts` | Added `carry_forward_expiry_date` to `LeaveBalance` |
+| `app/dashboard/leave/_components/LeaveDashboard.tsx` | Wired to FY config; carry-forward expiry shown on balance stat cards |
+| `app/dashboard/leave/_components/LeaveAnalytics.tsx` | Wired to FY config |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx` | Wired to FY config; carry-forward expiry shown on leave-type cards |
+| `components/dashboard/employee/EmpLeaveBalances.tsx` | Wired to FY config |
+| `hooks/useEmployeeLeave.ts` | Wired to FY config, stops re-syncing once the caller navigates years |
+| `lib/csv.ts` | **NEW** — shared `buildCsv`/`downloadCsv` (still used by the employee error-report download) |
+| `lib/downloadFile.ts` | **NEW** — shared `downloadBlobFile()` for authenticated file endpoints |
+| `lib/clientApi.ts` | Added `resolveBlobErrorData()` — root-cause fix for blob-response error messages |
+| `app/dashboard/employees/_components/BulkImportModal.tsx` | Added Sample CSV/XLSX buttons, wired to the real sample endpoint |
+| `app/dashboard/interview-list/CandidateBulkImportModal.tsx` | Same |
+| `app/dashboard/attendance/_components/ImportModal.tsx` | Same |
+
+---
+
+### Notes for Next Developer
+
+- **Two distinct "carry forward" features now exist — do not conflate them.** The **Carry Forward tab** (§1) executes the actual balance migration across employees for a year pair. The **Carry Forward Settings section** (§2) on the Leave Policy tab only configures *how* that execution behaves per leave type. Same feature area, different endpoints, different save actions.
+- **Financial Year config is `localStorage` no more** — if you find any remaining reference to a `fiscal_year_start_month` in `localStorage`, that's stale; the real config now lives entirely behind `GET/PUT /settings/company/financial-year/`.
+- **`useFiscalYearConfig()`'s numeric `currentYear`/`previousYear`/`nextYear` are parsed from the backend's `"FY 2026-27"` label strings via regex**, not independently computed — if the backend ever changes that label format, the parser (`parseStartYear()` in `lib/fiscalYear.ts`) needs updating, not the six consumer files.
+- **All 4 carry-forward-execution endpoints and all 3 bulk-import-sample endpoints are frontend-ready but not yet confirmed against a running backend** — same standing caveat as every other frontend-ahead-of-backend feature in this doc. Verify exact response shapes (esp. the sample endpoints' 403 messages) once live.
+- **`resolveBlobErrorData()` in `lib/clientApi.ts` now applies to every `responseType: "blob"` request app-wide**, including the pre-existing attendance CSV export — that export's own error handling gets the real backend message now too, as a side effect, not a separate fix.
+- **A separate "Opening Leave Balance Import" / one-time migration feature was discussed but not built this session** — naming suggestions only (leaning toward "Opening Leave Balance Import" as the feature name, "Import Opening Balances" as the button label). Whoever picks this up next: it's for onboarding an existing company / migrating off another HRMS, used once, then the Leave module manages everything automatically — a genuinely different feature from both carry-forward features above, not an extension of either.

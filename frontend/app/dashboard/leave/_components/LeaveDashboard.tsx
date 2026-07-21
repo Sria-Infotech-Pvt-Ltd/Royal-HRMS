@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
+import { useFiscalYearConfig } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
   LEAVE_TYPE_CONFIG,
@@ -39,7 +40,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
   // Branch filter changed — the current page no longer means the same thing.
   useEffect(() => { setPage(1); }, [branch]);
 
-  const currentYear = new Date().getFullYear();
+  const { currentYear } = useFiscalYearConfig();
 
   const { data: balances } = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`
@@ -144,6 +145,12 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />
                 </div>
+                {/* Only worth surfacing once something has actually been carried forward. */}
+                {b && b.carried_forward > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>
+                    {b.carry_forward_expiry_date ? `Carry-forward expires ${fmtShortDate(b.carry_forward_expiry_date)}` : "Carry-forward: no expiry"}
+                  </div>
+                )}
               </div>
             );
           })}
