@@ -2296,3 +2296,131 @@ backend/apps/hrms/tasks.py
 - Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave approved
 - Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-21 (Part 2)
+**Author: Teerdaveni**
+
+### Features Shipped
+
+---
+
+**1. Financial Year Configuration**
+
+Single source of truth for Financial Year is `Company.financial_year_start_month` (CharField, default `'April'`). Computed FY strings are never persisted — always derived at runtime.
+
+**Endpoints:**
+
+| Method | URL | Roles |
+|---|---|---|
+| `GET` | `/api/settings/company/financial-year/` | Any authenticated user |
+| `PUT` | `/api/settings/company/financial-year/` | `system_admin` only |
+
+**Response shape:**
+```json
+{
+  "financial_year_start_month": "April",
+  "previous_financial_year": "FY 2025-26",
+  "current_financial_year": "FY 2026-27",
+  "next_financial_year": "FY 2027-28"
+}
+```
+
+- Cached 24 h via `FinancialYearCacheService` in `core/cache_service.py`
+- Cache invalidated on every `Company` model `post_save` signal (`apps/accounts/signals.py`)
+- All modules consume `get_company_financial_year_config()` from `apps/accounts/utils.py`
+- `_current_year()` in `apps/hrms/views/leave.py` updated to return FY start year (not calendar year)
+- Migration: `apps/accounts/migrations/0043_company_financial_year.py`
+
+**Files modified:** `apps/accounts/models.py`, `apps/accounts/utils.py`, `apps/accounts/views.py`, `apps/accounts/urls.py`, `apps/accounts/signals.py`, `apps/accounts/migrations/0043_company_financial_year.py`, `core/cache_service.py`, `apps/hrms/views/leave.py`
+
+---
+
+**2. Sample Template Downloads — All 3 Bulk Import Modules**
+
+Shared utility `core/file_utils.py` with `build_sample_csv()` and `build_sample_xlsx()`:
+- CSV: UTF-8 BOM so Excel opens without encoding prompts
+- XLSX: bold/blue header row, first row frozen, auto column widths via `openpyxl`
+
+| Endpoint | View | Roles |
+|---|---|---|
+| `GET /api/employees/bulk-import/sample/?format=csv\|xlsx` | `EmployeeBulkImportSampleView` | `system_admin`, `hr_admin` |
+| `GET /api/attendance/import/sample/?format=csv\|xlsx` | `HRAttendanceImportSampleView` | `attendance.create` permission |
+| `GET /api/recruitment/candidates/bulk-import/sample/?format=csv\|xlsx` | `CandidateBulkImportSampleView` | `system_admin`, `hr`, `hr_admin` |
+
+Column headers verified to exactly match each module's `_COL_MAP` aliases — imports work from any downloaded template without header edits.
+
+**Files modified:** `core/file_utils.py` (new), `apps/accounts/views.py`, `apps/accounts/urls.py`, `apps/attendance/views/hr_attendance.py`, `apps/attendance/views/__init__.py`, `apps/attendance/urls.py`, `apps/recruitment/views.py`, `apps/recruitment/urls.py`
+
+---
+
+**3. Leave Opening Balance Import (Migration Tool)**
+
+Enterprise-scale one-time import for onboarding leave history from a previous HRMS. Writes directly to the existing `LeaveBalance` model — no new models.
+
+**Endpoints:**
+
+| Method | URL | Roles |
+|---|---|---|
+| `POST` | `/api/leave/balance/import/` | `system_admin`, `hr_admin`, `hr` |
+| `GET` | `/api/leave/balance/import/sample/?format=csv\|xlsx` | `system_admin`, `hr_admin`, `hr` |
+
+**POST request:** `multipart/form-data`, field `file` — CSV or XLSX, max 5 MB
+
+**POST response:**
+```json
+{
+  "success": true,
+  "message": "Import complete. 45 created, 0 failed, 2 skipped.",
+  "data": {
+    "total_rows": 47,
+    "created": 45,
+    "failed": 0,
+    "skipped": 2,
+    "processing_time_ms": 312,
+    "error_report_csv": "<base64 UTF-8 BOM CSV, present only when failures > 0>"
+  }
+}
+```
+
+**CSV template columns:**
+`Employee ID`, `Leave Type`, `Financial Year`, `Opening Balance`, `Leave Allocated`, `Leave Availed`, `Leave Balance`, `Carry Forward Days`, `Remarks`
+
+**Key implementation details:**
+- Flexible header aliasing via `_LEAVE_IMPORT_COL_MAP` — accepts `emp_id`, `employee code`, `cf_days`, `carried forward`, etc.
+- FY parsing: `"FY 2026-27"` / `"2026-27"` / `"2026"` all normalise to integer start year `2026`
+- `LeaveBalance` mapping: `total_days = opening_balance + carry_forward + allocated`, `used_days = availed`, `carried_forward = carry_forward`
+- N+1 free: 3 queries pre-load all reference data (employees, leave types, existing balances) before row loop
+- `unique_together = (employee, leave_type, year)` — existing rows reported as errors, not silently overwritten
+- Intra-file duplicates: first occurrence wins; subsequent rows skipped with count increment
+- 500-row batches via `LeaveBalance.objects.bulk_create()` inside `transaction.atomic()`
+- `AuditLog` created on every import call (including partial failures)
+- `error_report_csv` is base64-encoded UTF-8 BOM CSV — frontend decodes and offers as file download
+- URL ordering: `leave/balance/import/` and `leave/balance/import/sample/` placed **before** `leave/balance/<str:balance_id>/` to prevent static paths being matched as the wildcard
+
+**Files modified:** `apps/hrms/views/leave.py`, `apps/hrms/views/__init__.py`, `apps/hrms/urls.py`
+
+---
+
+**4. Dev Server Orphan Process — Documented Gotcha**
+
+Django `runserver` spawns a child request-handler process. Killing the parent with `Ctrl+C` does not always terminate the child. The orphan keeps port 8000 bound with old code — subsequent restarts may attach a second process that never receives traffic, causing newly registered URLs to 404 even though `manage.py shell resolve()` confirms the pattern exists.
+
+**Fix — kill all manage.py processes before every restart:**
+```powershell
+Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like "*manage.py*" } | Stop-Process -Force
+python manage.py runserver 0.0.0.0:8000
+```
+
+---
+
+### Pending
+
+- Frontend: Leave Opening Balance Import modal (file upload, progress indicator, error CSV download button)
+- Frontend: Financial Year Configuration settings page
+- Frontend: Carry Forward Leave UI (years selector, preview table, run button, history log)
+- Frontend: Employee Bulk Import modal
+- Frontend: Candidate Bulk Import modal
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
