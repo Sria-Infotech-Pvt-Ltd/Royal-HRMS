@@ -122,3 +122,76 @@ class CycleAttendanceSummaryView(APIView):
         ]
 
         return success('Attendance summary retrieved.', {'cycle': cycle_data, 'employees': employees})
+
+
+class CycleEmployeeDailyView(APIView):
+    """Day-by-day attendance for one employee within a payroll cycle period."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, employee_pk):
+        role = _role(request.user)
+        if role not in APPROVER_ROLES:
+            return error('Access denied.', http_status=403)
+
+        cycle = get_object_or_404(PayrollCycle, pk=pk)
+
+        import uuid as _uuid_mod
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            _uuid_mod.UUID(str(employee_pk))
+            employee = User.objects.filter(pk=employee_pk, is_active=True).first()
+        except (ValueError, AttributeError):
+            employee = User.objects.filter(employee_id=employee_pk, is_active=True).first()
+
+        if not employee:
+            return error('Employee not found.', http_status=404)
+
+        if role == 'manager' and employee.reporting_manager_id != request.user.pk:
+            return error('Access denied.', http_status=403)
+
+        from apps.attendance.models import AttendanceRecord
+        from datetime import timedelta
+
+        record_map = {
+            r.date: r
+            for r in AttendanceRecord.objects.filter(
+                employee=employee,
+                date__gte=cycle.cycle_start,
+                date__lte=cycle.cycle_end,
+            )
+        }
+
+        STATUS_LABELS = {
+            'present':    'Present',
+            'late':       'Late Arrival',
+            'half_day':   'Half Day',
+            'on_leave':   'On Leave',
+            'weekly_off': 'Week Off',
+            'holiday':    'Holiday',
+            'absent':     'Absent',
+            'incomplete': 'Incomplete',
+        }
+
+        days = []
+        current = cycle.cycle_start
+        while current <= cycle.cycle_end:
+            rec = record_map.get(current)
+            status = rec.status if rec else 'no_record'
+            minutes = (rec.total_working_minutes or 0) if rec else 0
+            days.append({
+                'date':          current.isoformat(),
+                'day':           current.strftime('%a'),
+                'status':        status,
+                'status_label':  STATUS_LABELS.get(status, 'No Record'),
+                'working_hours': round(minutes / 60, 1),
+                'is_flagged':    status in ('absent', 'incomplete'),
+            })
+            current += timedelta(days=1)
+
+        return success('Daily attendance retrieved.', {
+            'employee_id': employee.employee_id,
+            'full_name':   employee.full_name,
+            'days':        days,
+        })
