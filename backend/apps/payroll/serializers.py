@@ -214,6 +214,9 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
     employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
     department = serializers.CharField(source='employee.department', read_only=True)
     branch = serializers.CharField(source='employee.branch', read_only=True)
+    cycle_start = serializers.DateField(source='cycle.cycle_start', read_only=True)
+    cycle_end = serializers.DateField(source='cycle.cycle_end', read_only=True)
+    pay_date = serializers.DateField(source='cycle.pay_date', read_only=True)
     open_query_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -221,6 +224,9 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'cycle',
+            'cycle_start',
+            'cycle_end',
+            'pay_date',
             'employee',
             'employee_name',
             'employee_id_code',
@@ -258,6 +264,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'employee_name', 'employee_id_code', 'department', 'branch',
+            'cycle_start', 'cycle_end', 'pay_date',
             'gross_earnings', 'lop_deduction', 'total_deductions', 'net_pay',
             'status', 'payslip_pdf', 'sent_at', 'query_deadline', 'paid_at',
             'open_query_count', 'created_at', 'updated_at',

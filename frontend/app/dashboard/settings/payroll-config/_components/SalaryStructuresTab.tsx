@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { SalaryStructure, SalaryComponent } from "@/types/payroll";
+import type { SalaryStructure, SalaryStructureListItem, SalaryComponent } from "@/types/payroll";
 
 const CALC_LABEL: Record<string, string> = {
   percentage_of_ctc:   "% of CTC",
@@ -33,22 +33,38 @@ const EMPTY_COMP: ComponentFormState = {
 };
 
 export default function SalaryStructuresTab() {
-  const { data: structures, loading, refetch } = useFetch<SalaryStructure[]>(API.payroll.structures);
+  // List endpoint returns items WITHOUT components — only detail has components
+  const { data: structures, loading: listLoading, refetch: refetchList } =
+    useFetch<SalaryStructureListItem[]>(API.payroll.structures);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Detail fetch keyed on selectedId — null URL skips the fetch
+  const { data: selectedDetail, loading: detailLoading, refetch: refetchDetail } =
+    useFetch<SalaryStructure>(selectedId ? API.payroll.structure(selectedId) : null);
+
   const [showNewStructure, setShowNewStructure] = useState(false);
-  const [newStructName, setNewStructName] = useState("");
-  const [newStructDesc, setNewStructDesc] = useState("");
+  const [newStructName,    setNewStructName]    = useState("");
+  const [newStructDesc,    setNewStructDesc]    = useState("");
   const [newStructDefault, setNewStructDefault] = useState(false);
   const [showAddComp, setShowAddComp] = useState(false);
   const [compForm, setCompForm] = useState<ComponentFormState>(EMPTY_COMP);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const selected = structures?.find(s => s.id === selectedId) ?? null;
+  // Sidebar item (name, default flag) from the list; components from the detail
+  const selectedItem = structures?.find(s => s.id === selectedId) ?? null;
+  const components   = selectedDetail?.components ?? [];
 
   function flash(text: string) {
     setMsg(text);
     setTimeout(() => setMsg(null), 3000);
+  }
+
+  function selectStructure(id: string) {
+    setSelectedId(id);
+    setShowAddComp(false);
+    setCompForm(EMPTY_COMP);
   }
 
   async function createStructure() {
@@ -62,7 +78,7 @@ export default function SalaryStructuresTab() {
       });
       setShowNewStructure(false);
       setNewStructName(""); setNewStructDesc(""); setNewStructDefault(false);
-      refetch();
+      refetchList();
       flash("Salary structure created.");
     } catch {
       flash("Failed to create structure.");
@@ -74,7 +90,8 @@ export default function SalaryStructuresTab() {
   async function toggleDefault(id: string) {
     try {
       await clientApi.put(API.payroll.structure(id), { is_default: true });
-      refetch();
+      refetchList();
+      refetchDetail();
     } catch {
       flash("Failed to update default.");
     }
@@ -94,7 +111,7 @@ export default function SalaryStructuresTab() {
       });
       setCompForm(EMPTY_COMP);
       setShowAddComp(false);
-      refetch();
+      refetchDetail();
       flash("Component added.");
     } catch {
       flash("Failed to add component.");
@@ -107,7 +124,7 @@ export default function SalaryStructuresTab() {
     if (!selectedId) return;
     try {
       await clientApi.put(API.payroll.component(selectedId, comp.id), { is_active: !comp.is_active });
-      refetch();
+      refetchDetail();
     } catch {
       flash("Failed to update component.");
     }
@@ -129,7 +146,7 @@ export default function SalaryStructuresTab() {
             </button>
           </div>
 
-          {loading ? (
+          {listLoading ? (
             <div className="px-4 py-6 text-center text-gray-400 text-xs">
               <i className="ti ti-loader-2 animate-spin" /> Loading…
             </div>
@@ -138,7 +155,7 @@ export default function SalaryStructuresTab() {
               {(structures ?? []).map(s => (
                 <button
                   key={s.id}
-                  onClick={() => setSelectedId(s.id)}
+                  onClick={() => selectStructure(s.id)}
                   className={`w-full text-left px-4 py-3 transition-colors ${selectedId === s.id ? "bg-blue-50" : "hover:bg-gray-50"}`}
                 >
                   <div className="flex items-center gap-2">
@@ -148,7 +165,7 @@ export default function SalaryStructuresTab() {
                   {s.description && <div className="text-[11px] text-gray-400 mt-0.5 truncate">{s.description}</div>}
                 </button>
               ))}
-              {!loading && (structures ?? []).length === 0 && (
+              {!listLoading && (structures ?? []).length === 0 && (
                 <div className="px-4 py-6 text-center text-gray-400 text-xs">No structures yet</div>
               )}
             </div>
@@ -164,7 +181,7 @@ export default function SalaryStructuresTab() {
           </div>
         )}
 
-        {!selected ? (
+        {!selectedItem ? (
           <div className="bg-white rounded-xl border border-gray-200 px-6 py-12 text-center text-gray-400">
             <i className="ti ti-stack text-3xl mb-2 block" />
             Select a structure to view and edit its components
@@ -173,13 +190,13 @@ export default function SalaryStructuresTab() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
-                <span className="font-semibold text-gray-900">{selected.name}</span>
-                {selected.description && <span className="ml-2 text-[12px] text-gray-400">{selected.description}</span>}
+                <span className="font-semibold text-gray-900">{selectedItem.name}</span>
+                {selectedItem.description && <span className="ml-2 text-[12px] text-gray-400">{selectedItem.description}</span>}
               </div>
               <div className="flex items-center gap-2">
-                {!selected.is_default && (
+                {!selectedItem.is_default && (
                   <button
-                    onClick={() => toggleDefault(selected.id)}
+                    onClick={() => toggleDefault(selectedItem.id)}
                     className="text-[12px] text-blue-700 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
                   >
                     Set as Default
@@ -194,51 +211,58 @@ export default function SalaryStructuresTab() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    {["Component", "Type", "Calc", "Value", "Taxable", "Order", "Status", ""].map(h => (
-                      <th key={h} className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
+            {detailLoading ? (
+              <div className="px-4 py-10 text-center text-gray-400 text-xs">
+                <i className="ti ti-loader-2 animate-spin text-lg" />
+                <div className="mt-2">Loading components…</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {["Component", "Type", "Calc", "Value", "Taxable", "Order", "Status", ""].map(h => (
+                        <th key={h} className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {components.map(comp => (
+                      <tr key={comp.id} className={`hover:bg-gray-50 transition-colors ${!comp.is_active ? "opacity-50" : ""}`}>
+                        <td className="px-4 py-3 font-semibold text-gray-900">{comp.name}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${TYPE_CLS[comp.component_type] ?? ""}`}>
+                            {comp.component_type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 text-[12px]">{CALC_LABEL[comp.calculation_type]}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">
+                          {comp.calculation_type === "fixed"
+                            ? `₹${Number(comp.value).toLocaleString("en-IN")}`
+                            : `${comp.value}%`}
+                        </td>
+                        <td className="px-4 py-3 text-[12px] text-gray-500">{comp.is_taxable ? "Yes" : "No"}</td>
+                        <td className="px-4 py-3 text-[12px] text-gray-500">{comp.order}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleComponent(comp)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${comp.is_active ? "bg-blue-800" : "bg-gray-200"}`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${comp.is_active ? "translate-x-4" : "translate-x-0.5"}`} />
+                          </button>
+                        </td>
+                        <td className="px-4 py-3" />
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {selected.components.map(comp => (
-                    <tr key={comp.id} className={`hover:bg-gray-50 transition-colors ${!comp.is_active ? "opacity-50" : ""}`}>
-                      <td className="px-4 py-3 font-semibold text-gray-900">{comp.name}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${TYPE_CLS[comp.component_type]}`}>
-                          {comp.component_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-[12px]">{CALC_LABEL[comp.calculation_type]}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-800">
-                        {comp.calculation_type === "fixed"
-                          ? `₹${Number(comp.value).toLocaleString("en-IN")}`
-                          : `${comp.value}%`}
-                      </td>
-                      <td className="px-4 py-3 text-[12px] text-gray-500">{comp.is_taxable ? "Yes" : "No"}</td>
-                      <td className="px-4 py-3 text-[12px] text-gray-500">{comp.order}</td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => toggleComponent(comp)}
-                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${comp.is_active ? "bg-blue-800" : "bg-gray-200"}`}
-                        >
-                          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${comp.is_active ? "translate-x-4" : "translate-x-0.5"}`} />
-                        </button>
-                      </td>
-                      <td className="px-4 py-3" />
-                    </tr>
-                  ))}
-                  {selected.components.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No components yet — add one above</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    {components.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No components yet — click "Add Component" above</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -292,8 +316,8 @@ export default function SalaryStructuresTab() {
       )}
 
       {/* Add component modal */}
-      {showAddComp && selected && (
-        <Modal title={`Add Component — ${selected.name}`} onClose={() => { setShowAddComp(false); setCompForm(EMPTY_COMP); }}>
+      {showAddComp && selectedItem && (
+        <Modal title={`Add Component — ${selectedItem.name}`} onClose={() => { setShowAddComp(false); setCompForm(EMPTY_COMP); }}>
           <div className="flex flex-col gap-4">
             <Field label="Component Name" required>
               <input

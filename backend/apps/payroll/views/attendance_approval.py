@@ -1,0 +1,124 @@
+import logging
+
+from django.db.models import Count, Sum, Q
+from django.shortcuts import get_object_or_404
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+
+from core.responses import success, error
+from apps.payroll.models import PayrollCycle
+from apps.payroll.serializers import PayrollCycleSerializer
+
+logger = logging.getLogger(__name__)
+
+APPROVER_ROLES = frozenset(['system_admin', 'hr_admin', 'manager', 'finance_manager'])
+HR_ROLES       = frozenset(['system_admin', 'hr_admin'])
+
+
+def _role(user):
+    return user.role.name if user.role else ''
+
+
+class AttendancePendingCyclesView(APIView):
+    """Cycles awaiting attendance approval for the current user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        role = _role(request.user)
+        if role not in APPROVER_ROLES:
+            return error('Access denied.', http_status=403)
+
+        cycles = PayrollCycle.objects.filter(
+            status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
+        ).select_related(
+            'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
+        ).order_by('-cycle_start')
+
+        # Managers only see cycles where their L1 approval is still pending
+        if role == 'manager':
+            cycles = cycles.filter(attendance_approved_by_l1__isnull=True)
+
+        serializer = PayrollCycleSerializer(cycles, many=True)
+        return success('Pending attendance approval cycles.', serializer.data)
+
+
+class CycleAttendanceSummaryView(APIView):
+    """Team attendance breakdown for a payroll cycle period."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        role = _role(request.user)
+        if role not in APPROVER_ROLES:
+            return error('Access denied.', http_status=403)
+
+        cycle = get_object_or_404(PayrollCycle, pk=pk)
+
+        # Late import to avoid circular deps
+        from apps.attendance.models import AttendanceRecord
+
+        records = AttendanceRecord.objects.filter(
+            date__range=[cycle.cycle_start, cycle.cycle_end],
+            employee__is_active=True,
+        ).select_related('employee')
+
+        # Managers see only their direct reportees
+        if role == 'manager':
+            records = records.filter(employee__reporting_manager=request.user)
+
+        summary = (
+            records
+            .values(
+                'employee__id',
+                'employee__employee_id',
+                'employee__full_name',
+                'employee__department',
+                'employee__designation',
+            )
+            .annotate(
+                present_days    = Count('id', filter=Q(status='present')),
+                late_days       = Count('id', filter=Q(status='late')),
+                half_days       = Count('id', filter=Q(status='half_day')),
+                absent_days     = Count('id', filter=Q(status='absent')),
+                incomplete_days = Count('id', filter=Q(status='incomplete')),
+                on_leave_days   = Count('id', filter=Q(status='on_leave')),
+                weekly_off_days = Count('id', filter=Q(status='weekly_off')),
+                holiday_days    = Count('id', filter=Q(status='holiday')),
+                total_minutes   = Sum('total_working_minutes'),
+            )
+            .order_by('employee__full_name')
+        )
+
+        cycle_data = {
+            'id':                        str(cycle.id),
+            'cycle_start':               str(cycle.cycle_start),
+            'cycle_end':                 str(cycle.cycle_end),
+            'pay_date':                  str(cycle.pay_date),
+            'status':                    cycle.status,
+            'l1_approver':               cycle.attendance_approved_by_l1.full_name if cycle.attendance_approved_by_l1 else None,
+            'l2_approver':               cycle.attendance_approved_by_l2.full_name if cycle.attendance_approved_by_l2 else None,
+            'l1_approved_at':            str(cycle.attendance_l1_approved_at) if cycle.attendance_l1_approved_at else None,
+            'l2_approved_at':            str(cycle.attendance_l2_approved_at) if cycle.attendance_l2_approved_at else None,
+        }
+
+        employees = [
+            {
+                'employee_id':   row['employee__employee_id'],
+                'employee_uuid': str(row['employee__id']),
+                'full_name':     row['employee__full_name'],
+                'department':    row['employee__department'] or '—',
+                'designation':   row['employee__designation'] or '—',
+                'present_days':  row['present_days'],
+                'late_days':     row['late_days'],
+                'half_days':     row['half_days'],
+                'absent_days':   row['absent_days'],
+                'incomplete_days': row['incomplete_days'],
+                'on_leave_days': row['on_leave_days'],
+                'lop_days':      (row['absent_days'] or 0) + (row['incomplete_days'] or 0),
+                'working_hours': round((row['total_minutes'] or 0) / 60, 1),
+            }
+            for row in summary
+        ]
+
+        return success('Attendance summary retrieved.', {'cycle': cycle_data, 'employees': employees})

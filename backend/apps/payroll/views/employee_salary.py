@@ -1,12 +1,25 @@
 import logging
+import uuid as _uuid_mod
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 
 from core.responses import success, error, first_error
 from core.pagination import paginate, paginated_data
 from apps.payroll.models import EmployeeSalaryConfig
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
+
+User = get_user_model()
+
+
+def _resolve_employee(identifier):
+    """Accept a UUID string or an employee_id display code; return the User or None."""
+    try:
+        _uuid_mod.UUID(str(identifier))
+        return User.objects.filter(pk=identifier, is_active=True).first()
+    except (ValueError, AttributeError):
+        return User.objects.filter(employee_id=identifier, is_active=True).first()
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +54,16 @@ class EmployeeSalaryConfigListView(APIView):
         if not _is_hr_admin(request.user):
             return error('Only HR admin can assign salary configs.', http_status=403)
 
-        serializer = EmployeeSalaryConfigSerializer(data=request.data)
+        # Accept UUID or display code (e.g. RSS00017) for the employee field
+        employee_identifier = request.data.get('employee', '')
+        employee = _resolve_employee(employee_identifier)
+        if not employee:
+            return error('Employee not found or is inactive.')
+
+        data = request.data.copy()
+        data['employee'] = str(employee.id)
+
+        serializer = EmployeeSalaryConfigSerializer(data=data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
 
@@ -95,8 +117,12 @@ class EmployeeSalaryHistoryView(APIView):
         if not _is_hr_admin(request.user):
             return error('Only HR admin can view salary history.', http_status=403)
 
+        employee = _resolve_employee(employee_pk)
+        if not employee:
+            return error('Employee not found.', http_status=404)
+
         configs = EmployeeSalaryConfig.objects.filter(
-            employee_id=employee_pk,
+            employee=employee,
         ).select_related('salary_structure').order_by('-effective_from')
 
         serializer = EmployeeSalaryConfigSerializer(configs, many=True)

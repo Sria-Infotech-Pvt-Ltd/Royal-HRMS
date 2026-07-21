@@ -29,6 +29,10 @@ from apps.payroll.views.cycles import (
     ProcessPayrollView,
     MarkCyclePaidView,
 )
+from apps.payroll.views.attendance_approval import (
+    AttendancePendingCyclesView,
+    CycleAttendanceSummaryView,
+)
 from apps.payroll.views.payslips import (
     CyclePayslipListView,
     PayslipDetailView,
@@ -63,7 +67,11 @@ urlpatterns = [
     # ── Employee salary config (CTC assignment) ──────────────────────────────
     path('employee-salary/', EmployeeSalaryConfigListView.as_view(), name='employee-salary-list'),
     path('employee-salary/<uuid:pk>/', EmployeeSalaryConfigDetailView.as_view(), name='employee-salary-detail'),
-    path('employee-salary/history/<uuid:employee_pk>/', EmployeeSalaryHistoryView.as_view(), name='employee-salary-history'),
+    path('employee-salary/history/<str:employee_pk>/', EmployeeSalaryHistoryView.as_view(), name='employee-salary-history'),
+
+    # ── Attendance approval (manager + HR) ──────────────────────────────────
+    path('cycles/pending-approval/', AttendancePendingCyclesView.as_view(), name='payroll-pending-approval'),
+    path('cycles/<uuid:pk>/attendance-summary/', CycleAttendanceSummaryView.as_view(), name='payroll-attendance-summary'),
 
     # ── Payroll cycles ───────────────────────────────────────────────────────
     path('cycles/', PayrollCycleListView.as_view(), name='payroll-cycle-list'),

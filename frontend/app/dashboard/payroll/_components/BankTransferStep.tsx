@@ -1,131 +1,173 @@
 "use client";
 
 import { useState } from "react";
-import { EMP_DATA, netSalary, fmt } from "./payrollData";
+import { useFetch } from "@/hooks/useFetch";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
 
-interface Props { onNext: () => void; onBack: () => void; }
+interface Props {
+  cycleId: string;
+  onNext: () => void;
+  onBack: () => void;
+}
 
-type TransferStatus = "pending" | "processing" | "paid";
+interface PagedResponse<T> { results: T[]; count: number; }
 
-const STATUS_BADGE: Record<TransferStatus, string> = {
-  pending:    "badge badge-warn",
-  processing: "badge badge-info",
-  paid:       "badge badge-success",
-};
+const fmt = (n: number | string) =>
+  `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
-export default function BankTransferStep({ onNext, onBack }: Props) {
-  const [statuses, setStatuses] = useState<Record<string, TransferStatus>>(
-    Object.fromEntries(EMP_DATA.map(e => [e.id, "pending"]))
-  );
-  const [markAll, setMarkAll] = useState(false);
-  const [fileGenerated, setFileGenerated] = useState(false);
+export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
+  const { data: payslipPage, loading, refetch } =
+    useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
+  const { data: cycle, refetch: refetchCycle } = useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
 
-  function markPaid(id: string) {
-    setStatuses(p => ({ ...p, [id]: "paid" }));
+  const [marking, setMarking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const payslips = payslipPage?.results ?? [];
+  const totalNet = payslips.reduce((s, p) => s + Number(p.net_pay), 0);
+  const isPaid   = cycle?.status === "paid" || cycle?.status === "closed";
+
+  async function markPaid() {
+    setMarking(true);
+    setErr(null);
+    try {
+      await clientApi.post(API.payroll.markPaid(cycleId));
+      refetch();
+      refetchCycle();
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to mark as paid.";
+      setErr(msg);
+    } finally {
+      setMarking(false);
+    }
   }
-
-  function markAllPaid() {
-    setStatuses(Object.fromEntries(EMP_DATA.map(e => [e.id, "paid"])));
-    setMarkAll(true);
-  }
-
-  function generateFile() {
-    setFileGenerated(true);
-    setStatuses(Object.fromEntries(EMP_DATA.map(e => [e.id, "processing"])));
-  }
-
-  const totalNet  = EMP_DATA.reduce((s, e) => s + netSalary(e), 0);
-  const paidCount = Object.values(statuses).filter(s => s === "paid").length;
-  const allPaid   = paidCount === EMP_DATA.length;
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-credit-card" /> Bank Transfer</div>
+        <div className="card-title"><i className="ti ti-circle-check" /> Mark Payroll as Paid</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span className="badge badge-primary">{fmt(totalNet)} total</span>
-          <span className="badge badge-info">Step 11 of 11</span>
+          {isPaid && <span className="badge badge-success"><i className="ti ti-check" /> Paid</span>}
         </div>
       </div>
 
-      {allPaid && (
-        <div className="alert alert-success" style={{ margin: "0 0 0 0", borderRadius: 0 }}>
+      {isPaid && (
+        <div className="alert alert-success" style={{ margin: "0", borderRadius: 0 }}>
           <i className="ti ti-circle-check" />
-          <span>All salaries disbursed successfully. June 2026 payroll run is complete.</span>
+          <span>All salaries marked as paid. Payroll run for this cycle is complete.</span>
         </div>
       )}
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Employee</th>
-              <th>Bank Name</th>
-              <th>Account Number</th>
-              <th>IFSC Code</th>
-              <th style={{ textAlign: "right", color: "var(--success)" }}>Net Salary</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {EMP_DATA.map(e => {
-              const net    = netSalary(e);
-              const status = statuses[e.id];
-              return (
-                <tr key={e.id}>
+      {err && (
+        <div className="alert alert-error" style={{ margin: "0", borderRadius: 0 }}>
+          <i className="ti ti-alert-circle" />
+          <span>{err}</span>
+        </div>
+      )}
+
+      {/* Summary */}
+      <div style={{ padding: "20px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, borderBottom: "1px solid var(--outline-v)" }}>
+        <div className="stat-card">
+          <div className="stat-label">Employees</div>
+          <div className="stat-value">{payslips.length}</div>
+          <div className="stat-sub">In this payroll run</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Total Net Payable</div>
+          <div className="stat-value" style={{ color: "var(--success)" }}>{fmt(totalNet)}</div>
+          <div className="stat-sub">Gross − all deductions</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Status</div>
+          <div className="stat-value" style={{ color: isPaid ? "var(--success)" : "var(--warn)", fontSize: 18 }}>
+            {isPaid ? "Paid" : "Pending"}
+          </div>
+          <div className="stat-sub">{cycle?.pay_date ? `Pay date: ${cycle.pay_date}` : "—"}</div>
+        </div>
+      </div>
+
+      {/* Payslip list */}
+      {loading ? (
+        <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)" }}>
+          <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 24 }} />
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Department</th>
+                <th>Branch</th>
+                <th style={{ textAlign: "right", color: "var(--success)" }}>Net Salary</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payslips.map(p => (
+                <tr key={p.id}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{e.avatar}</div>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
+                        {p.employee_name.charAt(0)}
+                      </div>
                       <div>
-                        <div style={{ fontWeight: 600 }}>{e.name}</div>
-                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{e.dept}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{p.employee_name}</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{p.employee_id_code}</div>
                       </div>
                     </div>
                   </td>
-                  <td>{e.bank}</td>
-                  <td style={{ fontFamily: "monospace", letterSpacing: "0.05em" }}>{e.account}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: 12 }}>{e.ifsc}</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)" }}>{fmt(net)}</td>
-                  <td><span className={STATUS_BADGE[status]}>{status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+                  <td style={{ fontSize: 13 }}>{p.department || "—"}</td>
+                  <td style={{ fontSize: 13 }}>{p.branch || "—"}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)", fontSize: 14 }}>{fmt(p.net_pay)}</td>
                   <td>
-                    <button
-                      className="btn btn-success btn-sm"
-                      onClick={() => markPaid(e.id)}
-                      disabled={status === "paid"}
-                      style={{ opacity: status === "paid" ? 0.4 : 1 }}
-                    >
-                      <i className="ti ti-check" /> Mark Paid
-                    </button>
+                    <span className={`badge ${p.status === "paid" ? "badge-success" : "badge-info"}`}>
+                      {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                    </span>
                   </td>
                 </tr>
-              );
-            })}
-            <tr style={{ background: "var(--bg-low)" }}>
-              <td style={{ fontWeight: 700 }} colSpan={4}>Total Net Payable</td>
-              <td style={{ textAlign: "right", fontWeight: 800, color: "var(--success)", fontSize: 15 }}>{fmt(totalNet)}</td>
-              <td colSpan={2} />
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              ))}
+              {payslips.length > 0 && (
+                <tr style={{ background: "var(--bg-low)" }}>
+                  <td style={{ fontWeight: 700 }} colSpan={3}>Total Net Payable</td>
+                  <td style={{ textAlign: "right", fontWeight: 800, color: "var(--success)", fontSize: 15 }}>{fmt(totalNet)}</td>
+                  <td />
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-outline btn-sm" onClick={generateFile} disabled={fileGenerated}>
-            <i className="ti ti-file-export" /> Generate Bank File
-          </button>
-          <button className="btn btn-ghost btn-sm">
-            <i className="ti ti-table-export" /> Export Excel
-          </button>
-          <button className="btn btn-success btn-sm" onClick={markAllPaid} disabled={markAll}>
-            <i className="ti ti-checks" /> Mark All Paid
-          </button>
+          {!isPaid && (
+            <button
+              className="btn btn-success"
+              onClick={markPaid}
+              disabled={marking || payslips.length === 0}
+            >
+              {marking
+                ? <><i className="ti ti-loader-2 animate-spin" /> Marking Paid…</>
+                : <><i className="ti ti-checks" /> Mark All Paid</>}
+            </button>
+          )}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
-          <button className="btn btn-filled" onClick={onNext}>
-            <i className="ti ti-circle-check" /> Finish Payroll
+          <button className="btn btn-ghost" onClick={onBack} disabled={isPaid}>
+            <i className="ti ti-arrow-left" /> Back
+          </button>
+          <button
+            className="btn btn-filled"
+            onClick={onNext}
+            disabled={!isPaid}
+            style={{ opacity: isPaid ? 1 : 0.5 }}
+          >
+            <i className="ti ti-circle-check" /> Finish Payroll Run
           </button>
         </div>
       </div>

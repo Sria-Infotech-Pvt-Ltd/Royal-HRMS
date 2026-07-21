@@ -3557,10 +3557,17 @@ class OnboardingApprovalView(APIView):
 
         decision        = request.data.get('decision')
         remarks         = request.data.get('remarks', '')
-        req_designation = (request.data.get('designation') or '').strip()
-        req_department  = (request.data.get('department')  or '').strip()
+        req_designation = (request.data.get('designation')  or '').strip()
+        req_department  = (request.data.get('department')   or '').strip()
+        req_manager_id  = request.data.get('reporting_manager_id')
+        annual_ctc_raw  = (request.data.get('annual_ctc')  or '').strip()
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
+        if decision == 'approve':
+            if not req_department:
+                return error('Department is required to approve onboarding.')
+            if not req_designation:
+                return error('Designation is required to approve onboarding.')
 
         company      = Company.objects.first()
         company_name = company.company_name if company else ''
@@ -3596,6 +3603,14 @@ class OnboardingApprovalView(APIView):
             if req_department:
                 target.department = req_department
 
+            # Explicit reporting manager override — set before _auto_assign_managers so auto-assign skips it
+            if req_manager_id:
+                try:
+                    manager_user = User.objects.get(pk=req_manager_id, is_active=True)
+                    target.reporting_manager = manager_user
+                except User.DoesNotExist:
+                    return error('Reporting manager not found or is inactive.')
+
             target.onboarding_status    = User.ONBOARDING_COMPLETE
             target.must_change_password = False
             auto_fields = _auto_assign_managers(target)
@@ -3606,6 +3621,24 @@ class OnboardingApprovalView(APIView):
                 'reporting_manager', 'hr',
                 *auto_fields,
             ])))
+
+            # Create initial salary config if CTC was provided at approval time
+            if annual_ctc_raw:
+                from decimal import Decimal as _Decimal
+                from django.utils import timezone as _tz
+                from apps.payroll.models import EmployeeSalaryConfig as _SalaryConfig
+                try:
+                    _annual_ctc = _Decimal(annual_ctc_raw)
+                    _SalaryConfig.objects.filter(employee=target, is_active=True).update(is_active=False)
+                    _SalaryConfig.objects.create(
+                        employee=target,
+                        annual_ctc=_annual_ctc,
+                        effective_from=target.date_of_joining or _tz.now().date(),
+                        is_active=True,
+                    )
+                    logger.info('EmployeeSalaryConfig created for %s via onboarding approval', target.email)
+                except Exception:
+                    logger.exception('Failed to create salary config for %s during onboarding approval', target.email)
 
             if linked_candidate:
                 linked_candidate.status      = Candidate.STATUS_CONVERTED

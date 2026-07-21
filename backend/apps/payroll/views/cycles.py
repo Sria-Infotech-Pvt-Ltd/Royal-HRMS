@@ -87,6 +87,27 @@ class PayrollCycleListView(APIView):
             notes=request.data.get('notes', ''),
         )
         logger.info('PayrollCycle %s created by %s', cycle.id, request.user.email)
+
+        # Notify all active managers to review and approve attendance
+        try:
+            from apps.notifications.signals import _notify
+            period = f'{cycle_start} – {cycle_end}'
+            managers = User.objects.filter(
+                is_active=True, role__name='manager',
+            ).exclude(pk=request.user.pk)
+            for manager in managers:
+                _notify(
+                    manager,
+                    'Attendance Approval Required',
+                    f'Payroll for {period} has been initiated and requires your attendance sign-off.',
+                    'attendance',
+                    'payroll',
+                    str(cycle.id),
+                    request.user,
+                )
+        except Exception:
+            logger.exception('Failed to send attendance approval notifications for cycle %s', cycle.id)
+
         return success('Payroll cycle created.', PayrollCycleSerializer(cycle).data, http_status=201)
 
 
@@ -203,6 +224,9 @@ class ProcessPayrollView(APIView):
         created_count = 0
         skipped = []
 
+        PF_DEFAULT_RATE = Decimal('12.00')
+        PF_DEFAULT_CEILING = Decimal('15000.00')
+
         with transaction.atomic():
             cycle.status = PayrollCycle.STATUS_PROCESSING
             cycle.save(update_fields=['status', 'updated_at'])
@@ -218,14 +242,16 @@ class ProcessPayrollView(APIView):
                     skipped.append(employee.full_name)
                     continue
 
+                # Single branch lookup — used for structure, PF, and statutory below
+                branch_obj = Branch.objects.filter(
+                    branch_name=employee.branch,
+                ).select_related('state', 'payroll_config__salary_structure').first()
+                branch_config = getattr(branch_obj, 'payroll_config', None) if branch_obj else None
+
                 # Resolve structure: employee override → branch → default
                 structure = salary_config.salary_structure
-                if structure is None:
-                    branch_obj = Branch.objects.filter(
-                        branch_name=employee.branch,
-                    ).select_related('payroll_config__salary_structure').first()
-                    if branch_obj and hasattr(branch_obj, 'payroll_config') and branch_obj.payroll_config.salary_structure:
-                        structure = branch_obj.payroll_config.salary_structure
+                if structure is None and branch_config and branch_config.salary_structure:
+                    structure = branch_config.salary_structure
                 if structure is None:
                     structure = default_structure
                 if structure is None:
@@ -263,25 +289,24 @@ class ProcessPayrollView(APIView):
                 total_working_days = 26
                 lop_deduction = (gross / total_working_days) * lop_days
 
-                # Resolve branch PF config
-                branch_config = None
-                branch_obj = Branch.objects.filter(branch_name=employee.branch).first()
-                if branch_obj:
-                    branch_config = BranchPayrollConfig.objects.filter(branch=branch_obj).first()
-
+                # PF: use branch config if present, else statutory defaults (12%/12%, ₹15,000 ceiling)
+                pf_applicable = branch_config.pf_applicable if branch_config is not None else True
                 pf_employee = Decimal('0')
                 pf_employer = Decimal('0')
-                if branch_config and branch_config.pf_applicable:
-                    pf_base = min(basic, branch_config.pf_wage_ceiling)
-                    pf_employee = pf_base * branch_config.pf_employee_rate / 100
-                    pf_employer = pf_base * branch_config.pf_employer_rate / 100
+                if pf_applicable:
+                    pf_ceiling = branch_config.pf_wage_ceiling if branch_config else PF_DEFAULT_CEILING
+                    pf_emp_rate = branch_config.pf_employee_rate if branch_config else PF_DEFAULT_RATE
+                    pf_er_rate = branch_config.pf_employer_rate if branch_config else PF_DEFAULT_RATE
+                    pf_base = min(basic, pf_ceiling)
+                    pf_employee = pf_base * pf_emp_rate / 100
+                    pf_employer = pf_base * pf_er_rate / 100
 
-                # ESI
+                # ESI, PT, LWF: from the branch's state statutory config — no branch config record needed
                 esi_employee = Decimal('0')
                 esi_employer = Decimal('0')
-                statutory = None
-                if branch_obj:
-                    statutory = StatutoryConfig.objects.filter(state=branch_obj.state).first()
+                statutory = StatutoryConfig.objects.filter(
+                    state=branch_obj.state,
+                ).first() if branch_obj else None
                 if statutory and statutory.esi_applicable and gross <= statutory.esi_wage_ceiling:
                     esi_employee = gross * statutory.esi_employee_rate / 100
                     esi_employer = gross * statutory.esi_employer_rate / 100

@@ -1,143 +1,151 @@
 "use client";
 
 import { useState } from "react";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import type { PayrollSettings, PayrollCycle } from "@/types/payroll";
 
-interface Props { onNext: () => void; onBack: () => void; }
-
-const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const YEARS  = ["2024","2025","2026","2027"];
-
-interface PeriodForm {
-  month:       string;
-  year:        string;
-  branch:      string;
-  department:  string;
-  emp_type:    string;
-  payroll_type: string;
-  salary_date: string;
+interface Props {
+  settings: PayrollSettings | null;
+  onNext: (cycleId: string) => void;
+  onBack: () => void;
 }
 
-const BLANK: PeriodForm = {
-  month: "June", year: "2026", branch: "All Branches", department: "All Departments",
-  emp_type: "all", payroll_type: "regular", salary_date: "2026-06-30",
-};
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+const YEARS = ["2024","2025","2026","2027"];
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="field-group">
-      <label className="field-label">{label}</label>
-      {children}
-    </div>
-  );
+function daysInMonth(month: number, year: number) { return new Date(year, month, 0).getDate(); }
+
+function computeDates(month: string, year: string, settings: PayrollSettings | null) {
+  const m = MONTHS.indexOf(month) + 1;
+  const y = Number(year);
+  const maxDay = daysInMonth(m, y);
+  const startDay = Math.min(settings?.cycle_start_day ?? 1,  maxDay);
+  const endDay   = Math.min(settings?.cycle_end_day   ?? maxDay, maxDay);
+  const payDay   = Math.min(settings?.pay_day         ?? 30, maxDay);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    cycle_start: `${y}-${pad(m)}-${pad(startDay)}`,
+    cycle_end:   `${y}-${pad(m)}-${pad(endDay)}`,
+    pay_date:    `${y}-${pad(m)}-${pad(payDay)}`,
+  };
 }
 
-export default function PayrollPeriodStep({ onNext, onBack }: Props) {
-  const [form, setForm] = useState<PeriodForm>(BLANK);
-  const [errors, setErrors] = useState<Partial<PeriodForm>>({});
+export default function PayrollPeriodStep({ settings, onNext, onBack }: Props) {
+  const today = new Date();
+  const [month, setMonth]  = useState(MONTHS[today.getMonth()]);
+  const [year,  setYear]   = useState(String(today.getFullYear()));
+  const [notes, setNotes]  = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function set(key: keyof PeriodForm, val: string) {
-    setForm(f => ({ ...f, [key]: val }));
-    setErrors(e => ({ ...e, [key]: "" }));
-  }
+  const { cycle_start, cycle_end, pay_date } = computeDates(month, year, settings);
 
-  function validate(): boolean {
-    const e: Partial<PeriodForm> = {};
-    if (!form.salary_date) e.salary_date = "Salary date is required";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+  async function createCycle() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await clientApi.post<{ data: PayrollCycle }>(API.payroll.cycles, {
+        cycle_start,
+        cycle_end,
+        pay_date,
+        notes: notes.trim() || undefined,
+      });
+      onNext(res.data.data.id);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to create payroll cycle. It may already exist for this period.";
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-calendar" /> Payroll Period Setup</div>
-        <span className="badge badge-info">Step 1 of 11</span>
+        <span className="badge badge-info">Step 1 of Wizard</span>
       </div>
       <div className="card-body">
 
         <div className="alert alert-info" style={{ marginBottom: 20 }}>
           <i className="ti ti-info-circle" />
-          <span>Define the payroll period and scope. All settings here apply to the entire payroll run.</span>
+          <span>Dates are auto-filled from your Payroll Run Settings. Adjust month/year to change them.</span>
         </div>
 
+        {error && (
+          <div className="alert alert-error" style={{ marginBottom: 16 }}>
+            <i className="ti ti-alert-circle" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div className="form-row cols-2">
-          <Field label="Payroll Month *">
-            <select className="field-input" value={form.month} onChange={e => set("month", e.target.value)}>
+          <div className="field-group">
+            <label className="field-label">Payroll Month *</label>
+            <select className="field-input" value={month} onChange={e => setMonth(e.target.value)}>
               {MONTHS.map(m => <option key={m}>{m}</option>)}
             </select>
-          </Field>
-          <Field label="Payroll Year *">
-            <select className="field-input" value={form.year} onChange={e => set("year", e.target.value)}>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Payroll Year *</label>
+            <select className="field-input" value={year} onChange={e => setYear(e.target.value)}>
               {YEARS.map(y => <option key={y}>{y}</option>)}
             </select>
-          </Field>
-        </div>
-
-        <div className="form-row cols-2">
-          <Field label="Branch">
-            <select className="field-input" value={form.branch} onChange={e => set("branch", e.target.value)}>
-              <option>All Branches</option>
-              <option>Head Office</option>
-              <option>Mumbai</option>
-              <option>Chennai</option>
-              <option>Bengaluru</option>
-              <option>Hyderabad</option>
-            </select>
-          </Field>
-          <Field label="Department">
-            <select className="field-input" value={form.department} onChange={e => set("department", e.target.value)}>
-              <option>All Departments</option>
-              <option>Engineering</option>
-              <option>HR</option>
-              <option>Sales</option>
-              <option>Finance</option>
-              <option>Operations</option>
-            </select>
-          </Field>
-        </div>
-
-        <div className="form-row cols-2">
-          <Field label="Employee Type">
-            <select className="field-input" value={form.emp_type} onChange={e => set("emp_type", e.target.value)}>
-              <option value="all">All Employees</option>
-              <option value="permanent">Permanent</option>
-              <option value="contract">Contract</option>
-              <option value="intern">Intern</option>
-              <option value="probation">Probation</option>
-            </select>
-          </Field>
-          <Field label="Payroll Type">
-            <select className="field-input" value={form.payroll_type} onChange={e => set("payroll_type", e.target.value)}>
-              <option value="regular">Regular Payroll</option>
-              <option value="supplementary">Supplementary</option>
-              <option value="advance">Advance Payroll</option>
-            </select>
-          </Field>
-        </div>
-
-        <div className="form-row cols-2">
-          <Field label="Salary Date *">
-            <input
-              type="date"
-              className={`field-input${errors.salary_date ? " field-error" : ""}`}
-              value={form.salary_date}
-              onChange={e => set("salary_date", e.target.value)}
-            />
-            {errors.salary_date && <span className="field-error-msg">{errors.salary_date}</span>}
-          </Field>
-          <div className="field-group">
-            <label className="field-label">&nbsp;</label>
-            <div style={{ padding: "10px 14px", background: "var(--bg-low)", borderRadius: "var(--radius)", border: "1px solid var(--outline-v)", fontSize: 13, color: "var(--on-variant)" }}>
-              <i className="ti ti-users" style={{ marginRight: 6 }} />
-              <strong style={{ color: "var(--on-bg)" }}>248 employees</strong> will be included in this payroll run
-            </div>
           </div>
         </div>
 
+        {/* Computed dates — read-only preview */}
+        <div style={{ background: "var(--bg-low)", borderRadius: "var(--radius)", padding: "16px 20px", marginBottom: 20, border: "1px solid var(--outline-v)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>
+            Computed Period Dates
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            {[
+              { label: "Cycle Start", value: cycle_start, icon: "ti-calendar-event", color: "var(--info)" },
+              { label: "Cycle End",   value: cycle_end,   icon: "ti-calendar-event", color: "var(--warn)" },
+              { label: "Pay Date",    value: pay_date,    icon: "ti-credit-card",     color: "var(--success)" },
+            ].map(f => (
+              <div key={f.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <i className={`ti ${f.icon}`} style={{ color: f.color, fontSize: 18 }} />
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{f.label}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{f.value}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {!settings && (
+            <div style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}>
+              <i className="ti ti-alert-triangle" style={{ marginRight: 4 }} />
+              Payroll settings not configured — dates default to month boundaries. Go to Settings → Payroll Configuration to set custom days.
+            </div>
+          )}
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Run Notes (optional)</label>
+          <textarea
+            className="field-input"
+            placeholder="e.g. June 2026 regular payroll run"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            style={{ height: 70, resize: "none" }}
+          />
+        </div>
+
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8, paddingTop: 20, borderTop: "1px solid var(--outline-v)" }}>
-          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-x" /> Cancel</button>
-          <button className="btn btn-filled" onClick={() => validate() && onNext()}>
-            Continue <i className="ti ti-arrow-right" />
+          <button className="btn btn-ghost" onClick={onBack} disabled={submitting}>
+            <i className="ti ti-x" /> Cancel
+          </button>
+          <button className="btn btn-filled" onClick={createCycle} disabled={submitting}>
+            {submitting
+              ? <><i className="ti ti-loader-2 animate-spin" /> Creating…</>
+              : <>Continue <i className="ti ti-arrow-right" /></>}
           </button>
         </div>
       </div>

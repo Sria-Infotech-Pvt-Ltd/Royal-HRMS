@@ -6,7 +6,9 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { StatutoryConfig } from "@/types/payroll";
 
-interface StateOption { id: string; name: string; code: string; }
+// State model uses integer PK in the backend
+interface StateOption { id: number; name: string; code: string; is_active: boolean; }
+interface PTSlab { min: number; max: number | null; amount: number; }
 
 export default function StatutoryConfigTab() {
   const { data: configs, loading, refetch } = useFetch<StatutoryConfig[]>(API.payroll.statutory);
@@ -16,12 +18,13 @@ export default function StatutoryConfigTab() {
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [newStateId, setNewStateId] = useState("");
+  const [draft, setDraft] = useState<Partial<StatutoryConfig>>({});
 
   const selected = configs?.find(c => c.id === selectedId) ?? null;
-  const [draft, setDraft] = useState<Partial<StatutoryConfig>>({});
   const current: Partial<StatutoryConfig> = { ...selected, ...draft };
+  const currentSlabs: PTSlab[] = (current.pt_slabs as PTSlab[] | undefined) ?? [];
 
-  function set<K extends keyof StatutoryConfig>(key: K, value: StatutoryConfig[K]) {
+  function setField<K extends keyof StatutoryConfig>(key: K, value: StatutoryConfig[K]) {
     setDraft(prev => ({ ...prev, [key]: value }));
   }
 
@@ -33,6 +36,27 @@ export default function StatutoryConfigTab() {
   function selectConfig(id: string) {
     setSelectedId(id);
     setDraft({});
+  }
+
+  function setSlabs(slabs: PTSlab[]) {
+    setDraft(prev => ({ ...prev, pt_slabs: slabs }));
+  }
+
+  function addSlab() {
+    setSlabs([...currentSlabs, { min: 0, max: null, amount: 0 }]);
+  }
+
+  function removeSlab(index: number) {
+    setSlabs(currentSlabs.filter((_, i) => i !== index));
+  }
+
+  function updateSlab(index: number, field: keyof PTSlab, raw: string) {
+    const updated = currentSlabs.map((slab, i) => {
+      if (i !== index) return slab;
+      if (field === "max") return { ...slab, max: raw === "" ? null : Number(raw) };
+      return { ...slab, [field]: Number(raw) };
+    });
+    setSlabs(updated);
   }
 
   async function saveConfig() {
@@ -54,7 +78,7 @@ export default function StatutoryConfigTab() {
     if (!newStateId) return;
     setSaving(true);
     try {
-      const res = await clientApi.post<{ data: StatutoryConfig }>(API.payroll.statutory, { state: newStateId });
+      const res = await clientApi.post<{ data: StatutoryConfig }>(API.payroll.statutory, { state: Number(newStateId) });
       setShowNew(false);
       setNewStateId("");
       refetch();
@@ -67,7 +91,8 @@ export default function StatutoryConfigTab() {
     }
   }
 
-  const configuredStateIds = new Set((configs ?? []).map(c => c.state));
+  // State.id is an integer; StatutoryConfig.state is also the State integer PK
+  const configuredStateIds = new Set((configs ?? []).map(c => Number(c.state)));
   const availableStates = (states ?? []).filter(s => !configuredStateIds.has(s.id));
   const hasChanges = Object.keys(draft).length > 0;
 
@@ -138,12 +163,83 @@ export default function StatutoryConfigTab() {
                 <ToggleRow
                   label="PT Applicable"
                   value={current.pt_applicable ?? false}
-                  onChange={v => set("pt_applicable", v)}
+                  onChange={v => setField("pt_applicable", v)}
                 />
+
                 {current.pt_applicable && (
-                  <div className="mt-3 p-3 bg-amber-50 rounded-lg text-[12px] text-amber-700">
-                    <i className="ti ti-info-circle mr-1" />
-                    PT slabs are configured via the API. Contact your administrator to update PT slab values for {selected.state_name}.
+                  <div className="mt-4">
+                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">PT Slabs</div>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 border-b border-gray-200">
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Min (₹)</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Max (₹)</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">PT Amount (₹/mo)</th>
+                            <th className="px-3 py-2 w-10" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {currentSlabs.map((slab, i) => (
+                            <tr key={i}>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={slab.min}
+                                  onChange={e => updateSlab(i, "min", e.target.value)}
+                                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={slab.max ?? ""}
+                                  placeholder="No limit"
+                                  onChange={e => updateSlab(i, "max", e.target.value)}
+                                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={slab.amount}
+                                  onChange={e => updateSlab(i, "amount", e.target.value)}
+                                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  onClick={() => removeSlab(i)}
+                                  className="text-red-400 hover:text-red-600 transition-colors p-1 rounded"
+                                  title="Remove slab"
+                                >
+                                  <i className="ti ti-trash text-sm" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {currentSlabs.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="px-3 py-4 text-center text-gray-400 text-xs">
+                                No PT slabs defined — add one below
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button
+                      onClick={addSlab}
+                      className="mt-2 flex items-center gap-1.5 text-[12px] text-blue-700 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      <i className="ti ti-plus text-xs" /> Add Slab
+                    </button>
+                    <div className="mt-2 text-[11px] text-gray-400">
+                      Leave Max blank on the last slab to apply it to all higher incomes.
+                    </div>
                   </div>
                 )}
               </Section>
@@ -153,25 +249,25 @@ export default function StatutoryConfigTab() {
                 <ToggleRow
                   label="ESI Applicable"
                   value={current.esi_applicable ?? false}
-                  onChange={v => set("esi_applicable", v)}
+                  onChange={v => setField("esi_applicable", v)}
                 />
                 {current.esi_applicable && (
                   <div className="grid grid-cols-3 gap-3 mt-3">
                     <NumField
                       label="Wage Ceiling (₹)"
                       value={String(current.esi_wage_ceiling ?? "")}
-                      onChange={v => set("esi_wage_ceiling", v)}
+                      onChange={v => setField("esi_wage_ceiling", v)}
                     />
                     <NumField
                       label="Employee Rate (%)"
                       value={String(current.esi_employee_rate ?? "")}
-                      onChange={v => set("esi_employee_rate", v)}
+                      onChange={v => setField("esi_employee_rate", v)}
                       step="0.01"
                     />
                     <NumField
                       label="Employer Rate (%)"
                       value={String(current.esi_employer_rate ?? "")}
-                      onChange={v => set("esi_employer_rate", v)}
+                      onChange={v => setField("esi_employer_rate", v)}
                       step="0.01"
                     />
                   </div>
@@ -183,25 +279,25 @@ export default function StatutoryConfigTab() {
                 <ToggleRow
                   label="LWF Applicable"
                   value={current.lwf_applicable ?? false}
-                  onChange={v => set("lwf_applicable", v)}
+                  onChange={v => setField("lwf_applicable", v)}
                 />
                 {current.lwf_applicable && (
                   <div className="grid grid-cols-3 gap-3 mt-3">
                     <NumField
                       label="Employee Amount (₹)"
                       value={String(current.lwf_employee_amount ?? "")}
-                      onChange={v => set("lwf_employee_amount", v)}
+                      onChange={v => setField("lwf_employee_amount", v)}
                     />
                     <NumField
                       label="Employer Amount (₹)"
                       value={String(current.lwf_employer_amount ?? "")}
-                      onChange={v => set("lwf_employer_amount", v)}
+                      onChange={v => setField("lwf_employer_amount", v)}
                     />
                     <div>
                       <label className="block text-[12px] font-semibold text-gray-700 mb-1">Frequency</label>
                       <select
                         value={current.lwf_frequency ?? "monthly"}
-                        onChange={e => set("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
+                        onChange={e => setField("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
                         className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                       >
                         <option value="monthly">Monthly</option>

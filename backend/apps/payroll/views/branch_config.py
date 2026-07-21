@@ -77,6 +77,19 @@ class BranchPayrollConfigDetailView(APIView):
         )
         return success('Branch config updated.', serializer.data)
 
+    def delete(self, request, pk):
+        if not _is_hr_admin(request.user):
+            return error('Only HR admin can remove branch payroll configs.', http_status=403)
+
+        config = get_object_or_404(BranchPayrollConfig, pk=pk)
+        branch_name = config.branch.branch_name
+        config.delete()
+        logger.info(
+            'BranchPayrollConfig for %s removed by %s — reverting to system defaults',
+            branch_name, request.user.email,
+        )
+        return success('Branch config removed. Branch will use system defaults.')
+
 
 class BranchPayrollConfigByBranchView(APIView):
     """GET payroll config by Branch ID."""
