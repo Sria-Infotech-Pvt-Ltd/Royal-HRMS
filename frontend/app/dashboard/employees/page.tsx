@@ -465,10 +465,7 @@ export default function EmployeesPage() {
       {showImport && (
         <BulkImportModal
           onClose={() => setShowImport(false)}
-          onSuccess={() => {
-            setShowImport(false);
-            fetchEmployees(search, 1);
-          }}
+          onSuccess={() => fetchEmployees(search, 1)}
         />
       )}
     </div>

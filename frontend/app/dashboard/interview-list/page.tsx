@@ -15,10 +15,11 @@ import {
   initials,
   MODE_LABELS,
 } from "./_data";
-import { AddCandidateModal }    from "./AddCandidateModal";
-import { MarkCandidateModal }   from "./MarkCandidateModal";
-import { LogsModal }            from "./LogsModal";
-import { EditCandidateModal }   from "./EditCandidateModal";
+import { AddCandidateModal }          from "./AddCandidateModal";
+import { MarkCandidateModal }         from "./MarkCandidateModal";
+import { LogsModal }                  from "./LogsModal";
+import { EditCandidateModal }         from "./EditCandidateModal";
+import { CandidateBulkImportModal }   from "./CandidateBulkImportModal";
 
 // ─── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -127,6 +128,7 @@ export default function InterviewListPage() {
   const [totalCount,    setTotalCount]    = useState(0);
 
   const [showAdd,       setShowAdd]       = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [markData,      setMarkData]      = useState<{ candidate: Candidate; targetStatus: "selected" | "rejected" } | null>(null);
   const [logsFor,       setLogsFor]       = useState<Candidate | null>(null);
   const [sendingPortal, setSendingPortal] = useState<number | null>(null);
@@ -291,9 +293,14 @@ export default function InterviewListPage() {
           </div>
 
           {canCreate && (
-            <button className="btn btn-filled" onClick={() => setShowAdd(true)}>
-              <i className="ti ti-plus" /> Add Candidate
-            </button>
+            <>
+              <button className="btn btn-ghost" onClick={() => setShowBulkImport(true)} suppressHydrationWarning>
+                <i className="ti ti-file-upload" /> Bulk Import
+              </button>
+              <button className="btn btn-filled" onClick={() => setShowAdd(true)}>
+                <i className="ti ti-plus" /> Add Candidate
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -406,11 +413,12 @@ export default function InterviewListPage() {
                           <i className="ti ti-history" /> Logs
                         </button>
 
-                        {/* Set Details — only for referred candidates missing branch or interview date */}
-                        {canEditRec && c.referral_by !== null && (!c.branch || !c.interview_date) && (
+                        {/* Edit — update interview details; not applicable once converted to an employee */}
+                        {canEditRec && c.status !== "converted" && (
                           <button className="btn btn-ghost btn-sm" onClick={() => setEditTarget(c)} suppressHydrationWarning
-                            style={{ color: "var(--warn)" }}>
-                            <i className="ti ti-pencil" /> Set Details
+                            style={c.referral_by !== null && (!c.branch || !c.interview_date) ? { color: "var(--warn)" } : undefined}>
+                            <i className="ti ti-pencil" />
+                            {c.referral_by !== null && (!c.branch || !c.interview_date) ? " Set Details" : " Edit"}
                           </button>
                         )}
 
@@ -504,6 +512,12 @@ export default function InterviewListPage() {
 
       {/* Modals */}
       {showAdd && <AddCandidateModal onClose={() => setShowAdd(false)} onSaved={onCandidateAdded} />}
+      {showBulkImport && (
+        <CandidateBulkImportModal
+          onClose={() => setShowBulkImport(false)}
+          onSuccess={() => fetchAll(search, statusFilter, branchFilter, 1)}
+        />
+      )}
       {markData && (
         <MarkCandidateModal
           candidate={markData.candidate}

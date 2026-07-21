@@ -14,6 +14,8 @@ interface Props {
 const MODE_OPTIONS: InterviewMode[] = ["in_person", "video_call", "phone"];
 
 export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Props) {
+  const [name,           setName]           = useState<string>(candidate.name);
+  const [positionApplied,setPositionApplied]= useState<string>(candidate.position_applied);
   const [branch,         setBranch]         = useState<string>(candidate.branch ? String(candidate.branch) : "");
   const [interviewDate,  setInterviewDate]  = useState<string>(
     candidate.interview_date ? candidate.interview_date.slice(0, 16) : ""
@@ -23,6 +25,14 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
   const [error,          setError]          = useState("");
 
   async function handleSave() {
+    if (!name.trim() || !positionApplied.trim()) {
+      setError("Name and position are required.");
+      return;
+    }
+    if (!branch) {
+      setError("Please select a branch.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -30,23 +40,25 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
       const isFirstSchedule = !!formattedDate && !candidate.interview_date;
 
       const res = await RECRUITMENT_API.update(candidate.id, {
-        branch:         branch        ? Number(branch) : null,
-        interview_date: formattedDate || null,
-        interview_mode: interviewMode,
+        name:             name.trim(),
+        position_applied: positionApplied.trim(),
+        branch:           branch ? Number(branch) : null,
+        interview_date:   formattedDate || null,
+        interview_mode:   interviewMode,
       });
 
       if (isFirstSchedule) {
-        const parts     = candidate.name.trim().split(/\s+/);
-        const firstName = parts[0] ?? candidate.name;
+        const parts     = name.trim().split(/\s+/);
+        const firstName = parts[0] ?? name;
         const lastName  = parts.length > 1 ? parts[parts.length - 1] : "";
         const extraContext = normalizeExtraContext({
-          candidate_name:         candidate.name,
-          full_name:              candidate.name,
+          candidate_name:         name,
+          full_name:              name,
           first_name:             firstName,
           last_name:              lastName,
           email:                  candidate.email,
-          position_applied:       candidate.position_applied,
-          position:               candidate.position_applied,
+          position_applied:       positionApplied,
+          position:               positionApplied,
           branch_name:            candidate.branch_name ?? "",
           interview_date:         formattedDate,
           interview_mode:         interviewMode,
@@ -58,7 +70,14 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
         });
       }
 
-      onSaved(res.data?.data ?? { ...candidate, branch: branch ? Number(branch) : null, interview_date: formattedDate || null, interview_mode: interviewMode });
+      onSaved(res.data?.data ?? {
+        ...candidate,
+        name:             name.trim(),
+        position_applied: positionApplied.trim(),
+        branch:           branch ? Number(branch) : null,
+        interview_date:   formattedDate || null,
+        interview_mode:   interviewMode,
+      });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
         ?.response?.data?.message ?? "Failed to save changes.";
@@ -69,42 +88,46 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "var(--surface, #fff)", borderRadius: 16, width: "100%", maxWidth: 480, boxShadow: "0 20px 50px rgba(0,0,0,0.22)" }}>
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid var(--outline-v)" }}>
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
           <div>
-            <p style={{ fontWeight: 700, fontSize: 15, color: "var(--on-bg)", margin: 0 }}>Edit Interview Details</p>
-            <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "2px 0 0" }}>{candidate.name} · {candidate.position_applied}</p>
+            <div className="modal-title">Edit Interview Details</div>
+            <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "2px 0 0" }}>{candidate.email}</p>
           </div>
-          <button
-            style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "var(--bg)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--on-variant)" }}
-            onClick={onClose} suppressHydrationWarning>
-            <i className="ti ti-x" />
-          </button>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: "20px" }}>
+        <div className="modal-body">
           {error && (
-            <div className="alert alert-error" style={{ marginBottom: 16 }}>
+            <div className="alert alert-error mb-16">
               <i className="ti ti-alert-circle" /><div>{error}</div>
             </div>
           )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Branch <span style={{ color: "var(--error)" }}>*</span></label>
-              <select className="field-input field-select" value={branch}
-                onChange={e => setBranch(e.target.value)} suppressHydrationWarning>
-                <option value="">Select branch</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.branch_name} ({b.branch_code})</option>
-                ))}
-              </select>
+              <label className="field-label">Full Name *</label>
+              <input className="field-input" value={name} onChange={e => setName(e.target.value)} suppressHydrationWarning />
             </div>
+            <div className="field-group">
+              <label className="field-label">Position Applied *</label>
+              <input className="field-input" value={positionApplied} onChange={e => setPositionApplied(e.target.value)} suppressHydrationWarning />
+            </div>
+          </div>
 
+          <div className="field-group mb-16">
+            <label className="field-label">Branch <span style={{ color: "var(--error)" }}>*</span></label>
+            <select className="field-input field-select" value={branch}
+              onChange={e => setBranch(e.target.value)} suppressHydrationWarning>
+              <option value="">Select branch</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.branch_name} ({b.branch_code})</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Interview Date</label>
               <input type="date" className="field-input"
@@ -128,17 +151,16 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
               </select>
             </div>
           </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-            <button className="btn btn-filled" onClick={handleSave} disabled={saving || !branch} suppressHydrationWarning>
-              {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-device-floppy" /> Save Changes</>}
-            </button>
-            <button className="btn btn-ghost" onClick={onClose} suppressHydrationWarning>
-              Cancel
-            </button>
-          </div>
         </div>
 
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose} suppressHydrationWarning>
+            Cancel
+          </button>
+          <button className="btn btn-filled" onClick={handleSave} disabled={saving || !branch || !name.trim() || !positionApplied.trim()} suppressHydrationWarning>
+            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-device-floppy" /> Save Changes</>}
+          </button>
+        </div>
       </div>
     </div>
   );

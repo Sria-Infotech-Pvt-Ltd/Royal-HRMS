@@ -3,60 +3,108 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { EmployeeBulkImportError, EmployeeBulkImportResult } from "@/types/employeeBulkImport";
 
-interface ImportResult {
-  created:  number;
-  updated:  number;
-  failed:   number;
-  errors:   { row: number; message: string }[];
-}
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"];
 
 interface Props {
   onClose:   () => void;
   onSuccess: () => void;
 }
 
+function validateFile(file: File): string | null {
+  const hasAcceptedExtension = ACCEPTED_EXTENSIONS.some(ext =>
+    file.name.toLowerCase().endsWith(ext)
+  );
+  if (!hasAcceptedExtension) return "Unsupported file type. Please upload a .csv or .xlsx file.";
+  if (file.size > MAX_FILE_SIZE_BYTES) return "File is too large. Maximum allowed size is 5 MB.";
+  return null;
+}
+
+function csvCell(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadErrorReport(errors: EmployeeBulkImportError[]) {
+  const rows = [
+    ["Row", "Email", "Field", "Error"],
+    ...errors.map(e => [e.row, e.identifier, e.field, e.message]),
+  ];
+  const csvContent = rows.map(row => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "error_report.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function BulkImportModal({ onClose, onSuccess }: Props) {
   const inputRef                  = useRef<HTMLInputElement>(null);
-  const [file,       setFile]     = useState<File | null>(null);
-  const [uploading,  setUploading] = useState(false);
-  const [result,     setResult]   = useState<ImportResult | null>(null);
-  const [error,      setError]    = useState<string | null>(null);
+  const [file,        setFile]        = useState<File | null>(null);
+  const [fileError,   setFileError]   = useState<string | null>(null);
+  const [uploading,   setUploading]   = useState(false);
+  const [result,      setResult]      = useState<EmployeeBulkImportResult | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
-    setFile(picked);
     setResult(null);
-    setError(null);
+    setSubmitError(null);
+    if (!picked) {
+      setFile(null);
+      setFileError(null);
+      return;
+    }
+    const validationError = validateFile(picked);
+    setFile(validationError ? null : picked);
+    setFileError(validationError);
   }
 
   async function handleUpload() {
     if (!file) return;
     setUploading(true);
-    setError(null);
+    setSubmitError(null);
     setResult(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file, file.name);
-      const res = await clientApi.post(API.employees.bulkImport, fd);
-      const data: ImportResult = res.data?.data ?? res.data;
-      setResult(data);
-      if ((data.created + data.updated) > 0) onSuccess();
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+      const res = await clientApi.post<{ status: string; message: string; data: EmployeeBulkImportResult | null }>(
+        API.employees.bulkImport,
+        formData,
+      );
+      if (res.data.data) {
+        setResult(res.data.data);
+        if (res.data.data.created > 0) onSuccess();
+      } else {
+        setSubmitError(res.data.message || "Import failed. Please check your file and try again.");
+      }
     } catch (err: unknown) {
-      setError((err as { message?: string })?.message ?? "Import failed. Please check your file and try again.");
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Import failed. Please check your file and try again.";
+      setSubmitError(msg);
     } finally {
       setUploading(false);
     }
   }
 
-  const isExcel = file && (file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv"));
+  function handleClose() {
+    setFile(null);
+    setFileError(null);
+    setResult(null);
+    setSubmitError(null);
+    onClose();
+  }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && handleClose()}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title"><i className="ti ti-file-upload" style={{ marginRight: 8 }} />Bulk Import Employees</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+          <button className="modal-close" onClick={handleClose}><i className="ti ti-x" /></button>
         </div>
 
         <div className="modal-body">
@@ -66,9 +114,9 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
               <i className="ti ti-info-circle" style={{ marginRight: 5 }} />File Requirements
             </div>
             <ul style={{ margin: 0, paddingLeft: 16 }}>
-              <li>Accepted formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong></li>
-              <li>Required columns: <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>first_name</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>last_name</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>email</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>department</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>designation</code></li>
-              <li>Maximum 500 rows per import</li>
+              <li>Accepted formats: <strong>.csv</strong>, <strong>.xlsx</strong> (max 5 MB)</li>
+              <li>Required columns: First Name, Last Name, Work Email, Role, Department, Designation, Branch, Date of Joining</li>
+              <li>Optional columns: Phone, Employee Type, Gender, DOB, Blood Group, Address</li>
             </ul>
           </div>
 
@@ -85,7 +133,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             <input
               ref={inputRef}
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".csv,.xlsx"
               style={{ display: "none" }}
               onChange={handleFileChange}
             />
@@ -100,49 +148,104 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             ) : (
               <>
                 <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>Click to select file</div>
-                <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>.xlsx · .xls · .csv</div>
+                <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>.csv · .xlsx</div>
               </>
             )}
           </div>
 
-          {file && !isExcel && (
+          {fileError && (
             <div className="alert alert-error" style={{ marginBottom: 12 }}>
               <i className="ti ti-alert-circle" />
-              <span>Unsupported file type. Please upload a .xlsx, .xls, or .csv file.</span>
+              <span>{fileError}</span>
             </div>
           )}
 
-          {error && (
+          {submitError && (
             <div className="alert alert-error" style={{ marginBottom: 12 }}>
               <i className="ti ti-alert-circle" />
-              <span>{error}</span>
+              <span>{submitError}</span>
             </div>
           )}
 
           {/* Result summary */}
           {result && (
-            <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center" }}>
-                {[
-                  { label: "Created",  value: result.created, color: "var(--success)" },
-                  { label: "Updated",  value: result.updated, color: "var(--primary)" },
-                  { label: "Failed",   value: result.failed,  color: result.failed > 0 ? "var(--error)" : "var(--on-variant)" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)" }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
-                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>{label}</div>
+            <div>
+              <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", overflow: "hidden", marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center" }}>
+                  <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: "rgba(34,197,94,0.08)" }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: "var(--success)" }}>{result.created}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Created</div>
                   </div>
-                ))}
+                  <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: result.skipped > 0 ? "rgba(234,179,8,0.1)" : undefined }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: result.skipped > 0 ? "var(--warn)" : "var(--on-variant)" }}>{result.skipped}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Skipped</div>
+                  </div>
+                  <div style={{ padding: "12px 8px", background: result.failed > 0 ? "rgba(239,68,68,0.08)" : undefined }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: result.failed > 0 ? "var(--error)" : "var(--on-variant)" }}>{result.failed}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Failed</div>
+                  </div>
+                </div>
+                <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--on-variant)", borderTop: "1px solid var(--outline-v)" }}>
+                  {result.total_rows} row{result.total_rows === 1 ? "" : "s"} processed
+                </div>
               </div>
 
+              {result.skipped_rows.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)", marginBottom: 6 }}>Skipped Rows</div>
+                  <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", maxHeight: 160, overflowY: "auto" }}>
+                    <table style={{ width: "100%", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: "var(--bg-low)" }}>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Row</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Email</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.skipped_rows.map((s, i) => (
+                          <tr key={i} style={{ borderTop: "1px solid var(--outline-v)" }}>
+                            <td style={{ padding: "7px 14px", color: "var(--on-variant)" }}>{s.row}</td>
+                            <td style={{ padding: "7px 14px", color: "var(--on-variant)" }}>{s.identifier}</td>
+                            <td style={{ padding: "7px 14px", color: "var(--warn)" }}>{s.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {result.errors.length > 0 && (
-                <div style={{ borderTop: "1px solid var(--outline-v)", maxHeight: 140, overflowY: "auto" }}>
-                  {result.errors.map((e, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--outline-v)", fontSize: 12 }}>
-                      <span style={{ color: "var(--on-variant)", flexShrink: 0 }}>Row {e.row}</span>
-                      <span style={{ color: "var(--error)" }}>{e.message}</span>
-                    </div>
-                  ))}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--on-bg)" }}>Errors</div>
+                    <button className="btn btn-ghost btn-sm" onClick={() => downloadErrorReport(result.errors)} suppressHydrationWarning>
+                      <i className="ti ti-download" /> Download Error Report
+                    </button>
+                  </div>
+                  <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", maxHeight: 200, overflowY: "auto" }}>
+                    <table style={{ width: "100%", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: "var(--bg-low)" }}>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Row</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Email</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Field</th>
+                          <th style={{ textAlign: "left", padding: "6px 14px" }}>Error Message</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.errors.map((e, i) => (
+                          <tr key={i} style={{ borderTop: "1px solid var(--outline-v)" }}>
+                            <td style={{ padding: "7px 14px", color: "var(--on-variant)" }}>{e.row}</td>
+                            <td style={{ padding: "7px 14px", color: "var(--on-variant)" }}>{e.identifier}</td>
+                            <td style={{ padding: "7px 14px", color: "var(--on-variant)" }}>{e.field}</td>
+                            <td style={{ padding: "7px 14px", color: "var(--error)" }}>{e.message}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -150,19 +253,19 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>
+          <button className="btn btn-ghost" onClick={handleClose}>
             {result ? "Close" : "Cancel"}
           </button>
           {!result && (
             <button
               className="btn btn-filled"
               onClick={handleUpload}
-              disabled={!file || !isExcel || uploading}
+              disabled={!file || uploading}
               suppressHydrationWarning
             >
               {uploading
-                ? <><i className="ti ti-loader-2 spin" /> Importing…</>
-                : <><i className="ti ti-file-upload" /> Import</>
+                ? <><i className="ti ti-loader-2 spin" /> Uploading…</>
+                : <><i className="ti ti-file-upload" /> Upload & Import</>
               }
             </button>
           )}
