@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 from rest_framework import serializers
 
@@ -128,6 +129,85 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'Interview mode must be one of: {", ".join(valid_modes)}.'
             )
+        return value
+
+    def validate_notes(self, value: str) -> str:
+        if value and len(value) > 2000:
+            raise serializers.ValidationError('Notes must be 2000 characters or fewer.')
+        return value
+
+
+# ── Bulk Import ───────────────────────────────────────────────────────────────
+
+_BULK_MODE_ALIASES = {
+    'in person':  'in_person',
+    'in-person':  'in_person',
+    'inperson':   'in_person',
+    'in_person':  'in_person',
+    'video':      'video_call',
+    'video call': 'video_call',
+    'video_call': 'video_call',
+    'videocall':  'video_call',
+    'online':     'video_call',
+    'phone':      'phone',
+    'phone call': 'phone',
+    'phone_call': 'phone',
+}
+
+_VALID_IMPORT_MODES = frozenset(choice[0] for choice in Candidate.MODE_CHOICES)
+
+
+class CandidateBulkImportRowSerializer(serializers.Serializer):
+    """Validates one row from a bulk-import CSV/XLSX file.
+
+    Branch resolution happens in the view (pre-loaded once for the whole batch,
+    not per-row), so branch_name is kept as a plain CharField here.
+    """
+
+    name             = serializers.CharField(max_length=200)
+    email            = serializers.EmailField()
+    phone            = serializers.CharField(max_length=20, required=False,
+                                             allow_blank=True, default='')
+    position_applied = serializers.CharField(max_length=200)
+    branch_name      = serializers.CharField()
+    interview_date   = serializers.DateField(
+        required=False, allow_null=True, default=None,
+        input_formats=['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y', 'iso-8601'],
+    )
+    interview_mode   = serializers.CharField(required=False, allow_blank=True, default='')
+    notes            = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Full name is required.')
+        if len(value) > 200:
+            raise serializers.ValidationError('Name must be 200 characters or fewer.')
+        return value
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
+
+    def validate_phone(self, value: str) -> str:
+        value = value.strip()
+        if value and not _PHONE_RE.match(value):
+            raise serializers.ValidationError(
+                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
+            )
+        return value
+
+    def validate_interview_mode(self, value: str) -> str:
+        if not value:
+            return value
+        normalised = _BULK_MODE_ALIASES.get(value.strip().lower(), value.strip().lower())
+        if normalised not in _VALID_IMPORT_MODES:
+            raise serializers.ValidationError(
+                f'Invalid interview mode "{value}". '
+                f'Allowed: {", ".join(sorted(_VALID_IMPORT_MODES))}.'
+            )
+        return normalised
+
+    def validate_interview_date(self, value) -> object:
         return value
 
     def validate_notes(self, value: str) -> str:
