@@ -7,6 +7,7 @@ from .views.admin import (
     AssessmentListCreateView,
     AssignAssessmentView,
     CandidateResultsView,
+    EmailTemplateOptionsView,
 )
 from .views.portal import CompleteAssessmentView, MyAssessmentView, RespondToItemView, RetryAssessmentView
 from .views.sections import AssessmentSectionDetailView, AssessmentSectionListCreateView
@@ -27,7 +28,8 @@ urlpatterns = [
     path('<uuid:assessment_id>/sections/<uuid:section_id>/', AssessmentSectionDetailView.as_view(),    name='assessment-section-detail'),
 
     # HR — assignment and results
-    path('assign/',                                     AssignAssessmentView.as_view(),   name='assessment-assign'),
+    path('assign/',                                     AssignAssessmentView.as_view(),        name='assessment-assign'),
+    path('email-template-options/',                     EmailTemplateOptionsView.as_view(),    name='assessment-email-template-options'),
     path('candidates/<uuid:candidate_id>/results/',     CandidateResultsView.as_view(),   name='assessment-results'),
 
     # Candidate portal

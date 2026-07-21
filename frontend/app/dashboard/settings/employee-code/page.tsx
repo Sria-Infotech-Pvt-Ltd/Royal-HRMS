@@ -40,8 +40,10 @@ export default function EmployeeCodeSettingsPage() {
     clientApi
       .get<{ data: EmployeeCodeSettings }>(API.settings.employeeCode)
       .then(({ data }) => {
-        setForm(data.data);
-        setBase(data.data);
+        const d = data.data ?? {};
+        const safe = { prefix: d.prefix ?? "", padding: d.padding ?? 5, next_sequence: d.next_sequence ?? 1 };
+        setForm(safe);
+        setBase(safe);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -85,8 +87,10 @@ export default function EmployeeCodeSettingsPage() {
         API.settings.employeeCode,
         { prefix: form.prefix.trim().toUpperCase(), padding: form.padding, next_sequence: form.next_sequence }
       );
-      setForm(data.data);
-      setBase(data.data);
+      const d = data.data ?? {};
+      const safe = { prefix: d.prefix ?? "", padding: d.padding ?? 5, next_sequence: d.next_sequence ?? 1 };
+      setForm(safe);
+      setBase(safe);
       setSaved(true);
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { data?: FieldErrors; message?: string } } };

@@ -25,6 +25,7 @@ import { ApprovalMatrixTab } from "./_components/ApprovalMatrixTab";
 import { WishesTab } from "./_components/WishesTab";
 import { LeaveTab } from "./_components/LeaveTab";
 import { AttendanceTab } from "./_components/AttendanceTab";
+import SalaryTab from "./_components/SalaryTab";
 
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -51,7 +52,7 @@ interface ApiDocument {
 }
 
 interface ApiEmployee {
-  id: string; employee_id: string;
+  id: string; uuid: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
   department: string; designation: string; branch: string;
@@ -177,6 +178,7 @@ export default function EmployeeProfilePage({
   const [sectionId, setSectionId] = useState<string>("personal");
 
   const [employee,          setEmployee]          = useState<Employee | null>(null);
+  const [employeeUuid,      setEmployeeUuid]      = useState<string>("");
   const [onboardingStatus,  setOnboardingStatus]  = useState<string>("");
   const [loading,           setLoading]           = useState(true);
   const [notFound,          setNotFound]          = useState(false);
@@ -241,6 +243,7 @@ export default function EmployeeProfilePage({
         const raw = data.data;
         const emp = apiToEmployee(raw);
         setEmployee(emp);
+        setEmployeeUuid(raw.uuid);
         setOnboardingStatus(raw.onboarding_status ?? "");
         setValues({ ...emp.details });
         setBaseValues({ ...emp.details });
@@ -494,6 +497,8 @@ export default function EmployeeProfilePage({
             />
           </div>
         </div>
+      ) : tab === "salary" ? (
+        <SalaryTab employeeId={employeeUuid} />
       ) : tab === "leave" ? (
         <LeaveTab employeeId={id} />
       ) : tab === "attendance" ? (

@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import logging
 import os
 import re
@@ -65,6 +67,7 @@ from apps.accounts.serializers import (
     EmailTemplateCategorySerializer,
     EmailTemplatePreviewSerializer,
     EmailTemplateSerializer,
+    EmployeeBulkImportRowSerializer,
     EmployeeCodeSettingsSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
@@ -121,7 +124,7 @@ def _auto_assign_managers(employee: 'User') -> list:
         hr_user = branch_obj.hr if branch_obj else None
         if not hr_user:
             hr_user = User.objects.filter(
-                role__name='hr', branch__iexact=emp_branch, is_active=True
+                role__name='hr_admin', branch__iexact=emp_branch, is_active=True
             ).first()
         if hr_user and hr_user.pk != employee.pk:
             employee.hr = hr_user
@@ -131,33 +134,41 @@ def _auto_assign_managers(employee: 'User') -> list:
     if role_name == 'manager__team_lead':
         return changed
 
-    # Regular employees need both branch and department for manager auto-assign.
-    if not emp_branch or not emp_dept:
+    # Need at least a branch to find a manager.
+    if not emp_branch:
         return changed
 
     # Skip if reporting_manager already set.
     if employee.reporting_manager_id is not None:
         return changed
 
-    # Multiple managers in branch → ambiguous, let HR assign manually.
-    if User.objects.filter(
-        role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True
-    ).count() != 1:
-        return changed
-
     assigned = None
 
-    dept = (
-        Department.objects.select_related('manager')
-        .filter(name__iexact=emp_dept, is_active=True)
-        .first()
-    )
-    if (
-        dept and dept.manager
-        and dept.manager_id != employee.pk
-        and (dept.manager.branch or '').strip().lower() == emp_branch.lower()
-    ):
-        assigned = dept.manager
+    # 1. Department manager in same branch (most specific — preferred).
+    if emp_dept:
+        dept = (
+            Department.objects.select_related('manager')
+            .filter(name__iexact=emp_dept, is_active=True)
+            .first()
+        )
+        if (
+            dept and dept.manager
+            and dept.manager_id != employee.pk
+            and dept.manager.is_active
+            and (dept.manager.branch or '').strip().lower() == emp_branch.lower()
+        ):
+            assigned = dept.manager
+
+    # 2. Fallback: first active manager in the branch (deterministic by id).
+    #    Handles branches with multiple managers when no dept-level manager is set.
+    if assigned is None:
+        assigned = (
+            User.objects
+            .filter(role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True)
+            .exclude(pk=employee.pk)
+            .order_by('id')
+            .first()
+        )
 
     if assigned is not None:
         employee.reporting_manager = assigned
@@ -2419,8 +2430,12 @@ class EmployeeListCreateView(APIView):
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
-        employee_id = EmployeeCodeSettings.generate_employee_id()
-        full_name   = f'{first_name} {last_name}'
+        employee_id = EmployeeCodeSettings.generate_employee_id(
+            first_name=first_name,
+            last_name=last_name,
+            date_of_joining=date_of_joining or None,
+        )
+        full_name = f'{first_name} {last_name}'
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -2445,6 +2460,34 @@ class EmployeeListCreateView(APIView):
                 auto_fields.append('hr')
             if auto_fields:
                 user.save(update_fields=[*auto_fields, 'updated_at'])
+
+            # Auto-allocate leave balances based on active leave policies
+            from apps.hrms.views.leave import _allocate_leaves_for_employee
+            _allocate_leaves_for_employee(user, user.date_of_joining)
+
+            # Auto-assign all default assessments to the new employee
+            from apps.assessments.models import (
+                Assessment as _Assessment,
+                AssessmentItem as _AssessmentItem,
+                CandidateAssignment as _CandidateAssignment,
+            )
+            _default_assessments = list(
+                _Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
+            )
+            _has_pending_assessment = False
+            for _assessment in _default_assessments:
+                _max_score = _assessment.items.filter(item_type=_AssessmentItem.TYPE_QUIZ).count()
+                _, _created = _CandidateAssignment.objects.get_or_create(
+                    employee=user,
+                    assessment=_assessment,
+                    defaults={'assigned_by': request.user, 'max_score': _max_score},
+                )
+                if _created:
+                    _has_pending_assessment = True
+            if _has_pending_assessment:
+                user.assessment_status = User.ASSESSMENT_PENDING
+                user.save(update_fields=['assessment_status', 'updated_at'])
+
             AuditLog.objects.create(
                 user=request.user, action='employee_created', module='accounts',
                 object_id=str(user.id),
@@ -2909,6 +2952,42 @@ _NULLABLE_PROFILE_FIELDS = frozenset({
 })
 
 
+def _field_filled(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return bool(value)
+
+
+def _compute_completed_steps(profile, user) -> list:
+    """
+    Derive which wizard steps (0-4) already satisfy their required fields,
+    without persisting a separate progress field — completion is always
+    recomputed from the profile/document data that is already saved.
+    """
+    completed = []
+    for step, required in _STEP_REQUIRED_FIELDS.items():
+        if step == 4 or not required:
+            continue
+        if all(_field_filled(getattr(profile, field, None)) for field in required):
+            completed.append(step)
+
+    from apps.accounts.models import EmployeeDocument as ED
+    uploaded = set(ED.objects.filter(user=user).values_list('document_type', flat=True))
+    required_docs = {ED.TYPE_PAN, ED.TYPE_AADHAAR, ED.TYPE_DEGREE}
+    has_experience = (
+        bool((profile.previous_employer or '').strip())
+        or (profile.total_experience_years is not None and profile.total_experience_years > 0)
+    )
+    if has_experience:
+        required_docs.add(ED.TYPE_EXPERIENCE)
+    if required_docs.issubset(uploaded):
+        completed.append(4)
+
+    return completed
+
+
 class EmployeeProfileView(APIView):
     """GET / PATCH the requesting user's own EmployeeProfile."""
     permission_classes = [IsAuthenticated]
@@ -2993,7 +3072,9 @@ class OnboardingView(APIView):
 
         if step is None:
             profile, _ = self._get_or_create_profile(request.user)
-            return success('Profile retrieved.', data=EmployeeProfileSerializer(profile).data)
+            data = EmployeeProfileSerializer(profile).data
+            data['completed_steps'] = _compute_completed_steps(profile, request.user)
+            return success('Profile retrieved.', data=data)
 
         if step not in self._VALID_STEPS:
             return error(
@@ -3555,16 +3636,28 @@ class OnboardingApprovalView(APIView):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
-        decision        = request.data.get('decision')
-        remarks         = request.data.get('remarks', '')
-        req_designation = (request.data.get('designation') or '').strip()
-        req_department  = (request.data.get('department')  or '').strip()
+        decision          = request.data.get('decision')
+        remarks           = request.data.get('remarks', '')
+        req_designation   = (request.data.get('designation')        or '').strip()
+        req_department    = (request.data.get('department')         or '').strip()
+        req_assessment_id = request.data.get('assessment_id')       or None
+        req_manager_id    = request.data.get('reporting_manager_id')
+        annual_ctc_raw    = (request.data.get('annual_ctc')         or '').strip()
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
+        if decision == 'approve':
+            if not req_department:
+                return error('Department is required to approve onboarding.')
+            if not req_designation:
+                return error('Designation is required to approve onboarding.')
 
         company      = Company.objects.first()
         company_name = company.company_name if company else ''
         portal_url   = (company.portal_url if company else '') or ''
+        # The onboarding-approved and assessment-assigned emails must land the
+        # employee directly on the assessment page, not just the portal root —
+        # otherwise they have to manually find their way there after logging in.
+        assessments_portal_url = f'{portal_url.rstrip("/")}/onboarding/assessments' if portal_url else ''
 
         if decision == 'approve':
             from apps.recruitment.models import Candidate
@@ -3579,11 +3672,16 @@ class OnboardingApprovalView(APIView):
                     employee_role = Role.objects.get(name='employee')
                 except Role.DoesNotExist:
                     return error('Role "employee" not found. Create it in Roles settings first.')
-                target.role        = employee_role
-                target.employee_id = EmployeeCodeSettings.generate_employee_id()
+                target.role = employee_role
                 if not target.date_of_joining:
                     from django.utils import timezone as tz
                     target.date_of_joining = tz.now().date()
+                _name_parts = (target.full_name or '').split(' ', 1)
+                target.employee_id = EmployeeCodeSettings.generate_employee_id(
+                    first_name=_name_parts[0] if _name_parts else '',
+                    last_name=_name_parts[1] if len(_name_parts) > 1 else '',
+                    date_of_joining=target.date_of_joining,
+                )
 
                 if linked_candidate and not target.branch and linked_candidate.branch:
                     target.branch = linked_candidate.branch.branch_name
@@ -3596,6 +3694,14 @@ class OnboardingApprovalView(APIView):
             if req_department:
                 target.department = req_department
 
+            # Explicit reporting manager override — set before _auto_assign_managers so auto-assign skips it
+            if req_manager_id:
+                try:
+                    manager_user = User.objects.get(pk=req_manager_id, is_active=True)
+                    target.reporting_manager = manager_user
+                except User.DoesNotExist:
+                    return error('Reporting manager not found or is inactive.')
+
             target.onboarding_status    = User.ONBOARDING_COMPLETE
             target.must_change_password = False
             auto_fields = _auto_assign_managers(target)
@@ -3607,6 +3713,29 @@ class OnboardingApprovalView(APIView):
                 *auto_fields,
             ])))
 
+            if needs_conversion:
+                # Auto-allocate leave balances after candidate→employee conversion
+                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                _allocate_leaves_for_employee(target, target.date_of_joining)
+
+            # Create initial salary config if CTC was provided at approval time
+            if annual_ctc_raw:
+                from decimal import Decimal as _Decimal
+                from django.utils import timezone as _tz
+                from apps.payroll.models import EmployeeSalaryConfig as _SalaryConfig
+                try:
+                    _annual_ctc = _Decimal(annual_ctc_raw)
+                    _SalaryConfig.objects.filter(employee=target, is_active=True).update(is_active=False)
+                    _SalaryConfig.objects.create(
+                        employee=target,
+                        annual_ctc=_annual_ctc,
+                        effective_from=target.date_of_joining or _tz.now().date(),
+                        is_active=True,
+                    )
+                    logger.info('EmployeeSalaryConfig created for %s via onboarding approval', target.email)
+                except Exception:
+                    logger.exception('Failed to create salary config for %s during onboarding approval', target.email)
+
             if linked_candidate:
                 linked_candidate.status      = Candidate.STATUS_CONVERTED
                 linked_candidate.hr_approved = True
@@ -3617,10 +3746,18 @@ class OnboardingApprovalView(APIView):
             from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
             from django.db.models import Q as _Q
             assigned_assessments = []
-            default_assessments = list(
+            assessments_to_assign = list(
                 Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
             )
-            for assessment in default_assessments:
+            # HR may pick a specific (possibly non-default) assessment in the approval
+            # confirmation dialog — honor that choice, not just the global defaults.
+            if req_assessment_id and not any(str(a.id) == str(req_assessment_id) for a in assessments_to_assign):
+                selected_assessment = Assessment.objects.filter(
+                    pk=req_assessment_id, is_active=True,
+                ).prefetch_related('items').first()
+                if selected_assessment:
+                    assessments_to_assign.append(selected_assessment)
+            for assessment in assessments_to_assign:
                 max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
                 if linked_candidate:
                     _, created = CandidateAssignment.objects.get_or_create(
@@ -3668,7 +3805,7 @@ class OnboardingApprovalView(APIView):
                         'designation':      target.designation or '',
                         'department':       target.department  or '',
                         'date_of_joining':  str(target.date_of_joining) if target.date_of_joining else '',
-                        'portal_url':       portal_url,
+                        'portal_url':       assessments_portal_url if has_pending else portal_url,
                         'has_assessments':  'true' if has_pending else 'false',
                         'assessment_count': str(len(assigned_assessments)),
                     },
@@ -3686,7 +3823,7 @@ class OnboardingApprovalView(APIView):
                             'candidate_name':   target.full_name,
                             'assessment_title': assessment.title,
                             'company_name':     company_name,
-                            'portal_url':       portal_url,
+                            'portal_url':       assessments_portal_url or portal_url,
                         },
                     )
                 except Exception:
@@ -4237,4 +4374,363 @@ class EmployeeApprovalMatrixView(APIView):
         return success(
             f'Override for "{workflow_type}" cleared. Global default is now active.',
             data=_build_matrix_row(rule, None, employee),
+        )
+
+
+# ── Employee Bulk Import ───────────────────────────────────────────────────────
+
+_EMP_IMPORT_COL_MAP = {
+    'first name': 'first_name', 'firstname': 'first_name', 'first_name': 'first_name',
+    'last name':  'last_name',  'lastname':  'last_name',  'last_name':  'last_name',
+    'work email': 'email', 'email': 'email', 'work_email': 'email',
+    'email address': 'email', 'email_address': 'email',
+    'phone': 'phone', 'mobile': 'phone', 'phone number': 'phone',
+    'phone_number': 'phone', 'mobile number': 'phone',
+    'role': 'role',
+    'department': 'department', 'dept': 'department',
+    'designation': 'designation',
+    'branch': 'branch', 'branch name': 'branch', 'branch_name': 'branch',
+    'employee type': 'employee_type', 'employee_type': 'employee_type',
+    'emp type': 'employee_type', 'type': 'employee_type',
+    'date of joining': 'date_of_joining', 'date_of_joining': 'date_of_joining',
+    'joining date': 'date_of_joining', 'doj': 'date_of_joining',
+    'gender': 'gender', 'sex': 'gender',
+    'dob': 'date_of_birth', 'date of birth': 'date_of_birth',
+    'date_of_birth': 'date_of_birth', 'birth date': 'date_of_birth',
+    'birthdate': 'date_of_birth',
+    'blood group': 'blood_group', 'blood_group': 'blood_group', 'blood': 'blood_group',
+    'address': 'address', 'current address': 'address', 'current_address': 'address',
+}
+
+_EMP_MAX_IMPORT_ROWS  = 1000
+_EMP_MAX_IMPORT_BYTES = 5 * 1024 * 1024
+_EMP_ALLOWED_ROLES    = frozenset({'system_admin', 'hr_admin'})
+
+
+def _normalize_employee_import_headers(row_dict: dict) -> dict:
+    out = {}
+    for key, value in row_dict.items():
+        mapped = _EMP_IMPORT_COL_MAP.get(key.strip().lower())
+        if mapped:
+            out[mapped] = value
+    return out
+
+
+def _emp_xlsx_cell_to_str(value) -> str:
+    import datetime as _dt
+    if isinstance(value, _dt.datetime):
+        return value.strftime('%Y-%m-%d')
+    if isinstance(value, _dt.date):
+        return value.strftime('%Y-%m-%d')
+    return str(value).strip() if value is not None else ''
+
+
+def _parse_employee_xlsx_rows(file_obj) -> tuple:
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_obj, read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = iter(ws.iter_rows(values_only=True))
+        try:
+            header_row = next(rows_iter)
+        except StopIteration:
+            return [], 'The XLSX file has no header row.'
+        headers = [str(h).strip() if h is not None else '' for h in header_row]
+        rows = []
+        for raw in rows_iter:
+            if all(v is None or str(v).strip() == '' for v in raw):
+                continue
+            rows.append({headers[i]: _emp_xlsx_cell_to_str(raw[i]) for i in range(len(headers))})
+        wb.close()
+        return rows, None
+    except Exception as exc:
+        return [], f'Could not parse XLSX file: {exc}'
+
+
+def _parse_employee_csv_rows(file_obj) -> tuple:
+    try:
+        text = file_obj.read().decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(text))
+        rows = []
+        for row in reader:
+            if all((v or '').strip() == '' for v in row.values()):
+                continue
+            rows.append({k: (v or '').strip() for k, v in row.items()})
+        return rows, None
+    except Exception as exc:
+        return [], f'Could not parse CSV file: {exc}'
+
+
+class EmployeeBulkImportView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser]
+
+    def post(self, request):
+        role_name = (request.user.role.name if request.user.role else '')
+        if role_name not in _EMP_ALLOWED_ROLES:
+            return error(
+                'Only System Admin and HR Admin can perform bulk employee import.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return error('No file uploaded. Please attach a CSV or XLSX file.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+
+        if uploaded_file.size > _EMP_MAX_IMPORT_BYTES:
+            return error('File too large. Maximum allowed size is 5 MB.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+
+        filename = (uploaded_file.name or '').lower()
+        if filename.endswith('.xlsx'):
+            rows, parse_error = _parse_employee_xlsx_rows(uploaded_file)
+        elif filename.endswith('.csv'):
+            rows, parse_error = _parse_employee_csv_rows(uploaded_file)
+        else:
+            return error('Unsupported file format. Please upload a CSV or XLSX file.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+
+        if parse_error:
+            return error(parse_error, http_status=status.HTTP_400_BAD_REQUEST)
+        if not rows:
+            return error('The file contains no data rows.',
+                         http_status=status.HTTP_400_BAD_REQUEST)
+        if len(rows) > _EMP_MAX_IMPORT_ROWS:
+            return error(
+                f'File contains {len(rows)} rows. '
+                f'Maximum allowed per import is {_EMP_MAX_IMPORT_ROWS}.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Pre-load lookup tables once for the entire batch.
+        from apps.branch.models import Branch as _Branch
+        from apps.accounts.models import EmployeeProfile
+
+        # branch: lower_name → exact branch_name stored on User
+        branch_map: dict = {}
+        for b in _Branch.objects.only('branch_name', 'branch_code'):
+            branch_map[b.branch_name.strip().lower()] = b.branch_name.strip()
+            if b.branch_code:
+                branch_map[b.branch_code.strip().lower()] = b.branch_name.strip()
+
+        # department: lower_name → exact name
+        dept_map: dict = {
+            d.lower(): d
+            for d in Department.objects.filter(is_active=True).values_list('name', flat=True)
+        }
+
+        # designation: lower_name → set of lower dept names it belongs to
+        desig_dept_map: dict = {}
+        for desig_name, dept_name in (
+            Designation.objects
+            .filter(is_active=True)
+            .select_related('department')
+            .values_list('name', 'department__name')
+        ):
+            desig_dept_map.setdefault(desig_name.lower(), set()).add(dept_name.lower())
+
+        # role: lower_name/lower_display → Role obj
+        role_map: dict = {}
+        for r in Role.objects.filter(is_active=True):
+            role_map[r.name.lower()]         = r
+            role_map[r.display_name.lower()] = r
+
+        # Pre-load existing emails for DB-level duplicate detection.
+        existing_emails: set = set(
+            User.objects.values_list('email', flat=True)
+        )
+        seen_emails: set = set()
+
+        created_ids:  list = []
+        created_rows: list = []
+        row_errors:   list = []
+        skipped_rows: list = []
+
+        for idx, raw_row in enumerate(rows, start=2):
+            row_data = _normalize_employee_import_headers(raw_row)
+            ser = EmployeeBulkImportRowSerializer(data=row_data)
+
+            if not ser.is_valid():
+                for field, msgs in ser.errors.items():
+                    row_errors.append({
+                        'row':     idx,
+                        'field':   field,
+                        'message': msgs[0] if isinstance(msgs, list) else str(msgs),
+                    })
+                continue
+
+            vd    = ser.validated_data
+            email = vd['email']
+
+            # Duplicates are skipped silently — not treated as failures.
+            if email in existing_emails or email in seen_emails:
+                skipped_rows.append({
+                    'row':        idx,
+                    'identifier': email,
+                    'reason':     'Already exists',
+                })
+                continue
+
+            # Branch existence check.
+            branch_raw  = vd['branch']
+            branch_name = branch_map.get(branch_raw.lower())
+            if branch_name is None:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'branch',
+                    'identifier': email,
+                    'message':    f'Branch "{branch_raw}" not found.',
+                })
+                continue
+
+            # Department existence check.
+            dept_raw  = vd['department']
+            dept_name = dept_map.get(dept_raw.lower())
+            if dept_name is None:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'department',
+                    'identifier': email,
+                    'message':    f'Department "{dept_raw}" not found.',
+                })
+                continue
+
+            # Designation existence + belongs-to-department check.
+            desig_raw = vd['designation']
+            dept_set  = desig_dept_map.get(desig_raw.lower(), set())
+            if not dept_set:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'designation',
+                    'identifier': email,
+                    'message':    f'Designation "{desig_raw}" not found.',
+                })
+                continue
+            if dept_name.lower() not in dept_set:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'designation',
+                    'identifier': email,
+                    'message':    (
+                        f'Designation "{desig_raw}" does not belong to '
+                        f'department "{dept_name}".'
+                    ),
+                })
+                continue
+
+            # Role existence check.
+            role_raw = vd['role']
+            role_obj = role_map.get(role_raw.lower())
+            if role_obj is None:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'role',
+                    'identifier': email,
+                    'message':    f'Role "{role_raw}" not found.',
+                })
+                continue
+            if role_obj.name == 'system_admin':
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'role',
+                    'identifier': email,
+                    'message':    'system_admin cannot be assigned via bulk import.',
+                })
+                continue
+
+            # Create the employee.
+            try:
+                temp_password = ''.join(
+                    secrets.choice(string.ascii_letters + string.digits)
+                    for _ in range(12)
+                )
+                employee_id = EmployeeCodeSettings.generate_employee_id()
+                full_name   = f'{vd["first_name"]} {vd["last_name"]}'
+
+                user = User.objects.create_user(
+                    email                = email,
+                    password             = temp_password,
+                    full_name            = full_name,
+                    role                 = role_obj,
+                    employee_id          = employee_id,
+                    department           = dept_name,
+                    designation          = desig_raw,
+                    branch               = branch_name,
+                    phone                = vd.get('phone') or '',
+                    date_of_joining      = vd.get('date_of_joining'),
+                    must_change_password = True,
+                    onboarding_status    = User.ONBOARDING_PENDING,
+                )
+
+                auto_fields = _auto_assign_managers(user)
+                if auto_fields:
+                    user.save(update_fields=[*auto_fields, 'updated_at'])
+
+                # Create EmployeeProfile if optional personal fields are present.
+                gender  = vd.get('gender') or ''
+                dob     = vd.get('date_of_birth')
+                blood   = vd.get('blood_group') or ''
+                address = vd.get('address') or ''
+                if any([gender, dob, blood, address]):
+                    EmployeeProfile.objects.get_or_create(
+                        user=user,
+                        defaults={
+                            'gender':          gender,
+                            'date_of_birth':   dob,
+                            'blood_group':     blood,
+                            'current_address': address,
+                        },
+                    )
+
+                seen_emails.add(email)
+                created_ids.append(employee_id)
+                created_rows.append({'row': idx, 'identifier': email,
+                                     'employee_id': employee_id})
+                logger.info('Bulk import: employee %s (%s) created', employee_id, email)
+
+            except Exception as exc:
+                logger.error('Bulk import row %d failed (%s): %s', idx, email, exc)
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'general',
+                    'identifier': email,
+                    'message':    'Failed to create employee. Please verify the row data.',
+                })
+
+        total_rows    = len(rows)
+        created_count = len(created_ids)
+        skipped_count = len(skipped_rows)
+        fail_count    = len(row_errors)
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'bulk_employee_import',
+            module     = 'accounts',
+            changes    = {
+                'total_rows': total_rows,
+                'created':    created_count,
+                'skipped':    skipped_count,
+                'failed':     fail_count,
+            },
+            ip_address = get_client_ip(request),
+        )
+
+        logger.info(
+            'Bulk employee import by %s: %d created, %d skipped, %d failed (total %d)',
+            request.user.email, created_count, skipped_count, fail_count, total_rows,
+        )
+
+        return success(
+            'Bulk import completed.',
+            data={
+                'total_rows':           total_rows,
+                'created':              created_count,
+                'skipped':              skipped_count,
+                'failed':               fail_count,
+                'created_employee_ids': created_ids,
+                'created_rows':         created_rows,
+                'skipped_rows':         skipped_rows,
+                'errors':               row_errors,
+            },
         )

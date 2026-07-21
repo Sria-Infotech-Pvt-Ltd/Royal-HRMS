@@ -1819,6 +1819,78 @@ backend/apps/accounts/views.py
   — _employee_dict(): hr.id and mgr.id changed from UUID to employee_id; role guard fixed
 ```
 
+---
+
+## Session Log — 2026-07-20 (continued)
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**3. Bulk Candidate Import** (`POST /api/recruitment/candidates/bulk-import/`)
+
+New endpoint added to the existing Interview List / Recruitment module. No new Python files, no new models.
+
+**Accepted formats:** `.csv` and `.xlsx` (via `openpyxl`). Maximum 1 000 rows / 5 MB per upload.
+
+**Column headers accepted (case-insensitive, with aliases):**
+
+| Canonical field | Accepted header aliases |
+|---|---|
+| `name` | Full Name, Candidate Name, Name |
+| `email` | Email, Email Address |
+| `phone` | Phone, Mobile, Phone Number, Mobile Number |
+| `position_applied` | Position, Position Applied, Job Title, Role |
+| `branch_name` | Branch, Branch Name |
+| `interview_date` | Interview Date, Date |
+| `interview_mode` | Interview Mode, Mode |
+| `notes` | Notes, Remarks, Comments |
+
+**Validation per row:**
+- `name`, `email`, `position_applied` are required
+- Email: valid format; duplicate check against DB and within the file
+- Phone: valid format; duplicate check if provided
+- `interview_date`: today or future only; accepts `YYYY-MM-DD`, `DD-MM-YYYY`, `DD/MM/YYYY`
+- `interview_mode`: `in_person` / `video_call` / `phone`; also accepts aliases `In Person`, `Online`, `Video Call`
+- `branch_name`: resolved to existing `Branch` by name or code; missing branch returns row error (never creates new branches)
+
+**Import behaviour:**
+- Continues processing all rows after an error — does NOT stop at first failure
+- All valid rows inserted with `bulk_create()` inside `transaction.atomic()`
+- HTTP 200 if all rows succeed; HTTP 207 if any rows failed
+
+**Permission:** role must be `system_admin`, `hr`, or `hr_admin`; superusers always allowed; others get 403.
+
+**Response shape:**
+```json
+{
+  "status": "success",
+  "message": "Bulk import completed.",
+  "data": {
+    "total_rows": 50,
+    "success": 46,
+    "failed": 4,
+    "errors": [
+      { "row": 8,  "field": "email",  "message": "Duplicate email." },
+      { "row": 15, "field": "branch", "message": "Branch \"HQ\" not found. Use an existing branch name or code." }
+    ]
+  }
+}
+```
+
+### Files Modified
+
+```
+backend/requirements.txt                         — openpyxl==3.1.5 added
+backend/apps/recruitment/serializers.py          — CandidateBulkImportRowSerializer added
+                                                   (+ _BULK_MODE_ALIASES, _VALID_IMPORT_MODES constants)
+backend/apps/recruitment/views.py                — import csv, io, MultiPartParser added;
+                                                   CandidateBulkImportRowSerializer imported;
+                                                   _IMPORT_COL_MAP, _normalize_import_headers(),
+                                                   _parse_csv_rows(), _parse_xlsx_rows(),
+                                                   CandidateBulkImportView added
+backend/apps/recruitment/urls.py                 — candidates/bulk-import/ URL pattern added
+```
+
 ### Pending
 
 - Frontend implementation of all 3 dashboard pages (prompts given above)
@@ -1901,3 +1973,163 @@ frontend/
     — addRole catch: uses apiErr() instead of err.message
     — Success banner rendered when saveMsg is set (dismissable)
 ```
+
+---
+
+## Session Log — 2026-07-20 (Part 2)
+**Author: Teerdaveni**
+
+### Fixes Shipped
+
+**1. Candidate Bulk Import — branch is now a mandatory field**
+
+`branch_name` in `CandidateBulkImportRowSerializer` was `required=False, allow_blank=True`. Changed to `required=True` so any row missing a branch value is immediately rejected with a validation error.
+
+```
+backend/apps/recruitment/serializers.py
+  — CandidateBulkImportRowSerializer.branch_name: required=False → required=True
+```
+
+---
+
+### Features Shipped
+
+**2. Employee Bulk Import** (`POST /api/employees/bulk-import/`)
+
+Verified the endpoint did not exist. Implemented from scratch inside existing files — no new Python files, no new models.
+
+**Accepted formats:** `.csv` and `.xlsx`. Maximum 1 000 rows / 5 MB per upload.
+
+**Permission:** `system_admin` and `hr_admin` only — others get 403.
+
+**Column headers accepted (case-insensitive, with aliases):**
+
+| Canonical field | Accepted header aliases |
+|---|---|
+| `first_name` | First Name, Firstname |
+| `last_name` | Last Name, Lastname |
+| `email` | Work Email, Email, Email Address |
+| `phone` | Phone, Mobile, Phone Number |
+| `role` | Role |
+| `department` | Department, Dept |
+| `designation` | Designation |
+| `branch` | Branch, Branch Name |
+| `employee_type` | Employee Type, Emp Type, Type |
+| `date_of_joining` | Date of Joining, Joining Date, DOJ |
+| `gender` | Gender, Sex |
+| `date_of_birth` | DOB, Date of Birth, Birthdate |
+| `blood_group` | Blood Group, Blood |
+| `address` | Address, Current Address |
+
+**Validation per row (all independent — one failure never stops the rest):**
+- `first_name`, `last_name`, `email`, `role`, `department`, `designation`, `branch`, `date_of_joining` — required
+- Email: valid format; duplicate check against DB and within the uploaded file
+- Phone: valid format if provided
+- Branch: must match existing `Branch.branch_name` or `Branch.branch_code` (case-insensitive)
+- Department: must match an active `Department` (case-insensitive)
+- Designation: must exist AND belong to the selected department
+- Role: matched by `role.name` or `role.display_name`; `system_admin` cannot be assigned via import
+- Date formats: `YYYY-MM-DD`, `DD-MM-YYYY`, `DD/MM/YYYY`, `MM/DD/YYYY`, Excel date objects
+
+**For each valid row:**
+- `EmployeeCodeSettings.generate_employee_id()` generates employee ID atomically
+- `User.objects.create_user()` creates the account with `must_change_password=True`
+- `_auto_assign_managers()` runs to auto-assign HR and reporting manager
+- `EmployeeProfile` created if any optional profile fields (gender, DOB, blood group, address) are present
+
+**Audit log written** with `total_rows`, `created`, `skipped`, `failed` counts.
+
+**Files modified:**
+```
+backend/apps/accounts/serializers.py
+  — EmployeeBulkImportRowSerializer added (+ _EMP_PHONE_RE, _EMP_IMPORT_DATE_FMTS,
+    _EMP_VALID_GENDERS, _EMP_VALID_BLOOD constants)
+
+backend/apps/accounts/views.py
+  — import csv, io added at top
+  — EmployeeBulkImportRowSerializer added to serializer import block
+  — _EMP_IMPORT_COL_MAP, _EMP_MAX_IMPORT_ROWS, _EMP_MAX_IMPORT_BYTES, _EMP_ALLOWED_ROLES added
+  — _normalize_employee_import_headers(), _emp_xlsx_cell_to_str(),
+    _parse_employee_xlsx_rows(), _parse_employee_csv_rows(), EmployeeBulkImportView added
+
+backend/apps/accounts/urls.py
+  — EmployeeBulkImportView imported
+  — employees/bulk-import/ URL pattern added (before employees/<str:employee_id>/ to prevent conflict)
+```
+
+---
+
+**3. Bulk Import — Enterprise re-upload behaviour (both modules)**
+
+**Problem:** When a user uploaded a file, fixed the failures, and re-uploaded the same file, previously-imported rows came back as "Duplicate email" errors. This blocked the corrected rows from being visible in the results.
+
+**Fix applied to both `CandidateBulkImportView` and `EmployeeBulkImportView`:**
+
+Duplicate rows (email already in DB or already seen in this file) are now **skipped silently** instead of being treated as failures. They appear in a new `skipped_rows` section of the response.
+
+**New response shape (both modules):**
+
+```json
+{
+  "status": "success",
+  "message": "Bulk import completed.",
+  "data": {
+    "total_rows": 10,
+    "created": 7,
+    "skipped": 2,
+    "failed": 1,
+    "created_rows": [
+      { "row": 2, "identifier": "alice@company.com" }
+    ],
+    "skipped_rows": [
+      { "row": 3, "identifier": "bob@company.com", "reason": "Already exists" }
+    ],
+    "errors": [
+      { "row": 5, "field": "branch", "identifier": "charlie@company.com", "message": "Branch \"XYZ\" not found." }
+    ]
+  }
+}
+```
+
+**Enterprise behaviour:**
+
+| Upload | Alice | Bob (bad email) | Charlie (bad branch) |
+|---|---|---|---|
+| Upload 1 | ✅ Created | ❌ Failed | ❌ Failed |
+| Upload 2 (fixed) | ⏭ Skipped | ✅ Created | ✅ Created |
+
+**Additional improvement:** All error entries now include `identifier` (email) field to support client-side Error Report CSV generation.
+
+**Candidate import:** `AuditLog` entry was missing entirely — now added with `created/skipped/failed` counts.
+
+**Files modified:**
+```
+backend/apps/recruitment/views.py
+  — CandidateBulkImportView: email/phone duplicates → skipped_rows (not row_errors)
+  — to_create_meta list added to track created_rows
+  — AuditLog.objects.create() added (was missing)
+  — Response: success/failed → created/skipped/failed + created_rows/skipped_rows/errors
+
+backend/apps/accounts/views.py
+  — EmployeeBulkImportView: email duplicates → skipped_rows (not row_errors)
+  — created_rows list added with {row, identifier, employee_id}
+  — AuditLog updated to include skipped count
+  — Response: success/failed → created/skipped/failed + created_rows/skipped_rows/errors
+```
+
+### Frontend Prompts Given
+
+- Candidate Bulk Import full implementation prompt (endpoints, request format, response shape, TypeScript types, component spec, error/skipped table, download error report)
+- Employee Bulk Import full implementation prompt (same structure, employee-specific columns and types)
+
+### Pending
+
+- Frontend implementation of Employee Bulk Import modal
+- Frontend implementation of Candidate Bulk Import modal
+- Frontend implementation of all 3 dashboard pages
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR

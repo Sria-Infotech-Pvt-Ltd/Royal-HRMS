@@ -10,6 +10,7 @@ import StatusCell from "../leave/_components/StatusCell";
 import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModal";
 import { useToast } from "@/components/ToastProvider";
 import { LeaveRequest } from "../leave/_data";
+import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ type ExpenseListResponse = PaginatedResponse<ExpenseRequest>;
 
 interface CategoryOption { value: string; label: string; }
 
-type Section = "my-requests" | "approvals";
+type Section = "my-requests" | "approvals" | "attendance";
 type RequestType = "leave" | "expense";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -764,11 +765,13 @@ function TeamApprovalsSection() {
 
 export default function ApprovalsPage() {
   const [section, setSection] = useState<Section>("my-requests");
-  const canApprove = useAnyPermission("leave.approve", "expenses.approve");
+  const canApprove         = useAnyPermission("leave.approve", "expenses.approve");
+  const canApproveAttendance = useAnyPermission("payroll.view", "payroll.approve");
 
   const sections: { key: Section; label: string; icon: string }[] = [
-    { key: "my-requests", label: "My Requests",    icon: "ti-inbox"  },
-    ...(canApprove ? [{ key: "approvals" as Section, label: "Team Approvals", icon: "ti-checks" }] : []),
+    { key: "my-requests", label: "My Requests",           icon: "ti-inbox"        },
+    ...(canApprove           ? [{ key: "approvals"  as Section, label: "Team Approvals",       icon: "ti-checks"       }] : []),
+    ...(canApproveAttendance ? [{ key: "attendance" as Section, label: "Attendance Approval",  icon: "ti-calendar-check" }] : []),
   ];
 
   return (
@@ -797,7 +800,8 @@ export default function ApprovalsPage() {
 
       <div className="settings-card">
         {section === "my-requests" && <MyRequestsSection />}
-        {section === "approvals" && canApprove && <TeamApprovalsSection />}
+        {section === "approvals"   && canApprove           && <TeamApprovalsSection />}
+        {section === "attendance"  && canApproveAttendance && <AttendanceApprovalTab />}
       </div>
     </div>
   );

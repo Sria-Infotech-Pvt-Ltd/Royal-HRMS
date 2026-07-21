@@ -30,16 +30,16 @@ def _has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
-def _send_assessment_email(recipient_email: str, context: dict) -> None:
+def _send_assessment_email(recipient_email: str, context: dict, template_name: str = 'assessment_assigned') -> None:
     try:
         from apps.accounts.utils import send_template_email
         send_template_email(
             recipient_email=recipient_email,
-            template_name='assessment_assigned',
+            template_name=template_name,
             context=context,
         )
     except Exception:
-        logger.exception('Failed to send assessment_assigned email to %s', recipient_email)
+        logger.exception('Failed to send %s email to %s', template_name, recipient_email)
 
 
 class AssessmentListCreateView(APIView):
@@ -221,6 +221,7 @@ class AssignAssessmentView(APIView):
         department    = request.data.get('department', '').strip()
         assign_to     = request.data.get('assign_to', '').strip().lower()
         deadline_raw  = request.data.get('deadline')
+        template_name = (request.data.get('template_name') or 'assessment_assigned').strip()
 
         if not assessment_id:
             return error('assessment_id is required.')
@@ -256,7 +257,6 @@ class AssignAssessmentView(APIView):
         max_score = assessment.compute_max_score()
 
         from apps.accounts.models import Company
-        from apps.accounts.utils import send_template_email
         company    = Company.objects.first()
         company_name = company.company_name if company else ''
         portal_url   = (company.portal_url if company else '') or ''
@@ -304,7 +304,7 @@ class AssignAssessmentView(APIView):
                     }
                     threading.Thread(
                         target=_send_assessment_email,
-                        args=(employee.email, ctx),
+                        args=(employee.email, ctx, template_name),
                         daemon=True,
                     ).start()
 
@@ -336,7 +336,7 @@ class AssignAssessmentView(APIView):
                 }
                 threading.Thread(
                     target=_send_assessment_email,
-                    args=(candidate.email, ctx),
+                    args=(candidate.email, ctx, template_name),
                     daemon=True,
                 ).start()
 
@@ -374,7 +374,7 @@ class AssignAssessmentView(APIView):
                 }
                 threading.Thread(
                     target=_send_assessment_email,
-                    args=(employee.email, ctx),
+                    args=(employee.email, ctx, template_name),
                     daemon=True,
                 ).start()
 
@@ -425,7 +425,7 @@ class AssignAssessmentView(APIView):
                         'company_name':     company_name,
                         'portal_url':       portal_url,
                         'deadline':         str(deadline) if deadline else '',
-                    })
+                    }, template_name)
             threading.Thread(target=_bulk_notify, daemon=True).start()
 
         scope = f'department "{department}"' if department else 'entire company'
@@ -438,6 +438,25 @@ class AssignAssessmentView(APIView):
             {'assigned_count': assigned, 'skipped_count': skipped},
             http_status=status.HTTP_201_CREATED,
         )
+
+
+class EmailTemplateOptionsView(APIView):
+    """
+    GET /api/assessments/email-template-options/
+    Returns a flat list of {name, display_name} for all active email templates.
+    Used to populate the template selector in the Assign Assessment modal.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.models import EmailTemplate
+        templates = list(
+            EmailTemplate.objects
+            .filter(is_active=True)
+            .order_by('display_name')
+            .values('name', 'display_name')
+        )
+        return success('Email templates retrieved.', templates)
 
 
 class CandidateResultsView(APIView):

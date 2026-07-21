@@ -125,8 +125,8 @@ export function proxy(request: NextRequest) {
 
     // "approved" means HR has approved the onboarding form; only then can
     // the employee access the assessment portal.
-    const needsOnboarding  = onboardingStatus !== "complete" && onboardingStatus !== "approved";
-    const needsAssessments = onboardingStatus === "approved" && assessmentStatus === "pending";
+    const needsOnboarding  = onboardingStatus !== "complete";
+    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending";
 
     // Block /onboarding/assessments until HR has approved the onboarding form.
     // Without this explicit check the route slips through because isOnboarding

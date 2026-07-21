@@ -6,26 +6,35 @@ import PayrollDashboard from "./_components/PayrollDashboard";
 import RunPayrollWizard from "./_components/RunPayrollWizard";
 import PayrollReports   from "./_components/PayrollReports";
 import PayrollAnalytics from "./_components/PayrollAnalytics";
+import SalarySetupTab   from "./_components/SalarySetupTab";
 
-type TabId = "dashboard" | "reports" | "analytics";
+type TabId = "dashboard" | "salary_setup" | "reports" | "analytics";
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "dashboard",  label: "Dashboard"  },
-  { id: "reports",    label: "Reports"    },
-  { id: "analytics",  label: "Analytics"  },
+const TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: "dashboard",    label: "Dashboard",    icon: "ti-layout-dashboard" },
+  { id: "salary_setup", label: "Salary Setup", icon: "ti-currency-rupee"  },
+  { id: "reports",      label: "Reports",      icon: "ti-report"           },
+  { id: "analytics",    label: "Analytics",    icon: "ti-chart-bar"        },
 ];
+
+interface ResumeState { cycleId: string; status: string; }
 
 export default function PayrollPage() {
   const canCreate   = usePermission("payroll.create");
   const [active,     setActive]     = useState<TabId>("dashboard");
   const [runWizard,  setRunWizard]  = useState(false);
+  const [resume,     setResume]     = useState<ResumeState | null>(null);
+
+  function openFresh() { setResume(null); setRunWizard(true); }
+  function openResume(cycleId: string, status: string) { setResume({ cycleId, status }); setRunWizard(true); }
+  function closeWizard() { setResume(null); setRunWizard(false); }
 
   return (
     <div>
       <div className="page-header">
         <div>
           <div className="page-title">Payroll Management</div>
-          <div className="page-sub">Process, approve and disburse salaries — June 2026</div>
+          <div className="page-sub">Process, approve and disburse salaries — {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })}</div>
         </div>
         {!runWizard && (
           <div className="page-actions">
@@ -33,7 +42,7 @@ export default function PayrollPage() {
               <i className="ti ti-history" /> View History
             </button>
             {canCreate && (
-              <button className="btn btn-filled btn-sm" onClick={() => setRunWizard(true)}>
+              <button className="btn btn-filled btn-sm" onClick={openFresh}>
                 <i className="ti ti-player-play" /> Run Payroll
               </button>
             )}
@@ -42,7 +51,11 @@ export default function PayrollPage() {
       </div>
 
       {runWizard ? (
-        <RunPayrollWizard onCancel={() => setRunWizard(false)} />
+        <RunPayrollWizard
+          onCancel={closeWizard}
+          initialCycleId={resume?.cycleId}
+          initialStatus={resume?.status}
+        />
       ) : (
         <>
           <div className="tabs">
@@ -52,14 +65,15 @@ export default function PayrollPage() {
                 className={`tab${active === tab.id ? " active" : ""}`}
                 onClick={() => setActive(tab.id)}
               >
-                {tab.label}
+                <i className={`ti ${tab.icon}`} style={{ marginRight: 5 }} />{tab.label}
               </button>
             ))}
           </div>
 
-          {active === "dashboard"  && <PayrollDashboard onRunPayroll={() => setRunWizard(true)} />}
-          {active === "reports"    && <PayrollReports />}
-          {active === "analytics"  && <PayrollAnalytics />}
+          {active === "dashboard"    && <PayrollDashboard onRunPayroll={openFresh} onResumeCycle={openResume} />}
+          {active === "salary_setup" && <SalarySetupTab />}
+          {active === "reports"      && <PayrollReports />}
+          {active === "analytics"    && <PayrollAnalytics />}
         </>
       )}
     </div>

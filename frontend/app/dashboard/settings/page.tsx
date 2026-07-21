@@ -51,7 +51,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "notifications":        "/dashboard/settings/notifications",
 };
 
-const COMING_SOON_ITEMS = new Set(["recruitment-config", "notifications", "payroll-config"]);
+const COMING_SOON_ITEMS = new Set(["recruitment-config", "notifications"]);
 
 export default function SettingsPage() {
   const router = useRouter();

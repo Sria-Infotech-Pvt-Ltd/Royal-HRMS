@@ -3,6 +3,7 @@ from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
     EmployeeApprovalMatrixView,
+    EmployeeBulkImportView,
     EmployeeCodeSettingsView,
     EmployeeDetailView,
     EmployeeDocumentView,
@@ -55,6 +56,7 @@ urlpatterns = [
 
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
+    path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
     path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),

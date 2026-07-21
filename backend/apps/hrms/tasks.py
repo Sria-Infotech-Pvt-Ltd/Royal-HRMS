@@ -15,6 +15,93 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def reset_annual_leave_balances(self):
+    """
+    Annual task: runs on 1st Jan at 00:01 IST.
+
+    For every active employee:
+    - Checks each active LeavePolicy for eligibility (branch, dept, designation, service period).
+    - Carries forward unused days from the previous year (capped by max_carry_forward_days).
+    - Creates a new LeaveBalance for the new year.
+
+    Idempotent: get_or_create — safe to re-run if the task fires twice.
+    """
+    try:
+        from decimal import Decimal
+        from apps.accounts.models import User
+        from apps.hrms.models import LeaveBalance, LeavePolicy
+
+        today    = timezone.localdate()
+        new_year = today.year
+        prev_year = new_year - 1
+
+        active_employees = list(
+            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+        )
+        policies = list(LeavePolicy.objects.filter(is_active=True))
+
+        created_total = 0
+        skipped_total = 0
+
+        for employee in active_employees:
+            doj           = getattr(employee, 'date_of_joining', None)
+            months_served = 0
+            if doj:
+                months_served = (today.year - doj.year) * 12 + (today.month - doj.month)
+
+            for policy in policies:
+                if policy.minimum_service_period > 0 and months_served < policy.minimum_service_period:
+                    continue
+
+                if policy.applicable_branches and (
+                    not employee.branch or employee.branch not in policy.applicable_branches
+                ):
+                    continue
+
+                if policy.applicable_departments and (
+                    not employee.department or employee.department not in policy.applicable_departments
+                ):
+                    continue
+
+                if policy.applicable_designations and (
+                    not employee.designation or employee.designation not in policy.applicable_designations
+                ):
+                    continue
+
+                carry_forward = Decimal('0')
+                if policy.can_carry_forward and policy.max_carry_forward_days > 0:
+                    prev = LeaveBalance.objects.filter(
+                        employee=employee, leave_type=policy.leave_type, year=prev_year,
+                    ).first()
+                    if prev:
+                        unused = prev.total_days - prev.used_days
+                        if unused > 0:
+                            carry_forward = min(unused, Decimal(str(policy.max_carry_forward_days)))
+
+                _, created = LeaveBalance.objects.get_or_create(
+                    employee=employee,
+                    leave_type=policy.leave_type,
+                    year=new_year,
+                    defaults={
+                        'total_days':      policy.annual_days + carry_forward,
+                        'carried_forward': carry_forward,
+                    },
+                )
+                if created:
+                    created_total += 1
+                else:
+                    skipped_total += 1
+
+        result = {'year': new_year, 'created': created_total, 'skipped': skipped_total}
+        logger.info('reset_annual_leave_balances completed: %s', result)
+        return result
+
+    except Exception as exc:
+        logger.error('reset_annual_leave_balances error: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_birthday_wishes(self):
     """
     Daily task: send a birthday wish email to every active employee

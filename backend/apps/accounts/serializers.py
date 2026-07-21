@@ -802,9 +802,16 @@ class DocumentSerializer(serializers.ModelSerializer):
 # ─── Employee Code Settings ───────────────────────────────────────────────────
 
 class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
+    format_description = serializers.SerializerMethodField()
+
     class Meta:
         model  = EmployeeCodeSettings
-        fields = ['prefix', 'padding', 'next_sequence']
+        fields = ['prefix', 'padding', 'next_sequence', 'format_description']
+        read_only_fields = ['format_description']
+
+    def get_format_description(self, obj) -> str:
+        seq = str(obj.next_sequence).zfill(obj.padding)
+        return f'{obj.prefix}{seq}  (prefix + {obj.padding}-digit sequence, next = {obj.next_sequence})'
 
     def validate_prefix(self, value):
         value = value.strip().upper()
@@ -1307,3 +1314,114 @@ class ApprovalWorkflowRuleUpdateSerializer(serializers.Serializer):
                            allow_blank=True,
                            default='',
                        )
+
+
+# ── Employee Bulk Import ───────────────────────────────────────────────────────
+
+_EMP_PHONE_RE         = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+_EMP_IMPORT_DATE_FMTS = ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y', 'iso-8601']
+_EMP_VALID_GENDERS    = frozenset({'male', 'female', 'other'})
+_EMP_VALID_BLOOD      = frozenset({'a+', 'a-', 'b+', 'b-', 'o+', 'o-', 'ab+', 'ab-'})
+
+
+class EmployeeBulkImportRowSerializer(serializers.Serializer):
+    """Validates one row from an employee bulk-import CSV/XLSX file.
+
+    Role / department / designation / branch existence checks happen in the view
+    (pre-loaded once per batch), so those fields are plain CharFields here.
+    """
+
+    first_name      = serializers.CharField(max_length=150)
+    last_name       = serializers.CharField(max_length=150)
+    email           = serializers.EmailField()
+    phone           = serializers.CharField(max_length=20, required=False,
+                                             allow_blank=True, default='')
+    role            = serializers.CharField(max_length=100)
+    department      = serializers.CharField(max_length=100)
+    designation     = serializers.CharField(max_length=100)
+    branch          = serializers.CharField(max_length=100)
+    employee_type   = serializers.CharField(max_length=50, required=False,
+                                             allow_blank=True, default='Permanent')
+    date_of_joining = serializers.DateField(input_formats=_EMP_IMPORT_DATE_FMTS)
+    gender          = serializers.CharField(max_length=10, required=False,
+                                             allow_blank=True, default='')
+    date_of_birth   = serializers.DateField(
+                          required=False, allow_null=True, default=None,
+                          input_formats=_EMP_IMPORT_DATE_FMTS,
+                      )
+    blood_group     = serializers.CharField(max_length=5, required=False,
+                                             allow_blank=True, default='')
+    address         = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_first_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('First name is required.')
+        return value
+
+    def validate_last_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Last name is required.')
+        return value
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
+
+    def validate_phone(self, value: str) -> str:
+        value = value.strip()
+        if value and not _EMP_PHONE_RE.match(value):
+            raise serializers.ValidationError(
+                'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
+            )
+        return value
+
+    def validate_role(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Role is required.')
+        return value
+
+    def validate_department(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Department is required.')
+        return value
+
+    def validate_designation(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Designation is required.')
+        return value
+
+    def validate_branch(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Branch is required.')
+        return value
+
+    def validate_gender(self, value: str) -> str:
+        if not value:
+            return value
+        normalized = value.strip().lower()
+        if normalized not in _EMP_VALID_GENDERS:
+            raise serializers.ValidationError(
+                f'Invalid gender "{value}". Allowed: male, female, other.'
+            )
+        return normalized
+
+    def validate_blood_group(self, value: str) -> str:
+        if not value:
+            return value
+        normalized = value.strip().lower()
+        if normalized not in _EMP_VALID_BLOOD:
+            raise serializers.ValidationError(
+                f'Invalid blood group "{value}". '
+                f'Allowed: A+, A-, B+, B-, O+, O-, AB+, AB-.'
+            )
+        return value.strip().upper()
+
+    def validate_address(self, value: str) -> str:
+        if value and len(value) > 500:
+            raise serializers.ValidationError('Address must be 500 characters or fewer.')
+        return value

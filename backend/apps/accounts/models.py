@@ -531,6 +531,7 @@ class Company(models.Model):
 
 # ─── Employee Code Settings (singleton) ──────────────────────────────────────
 
+
 class EmployeeCodeSettings(models.Model):
     """Singleton row (pk=1) that governs how employee IDs are generated."""
     prefix        = models.CharField(max_length=10, default='RSS')
@@ -549,7 +550,7 @@ class EmployeeCodeSettings(models.Model):
         db_table = 'hrms_employee_code_settings'
 
     def __str__(self) -> str:
-        return f'{self.prefix} (next: {self.next_sequence})'
+        return f'{self.prefix} (format: prefix + initial + DD + month + surname)'
 
     @classmethod
     def get(cls) -> 'EmployeeCodeSettings':
@@ -560,16 +561,30 @@ class EmployeeCodeSettings(models.Model):
         return obj
 
     @classmethod
-    @transaction.atomic
-    def generate_employee_id(cls) -> str:
-        """Atomically read-and-increment the sequence; return the formatted ID."""
-        cfg = cls.objects.select_for_update().get_or_create(
-            pk=1,
-            defaults={'prefix': 'RSS', 'padding': 5, 'next_sequence': 1},
-        )[0]
-        employee_id = f'{cfg.prefix}{str(cfg.next_sequence).zfill(cfg.padding)}'
-        cls.objects.filter(pk=1).update(next_sequence=F('next_sequence') + 1)
-        return employee_id
+    def generate_employee_id(
+        cls,
+        first_name: str,
+        last_name: str,
+        date_of_joining=None,
+    ) -> str:
+        """Generate sequential ID: prefix + zero-padded sequence number.
+
+        Format example: RSS + 00020 (padding=5, next_sequence=20) → RSS00020
+        Increments next_sequence atomically after each ID is claimed.
+        """
+        from django.db import transaction as _tx
+
+        with _tx.atomic():
+            cfg = cls.objects.select_for_update().get_or_create(
+                pk=1,
+                defaults={'prefix': 'RSS', 'padding': 5, 'next_sequence': 1},
+            )[0]
+            prefix   = cfg.prefix or 'RSS'
+            seq      = str(cfg.next_sequence).zfill(cfg.padding)
+            emp_id   = f'{prefix}{seq}'
+            cfg.next_sequence += 1
+            cfg.save(update_fields=['next_sequence', 'updated_at'])
+        return emp_id
 
 
 # ─── Document Center ──────────────────────────────────────────────────────────

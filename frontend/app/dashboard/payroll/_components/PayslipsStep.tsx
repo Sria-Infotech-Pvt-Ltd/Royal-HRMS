@@ -1,192 +1,189 @@
 "use client";
 
 import { useState } from "react";
-import { EMP_DATA, grossEarnings, totalDeductions, netSalary, fmt } from "./payrollData";
+import { useFetch } from "@/hooks/useFetch";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
 
-interface Props { onNext: () => void; onBack: () => void; }
+interface Props {
+  cycleId: string;
+  onNext: () => void;
+  onBack: () => void;
+}
 
-type SlipStatus = "pending" | "generated" | "emailed";
+interface PagedResponse<T> { results: T[]; count: number; }
+
+type SlipStatus = EmployeePayslip["status"];
 
 const STATUS_STYLE: Record<SlipStatus, { bg: string; text: string; label: string }> = {
-  pending:   { bg: "bg-amber-50",   text: "text-amber-700",   label: "Pending"   },
-  generated: { bg: "bg-blue-50",    text: "text-blue-700",    label: "Generated" },
-  emailed:   { bg: "bg-emerald-50", text: "text-emerald-700", label: "Emailed"   },
+  draft:        { bg: "bg-gray-50",    text: "text-gray-600",    label: "Draft"        },
+  sent:         { bg: "bg-blue-50",    text: "text-blue-700",    label: "Dispatched"   },
+  acknowledged: { bg: "bg-indigo-50",  text: "text-indigo-700",  label: "Acknowledged" },
+  queried:      { bg: "bg-amber-50",   text: "text-amber-700",   label: "Queried"      },
+  resolved:     { bg: "bg-emerald-50", text: "text-emerald-700", label: "Resolved"     },
+  paid:         { bg: "bg-green-50",   text: "text-green-700",   label: "Paid"         },
 };
 
-export default function PayslipsStep({ onNext, onBack }: Props) {
-  const [statuses, setStatuses] = useState<Record<string, SlipStatus>>(
-    Object.fromEntries(EMP_DATA.map(e => [e.id, "pending"]))
-  );
-  const [generating, setGenerating] = useState(false);
+const fmt = (n: number | string) =>
+  `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
-  function generateAll() {
-    setGenerating(true);
-    setTimeout(() => {
-      setStatuses(Object.fromEntries(EMP_DATA.map(e => [e.id, "generated"])));
-      setGenerating(false);
-    }, 1200);
+export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
+  const { data: payslipPage, loading, refetch } =
+    useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
+  const { data: cycle } = useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
+
+  const [dispatching, setDispatching] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const payslips  = payslipPage?.results ?? [];
+  const totalNet  = payslips.reduce((s, p) => s + Number(p.net_pay), 0);
+  const allSent   = payslips.length > 0 && payslips.every(p => p.status !== "draft");
+  const cycleDispatched = cycle?.status === "query_window_open" || allSent;
+
+  async function dispatch() {
+    setDispatching(true);
+    setErr(null);
+    try {
+      await clientApi.post(API.payroll.dispatchPayslips(cycleId));
+      refetch();
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to dispatch payslips.";
+      setErr(msg);
+    } finally {
+      setDispatching(false);
+    }
   }
-
-  function emailAll() {
-    setStatuses(Object.fromEntries(EMP_DATA.map(e => [e.id, "emailed"])));
-  }
-
-  function emailOne(id: string) {
-    setStatuses(p => ({ ...p, [id]: "emailed" }));
-  }
-
-  const generatedCount = Object.values(statuses).filter(s => s !== "pending").length;
-  const allGenerated   = generatedCount === EMP_DATA.length;
-  const totalNet       = EMP_DATA.reduce((s, e) => s + netSalary(e), 0);
 
   return (
-    <div className="flex flex-col gap-4">
-
-      {/* Header card */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
-              <i className="ti ti-file-invoice text-blue-800 text-lg" />
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      <div className="card">
+        <div className="card-header">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: "var(--radius)", background: "var(--bg-low)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <i className="ti ti-file-invoice" style={{ fontSize: 18, color: "var(--primary)" }} />
             </div>
             <div>
-              <div className="font-semibold text-gray-900">Generate Payslips</div>
-              <div className="text-xs text-gray-500">June 2026 · {EMP_DATA.length} employees</div>
+              <div className="card-title">Dispatch Payslips</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                {payslips.length} employees · Net: <strong style={{ color: "var(--success)" }}>{fmt(totalNet)}</strong>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">
-              Net Payable: <span className="font-bold text-emerald-700">{fmt(totalNet)}</span>
-            </span>
-            {allGenerated && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {cycleDispatched ? (
+              <span className="badge badge-success"><i className="ti ti-check" /> Dispatched</span>
+            ) : (
               <button
-                onClick={emailAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-blue-800 text-blue-800 rounded-lg hover:bg-blue-50 transition-colors"
+                className="btn btn-filled btn-sm"
+                onClick={dispatch}
+                disabled={dispatching || payslips.length === 0}
               >
-                <i className="ti ti-mail text-sm" /> Email All
+                {dispatching
+                  ? <><i className="ti ti-loader-2 animate-spin" /> Dispatching…</>
+                  : <><i className="ti ti-send" /> Dispatch All</>}
               </button>
             )}
-            <button
-              onClick={generateAll}
-              disabled={generating || allGenerated}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {generating
-                ? <><i className="ti ti-loader-2 animate-spin text-sm" /> Generating...</>
-                : allGenerated
-                ? <><i className="ti ti-check text-sm" /> All Generated</>
-                : <><i className="ti ti-file-plus text-sm" /> Generate All</>}
-            </button>
-            <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Step 7 of 8</span>
+            <button className="btn btn-ghost btn-sm" onClick={refetch}><i className="ti ti-refresh" /></button>
           </div>
         </div>
 
-        {/* Success banner */}
-        {allGenerated && (
-          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-50 border-b border-emerald-100 text-sm text-emerald-700">
-            <i className="ti ti-circle-check text-base" />
-            All {EMP_DATA.length} payslips generated. Download or email them below.
+        {err && (
+          <div className="alert alert-error" style={{ margin: "0", borderRadius: 0 }}>
+            <i className="ti ti-alert-circle" />
+            <span>{err}</span>
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Employee</th>
-                <th className="text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Gross Salary</th>
-                <th className="text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Deductions</th>
-                <th className="text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Net Salary</th>
-                <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Status</th>
-                <th className="text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {EMP_DATA.map(e => {
-                const gross  = grossEarnings(e);
-                const ded    = totalDeductions(e);
-                const net    = netSalary(e);
-                const status = statuses[e.id];
-                const style  = STATUS_STYLE[status];
-                return (
-                  <tr key={e.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                          {e.avatar}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-sm text-gray-900">{e.name}</div>
-                          <div className="text-[11px] text-gray-500">{e.designation}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-semibold text-sm text-gray-800">{fmt(gross)}</td>
-                    <td className="px-4 py-3.5 text-right text-sm font-medium text-red-600">{fmt(ded)}</td>
-                    <td className="px-4 py-3.5 text-right font-bold text-emerald-700">{fmt(net)}</td>
-                    <td className="px-4 py-3.5">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${style.bg} ${style.text}`}>
-                        {style.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          disabled={status === "pending"}
-                          className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          title="Download PDF"
-                        >
-                          <i className="ti ti-download text-sm" />
-                        </button>
-                        <button
-                          disabled={status === "pending"}
-                          onClick={() => emailOne(e.id)}
-                          className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          title="Email Payslip"
-                        >
-                          <i className="ti ti-mail text-sm" />
-                        </button>
-                        <button
-                          disabled={status === "pending"}
-                          className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          title="Preview"
-                        >
-                          <i className="ti ti-eye text-sm" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-50 border-t-2 border-gray-200">
-                <td className="px-5 py-3 font-bold text-sm text-gray-900">Total</td>
-                <td className="px-4 py-3 text-right font-bold text-sm text-gray-900">{fmt(EMP_DATA.reduce((s, e) => s + grossEarnings(e), 0))}</td>
-                <td className="px-4 py-3 text-right font-bold text-sm text-red-600">{fmt(EMP_DATA.reduce((s, e) => s + totalDeductions(e), 0))}</td>
-                <td className="px-4 py-3 text-right font-bold text-emerald-700">{fmt(totalNet)}</td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100 bg-gray-50">
-          <span className="text-xs text-gray-500">{generatedCount} of {EMP_DATA.length} payslips generated</span>
-          <div className="flex items-center gap-2">
-            <button onClick={onBack} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors">
-              <i className="ti ti-arrow-left text-sm" /> Back
-            </button>
-            <button
-              onClick={onNext}
-              disabled={!allGenerated}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Continue <i className="ti ti-arrow-right text-sm" />
-            </button>
+        {cycleDispatched && (
+          <div className="alert alert-success" style={{ margin: "0", borderRadius: 0 }}>
+            <i className="ti ti-circle-check" />
+            <span>All payslips dispatched. Employees have {cycle?.query_window_closes_at ? `until ${new Date(cycle.query_window_closes_at).toLocaleDateString("en-IN")}` : "the configured window"} to raise queries.</span>
           </div>
+        )}
+
+        {loading ? (
+          <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)" }}>
+            <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 24 }} />
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th style={{ textAlign: "right" }}>Gross</th>
+                  <th style={{ textAlign: "right" }}>Deductions</th>
+                  <th style={{ textAlign: "right" }}>Net Salary</th>
+                  <th>Status</th>
+                  <th>Sent At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payslips.map(p => {
+                  const style = STATUS_STYLE[p.status];
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
+                            {p.employee_name.charAt(0)}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{p.employee_name}</div>
+                            <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{p.department}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>{fmt(p.gross_earnings)}</td>
+                      <td style={{ textAlign: "right", color: "var(--error)" }}>{fmt(p.total_deductions)}</td>
+                      <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)" }}>{fmt(p.net_pay)}</td>
+                      <td>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${style.bg} ${style.text}`}>
+                          {style.label}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                        {p.sent_at
+                          ? new Date(p.sent_at).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                          : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {payslips.length > 0 && (
+                <tfoot>
+                  <tr style={{ background: "var(--bg-low)", borderTop: "2px solid var(--outline-v)" }}>
+                    <td style={{ fontWeight: 700 }}>Total ({payslips.length} employees)</td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>{fmt(payslips.reduce((s, p) => s + Number(p.gross_earnings), 0))}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700, color: "var(--error)" }}>{fmt(payslips.reduce((s, p) => s + Number(p.total_deductions), 0))}</td>
+                    <td style={{ textAlign: "right", fontWeight: 800, color: "var(--success)", fontSize: 15 }}>{fmt(totalNet)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+
+            {payslips.length === 0 && (
+              <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
+                No payslips found for this cycle.
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
+          <button
+            className="btn btn-filled"
+            onClick={onNext}
+            disabled={!cycleDispatched}
+            style={{ opacity: cycleDispatched ? 1 : 0.5 }}
+          >
+            Continue to Mark as Paid <i className="ti ti-arrow-right" />
+          </button>
         </div>
       </div>
     </div>

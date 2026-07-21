@@ -85,6 +85,7 @@ export const API = {
 
   recruitment: {
     candidates: "/recruitment/candidates/",
+    bulkImport: "/recruitment/candidates/bulk-import/",
     stats: "/recruitment/candidates/stats/",
     review: "/recruitment/candidates/review/",
     detail: (id: number) => `/recruitment/candidates/${id}/`,
@@ -137,6 +138,7 @@ export const API = {
     sections: (assessmentId: string) => `/assessments/${assessmentId}/sections/`,
     sectionDetail: (assessmentId: string, sectionId: string) => `/assessments/${assessmentId}/sections/${sectionId}/`,
     assign: "/assessments/assign/",
+    emailTemplateOptions: "/assessments/email-template-options/",
     results: (assessmentId: string) => `/assessments/${assessmentId}/results/`,
     candidateResults: (candidateId: string) => `/assessments/candidates/${candidateId}/results/`,
   },
@@ -199,6 +201,55 @@ export const API = {
     attendanceSummary: "/dashboard/employee/attendance-summary/",
     attendanceStatus:  "/dashboard/employee/attendance-status/",
     announcement:      "/dashboard/announcement/",
+  },
+
+  payroll: {
+    // Settings
+    settings: "/payroll/settings/",
+
+    // Salary structures
+    structures: "/payroll/structures/",
+    structure: (id: string) => `/payroll/structures/${id}/`,
+    components: (structureId: string) => `/payroll/structures/${structureId}/components/`,
+    component: (structureId: string, id: string) => `/payroll/structures/${structureId}/components/${id}/`,
+
+    // Statutory config (per state)
+    statutory: "/payroll/statutory/",
+    statutoryDetail: (id: string) => `/payroll/statutory/${id}/`,
+    statutoryByState: (stateId: string) => `/payroll/statutory/by-state/${stateId}/`,
+
+    // Branch payroll config
+    branchConfig: "/payroll/branch-config/",
+    branchConfigDetail: (id: string) => `/payroll/branch-config/${id}/`,
+    branchConfigByBranch: (branchId: string) => `/payroll/branch-config/by-branch/${branchId}/`,
+
+    // Employee salary config (CTC)
+    employeeSalary: "/payroll/employee-salary/",
+    employeeSalaryDetail: (id: string) => `/payroll/employee-salary/${id}/`,
+    employeeSalaryHistory: (employeeId: string) => `/payroll/employee-salary/history/${employeeId}/`,
+
+    // Payroll cycles
+    cycles: "/payroll/cycles/",
+    cycle: (id: string) => `/payroll/cycles/${id}/`,
+    approveAttendance:   (id: string) => `/payroll/cycles/${id}/approve-attendance/`,
+    pendingApprovalCycles: "/payroll/cycles/pending-approval/",
+    attendanceSummary:   (id: string) => `/payroll/cycles/${id}/attendance-summary/`,
+    processCycle: (id: string) => `/payroll/cycles/${id}/process/`,
+    markPaid: (id: string) => `/payroll/cycles/${id}/mark-paid/`,
+
+    // Payslips (HR)
+    cyclePayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/`,
+    dispatchPayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/dispatch/`,
+    payslip: (id: string) => `/payroll/payslips/${id}/`,
+    payslipReimbBonus: (id: string) => `/payroll/payslips/${id}/reimb-bonus/`,
+
+    // Employee self-service
+    myPayslips: "/payroll/my-payslips/",
+    acknowledgePayslip: (id: string) => `/payroll/my-payslips/${id}/acknowledge/`,
+
+    // Queries
+    queries: "/payroll/queries/",
+    resolveQuery: (id: string) => `/payroll/queries/${id}/resolve/`,
   },
 
   dashboard: {

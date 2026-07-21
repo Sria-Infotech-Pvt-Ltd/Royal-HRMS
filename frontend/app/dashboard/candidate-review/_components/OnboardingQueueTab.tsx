@@ -36,8 +36,9 @@ interface ApprovalUser {
 interface PageData { count: number; page: number; total_pages: number; results: ApprovalUser[]; }
 
 interface EmailTemplate { id: number; name: string; display_name: string; subject: string; is_active: boolean; template_type: string; }
-
 interface AssessmentOption { id: string; title: string; is_default: boolean; is_active: boolean; }
+interface ApiDept { id: number; name: string; is_active: boolean; }
+interface ApiManager { id: string; full_name: string; employee_id: string; }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -73,63 +74,88 @@ export default function OnboardingQueueTab() {
   const [actionErr,  setActionErr]  = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
-  // Approval confirmation step
-  const [confirming,          setConfirming]          = useState(false);
-  const [selectedTemplateId,  setSelectedTemplateId]  = useState<number | "">("");
-  const [selectedAssessmentId,setSelectedAssessmentId]= useState<string>("");
+  // Approval popup modal state
+  const [showApprovalModal,    setShowApprovalModal]    = useState(false);
+  const [selectedTemplateId,   setSelectedTemplateId]   = useState<number | "">("");
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>("");
+  const [approvalDept,         setApprovalDept]         = useState("");
+  const [approvalDesig,        setApprovalDesig]        = useState("");
+  const [approvalManagerId,    setApprovalManagerId]    = useState("");
+  const [approvalCtc,          setApprovalCtc]          = useState("");
+  const [modalErr,             setModalErr]             = useState<string | null>(null);
 
   const url = `${API.onboarding.approvals}?page=${page}&page_size=20`;
   const { data, loading, error, refetch } = useFetch<PageData>(url);
 
-  // Prefetch email templates and assessments while drawer is open
-  const { data: tmplData } = useFetch<Record<string, EmailTemplate[]>>(
-    selected ? API.settings.emailTemplates : null
-  );
-  const { data: assData } = useFetch<{ results: AssessmentOption[] }>(
-    selected ? API.assessments.list : null
-  );
+  // Prefetch while drawer is open
+  const { data: tmplData   } = useFetch<Record<string, EmailTemplate[]>>(selected ? API.settings.emailTemplates                : null);
+  const { data: assData    } = useFetch<{ results: AssessmentOption[] }>(selected ? API.assessments.list                       : null);
+  const { data: deptData   } = useFetch<ApiDept[]>(                     selected ? API.departments.list                        : null);
+  const { data: managerRaw } = useFetch<{ results: ApiManager[] }>(     selected ? `${API.employees.managerList}?page_size=200` : null);
 
-  // Flatten grouped email templates (API returns Record<type, templates[]> directly)
-  const allTemplates: EmailTemplate[] = tmplData
-    ? Object.values(tmplData).flat().filter(t => t.is_active)
-    : [];
-
+  const allTemplates:   EmailTemplate[]   = tmplData ? Object.values(tmplData).flat().filter(t => t.is_active) : [];
   const allAssessments: AssessmentOption[] = (assData?.results ?? []).filter(a => a.is_active);
+  const allDepts:       ApiDept[]          = (deptData ?? []).filter(d => d.is_active);
+  const allManagers:    ApiManager[]       = managerRaw?.results ?? [];
 
-  // When opening confirm step, pre-select the default assessment
-  function openConfirm() {
+  function openApprovalModal() {
     const defaultAssessment = allAssessments.find(a => a.is_default);
     setSelectedAssessmentId(defaultAssessment?.id ?? allAssessments[0]?.id ?? "");
     setSelectedTemplateId("");
-    setConfirming(true);
+    setApprovalDept(selected?.department ?? "");
+    setApprovalDesig(selected?.designation ?? "");
+    setApprovalManagerId("");
+    setApprovalCtc("");
+    setModalErr(null);
+    setShowApprovalModal(true);
+  }
+
+  function closeApprovalModal() {
+    setShowApprovalModal(false);
+    setModalErr(null);
   }
 
   function closeDrawer() {
-    setSelected(null); setRemarks(""); setConfirming(false);
-    setActionMsg(null); setActionErr(null);
+    setSelected(null);
+    setRemarks("");
+    setShowApprovalModal(false);
+    setActionMsg(null);
+    setActionErr(null);
   }
 
   const act = useCallback(async (userId: string, decision: "approve" | "reject") => {
-    setActing(true); setActionMsg(null); setActionErr(null);
+    if (decision === "approve") {
+      if (!approvalDept)      { setModalErr("Department is required."); return; }
+      if (!approvalDesig)     { setModalErr("Designation is required."); return; }
+      if (!approvalManagerId) { setModalErr("Reporting Manager is required."); return; }
+    }
+
+    setActing(true); setModalErr(null); setActionErr(null);
     try {
       const payload: Record<string, unknown> = { decision, remarks };
       if (decision === "approve") {
+        payload.department           = approvalDept;
+        payload.designation          = approvalDesig;
+        payload.reporting_manager_id = approvalManagerId;
+        if (approvalCtc)          payload.annual_ctc        = approvalCtc;
         if (selectedTemplateId)   payload.email_template_id = selectedTemplateId;
         if (selectedAssessmentId) payload.assessment_id     = selectedAssessmentId;
       }
       const r = await clientApi.post(API.onboarding.approve(userId), payload);
       setActionMsg(r.data?.message ?? "Done.");
+      closeApprovalModal();
       closeDrawer();
       refetch();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
         ?.response?.data?.message ?? "Action failed.";
-      setActionErr(msg);
+      if (decision === "approve") setModalErr(msg);
+      else setActionErr(msg);
     } finally {
       setActing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remarks, selectedTemplateId, selectedAssessmentId, refetch]);
+  }, [remarks, selectedTemplateId, selectedAssessmentId, approvalDept, approvalDesig, approvalManagerId, approvalCtc, refetch]);
 
   const results = data?.results ?? [];
 
@@ -189,7 +215,7 @@ export default function OnboardingQueueTab() {
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: ".82rem" }}
-                        onClick={() => { setSelected(u); setRemarks(""); setConfirming(false); setActionMsg(null); setActionErr(null); }}
+                        onClick={() => { setSelected(u); setRemarks(""); setActionMsg(null); setActionErr(null); }}
                       >
                         Review
                       </button>
@@ -210,109 +236,229 @@ export default function OnboardingQueueTab() {
         </div>
       )}
 
+      {/* ── Review drawer ── */}
       {selected && (
         <div className="drawer-overlay open" onClick={closeDrawer}>
           <div className="drawer open" onClick={e => e.stopPropagation()}>
             <div className="drawer-header">
-              <span className="drawer-title">
-                {confirming ? `Approve — ${selected.full_name}` : `Review — ${selected.full_name}`}
-              </span>
+              <span className="drawer-title">Review — {selected.full_name}</span>
               <button className="drawer-close" onClick={closeDrawer}>✕</button>
             </div>
 
             <div className="drawer-body">
               {actionErr && <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{actionErr}</div>}
 
-              {/* ── Review view ── */}
-              {!confirming && (
+              <Section title="Basic Info">
+                <Row label="Email"       value={selected.email} />
+                <Row label="Phone"       value={selected.phone} />
+                <Row label="Department"  value={selected.department} />
+                <Row label="Designation" value={selected.designation} />
+                <Row label="Branch"      value={selected.branch} />
+                <Row label="Role"        value={selected.role_display || "Candidate (no role yet)"} />
+              </Section>
+
+              {selected.profile && (
                 <>
-                  <Section title="Basic Info">
-                    <Row label="Email"       value={selected.email} />
-                    <Row label="Phone"       value={selected.phone} />
-                    <Row label="Department"  value={selected.department} />
-                    <Row label="Designation" value={selected.designation} />
-                    <Row label="Branch"      value={selected.branch} />
-                    <Row label="Role"        value={selected.role_display || "Candidate (no role yet)"} />
+                  <Section title="Personal">
+                    <Row label="DOB"             value={selected.profile.date_of_birth} />
+                    <Row label="Gender"          value={selected.profile.gender} />
+                    <Row label="Marital Status"  value={selected.profile.marital_status} />
+                    <Row label="Father Name"     value={selected.profile.father_name} />
+                    <Row label="Blood Group"     value={selected.profile.blood_group} />
+                    <Row label="Current Address" value={selected.profile.current_address} />
                   </Section>
-
-                  {selected.profile && (
-                    <>
-                      <Section title="Personal">
-                        <Row label="DOB"             value={selected.profile.date_of_birth} />
-                        <Row label="Gender"          value={selected.profile.gender} />
-                        <Row label="Marital Status"  value={selected.profile.marital_status} />
-                        <Row label="Father Name"     value={selected.profile.father_name} />
-                        <Row label="Blood Group"     value={selected.profile.blood_group} />
-                        <Row label="Current Address" value={selected.profile.current_address} />
-                      </Section>
-                      <Section title="Education & Experience">
-                        <Row label="Qualification"    value={selected.profile.highest_qualification} />
-                        <Row label="Institution"      value={selected.profile.institution} />
-                        <Row label="Year of Passing"  value={selected.profile.year_of_passing?.toString()} />
-                        <Row label="Experience (yrs)" value={selected.profile.total_experience_years} />
-                        <Row label="Prev Employer"    value={selected.profile.previous_employer} />
-                      </Section>
-                      <Section title="Bank Details">
-                        <Row label="Account Holder" value={selected.profile.account_holder_name} />
-                        <Row label="Account No."    value={selected.profile.account_number ? `••••${selected.profile.account_number.slice(-4)}` : undefined} />
-                        <Row label="IFSC"           value={selected.profile.ifsc_code} />
-                        <Row label="Bank"           value={selected.profile.bank_name} />
-                        <Row label="Branch"         value={selected.profile.bank_branch_name} />
-                        <Row label="Account Type"   value={selected.profile.account_type} />
-                      </Section>
-                      <Section title="Emergency Contact">
-                        <Row label="Name"         value={selected.profile.emergency_name} />
-                        <Row label="Relationship" value={selected.profile.emergency_relationship} />
-                        <Row label="Phone"        value={selected.profile.emergency_phone} />
-                      </Section>
-                    </>
-                  )}
-
-                  <Section title={`Documents (${selected.documents.length})`}>
-                    {selected.documents.length === 0
-                      ? <p style={{ color: "var(--text-muted)", fontSize: ".85rem" }}>No documents uploaded.</p>
-                      : selected.documents.map(d => (
-                        <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: ".4rem 0", borderBottom: "1px solid var(--border)", fontSize: ".85rem" }}>
-                          <span style={{ fontWeight: 500 }}>{d.document_type_display}</span>
-                          <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
-                            <span style={{ color: "var(--text-secondary)" }}>{d.file_name}</span>
-                            <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title="Preview">
-                              <i className="ti ti-eye" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    }
+                  <Section title="Education & Experience">
+                    <Row label="Qualification"    value={selected.profile.highest_qualification} />
+                    <Row label="Institution"      value={selected.profile.institution} />
+                    <Row label="Year of Passing"  value={selected.profile.year_of_passing?.toString()} />
+                    <Row label="Experience (yrs)" value={selected.profile.total_experience_years} />
+                    <Row label="Prev Employer"    value={selected.profile.previous_employer} />
                   </Section>
-
-                  <div className="field-group" style={{ marginTop: "1rem" }}>
-                    <label className="field-label">Remarks (optional)</label>
-                    <textarea
-                      className="field-input"
-                      rows={3}
-                      value={remarks}
-                      onChange={e => setRemarks(e.target.value)}
-                      placeholder="Notes for the employee or for record…"
-                    />
-                  </div>
+                  <Section title="Bank Details">
+                    <Row label="Account Holder" value={selected.profile.account_holder_name} />
+                    <Row label="Account No."    value={selected.profile.account_number ? `••••${selected.profile.account_number.slice(-4)}` : undefined} />
+                    <Row label="IFSC"           value={selected.profile.ifsc_code} />
+                    <Row label="Bank"           value={selected.profile.bank_name} />
+                    <Row label="Branch"         value={selected.profile.bank_branch_name} />
+                    <Row label="Account Type"   value={selected.profile.account_type} />
+                  </Section>
+                  <Section title="Emergency Contact">
+                    <Row label="Name"         value={selected.profile.emergency_name} />
+                    <Row label="Relationship" value={selected.profile.emergency_relationship} />
+                    <Row label="Phone"        value={selected.profile.emergency_phone} />
+                  </Section>
                 </>
               )}
 
-              {/* ── Confirm approval step ── */}
-              {confirming && (
-                <div>
-                  <div className="alert alert-info" style={{ marginBottom: "1.25rem", fontSize: ".88rem" }}>
-                    <i className="ti ti-info-circle mr-6" />
-                    You are approving <strong>{selected.full_name}</strong>. Choose the email notification and assessment to assign.
+              <Section title={`Documents (${selected.documents.length})`}>
+                {selected.documents.length === 0
+                  ? <p style={{ color: "var(--text-muted)", fontSize: ".85rem" }}>No documents uploaded.</p>
+                  : selected.documents.map(d => (
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: ".4rem 0", borderBottom: "1px solid var(--border)", fontSize: ".85rem" }}>
+                      <span style={{ fontWeight: 500 }}>{d.document_type_display}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>{d.file_name}</span>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title="Preview">
+                          <i className="ti ti-eye" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </Section>
+
+              <div className="field-group" style={{ marginTop: "1rem" }}>
+                <label className="field-label">Remarks (optional)</label>
+                <textarea
+                  className="field-input"
+                  rows={3}
+                  value={remarks}
+                  onChange={e => setRemarks(e.target.value)}
+                  placeholder="Notes for the employee or for record…"
+                />
+              </div>
+            </div>
+
+            <div className="drawer-footer">
+              <button
+                className="btn btn-ghost"
+                style={{ color: "var(--error)", borderColor: "var(--error)" }}
+                onClick={() => act(selected.id, "reject")}
+                disabled={acting}
+              >
+                {acting ? "…" : "Send Back for Corrections"}
+              </button>
+              <button className="btn btn-filled" onClick={openApprovalModal}>
+                Approve & Activate ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Approval popup modal ── */}
+      {showApprovalModal && selected && (
+        <div
+          className="modal-overlay open"
+          onClick={e => { if (e.target === e.currentTarget) closeApprovalModal(); }}
+        >
+          <div className="modal modal-lg">
+            <div className="modal-header">
+              <span className="modal-title">Approve — {selected.full_name}</span>
+              <button className="modal-close" onClick={closeApprovalModal}>
+                <i className="ti ti-x" />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {modalErr && (
+                <div className="alert alert-error" style={{ marginBottom: "1.25rem" }}>{modalErr}</div>
+              )}
+
+              {/* Employment details */}
+              <div style={{ marginBottom: "1.5rem" }}>
+                <div style={{ fontWeight: 700, fontSize: ".8rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-muted)", marginBottom: "1rem" }}>
+                  Employment Details
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="field-group">
+                    <label className="field-label">
+                      Department <span style={{ color: "var(--error)" }}>*</span>
+                    </label>
+                    {allDepts.length > 0 ? (
+                      <select
+                        className="field-input field-select"
+                        value={approvalDept}
+                        onChange={e => setApprovalDept(e.target.value)}
+                      >
+                        <option value="">— Select —</option>
+                        {allDepts.map(d => (
+                          <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="field-input"
+                        type="text"
+                        placeholder="Department name"
+                        value={approvalDept}
+                        onChange={e => setApprovalDept(e.target.value)}
+                      />
+                    )}
                   </div>
 
-                  {/* Email template */}
-                  <div className="field-group" style={{ marginBottom: "1rem" }}>
+                  <div className="field-group">
+                    <label className="field-label">
+                      Designation <span style={{ color: "var(--error)" }}>*</span>
+                    </label>
+                    <input
+                      className="field-input"
+                      type="text"
+                      placeholder="e.g. Software Engineer"
+                      value={approvalDesig}
+                      onChange={e => setApprovalDesig(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="field-group">
+                    <label className="field-label">
+                      Reporting Manager <span style={{ color: "var(--error)" }}>*</span>
+                    </label>
+                    {allManagers.length > 0 ? (
+                      <select
+                        className="field-input field-select"
+                        value={approvalManagerId}
+                        onChange={e => setApprovalManagerId(e.target.value)}
+                      >
+                        <option value="">— Select —</option>
+                        {allManagers.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.full_name}{m.employee_id ? ` (${m.employee_id})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p style={{ fontSize: ".83rem", color: "var(--text-muted)", marginTop: ".35rem" }}>No active managers found.</p>
+                    )}
+                  </div>
+
+                  <div className="field-group">
+                    <label className="field-label">
+                      Annual CTC{" "}
+                      <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
+                    </label>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min={0}
+                      step={1000}
+                      placeholder="e.g. 600000"
+                      value={approvalCtc}
+                      onChange={e => setApprovalCtc(e.target.value)}
+                    />
+                    {approvalCtc && (
+                      <div style={{ fontSize: ".78rem", color: "var(--text-secondary)", marginTop: ".25rem" }}>
+                        Monthly: ₹{Math.round(Number(approvalCtc) / 12).toLocaleString("en-IN")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notification settings */}
+              <div>
+                <div style={{ fontWeight: 700, fontSize: ".8rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-muted)", marginBottom: "1rem" }}>
+                  Notification &amp; Assessment
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="field-group">
                     <label className="field-label">
                       <i className="ti ti-mail mr-4" />Email Template
                     </label>
                     {allTemplates.length === 0 ? (
-                      <p style={{ fontSize: ".83rem", color: "var(--text-muted)" }}>No active email templates found.</p>
+                      <p style={{ fontSize: ".83rem", color: "var(--text-muted)" }}>No active templates.</p>
                     ) : (
                       <select
                         className="field-input field-select"
@@ -325,23 +471,14 @@ export default function OnboardingQueueTab() {
                         ))}
                       </select>
                     )}
-                    {selectedTemplateId && (() => {
-                      const tpl = allTemplates.find(t => t.id === selectedTemplateId);
-                      return tpl ? (
-                        <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", marginTop: ".35rem" }}>
-                          Subject: {tpl.subject}
-                        </p>
-                      ) : null;
-                    })()}
                   </div>
 
-                  {/* Assessment */}
-                  <div className="field-group" style={{ marginBottom: "1.25rem" }}>
+                  <div className="field-group">
                     <label className="field-label">
-                      <i className="ti ti-clipboard-check mr-4" />Assessment to Assign
+                      <i className="ti ti-clipboard-check mr-4" />Assessment
                     </label>
                     {allAssessments.length === 0 ? (
-                      <p style={{ fontSize: ".83rem", color: "var(--text-muted)" }}>No active assessments found.</p>
+                      <p style={{ fontSize: ".83rem", color: "var(--text-muted)" }}>No active assessments.</p>
                     ) : (
                       <select
                         className="field-input field-select"
@@ -356,58 +493,25 @@ export default function OnboardingQueueTab() {
                         ))}
                       </select>
                     )}
-                    {selectedAssessmentId && (() => {
-                      const isDefault = allAssessments.find(a => a.id === selectedAssessmentId)?.is_default;
-                      return isDefault ? (
-                        <p style={{ fontSize: ".8rem", color: "var(--text-secondary)", marginTop: ".35rem" }}>
-                          <i className="ti ti-star mr-3" />This is the default assessment.
-                        </p>
-                      ) : (
-                        <p style={{ fontSize: ".8rem", color: "var(--warning)", marginTop: ".35rem" }}>
-                          <i className="ti ti-alert-triangle mr-3" />Non-default assessment selected.
-                        </p>
-                      );
-                    })()}
                   </div>
-
-                  {remarks && (
-                    <div style={{ padding: ".6rem .8rem", background: "var(--bg-mid)", borderRadius: 8, fontSize: ".83rem", color: "var(--text-secondary)", marginBottom: ".75rem" }}>
-                      <span style={{ fontWeight: 600 }}>Remarks:</span> {remarks}
-                    </div>
-                  )}
                 </div>
-              )}
+              </div>
             </div>
 
-            <div className="drawer-footer">
-              {!confirming ? (
-                <>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ color: "var(--error)", borderColor: "var(--error)" }}
-                    onClick={() => act(selected.id, "reject")}
-                    disabled={acting}
-                  >
-                    {acting ? "…" : "Send Back for Corrections"}
-                  </button>
-                  <button className="btn btn-filled" onClick={openConfirm}>
-                    Approve & Activate ✓
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="btn btn-ghost" onClick={() => { setConfirming(false); setActionErr(null); }} disabled={acting}>
-                    ← Back
-                  </button>
-                  <button
-                    className="btn btn-filled"
-                    onClick={() => act(selected.id, "approve")}
-                    disabled={acting}
-                  >
-                    {acting ? <><i className="ti ti-loader-2 spin" /> Approving…</> : "Confirm Approval ✓"}
-                  </button>
-                </>
-              )}
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={closeApprovalModal} disabled={acting}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-filled"
+                onClick={() => act(selected.id, "approve")}
+                disabled={acting || !approvalDept || !approvalDesig || !approvalManagerId}
+              >
+                {acting
+                  ? <><i className="ti ti-loader-2 spin" /> Approving…</>
+                  : "Confirm Approval ✓"
+                }
+              </button>
             </div>
           </div>
         </div>

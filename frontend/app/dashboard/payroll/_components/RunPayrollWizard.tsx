@@ -1,41 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import type { PayrollSettings } from "@/types/payroll";
 import PayrollPeriodStep      from "./PayrollPeriodStep";
+import ApprovalStep           from "./ApprovalStep";
 import EarningsDeductionsStep from "./EarningsDeductionsStep";
 import ReimbBonusesStep       from "./ReimbBonusesStep";
 import CalculationStep        from "./CalculationStep";
 import ValidationStep         from "./ValidationStep";
-import ApprovalStep           from "./ApprovalStep";
 import PayslipsStep           from "./PayslipsStep";
 import BankTransferStep       from "./BankTransferStep";
 
-interface Props { onCancel: () => void; }
+// Maps a cycle's backend status to the wizard step key to resume at
+const STATUS_STEP_KEY: Record<string, string> = {
+  draft:               "approval",
+  attendance_pending:  "approval",
+  attendance_approved: "earnings",
+  processing:          "calc",
+  payslips_generated:  "validation",
+  query_window_open:   "payslips",
+  paid:                "paid",
+};
 
-const STEPS = [
-  { label: "Period Setup",      icon: "ti-calendar"       },
-  { label: "Earn. & Deduct.",   icon: "ti-cash"           },
-  { label: "Reimb. & Bonuses",  icon: "ti-gift"           },
-  { label: "Calculation",       icon: "ti-calculator"     },
-  { label: "Validation",        icon: "ti-shield-check"   },
-  { label: "Approval",          icon: "ti-user-check"     },
-  { label: "Payslips",          icon: "ti-file-invoice"   },
-  { label: "Bank Transfer",     icon: "ti-credit-card"    },
-];
+interface Props {
+  onCancel: () => void;
+  initialCycleId?: string;
+  initialStatus?: string;
+}
 
-export default function RunPayrollWizard({ onCancel }: Props) {
-  const [step, setStep] = useState(0);
+interface StepDef { key: string; label: string; icon: string; }
+
+export default function RunPayrollWizard({ onCancel, initialCycleId, initialStatus }: Props) {
+  const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
+  const [step,    setStep]    = useState(0);
+  const [cycleId, setCycleId] = useState<string | null>(initialCycleId ?? null);
+  const jumped = useRef(false);
+
+  const showReimb = !!(settings?.enable_reimbursements || settings?.enable_bonuses);
+
+  const STEPS: StepDef[] = [
+    { key: "period",     label: "Period Setup",    icon: "ti-calendar"      },
+    { key: "approval",   label: "Approval",        icon: "ti-user-check"    },
+    { key: "earnings",   label: "Earn. & Deduct.", icon: "ti-cash"          },
+    ...(showReimb ? [{ key: "reimb", label: "Reimb. & Bonuses", icon: "ti-gift" }] : []),
+    { key: "calc",       label: "Calculation",     icon: "ti-calculator"    },
+    { key: "validation", label: "Validation",      icon: "ti-shield-check"  },
+    { key: "payslips",   label: "Payslips",        icon: "ti-file-invoice"  },
+    { key: "paid",       label: "Mark as Paid",    icon: "ti-circle-check"  },
+  ];
+
+  // Once settings load and STEPS is final, jump to the correct step for a resumed cycle
+  useEffect(() => {
+    if (jumped.current || !initialStatus || !settings) return;
+    const targetKey = STATUS_STEP_KEY[initialStatus];
+    if (!targetKey) return;
+    const idx = STEPS.findIndex(s => s.key === targetKey);
+    if (idx >= 0) setStep(idx);
+    jumped.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+
+  const currentKey = STEPS[step]?.key ?? "";
   const next = () => setStep(s => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep(s => Math.max(s - 1, 0));
 
+  function handleCycleCreated(id: string) {
+    setCycleId(id);
+    next();
+  }
+
   return (
     <div>
-      {/* Step bar */}
+      {/* Step progress bar */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
-              Step {step + 1} of {STEPS.length} — {STEPS[step].label}
+              Step {step + 1} of {STEPS.length} — {STEPS[step]?.label}
             </span>
             <button className="btn btn-ghost btn-sm" onClick={onCancel}>
               <i className="ti ti-x" /> Cancel
@@ -44,7 +87,7 @@ export default function RunPayrollWizard({ onCancel }: Props) {
 
           <div style={{ display: "flex", alignItems: "center", marginTop: 14, overflowX: "auto", paddingBottom: 4 }}>
             {STEPS.map((s, idx) => (
-              <div key={idx} style={{ display: "flex", alignItems: "center", flex: idx < STEPS.length - 1 ? 1 : "none", minWidth: 0 }}>
+              <div key={s.key} style={{ display: "flex", alignItems: "center", flex: idx < STEPS.length - 1 ? 1 : "none", minWidth: 0 }}>
                 <div
                   style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: idx <= step ? "pointer" : "default" }}
                   onClick={() => idx <= step && setStep(idx)}
@@ -82,14 +125,37 @@ export default function RunPayrollWizard({ onCancel }: Props) {
         </div>
       </div>
 
-      {step === 0 && <PayrollPeriodStep      onNext={next} onBack={onCancel} />}
-      {step === 1 && <EarningsDeductionsStep onNext={next} onBack={back}    />}
-      {step === 2 && <ReimbBonusesStep       onNext={next} onBack={back}    />}
-      {step === 3 && <CalculationStep        onNext={next} onBack={back}    />}
-      {step === 4 && <ValidationStep         onNext={next} onBack={back}    />}
-      {step === 5 && <ApprovalStep           onNext={next} onBack={back}    />}
-      {step === 6 && <PayslipsStep           onNext={next} onBack={back}    />}
-      {step === 7 && <BankTransferStep       onNext={onCancel} onBack={back} />}
+      {/* Step content */}
+      {currentKey === "period" && (
+        <PayrollPeriodStep settings={settings} onNext={handleCycleCreated} onBack={onCancel} />
+      )}
+      {currentKey === "approval" && cycleId && (
+        <ApprovalStep cycleId={cycleId} settings={settings} onNext={next} onBack={back} />
+      )}
+      {currentKey === "earnings" && cycleId && (
+        <EarningsDeductionsStep cycleId={cycleId} onNext={next} onBack={back} />
+      )}
+      {currentKey === "reimb" && cycleId && settings && (
+        <ReimbBonusesStep
+          cycleId={cycleId}
+          enableReimbursements={settings.enable_reimbursements}
+          enableBonuses={settings.enable_bonuses}
+          onNext={next}
+          onBack={back}
+        />
+      )}
+      {currentKey === "calc" && cycleId && (
+        <CalculationStep cycleId={cycleId} onNext={next} onBack={back} />
+      )}
+      {currentKey === "validation" && cycleId && (
+        <ValidationStep cycleId={cycleId} onNext={next} onBack={back} />
+      )}
+      {currentKey === "payslips" && cycleId && (
+        <PayslipsStep cycleId={cycleId} onNext={next} onBack={back} />
+      )}
+      {currentKey === "paid" && cycleId && (
+        <BankTransferStep cycleId={cycleId} onNext={onCancel} onBack={back} />
+      )}
     </div>
   );
 }

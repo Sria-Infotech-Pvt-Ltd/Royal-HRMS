@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.permissions import HasCompletedOnboarding
 from core.responses import error, success
 from apps.dashboard.views.overview import _is_system_admin, _is_hr_or_admin
 
@@ -262,7 +263,7 @@ class HRBirthdayUpcomingView(APIView):
 # ─── Employee Action Items ────────────────────────────────────────────────────
 
 class EmployeeActionItemsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.accounts.models import EmployeeProfile, EmployeeDocument
@@ -353,7 +354,7 @@ class EmployeeActionItemsView(APIView):
 # ─── Employee Recent Requests ─────────────────────────────────────────────────
 
 class EmployeeRecentRequestsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
         from apps.attendance.models import AttendanceCorrection
