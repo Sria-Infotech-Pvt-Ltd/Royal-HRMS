@@ -248,18 +248,22 @@ export interface OvertimeCreatePayload {
 }
 
 export interface ImportRowError {
-  row:    number;
-  data:   Record<string, string>;
-  // Backend sends a plain string for exceptions, but a DRF serializer errors
-  // dict (e.g. { date: ["Invalid format."] }) for per-field validation failures.
-  errors: string | Record<string, string[]>;
+  row:             number;
+  employee_id:     string;
+  employee_name:   string;
+  attendance_date: string;
+  reason:          string;
+  resolution:      string;
 }
 
 export interface ImportResult {
-  import_id:  string;
-  total_rows: number;
-  success:    number;
-  failed:     number;
-  status:     "completed" | "failed";
-  errors:     ImportRowError[];
+  import_id:        string;
+  status:           "success" | "partial_success" | "failed";
+  message:          string;
+  total_records:    number;
+  successful:       number;
+  failed:           number;
+  skipped:          number;
+  errors:           ImportRowError[];
+  error_report_csv: string;
 }

@@ -30,9 +30,9 @@ export function EmployeePickerInline({
 }: Props) {
   const [open, setOpen] = useState(false);
 
-  // Fetch options only when in edit mode
+  // Fetch options only when dropdown is open — avoids double-fetch in StrictMode
   const { data: optionsRaw, loading } = useFetch<EmployeeResult[]>(
-    disabled ? null : listEndpoint
+    disabled || !open ? null : listEndpoint
   );
   const options = optionsRaw ?? [];
 

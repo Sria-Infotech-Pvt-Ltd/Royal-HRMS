@@ -239,14 +239,33 @@ export default function EmployeeProfilePage({
     setNotFound(false);
     clientApi
       .get<{ data: ApiEmployee }>(API.employees.detail(id))
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         const raw = data.data;
         const emp = apiToEmployee(raw);
         setEmployee(emp);
         setEmployeeUuid(raw.uuid);
         setOnboardingStatus(raw.onboarding_status ?? "");
-        setValues({ ...emp.details });
-        setBaseValues({ ...emp.details });
+
+        const details = { ...emp.details };
+
+        // Auto-assign the sole HR in the branch when none is set yet
+        if (!details.hr && !details.hrId && details.branch) {
+          try {
+            const hrRes = await clientApi.get<{ data: { id: string; full_name: string }[] }>(
+              `${API.employees.hrList}?branch=${encodeURIComponent(details.branch)}`,
+            );
+            const hrs = hrRes.data?.data ?? [];
+            if (hrs.length === 1) {
+              details.hr   = hrs[0].full_name;
+              details.hrId = hrs[0].id;
+            }
+          } catch {
+            // Non-blocking — leave hr unassigned if the lookup fails
+          }
+        }
+
+        setValues(details);
+        setBaseValues({ ...details });
         setTables({});
         setBaseTables({});
       })
@@ -479,7 +498,7 @@ export default function EmployeeProfilePage({
                       value={values.hr ?? ""}
                       selectedId={values.hrId ?? ""}
                       disabled={false}
-                      listEndpoint={API.employees.hrList}
+                      listEndpoint={values.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(values.branch)}` : API.employees.hrList}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, hr: name ?? "", hrId: uuid ?? "" }))
                       }
