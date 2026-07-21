@@ -70,7 +70,7 @@ export default function PayrollPage() {
             ))}
           </div>
 
-          {active === "dashboard"    && <PayrollDashboard onRunPayroll={openFresh} onResumeCycle={openResume} />}
+          {active === "dashboard"    && <PayrollDashboard onRunPayroll={openFresh} onResumeCycle={openResume} canResume={canCreate} />}
           {active === "salary_setup" && <SalarySetupTab />}
           {active === "reports"      && <PayrollReports />}
           {active === "analytics"    && <PayrollAnalytics />}

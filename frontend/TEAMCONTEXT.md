@@ -2581,3 +2581,119 @@ New `types/employeeBulkImport.ts` holds `EmployeeBulkImportCreatedRow`/`SkippedR
 - **The two bulk-import endpoints use two different envelope conventions** (`{success: bool}` for candidates vs `{status: "success"|"error"}` for employees) — both implemented as specified, not reconciled. Worth a backend-side decision on which is canonical.
 - **`EditCandidateModal.tsx`'s old inline-overlay pattern may exist elsewhere** — it was written before `.modal-overlay` became the established convention. Worth a quick repo-wide check for any other modal still using a raw inline-styled backdrop instead of the shared class, since it silently breaks both blur and z-index stacking against the sidebar.
 - **Employee Bulk Import's error/skipped rows key on email (`identifier`), not a stable ID** — fine for display, but if two rows in the same file share an email (which would itself be a validation error) there's nothing else to disambiguate them client-side; not an issue in practice since duplicate emails are rejected by the backend.
+
+---
+
+## Session — G. Durga Prasad (21 July 2026)
+
+**Branch:** `Backend/Testeeeeeeeeeeeeee`
+
+Full-stack session — backend permission architecture, email templates, and matching frontend permission gating.
+
+---
+
+### 1. Document Center — Permission Gating + Branch Locking
+
+**Files:** `app/dashboard/documents/page.tsx`, `app/dashboard/interview-list/{AddCandidateModal,EditCandidateModal,page}.tsx`, `app/dashboard/employees/_components/AddEmployeeModal.tsx`
+
+Upload/Delete buttons in Document Center rendered unconditionally with no `usePermission` check — only a reactive 403 toast on click. Gated behind `usePermission("documents.create")` / `usePermission("documents.delete")`.
+
+Branch dropdowns in the Add Candidate, Add Employee, and Edit Candidate modals (and the Interview List page's branch filter) showed every branch to every role, including branch-restricted HR/managers. Locked to the user's own branch (disabled input showing `effectiveBranch`) for anyone except `system_admin`, using the existing `isUnrestrictedUser`/`getEffectiveBranch` helpers from `lib/auth.ts` — same convention already used in the attendance components.
+
+### 2. Mark Candidate Selected/Rejected — Locked Template, No Manual Picker
+
+**File:** `app/dashboard/interview-list/MarkCandidateModal.tsx`
+
+Per direct request, removed the template dropdown from the Select/Reject confirmation modal — it now always locks to `candidate_selected` / `candidate_rejected` (no manual override), showing an error if that specific template isn't active rather than silently falling back to an arbitrary other template (the old `all[0]` fallback).
+
+**Backend:** `backend/apps/recruitment/migrations/0010_candidate_selected_rejected_email_templates.py` (new) — these two templates never existed anywhere in the codebase despite being the exact names the frontend locks onto; migration created them.
+
+### 3. Document Preview/Download — Real 401 Bug, Not a Permission Issue
+
+**File:** `backend/apps/accounts/views.py` (`DocumentDetailView._stream_file`)
+
+Reproduced directly with Django's test client. Root cause: the signed download URL is verified with `if data.get('id') != pk`, but the URL route is `documents/<str:pk>/` while the token's payload decodes as a JSON **int** — `7 != '7'` is always `True` in Python, so every legitimate request failed this check and was misreported as "Invalid or expired download link." Fixed by comparing `str(data.get('id')) != str(pk)`. Affected every user (not just employees) on both preview and download.
+
+Also fixed `Company.portal_url` (was still `http://localhost:3000`) and diagnosed — but did not fabricate — that the branded email header/footer look blank because the `Company` row's `company_name`/`website`/`address`/`logo` are genuinely empty; per this repo's own no-hardcoding rule, flagged for the user to fill in via Settings → Company Profile rather than guessing values.
+
+### 4. Full Permission-Architecture Audit (Two Background Agents)
+
+Ran a frontend sweep (missing `usePermission` gates on mutating buttons) and a backend sweep (missing `permission_classes`, missing codename checks, branch-scoping gaps) across the whole app. Fixed all 3 frontend findings and all 9 high-severity backend findings, including:
+
+- **Privilege escalation**: `EmployeeDetailView.put` had no block on reassigning the `system_admin` role.
+- **Cross-branch IDOR**: `EmployeeDetailView` (get/put/patch/delete) had no branch filter at all for non-`system_admin` users.
+- **No permission check**: `ReferralListCreateView.post` let any authenticated employee set HR-only fields (`branch`, `interviewer`, `interview_date`) via the referral endpoint — fixed with a new `ReferralSubmitSerializer` restricted to referral-safe fields only.
+- **Stale hardcoded role set**: `announcements.CanPostAnnouncement` let `manager` post org-wide announcements despite never being granted `announcements.create` — replaced with real codename checks.
+- Branch/reporting-chain scoping added to `HRCorrectionReviewView`, `my_attendance._resolve_target_user`, `LeaveBalanceAdjustView` (also blocked self-adjustment entirely), and `ExpenseDetailView`.
+
+Left medium/low-severity findings (candidate-edit branch scoping, an overly-broad leave-policy gate, a `status=` kwarg bug that turns some 403s into 500s) unfixed per explicit scope decision — noted for a future pass.
+
+### 5. Systemic Bug — Role Names Renamed in the Database, Code Never Updated
+
+**~20 files, backend and frontend**
+
+While investigating "HR can't upload documents," discovered the actual `Role.name` values in this database are `hr` and `manager__team_lead` — there is no `hr_admin` or `manager` role row anywhere. A large amount of code across both layers still hardcoded the old names, so every one of those checks silently failed closed:
+
+- **The entire payroll module** (`employee_salary.py`, `cycles.py`, `payslips.py`, `settings.py`, `statutory.py`, `structures.py`, `branch_config.py`, `attendance_approval.py`) — real HR user could not view or manage salary configs, payroll cycles, payslips, or statutory config at all. Converted every check to `payroll.view/create/edit/delete` codenames (workflow-specific L1/L2 sign-off checks in `cycles.py`/`attendance_approval.py` kept as role-identity checks, since managers hold zero `payroll.*` permissions by design — just corrected to the real role names).
+- **`accounts/views.py`** — ~13 separate spots: role reassignment rules, company settings, onboarding auto-assignment, HR notification email recipient lookup, bulk import gating, `create_superuser` default role, reporting-manager business rules.
+- **`announcements/views.py`, `recruitment/views.py` (bulk import)** — same class of fix.
+- **Frontend**: `SalaryTab.tsx`, `ApprovalMatrixTab.tsx`, `BranchManagement.tsx`, `LeaveApprovals.tsx`, `LeaveDashboard.tsx`, `announcements/page.tsx` — role-name checks corrected to match.
+- **Real functional bug found along the way**: `app/dashboard/employees/[id]/page.tsx` had a hardcoded `ROLE_SLUG` display-name→slug lookup table for saving an employee's role — both the keys and values were stale, so **changing an employee's role to HR or Manager via the profile page silently did nothing** (payload just omitted the field, no error surfaced). Fixed by sourcing the role slug directly from the live Roles API (`roleOptions` now maps `{value: r.name, label: r.display_name}` instead of using `display_name` for both) — removes the hardcoded table entirely, immune to any future role rename.
+
+`hrms/views/leave.py`'s existing `_is_hr_role()`/`role == 'manager__team_lead'` checks were already correct — left untouched (the earlier audit had flagged them as stale on the assumption `hr_admin`/`manager` were canonical; they weren't).
+
+### 6. Leave L1→L2 Approval Skip — Diagnosed as a Data Gap, Not a Code Bug
+
+**File:** `backend/apps/hrms/views/leave.py` (`LeaveApprovalView.post`, read-only investigation)
+
+Reported symptom: manager approves leave, it never reaches HR, then a second approve attempt 400s ("Cannot act on a request with status \"approved\""). Confirmed the approval state machine is correct — L1 approval only escalates to `l2_pending` if `leave_request.l2_approver_id` was resolved *at request-creation time*; if the employee had no `hr` assigned, the code deliberately treats L1 approval as final. The specific employee's `employee.hr_id` was `None`, despite a valid HR user existing in their branch — the auto-assignment (`_auto_assign_managers`) only backfills on employee create/view/edit, and had never run for them.
+
+Fixed via direct, verified data correction (not a code change): backfilled `employee.hr`, reversed the leave balance deduction that had already applied under the single-level short-circuit (to avoid double-deducting once HR approves for real), and reset that specific request to `l2_pending` with the HR user as designated L2 approver.
+
+### 7. Leave Email Templates — Added and Wired In
+
+**Files:** `backend/apps/hrms/migrations/0014_seed_leave_email_templates.py` (new), `backend/apps/notifications/signals.py`
+
+Leave requests previously only ever produced in-app `Notification` rows — zero email integration anywhere. Added 6 templates (`leave_request_submitted`, `leave_request_pending_approval`, `leave_forwarded_to_hr`, `leave_approved`, `leave_rejected`, `leave_cancelled`) and wired real `send_template_email()` calls directly into the existing `LeaveRequest` `post_save` signal handler — the same place the in-app notifications already fire — so every event (submit, L1/L2 approve/reject, cancel) now sends both. Emails fire via a background thread and are fully defensive (never raise, matching the existing `_notify()` pattern).
+
+Also fixed 3 pre-existing, unrelated silent email failures found via an agent-run cross-reference of every `send_template_email(template_name=...)` call site against every actually-seeded `EmailTemplate`:
+- `welcome_employee` — `CandidateHRDecisionView`'s default fallback template; never seeded. Seeded via `recruitment/migrations/0011_welcome_employee_email_template.py`.
+- `attendance_missing_clockout` — `services_unpunch.py` referenced `'attendance/missing_clockout'` (invalid slash, breaks the snake_case convention) and it was never seeded either. Fixed the name and seeded it via `attendance/migrations/0016_seed_missing_clockout_email_template.py`; also added the missing `company_name` to its send context.
+- `recruitment/views.py`'s candidate status-change endpoint defaulted to `'selection'`/`'rejection'` when no explicit template was passed — neither exists; the actually-seeded names are `candidate_selected`/`candidate_rejected`. Fixed the default.
+
+---
+
+### Key Files Changed (21 July 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/documents/page.tsx` | Upload/Delete gated behind `documents.create`/`documents.delete` |
+| `app/dashboard/interview-list/AddCandidateModal.tsx`, `EditCandidateModal.tsx`, `page.tsx` | Branch field/filter locked to own branch for restricted roles |
+| `app/dashboard/employees/_components/AddEmployeeModal.tsx` | Branch field locked to own branch for restricted roles |
+| `app/dashboard/interview-list/MarkCandidateModal.tsx` | Removed template picker; locked to `candidate_selected`/`candidate_rejected` |
+| `backend/apps/recruitment/migrations/0010_candidate_selected_rejected_email_templates.py` | **NEW** — seeds `candidate_selected`/`candidate_rejected` |
+| `backend/apps/accounts/views.py` | Fixed `DocumentDetailView._stream_file` int/str pk mismatch (401 bug); ~13 stale `hr_admin`/`manager` role checks converted to permission codenames or corrected role names; `_can_manage_docs` removed in favor of `documents.*` codenames; `create_superuser` default role fixed |
+| `backend/apps/payroll/views/*.py` (7 files) | All `HR_ADMIN_ROLES`/`_is_hr_admin` hardcoded-role checks converted to `payroll.view/create/edit/delete` codename checks; L1/L2 workflow checks corrected to real role names |
+| `backend/apps/announcements/views.py` | `_POSTER_ROLES` hardcoded set replaced with `announcements.create/edit/delete` codename checks |
+| `backend/apps/recruitment/views.py` | Bulk import role check converted to `recruitment.create`; fixed `'selection'`/`'rejection'` default template mismatch |
+| `backend/apps/hrms/views/leave.py`, `expenses.py`, `attendance/views/my_attendance.py` | Branch/reporting-chain scoping added (high-severity audit fixes); role-name literals corrected to `manager__team_lead` |
+| `backend/apps/hrms/migrations/0014_seed_leave_email_templates.py` | **NEW** — seeds all 6 leave lifecycle templates |
+| `backend/apps/notifications/signals.py` | Added `_send_leave_email()`; wired into every leave status transition alongside existing in-app notifications |
+| `backend/apps/recruitment/migrations/0011_welcome_employee_email_template.py` | **NEW** — seeds `welcome_employee` |
+| `backend/apps/attendance/migrations/0016_seed_missing_clockout_email_template.py` | **NEW** — seeds `attendance_missing_clockout` (fixed invalid name) |
+| `backend/apps/attendance/services_unpunch.py` | Fixed `attendance_missing_clockout` template name; added `company_name` to context |
+| `app/dashboard/employees/[id]/_components/SalaryTab.tsx`, `ApprovalMatrixTab.tsx` | Role-name checks → `usePermission("payroll.edit")` / `usePermission("settings.edit")` |
+| `app/dashboard/branches/_components/BranchManagement.tsx` | `hr_admin` → `hr` in the "HR must never edit branches" business rule |
+| `app/dashboard/leave/_components/LeaveApprovals.tsx`, `LeaveDashboard.tsx` | Role-name literals corrected |
+| `app/dashboard/announcements/page.tsx` | `isHR` role-name literal corrected |
+| `app/dashboard/employees/[id]/page.tsx` | Removed stale `ROLE_SLUG` table (was silently breaking HR/Manager role changes); `roleOptions` now sources the real role slug from the Roles API |
+
+---
+
+### Notes for Next Developer
+
+- **The `hr`/`manager__team_lead` role names are the real, current values — do not reintroduce `hr_admin`/`manager` anywhere.** No migration ever renamed them; they were very likely renamed manually via Settings → Roles & Permissions at some point, so any *new* hardcoded role-name check is still fragile against a future rename. Prefer a permission-codename check (`_has_perm(user, 'module.action')`) over a role-name string wherever the two are equivalent — that's immune to this class of bug entirely.
+- **`hr` role currently holds `payroll.view` but not `payroll.create/edit/delete`** in the live permission table — this is now correctly enforced (previously it was accidentally irrelevant because the hardcoded role check blocked `hr` from everything regardless). If HR is supposed to manage payroll data directly, grant those codenames via Settings → Roles & Permissions; this was left as a data/policy decision, not assumed.
+- **Workflow-specific L1/L2 approver checks are intentionally role-identity based, not permission-based** — see `cycles.py`/`attendance_approval.py`. Managers hold zero `payroll.*` permissions by design (approving your own team's attendance sign-off isn't a payroll-management capability), so these correctly stay as `role.name in (...)` checks, just with the corrected literal names. Don't "fix" these to use `_has_perm` — it would lock managers out of the L1 step entirely.
+- **`_send_leave_email()` in `notifications/signals.py` fires from the model's `post_save` signal**, not from the view layer — this means it also fires for any leave status change made via Django admin, a management command, or a future bulk-action endpoint, not just the two API views. That's intentional (matches how the in-app notifications already behave) but worth knowing if a future bulk leave-approval feature is added and someone wonders why emails are already going out.
+- **`Company.company_name`/`website`/`address`/`logo` are still empty** in this environment — every outgoing email's branded header/footer will look blank until Settings → Company Profile is filled in. `portal_url` was fixed to the real production URL; the rest deliberately was not guessed.

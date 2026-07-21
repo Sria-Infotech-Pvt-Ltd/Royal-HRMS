@@ -10,11 +10,13 @@ from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class BranchPayrollConfigListView(APIView):
@@ -30,7 +32,7 @@ class BranchPayrollConfigListView(APIView):
         return success('Branch payroll configs retrieved.', serializer.data)
 
     def post(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.create'):
             return error('Only HR admin can create branch payroll configs.', http_status=403)
 
         branch_id = request.data.get('branch')
@@ -62,7 +64,7 @@ class BranchPayrollConfigDetailView(APIView):
         return success('Branch payroll config retrieved.', BranchPayrollConfigSerializer(config).data)
 
     def put(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update branch payroll configs.', http_status=403)
 
         config = get_object_or_404(BranchPayrollConfig, pk=pk)
@@ -78,7 +80,7 @@ class BranchPayrollConfigDetailView(APIView):
         return success('Branch config updated.', serializer.data)
 
     def delete(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.delete'):
             return error('Only HR admin can remove branch payroll configs.', http_status=403)
 
         config = get_object_or_404(BranchPayrollConfig, pk=pk)

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
 
 interface Props {
@@ -11,6 +13,10 @@ interface Props {
 }
 
 export function AddCandidateModal({ onClose, onSaved }: Props) {
+  const user            = useCurrentUser();
+  const unrestricted    = isUnrestrictedUser(user);
+  const effectiveBranch = getEffectiveBranch(user);
+
   const [form, setForm] = useState<{
     name: string; email: string; phone: string; position_applied: string;
     branch: string; interview_date: string; interview_mode: InterviewMode; notes: string;
@@ -31,6 +37,15 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
       .then(r => setBranches(r.data?.data?.results ?? []))
       .catch(() => {/* non-blocking — user can still submit without branch */});
   }, []);
+
+  // Branch-restricted users (everyone except system_admin) always add candidates
+  // to their own branch — lock the field instead of offering every branch.
+  const myBranch = branches.find(b => b.branch_name === effectiveBranch);
+  useEffect(() => {
+    if (!unrestricted && myBranch) {
+      setForm(f => (f.branch ? f : { ...f, branch: String(myBranch.id) }));
+    }
+  }, [unrestricted, myBranch]);
 
   function set(key: string, val: string) {
     setForm(f => ({ ...f, [key]: val }));
@@ -93,21 +108,25 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
             </div>
           </div>
 
-          {/* Branch selection — required */}
+          {/* Branch selection — required. Branch-restricted users are locked to their own branch. */}
           <div className="field-group mb-16">
             <label className="field-label">Branch *</label>
-            <select
-              className="field-input field-select"
-              value={form.branch}
-              onChange={e => set("branch", e.target.value)}
-            >
-              <option value="">— Select branch —</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.branch_name} ({b.branch_code})
-                </option>
-              ))}
-            </select>
+            {unrestricted ? (
+              <select
+                className="field-input field-select"
+                value={form.branch}
+                onChange={e => set("branch", e.target.value)}
+              >
+                <option value="">— Select branch —</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.branch_name} ({b.branch_code})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input className="field-input" value={effectiveBranch} disabled readOnly />
+            )}
           </div>
 
           <div className="form-row cols-2">

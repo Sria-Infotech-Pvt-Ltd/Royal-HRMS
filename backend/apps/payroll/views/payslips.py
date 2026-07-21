@@ -18,11 +18,15 @@ from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySeri
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _is_payroll_admin(user) -> bool:
+    """
+    HR and system_admin manage/view every payslip; plain employees only see
+    their own via MyPayslipsView. payroll.view is held by both hr and
+    employee (it also gates My Payslips), so it can't distinguish "view all"
+    from "view own" — this checks role identity directly instead.
+    """
+    return bool(user.role and user.role.name in ('hr', 'system_admin'))
 
 
 class CyclePayslipListView(APIView):
@@ -31,7 +35,7 @@ class CyclePayslipListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can view all payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -53,7 +57,7 @@ class PayslipDetailView(APIView):
     def get(self, request, pk):
         payslip = get_object_or_404(EmployeePayslip.objects.select_related('employee', 'cycle'), pk=pk)
 
-        if not _is_hr_admin(request.user) and payslip.employee_id != request.user.id:
+        if not _is_payroll_admin(request.user) and payslip.employee_id != request.user.id:
             return error('You can only view your own payslips.', http_status=403)
 
         return success('Payslip retrieved.', EmployeePayslipSerializer(payslip).data)
@@ -65,7 +69,7 @@ class UpdatePayslipReimbBonusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can update payslip reimbursements.', http_status=403)
 
         payslip = get_object_or_404(EmployeePayslip, pk=pk)
@@ -112,7 +116,7 @@ class DispatchPayslipsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, cycle_pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can dispatch payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -183,7 +187,7 @@ class PayslipQueryListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if _is_hr_admin(request.user):
+        if _is_payroll_admin(request.user):
             queries = PayslipQuery.objects.filter(
                 status=PayslipQuery.STATUS_OPEN,
             ).select_related('payslip', 'payslip__employee', 'raised_by').order_by('-created_at')
@@ -228,7 +232,7 @@ class PayslipQueryResolveView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can resolve queries.', http_status=403)
 
         query = get_object_or_404(PayslipQuery, pk=pk, status=PayslipQuery.STATUS_OPEN)

@@ -11,8 +11,8 @@ from apps.payroll.serializers import PayrollCycleSerializer
 
 logger = logging.getLogger(__name__)
 
-APPROVER_ROLES = frozenset(['system_admin', 'hr_admin', 'manager', 'finance_manager'])
-HR_ROLES       = frozenset(['system_admin', 'hr_admin'])
+APPROVER_ROLES = frozenset(['system_admin', 'hr', 'manager__team_lead'])
+HR_ROLES       = frozenset(['system_admin', 'hr'])
 
 
 def _role(user):
@@ -36,7 +36,7 @@ class AttendancePendingCyclesView(APIView):
         ).order_by('-cycle_start')
 
         # Managers only see cycles where their L1 approval is still pending
-        if role == 'manager':
+        if role == 'manager__team_lead':
             cycles = cycles.filter(attendance_approved_by_l1__isnull=True)
 
         serializer = PayrollCycleSerializer(cycles, many=True)
@@ -64,7 +64,7 @@ class CycleAttendanceSummaryView(APIView):
         ).select_related('employee')
 
         # Managers see only their direct reportees
-        if role == 'manager':
+        if role == 'manager__team_lead':
             records = records.filter(employee__reporting_manager=request.user)
 
         summary = (

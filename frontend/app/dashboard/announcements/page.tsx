@@ -147,7 +147,7 @@ export default function AnnouncementsPage() {
   const canPost  = currentUser?.permissions.includes("announcements.create") || currentUser?.role === "system_admin" || false;
   const canEdit  = currentUser?.permissions.includes("announcements.edit")   || currentUser?.role === "system_admin" || false;
   const isAdmin  = currentUser?.role === "system_admin";
-  const isHR     = currentUser?.role === "hr_admin";
+  const isHR     = currentUser?.role === "hr";
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [meta,    setMeta]    = useState<PageMeta | null>(null);

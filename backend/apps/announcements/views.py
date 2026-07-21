@@ -19,16 +19,24 @@ from apps.announcements.serializers import AnnouncementSerializer, AnnouncementW
 logger = logging.getLogger(__name__)
 
 
+def _has_perm(user, codename):
+    if not user:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
+        return False
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
 
 # ─── Permission ───────────────────────────────────────────────────────────────
-
-_POSTER_ROLES = frozenset({'hr_admin', 'system_admin', 'manager'})
-
 
 class CanPostAnnouncement(BasePermission):
     """
     Safe methods: any authenticated user.
-    Write methods: hr_admin, system_admin, manager.
+    Write methods: gated by the announcements.create/edit/delete codenames —
+    NOT a hardcoded role set, so this always matches whatever Roles &
+    Permissions actually grants (today: hr_admin, system_admin only).
     Object-level edit/delete: system_admin can modify any; others only their own.
     """
 
@@ -37,7 +45,11 @@ class CanPostAnnouncement(BasePermission):
             return False
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
-        return bool(request.user.role and request.user.role.name in _POSTER_ROLES)
+        if view.__class__.__name__ == 'AnnouncementListCreateView':
+            return _has_perm(request.user, 'announcements.create')
+        if request.method == 'DELETE':
+            return _has_perm(request.user, 'announcements.delete')
+        return _has_perm(request.user, 'announcements.edit')
 
     def has_object_permission(self, request, view, obj) -> bool:
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
@@ -53,9 +65,7 @@ class CanPostAnnouncement(BasePermission):
 
 def _visible_qs(request) -> 'QuerySet[Announcement]':
     """Return the base Announcement queryset scoped to what `request.user` may see."""
-    role_name = (request.user.role.name if request.user.role else '')
-
-    if role_name in ('system_admin', 'hr_admin'):
+    if _has_perm(request.user, 'announcements.edit'):
         qs = Announcement.objects.all()
     else:
         qs = Announcement.objects.filter(
@@ -324,7 +334,7 @@ class AnnouncementReactView(APIView):
                     target_department__name=request.user.department)
                 | Q(visibility=Announcement.VISIBILITY_BRANCH,
                     target_branch__branch_name=request.user.branch)
-            ) if not (request.user.role and request.user.role.name in ('system_admin', 'hr_admin'))
+            ) if not _has_perm(request.user, 'announcements.edit')
             else Announcement.objects.all(),
             pk=pk,
         )

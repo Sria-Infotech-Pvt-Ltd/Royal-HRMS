@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
-import { getStoredUser } from "@/lib/auth";
+import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import type { WorkflowMatrixRow, ApprovalWorkflowType } from "@/types/approvalMatrix";
 
@@ -315,8 +315,7 @@ export function ApprovalMatrixTab({
   const [editingManager, setEditingManager] = useState(false);
   const [editingHr,      setEditingHr]      = useState(false);
 
-  const currentUser = getStoredUser();
-  const canEdit = currentUser?.role === "hr_admin" || currentUser?.role === "system_admin";
+  const canEdit = usePermission("settings.edit");
 
   function handleSaved(_updated: WorkflowMatrixRow) {
     refetch();

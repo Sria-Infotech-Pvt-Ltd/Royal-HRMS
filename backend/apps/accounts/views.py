@@ -124,7 +124,8 @@ def _auto_assign_managers(employee: 'User') -> list:
         hr_user = branch_obj.hr if branch_obj else None
         if not hr_user:
             hr_user = User.objects.filter(
-                role__name='hr_admin', branch__iexact=emp_branch, is_active=True
+                role__role_permissions__permission__codename='employees.edit',
+                branch__iexact=emp_branch, is_active=True,
             ).first()
         if hr_user and hr_user.pk != employee.pk:
             employee.hr = hr_user
@@ -301,15 +302,14 @@ def _employee_dict(user: User) -> dict:
 # ─── Custom permissions ────────────────────────────────────────────────────────
 
 class CanManageRoles(BasePermission):
-    """Only hr_admin and system_admin may manage roles, permissions, and settings."""
+    """Only users holding settings.edit may manage roles, permissions, and settings."""
     message = 'You do not have permission to perform this action.'
 
     def has_permission(self, request, _) -> bool:
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.role
-            and request.user.role.name in ('hr_admin', 'system_admin')
+            and _has_perm(request.user, 'settings.edit')
         )
 
 
@@ -783,7 +783,7 @@ class RoleDetailView(APIView):
         if not role:
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        _SYSTEM_ROLES = {'employee', 'hr_admin', 'system_admin'}
+        _SYSTEM_ROLES = {'employee', 'hr', 'system_admin', 'manager__team_lead'}
         if role.name in _SYSTEM_ROLES:
             return error(
                 f'Role "{role.display_name}" is a system role and cannot be deleted.',
@@ -1933,10 +1933,6 @@ class EmailTemplatePreviewView(APIView):
 
 # ─── Document Center ───────────────────────────────────────────────────────────
 
-def _can_manage_docs(user) -> bool:
-    """Only hr_admin and system_admin may upload / edit / delete documents."""
-    return bool(user and user.role and user.role.name in ('hr_admin', 'system_admin'))
-
 
 class DocumentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1992,7 +1988,7 @@ class DocumentListCreateView(APIView):
         )
 
     def post(self, request):
-        if not _can_manage_docs(request.user):
+        if not _has_perm(request.user, 'documents.create'):
             return error(
                 'You do not have permission to upload documents.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -2053,7 +2049,10 @@ class DocumentDetailView(APIView):
     def _stream_file(self, pk: int, token: str):
         try:
             data = signing.loads(token, salt='doc-dl', max_age=7200)
-            if data.get('id') != pk:
+            # pk arrives as a str (URL uses <str:pk>) but the signed payload's
+            # 'id' is a JSON-decoded int — compare as strings so a valid token
+            # for this document is never rejected as a mismatch.
+            if str(data.get('id')) != str(pk):
                 raise ValueError('pk mismatch')
         except Exception:
             return error('Invalid or expired download link.', http_status=status.HTTP_401_UNAUTHORIZED)
@@ -2109,7 +2108,7 @@ class DocumentDetailView(APIView):
         )
 
     def put(self, request, pk: int):
-        if not _can_manage_docs(request.user):
+        if not _has_perm(request.user, 'documents.edit'):
             return error('You do not have permission to update documents.', http_status=status.HTTP_403_FORBIDDEN)
         doc = self._get_doc(pk)
         if not doc:
@@ -2152,7 +2151,7 @@ class DocumentDetailView(APIView):
         )
 
     def patch(self, request, pk: int):
-        if not _can_manage_docs(request.user):
+        if not _has_perm(request.user, 'documents.edit'):
             return error('You do not have permission to update documents.', http_status=status.HTTP_403_FORBIDDEN)
         doc = self._get_doc(pk)
         if not doc:
@@ -2199,7 +2198,7 @@ class DocumentDetailView(APIView):
         )
 
     def delete(self, request, pk: int):
-        if not _can_manage_docs(request.user):
+        if not _has_perm(request.user, 'documents.delete'):
             return error('You do not have permission to delete documents.', http_status=status.HTTP_403_FORBIDDEN)
         doc = self._get_doc(pk)
         if not doc:
@@ -2261,7 +2260,7 @@ class CompanyRetrieveUpdateView(APIView):
         return success('Company info retrieved.', data=serializer.data)
 
     def put(self, request):
-        if not (request.user.role and request.user.role.name in ('hr_admin', 'system_admin')):
+        if not _has_perm(request.user, 'settings.edit'):
             return error(
                 'You do not have permission to update company info.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -2454,7 +2453,7 @@ class EmployeeListCreateView(APIView):
             )
             auto_fields = _auto_assign_managers(user)
             # Auto-assign creating HR admin as the employee's branch HR
-            if (request.user.role and request.user.role.name == 'hr_admin'
+            if (_has_perm(request.user, 'employees.edit')
                     and user.hr_id is None and user.pk != request.user.pk):
                 user.hr = request.user
                 auto_fields.append('hr')
@@ -2562,6 +2561,20 @@ def _get_employee(identifier: str):
         return None
 
 
+def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
+    """
+    Non-system-admin users are always scoped to their own branch — mirrors the
+    scoping already applied to EmployeeListCreateView.get(). Returns True when
+    the employee should be treated as not found for this requester.
+    """
+    role_name = requesting_user.role.name if requesting_user.role else ''
+    return (
+        role_name != 'system_admin'
+        and bool(requesting_user.branch)
+        and employee.branch != requesting_user.branch
+    )
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -2571,7 +2584,7 @@ class EmployeeDetailView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
         auto_changed = _auto_assign_managers(employee)
         if auto_changed:
@@ -2582,7 +2595,7 @@ class EmployeeDetailView(APIView):
         if not _has_perm(request.user, 'employees.edit'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         data          = request.data
@@ -2591,6 +2604,8 @@ class EmployeeDetailView(APIView):
 
         role_name = (data.get('role') or '').strip()
         if role_name:
+            if role_name == 'system_admin':
+                return error('system_admin cannot be assigned via employee edit.')
             try:
                 new_role = Role.objects.get(name=role_name)
             except Role.DoesNotExist:
@@ -2672,7 +2687,7 @@ class EmployeeDetailView(APIView):
         # Manual reporting manager assignment (overrides auto-assign; blocked for managers)
         if 'reporting_manager_id' in data:
             current_role = (employee.role.name if employee.role else '').lower()
-            if current_role == 'manager':
+            if current_role == 'manager__team_lead':
                 return error('Managers do not have a reporting manager.')
             rm_val = data.get('reporting_manager_id')
             if rm_val:
@@ -2714,7 +2729,7 @@ class EmployeeDetailView(APIView):
         if not _has_perm(request.user, 'employees.edit'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if 'is_active' not in request.data:
@@ -2769,7 +2784,7 @@ class EmployeeDetailView(APIView):
         if not _has_perm(request.user, 'employees.delete'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
-        if employee is None:
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if employee.id == request.user.id:
@@ -3309,7 +3324,10 @@ class OnboardingView(APIView):
         else:
             hr_targets = [
                 (email, 'HR Team')
-                for email in User.objects.filter(role__name='hr_admin', is_active=True)
+                for email in User.objects.filter(
+                                             role__role_permissions__permission__codename='onboarding.approve',
+                                             is_active=True,
+                                         )
                                          .exclude(email='')
                                          .values_list('email', flat=True)
             ]
@@ -3491,7 +3509,7 @@ class EmployeeDocumentView(APIView):
             doc = ED.objects.get(id=doc_id)
         except ED.DoesNotExist:
             return None, error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
-        if doc.user_id != request.user.id and not _can_manage_docs(request.user):
+        if doc.user_id != request.user.id and not _has_perm(request.user, 'employees.edit'):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return doc, None
 
@@ -3632,7 +3650,7 @@ class OnboardingApprovalView(APIView):
 
         role_name        = request.user.role.name if request.user.role else ''
         target_role_name = target.role.name if target.role else ''
-        if role_name == 'hr_admin' and target_role_name in ('hr_admin', 'system_admin'):
+        if role_name != 'system_admin' and target_role_name in ('hr', 'system_admin'):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
@@ -3882,8 +3900,8 @@ class OnboardingApprovalView(APIView):
             .distinct()
             .order_by('-date_joined')
         )
-        if role_name == 'hr_admin':
-            base_qs = base_qs.exclude(role__name__in=['hr_admin', 'system_admin'])
+        if role_name != 'system_admin':
+            base_qs = base_qs.exclude(role__name__in=['hr', 'system_admin'])
 
         stats = {
             'pending':   base_qs.filter(onboarding_status=User.ONBOARDING_PENDING).count(),
@@ -3926,8 +3944,8 @@ class OnboardingApprovalView(APIView):
             .prefetch_related('employee_documents')
             .order_by('date_joined')
         )
-        if role_name == 'hr_admin':
-            qs = qs.exclude(role__name__in=['hr_admin', 'system_admin'])
+        if role_name != 'system_admin':
+            qs = qs.exclude(role__name__in=['hr', 'system_admin'])
 
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         user_ids = [u.pk for u in page_obj.object_list]
@@ -4049,9 +4067,10 @@ class HRListView(APIView):
              'department': u.department, 'branch': u.branch}
             for u in hrs
         ]
-        # If the requesting user is hr_admin but not in the results (e.g. role FK mismatch),
-        # include them so the picker always has at least the current HR visible.
-        requester_is_hr = (request.user.role and request.user.role.name == 'hr_admin')
+        # If the requesting user holds onboarding.approve but isn't in the results
+        # (e.g. branch filter excluded them), include them so the picker always
+        # has at least the current HR visible.
+        requester_is_hr = _has_perm(request.user, 'onboarding.approve')
         if requester_is_hr and not any(d['id'] == str(request.user.id) for d in data):
             data.insert(0, {
                 'id': str(request.user.id),
@@ -4109,7 +4128,7 @@ class EmployeeReportingManagerView(APIView):
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        if employee.role and employee.role.name.lower() == 'manager':
+        if employee.role and employee.role.name.lower() == 'manager__team_lead':
             return error('Managers do not have a reporting manager.')
 
         manager_id = request.data.get('reporting_manager_id')
@@ -4404,7 +4423,6 @@ _EMP_IMPORT_COL_MAP = {
 
 _EMP_MAX_IMPORT_ROWS  = 1000
 _EMP_MAX_IMPORT_BYTES = 5 * 1024 * 1024
-_EMP_ALLOWED_ROLES    = frozenset({'system_admin', 'hr_admin'})
 
 
 def _normalize_employee_import_headers(row_dict: dict) -> dict:
@@ -4466,8 +4484,7 @@ class EmployeeBulkImportView(APIView):
     parser_classes     = [MultiPartParser]
 
     def post(self, request):
-        role_name = (request.user.role.name if request.user.role else '')
-        if role_name not in _EMP_ALLOWED_ROLES:
+        if not _has_perm(request.user, 'employees.create'):
             return error(
                 'Only System Admin and HR Admin can perform bulk employee import.',
                 http_status=status.HTTP_403_FORBIDDEN,

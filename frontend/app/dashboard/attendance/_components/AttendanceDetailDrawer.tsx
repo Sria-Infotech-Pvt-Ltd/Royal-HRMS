@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
@@ -66,6 +67,7 @@ function SectionTitle({ icon, title }: { icon: string; title: string }) {
 
 export default function AttendanceDetailDrawer({ recordId, date, onClose }: Props) {
   const { showToast } = useToast();
+  const canReview = usePermission("attendance.create");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const { data, loading, error } = useFetch<AttendanceDetail>(
@@ -209,7 +211,7 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose }: Prop
                     </div>
                     <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{c.reason}</div>
 
-                    {c.status === "pending" ? (
+                    {c.status === "pending" && canReview ? (
                       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                         <button
                           className="btn btn-outline btn-sm"

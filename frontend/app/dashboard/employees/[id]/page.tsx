@@ -128,7 +128,7 @@ function apiToEmployee(u: ApiEmployee): Employee {
       nationality:   "Indian",
       loginEmail:    u.email,
       personalEmail: u.email,
-      ssRole:        u.role_display || "Employee",
+      ssRole:        u.role || "employee",
       portalAccess:  "enabled",
       mobileNumber:  u.phone || "",
       // Personal (from onboarding profile)
@@ -217,7 +217,7 @@ export default function EmployeeProfilePage({
         setRoleOptions(
           roles.value.data.data.results
             .filter(r => r.name !== "system_admin")
-            .map(r => ({ value: r.display_name, label: r.display_name }))
+            .map(r => ({ value: r.name, label: r.display_name }))
         );
       if (branches.status === "fulfilled")
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
@@ -296,11 +296,6 @@ export default function EmployeeProfilePage({
     setTables(t => ({ ...t, [sectionId]: rows }));
     setJustSaved(false);
   }
-  const ROLE_SLUG: Record<string, string> = {
-    "Employee": "employee", "HR Admin": "hr_admin", "Manager": "manager",
-    "System Admin": "system_admin", "Finance Manager": "finance_manager",
-  };
-
   async function onSave() {
     setSaving(true);
     setSaveError(false);
@@ -311,7 +306,7 @@ export default function EmployeeProfilePage({
         department:             values.department            || null,
         designation:            values.designation           || null,
         branch:                 values.branch                || null,
-        role:                   ROLE_SLUG[values.ssRole]     || null,
+        role:                   values.ssRole                || null,
         is_active:              employee?.status !== "inactive",
         reporting_manager_id:   values.reportingManagerId   || null,
         hr_id:                  values.hrId                  || null,

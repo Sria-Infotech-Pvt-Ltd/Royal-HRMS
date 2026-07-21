@@ -3,6 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 
 /* ── Types ────────────────────────────────────────────────────── */
 interface ApiRole   { id: number; name: string; display_name: string }
@@ -88,6 +90,10 @@ export default function AddEmployeeModal({
   onClose:   () => void;
   onCreated: (emp: Record<string, unknown>) => void;
 }) {
+  const user            = useCurrentUser();
+  const unrestricted    = isUnrestrictedUser(user);
+  const effectiveBranch = getEffectiveBranch(user);
+
   const [form,   setForm]   = useState<Form>(EMPTY);
   const [errs,   setErrs]   = useState<Errs>({});
   const [saving, setSaving] = useState(false);
@@ -117,6 +123,14 @@ export default function AddEmployeeModal({
       .catch(() => {/* silently degrade to empty lists */})
       .finally(() => setLoading(false));
   }, []);
+
+  // Branch-restricted users (everyone except system_admin) always add employees
+  // to their own branch — lock the field instead of offering every branch.
+  useEffect(() => {
+    if (!unrestricted && effectiveBranch) {
+      setForm(f => (f.branch ? f : { ...f, branch: effectiveBranch }));
+    }
+  }, [unrestricted, effectiveBranch]);
 
   /* fetch designations whenever department changes */
   useEffect(() => {
@@ -284,12 +298,20 @@ export default function AddEmployeeModal({
                       </Sel>
                     </Field>
                     <Field label="Branch" required error={errs.branch}>
-                      <Sel v={form.branch} set={v => set("branch", v)} err={!!errs.branch}>
-                        <option value="">— Select Branch —</option>
-                        {branches.map(b => (
-                          <option key={b.id} value={b.branch_name}>{b.branch_name}</option>
-                        ))}
-                      </Sel>
+                      {unrestricted ? (
+                        <Sel v={form.branch} set={v => set("branch", v)} err={!!errs.branch}>
+                          <option value="">— Select Branch —</option>
+                          {branches.map(b => (
+                            <option key={b.id} value={b.branch_name}>{b.branch_name}</option>
+                          ))}
+                        </Sel>
+                      ) : (
+                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                          title="Scoped to your branch">
+                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                          {effectiveBranch}
+                        </div>
+                      )}
                     </Field>
                     <Field label="Employee Type">
                       <Sel v={form.employee_type} set={v => set("employee_type", v)}>
