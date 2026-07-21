@@ -1303,8 +1303,10 @@ class AttendanceImportLog(models.Model):
     total_rows   = models.PositiveIntegerField(default=0)
     success_rows = models.PositiveIntegerField(default=0)
     failed_rows  = models.PositiveIntegerField(default=0)
+    skipped_rows = models.PositiveIntegerField(default=0)
     status       = models.CharField(max_length=15, choices=STATUS_CHOICES, default=STATUS_PROCESSING)
     errors       = models.JSONField(default=list, blank=True)
+    task_id      = models.CharField(max_length=255, blank=True, default='')
     created_at   = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 

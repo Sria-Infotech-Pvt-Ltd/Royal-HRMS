@@ -4,13 +4,58 @@ import logging
 import re
 import secrets
 import string
+from datetime import date, datetime
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
 
-logger = logging.getLogger('accounts')
+logger = logging.getLogger(__name__)
 
 _OTP_ALPHABET: str = string.digits
+
+
+# ─── Financial Year helpers ───────────────────────────────────────────────────
+
+def get_fy_start_year(today: date, start_month_name: str) -> int:
+    """Return the calendar year in which the current financial year started.
+
+    If today is on or after the configured start month, the FY started this
+    calendar year.  Otherwise it started last calendar year.
+    """
+    start_month = datetime.strptime(start_month_name, '%B').month
+    return today.year if today.month >= start_month else today.year - 1
+
+
+def _fy_label(start_year: int) -> str:
+    return f'FY {start_year}-{str(start_year + 1)[2:]}'
+
+
+def get_financial_years(today: date, start_month_name: str) -> dict:
+    """Return previous, current, and next FY display strings."""
+    current_start = get_fy_start_year(today, start_month_name)
+    return {
+        'previous_financial_year': _fy_label(current_start - 1),
+        'current_financial_year':  _fy_label(current_start),
+        'next_financial_year':     _fy_label(current_start + 1),
+    }
+
+
+def get_company_financial_year_config() -> dict:
+    """Return the company FY configuration dict, reading from cache when warm."""
+    from core.cache_service import FinancialYearCacheService
+    cached = FinancialYearCacheService.get()
+    if cached is not None:
+        return cached
+    from apps.accounts.models import Company
+    company = Company.objects.first()
+    start_month = company.financial_year_start_month if company else 'April'
+    today = date.today()
+    data = {
+        'financial_year_start_month': start_month,
+        **get_financial_years(today, start_month),
+    }
+    FinancialYearCacheService.set(data)
+    return data
 
 
 # ─── OTP ─────────────────────────────────────────────────────────────────────

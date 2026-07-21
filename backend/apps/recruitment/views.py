@@ -7,6 +7,7 @@ import string
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -2022,3 +2023,59 @@ class CandidateBulkImportView(APIView):
             },
             http_status=status.HTTP_200_OK if failed == 0 else status.HTTP_207_MULTI_STATUS,
         )
+
+
+# ─── Candidate Bulk Import — Sample Template ──────────────────────────────────
+
+class CandidateBulkImportSampleView(APIView):
+    """
+    GET /api/recruitment/candidates/bulk-import/sample/?format=csv
+    GET /api/recruitment/candidates/bulk-import/sample/?format=xlsx
+
+    Download a sample import template for Candidate Bulk Import.
+    Headers match the column aliases accepted by CandidateBulkImportView exactly.
+    Permission mirrors the upload endpoint (system_admin / hr / hr_admin only).
+    """
+    permission_classes = [IsAuthenticated]
+
+    _HEADERS = [
+        'Candidate Name', 'Email', 'Mobile Number', 'Position Applied',
+        'Branch', 'Interview Date', 'Interview Mode', 'Notes',
+    ]
+    _SAMPLE_ROWS = [
+        [
+            'Rahul Sharma', 'rahul.sharma@email.com', '9876543210',
+            'Software Engineer', 'Mumbai HQ', '2026-07-25', 'In-Person', '',
+        ],
+        [
+            'Priya Patel', 'priya.patel@email.com', '9123456789',
+            'Product Manager', 'Delhi Branch', '2026-07-26', 'Video Call', 'Strong candidate',
+        ],
+    ]
+
+    def get(self, request):
+        role_name = (request.user.role.name if request.user.role else '')
+        if (
+            role_name not in _ALLOWED_IMPORT_ROLES
+            and not getattr(request.user, 'is_superuser', False)
+        ):
+            return error(
+                'Only HR and System Admin users can download the candidate import template.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
+
+        fmt = request.query_params.get('format', 'csv').lower().strip()
+        if fmt == 'xlsx':
+            content  = build_sample_xlsx(self._HEADERS, self._SAMPLE_ROWS, 'Candidate Import')
+            filename = 'candidate_import_sample.xlsx'
+            mime     = _XLSX_MIME
+        else:
+            content  = build_sample_csv(self._HEADERS, self._SAMPLE_ROWS)
+            filename = 'candidate_import_sample.csv'
+            mime     = _CSV_MIME
+
+        response = HttpResponse(content, content_type=mime)
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response

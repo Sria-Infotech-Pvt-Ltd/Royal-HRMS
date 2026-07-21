@@ -20,7 +20,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.http import StreamingHttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, F, Q
 from django.utils import timezone
@@ -2308,6 +2308,82 @@ class CompanyRetrieveUpdateView(APIView):
 
     def patch(self, request):
         return self.put(request)
+
+
+# ─── Company Financial Year ───────────────────────────────────────────────────
+
+class CompanyFinancialYearView(APIView):
+    """
+    GET  /api/settings/company/financial-year/
+        Any authenticated user. Returns the configured start month plus
+        dynamically computed previous, current, and next FY labels.
+
+    PUT  /api/settings/company/financial-year/
+        system_admin only. Accepts { "financial_year_start_month": "April" }.
+        Persists the change, busts the FY cache, and writes an audit log.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.utils import get_company_financial_year_config
+        data = get_company_financial_year_config()
+        return success('Financial year configuration retrieved.', data)
+
+    def put(self, request):
+        if not (request.user.role and request.user.role.name == 'system_admin'):
+            return error(
+                'Only system administrators can update the financial year configuration.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        new_month = str(request.data.get('financial_year_start_month', '')).strip()
+        valid_months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ]
+        if new_month not in valid_months:
+            return error(
+                f'Invalid month "{new_month}". Must be one of: {", ".join(valid_months)}.'
+            )
+
+        company = Company.objects.first()
+        if not company:
+            return error('Company record not found. Set up company info first.', http_status=404)
+
+        old_month = company.financial_year_start_month
+
+        if old_month != new_month:
+            with transaction.atomic():
+                company.financial_year_start_month = new_month
+                company.updated_by = request.user
+                company.save(update_fields=['financial_year_start_month', 'updated_by', 'updated_at'])
+
+            AuditLog.objects.create(
+                user=request.user,
+                action='update',
+                module='company_financial_year',
+                object_id=str(company.pk),
+                ip_address=get_client_ip(request),
+                changes={
+                    'financial_year_start_month': {'old': old_month, 'new': new_month},
+                },
+            )
+            logger.info(
+                'Financial year start month changed from %s to %s by %s',
+                old_month, new_month, request.user.email,
+            )
+
+        from apps.accounts.utils import get_financial_years, get_fy_start_year
+        from core.cache_service import FinancialYearCacheService
+        from datetime import date as _date
+        today = _date.today()
+        data = {
+            'financial_year_start_month': new_month,
+            **get_financial_years(today, new_month),
+        }
+        FinancialYearCacheService.set(data)
+
+        return success('Financial year configuration updated.', data)
 
 
 # ─── Audit Log ────────────────────────────────────────────────────────────────
@@ -4734,3 +4810,59 @@ class EmployeeBulkImportView(APIView):
                 'errors':               row_errors,
             },
         )
+
+
+# ─── Employee Bulk Import — Sample Template ───────────────────────────────────
+
+class EmployeeBulkImportSampleView(APIView):
+    """
+    GET /api/employees/bulk-import/sample/?format=csv
+    GET /api/employees/bulk-import/sample/?format=xlsx
+
+    Download a sample import template for Employee Bulk Import.
+    Headers are identical to the column aliases accepted by EmployeeBulkImportView.
+    Permission mirrors the upload endpoint (system_admin / hr_admin only).
+    """
+    permission_classes = [IsAuthenticated]
+
+    _HEADERS = [
+        'First Name', 'Last Name', 'Work Email', 'Mobile Number',
+        'Role', 'Department', 'Designation', 'Branch', 'Employee Type',
+        'Date of Joining', 'Gender', 'Date of Birth', 'Blood Group', 'Address',
+    ]
+    _SAMPLE_ROWS = [
+        [
+            'John', 'Doe', 'john.doe@company.com', '9876543210',
+            'Employee', 'Engineering', 'Software Engineer', 'Mumbai HQ', 'Permanent',
+            '2026-01-15', 'Male', '1995-06-20', 'B+', '123 Main Street, Mumbai',
+        ],
+        [
+            'Jane', 'Smith', 'jane.smith@company.com', '9123456789',
+            'HR Admin', 'Human Resources', 'HR Manager', 'Delhi Branch', 'Permanent',
+            '2026-02-01', 'Female', '1990-03-15', 'A+', '456 Park Avenue, Delhi',
+        ],
+    ]
+
+    def get(self, request):
+        role_name = (request.user.role.name if request.user.role else '')
+        if role_name not in _EMP_ALLOWED_ROLES:
+            return error(
+                'Only System Admin and HR Admin can download the employee import template.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
+
+        fmt = request.query_params.get('format', 'csv').lower().strip()
+        if fmt == 'xlsx':
+            content  = build_sample_xlsx(self._HEADERS, self._SAMPLE_ROWS, 'Employee Import')
+            filename = 'employee_import_sample.xlsx'
+            mime     = _XLSX_MIME
+        else:
+            content  = build_sample_csv(self._HEADERS, self._SAMPLE_ROWS)
+            filename = 'employee_import_sample.csv'
+            mime     = _CSV_MIME
+
+        response = HttpResponse(content, content_type=mime)
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response

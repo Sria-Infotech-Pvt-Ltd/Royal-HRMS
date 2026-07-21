@@ -496,6 +496,14 @@ class EmailTemplate(models.Model):
 
 class Company(models.Model):
     """Single legal entity. Only one record ever exists in this table."""
+
+    MONTH_CHOICES = [
+        ('January',   'January'),   ('February', 'February'), ('March',    'March'),
+        ('April',     'April'),     ('May',       'May'),      ('June',     'June'),
+        ('July',      'July'),      ('August',    'August'),   ('September','September'),
+        ('October',   'October'),   ('November',  'November'), ('December', 'December'),
+    ]
+
     company_name   = models.CharField(max_length=200)
     trade_name     = models.CharField(max_length=200, blank=True)
     logo           = models.ImageField(upload_to='company/', null=True, blank=True)
@@ -512,6 +520,12 @@ class Company(models.Model):
     portal_url     = models.CharField(
                          max_length=255, blank=True,
                          help_text='Employee onboarding portal URL sent in invitation emails.',
+                     )
+    financial_year_start_month = models.CharField(
+                         max_length=10,
+                         choices=MONTH_CHOICES,
+                         default='April',
+                         help_text='First month of the financial year (e.g. "April" for Apr–Mar).',
                      )
     updated_at     = models.DateTimeField(auto_now=True)
     updated_by     = models.ForeignKey(

@@ -2133,3 +2133,166 @@ backend/apps/accounts/views.py
 - Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave approved
 - Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-21
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Carry Forward Leave — Configuration & Process** (backend complete)
+
+Full carry-forward leave workflow implemented. Extends the existing `can_carry_forward` / `max_carry_forward_days` partial implementation with type, mode, expiry, manual execution APIs, and audit log.
+
+---
+
+#### Model Changes
+
+**`LeavePolicy` — 3 new fields:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `carry_forward_type` | CharField | `limited` | `limited` = cap at `max_carry_forward_days`; `unlimited` = carry all unused days |
+| `carry_forward_mode` | CharField | `automatic` | `automatic` = handled by Celery on 1 Jan; `manual` = HR/Admin executes via API |
+| `carry_forward_expiry_days` | PositiveIntegerField | `0` | Days before carry-forwarded balance expires (0 = never) |
+
+**`LeaveBalance` — 1 new field:**
+
+| Field | Type | Description |
+|---|---|---|
+| `carry_forward_expiry_date` | DateField (nullable) | Set when carry forward is applied; `null` if `expiry_days == 0` |
+
+**`CarryForwardLog` — new audit model** (`hrms_carry_forward_logs`):
+
+| Field | Description |
+|---|---|
+| `from_year` / `to_year` | Year range of the carry-forward run |
+| `leave_type` | Leave type (blank = all types) |
+| `executed_by` | FK to User who triggered the run |
+| `process_mode` | `execute` |
+| `total_processed` | Balances successfully created |
+| `total_skipped` | Rows skipped (already existed, ineligible, or zero unused) |
+| `total_failed` | Rows that raised an exception |
+| `is_completed` | `True` on successful run completion |
+| `notes` | Free-text field for run notes |
+
+Migration: `0014_carry_forward` — applied ✓
+
+---
+
+#### API Endpoints
+
+All 4 endpoints require `system_admin`, `hr_admin`, or `hr` role — others get 403.
+
+| Method | URL | Description |
+|---|---|---|
+| `GET` | `/api/hrms/leave/carry-forward/years/` | Available from/to year pairs derived from existing `LeaveBalance.year` values; includes `default_from` and `default_to` based on current year |
+| `POST` | `/api/hrms/leave/carry-forward/preview/` | Dry-run — shows every row that would be processed without writing to DB |
+| `POST` | `/api/hrms/leave/carry-forward/run/` | Executes carry forward; returns `409` if this `from_year→to_year` pair was already completed |
+| `GET` | `/api/hrms/leave/carry-forward/history/` | Paginated audit log of all past runs |
+
+**Preview request / response:**
+```json
+// POST /api/hrms/leave/carry-forward/preview/
+{ "from_year": 2025, "to_year": 2026 }
+
+// Response
+{
+  "from_year": 2025, "to_year": 2026,
+  "total_rows": 12, "pending_count": 10, "already_processed_count": 2,
+  "preview_rows": [
+    {
+      "employee_id": "RSS00001", "employee_name": "Arun Kumar",
+      "leave_type": "earned", "leave_type_display": "Earned Leave",
+      "unused_days": 8.0, "carry_forward_amount": 5.0,
+      "expiry_date": "2026-12-31", "already_processed": false
+    }
+  ]
+}
+```
+
+**Run request / response:**
+```json
+// POST /api/hrms/leave/carry-forward/run/
+{ "from_year": 2025, "to_year": 2026 }
+
+// Response (CarryForwardLog)
+{
+  "id": "...", "from_year": 2025, "to_year": 2026,
+  "process_mode": "execute", "executed_by_name": "Teerdaveni",
+  "total_processed": 10, "total_skipped": 2, "total_failed": 0,
+  "is_completed": true, "created_at": "2026-07-21T..."
+}
+```
+
+---
+
+#### Carry Forward Logic
+
+**For manual run (`/run/`):**
+- Only processes policies where `carry_forward_mode = manual`
+- Skips employees who already have a `to_year` balance for a given leave type (idempotent)
+- `carry_forward_type = unlimited` → carries all unused days; `limited` → capped by `max_carry_forward_days`
+- If `carry_forward_expiry_days > 0` → sets `carry_forward_expiry_date = today + expiry_days` on the created balance
+- Duplicate-run guard: returns `409` if a completed log already exists for the same `from_year→to_year`
+
+**For Celery automatic run (`reset_annual_leave_balances`):**
+- Skips policies where `carry_forward_mode = manual` (those are HR-managed only)
+- Respects new `carry_forward_type` (unlimited removes the `max_carry_forward_days` cap)
+- Sets `carry_forward_expiry_date` on each new balance when `expiry_days > 0`
+- Remains idempotent (`get_or_create`)
+
+---
+
+#### Files Modified
+
+```
+backend/apps/hrms/models.py
+  — CARRY_FORWARD_* constants added
+  — LeavePolicy: carry_forward_type, carry_forward_mode, carry_forward_expiry_days added
+  — LeaveBalance: carry_forward_expiry_date added
+  — CarryForwardLog model added
+
+backend/apps/hrms/migrations/0014_carry_forward.py     (NEW — applied)
+
+backend/apps/hrms/serializers.py
+  — CarryForwardLog imported
+  — LeavePolicySerializer, LeavePolicyCreateSerializer, LeavePolicyUpdateSerializer:
+      carry_forward_type, carry_forward_mode, carry_forward_expiry_days added
+  — LeaveBalanceSerializer: carry_forward_expiry_date added
+  — CarryForwardInputSerializer, CarryForwardLogSerializer added
+
+backend/apps/hrms/views/leave.py
+  — imports: timedelta, CARRY_FORWARD_UNLIMITED, CARRY_FORWARD_MANUAL,
+      CarryForwardLog, CarryForwardInputSerializer, CarryForwardLogSerializer added
+  — _eligible_for_policy(), _build_carry_forward_rows() helpers added
+  — CarryForwardYearsView, CarryForwardPreviewView, CarryForwardRunView,
+      CarryForwardHistoryView added
+
+backend/apps/hrms/views/__init__.py
+  — All 4 carry-forward views exported
+
+backend/apps/hrms/urls.py
+  — All 4 carry-forward views imported
+  — 4 URL patterns added under leave/carry-forward/
+
+backend/apps/hrms/tasks.py
+  — timedelta imported
+  — CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED imported from hrms.models
+  — reset_annual_leave_balances: excludes manual-mode policies; respects carry_forward_type;
+      sets carry_forward_expiry_date on created balances
+```
+
+### Pending
+
+- Frontend implementation of Carry Forward Leave UI (years selector, preview table, run button, history log)
+- Frontend implementation of Employee Bulk Import modal
+- Frontend implementation of Candidate Bulk Import modal
+- Frontend implementation of all 3 dashboard pages
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR

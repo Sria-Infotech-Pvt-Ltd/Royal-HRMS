@@ -3,6 +3,7 @@ import logging
 from rest_framework import serializers
 
 from .models import (
+    CarryForwardLog,
     Expense, ExpenseReceipt,
     Holiday, HOLIDAY_TYPE_CHOICES,
     LeaveBalance, LeavePolicy, LeaveRequest,
@@ -126,7 +127,8 @@ class LeavePolicySerializer(serializers.ModelSerializer):
         model  = LeavePolicy
         fields = (
             ['id', 'leave_type', 'leave_type_display', 'annual_days', 'can_carry_forward',
-             'max_carry_forward_days', 'policy_note', 'is_active']
+             'max_carry_forward_days', 'carry_forward_type', 'carry_forward_mode',
+             'carry_forward_expiry_days', 'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
             + ['updated_at']
         )
@@ -140,9 +142,12 @@ class LeavePolicySerializer(serializers.ModelSerializer):
 class LeavePolicyCreateSerializer(serializers.Serializer):
     leave_type_label       = serializers.CharField(max_length=100)
     annual_days            = serializers.DecimalField(max_digits=5, decimal_places=1, default=0)
-    can_carry_forward      = serializers.BooleanField(default=False)
-    max_carry_forward_days = serializers.IntegerField(default=0, min_value=0)
-    policy_note            = serializers.CharField(required=False, default='', allow_blank=True)
+    can_carry_forward         = serializers.BooleanField(default=False)
+    max_carry_forward_days    = serializers.IntegerField(default=0, min_value=0)
+    carry_forward_type        = serializers.ChoiceField(choices=['limited', 'unlimited'], default='limited', required=False)
+    carry_forward_mode        = serializers.ChoiceField(choices=['automatic', 'manual'], default='automatic', required=False)
+    carry_forward_expiry_days = serializers.IntegerField(default=0, min_value=0, required=False)
+    policy_note               = serializers.CharField(required=False, default='', allow_blank=True)
     is_active              = serializers.BooleanField(default=True)
     # Application Rules
     minimum_leave_duration   = serializers.DecimalField(max_digits=4, decimal_places=1, default=0.5, required=False)
@@ -208,7 +213,9 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = LeavePolicy
         fields = (
-            ['annual_days', 'can_carry_forward', 'max_carry_forward_days', 'policy_note', 'is_active']
+            ['annual_days', 'can_carry_forward', 'max_carry_forward_days',
+             'carry_forward_type', 'carry_forward_mode', 'carry_forward_expiry_days',
+             'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
         )
 
@@ -236,7 +243,8 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
         model  = LeaveBalance
         fields = [
             'id', 'employee_name', 'leave_type', 'leave_type_display',
-            'year', 'total_days', 'used_days', 'carried_forward', 'available_days',
+            'year', 'total_days', 'used_days', 'carried_forward',
+            'carry_forward_expiry_date', 'available_days',
         ]
 
     def get_employee_name(self, obj):
@@ -428,3 +436,30 @@ class HolidayCreateSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError('Holiday name cannot be empty.')
         return value
+
+
+# ─── Carry Forward serializers ────────────────────────────────────────────────
+
+class CarryForwardInputSerializer(serializers.Serializer):
+    from_year = serializers.IntegerField(min_value=2000, max_value=2100)
+    to_year   = serializers.IntegerField(min_value=2000, max_value=2100)
+
+    def validate(self, data):
+        if data['to_year'] <= data['from_year']:
+            raise serializers.ValidationError({'to_year': 'to_year must be greater than from_year.'})
+        return data
+
+
+class CarryForwardLogSerializer(serializers.ModelSerializer):
+    executed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = CarryForwardLog
+        fields = [
+            'id', 'from_year', 'to_year', 'leave_type', 'executed_by_name',
+            'process_mode', 'total_processed', 'total_skipped', 'total_failed',
+            'is_completed', 'notes', 'created_at',
+        ]
+
+    def get_executed_by_name(self, obj):
+        return obj.executed_by.full_name if obj.executed_by_id else 'System'

@@ -292,8 +292,114 @@ class HRAttendanceImportView(APIView):
             return error('File size must not exceed 5 MB.')
 
         result = import_attendance_csv(file, imported_by=request.user)
-        http_status = 200 if result['failed'] == 0 else 207
-        return success('Import complete.', result, http_status=http_status)
+        status_val = result.get('status')
+        if status_val == 'queued':
+            http_status = 202
+        elif result.get('failed', 0) == 0:
+            http_status = 200
+        elif result.get('successful', 0) == 0:
+            http_status = 400
+        else:
+            http_status = 207
+        return success(result['message'], result, http_status=http_status)
+
+
+# ── Import status (progress polling for async imports) ───────────────────────
+
+class HRAttendanceImportStatusView(APIView):
+    """
+    GET /api/attendance/import/<uuid:import_id>/status/
+
+    Returns the current processing state of a bulk import job.
+    Used by the frontend to poll progress for large files that were queued
+    asynchronously (status='queued' on the initial POST response).
+
+    Response data:
+        import_id       — UUID of the import log
+        status          — processing | queued | success | partial_success | failed
+        total_records   — total rows in the uploaded file
+        successful      — rows saved or updated so far
+        failed          — rows that could not be saved
+        skipped         — intra-file duplicate rows (last occurrence wins)
+        errors          — first 50 row-level error entries
+        task_id         — Celery task ID (present when import was async)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, import_id):
+        if not _has_hr_permission(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        from apps.attendance.models import AttendanceImportLog
+
+        try:
+            log = AttendanceImportLog.objects.get(id=import_id)
+        except AttendanceImportLog.DoesNotExist:
+            return error('Import log not found.', http_status=404)
+
+        raw_status = log.status
+        if raw_status == AttendanceImportLog.STATUS_PROCESSING:
+            display_status = 'processing'
+        elif raw_status == AttendanceImportLog.STATUS_COMPLETED:
+            display_status = 'success' if log.failed_rows == 0 else 'partial_success'
+        else:
+            display_status = 'failed' if log.success_rows == 0 else 'partial_success'
+
+        skipped = max(log.total_rows - log.success_rows - log.failed_rows, log.skipped_rows)
+
+        data = {
+            'import_id':     str(log.id),
+            'status':        display_status,
+            'total_records': log.total_rows,
+            'successful':    log.success_rows,
+            'failed':        log.failed_rows,
+            'skipped':       skipped,
+            'errors':        (log.errors or [])[:50],
+        }
+        if log.task_id:
+            data['task_id'] = log.task_id
+
+        return success('Import status retrieved.', data)
+
+
+# ── Import Sample Template ────────────────────────────────────────────────────
+
+class HRAttendanceImportSampleView(APIView):
+    """
+    GET /api/attendance/import/sample/?format=csv
+    GET /api/attendance/import/sample/?format=xlsx
+
+    Download a sample import template for Attendance Bulk Import.
+    Headers match the columns accepted by HRAttendanceImportView exactly.
+    Permission mirrors the upload endpoint (attendance.create required).
+    """
+    permission_classes = [IsAuthenticated]
+
+    _HEADERS = ['Employee ID', 'Date', 'Punch In', 'Punch Out']
+    _SAMPLE_ROWS = [
+        ['RSS00001', '2026-07-01', '09:00', '18:00'],
+        ['RSS00002', '2026-07-01', '08:30', '17:30'],
+    ]
+
+    def get(self, request):
+        if not _has_hr_permission(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
+
+        fmt = request.query_params.get('format', 'csv').lower().strip()
+        if fmt == 'xlsx':
+            content  = build_sample_xlsx(self._HEADERS, self._SAMPLE_ROWS, 'Attendance Import')
+            filename = 'attendance_import_sample.xlsx'
+            mime     = _XLSX_MIME
+        else:
+            content  = build_sample_csv(self._HEADERS, self._SAMPLE_ROWS)
+            filename = 'attendance_import_sample.csv'
+            mime     = _CSV_MIME
+
+        response = HttpResponse(content, content_type=mime)
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 # ── Reprocess ────────────────────────────────────────────────────────────────

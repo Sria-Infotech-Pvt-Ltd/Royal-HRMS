@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CandidateBulkImportView,
+    CandidateBulkImportSampleView,
     CandidateDetailView,
     CandidateEmailLogView,
     CandidateHRDecisionView,
@@ -25,7 +26,8 @@ from .views import (
 
 urlpatterns = [
     path('candidates/',                                   CandidateListCreateView.as_view(),      name='candidate-list-create'),
-    path('candidates/bulk-import/',                       CandidateBulkImportView.as_view(),      name='candidate-bulk-import'),
+    path('candidates/bulk-import/',                       CandidateBulkImportView.as_view(),        name='candidate-bulk-import'),
+    path('candidates/bulk-import/sample/',                CandidateBulkImportSampleView.as_view(),  name='candidate-bulk-import-sample'),
     path('candidates/review/',                            CandidateReviewListView.as_view(),      name='candidate-review'),
     path('candidates/stats/',                             CandidateStatsView.as_view(),           name='candidate-stats'),
     path('candidates/status-choices/',                    CandidateStatusChoicesView.as_view(),   name='candidate-status-choices'),

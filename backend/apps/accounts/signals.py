@@ -24,3 +24,9 @@ def on_designation_change(sender, instance, **kwargs):
 def on_approval_workflow_rule_change(sender, instance, **kwargs):
     from core.cache_service import ApprovalWorkflowCacheService
     ApprovalWorkflowCacheService.invalidate(instance.workflow_type)
+
+
+@receiver(post_save, sender='accounts.Company')
+def on_company_change(sender, instance, **kwargs):
+    from core.cache_service import FinancialYearCacheService
+    FinancialYearCacheService.invalidate()
