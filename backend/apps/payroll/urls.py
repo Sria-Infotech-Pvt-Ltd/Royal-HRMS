@@ -32,6 +32,7 @@ from apps.payroll.views.cycles import (
 from apps.payroll.views.attendance_approval import (
     AttendancePendingCyclesView,
     CycleAttendanceSummaryView,
+    CycleEmployeeDailyView,
 )
 from apps.payroll.views.payslips import (
     CyclePayslipListView,
@@ -72,6 +73,7 @@ urlpatterns = [
     # ── Attendance approval (manager + HR) ──────────────────────────────────
     path('cycles/pending-approval/', AttendancePendingCyclesView.as_view(), name='payroll-pending-approval'),
     path('cycles/<uuid:pk>/attendance-summary/', CycleAttendanceSummaryView.as_view(), name='payroll-attendance-summary'),
+    path('cycles/<uuid:pk>/attendance-daily/<str:employee_pk>/', CycleEmployeeDailyView.as_view(), name='payroll-employee-daily'),
 
     # ── Payroll cycles ───────────────────────────────────────────────────────
     path('cycles/', PayrollCycleListView.as_view(), name='payroll-cycle-list'),

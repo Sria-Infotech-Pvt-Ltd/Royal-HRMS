@@ -234,6 +234,7 @@ export const API = {
     approveAttendance:   (id: string) => `/payroll/cycles/${id}/approve-attendance/`,
     pendingApprovalCycles: "/payroll/cycles/pending-approval/",
     attendanceSummary:   (id: string) => `/payroll/cycles/${id}/attendance-summary/`,
+    employeeDailyAttendance: (cycleId: string, employeeId: string) => `/payroll/cycles/${cycleId}/attendance-daily/${employeeId}/`,
     processCycle: (id: string) => `/payroll/cycles/${id}/process/`,
     markPaid: (id: string) => `/payroll/cycles/${id}/mark-paid/`,
 
