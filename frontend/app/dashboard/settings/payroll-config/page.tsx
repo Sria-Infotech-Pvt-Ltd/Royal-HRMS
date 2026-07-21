@@ -2,96 +2,93 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import RulesTable, { EARNING_RULES, DEDUCTION_RULES, TYPE_BADGE, PayrollRule, RuleType } from "./_components/RulesTable";
+import { useFetch } from "@/hooks/useFetch";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import type { PayrollSettings, SalaryStructureListItem, StatutoryConfig, BranchPayrollConfig } from "@/types/payroll";
+import SalaryStructuresTab from "./_components/SalaryStructuresTab";
+import StatutoryConfigTab from "./_components/StatutoryConfigTab";
+import BranchConfigTab from "./_components/BranchConfigTab";
 
-type TabId = "earnings" | "deductions" | "run";
-interface EditState { rule: PayrollRule; draft: PayrollRule; }
-
-const RUN_FIELDS = [
-  { label: "Pay Frequency",         desc: "How often payroll is run",                  type: "select", opts: ["Monthly","Bi-weekly","Weekly"],                                    val: "Monthly"      },
-  { label: "Payroll Lock Date",      desc: "Day of month payroll gets locked",          type: "number",                                                                            val: "25"           },
-  { label: "Pay Day",               desc: "Day salaries are disbursed",                 type: "number",                                                                            val: "28"           },
-  { label: "ESI Ceiling (Gross ₹)", desc: "Employees above this are ESI exempt",        type: "number",                                                                            val: "21000"        },
-  { label: "PT State",              desc: "State for Professional Tax calculation",      type: "select", opts: ["Karnataka","Maharashtra","Tamil Nadu","Telangana","West Bengal"],  val: "Karnataka"    },
-  { label: "LOP Calculation",       desc: "Days basis for per-day LOP deduction",        type: "select", opts: ["Calendar Days","Working Days","26 Days Fixed"],                   val: "Working Days" },
-  { label: "Auto-approve Threshold",desc: "Net salary below this auto-approves payroll", type: "number",                                                                           val: "0"            },
-  { label: "Employer PF %",         desc: "Employer's PF contribution rate",             type: "number",                                                                           val: "12"           },
-] as const;
+type TabId = "run" | "structures" | "statutory" | "branch";
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: "earnings",   icon: "ti-cash",          label: "Earnings Rules"        },
-  { id: "deductions", icon: "ti-minus-vertical", label: "Deduction Rules"       },
-  { id: "run",        icon: "ti-settings",       label: "Payroll Run Settings"  },
+  { id: "run",       icon: "ti-settings",     label: "Payroll Run Settings"  },
+  { id: "structures",icon: "ti-stack",         label: "Salary Structures"     },
+  { id: "statutory", icon: "ti-building-bank", label: "Statutory Config"      },
+  { id: "branch",    icon: "ti-building",      label: "Branch Config"         },
 ];
 
 export default function PayrollConfigPage() {
   const router  = useRouter();
-  const [tab,     setTab]     = useState<TabId>("earnings");
-  const [earning, setEarning] = useState<PayrollRule[]>(EARNING_RULES);
-  const [deduct,  setDeduct]  = useState<PayrollRule[]>(DEDUCTION_RULES);
-  const [editing, setEditing] = useState<EditState | null>(null);
-  const [saving,  setSaving]  = useState(false);
+  const [tab,   setTab]   = useState<TabId>("run");
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  const active = tab === "earnings" ? earning : deduct;
-  const countEnabled    = (arr: PayrollRule[]) => arr.filter(r => r.enabled).length;
-  const countStatutory  = (arr: PayrollRule[]) => arr.filter(r => r.statutory).length;
+  const { data: settings, loading, refetch } = useFetch<PayrollSettings>(API.payroll.settings);
 
-  function toggleRule(setter: React.Dispatch<React.SetStateAction<PayrollRule[]>>) {
-    return (id: string) => setter(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  const [form, setForm] = useState<Partial<PayrollSettings>>({});
+  const draft: Partial<PayrollSettings> = { ...settings, ...form };
+
+  function set<K extends keyof PayrollSettings>(key: K, value: PayrollSettings[K]) {
+    setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  function saveEdit() {
-    if (!editing) return;
+  async function saveSettings() {
     setSaving(true);
-    setTimeout(() => {
-      const update = (prev: PayrollRule[]) => prev.map(r => r.id === editing.rule.id ? editing.draft : r);
-      if (tab === "earnings") setEarning(update);
-      else setDeduct(update);
+    setSaveMsg(null);
+    try {
+      await clientApi.put(API.payroll.settings, form);
+      setSaveMsg("Settings saved.");
+      setForm({});
+      refetch();
+    } catch {
+      setSaveMsg("Failed to save. Please try again.");
+    } finally {
       setSaving(false);
-      setEditing(null);
-    }, 350);
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
   }
 
-  const STATS = [
-    { icon: "ti-cash",          color: "text-blue-800",    bg: "bg-blue-50",    label: "Earning Components", value: earning.length },
-    { icon: "ti-minus-vertical",color: "text-red-600",     bg: "bg-red-50",     label: "Deduction Rules",    value: deduct.length  },
-    { icon: "ti-shield-check",  color: "text-emerald-700", bg: "bg-emerald-50", label: "Statutory Rules",    value: countStatutory(earning) + countStatutory(deduct) },
-    { icon: "ti-toggle-right",  color: "text-violet-700",  bg: "bg-violet-50",  label: "Active Rules",       value: countEnabled(earning) + countEnabled(deduct) },
-  ];
+  const hasChanges = Object.keys(form).length > 0;
 
   return (
     <>
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <button onClick={() => router.push("/dashboard/settings")} className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-800 mb-2 transition-colors">
+          <button
+            onClick={() => router.push("/dashboard/settings")}
+            className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-800 mb-2 transition-colors"
+          >
             <i className="ti ti-arrow-left text-sm" /> Settings
           </button>
-          <h1 className="text-[22px] font-bold text-gray-900 leading-tight">Payroll Rules</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Configure salary components, statutory deductions and payroll run behaviour</p>
+          <h1 className="text-[22px] font-bold text-gray-900 leading-tight">Payroll Configuration</h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">
+            Salary structures, statutory rules, and payroll cycle settings
+          </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors">
-          <i className="ti ti-device-floppy text-sm" /> Save All Changes
-        </button>
+        {tab === "run" && hasChanges && (
+          <button
+            onClick={saveSettings}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors disabled:opacity-50"
+          >
+            {saving
+              ? <><i className="ti ti-loader-2 animate-spin text-sm" /> Saving…</>
+              : <><i className="ti ti-device-floppy text-sm" /> Save Settings</>}
+          </button>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {STATS.map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg ${s.bg} flex items-center justify-center shrink-0`}>
-              <i className={`ti ${s.icon} ${s.color} text-lg`} />
-            </div>
-            <div>
-              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-              <div className="text-[11px] text-gray-500">{s.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {saveMsg && (
+        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium ${saveMsg.startsWith("Failed") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {saveMsg}
+        </div>
+      )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl w-fit">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -105,123 +102,174 @@ export default function PayrollConfigPage() {
         ))}
       </div>
 
-      {/* Earnings / Deductions table */}
-      {(tab === "earnings" || tab === "deductions") && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <i className={`ti ${tab === "earnings" ? "ti-cash text-blue-800" : "ti-minus-vertical text-red-600"} text-lg`} />
-              <span className="font-semibold text-gray-900">{tab === "earnings" ? "Earnings Components" : "Deduction Rules"}</span>
-              <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">
-                {active.length} rules · {countEnabled(active)} active
-              </span>
-            </div>
-            <span className="text-[12px] text-gray-400">Toggle to enable/disable · Edit icon to configure</span>
-          </div>
-          <RulesTable
-            rules={active}
-            onToggle={tab === "earnings" ? toggleRule(setEarning) : toggleRule(setDeduct)}
-            onEdit={r => setEditing({ rule: r, draft: { ...r } })}
-          />
-        </div>
-      )}
-
-      {/* Payroll Run Settings */}
+      {/* ── Payroll Run Settings ── */}
       {tab === "run" && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <div className="font-semibold text-gray-900">Payroll Run Configuration</div>
-            <div className="text-[12px] text-gray-400 mt-0.5">Controls how payroll is processed each cycle</div>
+            <div className="font-semibold text-gray-900">Payroll Cycle & Approval Settings</div>
+            <div className="text-[12px] text-gray-400 mt-0.5">Controls how payroll cycles are defined, approved and paid</div>
           </div>
-          <div className="grid grid-cols-2 divide-x divide-y divide-gray-100">
-            {RUN_FIELDS.map(f => (
-              <div key={f.label} className="px-5 py-4">
-                <label className="block text-[12px] font-semibold text-gray-700 mb-0.5">{f.label}</label>
-                <div className="text-[11px] text-gray-400 mb-2">{f.desc}</div>
-                {f.type === "select" ? (
-                  <select defaultValue={f.val} className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300">
-                    {"opts" in f && f.opts.map((o: string) => <option key={o}>{o}</option>)}
-                  </select>
-                ) : (
-                  <input type="number" defaultValue={f.val} className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
-                )}
+
+          {loading ? (
+            <div className="px-5 py-10 text-center text-gray-400 text-sm">
+              <i className="ti ti-loader-2 animate-spin text-lg" />
+              <div className="mt-2">Loading settings…</div>
+            </div>
+          ) : (
+            <>
+              {/* Cycle dates */}
+              <div className="px-5 py-5 border-b border-gray-100">
+                <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wider mb-3">Salary Cycle</div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">Cycle Start Day</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Day of month the cycle begins</div>
+                    <input
+                      type="number"
+                      min={1} max={31}
+                      value={draft.cycle_start_day ?? ""}
+                      onChange={e => set("cycle_start_day", Number(e.target.value))}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">Cycle End Day</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Day of month the cycle ends</div>
+                    <input
+                      type="number"
+                      min={1} max={31}
+                      value={draft.cycle_end_day ?? ""}
+                      onChange={e => set("cycle_end_day", Number(e.target.value))}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">Pay Day</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Day salary is credited to employees</div>
+                    <input
+                      type="number"
+                      min={1} max={31}
+                      value={draft.pay_day ?? ""}
+                      onChange={e => set("pay_day", Number(e.target.value))}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex justify-end">
-            <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors">
-              <i className="ti ti-device-floppy text-sm" /> Save Run Settings
-            </button>
-          </div>
+
+              {/* Approval */}
+              <div className="px-5 py-5 border-b border-gray-100">
+                <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wider mb-3">Approval Workflow</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">Attendance Approval Levels</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Who must approve attendance before payroll can run</div>
+                    <div className="flex gap-2">
+                      {(["L1", "L1_L2"] as const).map(level => (
+                        <button
+                          key={level}
+                          onClick={() => set("approval_levels", level)}
+                          className={`flex-1 py-2 rounded-lg text-[12px] font-semibold border transition-all ${
+                            draft.approval_levels === level
+                              ? "bg-blue-800 text-white border-blue-800"
+                              : "border-gray-200 text-gray-600 hover:border-blue-300"
+                          }`}
+                        >
+                          {level === "L1" ? "Manager only (L1)" : "Manager + HR (L1 + L2)"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">Employee Query Window (hours)</label>
+                    <div className="text-[11px] text-gray-400 mb-2">How long employees have to raise payslip queries</div>
+                    <input
+                      type="number"
+                      min={1} max={168}
+                      value={draft.employee_query_window_hours ?? ""}
+                      onChange={e => set("employee_query_window_hours", Number(e.target.value))}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Optional components */}
+              <div className="px-5 py-5">
+                <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wider mb-3">Optional Payroll Components</div>
+                <div className="flex flex-col gap-3">
+                  <Toggle
+                    label="Reimbursements"
+                    description="Show reimbursements step in payroll wizard and include in payslips"
+                    value={draft.enable_reimbursements ?? false}
+                    onChange={v => set("enable_reimbursements", v)}
+                  />
+                  <Toggle
+                    label="Bonuses"
+                    description="Show bonus step in payroll wizard and include in payslips"
+                    value={draft.enable_bonuses ?? false}
+                    onChange={v => set("enable_bonuses", v)}
+                  />
+                </div>
+              </div>
+
+              {hasChanges && (
+                <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                  <span className="text-[12px] text-gray-500">You have unsaved changes</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setForm({})}
+                      className="px-3 py-1.5 text-[12px] font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      onClick={saveSettings}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 disabled:opacity-50"
+                    >
+                      {saving ? "Saving…" : "Save Settings"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
-      {/* Edit modal */}
-      {editing && (
-        <div className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setEditing(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="font-semibold text-gray-900">Edit Rule — {editing.draft.name}</div>
-              <button onClick={() => setEditing(null)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100"><i className="ti ti-x" /></button>
-            </div>
-            <div className="px-6 py-5 flex flex-col gap-4">
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">Calculation Type</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {(["percent","fixed","slab","variable"] as RuleType[]).map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setEditing(p => p ? { ...p, draft: { ...p.draft, type: t } } : p)}
-                      className={`py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${editing.draft.type === t ? "bg-blue-800 text-white border-blue-800" : "border-gray-200 text-gray-600 hover:border-blue-300"}`}
-                    >
-                      {TYPE_BADGE[t].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {(editing.draft.type === "percent" || editing.draft.type === "fixed") && (
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
-                    {editing.draft.type === "percent" ? "Percentage (%)" : "Fixed Amount (₹)"}
-                  </label>
-                  <input
-                    type="number"
-                    value={editing.draft.value}
-                    onChange={e => setEditing(p => p ? { ...p, draft: { ...p.draft, value: Number(e.target.value) } } : p)}
-                    step={editing.draft.type === "percent" ? "0.01" : "1"}
-                    min={0}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">Effective Date</label>
-                <input
-                  type="date"
-                  value={editing.draft.effectiveDate}
-                  onChange={e => setEditing(p => p ? { ...p, draft: { ...p.draft, effectiveDate: e.target.value } } : p)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-              </div>
-              <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                <span className="text-[13px] font-medium text-gray-700">Enable this rule</span>
-                <button
-                  onClick={() => setEditing(p => p ? { ...p, draft: { ...p.draft, enabled: !p.draft.enabled } } : p)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editing.draft.enabled ? "bg-blue-800" : "bg-gray-200"}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${editing.draft.enabled ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-              <button onClick={() => setEditing(null)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">Cancel</button>
-              <button onClick={saveEdit} disabled={saving} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors disabled:opacity-50">
-                {saving ? <><i className="ti ti-loader-2 animate-spin text-sm" /> Saving…</> : <><i className="ti ti-check text-sm" /> Save Rule</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {tab === "structures" && <SalaryStructuresTab />}
+      {tab === "statutory"  && <StatutoryConfigTab />}
+      {tab === "branch"     && <BranchConfigTab />}
     </>
+  );
+}
+
+// ── Reusable toggle row ────────────────────────────────────────────────────────
+
+function Toggle({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl">
+      <div>
+        <div className="text-[13px] font-semibold text-gray-800">{label}</div>
+        <div className="text-[11px] text-gray-400 mt-0.5">{description}</div>
+      </div>
+      <button
+        onClick={() => onChange(!value)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? "bg-blue-800" : "bg-gray-200"}`}
+      >
+        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${value ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
+    </div>
   );
 }
