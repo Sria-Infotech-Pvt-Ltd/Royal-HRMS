@@ -548,6 +548,16 @@ class HRCorrectionReviewView(APIView):
         if not _has_hr_permission(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
+        # Branch-restricted reviewers may only act on corrections for
+        # employees in their own branch — mirrors the GET list's branch scope.
+        if not _is_unrestricted(request.user):
+            from apps.attendance.models import AttendanceCorrection
+            correction = AttendanceCorrection.objects.select_related('employee').filter(pk=pk).first()
+            if correction is None:
+                return error('Correction request not found.', http_status=404)
+            if correction.employee.branch != request.user.branch:
+                return error('Correction request not found.', http_status=404)
+
         ser = CorrectionReviewSerializer(data=request.data)
         if not ser.is_valid():
             return error(first_error(ser.errors))

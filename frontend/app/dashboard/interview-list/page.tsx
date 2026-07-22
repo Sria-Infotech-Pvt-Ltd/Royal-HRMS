@@ -5,6 +5,8 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import {
   Branch,
   Candidate,
@@ -112,6 +114,9 @@ export default function InterviewListPage() {
   const { showToast }  = useToast();
   const canCreate      = usePermission("recruitment.create");
   const canEditRec     = usePermission("recruitment.edit");
+  const user            = useCurrentUser();
+  const unrestricted    = isUnrestrictedUser(user);
+  const effectiveBranch = getEffectiveBranch(user);
   const [candidates,    setCandidates]    = useState<Candidate[]>([]);
   const [stats,         setStats]         = useState<RecruitmentStats | null>(null);
   const [loading,       setLoading]       = useState(true);
@@ -137,6 +142,9 @@ export default function InterviewListPage() {
   const [editTarget,    setEditTarget]    = useState<Candidate | null>(null);
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialFetchDone = useRef(false);
+
+  const [branchesLoaded, setBranchesLoaded] = useState(false);
 
   // Fetch active branches once on mount
   useEffect(() => {
@@ -145,8 +153,13 @@ export default function InterviewListPage() {
         params: { status: "active", page_size: 100 },
       })
       .then(r => setBranches(r.data?.data?.results ?? []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setBranchesLoaded(true));
   }, []);
+
+  // Branch-restricted users (everyone except system_admin) only ever see
+  // their own branch — the id that matches their branch name in the list.
+  const myBranch = branches.find(b => b.branch_name === effectiveBranch);
 
   const fetchAll = useCallback(async (
     q?: string,
@@ -183,7 +196,17 @@ export default function InterviewListPage() {
     }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  // Wait for the user (and, if branch-restricted, the branch list) to resolve
+  // before the very first fetch — otherwise it would briefly go out unscoped.
+  // If a restricted user's branch name has no matching Branch record, fail
+  // closed (fetch nothing) rather than falling back to "All Branches".
+  useEffect(() => {
+    if (initialFetchDone.current || !user || !branchesLoaded) return;
+    initialFetchDone.current = true;
+    const initialBranch = unrestricted ? "" : (myBranch ? myBranch.id : -1);
+    if (!unrestricted) setBranchFilter(initialBranch);
+    fetchAll(search, statusFilter, initialBranch, 1);
+  }, [user, branchesLoaded, unrestricted, myBranch, fetchAll, search, statusFilter]);
 
   function handleSearch(val: string) {
     setSearch(val);
@@ -266,30 +289,46 @@ export default function InterviewListPage() {
             />
           </div>
 
-          {/* Branch filter dropdown */}
-          <div style={{ position: "relative" }}>
-            <select
-              className="field-input field-select"
-              style={{ minWidth: 180, paddingLeft: 32 }}
-              value={branchFilter}
-              onChange={e => handleBranchFilter(e.target.value ? Number(e.target.value) : "")}
-              suppressHydrationWarning
-            >
-              <option value="">All Branches</option>
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.branch_name} ({b.branch_code})
-                </option>
-              ))}
-            </select>
-            <i
-              className="ti ti-building"
-              style={{
-                position: "absolute", left: 10, top: "50%",
-                transform: "translateY(-50%)", color: "var(--on-variant)",
-                pointerEvents: "none",
-              }}
-            />
+          {/* Branch filter dropdown — locked to their own branch for branch-restricted users */}
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
+            {unrestricted ? (
+              <>
+                <select
+                  className="field-input field-select"
+                  style={{ minWidth: 180, paddingLeft: 32 }}
+                  value={branchFilter}
+                  onChange={e => handleBranchFilter(e.target.value ? Number(e.target.value) : "")}
+                  suppressHydrationWarning
+                >
+                  <option value="">All Branches</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.branch_name} ({b.branch_code})
+                    </option>
+                  ))}
+                </select>
+                <i
+                  className="ti ti-building"
+                  style={{
+                    position: "absolute", left: 10, top: "50%",
+                    transform: "translateY(-50%)", color: "var(--on-variant)",
+                    pointerEvents: "none",
+                  }}
+                />
+              </>
+            ) : (
+              <select
+                className="field-input field-select"
+                style={{ minWidth: 180, paddingLeft: 32, background: "var(--bg-low)", cursor: "not-allowed" }}
+                value={effectiveBranch}
+                disabled
+                title="Scoped to your branch"
+                suppressHydrationWarning
+              >
+                <option value={effectiveBranch}>{effectiveBranch || "—"}</option>
+              </select>
+            )}
+            {!unrestricted && <i className="ti ti-lock" style={{ color: "var(--on-variant)", fontSize: 14 }} />}
           </div>
 
           {canCreate && (

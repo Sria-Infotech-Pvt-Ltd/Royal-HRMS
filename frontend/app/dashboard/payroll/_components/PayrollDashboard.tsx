@@ -7,6 +7,7 @@ import type { PayrollCycle, PayrollSettings, EmployeeSalaryConfig } from "@/type
 interface Props {
   onRunPayroll: () => void;
   onResumeCycle: (id: string, status: string) => void;
+  canResume: boolean;
 }
 interface PagedResponse<T> { results: T[]; count: number; }
 
@@ -40,7 +41,7 @@ function getCalendarDates(year: number, month: number) {
   return { firstDay, days };
 }
 
-export default function PayrollDashboard({ onRunPayroll, onResumeCycle }: Props) {
+export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume }: Props) {
   const { data: cyclesPage, loading: cyclesLoading } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
@@ -207,7 +208,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle }: Props)
                 </thead>
                 <tbody>
                   {cycles.map(c => (
-                    <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => onResumeCycle(c.id, c.status)}>
+                    <tr key={c.id} style={{ cursor: canResume ? "pointer" : "default" }} onClick={canResume ? () => onResumeCycle(c.id, c.status) : undefined}>
                       <td style={{ fontWeight: 600, fontSize: 13 }}>
                         {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
                       </td>
@@ -251,7 +252,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle }: Props)
               </thead>
               <tbody>
                 {pending.map(c => (
-                  <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => onResumeCycle(c.id, c.status)}>
+                  <tr key={c.id} style={{ cursor: canResume ? "pointer" : "default" }} onClick={canResume ? () => onResumeCycle(c.id, c.status) : undefined}>
                     <td style={{ fontWeight: 600 }}>
                       {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
                     </td>

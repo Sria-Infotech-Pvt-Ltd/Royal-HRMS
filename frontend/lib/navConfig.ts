@@ -7,7 +7,7 @@ export interface NavItem {
   label:        string;
   badge?:       string;
   path:         string;
-  permission:   string | null; // null = always visible
+  permission:   string | string[] | null; // null = always visible; string[] = any one grants access
   comingSoon?:  boolean;       // true = non-clickable, shows "Soon" badge
   excludeRoles?: string[];     // hidden for these role names regardless of permissions
 }
@@ -41,7 +41,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "expenses",         icon: "ti-wallet",               label: "Expenses",         path: "/dashboard/expenses",         permission: "expenses.view" },
 
   { section: "HR Ops" },
-  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: "leave.view" },
+  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: ["leave.approve", "expenses.approve"] },
   { id: "separation",       icon: "ti-logout",               label: "Separation & FnF", path: "/dashboard/separation",       permission: "employees.view",  comingSoon: true },
   { id: "documents",        icon: "ti-folder",               label: "Document Center",  path: "/dashboard/documents",        permission: "documents.view" },
 
@@ -68,7 +68,10 @@ export function buildNav(permissions: string[], role?: string): NavEntry[] {
       sectionHasItem = false;
     } else {
       const item = entry as NavItem;
-      const permVisible = item.permission === null || permSet.has(item.permission);
+      const permVisible = item.permission === null
+        || (Array.isArray(item.permission)
+          ? item.permission.some(p => permSet.has(p))
+          : permSet.has(item.permission));
       const roleVisible = !role || !item.excludeRoles || !item.excludeRoles.includes(role);
       if (permVisible && roleVisible) {
         if (pendingSection && !sectionHasItem) result.push(pendingSection);

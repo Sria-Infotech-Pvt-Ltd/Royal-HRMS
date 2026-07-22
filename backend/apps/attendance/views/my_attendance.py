@@ -71,6 +71,17 @@ def _resolve_target_user(request):
     user = User.objects.filter(employee_id=employee_id).first()
     if not user:
         return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+    # Scope who a non-system_admin can look up — managers get their direct
+    # reports only, everyone else (e.g. hr_admin) is scoped to their own
+    # branch, mirroring the reporting-chain/branch scoping used in leave.py.
+    if role_name != 'system_admin':
+        if role_name == 'manager__team_lead':
+            if user.reporting_manager_id != request.user.id:
+                return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        elif request.user.branch and user.branch != request.user.branch:
+            return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
     return user, None
 
 

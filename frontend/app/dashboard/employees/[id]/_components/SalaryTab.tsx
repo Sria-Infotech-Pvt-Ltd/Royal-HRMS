@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
@@ -15,6 +16,8 @@ const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
 export default function SalaryTab({ employeeId }: Props) {
+  const canEdit = usePermission("payroll.edit");
+
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -78,10 +81,12 @@ export default function SalaryTab({ employeeId }: Props) {
       <div className="card">
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontWeight: 700, fontSize: 14 }}>Current CTC</span>
-          <button className="btn btn-filled btn-sm" onClick={openModal}>
-            <i className={`ti ${hasConfig ? "ti-edit" : "ti-plus"}`} />
-            {hasConfig ? " Revise CTC" : " Assign CTC"}
-          </button>
+          {canEdit && (
+            <button className="btn btn-filled btn-sm" onClick={openModal}>
+              <i className={`ti ${hasConfig ? "ti-edit" : "ti-plus"}`} />
+              {hasConfig ? " Revise CTC" : " Assign CTC"}
+            </button>
+          )}
         </div>
         <div style={{ padding: 20 }}>
           {loading ? (

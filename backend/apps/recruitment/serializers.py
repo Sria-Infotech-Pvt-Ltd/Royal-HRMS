@@ -137,6 +137,16 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
         return value
 
 
+class ReferralSubmitSerializer(CandidateCreateSerializer):
+    """
+    Used by ReferralListCreateView.post — any authenticated employee can refer
+    a candidate, but only with these fields. branch/interview_date/interviewer/
+    interview_mode are HR-only concerns and must never be settable by a referrer.
+    """
+    class Meta(CandidateCreateSerializer.Meta):
+        fields = ['name', 'email', 'phone', 'position_applied', 'notes']
+
+
 # ── Bulk Import ───────────────────────────────────────────────────────────────
 
 _BULK_MODE_ALIASES = {

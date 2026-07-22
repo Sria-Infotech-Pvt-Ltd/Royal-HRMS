@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import { useDepartmentOptions } from "@/hooks/useDepartmentOptions";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -46,6 +47,7 @@ export default function CorrectionsTab() {
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
+  const canReview       = usePermission("attendance.create");
 
   const [branchInput, setBranchInput] = useState("");
   const [department, setDepartment] = useState("");
@@ -145,7 +147,7 @@ export default function CorrectionsTab() {
                   <td style={{ maxWidth: 220, fontSize: 12, color: "var(--on-variant)" }}>{r.reason}</td>
                   <td><span className={STATUS_BADGE[r.status]}>{r.status}</span></td>
                   <td>
-                    {r.status === "pending" ? (
+                    {r.status === "pending" && canReview ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <button
                           className="btn btn-outline btn-sm"

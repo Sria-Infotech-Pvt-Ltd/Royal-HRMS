@@ -26,6 +26,7 @@ from .serializers import (
     CandidateUpdateSerializer,
     ReferralBonusSerializer,
     ReferralRuleSerializer,
+    ReferralSubmitSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -548,7 +549,7 @@ class CandidateStatusView(APIView):
         # Send email only for selected or rejected transitions
         email_sent = False
         if new_status in (Candidate.STATUS_SELECTED, Candidate.STATUS_REJECTED):
-            default_slug      = 'selection' if new_status == Candidate.STATUS_SELECTED else 'rejection'
+            default_slug      = 'candidate_selected' if new_status == Candidate.STATUS_SELECTED else 'candidate_rejected'
             raw_template_name = request.data.get('template_name')
             template_slug     = (str(raw_template_name).strip() if raw_template_name else default_slug)
             email_status  = _send_candidate_email(candidate, template_slug, request.user)
@@ -1431,7 +1432,10 @@ class ReferralListCreateView(APIView):
         return success('Referrals fetched.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
-        serializer = CandidateCreateSerializer(data=request.data)
+        # Any authenticated employee may refer a candidate, but only with
+        # referral-safe fields — branch/interview scheduling/interviewer are
+        # HR-only concerns and must not be settable via this endpoint.
+        serializer = ReferralSubmitSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
         candidate = serializer.save(
@@ -1760,7 +1764,6 @@ _IMPORT_COL_MAP = {
 
 _MAX_IMPORT_ROWS = 1000
 _MAX_IMPORT_BYTES = 5 * 1024 * 1024  # 5 MB
-_ALLOWED_IMPORT_ROLES = frozenset({'system_admin', 'hr', 'hr_admin'})
 
 
 def _normalize_import_headers(row_dict: dict) -> dict:
@@ -1839,11 +1842,7 @@ class CandidateBulkImportView(APIView):
     parser_classes     = [MultiPartParser]
 
     def post(self, request):
-        role_name = (request.user.role.name if request.user.role else '')
-        if (
-            role_name not in _ALLOWED_IMPORT_ROLES
-            and not getattr(request.user, 'is_superuser', False)
-        ):
+        if not _has_perm(request.user, 'recruitment.create'):
             return error(
                 'Only HR and System Admin users can import candidates.',
                 http_status=status.HTTP_403_FORBIDDEN,

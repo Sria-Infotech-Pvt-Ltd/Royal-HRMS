@@ -36,6 +36,39 @@ def _notify(user, title: str, message: str, notification_type: str,
         logger.exception('Failed to create notification for user %s', getattr(user, 'id', None))
 
 
+def _company_name() -> str:
+    try:
+        from apps.accounts.models import Company
+        company = Company.objects.first()
+        return company.company_name if company else ''
+    except Exception:
+        return ''
+
+
+def _send_leave_email(user, template_name: str, context: dict) -> None:
+    """
+    Fire-and-forget leave lifecycle email, sent alongside the in-app
+    Notification above. Runs in a background thread (SMTP can be slow) and
+    never raises — a failed email must never break the leave save transaction.
+    """
+    if not user or not getattr(user, 'email', ''):
+        return
+    import threading
+    from apps.accounts.utils import send_template_email
+
+    def _send():
+        try:
+            send_template_email(
+                recipient_email=user.email,
+                template_name=template_name,
+                context={**context, 'company_name': _company_name()},
+            )
+        except Exception:
+            logger.exception('Failed to send leave email "%s" to %s', template_name, user.email)
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
 # ─── Leave Request ─────────────────────────────────────────────────────────────
 
 @receiver(pre_save, sender='hrms.LeaveRequest')
@@ -62,6 +95,14 @@ def _on_leave_save(sender, instance, created, **kwargs):
         _notify(employee, 'Leave Request Submitted',
                 f'Your {label} request has been submitted successfully.',
                 'leave_applied', 'leave', ref_id, employee)
+        _send_leave_email(employee, 'leave_request_submitted', {
+            'employee_name': employee.full_name or employee.email,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+            'total_days':    str(instance.total_days),
+            'reason':        instance.reason,
+        })
         # L1 approver if assigned, or L2 when manager submits (goes straight to l2_pending)
         approver = instance.l1_approver or (
             instance.l2_approver if instance.status == 'l2_pending' else None
@@ -70,6 +111,15 @@ def _on_leave_save(sender, instance, created, **kwargs):
             _notify(approver, 'New Leave Request',
                     f'{employee.full_name} has submitted a {label} request from {start} to {end}.',
                     'leave_applied', 'leave', ref_id, employee)
+            _send_leave_email(approver, 'leave_request_pending_approval', {
+                'approver_name': approver.full_name or approver.email,
+                'employee_name': employee.full_name or employee.email,
+                'leave_type':    label,
+                'start_date':    start,
+                'end_date':      end,
+                'total_days':    str(instance.total_days),
+                'reason':        instance.reason,
+            })
         return
 
     old_status = getattr(instance, '_old_status', None)
@@ -79,43 +129,105 @@ def _on_leave_save(sender, instance, created, **kwargs):
 
 
 def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
+    start = instance.start_date.strftime('%d %b')
+    end   = instance.end_date.strftime('%d %b')
+
     if old_st == 'pending' and new_st == 'l2_pending':
+        approver_name = instance.l1_approver.full_name if instance.l1_approver else 'Manager'
         _notify(employee, 'Leave Forwarded to HR',
                 f'Your {label} request has been forwarded to HR for approval.',
                 'leave_manager_approved', 'leave', ref_id)
+        _send_leave_email(employee, 'leave_forwarded_to_hr', {
+            'employee_name': employee.full_name or employee.email,
+            'approver_name': approver_name,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+        })
         if instance.l2_approver:
             _notify(instance.l2_approver, 'Leave Awaiting Approval',
                     f'Leave request of {employee.full_name} is awaiting your approval.',
                     'leave_manager_approved', 'leave', ref_id)
+            _send_leave_email(instance.l2_approver, 'leave_request_pending_approval', {
+                'approver_name': instance.l2_approver.full_name or instance.l2_approver.email,
+                'employee_name': employee.full_name or employee.email,
+                'leave_type':    label,
+                'start_date':    start,
+                'end_date':      end,
+                'total_days':    str(instance.total_days),
+                'reason':        instance.reason,
+            })
 
     elif old_st == 'pending' and new_st == 'approved':
         name = instance.l1_approver.full_name if instance.l1_approver else 'Manager'
         _notify(employee, 'Leave Approved',
                 f'Your {label} request has been approved by {name}.',
                 'leave_manager_approved', 'leave', ref_id)
+        _send_leave_email(employee, 'leave_approved', {
+            'employee_name': employee.full_name or employee.email,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+            'total_days':    str(instance.total_days),
+            'approver_name': name,
+            'approver_role': 'Manager',
+        })
 
     elif old_st == 'pending' and new_st == 'rejected':
         name = instance.l1_approver.full_name if instance.l1_approver else 'Manager'
         _notify(employee, 'Leave Rejected',
                 f'Your {label} request has been rejected by {name} (Reporting Manager).',
                 'leave_manager_rejected', 'leave', ref_id)
+        _send_leave_email(employee, 'leave_rejected', {
+            'employee_name': employee.full_name or employee.email,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+            'approver_name': name,
+            'approver_role': 'Manager',
+            'remarks':       instance.l1_remarks or '—',
+        })
 
     elif old_st == 'l2_pending' and new_st == 'approved':
         name = instance.l2_approver.full_name if instance.l2_approver else 'HR'
         _notify(employee, 'Leave Approved',
                 f'Your {label} request has been approved by {name} (HR).',
                 'leave_hr_approved', 'leave', ref_id)
+        _send_leave_email(employee, 'leave_approved', {
+            'employee_name': employee.full_name or employee.email,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+            'total_days':    str(instance.total_days),
+            'approver_name': name,
+            'approver_role': 'HR',
+        })
 
     elif old_st == 'l2_pending' and new_st == 'rejected':
         name = instance.l2_approver.full_name if instance.l2_approver else 'HR'
         _notify(employee, 'Leave Rejected',
                 f'Your {label} request has been rejected by {name} (HR).',
                 'leave_hr_rejected', 'leave', ref_id)
+        _send_leave_email(employee, 'leave_rejected', {
+            'employee_name': employee.full_name or employee.email,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+            'approver_name': name,
+            'approver_role': 'HR',
+            'remarks':       instance.l2_remarks or '—',
+        })
 
     elif new_st == 'cancelled':
         _notify(employee, 'Leave Cancelled',
                 f'Your {label} request has been cancelled.',
                 'leave_cancelled', 'leave', ref_id)
+        _send_leave_email(employee, 'leave_cancelled', {
+            'employee_name': employee.full_name or employee.email,
+            'leave_type':    label,
+            'start_date':    start,
+            'end_date':      end,
+        })
 
 
 # ─── Attendance Correction (Regularization) ────────────────────────────────────

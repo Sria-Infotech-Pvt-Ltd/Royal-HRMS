@@ -248,10 +248,10 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
     );
   }
 
-  // ── Approver layout (manager / hr_admin / system_admin) ───────────────────
+  // ── Approver layout (manager / hr / system_admin) ─────────────────────────
   const pendingCount = stats?.pending ?? 0;
-  const scopeLabel   = role === "manager"  ? "Your team's requests"
-                     : role === "hr_admin" ? "Your branch requests"
+  const scopeLabel   = role === "manager__team_lead" ? "Your team's requests"
+                     : role === "hr"                 ? "Your branch requests"
                      : "Organisation-wide requests";
 
   return (
