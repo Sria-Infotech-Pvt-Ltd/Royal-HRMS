@@ -35,8 +35,21 @@ export default function CancelCycleModal({ cycle, onCancelled, onClose }: Props)
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+    <div
+      className="modal-backdrop"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        className="modal"
+        style={{ maxWidth: 480, width: "100%", margin: 0 }}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--error-container)", display: "flex", alignItems: "center", justifyContent: "center" }}>
