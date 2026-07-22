@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
+import { useFiscalYearConfig } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
   LeaveTypeKey, DurationKey,
@@ -59,7 +60,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
   const [docFile,       setDocFile]       = useState<File | null>(null);
 
-  const currentYear = new Date().getFullYear();
+  const { currentYear } = useFiscalYearConfig();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
 
@@ -230,6 +231,12 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                         <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
                           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: lt.color }} />
                         </div>
+                        {/* Only worth surfacing once something has actually been carried forward. */}
+                        {bal && bal.carried_forward > 0 && (
+                          <div className="text-[10px] text-gray-400 mt-1">
+                            {bal.carry_forward_expiry_date ? `Expires ${fmtDate(bal.carry_forward_expiry_date)}` : "No expiry"}
+                          </div>
+                        )}
                       </>
                     )}
                   </button>

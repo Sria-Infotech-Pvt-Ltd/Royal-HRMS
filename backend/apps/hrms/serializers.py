@@ -1,4 +1,5 @@
 import logging
+import re
 
 from rest_framework import serializers
 
@@ -99,6 +100,8 @@ def validate_receipt_file(file) -> None:
 
 # ─── Leave serializers ────────────────────────────────────────────────────────
 
+_LEAVE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z -]*$")
+
 _POLICY_RULE_FIELDS = [
     # Application Rules
     'minimum_leave_duration', 'maximum_leave_duration', 'maximum_consecutive_days',
@@ -189,6 +192,10 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
         value = value.strip()
         if not value:
             raise serializers.ValidationError('Display name cannot be empty.')
+        if not _LEAVE_NAME_RE.match(value):
+            raise serializers.ValidationError(
+                'Display name can only contain letters, spaces, and hyphens — no numbers or special characters.'
+            )
         key = value.lower().replace(' ', '_').replace('-', '_')
         if LeavePolicy.objects.filter(leave_type=key).exists():
             raise serializers.ValidationError('A leave type with this name already exists.')
@@ -206,6 +213,18 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({'maximum_leave_duration': 'Maximum duration must be ≥ minimum duration.'})
         if data.get('medical_certificate_required') and not data.get('medical_certificate_after_days'):
             raise serializers.ValidationError({'medical_certificate_after_days': 'Required when medical certificate is enabled.'})
+
+        can_carry_forward      = data.get('can_carry_forward', False)
+        max_carry_forward_days = data.get('max_carry_forward_days', 0)
+        if not can_carry_forward:
+            # Carry forward is off — any stale days left in the field are ignored,
+            # not just disabled in the UI. Prevents a disabled-but-nonzero value
+            # from silently persisting to the database.
+            data['max_carry_forward_days'] = 0
+        elif max_carry_forward_days < 1:
+            raise serializers.ValidationError(
+                {'max_carry_forward_days': 'Must be at least 1 when carry forward is enabled.'}
+            )
         return data
 
 
@@ -231,6 +250,24 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'maximum_leave_duration': 'Maximum duration must be ≥ minimum duration.'})
         if data.get('medical_certificate_required') and not data.get('medical_certificate_after_days'):
             raise serializers.ValidationError({'medical_certificate_after_days': 'Required when medical certificate is enabled.'})
+
+        can_carry_forward = data.get(
+            'can_carry_forward',
+            self.instance.can_carry_forward if self.instance else False,
+        )
+        max_carry_forward_days = data.get(
+            'max_carry_forward_days',
+            self.instance.max_carry_forward_days if self.instance else 0,
+        )
+        if not can_carry_forward:
+            # Carry forward is off — any stale days left in the field are ignored,
+            # not just disabled in the UI. Prevents a disabled-but-nonzero value
+            # from silently persisting to the database.
+            data['max_carry_forward_days'] = 0
+        elif max_carry_forward_days < 1:
+            raise serializers.ValidationError(
+                {'max_carry_forward_days': 'Must be at least 1 when carry forward is enabled.'}
+            )
         return data
 
 
@@ -397,6 +434,11 @@ class LeaveRequestCreateSerializer(serializers.ModelSerializer):
 
 # ─── Holiday serializers ──────────────────────────────────────────────────────
 
+# Letters, spaces, and the punctuation real holiday names use — e.g.
+# "New Year's Day", "Dr. B.R. Ambedkar Jayanti" — but never a bare number
+# or symbol string (the lookahead requires at least one letter).
+_HOLIDAY_NAME_RE = re.compile(r"^(?=.*[A-Za-z])[A-Za-z .'-]+$")
+
 class HolidaySerializer(serializers.ModelSerializer):
     branch_name          = serializers.SerializerMethodField()
     holiday_type_display = serializers.CharField(source='get_holiday_type_display', read_only=True)
@@ -435,7 +477,39 @@ class HolidayCreateSerializer(serializers.ModelSerializer):
         value = value.strip()
         if not value:
             raise serializers.ValidationError('Holiday name cannot be empty.')
+        if not _HOLIDAY_NAME_RE.match(value):
+            raise serializers.ValidationError(
+                'Holiday name can only contain letters, spaces, apostrophes, periods, and hyphens — '
+                'not just numbers or symbols.'
+            )
         return value
+
+    def validate(self, data):
+        name   = (data.get('name') or (self.instance.name if self.instance else '')).strip()
+        hdate  = data.get('date', self.instance.date if self.instance else None)
+        branch = data.get('branch', self.instance.branch if self.instance else None)
+
+        if self.instance:
+            # Editing without touching name/date/branch must never fail this check —
+            # otherwise pre-existing duplicate rows would block unrelated edits
+            # (e.g. toggling is_active) to any of their own siblings forever.
+            unchanged = (
+                name.lower() == (self.instance.name or '').strip().lower()
+                and hdate == self.instance.date
+                and branch == self.instance.branch
+            )
+            if unchanged:
+                return data
+
+        if name and hdate:
+            qs = Holiday.objects.filter(name__iexact=name, date__year=hdate.year, branch=branch)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {'name': f'A holiday named "{name}" already exists for {hdate.year}.'}
+                )
+        return data
 
 
 # ─── Carry Forward serializers ────────────────────────────────────────────────

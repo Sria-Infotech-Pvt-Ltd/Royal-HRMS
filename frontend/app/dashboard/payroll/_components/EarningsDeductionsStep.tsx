@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -138,8 +138,8 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                     {payslips.map(p => {
                       const isOpen = expanded === p.id;
                       return (
-                        <>
-                          <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : p.id)}>
+                        <Fragment key={p.id}>
+                          <tr style={{ cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : p.id)}>
                             <td>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
@@ -206,7 +206,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       );
                     })}
                     {payslips.length > 0 && (

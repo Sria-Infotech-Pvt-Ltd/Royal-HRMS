@@ -37,6 +37,26 @@ def _resolve_branch(user):
     return Branch.objects.filter(branch_name__iexact=branch_name).first()
 
 
+def _can_access_expense(user, expense) -> bool:
+    """
+    True for the submitter always. Otherwise the user must hold
+    expenses.approve AND be scoped to this expense's employee — managers via
+    the reporting chain, everyone else (e.g. hr_admin) via branch — mirroring
+    the scoping conventions used for leave requests/balances.
+    """
+    if expense.employee_id == user.id:
+        return True
+    if not _has_perm(user, 'expenses.approve'):
+        return False
+    role = user.role.name if user.role else ''
+    if role == 'system_admin':
+        return True
+    if role == 'manager__team_lead':
+        return expense.employee.reporting_manager_id == user.id
+    branch = getattr(user, 'branch', '') or ''
+    return not branch or (getattr(expense.employee, 'branch', '') or '') == branch
+
+
 class ExpenseListCreateView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
@@ -119,8 +139,7 @@ class ExpenseDetailView(APIView):
             )
         except Expense.DoesNotExist:
             return None, error('Expense not found.', http_status=status.HTTP_404_NOT_FOUND)
-        has_approve = _has_perm(user, 'expenses.approve')
-        if not has_approve and expense.employee_id != user.id:
+        if not _can_access_expense(user, expense):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return expense, None
 

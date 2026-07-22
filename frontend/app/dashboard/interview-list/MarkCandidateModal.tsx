@@ -28,10 +28,13 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
   const [remarks,          setRemarks]          = useState("");
   const [saving,           setSaving]           = useState(false);
   const [apiError,         setApiError]         = useState("");
-  const [templateGroups,   setTemplateGroups]   = useState<{ category: string; templates: EmailTemplate[] }[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
+
+  // The template is fixed by status — "selected" always sends candidate_selected,
+  // "rejected" always sends candidate_rejected. No manual override.
+  const defaultSlug = isSelect ? "candidate_selected" : "candidate_rejected";
 
   // Fetch templates and company info in parallel on open
   useEffect(() => {
@@ -41,24 +44,18 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
     ])
       .then(([tplRes, coRes]) => {
         const grouped: Record<string, EmailTemplate[]> = tplRes.data?.data?.results ?? {} as Record<string, EmailTemplate[]>;
-        const groups = Object.entries(grouped)
-          .map(([category, items]) => ({
-            category,
-            templates: items.filter(t => t.is_active),
-          }))
-          .filter(g => g.templates.length > 0);
-        setTemplateGroups(groups);
-
-        const all = groups.flatMap(g => g.templates);
-        const defaultSlug = isSelect ? "candidate_selected" : "candidate_rejected";
-        const preferred   = all.find(t => t.name === defaultSlug) ?? all[0] ?? null;
-        setSelectedTemplate(preferred);
+        const all = Object.values(grouped).flat().filter(t => t.is_active);
+        const found = all.find(t => t.name === defaultSlug) ?? null;
+        setSelectedTemplate(found);
+        if (!found) {
+          setApiError(`No active "${defaultSlug}" email template found. Create one in Settings → Email Templates first.`);
+        }
 
         setCompany(coRes.data?.data ?? null);
       })
       .catch(() => setApiError("Could not load templates or company info."))
       .finally(() => setLoadingTemplates(false));
-  }, [isSelect]);
+  }, [defaultSlug]);
 
   function candidateVars(): Record<string, string> {
     const parts      = candidate.name.trim().split(/\s+/);
@@ -154,39 +151,23 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
             </div>
           </div>
 
-          {/* Template picker */}
+          {/* Email template — fixed by status, not manually chosen */}
           <div className="field-group mb-16">
-            <label className="field-label">Email Template *</label>
+            <label className="field-label">Email Template</label>
             {loadingTemplates ? (
               <div className="text-sm text-[var(--on-variant)]">
                 <i className="ti ti-loader-2 spin" /> Loading…
               </div>
-            ) : (
-              <select
-                className="field-input field-select"
-                value={selectedTemplate?.name ?? ""}
-                onChange={e => {
-                  const found = templateGroups
-                    .flatMap(g => g.templates)
-                    .find(t => t.name === e.target.value) ?? null;
-                  setSelectedTemplate(found);
-                }}
+            ) : selectedTemplate ? (
+              <div
+                className="field-input"
+                style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-low)", cursor: "not-allowed" }}
+                title="This template is fixed for this status and cannot be changed here"
               >
-                {templateGroups.length === 0 && (
-                  <option value="">No active templates — create one in Settings → Email Templates</option>
-                )}
-                {templateGroups.map(g => (
-                  <optgroup
-                    key={g.category}
-                    label={g.category.charAt(0).toUpperCase() + g.category.slice(1)}
-                  >
-                    {g.templates.map(t => (
-                      <option key={t.name} value={t.name}>{t.display_name}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            )}
+                <i className="ti ti-lock" style={{ color: "var(--on-variant)", fontSize: 14 }} />
+                {selectedTemplate.display_name}
+              </div>
+            ) : null}
           </div>
 
           {/* Remarks */}

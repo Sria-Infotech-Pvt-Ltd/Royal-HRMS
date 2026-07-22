@@ -3,10 +3,13 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { downloadBlobFile } from "@/lib/downloadFile";
 import { BulkImportResult } from "./_data";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"];
+
+type SampleFormat = "csv" | "xlsx";
 
 interface Props {
   onClose:   () => void;
@@ -30,6 +33,23 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
   const [result,        setResult]        = useState<BulkImportResult | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [submitError,   setSubmitError]   = useState<string | null>(null);
+
+  // GET /recruitment/candidates/bulk-import/sample/?format= — system_admin,
+  // hr_admin, or hr only (backend-enforced; we just relay its 403 message).
+  const [sampleDownloading, setSampleDownloading] = useState<SampleFormat | null>(null);
+  const [sampleError,       setSampleError]       = useState<string | null>(null);
+
+  async function handleDownloadSample(format: SampleFormat) {
+    setSampleDownloading(format);
+    setSampleError(null);
+    const res = await downloadBlobFile(
+      API.recruitment.bulkImportSample,
+      { format },
+      `candidate_import_sample.${format}`,
+    );
+    if (!res.success) setSampleError(res.message ?? "Failed to download sample file.");
+    setSampleDownloading(null);
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -103,6 +123,17 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
               <li>Required columns: <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Name</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Email</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Position</code>, <code style={{ background: "rgba(0,0,0,0.06)", padding: "0 4px", borderRadius: 3 }}>Branch</code></li>
               <li>Optional columns: Phone, Interview Date, Interview Mode, Notes</li>
             </ul>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDownloading} suppressHydrationWarning>
+                <i className="ti ti-download" /> {sampleDownloading === "csv" ? "Downloading…" : "Sample CSV"}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDownloading} suppressHydrationWarning>
+                <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? "Downloading…" : "Sample XLSX"}
+              </button>
+            </div>
+            {sampleError && (
+              <div style={{ marginTop: 8, color: "var(--error)", fontSize: 11.5 }}>{sampleError}</div>
+            )}
           </div>
 
           {/* Drop zone */}

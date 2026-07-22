@@ -13,11 +13,13 @@ from apps.payroll.serializers import (
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class SalaryStructureListView(APIView):
@@ -31,7 +33,7 @@ class SalaryStructureListView(APIView):
         return success('Salary structures retrieved.', serializer.data)
 
     def post(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.create'):
             return error('Only HR admin can create salary structures.', http_status=403)
 
         serializer = SalaryStructureListSerializer(data=request.data)
@@ -58,7 +60,7 @@ class SalaryStructureDetailView(APIView):
         return success('Salary structure retrieved.', serializer.data)
 
     def put(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update salary structures.', http_status=403)
 
         structure = get_object_or_404(SalaryStructure, pk=pk)
@@ -73,7 +75,7 @@ class SalaryStructureDetailView(APIView):
         return success('Salary structure updated.', SalaryStructureSerializer(structure).data)
 
     def delete(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.delete'):
             return error('Only HR admin can delete salary structures.', http_status=403)
 
         structure = get_object_or_404(SalaryStructure, pk=pk)
@@ -96,7 +98,7 @@ class SalaryComponentListView(APIView):
         return success('Components retrieved.', serializer.data)
 
     def post(self, request, structure_pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.create'):
             return error('Only HR admin can add components.', http_status=403)
 
         structure = get_object_or_404(SalaryStructure, pk=structure_pk)
@@ -118,7 +120,7 @@ class SalaryComponentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, structure_pk, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update components.', http_status=403)
 
         component = get_object_or_404(SalaryComponent, pk=pk, structure__pk=structure_pk)
@@ -130,7 +132,7 @@ class SalaryComponentDetailView(APIView):
         return success('Component updated.', serializer.data)
 
     def delete(self, request, structure_pk, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.delete'):
             return error('Only HR admin can delete components.', http_status=403)
 
         component = get_object_or_404(SalaryComponent, pk=pk, structure__pk=structure_pk)

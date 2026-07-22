@@ -46,6 +46,8 @@ from apps.attendance.views.hr_attendance import (
     HRAttendanceReprocessView,
     HRCorrectionListView,
     HRCorrectionReviewView,
+    HREmployeeMonthView,
+    HRAttendanceCreateView,
 )
 from apps.attendance.views.hr_audit_actions import (
     HRAttendanceAuditView,
@@ -89,6 +91,8 @@ __all__ = [
     'HRAttendanceReprocessView',
     'HRCorrectionListView',
     'HRCorrectionReviewView',
+    'HREmployeeMonthView',
+    'HRAttendanceCreateView',
     # Audit + Invalid Punch Actions
     'HRAttendanceAuditView',
     'HRInvalidPunchAssignView',

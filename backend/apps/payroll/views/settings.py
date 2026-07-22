@@ -8,11 +8,13 @@ from apps.payroll.serializers import PayrollSettingsSerializer
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class PayrollSettingsView(APIView):
@@ -33,7 +35,7 @@ class PayrollSettingsView(APIView):
         return success('Payroll settings retrieved.', serializer.data)
 
     def put(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update payroll settings.', http_status=403)
 
         settings_obj = PayrollSettings.objects.first()

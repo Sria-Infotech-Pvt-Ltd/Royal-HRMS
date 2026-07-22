@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
 
 interface LeavePolicy {
   id: number;
@@ -43,6 +44,10 @@ const TYPE_COLORS: Record<string, string> = {
   paternity: "#0e7c86",
 };
 
+// Built-in leave types can be deactivated but never deleted — mirrors the
+// _BUILTIN set enforced server-side in LeavePolicyView.delete().
+const BUILTIN_TYPES = new Set(["casual", "earned", "sick", "lwp", "maternity", "paternity"]);
+
 function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
 }
@@ -63,6 +68,10 @@ export default function PolicyTab() {
   const [createErrors,  setCreateErrors]  = useState<Record<string, string>>({});
   const [isSubmitting,  setIsSubmitting]  = useState(false);
   const [createError,   setCreateError]   = useState<string | null>(null);
+
+  // ── Row action state (toggle active / delete) ─────────────────────────────
+  const [busyType,  setBusyType]  = useState<string | null>(null);
+  const [rowError,  setRowError]  = useState<string | null>(null);
 
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function openEdit(p: LeavePolicy) {
@@ -99,7 +108,40 @@ export default function PolicyTab() {
 
   function editField(key: keyof EditForm, value: string | number | boolean) {
     setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
-    setForm(prev => ({ ...prev, [key]: value }));
+    setForm(prev => ({
+      ...prev,
+      [key]: value,
+      // Disabling carry forward clears any stale days left in the field —
+      // otherwise a disabled-but-nonzero value could get saved silently.
+      ...(key === "can_carry_forward" && value === false ? { max_carry_forward_days: 0 } : {}),
+    }));
+  }
+
+  async function toggleActive(p: LeavePolicy) {
+    setBusyType(p.leave_type);
+    setRowError(null);
+    try {
+      await clientApi.put(API.leave.policyDetail(p.leave_type), { is_active: !p.is_active });
+      refetch();
+    } catch (err: unknown) {
+      setRowError((err as { message?: string })?.message ?? "Failed to update status.");
+    } finally {
+      setBusyType(null);
+    }
+  }
+
+  async function deletePolicy(p: LeavePolicy) {
+    if (!window.confirm(`Delete "${p.leave_type_display}"? This cannot be undone.`)) return;
+    setBusyType(p.leave_type);
+    setRowError(null);
+    try {
+      await clientApi.delete(API.leave.policyDetail(p.leave_type));
+      refetch();
+    } catch (err: unknown) {
+      setRowError((err as { message?: string })?.message ?? "Failed to delete leave type.");
+    } finally {
+      setBusyType(null);
+    }
   }
 
   // ── Create handlers ───────────────────────────────────────────────────────
@@ -114,7 +156,9 @@ export default function PolicyTab() {
 
   function validateCreate(): boolean {
     const e: Record<string, string> = {};
-    if (!createForm.leave_type_label.trim()) e.leave_type_label = "Display name is required.";
+    const label = createForm.leave_type_label.trim();
+    if (!label) e.leave_type_label = "Display name is required.";
+    else if (!LEAVE_NAME_RE.test(label)) e.leave_type_label = "Display name can only contain letters, spaces, and hyphens — no numbers or special characters.";
     if (createForm.annual_days < 0) e.annual_days = "Annual days cannot be negative.";
     if (createForm.can_carry_forward && createForm.max_carry_forward_days < 1) e.max_carry_forward_days = "Must be at least 1 when carry forward is enabled.";
     setCreateErrors(e);
@@ -138,7 +182,11 @@ export default function PolicyTab() {
 
   function createField(key: keyof CreateForm, value: string | number | boolean) {
     setCreateErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
-    setCreateForm(prev => ({ ...prev, [key]: value }));
+    setCreateForm(prev => ({
+      ...prev,
+      [key]: value,
+      ...(key === "can_carry_forward" && value === false ? { max_carry_forward_days: 0 } : {}),
+    }));
   }
 
   const list = policies ?? [];
@@ -175,6 +223,9 @@ export default function PolicyTab() {
 
         {loading && <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--on-variant)" }}><Spin /> &nbsp;Loading policies…</div>}
         {error   && <div style={{ padding: "24px", color: "var(--error)", fontSize: 14 }}>{error}</div>}
+        {rowError && (
+          <div style={{ margin: "0 24px 16px", padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{rowError}</div>
+        )}
 
         {!loading && !error && (
           <div className="table-wrap">
@@ -215,9 +266,39 @@ export default function PolicyTab() {
                       {p.policy_note || <span style={{ color: "var(--outline)" }}>—</span>}
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <button className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }} onClick={() => openEdit(p)}>
-                        <i className="ti ti-edit" style={{ fontSize: 13 }} />
-                      </button>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ width: 28, height: 28, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
+                          onClick={() => openEdit(p)}
+                          title="Edit"
+                        >
+                          <i className="ti ti-edit" style={{ fontSize: 13 }} />
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ width: 28, height: 28, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6 }}
+                          onClick={() => toggleActive(p)}
+                          disabled={busyType === p.leave_type}
+                          title={p.is_active ? "Deactivate" : "Activate"}
+                        >
+                          <i className={`ti ${p.is_active ? "ti-toggle-right" : "ti-toggle-left"}`} style={{ fontSize: 13 }} />
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          style={{
+                            width: 28, height: 28, padding: 0, justifyContent: "center",
+                            border: "1px solid var(--outline-v)", borderRadius: 6,
+                            color: BUILTIN_TYPES.has(p.leave_type) ? "var(--outline)" : "var(--error)",
+                            cursor: BUILTIN_TYPES.has(p.leave_type) ? "not-allowed" : "pointer",
+                          }}
+                          onClick={() => deletePolicy(p)}
+                          disabled={busyType === p.leave_type || BUILTIN_TYPES.has(p.leave_type)}
+                          title={BUILTIN_TYPES.has(p.leave_type) ? "Built-in leave types cannot be deleted" : "Delete"}
+                        >
+                          <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -295,7 +376,7 @@ export default function PolicyTab() {
                   type="text"
                   placeholder="e.g. Compensatory Off"
                   value={createForm.leave_type_label}
-                  onChange={e => createField("leave_type_label", e.target.value)}
+                  onChange={e => createField("leave_type_label", sanitizeLeaveName(e.target.value))}
                 />
                 {createErrors.leave_type_label
                   ? <p className="field-error-msg">{createErrors.leave_type_label}</p>

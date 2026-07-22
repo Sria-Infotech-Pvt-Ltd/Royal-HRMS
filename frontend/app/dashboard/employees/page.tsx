@@ -328,7 +328,7 @@ export default function EmployeesPage() {
             <table className="w-full border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-[var(--bg-low)] border-b border-[var(--outline-v)]">
-                  {["Employee", "Branch", "Department", "Designation", "Date of Joining", "Status", "Actions"].map(h => (
+                  {["Employee", "Branch", "Department", "Role", "Date of Joining", "Status", "Actions"].map(h => (
                     <th key={h}
                       className="text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--on-variant)] px-5 py-3 whitespace-nowrap">
                       {h}
@@ -354,6 +354,7 @@ export default function EmployeesPage() {
                           <div className="min-w-0">
                             <div className="text-[14px] font-semibold text-[var(--on-bg)] leading-tight truncate">{fullName(e)}</div>
                             <div className="text-[12px] text-[var(--on-variant)] truncate">{e.email}</div>
+                            <div className="text-[11px] text-[var(--outline)] truncate">{e.code}</div>
                           </div>
                         </div>
                       </td>
@@ -371,7 +372,7 @@ export default function EmployeesPage() {
                           {e.department || "—"}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-[13px] text-[var(--on-bg)] whitespace-nowrap">{e.designation || "—"}</td>
+                      <td className="px-5 py-3.5 text-[13px] text-[var(--on-bg)] whitespace-nowrap">{e.details.ssRole || "—"}</td>
                       <td className="px-5 py-3.5 text-[13px] text-[var(--on-variant)] whitespace-nowrap">{formatDate(e.dateOfJoining)}</td>
                       <td className="px-5 py-3.5"><StatusBadge status={e.status} /></td>
                       <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>

@@ -144,6 +144,7 @@ def send_otp_email(email: str, otp: str, full_name: str) -> None:
         f'<p style="margin-top:32px;">Regards,<br>'
         f'<strong>HR Team</strong><br>Royal Staffing Services</p>'
     )
+    html_body = _company_email_wrapper(html_body, *_get_company_branding())
 
     msg = _build_message(
         subject='Your Royal Staffing HRMS Password Reset OTP',
@@ -177,6 +178,7 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
         '&#10003;&nbsp;Your SMTP configuration is working correctly.</p>'
         '<p>Regards,<br><strong>Royal Staffing HRMS</strong></p>'
     )
+    html_body = _company_email_wrapper(html_body, *_get_company_branding())
 
     msg = _build_message(
         subject='Royal HRMS — SMTP Configuration Test',
@@ -186,6 +188,21 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
         connection=connection,
     )
     msg.send(fail_silently=False)
+
+
+def _get_company_branding() -> tuple[str, str, str, str]:
+    """Return (company_name, logo_url, website, address) from the singleton Company row."""
+    from apps.accounts.models import Company  # avoid circular import
+
+    company = Company.objects.first()
+    if not company:
+        return '', '', '', ''
+
+    company_name = company.company_name
+    logo_url     = company.logo.url if company.logo else ''
+    website      = company.website
+    address      = ', '.join(p for p in [company.address, company.city, company.state] if p)
+    return company_name, logo_url, website, address
 
 
 def _company_email_wrapper(body: str, company_name: str, logo_url: str,
@@ -236,7 +253,7 @@ def send_template_email(
     context: dict,
 ) -> None:
 
-    from apps.accounts.models import Company, EmailTemplate  # avoid circular import
+    from apps.accounts.models import EmailTemplate  # avoid circular import
 
     try:
         tpl = EmailTemplate.objects.prefetch_related('attachments').get(
@@ -248,20 +265,7 @@ def send_template_email(
         )
 
     subject, html_body = tpl.render(context)
-
-    # Wrap with company branding
-    company      = Company.objects.first()
-    company_name = company.company_name if company else ''
-    logo_url     = company.logo.url     if (company and company.logo) else ''
-    website      = company.website      if company else ''
-    address_parts = [p for p in [
-        getattr(company, 'address', ''),
-        getattr(company, 'city', ''),
-        getattr(company, 'state', ''),
-    ] if p] if company else []
-    address = ', '.join(address_parts)
-
-    html_body = _company_email_wrapper(html_body, company_name, logo_url, website, address)
+    html_body = _company_email_wrapper(html_body, *_get_company_branding())
 
     connection, from_email = _get_smtp_connection()
 

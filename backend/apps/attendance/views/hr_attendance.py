@@ -21,6 +21,8 @@ from apps.attendance.serializers_hr import (
     CorrectionListFilterSerializer,
     CorrectionReviewSerializer,
     DateFilterSerializer,
+    HRAttendanceEditSerializer,
+    HRAttendanceManualCreateSerializer,
     OvertimeWriteSerializer,
 )
 from apps.attendance.services_hr import (
@@ -161,6 +163,172 @@ class HRAttendanceDetailView(APIView):
             return error('Attendance record not found.', http_status=404)
 
         return success('Attendance detail loaded.', detail)
+
+    def patch(self, request, pk: str):
+        """HR edits an existing attendance record — status, punch times, note."""
+        if not _has_hr_permission(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        ser = HRAttendanceEditSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors))
+
+        from apps.attendance.models import AttendanceRecord, AttendanceAuditLog
+        from apps.attendance.services_audit_log import write_audit_log
+        from apps.payroll.models import PayrollCycle
+
+        try:
+            record = AttendanceRecord.objects.select_related('employee').get(pk=pk)
+        except AttendanceRecord.DoesNotExist:
+            return error('Attendance record not found.', http_status=404)
+
+        locked = PayrollCycle.objects.filter(
+            cycle_start__lte=record.date,
+            cycle_end__gte=record.date,
+            status__in=['paid', 'closed'],
+        ).first()
+        if locked:
+            return error(
+                f'This date is locked — payroll cycle is {locked.get_status_display()}.',
+                http_status=409,
+            )
+
+        data = ser.validated_data
+        old_val = (
+            f"{record.status} | "
+            f"{record.first_punch_in or '—'} → {record.last_punch_out or '—'}"
+        )
+
+        if 'status' in data:
+            record.status = data['status']
+        if 'clock_in' in data:
+            record.first_punch_in = data['clock_in']
+        if 'clock_out' in data:
+            record.last_punch_out = data['clock_out']
+        record.note = data.get('note', record.note)
+
+        if record.first_punch_in and record.last_punch_out:
+            import datetime as _dt
+            _dummy = _dt.date(2000, 1, 1)
+            t_in  = _dt.datetime.combine(_dummy, record.first_punch_in)
+            t_out = _dt.datetime.combine(_dummy, record.last_punch_out)
+            if t_out < t_in:
+                t_out = _dt.datetime.combine(_dummy + _dt.timedelta(days=1), record.last_punch_out)
+            record.total_working_minutes = max(0, int((t_out - t_in).total_seconds() / 60))
+        elif not record.first_punch_in and not record.last_punch_out:
+            record.total_working_minutes = 0
+
+        record.save()
+
+        new_val = (
+            f"{record.status} | "
+            f"{record.first_punch_in or '—'} → {record.last_punch_out or '—'}"
+        )
+        write_audit_log(
+            employee=record.employee,
+            date=record.date,
+            event=AttendanceAuditLog.EVENT_MANUALLY_EDITED,
+            performed_by=request.user,
+            record=record,
+            old_value=old_val,
+            new_value=new_val,
+            action='HR manually edited attendance record.',
+            remarks=data.get('reason', ''),
+        )
+        return success('Attendance record updated.', {'record_id': str(record.id)})
+
+
+# ── HR Attendance Manual Create ───────────────────────────────────────────────
+
+class HRAttendanceCreateView(APIView):
+    """HR creates an attendance record for a day with no existing record."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not _has_hr_permission(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        ser = HRAttendanceManualCreateSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors))
+
+        data = ser.validated_data
+
+        import uuid as _uuid_mod
+        from django.contrib.auth import get_user_model
+        from apps.attendance.models import AttendanceRecord, AttendanceAuditLog
+        from apps.attendance.services_audit_log import write_audit_log
+        from apps.payroll.models import PayrollCycle
+
+        User = get_user_model()
+        employee_pk = str(data['employee_id'])
+        try:
+            _uuid_mod.UUID(employee_pk)
+            employee = User.objects.filter(pk=employee_pk, is_active=True).first()
+        except (ValueError, AttributeError):
+            employee = User.objects.filter(employee_id=employee_pk, is_active=True).first()
+
+        if not employee:
+            return error('Employee not found.', http_status=404)
+
+        target_date = data['date']
+
+        locked = PayrollCycle.objects.filter(
+            cycle_start__lte=target_date,
+            cycle_end__gte=target_date,
+            status__in=['paid', 'closed'],
+        ).first()
+        if locked:
+            return error(
+                f'This date is locked — payroll cycle is {locked.get_status_display()}.',
+                http_status=409,
+            )
+
+        if AttendanceRecord.objects.filter(employee=employee, date=target_date).exists():
+            return error(
+                'An attendance record already exists for this date. Use edit instead.',
+                http_status=409,
+            )
+
+        clock_in  = data.get('clock_in')
+        clock_out = data.get('clock_out')
+        total_minutes = 0
+        if clock_in and clock_out:
+            import datetime as _dt
+            _dummy = _dt.date(2000, 1, 1)
+            t_in  = _dt.datetime.combine(_dummy, clock_in)
+            t_out = _dt.datetime.combine(_dummy, clock_out)
+            if t_out < t_in:
+                t_out = _dt.datetime.combine(_dummy + _dt.timedelta(days=1), clock_out)
+            total_minutes = max(0, int((t_out - t_in).total_seconds() / 60))
+
+        record = AttendanceRecord.objects.create(
+            employee=employee,
+            date=target_date,
+            status=data['status'],
+            first_punch_in=clock_in,
+            last_punch_out=clock_out,
+            total_working_minutes=total_minutes,
+            note=data.get('note', ''),
+        )
+
+        write_audit_log(
+            employee=employee,
+            date=target_date,
+            event=AttendanceAuditLog.EVENT_MANUALLY_EDITED,
+            performed_by=request.user,
+            record=record,
+            old_value='No Record',
+            new_value=(
+                f"{record.status} | "
+                f"{record.first_punch_in or '—'} → {record.last_punch_out or '—'}"
+            ),
+            action='HR manually created attendance record.',
+            remarks=data.get('reason', ''),
+        )
+
+        return success('Attendance record created.', {'record_id': str(record.id)}, http_status=201)
 
 
 # ── OT Entry List ─────────────────────────────────────────────────────────────
@@ -486,6 +654,16 @@ class HRCorrectionReviewView(APIView):
         if not _has_hr_permission(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
+        # Branch-restricted reviewers may only act on corrections for
+        # employees in their own branch — mirrors the GET list's branch scope.
+        if not _is_unrestricted(request.user):
+            from apps.attendance.models import AttendanceCorrection
+            correction = AttendanceCorrection.objects.select_related('employee').filter(pk=pk).first()
+            if correction is None:
+                return error('Correction request not found.', http_status=404)
+            if correction.employee.branch != request.user.branch:
+                return error('Correction request not found.', http_status=404)
+
         ser = CorrectionReviewSerializer(data=request.data)
         if not ser.is_valid():
             return error(first_error(ser.errors))
@@ -526,3 +704,113 @@ class HRAttendanceExportView(APIView):
         response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+# ── Employee Monthly Calendar (HR) ────────────────────────────────────────────
+
+class HREmployeeMonthView(APIView):
+    """Monthly attendance calendar for a single employee — HR use."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_hr_permission(request.user, 'attendance.view'):
+            return error('Permission denied.', http_status=403)
+
+        employee_pk = request.query_params.get('employee_id')
+        month_str   = request.query_params.get('month')
+
+        if not employee_pk:
+            return error('employee_id is required.', http_status=400)
+        if not month_str:
+            return error('month is required (YYYY-MM).', http_status=400)
+
+        try:
+            year, mon = (int(x) for x in month_str.split('-'))
+            if not (1 <= mon <= 12):
+                raise ValueError('month out of range')
+        except (ValueError, AttributeError):
+            return error('month must be in YYYY-MM format.', http_status=400)
+
+        import uuid as _uuid_mod
+        import datetime
+        import calendar as _calendar
+        from django.contrib.auth import get_user_model
+        from apps.attendance.models import AttendanceRecord
+
+        User = get_user_model()
+        try:
+            _uuid_mod.UUID(str(employee_pk))
+            employee = User.objects.filter(pk=employee_pk, is_active=True).first()
+        except (ValueError, AttributeError):
+            employee = User.objects.filter(employee_id=employee_pk, is_active=True).first()
+
+        if not employee:
+            return error('Employee not found.', http_status=404)
+
+        month_start = datetime.date(year, mon, 1)
+        month_end   = datetime.date(year, mon, _calendar.monthrange(year, mon)[1])
+
+        record_map = {
+            r.date: r
+            for r in AttendanceRecord.objects.filter(
+                employee=employee, date__gte=month_start, date__lte=month_end,
+            )
+        }
+
+        STATUS_LABELS = {
+            'present': 'Present', 'late': 'Late Arrival', 'half_day': 'Half Day',
+            'on_leave': 'On Leave', 'weekly_off': 'Week Off', 'holiday': 'Holiday',
+            'absent': 'Absent', 'incomplete': 'Incomplete',
+        }
+        LOP_STATUSES = frozenset(['absent', 'incomplete'])
+        stat_keys    = ('present', 'late', 'half_day', 'absent', 'on_leave',
+                        'weekly_off', 'holiday', 'incomplete')
+        stats = {k: 0 for k in stat_keys}
+        stats['lop_days'] = 0
+        total_minutes = 0
+
+        days = []
+        current = month_start
+        while current <= month_end:
+            rec      = record_map.get(current)
+            status   = rec.status if rec else 'no_record'
+            minutes  = (rec.total_working_minutes or 0) if rec else 0
+            ot_mins  = (rec.overtime_minutes or 0) if rec else 0
+            clock_in  = rec.first_punch_in.strftime('%H:%M') if rec and rec.first_punch_in else None
+            clock_out = rec.last_punch_out.strftime('%H:%M') if rec and rec.last_punch_out else None
+
+            if status in stats:
+                stats[status] += 1
+            if status in LOP_STATUSES:
+                stats['lop_days'] += 1
+            total_minutes += minutes
+
+            days.append({
+                'date':           current.isoformat(),
+                'day_name':       current.strftime('%A'),
+                'day_short':      current.strftime('%a'),
+                'day_num':        current.day,
+                'status':         status,
+                'status_label':   STATUS_LABELS.get(status, 'No Record'),
+                'clock_in':       clock_in,
+                'clock_out':      clock_out,
+                'total_hours':    round(minutes / 60, 1),
+                'overtime_hours': round(ot_mins / 60, 1),
+                'is_flagged':     status in LOP_STATUSES,
+                'record_id':      str(rec.id) if rec else None,
+            })
+            current += datetime.timedelta(days=1)
+
+        return success('Employee monthly attendance retrieved.', {
+            'employee': {
+                'id':          str(employee.pk),
+                'employee_id': employee.employee_id,
+                'full_name':   employee.full_name,
+                'department':  employee.department or '',
+                'designation': employee.designation or '',
+            },
+            'month': month_str,
+            'stats': {**stats, 'total_hours': round(total_minutes / 60, 1)},
+            'days':  days,
+        })

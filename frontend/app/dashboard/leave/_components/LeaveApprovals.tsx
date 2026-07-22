@@ -23,7 +23,7 @@ interface Props {
 
 export default function LeaveApprovals({ role }: Props) {
   const isSystemAdmin = role === "system_admin";
-  const canFilterDept  = role === "system_admin" || role === "hr_admin";
+  const canFilterDept  = role === "system_admin" || role === "hr";
 
   const [branch,     setBranch]     = useState("");
   const [department, setDepartment] = useState("");
