@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { API } from "@/lib/api/endpoints";
@@ -10,6 +10,7 @@ import AttendanceTab     from "./_components/AttendanceTab";
 import OtEntryTab        from "./_components/OtEntryTab";
 import InvalidPunchesTab from "./_components/InvalidPunchesTab";
 import UnpunchesTab      from "./_components/UnpunchesTab";
+import EmployeeMonthView from "./_components/EmployeeMonthView";
 
 type TabId = "attendance" | "ot" | "invalid" | "unpunches";
 
@@ -24,7 +25,18 @@ const TODAY_LABEL = new Date().toLocaleDateString("en-IN", {
 });
 
 export default function AttendancePage() {
-  const [active, setActive] = useState<TabId>("attendance");
+  const [active, setActive]       = useState<TabId>("attendance");
+  const [viewMode, setViewMode]   = useState<"team" | "employee">("team");
+  const [preEmployee, setPreEmployee] = useState<string | null>(null);
+  const [preMonth, setPreMonth]   = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === "employee") setViewMode("employee");
+    if (params.get("employee")) setPreEmployee(params.get("employee"));
+    if (params.get("month")) setPreMonth(params.get("month"));
+  }, []);
+
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
@@ -155,7 +167,31 @@ export default function AttendancePage() {
 
       {/* Tab content */}
       <div>
-        {active === "attendance" && <AttendanceTab onMutated={refetchDashboard} />}
+        {active === "attendance" && (
+          <>
+            {/* View mode toggle */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 18, padding: "10px 0 0" }}>
+              <button
+                className={viewMode === "team" ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}
+                onClick={() => setViewMode("team")}
+                style={{ gap: 6 }}
+              >
+                <i className="ti ti-layout-list" /> Team Day View
+              </button>
+              <button
+                className={viewMode === "employee" ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}
+                onClick={() => setViewMode("employee")}
+                style={{ gap: 6 }}
+              >
+                <i className="ti ti-calendar-user" /> Employee Month View
+              </button>
+            </div>
+            {viewMode === "team"
+              ? <AttendanceTab onMutated={refetchDashboard} />
+              : <EmployeeMonthView initialEmployee={preEmployee} initialMonth={preMonth} />
+            }
+          </>
+        )}
         {active === "ot"         && <OtEntryTab />}
         {active === "invalid"    && <InvalidPunchesTab onMutated={refetchDashboard} />}
         {active === "unpunches"  && <UnpunchesTab />}

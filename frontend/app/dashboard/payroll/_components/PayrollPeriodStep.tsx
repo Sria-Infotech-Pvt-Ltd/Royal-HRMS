@@ -22,13 +22,29 @@ function daysInMonth(month: number, year: number) { return new Date(year, month,
 function computeDates(month: string, year: string, settings: PayrollSettings | null) {
   const m = MONTHS.indexOf(month) + 1;
   const y = Number(year);
-  const maxDay = daysInMonth(m, y);
-  const startDay = Math.min(settings?.cycle_start_day ?? 1,  maxDay);
-  const endDay   = Math.min(settings?.cycle_end_day   ?? maxDay, maxDay);
-  const payDay   = Math.min(settings?.pay_day         ?? 30, maxDay);
+  const endMaxDay = daysInMonth(m, y);
+
+  const startDayCfg = settings?.cycle_start_day ?? 1;
+  const endDay       = Math.min(settings?.cycle_end_day ?? endMaxDay, endMaxDay);
+  const payDay       = Math.min(settings?.pay_day       ?? 30, endMaxDay);
+
+  // When the configured start day falls after the end day (e.g. 25 -> 24),
+  // the cycle spans two calendar months: start in the month before the one
+  // selected, end in the selected month.
+  let startMonth = m;
+  let startYear  = y;
+  if (startDayCfg > endDay) {
+    startMonth = m - 1;
+    if (startMonth === 0) {
+      startMonth = 12;
+      startYear  = y - 1;
+    }
+  }
+  const startDay = Math.min(startDayCfg, daysInMonth(startMonth, startYear));
+
   const pad = (n: number) => String(n).padStart(2, "0");
   return {
-    cycle_start: `${y}-${pad(m)}-${pad(startDay)}`,
+    cycle_start: `${startYear}-${pad(startMonth)}-${pad(startDay)}`,
     cycle_end:   `${y}-${pad(m)}-${pad(endDay)}`,
     pay_date:    `${y}-${pad(m)}-${pad(payDay)}`,
   };

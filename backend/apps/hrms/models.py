@@ -101,6 +101,13 @@ class Expense(models.Model):
     expense_date = models.DateField()
     description  = models.TextField(blank=True, default='')
     status       = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    # Set when this expense is paid out via a payroll payslip
+    disbursed_in_payslip = models.ForeignKey(
+        'payroll.EmployeePayslip',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='disbursed_expenses',
+    )
     created_at   = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
