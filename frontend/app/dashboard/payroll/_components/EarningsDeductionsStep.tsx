@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { EmployeePayslip } from "@/types/payroll";
+import type { EmployeePayslip, ProcessPayrollResult } from "@/types/payroll";
 
 interface Props {
   cycleId: string;
@@ -22,6 +22,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
   const [processed, setProcessed]   = useState(false);
   const [processErr, setProcessErr] = useState<string | null>(null);
   const [expanded, setExpanded]     = useState<string | null>(null);
+  const [skipped, setSkipped]       = useState<string[]>([]);
 
   const { data: payslipPage, loading, refetch } =
     useFetch<PagedResponse<EmployeePayslip>>(
@@ -34,7 +35,8 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
     setProcessing(true);
     setProcessErr(null);
     try {
-      await clientApi.post(API.payroll.processCycle(cycleId));
+      const res = await clientApi.post<{ data: ProcessPayrollResult }>(API.payroll.processCycle(cycleId));
+      setSkipped(res.data.data.skipped ?? []);
       setProcessed(true);
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -86,6 +88,16 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
       {/* Results */}
       {processed && (
         <>
+          {skipped.length > 0 && (
+            <div className="alert alert-warn" style={{ alignItems: "flex-start" }}>
+              <i className="ti ti-alert-triangle" />
+              <span>
+                {skipped.length} employee{skipped.length > 1 ? "s were" : " was"} skipped — no salary structure or CTC configured: {skipped.join(", ")}.
+                Set up their salary in Employees → Salary tab, then reprocess to include them.
+              </span>
+            </div>
+          )}
+
           {/* Summary row */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
             <div className="stat-card">

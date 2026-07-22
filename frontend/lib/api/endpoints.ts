@@ -287,4 +287,12 @@ export const API = {
     hrBirthdaysToday:      "/dashboard/hr/birthdays/today/",
     hrBirthdaysUpcoming:   "/dashboard/hr/birthdays/upcoming/",
   },
+
+  managerDashboard: {
+    kpis:              "/dashboard/manager/kpis/",
+    pendingApprovals:  "/dashboard/manager/pending-approvals/",
+    teamAttendance:    "/dashboard/manager/team-attendance/",
+    upcomingLeave:     "/dashboard/manager/upcoming-leave/",
+    recentActivity:    "/dashboard/manager/recent-activity/",
+  },
 } as const;
