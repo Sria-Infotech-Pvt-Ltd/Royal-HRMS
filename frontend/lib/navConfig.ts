@@ -41,7 +41,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "expenses",         icon: "ti-wallet",               label: "Expenses",         path: "/dashboard/expenses",         permission: "expenses.view" },
 
   { section: "HR Ops" },
-  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: ["leave.approve", "expenses.approve"] },
+  { id: "approvals",        icon: "ti-checks",               label: "Approvals",        path: "/dashboard/approvals",        permission: ["leave.approve", "expenses.approve"], excludeRoles: ["hr", "hr_admin"] },
   { id: "separation",       icon: "ti-logout",               label: "Separation & FnF", path: "/dashboard/separation",       permission: "employees.view",  comingSoon: true },
   { id: "documents",        icon: "ti-folder",               label: "Document Center",  path: "/dashboard/documents",        permission: "documents.view" },
 
