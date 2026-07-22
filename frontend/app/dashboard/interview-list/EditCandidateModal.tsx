@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { normalizeExtraContext } from "@/lib/emailPreview";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
+import { NAME_RE, POSITION_RE, sanitizeName, sanitizePosition, todayDateString } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, MODE_LABELS, RECRUITMENT_API } from "./_data";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 }
 
 const MODE_OPTIONS: InterviewMode[] = ["in_person", "video_call", "phone"];
+const todayStr = todayDateString();
 
 export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Props) {
   const user            = useCurrentUser();
@@ -40,18 +42,33 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
   const [error,          setError]          = useState("");
 
   async function handleSave() {
-    if (!name.trim() || !positionApplied.trim()) {
+    const trimmedName = name.trim();
+    const trimmedPosition = positionApplied.trim();
+    if (!trimmedName || !trimmedPosition) {
       setError("Name and position are required.");
+      return;
+    }
+    if (!NAME_RE.test(trimmedName)) {
+      setError("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.");
+      return;
+    }
+    if (!POSITION_RE.test(trimmedPosition)) {
+      setError("Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.");
       return;
     }
     if (!branch) {
       setError("Please select a branch.");
       return;
     }
+    const formattedDate     = interviewDate ? interviewDate.slice(0, 10) : "";
+    const originalDate      = candidate.interview_date ? candidate.interview_date.slice(0, 10) : "";
+    if (formattedDate && formattedDate < todayStr && formattedDate !== originalDate) {
+      setError("Interview date cannot be in the past.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      const formattedDate   = interviewDate ? interviewDate.slice(0, 10) : "";
       const isFirstSchedule = !!formattedDate && !candidate.interview_date;
 
       const res = await RECRUITMENT_API.update(candidate.id, {
@@ -123,11 +140,11 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Full Name *</label>
-              <input className="field-input" value={name} onChange={e => setName(e.target.value)} suppressHydrationWarning />
+              <input className="field-input" value={name} onChange={e => setName(sanitizeName(e.target.value))} suppressHydrationWarning />
             </div>
             <div className="field-group">
               <label className="field-label">Position Applied *</label>
-              <input className="field-input" value={positionApplied} onChange={e => setPositionApplied(e.target.value)} suppressHydrationWarning />
+              <input className="field-input" value={positionApplied} onChange={e => setPositionApplied(sanitizePosition(e.target.value))} suppressHydrationWarning />
             </div>
           </div>
 
@@ -150,6 +167,7 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
             <div className="field-group">
               <label className="field-label">Interview Date</label>
               <input type="date" className="field-input"
+                min={todayStr}
                 value={interviewDate.slice(0, 10)}
                 onChange={e => setInterviewDate(e.target.value)}
                 suppressHydrationWarning />

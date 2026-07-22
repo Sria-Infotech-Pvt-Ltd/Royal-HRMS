@@ -174,6 +174,7 @@ class DayRecordSerializer(serializers.Serializer):
     clockOut                = serializers.CharField(allow_null=True)
     hours                   = serializers.CharField(allow_null=True)
     note                    = serializers.CharField(allow_null=True)
+    holiday_name            = serializers.CharField(allow_null=True, required=False)
     canRegularize           = serializers.BooleanField()
     regularization_required = serializers.BooleanField()
 

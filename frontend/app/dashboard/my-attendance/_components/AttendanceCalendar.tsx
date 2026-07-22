@@ -106,6 +106,18 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                     </div>
                   )}
 
+                  {status === "Holiday" && record?.holiday_name && (
+                    <div
+                      title={record.holiday_name}
+                      style={{
+                        fontSize: 9, marginTop: 2, color: fg, fontWeight: 600,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      }}
+                    >
+                      {record.holiday_name}
+                    </div>
+                  )}
+
                   {!readOnly && record?.canRegularize && (
                     <button
                       onClick={() => onRegularize(dateStr(day))}

@@ -41,6 +41,7 @@ export interface DayRecord {
   clockOut:                string | null;
   hours:                   string | null;
   note:                    string | null;
+  holiday_name?:           string | null;
   canRegularize:           boolean;
   regularization_required: boolean;
 }
