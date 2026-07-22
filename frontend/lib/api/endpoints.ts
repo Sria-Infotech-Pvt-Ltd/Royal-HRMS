@@ -152,6 +152,8 @@ export const API = {
     balance: "/leave/balance/",
     balanceCredit: "/leave/balance/credit/",
     balanceAdjust: (id: string) => `/leave/balance/${id}/`,
+    balanceImportSample: "/leave/balance/import/sample/", // + ?format=csv|xlsx
+    balanceImport:       "/leave/balance/import/",
     requests: "/leave/requests/",
     requestDetail: (id: string) => `/leave/requests/${id}/`,
     approve: (id: string) => `/leave/requests/${id}/approve/`,

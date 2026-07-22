@@ -2814,3 +2814,61 @@ Reported gap: none of the three existing bulk-import modals (Employees, Intervie
 - **All 4 carry-forward-execution endpoints and all 3 bulk-import-sample endpoints are frontend-ready but not yet confirmed against a running backend** — same standing caveat as every other frontend-ahead-of-backend feature in this doc. Verify exact response shapes (esp. the sample endpoints' 403 messages) once live.
 - **`resolveBlobErrorData()` in `lib/clientApi.ts` now applies to every `responseType: "blob"` request app-wide**, including the pre-existing attendance CSV export — that export's own error handling gets the real backend message now too, as a side effect, not a separate fix.
 - **A separate "Opening Leave Balance Import" / one-time migration feature was discussed but not built this session** — naming suggestions only (leaning toward "Opening Leave Balance Import" as the feature name, "Import Opening Balances" as the button label). Whoever picks this up next: it's for onboarding an existing company / migrating off another HRMS, used once, then the Leave module manages everything automatically — a genuinely different feature from both carry-forward features above, not an extension of either.
+
+---
+
+## Session — Rithwika (22 July 2026)
+
+**Branch:** `frontend/22-7`
+
+---
+
+### 1. Opening Leave Balance Import — Built (previously only discussed)
+
+**Files:** `types/leave.ts`, `lib/api/endpoints.ts`, `app/dashboard/settings/leave-policy/_components/OpeningBalanceImportModal.tsx` (new), `app/dashboard/settings/leave-policy/page.tsx`
+
+The one-time historical migration tool flagged as "discussed but not built" in the 21 July session — now implemented against the real given contract (`GET /leave/balance/import/sample/?format=csv|xlsx`, `POST /leave/balance/import/`).
+
+- Button label: **"Import Opening Balances"** (modal title "Import Opening Leave Balances") — picked over the working name "Leave Opening Balance Migration" to match this app's existing verb-first button convention ("Add Leave Type", "Run Carry Forward").
+- `OpeningBalanceImportModal.tsx` mirrors the established `BulkImportModal.tsx` pattern (sample download buttons, drop zone, single upload-then-result flow) rather than a multi-step preview/commit wizard — the real backend contract validates and commits in one `POST`, so a second UI pattern wasn't warranted.
+- Result summary: 4-stat grid (Total Rows / Successful / Skipped / Failed) + row-level error table (Row, Employee ID, Leave Type, Financial Year, Reason) + "Download Error Report" button that saves the backend's raw `error_report_csv` string directly, not rebuilt client-side.
+- Button placed in the page header of Settings → Leave Policy (not a new tab), gated to `system_admin` / `hr_admin` / `hr` — same role check already used for the Carry Forward tab.
+
+> **No "already imported" lock.** The given API has no status-check endpoint, so there's nothing to gate the button on beyond the backend's own per-row duplicate detection (`"Opening balance already exists for this employee, leave type, and year."`). A harder one-time lock would need a new backend endpoint first.
+
+---
+
+### 2. No Inline CSS — New Global Utility Classes
+
+**Files:** `app/globals.css`
+
+Corrected mid-build: newer files in this app (`ApplyLeaveForm.tsx` and similar) already lean on Tailwind/global classes, but a lot of the `settings/leave-policy/_components/` family — and the first draft of `OpeningBalanceImportModal.tsx` — leaned on inline `style={{}}` instead. Instructed explicitly to stop: new/edited code should use `globals.css` classes or Tailwind, not inline styles.
+
+Added to `globals.css` rather than duplicating one-off styles per component:
+- `.text-success` / `.text-error` / `.text-warn` / `.text-muted` — color a value without needing a full `.badge`/`.alert` wrapper.
+- `.upload-zone--active` — the existing `.upload-zone` dropzone's "file selected" state as a real modifier class instead of an inline `style={{ borderColor: ... }}` override.
+- `.spin` — pairs with any icon (`className="ti ti-loader-2 spin"`); the `@keyframes spin` rule already existed in `globals.css`, but every consumer across the app was re-declaring `animation: spin 1s linear infinite` inline instead of having one class to reuse.
+
+`OpeningBalanceImportModal.tsx` was rewritten to use these plus existing classes (`.alert`, `.stats-grid`/`.stat-card`, `.table-wrap`, `.upload-zone`) exclusively — zero inline `style` props.
+
+> **This preference applies going forward, not just to this file.** Existing inline-style-heavy files (`CarryForwardTab.tsx`, `LeavePoliciesTab.tsx`, etc.) were left as-is this session — not an endorsement to keep writing that way, just not retroactively rewritten here.
+
+---
+
+### Key Files Changed / Created (22 July 2026)
+
+| File | Change |
+|------|--------|
+| `types/leave.ts` | Added `OpeningBalanceImportRowError`, `OpeningBalanceImportResult` |
+| `lib/api/endpoints.ts` | Added `leave.balanceImportSample`, `leave.balanceImport` |
+| `app/dashboard/settings/leave-policy/_components/OpeningBalanceImportModal.tsx` | **NEW** — sample download, upload, result summary, error report |
+| `app/dashboard/settings/leave-policy/page.tsx` | Added "Import Opening Balances" button (role-gated), wired to the modal |
+| `app/globals.css` | Added `.text-success`/`.text-error`/`.text-warn`/`.text-muted`, `.upload-zone--active`, `.spin` |
+
+---
+
+### Notes for Next Developer
+
+- **Opening Leave Balance Import is frontend-ready but not confirmed against a running backend** — same standing caveat as every other frontend-ahead-of-backend feature in this doc. The 9-column sample file layout and row-level `reason` strings are taken directly from the given contract.
+- **This is a genuinely different feature from both "carry forward" features documented in the 21 July session** — it's a one-time historical migration (opening balances), not the annual carry-forward execution or its per-policy settings. Don't conflate the three.
+- **New shared CSS utilities (`.text-*`, `.spin`, `.upload-zone--active`) are available app-wide now** — reach for these instead of inline `style` in any file touched next, per the standing "no inline CSS" instruction.
