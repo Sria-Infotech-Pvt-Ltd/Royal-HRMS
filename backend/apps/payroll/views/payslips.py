@@ -99,7 +99,7 @@ class UpdatePayslipReimbBonusView(APIView):
         return self._update(request, pk)
 
     def _update(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can update payslip reimbursements.', http_status=403)
 
         payslip = get_object_or_404(EmployeePayslip, pk=pk)
@@ -158,7 +158,7 @@ class ExpenseSummaryForCycleView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can view this.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -215,7 +215,7 @@ class ReferralBonusSummaryForCycleView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can view this.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
