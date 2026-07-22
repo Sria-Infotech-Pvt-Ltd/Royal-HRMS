@@ -276,6 +276,7 @@ class PayrollCycle(models.Model):
     STATUS_QUERY_WINDOW_OPEN = 'query_window_open'
     STATUS_PAID = 'paid'
     STATUS_CLOSED = 'closed'
+    STATUS_CANCELLED = 'cancelled'
     STATUS_CHOICES = [
         (STATUS_DRAFT, 'Draft'),
         (STATUS_ATTENDANCE_PENDING, 'Awaiting Attendance Approval'),
@@ -285,6 +286,16 @@ class PayrollCycle(models.Model):
         (STATUS_QUERY_WINDOW_OPEN, 'Employee Query Window Open'),
         (STATUS_PAID, 'Paid'),
         (STATUS_CLOSED, 'Closed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    CANCELLABLE_STATUSES = [
+        STATUS_DRAFT,
+        STATUS_ATTENDANCE_PENDING,
+        STATUS_ATTENDANCE_APPROVED,
+        STATUS_PROCESSING,
+        STATUS_PAYSLIPS_GENERATED,
+        STATUS_QUERY_WINDOW_OPEN,
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -323,6 +334,16 @@ class PayrollCycle(models.Model):
     )
 
     notes = models.TextField(blank=True)
+
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='payroll_cycles_cancelled',
+    )
+    cancellation_reason = models.TextField(blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

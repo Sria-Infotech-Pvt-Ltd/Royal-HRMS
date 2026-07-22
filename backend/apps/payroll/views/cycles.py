@@ -74,17 +74,13 @@ class PayrollCycleListView(APIView):
         if not all([cycle_start, cycle_end, pay_date]):
             return error('cycle_start, cycle_end, and pay_date are required.')
 
-        # Prevent duplicate open cycles for the same period
+        # Prevent overlapping cycles — any non-cancelled cycle whose date range
+        # overlaps the requested period blocks creation.
         if PayrollCycle.objects.filter(
-            cycle_start=cycle_start,
-            status__in=[
-                PayrollCycle.STATUS_DRAFT,
-                PayrollCycle.STATUS_ATTENDANCE_PENDING,
-                PayrollCycle.STATUS_ATTENDANCE_APPROVED,
-                PayrollCycle.STATUS_PROCESSING,
-            ],
-        ).exists():
-            return error('A payroll cycle for this period is already in progress.')
+            cycle_start__lte=cycle_end,
+            cycle_end__gte=cycle_start,
+        ).exclude(status=PayrollCycle.STATUS_CANCELLED).exists():
+            return error('A payroll cycle already exists for this period. Cancel the existing cycle first.')
 
         cycle = PayrollCycle.objects.create(
             cycle_start=cycle_start,
@@ -415,3 +411,53 @@ class MarkCyclePaidView(APIView):
 
         logger.info('Cycle %s marked as paid by %s', pk, request.user.email)
         return success('Cycle marked as paid.', PayrollCycleSerializer(cycle).data)
+
+
+class CancelPayrollCycleView(APIView):
+    """Cancel a payroll cycle that has not yet been paid.
+
+    Requires a reason. Unlinking any expenses that were marked as disbursed
+    through payslips in this cycle so they become available for the next run.
+    Paid/closed cycles are irreversible and cannot be cancelled.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'payroll.edit'):
+            return error('Only HR admin can cancel payroll cycles.', http_status=403)
+
+        cycle = get_object_or_404(PayrollCycle, pk=pk)
+
+        if cycle.status == PayrollCycle.STATUS_CANCELLED:
+            return error('This cycle is already cancelled.')
+
+        if cycle.status in [PayrollCycle.STATUS_PAID, PayrollCycle.STATUS_CLOSED]:
+            return error('Paid or closed payroll cycles cannot be cancelled. Contact your finance team.')
+
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return error('A cancellation reason is required.')
+
+        with transaction.atomic():
+            payslip_ids = list(cycle.payslips.values_list('id', flat=True))
+            if payslip_ids:
+                from apps.hrms.models import Expense
+                Expense.objects.filter(
+                    disbursed_in_payslip_id__in=payslip_ids,
+                ).update(disbursed_in_payslip=None)
+                logger.info(
+                    'Unlinked expenses for %d payslips in cancelled cycle %s',
+                    len(payslip_ids), pk,
+                )
+
+            cycle.status = PayrollCycle.STATUS_CANCELLED
+            cycle.cancelled_at = timezone.now()
+            cycle.cancelled_by = request.user
+            cycle.cancellation_reason = reason
+            cycle.save(update_fields=[
+                'status', 'cancelled_at', 'cancelled_by', 'cancellation_reason', 'updated_at',
+            ])
+
+        logger.info('Cycle %s cancelled by %s. Reason: %s', pk, request.user.email, reason)
+        return success('Payroll cycle cancelled.', PayrollCycleSerializer(cycle).data)

@@ -171,6 +171,7 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
     l2_approver_name = serializers.CharField(
         source='attendance_approved_by_l2.full_name', read_only=True,
     )
+    cancelled_by_name = serializers.CharField(source='cancelled_by.full_name', read_only=True)
     payslip_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -191,6 +192,10 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
             'attendance_l2_approved_at',
             'query_window_closes_at',
             'paid_at',
+            'cancelled_at',
+            'cancelled_by',
+            'cancelled_by_name',
+            'cancellation_reason',
             'notes',
             'payslip_count',
             'created_at',
@@ -201,8 +206,9 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
             'attendance_approved_by_l1', 'l1_approver_name',
             'attendance_approved_by_l2', 'l2_approver_name',
             'attendance_l1_approved_at', 'attendance_l2_approved_at',
-            'query_window_closes_at', 'paid_at', 'payslip_count',
-            'created_at', 'updated_at',
+            'query_window_closes_at', 'paid_at',
+            'cancelled_at', 'cancelled_by', 'cancelled_by_name', 'cancellation_reason',
+            'payslip_count', 'created_at', 'updated_at',
         ]
 
     def get_payslip_count(self, obj):

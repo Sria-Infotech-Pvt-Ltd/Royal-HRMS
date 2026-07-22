@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, PayrollSettings, EmployeeSalaryConfig } from "@/types/payroll";
+import CancelCycleModal from "./CancelCycleModal";
 
 interface Props {
   onRunPayroll: () => void;
@@ -14,6 +16,7 @@ interface PagedResponse<T> { results: T[]; count: number; }
 const STATUS_BADGE: Record<string, string> = {
   paid:                 "badge badge-success",
   closed:               "badge badge-success",
+  cancelled:            "badge badge-error",
   draft:                "badge badge-neutral",
   attendance_pending:   "badge badge-warn",
   attendance_approved:  "badge badge-info",
@@ -25,6 +28,7 @@ const STATUS_BADGE: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   paid:                 "Paid",
   closed:               "Closed",
+  cancelled:            "Cancelled",
   draft:                "Draft",
   attendance_pending:   "Awaiting Approval",
   attendance_approved:  "Approved",
@@ -32,6 +36,8 @@ const STATUS_LABEL: Record<string, string> = {
   payslips_generated:   "Payslips Ready",
   query_window_open:    "Query Window",
 };
+
+const UNCANCELLABLE = ["paid", "closed", "cancelled"];
 
 const DAYS_LABEL = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -42,16 +48,18 @@ function getCalendarDates(year: number, month: number) {
 }
 
 export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume }: Props) {
-  const { data: cyclesPage, loading: cyclesLoading } =
+  const { data: cyclesPage, loading: cyclesLoading, refetch } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
   const { data: salaryPage } =
     useFetch<PagedResponse<EmployeeSalaryConfig>>(API.payroll.employeeSalary);
 
+  const [cancelTarget, setCancelTarget] = useState<PayrollCycle | null>(null);
+
   const cycles   = cyclesPage?.results ?? [];
   const empCount = salaryPage?.count ?? 0;
 
-  const pending = cycles.filter(c => !["paid", "closed"].includes(c.status));
+  const pending = cycles.filter(c => !["paid", "closed", "cancelled"].includes(c.status));
   const paid    = cycles.filter(c =>  ["paid", "closed"].includes(c.status));
 
   const now      = new Date();
@@ -248,6 +256,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                   <th>Status</th>
                   <th>L1 Approver</th>
                   <th>Payslips</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -264,6 +273,18 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                     </td>
                     <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{c.l1_approver_name ?? "—"}</td>
                     <td>{c.payslip_count}</td>
+                    <td onClick={e => e.stopPropagation()}>
+                      {!UNCANCELLABLE.includes(c.status) && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: "var(--error)", fontSize: 12 }}
+                          onClick={() => setCancelTarget(c)}
+                          title="Cancel this cycle"
+                        >
+                          <i className="ti ti-ban" /> Cancel
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -272,12 +293,56 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
         </div>
       )}
 
+      {/* Cancelled cycles (collapsed, audit trail) */}
+      {cycles.some(c => c.status === "cancelled") && (
+        <details className="card" style={{ padding: 0 }}>
+          <summary style={{ padding: "12px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13, listStyle: "none", display: "flex", alignItems: "center", gap: 8 }}>
+            <i className="ti ti-ban" style={{ color: "var(--error)" }} />
+            Cancelled Cycles ({cycles.filter(c => c.status === "cancelled").length})
+          </summary>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Cancelled By</th>
+                  <th>Cancelled At</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cycles.filter(c => c.status === "cancelled").map(c => (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 600, fontSize: 13 }}>
+                      {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
+                    </td>
+                    <td style={{ fontSize: 13 }}>{c.cancelled_by_name ?? "—"}</td>
+                    <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                      {c.cancelled_at ? new Date(c.cancelled_at).toLocaleDateString("en-IN") : "—"}
+                    </td>
+                    <td style={{ fontSize: 13, color: "var(--on-variant)", maxWidth: 300 }}>{c.cancellation_reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
       {/* Salary setup reminder */}
       {empCount === 0 && !cyclesLoading && (
         <div className="alert alert-warn">
           <i className="ti ti-alert-triangle" />
           <span>No employee CTC has been configured. Go to <strong>Salary Setup</strong> tab to assign CTC before running payroll.</span>
         </div>
+      )}
+
+      {cancelTarget && (
+        <CancelCycleModal
+          cycle={cancelTarget}
+          onCancelled={() => { setCancelTarget(null); refetch(); }}
+          onClose={() => setCancelTarget(null)}
+        />
       )}
     </div>
   );

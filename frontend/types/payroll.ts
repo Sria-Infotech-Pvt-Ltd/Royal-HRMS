@@ -108,6 +108,10 @@ export interface PayrollCycle {
   attendance_l2_approved_at: string | null;
   query_window_closes_at: string | null;
   paid_at: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancelled_by_name: string | null;
+  cancellation_reason: string;
   notes: string;
   payslip_count: number;
   created_at: string;
