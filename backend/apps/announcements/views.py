@@ -83,7 +83,9 @@ def _send_announcement_email(announcement: Announcement) -> None:
     """Fire-and-forget email notification. Logs a warning on failure — never raises."""
     try:
         from apps.accounts.models import User
-        from apps.accounts.utils import _get_smtp_connection  # type: ignore[attr-defined]
+        from apps.accounts.utils import (  # type: ignore[attr-defined]
+            _get_smtp_connection, _company_email_wrapper, _get_company_branding,
+        )
 
         if announcement.visibility == Announcement.VISIBILITY_ALL:
             recipients = list(User.objects.filter(is_active=True).exclude(
@@ -112,7 +114,7 @@ def _send_announcement_email(announcement: Announcement) -> None:
 
         from django.core.mail import EmailMultiAlternatives
         subject = f'[Announcement] {announcement.title}'
-        body    = announcement.body
+        body    = _company_email_wrapper(announcement.body, *_get_company_branding())
 
         with connection:
             msg = EmailMultiAlternatives(

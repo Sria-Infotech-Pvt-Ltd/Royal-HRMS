@@ -2133,3 +2133,34 @@ backend/apps/accounts/views.py
 - Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
 - Leave integration — auto-mark employee `on_leave` in attendance when leave approved
 - Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-21
+**Author: SandalaNithin**
+
+### Changes Shipped
+
+**1. Approvals page — removed "My Requests" tab**
+
+Removed the self-service "My Requests" tab from `/dashboard/approvals` per request. The page now shows only "Team Approvals" and "Attendance Approval", each still gated by permission (`leave.approve`/`expenses.approve` and `payroll.view`/`payroll.approve` respectively).
+
+All code that became dead as a result was deleted rather than left unused: `MyRequestsSection`, `NewLeaveModal`, `NewExpenseModal`, `StatusFilter` dropdown, `CategoryOption` interface, `LEAVE_TYPES`/`DURATIONS` constants, and the now-unused `useToast` import.
+
+Tab list and default active tab are now derived from permissions (`useMemo`), with a `useEffect` guard that switches to the first available tab if the currently-selected one is no longer valid (e.g. permissions resolve after the first render).
+
+**Files modified:**
+```
+frontend/app/dashboard/approvals/page.tsx
+  — Section type: "my-requests" | "approvals" | "attendance" → "approvals" | "attendance"
+  — Removed MyRequestsSection, NewLeaveModal, NewExpenseModal, StatusFilter,
+    CategoryOption, LEAVE_TYPES, DURATIONS (dead code after tab removal)
+  — sections list wrapped in useMemo(canApprove, canApproveAttendance)
+  — useEffect added: corrects `section` state to sections[0] if the active
+    section is no longer in the permitted list
+  — Removed unused `useToast` import
+```
+
+**Note for the team:** the standalone `/dashboard/my-requests` page and its sidebar nav link are untouched — that remains the self-service entry point for leave/expense requests. One behavioural side effect: an employee with no approval permission (`leave.approve`, `expenses.approve`, `payroll.view`, `payroll.approve`) who navigates directly to `/dashboard/approvals` will now see an empty tab bar, since "My Requests" was previously the only tab available to them there. Flagged, not addressed — no redirect/fallback was requested.
+
+Verified with `eslint` (0 errors, 0 warnings) and `tsc --noEmit` (0 errors) on the changed file.
