@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import EmployeeAttendanceRow, { type EmployeeRow } from "./EmployeeAttendanceRow";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,20 +19,6 @@ interface PendingCycle {
   attendance_l1_approved_at: string | null;
   attendance_l2_approved_at: string | null;
   payslip_count: number;
-}
-
-interface EmployeeRow {
-  employee_id: string;
-  full_name: string;
-  department: string;
-  designation: string;
-  present_days: number;
-  late_days: number;
-  half_days: number;
-  absent_days: number;
-  on_leave_days: number;
-  lop_days: number;
-  working_hours: number;
 }
 
 interface CycleSummary {
@@ -218,22 +205,12 @@ export default function AttendanceApprovalTab() {
                 </thead>
                 <tbody>
                   {summary.employees.map(emp => (
-                    <tr key={emp.employee_id} style={{ borderBottom: "1px solid var(--outline-v)" }}>
-                      <td style={{ padding: "11px 12px" }}>
-                        <div style={{ fontWeight: 500 }}>{emp.full_name}</div>
-                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{emp.employee_id} · {emp.designation}</div>
-                      </td>
-                      <td style={{ padding: "11px 12px", color: "var(--on-variant)", fontSize: 12 }}>{emp.department}</td>
-                      <Num value={emp.present_days}  color="#15803d" />
-                      <Num value={emp.late_days}      color="#92400e" dim={emp.late_days === 0} />
-                      <Num value={emp.half_days}      color="#1d4ed8" dim={emp.half_days === 0} />
-                      <Num value={emp.on_leave_days}  color="#6d28d9" dim={emp.on_leave_days === 0} />
-                      <Num value={emp.absent_days}    color="#b91c1c" dim={emp.absent_days === 0} />
-                      <Num value={emp.lop_days}       color="#b91c1c" bold dim={emp.lop_days === 0} />
-                      <td style={{ padding: "11px 12px", textAlign: "center", fontVariantNumeric: "tabular-nums", color: "var(--on-variant)", fontSize: 12 }}>
-                        {emp.working_hours}h
-                      </td>
-                    </tr>
+                    <EmployeeAttendanceRow
+                      key={emp.employee_id}
+                      emp={emp}
+                      cycleId={selectedId}
+                      cycleStart={summary.cycle.cycle_start}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -282,10 +259,3 @@ export default function AttendanceApprovalTab() {
   );
 }
 
-function Num({ value, color, bold, dim }: { value: number; color: string; bold?: boolean; dim?: boolean }) {
-  return (
-    <td style={{ padding: "11px 12px", textAlign: "center", fontVariantNumeric: "tabular-nums", fontWeight: bold ? 700 : 500, color: dim ? "var(--on-variant)" : color, opacity: dim ? 0.4 : 1 }}>
-      {value}
-    </td>
-  );
-}

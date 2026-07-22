@@ -19,6 +19,21 @@ def _has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
+def _is_unrestricted(user) -> bool:
+    """
+    Returns True for users who can see holidays across every branch.
+
+    system_admin role and Django superusers have no branch restriction —
+    mirrors _is_unrestricted() in apps/attendance/views/hr_attendance.py.
+    """
+    if getattr(user, 'is_superuser', False):
+        return True
+    try:
+        return user.role.name == 'system_admin'
+    except Exception:
+        return False
+
+
 class HolidayListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -51,12 +66,14 @@ class HolidayListCreateView(APIView):
 
         if branch:
             qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch))
-        else:
+        elif not _is_unrestricted(request.user):
             user_branch = (getattr(request.user, 'branch', '') or '').strip()
             if user_branch:
                 qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=user_branch))
             else:
                 qs = qs.filter(branch__isnull=True)
+        # else: unrestricted user (system_admin / superuser) with no branch
+        # filter requested — see every branch's holidays plus company-wide ones.
 
         holidays = HolidaySerializer(qs, many=True).data
         return success('Holidays retrieved.', {

@@ -43,15 +43,16 @@ export interface LeavePolicy {
 }
 
 export interface LeaveBalance {
-  id:                 string;
-  leave_type:         LeaveTypeKey;
-  leave_type_display: string;
-  year:               number;
-  total_days:         number;
-  used_days:          number;
-  carried_forward:    number;
-  available_days:     number;
-  employee_name:      string;
+  id:                        string;
+  leave_type:                LeaveTypeKey;
+  leave_type_display:        string;
+  year:                      number;
+  total_days:                number;
+  used_days:                 number;
+  carried_forward:           number;
+  available_days:            number;
+  employee_name:             string;
+  carry_forward_expiry_date: string | null; // ISO date, or null when it never expires
 }
 
 export interface LeaveRequest {

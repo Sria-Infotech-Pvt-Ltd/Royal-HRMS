@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
+import { useFiscalYearConfig } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
   LEAVE_TYPE_CONFIG,
@@ -34,12 +35,12 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
   const [page, setPage] = useState(1);
-  const [tab, setTab] = useState<"pending" | "mine">("pending");
+  const [tab, setTab] = useState<"pending" | "mine" | "approved">("pending");
 
   // Branch filter changed — the current page no longer means the same thing.
   useEffect(() => { setPage(1); }, [branch]);
 
-  const currentYear = new Date().getFullYear();
+  const { currentYear } = useFiscalYearConfig();
 
   const { data: balances } = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`
@@ -54,7 +55,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
   const requestsUrl = isEmployee
     ? API.leave.requests
     : API.leave.requests
-      + "?scope=team"
+      + "?scope=team&status=pending,l2_pending"
       + (branch ? `&branch=${encodeURIComponent(branch)}` : "")
       + `&page=${page}`;
 
@@ -67,6 +68,15 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
     isEmployee ? null : API.leave.requests
   );
   const myRequestList = myRequests?.results ?? [];
+
+  // Leaves approved by this user (manager / HR) — fetch only when the tab is
+  // open so the request fires exactly once on first click (avoids StrictMode
+  // double-mount cancellation that silently drops the response).
+  const approvedByMeUrl = (!isEmployee && tab === "approved")
+    ? `${API.leave.requests}?scope=team&status=approved${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`
+    : null;
+  const { data: approvedData, loading: loadingApproved } = useFetch<PaginatedResponse<LeaveRequest>>(approvedByMeUrl);
+  const approvedList = approvedData?.results ?? [];
 
   const statsUrl = isEmployee
     ? API.leave.stats + `?year=${currentYear}&scope=own`
@@ -144,6 +154,12 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />
                 </div>
+                {/* Only worth surfacing once something has actually been carried forward. */}
+                {b && b.carried_forward > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>
+                    {b.carry_forward_expiry_date ? `Carry-forward expires ${fmtShortDate(b.carry_forward_expiry_date)}` : "Carry-forward: no expiry"}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -248,10 +264,10 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
     );
   }
 
-  // ── Approver layout (manager / hr_admin / system_admin) ───────────────────
+  // ── Approver layout (manager / hr / system_admin) ─────────────────────────
   const pendingCount = stats?.pending ?? 0;
-  const scopeLabel   = role === "manager"  ? "Your team's requests"
-                     : role === "hr_admin" ? "Your branch requests"
+  const scopeLabel   = role === "manager__team_lead" ? "Your team's requests"
+                     : role === "hr"                 ? "Your branch requests"
                      : "Organisation-wide requests";
 
   return (
@@ -330,6 +346,12 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
             >
               <i className="ti ti-user" /> My Leave Requests
             </button>
+            <button
+              className={`btn btn-sm ${tab === "approved" ? "btn-filled" : "btn-ghost"}`}
+              onClick={() => setTab("approved")}
+            >
+              <i className="ti ti-circle-check" /> Approved
+            </button>
           </div>
           <button className="btn btn-filled btn-sm" onClick={onApply}>
             <i className="ti ti-plus" /> Apply My Leave
@@ -337,7 +359,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
         </div>
 
         <div className="table-wrap">
-          {(tab === "pending" ? loading : loadingMine) ? (
+          {(tab === "pending" ? loading : tab === "mine" ? loadingMine : loadingApproved) ? (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
             </div>
@@ -382,7 +404,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                 ))}
               </tbody>
             </table>
-          ) : (
+          ) : tab === "mine" ? (
             <table>
               <thead>
                 <tr>
@@ -423,6 +445,44 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
                     <td style={{ textAlign: "center" }}>
                       <StatusCell request={r} />
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            /* ── Approved by me ── */
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Branch</th>
+                  <th>Leave Type</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th style={{ textAlign: "center" }}>Days</th>
+                  <th>Applied On</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvedList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
+                      <i className="ti ti-circle-check" style={{ fontSize: 28, display: "block", marginBottom: 8, color: "var(--outline-v)" }} />
+                      <span style={{ color: "var(--on-variant)", fontSize: 13 }}>No approved leave requests yet.</span>
+                    </td>
+                  </tr>
+                ) : approvedList.map(r => (
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
+                    <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
+                    <td><span className="badge badge-neutral">{r.employee_branch || "—"}</span></td>
+                    <td>{r.leave_type_display}</td>
+                    <td>{fmtShortDate(r.start_date)}</td>
+                    <td>{fmtShortDate(r.end_date)}</td>
+                    <td style={{ textAlign: "center", fontWeight: 700 }}>
+                      {r.total_days}
+                      <LopBadge request={r} />
+                    </td>
+                    <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
                   </tr>
                 ))}
               </tbody>

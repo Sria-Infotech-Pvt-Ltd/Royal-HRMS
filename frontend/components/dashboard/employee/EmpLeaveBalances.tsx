@@ -1,6 +1,7 @@
 "use client";
 
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
+import { useFiscalYearConfig } from "@/lib/fiscalYear";
 
 const LEAVE_TYPE_LABEL: Record<string, string> = {
   casual:    "Casual Leave",
@@ -21,7 +22,7 @@ const LEAVE_TYPE_COLOR: Record<string, string> = {
 };
 
 export default function EmpLeaveBalances() {
-  const year = new Date().getFullYear();
+  const { currentYear: year } = useFiscalYearConfig();
   const { data, loading } = useLeaveBalances(year);
 
   const balances = data?.balances ?? [];

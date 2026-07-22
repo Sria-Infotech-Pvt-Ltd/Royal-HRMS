@@ -1,12 +1,14 @@
 import logging
+from collections import defaultdict
 from datetime import timedelta
 
+from django.db import models as django_models
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.responses import success, error, first_error
+from core.responses import success, error
 from core.pagination import paginate, paginated_data
 from apps.payroll.models import (
     PayrollCycle,
@@ -18,11 +20,15 @@ from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySeri
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _is_payroll_admin(user) -> bool:
+    """
+    HR and system_admin manage/view every payslip; plain employees only see
+    their own via MyPayslipsView. payroll.view is held by both hr and
+    employee (it also gates My Payslips), so it can't distinguish "view all"
+    from "view own" — this checks role identity directly instead.
+    """
+    return bool(user.role and user.role.name in ('hr', 'system_admin'))
 
 
 class CyclePayslipListView(APIView):
@@ -31,7 +37,7 @@ class CyclePayslipListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can view all payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -53,10 +59,32 @@ class PayslipDetailView(APIView):
     def get(self, request, pk):
         payslip = get_object_or_404(EmployeePayslip.objects.select_related('employee', 'cycle'), pk=pk)
 
-        if not _is_hr_admin(request.user) and payslip.employee_id != request.user.id:
+        if not _is_payroll_admin(request.user) and payslip.employee_id != request.user.id:
             return error('You can only view your own payslips.', http_status=403)
 
         return success('Payslip retrieved.', EmployeePayslipSerializer(payslip).data)
+
+
+def _apply_expense_ids(payslip, expense_ids):
+    """Link expense records to a payslip and return their total amount."""
+    from apps.hrms.models import Expense
+    # Unlink any expenses previously linked to this payslip
+    Expense.objects.filter(disbursed_in_payslip=payslip).update(disbursed_in_payslip=None)
+    if not expense_ids:
+        return 0
+    # Only accept approved expenses belonging to this employee that are currently undisbursed
+    rows = list(Expense.objects.filter(
+        id__in=expense_ids,
+        employee=payslip.employee,
+        status='approved',
+        disbursed_in_payslip__isnull=True,
+    ).values_list('id', 'amount'))
+    if not rows:
+        return 0
+    valid_ids = [r[0] for r in rows]
+    total = sum(r[1] for r in rows)
+    Expense.objects.filter(id__in=valid_ids).update(disbursed_in_payslip=payslip)
+    return total
 
 
 class UpdatePayslipReimbBonusView(APIView):
@@ -65,6 +93,12 @@ class UpdatePayslipReimbBonusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
+        return self._update(request, pk)
+
+    def patch(self, request, pk):
+        return self._update(request, pk)
+
+    def _update(self, request, pk):
         if not _is_hr_admin(request.user):
             return error('Only HR admin can update payslip reimbursements.', http_status=403)
 
@@ -73,13 +107,25 @@ class UpdatePayslipReimbBonusView(APIView):
             return error('Only draft payslips can be updated.')
 
         settings_obj = PayrollSettings.objects.first()
-
         updated_fields = ['updated_at']
-        if 'reimbursements' in request.data and settings_obj and settings_obj.enable_reimbursements:
+
+        # Reimbursements: prefer expense_ids (traceable) over flat amount
+        if 'expense_ids' in request.data and settings_obj and settings_obj.enable_reimbursements:
+            payslip.reimbursements = _apply_expense_ids(payslip, request.data['expense_ids'])
+            updated_fields.append('reimbursements')
+        elif 'reimbursements' in request.data and settings_obj and settings_obj.enable_reimbursements:
             payslip.reimbursements = request.data['reimbursements']
             updated_fields.append('reimbursements')
 
-        if 'bonus' in request.data and settings_obj and settings_obj.enable_bonuses:
+        # Bonuses: prefer breakdown (typed) over flat amount
+        if 'bonus_breakdown' in request.data and settings_obj and settings_obj.enable_bonuses:
+            breakdown = request.data['bonus_breakdown']
+            if not isinstance(breakdown, list):
+                return error('bonus_breakdown must be a list.')
+            payslip.bonus_breakdown = breakdown
+            payslip.bonus = sum(float(e.get('amount', 0) or 0) for e in breakdown)
+            updated_fields.extend(['bonus_breakdown', 'bonus'])
+        elif 'bonus' in request.data and settings_obj and settings_obj.enable_bonuses:
             payslip.bonus = request.data['bonus']
             updated_fields.append('bonus')
 
@@ -89,7 +135,6 @@ class UpdatePayslipReimbBonusView(APIView):
             payslip.lop_deduction = per_day * payslip.lop_days
             updated_fields.extend(['lop_days', 'lop_deduction'])
 
-        # Recalculate totals
         payslip.gross_earnings = (
             payslip.basic + payslip.hra + payslip.special_allowance
             + sum(payslip.other_earnings.values())
@@ -102,8 +147,115 @@ class UpdatePayslipReimbBonusView(APIView):
         payslip.net_pay = payslip.gross_earnings - payslip.total_deductions
         updated_fields.extend(['gross_earnings', 'total_deductions', 'net_pay'])
 
-        payslip.save(update_fields=updated_fields)
+        payslip.save(update_fields=list(set(updated_fields)))
+        logger.info('Payslip %s reimb/bonus updated by %s', pk, request.user.email)
         return success('Payslip updated.', EmployeePayslipSerializer(payslip).data)
+
+
+class ExpenseSummaryForCycleView(APIView):
+    """Approved, undisbursed expenses per employee for a payroll cycle (for auto-population)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, cycle_pk):
+        if not _is_hr_admin(request.user):
+            return error('Only HR admin can view this.', http_status=403)
+
+        cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
+        payslips = list(cycle.payslips.select_related('employee').all())
+        if not payslips:
+            return success('No payslips in this cycle.', [])
+
+        payslip_ids = [p.id for p in payslips]
+        emp_payslip = {p.employee_id: p for p in payslips}
+
+        from apps.hrms.models import Expense
+        expenses = Expense.objects.filter(
+            employee_id__in=list(emp_payslip.keys()),
+            status='approved',
+        ).filter(
+            django_models.Q(disbursed_in_payslip__isnull=True) |
+            django_models.Q(disbursed_in_payslip_id__in=payslip_ids)
+        ).select_related('employee').order_by('expense_date')
+
+        by_employee = defaultdict(list)
+        for exp in expenses:
+            by_employee[exp.employee_id].append(exp)
+
+        result = []
+        for emp_id, payslip in emp_payslip.items():
+            emp_expenses = by_employee.get(emp_id, [])
+            if not emp_expenses:
+                continue
+            result.append({
+                'payslip_id': str(payslip.id),
+                'employee_id': str(emp_id),
+                'employee_name': payslip.employee.full_name,
+                'employee_code': payslip.employee.employee_id,
+                'current_reimbursements': str(payslip.reimbursements),
+                'expenses': [
+                    {
+                        'id': str(e.id),
+                        'title': e.title,
+                        'category': e.category,
+                        'amount': str(e.amount),
+                        'expense_date': str(e.expense_date),
+                        'already_included': e.disbursed_in_payslip_id == payslip.id,
+                    }
+                    for e in emp_expenses
+                ],
+            })
+
+        return success('Expense summary retrieved.', result)
+
+
+class ReferralBonusSummaryForCycleView(APIView):
+    """Approved referral bonuses per employee for auto-populating payroll bonus entries."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, cycle_pk):
+        if not _is_hr_admin(request.user):
+            return error('Only HR admin can view this.', http_status=403)
+
+        cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
+        payslips = list(cycle.payslips.select_related('employee').all())
+        if not payslips:
+            return success('No payslips in this cycle.', [])
+
+        emp_payslip = {p.employee_id: p for p in payslips}
+
+        from apps.recruitment.models import ReferralBonus
+        referral_bonuses = ReferralBonus.objects.filter(
+            referrer_id__in=list(emp_payslip.keys()),
+            status='approved',
+        ).select_related('referrer', 'candidate')
+
+        by_referrer = defaultdict(list)
+        for bonus in referral_bonuses:
+            by_referrer[bonus.referrer_id].append(bonus)
+
+        result = []
+        for emp_id, payslip in emp_payslip.items():
+            bonuses = by_referrer.get(emp_id, [])
+            if not bonuses:
+                continue
+            result.append({
+                'payslip_id': str(payslip.id),
+                'employee_id': str(emp_id),
+                'employee_name': payslip.employee.full_name,
+                'employee_code': payslip.employee.employee_id,
+                'referral_bonuses': [
+                    {
+                        'id': str(b.id),
+                        'bonus_amount': str(b.bonus_amount),
+                        'candidate_name': getattr(b.candidate, 'full_name', None) or str(b.candidate),
+                    }
+                    for b in bonuses
+                ],
+            })
+
+        return success('Referral bonus summary retrieved.', result)
 
 
 class DispatchPayslipsView(APIView):
@@ -112,7 +264,7 @@ class DispatchPayslipsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, cycle_pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can dispatch payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -183,7 +335,7 @@ class PayslipQueryListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if _is_hr_admin(request.user):
+        if _is_payroll_admin(request.user):
             queries = PayslipQuery.objects.filter(
                 status=PayslipQuery.STATUS_OPEN,
             ).select_related('payslip', 'payslip__employee', 'raised_by').order_by('-created_at')
@@ -228,7 +380,7 @@ class PayslipQueryResolveView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _is_payroll_admin(request.user):
             return error('Only HR admin can resolve queries.', http_status=403)
 
         query = get_object_or_404(PayslipQuery, pk=pk, status=PayslipQuery.STATUS_OPEN)

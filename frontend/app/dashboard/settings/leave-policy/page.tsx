@@ -2,13 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import PolicyTab from "./_components/PolicyTab";
 import CreditTab from "./_components/CreditTab";
 import LeavePoliciesTab from "./_components/LeavePoliciesTab";
+import CarryForwardTab from "./_components/CarryForwardTab";
 
-type Tab = "types" | "policies" | "credit";
+type Tab = "types" | "policies" | "credit" | "carryForward";
 
-const TABS: { id: Tab; icon: string; label: string }[] = [
+// Carry Forward is an execution/audit action (system_admin, hr_admin, hr only)
+// — kept out of the employee-visible tab bar even though this whole settings
+// page already requires settings.view at the route level.
+const CARRY_FORWARD_ROLES = ["system_admin", "hr_admin", "hr"];
+
+const BASE_TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "types",    icon: "ti-beach",      label: "Leave Types"  },
   { id: "policies", icon: "ti-settings-2", label: "Leave Policy" },
   { id: "credit",   icon: "ti-coin",       label: "Credit Rules" },
@@ -16,7 +23,13 @@ const TABS: { id: Tab; icon: string; label: string }[] = [
 
 export default function LeavePolicyPage() {
   const router = useRouter();
+  const user = useCurrentUser();
   const [tab, setTab] = useState<Tab>("types");
+
+  const canCarryForward = !!user && CARRY_FORWARD_ROLES.includes(user.role);
+  const TABS = canCarryForward
+    ? [...BASE_TABS, { id: "carryForward" as Tab, icon: "ti-repeat", label: "Carry Forward" }]
+    : BASE_TABS;
 
   return (
     <>
@@ -53,9 +66,10 @@ export default function LeavePolicyPage() {
         ))}
       </div>
 
-      {tab === "types"    && <PolicyTab />}
-      {tab === "policies" && <LeavePoliciesTab />}
-      {tab === "credit"   && <CreditTab />}
+      {tab === "types"        && <PolicyTab />}
+      {tab === "policies"     && <LeavePoliciesTab />}
+      {tab === "credit"       && <CreditTab />}
+      {tab === "carryForward" && canCarryForward && <CarryForwardTab />}
     </>
   );
 }

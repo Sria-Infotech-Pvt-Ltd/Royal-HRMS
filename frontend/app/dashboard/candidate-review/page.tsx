@@ -46,22 +46,17 @@ export default function CandidateReviewPage() {
   ) {
     setActing(true); setActionErr(null);
     try {
+      // The approval endpoint already assigns default assessments and honors an
+      // explicit assessment_id for a non-default pick in the same request — a
+      // separate /assessments/assign/ call here would just 409 on anything that
+      // was already auto-assigned as a default.
       await clientApi.post(API.onboarding.approve(userId), {
         decision,
         remarks,
-        department:  extras?.department,
-        designation: extras?.designation,
+        department:    extras?.department,
+        designation:   extras?.designation,
+        assessment_id: extras?.assessmentId,
       });
-      if (decision === "approve" && extras?.assessmentId && drawer?.candidate_id) {
-        try {
-          await clientApi.post(API.assessments.assign, {
-            candidate_id:  drawer.candidate_id,
-            assessment_id: extras.assessmentId,
-          });
-        } catch {
-          // Approval already succeeded — assessment assignment failure is non-blocking
-        }
-      }
       setDrawer(null); setRemarks("");
       if (decision === "approve") {
         router.push("/dashboard/employees");

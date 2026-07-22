@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
+import { usePermission } from "@/hooks/usePermission";
 import DocPreviewBody from "./_components/DocPreviewBody";
 import {
   DOCUMENTS_BASE, DOCUMENTS_STATS, documentDetail,
@@ -26,6 +27,9 @@ const FILTER_TO_CATEGORY: Record<Filter, DocCategory | ""> = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DocumentCenterPage() {
+  const canUpload = usePermission("documents.create");
+  const canDelete = usePermission("documents.delete");
+
   // ── Data state ─────────────────────────────────────────────────────────────
   const [documents,    setDocuments]    = useState<ApiDocument[]>([]);
   const [stats,        setStats]        = useState<ApiStatsResponse | null>(null);
@@ -260,11 +264,13 @@ export default function DocumentCenterPage() {
           <div className="page-title">Document Center</div>
           <div className="page-sub">Policies, forms, and templates — all in one place</div>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => setShowUpload(true)} suppressHydrationWarning>
-            <i className="ti ti-upload" /> Upload Document
-          </button>
-        </div>
+        {canUpload && (
+          <div className="page-actions">
+            <button className="btn btn-filled" onClick={() => setShowUpload(true)} suppressHydrationWarning>
+              <i className="ti ti-upload" /> Upload Document
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats row */}
@@ -447,12 +453,14 @@ export default function DocumentCenterPage() {
             </div>
 
             <div className="modal-footer" style={{ flexShrink: 0 }}>
-              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(selected)} disabled={deleting} suppressHydrationWarning>
-                {deleting
-                  ? <><i className="ti ti-loader-2" style={{ animation: "dcSpin 1s linear infinite" }} /> Deleting…</>
-                  : <><i className="ti ti-trash" /> Delete</>
-                }
-              </button>
+              {canDelete && (
+                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(selected)} disabled={deleting} suppressHydrationWarning>
+                  {deleting
+                    ? <><i className="ti ti-loader-2" style={{ animation: "dcSpin 1s linear infinite" }} /> Deleting…</>
+                    : <><i className="ti ti-trash" /> Delete</>
+                  }
+                </button>
+              )}
               <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                 <button className="btn btn-ghost" onClick={() => setSelected(null)} suppressHydrationWarning>Close</button>
                 <button className="btn btn-outline btn-sm"

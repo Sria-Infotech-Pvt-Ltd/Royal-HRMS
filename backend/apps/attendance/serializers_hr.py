@@ -271,3 +271,47 @@ class InvalidPunchConvertSerializer(serializers.Serializer):
     target_time = serializers.TimeField(
         help_text='The correct punch time in HH:MM format.',
     )
+
+
+# ── HR Attendance Edit / Manual Create ───────────────────────────────────────
+
+_EDITABLE_STATUSES = [
+    'present', 'late', 'half_day', 'on_leave',
+    'weekly_off', 'holiday', 'absent', 'incomplete',
+]
+
+
+class HRAttendanceEditSerializer(serializers.Serializer):
+    """Validates a PATCH body for HR editing an existing attendance record."""
+    status    = serializers.ChoiceField(choices=_EDITABLE_STATUSES, required=False)
+    clock_in  = serializers.TimeField(required=False, allow_null=True)
+    clock_out = serializers.TimeField(required=False, allow_null=True)
+    note      = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    reason    = serializers.CharField(max_length=500, help_text='Required — logged in the audit trail.')
+
+    def validate(self, attrs: dict) -> dict:
+        clock_in  = attrs.get('clock_in')
+        clock_out = attrs.get('clock_out')
+        if clock_in and clock_out and clock_out <= clock_in:
+            raise serializers.ValidationError({'clock_out': 'Clock out must be after clock in.'})
+        return attrs
+
+
+class HRAttendanceManualCreateSerializer(serializers.Serializer):
+    """Validates a POST body for HR manually creating an attendance record."""
+    employee_id = serializers.CharField()
+    date        = serializers.DateField()
+    status      = serializers.ChoiceField(choices=_EDITABLE_STATUSES)
+    clock_in    = serializers.TimeField(required=False, allow_null=True, default=None)
+    clock_out   = serializers.TimeField(required=False, allow_null=True, default=None)
+    note        = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    reason      = serializers.CharField(max_length=500, help_text='Required — logged in the audit trail.')
+
+    def validate(self, attrs: dict) -> dict:
+        clock_in  = attrs.get('clock_in')
+        clock_out = attrs.get('clock_out')
+        if clock_in and clock_out and clock_out <= clock_in:
+            raise serializers.ValidationError({'clock_out': 'Clock out must be after clock in.'})
+        if attrs['date'] > datetime.date.today():
+            raise serializers.ValidationError({'date': 'Cannot create attendance for a future date.'})
+        return attrs

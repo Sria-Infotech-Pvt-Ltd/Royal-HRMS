@@ -515,6 +515,25 @@ class LeaveBalanceView(APIView):
         return success(f'Credited {created_count} balance records for {year}.', {'year': year, 'credited': created_count})
 
 
+def _can_adjust_balance(user, balance) -> bool:
+    """
+    Block self-adjustment entirely (nobody may inflate their own balance),
+    then scope by role — mirrors _can_approve_at_stage's branch/
+    reporting-chain conventions used for leave request approval.
+    """
+    if balance.employee_id == user.id:
+        return False
+    role = _role_name(user)
+    if role == 'system_admin':
+        return True
+    if _is_hr_role(role):
+        branch = _user_branch(user)
+        return not branch or _user_branch(balance.employee) == branch
+    if role == 'manager__team_lead':
+        return balance.employee.reporting_manager_id == user.id
+    return False
+
+
 class LeaveBalanceAdjustView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -530,6 +549,8 @@ class LeaveBalanceAdjustView(APIView):
         balance, err = self._get_balance(balance_id)
         if err:
             return err
+        if not _can_adjust_balance(request.user, balance):
+            return error('Balance record not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Balance retrieved.', LeaveBalanceSerializer(balance).data)
 
     def patch(self, request, balance_id: str):
@@ -538,6 +559,8 @@ class LeaveBalanceAdjustView(APIView):
         balance, err = self._get_balance(balance_id)
         if err:
             return err
+        if not _can_adjust_balance(request.user, balance):
+            return error('Balance record not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         total = request.data.get('total_days')
         used  = request.data.get('used_days')

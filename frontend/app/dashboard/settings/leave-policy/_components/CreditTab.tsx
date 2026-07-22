@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,8 +39,6 @@ const BLANK: Omit<CreditRule, "id"> = {
   min_service_months: 0, is_active: true,
 };
 
-const CURRENT_YEAR = new Date().getFullYear();
-
 function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
 }
@@ -46,7 +46,9 @@ function Spin() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreditTab() {
-  const [creditYear,   setCreditYear]   = useState<number>(CURRENT_YEAR);
+  const fy = useFiscalYearConfig();
+  const [creditYear,  setCreditYear]  = useState<number>(fy.currentYear);
+  const [yearEdited,  setYearEdited]  = useState(false);
   const [crediting,    setCrediting]    = useState(false);
   const [creditResult, setCreditResult] = useState<{ credited: number } | null>(null);
   const [creditError,  setCreditError]  = useState<string | null>(null);
@@ -57,6 +59,13 @@ export default function CreditTab() {
   const [form,    setForm]    = useState<Omit<CreditRule, "id">>(BLANK);
   const [errors,  setErrors]  = useState<Record<string, string>>({});
   const [saving,  setSaving]  = useState(false);
+
+  // Track the current FY until the admin picks a different one explicitly —
+  // this only matters in the rare case the FY config resolves (from
+  // localStorage, after mount) to a value other than the calendar-year default.
+  useEffect(() => {
+    if (!yearEdited) setCreditYear(fy.currentYear);
+  }, [fy.currentYear, yearEdited]);
 
   async function creditAll() {
     setCrediting(true);
@@ -85,7 +94,12 @@ export default function CreditTab() {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!form.leave_type.trim())                  e.leave_type   = "Leave type is required.";
+    const leaveType = form.leave_type.trim();
+    if (!leaveType) e.leave_type = "Leave type is required.";
+    else if (!LEAVE_NAME_RE.test(leaveType)) e.leave_type = "Leave type can only contain letters, spaces, and hyphens — no numbers or special characters.";
+    else if (rules.some(r => r.leave_type.trim().toLowerCase() === leaveType.toLowerCase() && r.id !== editing?.id)) {
+      e.leave_type = `A credit rule for "${leaveType}" already exists.`;
+    }
     if (form.accrual_days <= 0)                   e.accrual_days = "Must be greater than 0.";
     if (form.max_balance < 1)                     e.max_balance  = "Max balance must be at least 1.";
     if (form.encashable && form.encash_limit < 1) e.encash_limit = "Encash limit must be at least 1.";
@@ -132,7 +146,7 @@ export default function CreditTab() {
                 className="field-input"
                 type="number" min={2020} max={2099}
                 value={creditYear}
-                onChange={e => { setCreditResult(null); setCreditError(null); setCreditYear(Number(e.target.value)); }}
+                onChange={e => { setYearEdited(true); setCreditResult(null); setCreditError(null); setCreditYear(Number(e.target.value)); }}
                 style={{ width: 110 }}
               />
             </div>
@@ -232,7 +246,7 @@ export default function CreditTab() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
                 <div className="field-group mb-16" style={{ gridColumn: "1 / -1" }}>
                   <label className="field-label">Leave Type *</label>
-                  <input className={`field-input${errors.leave_type ? " field-error" : ""}`} value={form.leave_type} onChange={e => field("leave_type", e.target.value)} placeholder="e.g. Earned Leave" autoFocus />
+                  <input className={`field-input${errors.leave_type ? " field-error" : ""}`} value={form.leave_type} onChange={e => field("leave_type", sanitizeLeaveName(e.target.value))} placeholder="e.g. Earned Leave" autoFocus />
                   {errors.leave_type && <p className="field-error-msg">{errors.leave_type}</p>}
                 </div>
                 <div className="field-group mb-16">

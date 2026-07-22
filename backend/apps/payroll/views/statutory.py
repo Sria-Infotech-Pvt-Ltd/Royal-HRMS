@@ -10,11 +10,13 @@ from apps.branch.models import State
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class StatutoryConfigListView(APIView):
@@ -28,7 +30,7 @@ class StatutoryConfigListView(APIView):
         return success('Statutory configs retrieved.', serializer.data)
 
     def post(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.create'):
             return error('Only HR admin can create statutory configs.', http_status=403)
 
         state_id = request.data.get('state')
@@ -54,7 +56,7 @@ class StatutoryConfigDetailView(APIView):
         return success('Statutory config retrieved.', StatutoryConfigSerializer(config).data)
 
     def put(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update statutory configs.', http_status=403)
 
         config = get_object_or_404(StatutoryConfig, pk=pk)

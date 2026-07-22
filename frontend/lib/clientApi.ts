@@ -71,7 +71,7 @@ clientApi.interceptors.response.use(
       original._retry ||
       AUTH_URLS.some(u => original.url?.endsWith(u))
     ) {
-      return Promise.reject(normaliseError(err));
+      return Promise.reject(normaliseError(await resolveBlobErrorData(err)));
     }
 
     // Queue behind an in-flight refresh
@@ -107,6 +107,26 @@ clientApi.interceptors.response.use(
     }
   }
 );
+
+// ── Unwrap blob error bodies ───────────────────────────────────────────────────
+// Requests made with responseType: "blob" (file downloads) still get their
+// error body delivered as a Blob even when the backend returned JSON (e.g. a
+// 403 on a sample-file endpoint) — normaliseError below can't read `.message`
+// off a Blob, so every blob-download call site silently fell back to axios's
+// generic "Request failed with status code 403" instead of the real reason.
+// Root-cause fix here rather than at each blob-download call site, matching
+// how normaliseError itself was already fixed once for the same reason.
+async function resolveBlobErrorData(err: AxiosError): Promise<AxiosError> {
+  const data = err.response?.data;
+  if (!(data instanceof Blob)) return err;
+  try {
+    const text = await data.text();
+    const parsed = JSON.parse(text);
+    return { ...err, response: { ...err.response, data: parsed } } as AxiosError;
+  } catch {
+    return err;
+  }
+}
 
 // ── Normalise error shape for all callers ─────────────────────────────────────
 function normaliseError(err: unknown) {

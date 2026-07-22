@@ -240,6 +240,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'other_earnings',
             'reimbursements',
             'bonus',
+            'bonus_breakdown',
             'gross_earnings',
             'total_working_days',
             'lop_days',

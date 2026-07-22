@@ -210,15 +210,18 @@ def _deliver(employee, target_date: date) -> None:
 
     # Email — uses the project's shared SMTP utility (see CLAUDE.md)
     try:
+        from apps.accounts.models import Company
         from apps.accounts.utils import send_template_email
+        company = Company.objects.first()
         send_template_email(
             recipient_email=employee.email,
-            template_name='attendance/missing_clockout',
+            template_name='attendance_missing_clockout',
             context={
                 'employee_name': getattr(employee, 'full_name', None) or employee.email,
                 'date_display':  target_date.strftime('%A, %d %B %Y'),
                 'subject':       subject,
                 'message':       message,
+                'company_name':  company.company_name if company else '',
             },
         )
     except Exception as exc:

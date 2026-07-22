@@ -23,11 +23,13 @@ def _resolve_employee(identifier):
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
 
-
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class EmployeeSalaryConfigListView(APIView):
@@ -36,7 +38,7 @@ class EmployeeSalaryConfigListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view salary configurations.', http_status=403)
 
         configs = EmployeeSalaryConfig.objects.filter(is_active=True).select_related(
@@ -51,7 +53,7 @@ class EmployeeSalaryConfigListView(APIView):
         )
 
     def post(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can assign salary configs.', http_status=403)
 
         # Accept UUID or display code (e.g. RSS00017) for the employee field
@@ -89,14 +91,14 @@ class EmployeeSalaryConfigDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view salary configurations.', http_status=403)
 
         config = get_object_or_404(EmployeeSalaryConfig, pk=pk)
         return success('Salary config retrieved.', EmployeeSalaryConfigSerializer(config).data)
 
     def put(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update salary configs.', http_status=403)
 
         config = get_object_or_404(EmployeeSalaryConfig, pk=pk)
@@ -114,7 +116,7 @@ class EmployeeSalaryHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, employee_pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view salary history.', http_status=403)
 
         employee = _resolve_employee(employee_pk)

@@ -83,8 +83,8 @@ type Paginated<T> = { count: number; page: number; page_size: number; total_page
 
 export default function BranchManagement() {
   const user      = useCurrentUser();
-  const isHrAdmin = user?.role === "hr_admin";
-  // hr_admin must never edit branches regardless of DB permissions — business rule
+  const isHrAdmin = user?.role === "hr";
+  // hr must never edit branches regardless of DB permissions — business rule
   const canEdit   = usePermission("settings.edit") && !isHrAdmin;
 
   const [branches, setBranches] = useState<Branch[]>([]);

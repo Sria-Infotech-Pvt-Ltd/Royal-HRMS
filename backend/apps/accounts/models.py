@@ -79,7 +79,7 @@ class UserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         if 'role' not in extra_fields:
             try:
-                extra_fields['role'] = Role.objects.get(name='hr_admin')
+                extra_fields['role'] = Role.objects.get(name='system_admin')
             except Role.DoesNotExist:
                 pass
         return self.create_user(email, password, **extra_fields)

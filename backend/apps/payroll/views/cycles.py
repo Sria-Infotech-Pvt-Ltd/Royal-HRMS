@@ -26,16 +26,24 @@ from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
 
-HR_ADMIN_ROLES = frozenset(['system_admin', 'hr_admin'])
-MANAGER_ROLES = frozenset(['system_admin', 'hr_admin', 'manager'])
+
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
-def _is_hr_admin(user):
-    return user.role and user.role.name in HR_ADMIN_ROLES
+# L1/L2 attendance sign-off is a workflow stage, not a payroll.* permission —
+# managers hold no payroll codenames at all but must still be able to L1-sign
+# off their own cycle's attendance, so this stays role-identity based.
+def _can_l1_approve(user):
+    return bool(user.role and user.role.name in ('system_admin', 'hr', 'manager__team_lead'))
 
 
-def _is_manager_or_above(user):
-    return user.role and user.role.name in MANAGER_ROLES
+def _can_l2_approve(user):
+    return bool(user.role and user.role.name in ('system_admin', 'hr'))
 
 
 class PayrollCycleListView(APIView):
@@ -44,7 +52,7 @@ class PayrollCycleListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view payroll cycles.', http_status=403)
 
         cycles = PayrollCycle.objects.select_related('created_by').order_by('-cycle_start')
@@ -56,7 +64,7 @@ class PayrollCycleListView(APIView):
         )
 
     def post(self, request):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.create'):
             return error('Only HR admin can create payroll cycles.', http_status=403)
 
         cycle_start = request.data.get('cycle_start')
@@ -117,7 +125,7 @@ class PayrollCycleDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Access denied.', http_status=403)
 
         cycle = get_object_or_404(
@@ -150,7 +158,7 @@ class AttendanceApprovalView(APIView):
         level = request.data.get('level', '').upper()
 
         if level == 'L1':
-            if not _is_manager_or_above(request.user):
+            if not _can_l1_approve(request.user):
                 return error('Manager or HR admin role required for L1 approval.', http_status=403)
             if cycle.attendance_approved_by_l1_id:
                 return error('L1 approval already recorded.')
@@ -170,7 +178,7 @@ class AttendanceApprovalView(APIView):
             return success('L1 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
         elif level == 'L2':
-            if not _is_hr_admin(request.user):
+            if not _can_l2_approve(request.user):
                 return error('HR admin role required for L2 approval.', http_status=403)
             if not cycle.attendance_approved_by_l1_id:
                 return error('L1 approval must be completed first.')
@@ -205,7 +213,7 @@ class ProcessPayrollView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can process payroll.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
@@ -379,7 +387,7 @@ class MarkCyclePaidView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _is_hr_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can mark payroll as paid.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
