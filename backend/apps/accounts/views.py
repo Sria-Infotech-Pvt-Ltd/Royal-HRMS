@@ -35,6 +35,8 @@ from core.responses import error, first_error, get_client_ip, success
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.authentication import JWTAuthentication   
+
 
 from apps.accounts.models import (
     ApprovalWorkflowRule,
@@ -4825,6 +4827,9 @@ class EmployeeBulkImportView(APIView):
 
 # ─── Employee Bulk Import — Sample Template ───────────────────────────────────
 
+_EMP_ALLOWED_ROLES = frozenset({'system_admin', 'hr_admin'})
+
+
 class EmployeeBulkImportSampleView(APIView):
     """
     GET /api/employees/bulk-import/sample/?format=csv
@@ -4835,6 +4840,13 @@ class EmployeeBulkImportSampleView(APIView):
     Permission mirrors the upload endpoint (system_admin / hr_admin only).
     """
     permission_classes = [IsAuthenticated]
+
+    def perform_content_negotiation(self, request, force=False):
+        # ?format= selects csv/xlsx file type, not DRF response renderer.
+        # Bypass DRF's renderer filtering to prevent Http404 on unknown formats.
+        from rest_framework.renderers import JSONRenderer
+        return (JSONRenderer(), 'application/json')
+    authentication_classes = [JWTAuthentication]        
 
     _HEADERS = [
         'First Name', 'Last Name', 'Work Email', 'Mobile Number',

@@ -27,6 +27,9 @@ urlpatterns = [
     path('hr/birthdays/upcoming/',             views.HRBirthdayUpcomingView.as_view()),
     path('hr/attendance-summary/',             views.HRAttendanceSummaryView.as_view()),
 
+    # ── Manager / Team Lead Dashboard ────────────────────────────────────────
+    path('manager/', views.ManagerDashboardView.as_view(), name='manager-dashboard'),
+
     # ── Employee Dashboard ────────────────────────────────────────────────────
     path('employee/kpis/',               views.EmployeeKPIView.as_view()),
     path('employee/leave-balances/',     views.EmployeeLeaveBalanceView.as_view()),

@@ -1,3 +1,4 @@
+from apps.dashboard.views.manager import ManagerDashboardView
 from apps.dashboard.views.overview import (
     SystemAdminKPIView,
     SystemAdminAnnouncementView,
@@ -27,6 +28,7 @@ from apps.dashboard.views.people import (
 )
 
 __all__ = [
+    'ManagerDashboardView',
     'SystemAdminKPIView',
     'SystemAdminAnnouncementView',
     'SystemAdminPendingApprovalsView',

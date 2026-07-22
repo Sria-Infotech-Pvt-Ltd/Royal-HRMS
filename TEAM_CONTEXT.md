@@ -2536,3 +2536,130 @@ All backend changes verified by direct invocation against the real database (not
 
 - Credit Rules module still has no backend (`GET/POST/PUT/DELETE /api/leave/credit-rules/` or similar) — `CreditTab.tsx` is mock state only
 - Everything listed as Pending in the 2026-07-20 (Part 2) entry above is still outstanding
+
+---
+
+## Session Log — 2026-07-22
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. Sample Download 404 — All Bulk Import Endpoints**
+
+All four `?format=csv` / `?format=xlsx` sample download endpoints returned 404 before authentication was even reached.
+
+**Root cause:** DRF 3.15.2 `DefaultContentNegotiation.filter_renderers()` raises `Http404` (not `NotAcceptable`) when `?format=csv` has no matching renderer. This fires inside `APIView.initial()` before any view logic or auth check.
+
+**Fix pattern applied to all four sample views:**
+```python
+def perform_content_negotiation(self, request, force=False):
+    # ?format= selects csv/xlsx file type, not DRF renderer.
+    # Bypass renderer filtering to prevent Http404 on unknown formats.
+    from rest_framework.renderers import JSONRenderer
+    return (JSONRenderer(), 'application/json')
+```
+These views return `HttpResponse` directly so the renderer is bypassed in `finalize_response` anyway — the override has zero side effects.
+
+**Also fixed:** `_EMP_ALLOWED_ROLES` (accounts) and `_ALLOWED_IMPORT_ROLES` (recruitment) module-level constants were silently removed by a `git pull origin demo` auto-merge, causing `NameError` on every sample request. Restored from view docstrings.
+
+| Endpoint | File |
+|---|---|
+| `GET /api/employees/bulk-import/sample/?format=csv\|xlsx` | `apps/accounts/views.py` |
+| `GET /api/attendance/import/sample/?format=csv\|xlsx` | `apps/attendance/views/hr_attendance.py` |
+| `GET /api/leave/balance/import/sample/?format=csv\|xlsx` | `apps/hrms/views/leave.py` |
+| `GET /api/recruitment/candidates/bulk-import/sample/?format=csv\|xlsx` | `apps/recruitment/views.py` |
+
+---
+
+**2. Manager / Team Lead Dashboard — New Endpoint**
+
+Single endpoint returns all dashboard data in one request. Designed for enterprise orgs (2,000+ employees) — no N+1 queries.
+
+**Endpoint:** `GET /api/dashboard/manager/`
+
+**Roles allowed:** `manager`, `team_lead`, `hr_admin`, `hr`, `system_admin`
+
+**Response — 8 widgets:**
+
+| Widget | Key | Contents |
+|---|---|---|
+| Team Overview | `team_overview` | total_members, present_today, absent_today, on_leave_today, remote_today |
+| Quick Actions | `quick_actions` | pending_leave_approvals, pending_expense_approvals, correction_requests |
+| Pending Approvals | `pending_approvals` | List of leave requests awaiting this manager (L1 or L2) |
+| Today's Birthdays | `birthdays_today` | Employees with birthday today |
+| Upcoming Birthdays | `upcoming_birthdays` | Employees with birthday in next 30 days |
+| Recent Activity | `recent_team_activity` | Last 10 AuditLog entries for team |
+| Team Attendance | `team_attendance` | Per-member attendance status for today |
+| Upcoming Leaves | `upcoming_leaves` | Approved leaves starting in next 30 days |
+
+**Performance design:**
+- Team IDs fetched once: `manager.direct_reports.filter(is_active=True).values_list('id', flat=True)` — reused across all widgets
+- Attendance aggregated via `GROUP BY` (single query, not per-row loop)
+- Birthday cache: `dashboard:manager:birthdays:today:{hash}` and `upcoming:{hash}` — 6h TTL, keyed by manager ID
+- Leave pending query: `Q(l1_approver=manager, status=REQ_PENDING) | Q(l2_approver=manager, status=REQ_L2_PENDING)`
+- All list queries use `.only()` to avoid fetching unused columns
+
+**Files changed:**
+```
+backend/apps/dashboard/views/manager.py      — NEW: ManagerDashboardView + 7 widget builder functions
+backend/apps/dashboard/views/__init__.py     — ManagerDashboardView imported + added to __all__
+backend/apps/dashboard/urls.py               — path('manager/', ...) added
+```
+
+---
+
+**3. Leave Opening Balance Import — Integration Fix**
+
+After a successful import via `POST /api/leave/balance/import/`, the imported balances were not visible in Employee Dashboard, Apply Leave, HR management, reports, or carry forward. Three bugs found and fixed.
+
+**Bug 1 — Cache key ignored `year` parameter** (`apps/dashboard/views/overview.py:450`)
+
+`EmployeeLeaveBalanceView` cached results under `dashboard:employee:leave_balance:{employee.id}`. Because the key had no year, a request for `?year=2026` could return a cached `?year=2025` response (or vice versa). After import, the new data was never served until the 10-minute TTL expired — and even then, the first re-fetch could re-cache the wrong year indefinitely.
+
+```python
+# Before:
+cache_key = f'dashboard:employee:leave_balance:{employee.id}'
+# After:
+cache_key = f'dashboard:employee:leave_balance:{employee.id}:{year}'
+```
+
+**Bug 2 — No cache invalidation after import** (`apps/hrms/views/leave.py` — `LeaveOpeningBalanceImportView.post()`)
+
+After `_bulk_insert_leave_balances()` completes, the affected employees' cache entries are now explicitly deleted so the dashboard reflects the import on the very next request.
+
+```python
+if created > 0:
+    from django.core.cache import cache as _cache
+    _cache.delete_many(list({
+        f'dashboard:employee:leave_balance:{lb.employee_id}:{lb.year}'
+        for lb in to_create
+    }))
+```
+
+**Bug 3 — `valid_lt` label override in `_load_leave_ref_data()`** (`apps/hrms/views/leave.py:1538`)
+
+The second loop (LeavePolicy) could override canonical `LEAVE_TYPE_CHOICES` mappings. Example: if a `LeavePolicy` had `leave_type='earned'` but `leave_type_label='Sick'`, then `valid_lt['sick'] = 'earned'` — any CSV row with "Sick" would be imported as `earned` leave, then fail to match the `sick` balance that apply-leave queries.
+
+```python
+# Before (unsafe override):
+if p.get('leave_type_label'):
+    valid_lt[p['leave_type_label'].lower()] = p['leave_type']
+
+# After (labels only add new aliases, never override canonical codes):
+if p.get('leave_type_label') and p['leave_type_label'].lower() not in valid_lt:
+    valid_lt[p['leave_type_label'].lower()] = p['leave_type']
+```
+
+**Result:** After import, affected employees see their new balances on the next dashboard load (instant if cache was cold, ≤10 minutes if warm). All other leave views — Apply Leave, HR Management, Leave Reports, Carry Forward — read `LeaveBalance` directly with no cache, so they always reflect imports immediately.
+
+**Files changed:**
+```
+backend/apps/dashboard/views/overview.py   — cache key includes year
+backend/apps/hrms/views/leave.py           — cache invalidation after bulk insert; valid_lt label guard
+```
+
+### Pending
+
+- Manager Dashboard frontend implementation (API prompt to be provided)
+- Credit Rules backend (`GET/POST/PUT/DELETE /api/leave/credit-rules/`) — `CreditTab.tsx` is still mock-only
+- Everything listed as Pending in the 2026-07-21 entry above is still outstanding

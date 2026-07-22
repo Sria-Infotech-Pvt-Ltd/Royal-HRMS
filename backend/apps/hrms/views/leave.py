@@ -1535,7 +1535,7 @@ def _load_leave_ref_data(emp_ids: set):
         valid_lt[label.lower()] = code
     for p in LeavePolicy.objects.filter(is_active=True).values('leave_type', 'leave_type_label'):
         valid_lt[p['leave_type'].lower()] = p['leave_type']
-        if p.get('leave_type_label'):
+        if p.get('leave_type_label') and p['leave_type_label'].lower() not in valid_lt:
             valid_lt[p['leave_type_label'].lower()] = p['leave_type']
     existing = {
         (b['employee_id'], b['leave_type'], b['year'])
@@ -1646,6 +1646,13 @@ class LeaveOpeningBalanceImportView(APIView):
         created, batch_errors = _bulk_insert_leave_balances(to_create)
         fail_count += batch_errors
 
+        if created > 0:
+            from django.core.cache import cache as _cache
+            _cache.delete_many(list({
+                f'dashboard:employee:leave_balance:{lb.employee_id}:{lb.year}'
+                for lb in to_create
+            }))
+
         from apps.accounts.models import AuditLog
         AuditLog.objects.create(
             user=request.user, action='leave_opening_balance_import', module='leave',
@@ -1669,6 +1676,12 @@ class LeaveOpeningBalanceImportView(APIView):
 class LeaveOpeningBalanceSampleView(APIView):
     """GET /api/leave/balance/import/sample/?format=csv|xlsx — download import template."""
     permission_classes = [IsAuthenticated]
+
+    def perform_content_negotiation(self, request, force=False):
+        # ?format= selects csv/xlsx file type, not DRF response renderer.
+        # Bypass DRF's renderer filtering to prevent Http404 on unknown formats.
+        from rest_framework.renderers import JSONRenderer
+        return (JSONRenderer(), 'application/json')
 
     def get(self, request):
         role = _role_name(request.user)

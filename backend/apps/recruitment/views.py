@@ -2026,6 +2026,9 @@ class CandidateBulkImportView(APIView):
 
 # ─── Candidate Bulk Import — Sample Template ──────────────────────────────────
 
+_ALLOWED_IMPORT_ROLES = frozenset({'system_admin', 'hr_admin', 'hr'})
+
+
 class CandidateBulkImportSampleView(APIView):
     """
     GET /api/recruitment/candidates/bulk-import/sample/?format=csv
@@ -2036,6 +2039,12 @@ class CandidateBulkImportSampleView(APIView):
     Permission mirrors the upload endpoint (system_admin / hr / hr_admin only).
     """
     permission_classes = [IsAuthenticated]
+
+    def perform_content_negotiation(self, request, force=False):
+        # ?format= selects csv/xlsx file type, not DRF response renderer.
+        # Bypass DRF's renderer filtering to prevent Http404 on unknown formats.
+        from rest_framework.renderers import JSONRenderer
+        return (JSONRenderer(), 'application/json')
 
     _HEADERS = [
         'Candidate Name', 'Email', 'Mobile Number', 'Position Applied',

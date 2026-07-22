@@ -543,6 +543,12 @@ class HRAttendanceImportSampleView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    def perform_content_negotiation(self, request, force=False):
+        # ?format= selects csv/xlsx file type, not DRF response renderer.
+        # Bypass DRF's renderer filtering to prevent Http404 on unknown formats.
+        from rest_framework.renderers import JSONRenderer
+        return (JSONRenderer(), 'application/json')
+
     _HEADERS = ['Employee ID', 'Date', 'Punch In', 'Punch Out']
     _SAMPLE_ROWS = [
         ['RSS00001', '2026-07-01', '09:00', '18:00'],
