@@ -74,9 +74,10 @@ function NumCell({ value, color, bold, dim }: {
   );
 }
 
-export default function EmployeeAttendanceRow({ emp, cycleId }: {
+export default function EmployeeAttendanceRow({ emp, cycleId, cycleStart }: {
   emp: EmployeeRow;
   cycleId: string;
+  cycleStart: string;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -152,14 +153,14 @@ export default function EmployeeAttendanceRow({ emp, cycleId }: {
                     )}
                   </div>
                   <a
-                    href="/dashboard/attendance"
+                    href={`/dashboard/attendance?view=employee&employee=${emp.employee_uuid}&month=${cycleStart.slice(0, 7)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={e => e.stopPropagation()}
                     style={{ fontSize: 12, color: "var(--primary)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 500 }}
                   >
                     <i className="ti ti-external-link" style={{ fontSize: 12 }} />
-                    Open Attendance Records
+                    Open in Attendance Calendar
                   </a>
                 </div>
 

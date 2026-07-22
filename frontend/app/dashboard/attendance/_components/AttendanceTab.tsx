@@ -43,6 +43,12 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function shiftDate(iso: string, delta: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
 function toQuery(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -120,6 +126,13 @@ export default function AttendanceTab({ onMutated }: Props) {
     <>
       {/* Toolbar */}
       <div className="filter-bar" style={{ marginBottom: 14 }}>
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ padding: "0 8px" }}
+          onClick={() => { setDate(d => shiftDate(d, -1)); setPage(1); }}
+        >
+          <i className="ti ti-chevron-left" />
+        </button>
         <input
           type="date"
           className="field-input"
@@ -127,6 +140,14 @@ export default function AttendanceTab({ onMutated }: Props) {
           value={date}
           onChange={e => { setDate(e.target.value); setPage(1); }}
         />
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ padding: "0 8px" }}
+          disabled={date >= todayISO()}
+          onClick={() => { setDate(d => shiftDate(d, 1)); setPage(1); }}
+        >
+          <i className="ti ti-chevron-right" />
+        </button>
         <BranchFilterSelect
           branches={branches}
           value={branchInput}

@@ -380,6 +380,8 @@ class EmployeePayslip(models.Model):
     # Reimbursements + bonuses (optional — governed by PayrollSettings toggles)
     reimbursements = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Typed breakdown for bonuses: [{"type": "Annual", "amount": "5000.00", "note": ""}]
+    bonus_breakdown = models.JSONField(default=list, blank=True)
 
     gross_earnings = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 

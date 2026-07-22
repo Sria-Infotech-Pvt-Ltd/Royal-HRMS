@@ -43,6 +43,8 @@ from apps.payroll.views.payslips import (
     AcknowledgePayslipView,
     PayslipQueryListView,
     PayslipQueryResolveView,
+    ExpenseSummaryForCycleView,
+    ReferralBonusSummaryForCycleView,
 )
 
 urlpatterns = [
@@ -85,6 +87,8 @@ urlpatterns = [
     # ── Payslips (HR) ────────────────────────────────────────────────────────
     path('cycles/<uuid:cycle_pk>/payslips/', CyclePayslipListView.as_view(), name='cycle-payslip-list'),
     path('cycles/<uuid:cycle_pk>/payslips/dispatch/', DispatchPayslipsView.as_view(), name='payslip-dispatch'),
+    path('cycles/<uuid:cycle_pk>/expense-summary/', ExpenseSummaryForCycleView.as_view(), name='cycle-expense-summary'),
+    path('cycles/<uuid:cycle_pk>/referral-bonus-summary/', ReferralBonusSummaryForCycleView.as_view(), name='cycle-referral-bonus-summary'),
     path('payslips/<uuid:pk>/', PayslipDetailView.as_view(), name='payslip-detail'),
     path('payslips/<uuid:pk>/reimb-bonus/', UpdatePayslipReimbBonusView.as_view(), name='payslip-reimb-bonus'),
 

@@ -209,6 +209,7 @@ export default function AttendanceApprovalTab() {
                       key={emp.employee_id}
                       emp={emp}
                       cycleId={selectedId}
+                      cycleStart={summary.cycle.cycle_start}
                     />
                   ))}
                 </tbody>

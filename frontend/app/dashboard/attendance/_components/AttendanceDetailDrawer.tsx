@@ -6,11 +6,13 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { AttendanceAuditEntry, AttendanceDetail, CorrectionReviewAction, CorrectionStatus, PaginatedCorrections, PunchType } from "@/types/attendance";
+import { AttendanceEditForm } from "./AttendanceEditForm";
 
 interface Props {
-  recordId: string;
-  date:     string;
-  onClose:  () => void;
+  recordId:         string;
+  date:             string;
+  onClose:          () => void;
+  onRecordChanged?: () => void;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -64,11 +66,12 @@ function SectionTitle({ icon, title }: { icon: string; title: string }) {
   );
 }
 
-export default function AttendanceDetailDrawer({ recordId, date, onClose }: Props) {
+export default function AttendanceDetailDrawer({ recordId, date, onClose, onRecordChanged }: Props) {
   const { showToast } = useToast();
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [editing,     setEditing]     = useState(false);
 
-  const { data, loading, error } = useFetch<AttendanceDetail>(
+  const { data, loading, error, refetch } = useFetch<AttendanceDetail>(
     `${API.attendance.record(recordId)}?date=${date}`
   );
 
@@ -124,9 +127,42 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose }: Prop
                     {data.employee_id} · {data.department} · {data.branch}
                   </div>
                 </div>
-                <span className={STATUS_BADGE[data.status_key] ?? "badge badge-neutral"}>{data.status}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className={STATUS_BADGE[data.status_key] ?? "badge badge-neutral"}>{data.status}</span>
+                  {!editing && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "3px 10px", fontSize: 11 }}
+                      onClick={() => setEditing(true)}
+                    >
+                      <i className="ti ti-edit" /> Edit
+                    </button>
+                  )}
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{date}</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: editing ? 16 : 0 }}>{date}</div>
+
+              {/* Edit form */}
+              {editing && (
+                <div style={{ background: "var(--bg)", border: "1.5px solid var(--primary)", borderRadius: 10, padding: "14px 16px", marginTop: 12, marginBottom: 4 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: "var(--primary)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 12 }}>
+                    <i className="ti ti-edit" style={{ marginRight: 5 }} /> Edit Attendance
+                  </div>
+                  <AttendanceEditForm
+                    recordId={recordId}
+                    initialStatus={data.status_key}
+                    initialClockIn={data.clock_in === "—" ? "" : data.clock_in}
+                    initialClockOut={data.clock_out === "—" ? "" : data.clock_out}
+                    initialNote={data.note ?? ""}
+                    onSaved={() => {
+                      setEditing(false);
+                      refetch();
+                      onRecordChanged?.();
+                    }}
+                    onCancel={() => setEditing(false)}
+                  />
+                </div>
+              )}
 
               {/* Attendance calculation */}
               <SectionTitle icon="ti-calculator" title="Attendance Calculation" />

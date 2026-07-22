@@ -33,6 +33,8 @@ from apps.attendance.views import (
     HRAttendanceReprocessView,
     HRCorrectionListView,
     HRCorrectionReviewView,
+    HREmployeeMonthView,
+    HRAttendanceCreateView,
     # Audit + Invalid Punch Actions
     HRAttendanceAuditView,
     HRInvalidPunchAssignView,
@@ -79,6 +81,7 @@ urlpatterns = [
     # ── HR Attendance Management ───────────────────────────────────────────────
     path('dashboard/',                    HRAttendanceDashboardView.as_view(), name='hr-attendance-dashboard'),
     path('records/',                      HRAttendanceListView.as_view(),      name='hr-attendance-list'),
+    path('records/create/',               HRAttendanceCreateView.as_view(),    name='hr-attendance-create'),
     path('records/<uuid:pk>/',            HRAttendanceDetailView.as_view(),    name='hr-attendance-detail'),
     path('overtime/',                     HROvertimeListView.as_view(),        name='hr-overtime-list'),
     path('overtime/create/',              HROvertimeCreateView.as_view(),      name='hr-overtime-create'),
@@ -89,6 +92,7 @@ urlpatterns = [
     path('reprocess/',                    HRAttendanceReprocessView.as_view(), name='hr-attendance-reprocess'),
     path('corrections/',                  HRCorrectionListView.as_view(),      name='hr-corrections-list'),
     path('corrections/<uuid:pk>/review/', HRCorrectionReviewView.as_view(),    name='hr-correction-review'),
+    path('employee-calendar/',            HREmployeeMonthView.as_view(),       name='hr-employee-month-calendar'),
 
     # ── Audit History ─────────────────────────────────────────────────────────
     path('records/<uuid:pk>/audit/',                    HRAttendanceAuditView.as_view(),         name='hr-attendance-audit'),

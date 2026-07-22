@@ -169,6 +169,7 @@ export const API = {
     // HR Management
     dashboard: "/attendance/dashboard/",
     records: "/attendance/records/",
+    recordCreate: "/attendance/records/create/",
     record: (id: string) => `/attendance/records/${id}/`,
     overtime: "/attendance/overtime/",
     overtimeCreate: "/attendance/overtime/create/",
@@ -182,6 +183,7 @@ export const API = {
     export: "/attendance/export/",
     corrections: "/attendance/corrections/",
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
+    employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
   },
 
   notifications: {
@@ -239,6 +241,8 @@ export const API = {
     // Payslips (HR)
     cyclePayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/`,
     dispatchPayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/dispatch/`,
+    expenseSummary: (cycleId: string) => `/payroll/cycles/${cycleId}/expense-summary/`,
+    referralBonusSummary: (cycleId: string) => `/payroll/cycles/${cycleId}/referral-bonus-summary/`,
     payslip: (id: string) => `/payroll/payslips/${id}/`,
     payslipReimbBonus: (id: string) => `/payroll/payslips/${id}/reimb-bonus/`,
 

@@ -130,6 +130,7 @@ export interface EmployeePayslip {
   other_earnings: Record<string, number>;
   reimbursements: string;
   bonus: string;
+  bonus_breakdown: BonusEntry[];
   gross_earnings: string;
   total_working_days: number;
   lop_days: string;
@@ -165,4 +166,42 @@ export interface PayslipQuery {
   resolution_note: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface BonusEntry {
+  type: string;
+  amount: string;
+  note: string;
+}
+
+export interface ExpenseItem {
+  id: string;
+  title: string;
+  category: string;
+  amount: string;
+  expense_date: string;
+  already_included: boolean;
+}
+
+export interface EmployeeExpenseSummary {
+  payslip_id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  current_reimbursements: string;
+  expenses: ExpenseItem[];
+}
+
+export interface ReferralBonusItem {
+  id: string;
+  bonus_amount: string;
+  candidate_name: string;
+}
+
+export interface EmployeeReferralSummary {
+  payslip_id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  referral_bonuses: ReferralBonusItem[];
 }
