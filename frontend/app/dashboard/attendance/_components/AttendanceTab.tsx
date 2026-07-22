@@ -284,9 +284,9 @@ export default function AttendanceTab({ onMutated }: Props) {
             setShowImport(false);
             refetchAll();
             if (result.failed > 0) {
-              showToast(`Import complete: ${result.success} succeeded, ${result.failed} failed.`, "error");
+              showToast(`Import complete: ${result.successful} succeeded, ${result.failed} failed.`, "error");
             } else {
-              showToast(`Import complete: ${result.success} record(s) imported.`, "success");
+              showToast(`Import complete: ${result.successful} record(s) imported.`, "success");
             }
           }}
         />
