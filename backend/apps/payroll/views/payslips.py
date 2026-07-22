@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db import models as django_models
 from django.utils import timezone
@@ -123,7 +124,7 @@ class UpdatePayslipReimbBonusView(APIView):
             if not isinstance(breakdown, list):
                 return error('bonus_breakdown must be a list.')
             payslip.bonus_breakdown = breakdown
-            payslip.bonus = sum(float(e.get('amount', 0) or 0) for e in breakdown)
+            payslip.bonus = Decimal(str(sum(float(e.get('amount', 0) or 0) for e in breakdown)))
             updated_fields.extend(['bonus_breakdown', 'bonus'])
         elif 'bonus' in request.data and settings_obj and settings_obj.enable_bonuses:
             payslip.bonus = request.data['bonus']
@@ -135,9 +136,13 @@ class UpdatePayslipReimbBonusView(APIView):
             payslip.lop_deduction = per_day * payslip.lop_days
             updated_fields.extend(['lop_days', 'lop_deduction'])
 
+        other_earnings_total = sum(
+            (Decimal(str(v)) for v in payslip.other_earnings.values()),
+            Decimal(0),
+        )
         payslip.gross_earnings = (
             payslip.basic + payslip.hra + payslip.special_allowance
-            + sum(payslip.other_earnings.values())
+            + other_earnings_total
             + payslip.reimbursements + payslip.bonus
         )
         payslip.total_deductions = (
