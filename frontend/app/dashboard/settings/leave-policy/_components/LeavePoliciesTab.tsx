@@ -6,12 +6,17 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import type { CarryForwardType, CarryForwardMode, LeavePolicyCarryForwardSettings } from "@/types/leave";
 import EligibilitySection from "./EligibilitySection";
+import CarryForwardSettingsSection from "./CarryForwardSettingsSection";
 
 // Full shape of GET /leave/policy/ list items — includes both the existing
 // Leave Types fields (annual_days, can_carry_forward, ...) and the policy
 // rule fields this tab edits. This tab never reads/writes the Leave Types
-// fields — those stay exclusively owned by PolicyTab.tsx.
+// fields — those stay exclusively owned by PolicyTab.tsx. The 3 carry-forward
+// settings fields (carry_forward_type/mode/expiry_days) are the exception:
+// they're edited here, in their own "Carry Forward Settings" section, saved
+// via a separate partial PATCH rather than the rules PUT below.
 export interface LeavePolicy {
   id:                  number;
   leave_type:          string;
@@ -19,6 +24,9 @@ export interface LeavePolicy {
   annual_days:         string;
   can_carry_forward:   boolean;
   max_carry_forward_days: number;
+  carry_forward_type:        CarryForwardType;
+  carry_forward_mode:        CarryForwardMode;
+  carry_forward_expiry_days: number;
   policy_note:         string;
   is_active:           boolean;
 
@@ -149,6 +157,20 @@ function extractRules(p: LeavePolicy): PolicyRuleFields {
   };
 }
 
+function defaultCf(): LeavePolicyCarryForwardSettings {
+  return { can_carry_forward: false, carry_forward_type: "limited", max_carry_forward_days: 0, carry_forward_mode: "automatic", carry_forward_expiry_days: 0 };
+}
+
+function extractCf(p: LeavePolicy): LeavePolicyCarryForwardSettings {
+  return {
+    can_carry_forward:         p.can_carry_forward,
+    carry_forward_type:        p.carry_forward_type ?? "limited",
+    max_carry_forward_days:    Number(p.max_carry_forward_days) || 0,
+    carry_forward_mode:        p.carry_forward_mode ?? "automatic",
+    carry_forward_expiry_days: Number(p.carry_forward_expiry_days) || 0,
+  };
+}
+
 // ── Small field-row helpers — shared with EligibilitySection ───────────────────
 
 export function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -214,6 +236,15 @@ export default function LeavePoliciesTab() {
   const [rules,  setRules]  = useState<PolicyRuleFields | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // ── Carry Forward Settings section state ──────────────────────────────────
+  const [cf, setCf] = useState<LeavePolicyCarryForwardSettings | null>(null);
+  // "Never Expire" vs "Expire After N days" is tracked separately from the
+  // numeric field itself — both radios can legitimately correspond to the
+  // same value (0) transiently while the user is mid-edit.
+  const [cfExpiryMode, setCfExpiryMode] = useState<"never" | "after">("never");
+  const [cfErrors,    setCfErrors]    = useState<{ max_carry_forward_days?: string; carry_forward_expiry_days?: string }>({});
+  const [cfSaveError, setCfSaveError] = useState<string | null>(null);
+
   const list = policies ?? [];
 
   useEffect(() => {
@@ -223,27 +254,78 @@ export default function LeavePoliciesTab() {
   }, [policies, selectedType]);
 
   useEffect(() => {
-    if (!selectedType) { setRules(null); return; }
+    if (!selectedType) { setRules(null); setCf(null); return; }
     const policy = (policies ?? []).find(p => p.leave_type === selectedType);
     setRules(policy ? extractRules(policy) : defaultRules());
+    const nextCf = policy ? extractCf(policy) : defaultCf();
+    setCf(nextCf);
+    setCfExpiryMode(nextCf.carry_forward_expiry_days > 0 ? "after" : "never");
+    setCfErrors({});
+    setCfSaveError(null);
   }, [selectedType, policies]);
 
   function setField<K extends keyof PolicyRuleFields>(key: K, value: PolicyRuleFields[K]) {
     setRules(prev => prev ? { ...prev, [key]: value } : prev);
   }
 
+  function setCfField<K extends keyof LeavePolicyCarryForwardSettings>(key: K, value: LeavePolicyCarryForwardSettings[K]) {
+    setCfErrors(prev => { const n = { ...prev }; delete n[key as "max_carry_forward_days" | "carry_forward_expiry_days"]; return n; });
+    setCf(prev => prev ? { ...prev, [key]: value } : prev);
+  }
+
   function discard() {
     const policy = list.find(p => p.leave_type === selectedType);
     setRules(policy ? extractRules(policy) : defaultRules());
+    const nextCf = policy ? extractCf(policy) : defaultCf();
+    setCf(nextCf);
+    setCfExpiryMode(nextCf.carry_forward_expiry_days > 0 ? "after" : "never");
+    setCfErrors({});
+    setCfSaveError(null);
+  }
+
+  function validateCf(): boolean {
+    if (!cf) return true;
+    const e: typeof cfErrors = {};
+    if (cf.can_carry_forward && cf.carry_forward_type === "limited" && (!cf.max_carry_forward_days || cf.max_carry_forward_days < 1)) {
+      e.max_carry_forward_days = "Required when type is Limited";
+    }
+    if (cf.can_carry_forward && cfExpiryMode === "after" && (!cf.carry_forward_expiry_days || cf.carry_forward_expiry_days < 1)) {
+      e.carry_forward_expiry_days = "Enter number of days";
+    }
+    setCfErrors(e);
+    return Object.keys(e).length === 0;
   }
 
   async function save() {
-    if (!rules || !selectedType) return;
+    if (!rules || !selectedType || !cf) return;
+    if (!validateCf()) return;
     setSaving(true);
+    setCfSaveError(null);
     try {
       const res = await clientApi.put<{ message: string }>(API.leave.policyDetail(selectedType), rules);
-      showToast(res.data.message || "Policy updated.", "success");
-      refetch();
+      // Carry-forward settings save as their own partial update, in the same
+      // submit action — no separate save button, per the given spec.
+      try {
+        const cfPayload = {
+          can_carry_forward:         cf.can_carry_forward,
+          carry_forward_type:        cf.carry_forward_type,
+          max_carry_forward_days:    cf.max_carry_forward_days,
+          carry_forward_mode:        cf.carry_forward_mode,
+          carry_forward_expiry_days: cfExpiryMode === "never" ? 0 : cf.carry_forward_expiry_days,
+        };
+        await clientApi.patch<{ message: string }>(API.leave.policyDetail(selectedType), cfPayload);
+        showToast(res.data.message || "Policy updated.", "success");
+        refetch();
+      } catch (cfErr: unknown) {
+        const status = (cfErr as { status?: number })?.status;
+        const msg    = (cfErr as { message?: string })?.message;
+        if (status === 403) {
+          showToast("You don't have permission to edit leave policies.", "error");
+        } else {
+          setCfSaveError(msg || "Failed to save carry-forward settings.");
+        }
+        refetch(); // rules half of the save already succeeded — reflect that
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       showToast(msg || "Failed to save leave policy.", "error");
@@ -329,6 +411,17 @@ export default function LeavePoliciesTab() {
             <ToggleRow label="Allow Leave Extension" checked={rules.allow_leave_extension} onChange={v => setField("allow_leave_extension", v)} />
             <ToggleRow label="Allow Combining Leave Types" checked={rules.allow_leave_combination} onChange={v => setField("allow_leave_combination", v)} />
           </Section>
+
+          {cf && (
+            <CarryForwardSettingsSection
+              cf={cf}
+              expiryMode={cfExpiryMode}
+              onExpiryModeChange={setCfExpiryMode}
+              setField={setCfField}
+              errors={cfErrors}
+              saveError={cfSaveError}
+            />
+          )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 4 }}>
             <button className="btn btn-ghost" onClick={discard} disabled={saving}>Discard Changes</button>

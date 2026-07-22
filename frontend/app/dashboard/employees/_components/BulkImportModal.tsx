@@ -3,10 +3,14 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { downloadCsv } from "@/lib/csv";
+import { downloadBlobFile } from "@/lib/downloadFile";
 import { EmployeeBulkImportError, EmployeeBulkImportResult } from "@/types/employeeBulkImport";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"];
+
+type SampleFormat = "csv" | "xlsx";
 
 interface Props {
   onClose:   () => void;
@@ -22,24 +26,11 @@ function validateFile(file: File): string | null {
   return null;
 }
 
-function csvCell(value: string | number): string {
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
 function downloadErrorReport(errors: EmployeeBulkImportError[]) {
-  const rows = [
+  downloadCsv("error_report.csv", [
     ["Row", "Email", "Field", "Error"],
     ...errors.map(e => [e.row, e.identifier, e.field, e.message]),
-  ];
-  const csvContent = rows.map(row => row.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "error_report.csv";
-  link.click();
-  URL.revokeObjectURL(url);
+  ]);
 }
 
 export default function BulkImportModal({ onClose, onSuccess }: Props) {
@@ -49,6 +40,23 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
   const [uploading,   setUploading]   = useState(false);
   const [result,      setResult]      = useState<EmployeeBulkImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // GET /employees/bulk-import/sample/?format= — system_admin/hr_admin only
+  // (the backend enforces the 403; we just surface whatever message it sends).
+  const [sampleDownloading, setSampleDownloading] = useState<SampleFormat | null>(null);
+  const [sampleError,       setSampleError]       = useState<string | null>(null);
+
+  async function handleDownloadSample(format: SampleFormat) {
+    setSampleDownloading(format);
+    setSampleError(null);
+    const res = await downloadBlobFile(
+      API.employees.bulkImportSample,
+      { format },
+      `employee_import_sample.${format}`,
+    );
+    if (!res.success) setSampleError(res.message ?? "Failed to download sample file.");
+    setSampleDownloading(null);
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -118,6 +126,17 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
               <li>Required columns: First Name, Last Name, Work Email, Role, Department, Designation, Branch, Date of Joining</li>
               <li>Optional columns: Phone, Employee Type, Gender, DOB, Blood Group, Address</li>
             </ul>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDownloading} suppressHydrationWarning>
+                <i className="ti ti-download" /> {sampleDownloading === "csv" ? "Downloading…" : "Sample CSV"}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDownloading} suppressHydrationWarning>
+                <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? "Downloading…" : "Sample XLSX"}
+              </button>
+            </div>
+            {sampleError && (
+              <div style={{ marginTop: 8, color: "var(--error)", fontSize: 11.5 }}>{sampleError}</div>
+            )}
           </div>
 
           {/* Drop zone */}

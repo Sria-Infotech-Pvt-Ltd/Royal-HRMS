@@ -47,6 +47,7 @@ export const API = {
     approvalMatrix: (id: string) => `/employees/${id}/approval-matrix/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
+    bulkImportSample: "/employees/bulk-import/sample/",
   },
 
   roles: {
@@ -61,6 +62,7 @@ export const API = {
   settings: {
     audit: "/settings/audit/",
     company: "/settings/company/",
+    financialYear: "/settings/company/financial-year/",
     employeeCode: "/settings/employee-code/",
     emailTemplates: "/settings/email-templates/",
     approvalRules: "/settings/approval-rules/",
@@ -86,6 +88,7 @@ export const API = {
   recruitment: {
     candidates: "/recruitment/candidates/",
     bulkImport: "/recruitment/candidates/bulk-import/",
+    bulkImportSample: "/recruitment/candidates/bulk-import/sample/",
     stats: "/recruitment/candidates/stats/",
     review: "/recruitment/candidates/review/",
     detail: (id: number) => `/recruitment/candidates/${id}/`,
@@ -156,6 +159,12 @@ export const API = {
     calendar: "/leave/calendar/",
     holidays: "/leave/holidays/",
     holidayDetail: (id: string) => `/leave/holidays/${id}/`,
+    carryForward: {
+      years:   "/leave/carry-forward/years/",
+      preview: "/leave/carry-forward/preview/",
+      run:     "/leave/carry-forward/run/",
+      history: "/leave/carry-forward/history/",
+    },
   },
 
   attendance: {
@@ -182,6 +191,7 @@ export const API = {
     recordAudit: (id: string) => `/attendance/records/${id}/audit/`,
     unPunches: "/attendance/un-punches/",
     import: "/attendance/import/",
+    importSample: "/attendance/import/sample/",
     export: "/attendance/export/",
     corrections: "/attendance/corrections/",
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,

@@ -3,7 +3,10 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { downloadBlobFile } from "@/lib/downloadFile";
 import type { ImportResult, ImportRowError } from "@/types/attendance";
+
+type SampleFormat = "csv" | "xlsx";
 
 interface Props {
   onClose:    () => void;
@@ -28,6 +31,23 @@ export default function ImportModal({ onClose, onImported }: Props) {
   const [result,     setResult]     = useState<ImportResult | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // GET /attendance/import/sample/?format= — requires attendance.create
+  // (backend-enforced; we just relay whatever message it sends on 403).
+  const [sampleDownloading, setSampleDownloading] = useState<SampleFormat | null>(null);
+  const [sampleError,       setSampleError]       = useState<string | null>(null);
+
+  async function handleDownloadSample(format: SampleFormat) {
+    setSampleDownloading(format);
+    setSampleError(null);
+    const res = await downloadBlobFile(
+      API.attendance.importSample,
+      { format },
+      `attendance_import_sample.${format}`,
+    );
+    if (!res.success) setSampleError(res.message ?? "Failed to download sample file.");
+    setSampleDownloading(null);
+  }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -78,6 +98,18 @@ export default function ImportModal({ onClose, onImported }: Props) {
                   </code>
                 </span>
               </div>
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("csv")} disabled={!!sampleDownloading} suppressHydrationWarning>
+                  <i className="ti ti-download" /> {sampleDownloading === "csv" ? "Downloading…" : "Sample CSV"}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSample("xlsx")} disabled={!!sampleDownloading} suppressHydrationWarning>
+                  <i className="ti ti-download" /> {sampleDownloading === "xlsx" ? "Downloading…" : "Sample XLSX"}
+                </button>
+              </div>
+              {sampleError && (
+                <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> <span>{sampleError}</span></div>
+              )}
 
               {error && (
                 <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> <span>{error}</span></div>
