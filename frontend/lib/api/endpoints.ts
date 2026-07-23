@@ -271,6 +271,9 @@ export const API = {
   },
 
   dashboard: {
+    // Manager (single aggregated endpoint)
+    manager:             "/dashboard/manager/",
+
     // System Admin
     kpis:                "/dashboard/system-admin/kpis/",
     announcement:        "/dashboard/system-admin/announcement/",
