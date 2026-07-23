@@ -1,154 +1,323 @@
+"use client";
+
+import ClockInButton from "@/components/ClockInButton";
+import { TeamProvider, useTeam } from "@/lib/teamContext";
 import type { SessionPayload } from "@/lib/session";
-import BirthdayWidget from "@/components/dashboard/BirthdayWidget";
 
 interface Props { session: SessionPayload }
 
+const QA_META: Record<string, { icon: string; bg: string; color: string }> = {
+  apply_leave:      { icon: "ti-beach",       bg: "rgba(27,138,107,0.12)", color: "var(--success)" },
+  my_requests:      { icon: "ti-inbox",        bg: "rgba(181,101,29,0.12)", color: "var(--warn)"    },
+  team_members:     { icon: "ti-users",        bg: "rgba(14,124,134,0.12)", color: "var(--info)"    },
+  review_approvals: { icon: "ti-checks",       bg: "rgba(181,101,29,0.12)", color: "var(--warn)"    },
+  my_payslip:       { icon: "ti-receipt",      bg: "rgba(30,78,140,0.12)",  color: "var(--primary)" },
+  interviews:       { icon: "ti-user-search",  bg: "rgba(30,78,140,0.12)",  color: "var(--primary)" },
+};
+
+const APPROVAL_META: Record<string, { icon: string; color: string; bg: string }> = {
+  leave:                 { icon: "ti-beach",   color: "var(--primary)", bg: "rgba(30,78,140,0.12)"  },
+  expense:               { icon: "ti-receipt", color: "var(--warn)",    bg: "rgba(181,101,29,0.12)" },
+  attendance_correction: { icon: "ti-clock",   color: "#D97706",        bg: "rgba(217,119,6,0.12)"  },
+};
+
+const ATTENDANCE_BADGE: Record<string, string> = {
+  present:    "badge badge-success",
+  late:       "badge badge-warn",
+  half_day:   "badge badge-primary",
+  incomplete: "badge badge-neutral",
+  on_leave:   "badge badge-info",
+  weekly_off: "badge badge-neutral",
+  holiday:    "badge badge-neutral",
+  absent:     "badge badge-error",
+};
+
+const LEAVE_STATUS_BADGE: Record<string, string> = {
+  approved:   "badge badge-success",
+  pending:    "badge badge-warn",
+  l2_pending: "badge badge-warn",
+};
+
+const ACTIVITY_ICON: Record<string, { icon: string; cls: string }> = {
+  login:                        { icon: "ti-login",      cls: "tl-info"    },
+  logout:                       { icon: "ti-logout",     cls: "tl-neutral" },
+  leave_apply:                  { icon: "ti-beach",      cls: "tl-warn"    },
+  leave_approved:               { icon: "ti-check",      cls: "tl-success" },
+  leave_rejected:               { icon: "ti-x",          cls: "tl-error"   },
+  leave_cancelled:              { icon: "ti-ban",        cls: "tl-neutral" },
+  expense_submitted:            { icon: "ti-receipt",    cls: "tl-warn"    },
+  expense_approved:             { icon: "ti-check",      cls: "tl-success" },
+  attendance_correction_submit: { icon: "ti-clock-edit", cls: "tl-info"    },
+  clock_in:                     { icon: "ti-login-2",    cls: "tl-success" },
+  clock_out:                    { icon: "ti-logout-2",   cls: "tl-neutral" },
+};
+
+function initials(name: string): string {
+  return name.split(" ").map(w => w[0] ?? "").join("").toUpperCase().slice(0, 2);
+}
+
+function timeAgo(iso: string): string {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
 export default function ManagerDashboard({ session }: Props) {
-  const firstName = session.name.split(" ")[0];
+  return (
+    <TeamProvider>
+      <ManagerDashboardInner session={session} />
+    </TeamProvider>
+  );
+}
+
+function ManagerDashboardInner({ session }: Props) {
+  const { data, loading } = useTeam();
+
+  const ov      = data?.team_overview;
+  const actions = data?.quick_actions        ?? [];
+  const pending = data?.pending_approvals    ?? [];
+  const activity= data?.recent_team_activity ?? [];
+  const todayBd = data?.todays_birthdays     ?? [];
+  const upcomBd = data?.upcoming_birthdays   ?? [];
+  const teamAtt = data?.team_attendance      ?? [];
+  const leaves  = data?.upcoming_leaves      ?? [];
+
+  const presentCount = teamAtt.filter(a => a.status === "present" || a.status === "late").length;
 
   return (
     <>
-      {/* Greeting banner */}
-      <div className="dash-greeting mb-20" style={{ background: "linear-gradient(135deg, #0F6E56 0%, #0a4f3e 100%)" }}>
-        <div className="dash-greeting-content">
-          <h1>Team Overview, {firstName} 👋</h1>
-          <p>3 approvals pending · 2 team members on leave today · Monday, Jun 24</p>
-          <div className="dash-greeting-stats">
-            <div className="dgs-item"><div className="dgs-val">12</div><div className="dgs-lbl">Team Size</div></div>
-            <div className="dgs-item"><div className="dgs-val">3</div><div className="dgs-lbl">Pending Approvals</div></div>
-            <div className="dgs-item"><div className="dgs-val">2</div><div className="dgs-lbl">On Leave Today</div></div>
-            <div className="dgs-item"><div className="dgs-val">94%</div><div className="dgs-lbl">Attendance Rate</div></div>
+      {/* Manager Console */}
+      <div className="mb-20" style={{ background: "linear-gradient(135deg, #1a3a6e 0%, #0e2447 100%)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
+        <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.06)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: -20, right: -20, width: 110, height: 110, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.04)", pointerEvents: "none" }} />
+
+        {/* Top bar */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 0", position: "relative", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(255,255,255,0.10)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#fff", flexShrink: 0 }}>
+              <i className="ti ti-users-group" />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>Team Console</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>
+                {ov ? `${ov.greeting}, ${ov.manager_name.split(" ")[0]}` : `Hello, ${session.name.split(" ")[0]}`}
+              </div>
+            </div>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {ov && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.85)", border: "1px solid rgba(255,255,255,0.15)" }}>
+                <i className="ti ti-chart-bar" style={{ fontSize: 11 }} />
+                {ov.team_attendance_percentage}% Attendance
+              </span>
+            )}
+            <ClockInButton />
+          </div>
+        </div>
+
+        <div style={{ margin: "6px 16px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
+
+        {/* Stats grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+          {[
+            { icon: "ti-users",        val: ov ? String(ov.team_size)               : (loading ? "—" : "0"), lbl: "Team Size",         sub: "Active direct reports" },
+            { icon: "ti-checks",       val: ov ? String(ov.pending_approvals)        : (loading ? "—" : "0"), lbl: "Pending Approvals", sub: "Awaiting review"       },
+            { icon: "ti-beach",        val: ov ? String(ov.employees_on_leave_today) : (loading ? "—" : "0"), lbl: "On Leave Today",    sub: "Team members"          },
+            { icon: "ti-calendar",     val: ov ? `${ov.team_attendance_percentage}%` : (loading ? "—" : "—"), lbl: "Attendance Rate",   sub: "Today"                 },
+          ].map(stat => (
+            <div key={stat.lbl} style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <i className={`ti ${stat.icon}`} style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }} />
+                <span style={{ fontSize: 18, fontWeight: 800, color: "#fff", lineHeight: 1 }}>{stat.val}</span>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.72)" }}>{stat.lbl}</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.36)" }}>{stat.sub}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Quick actions */}
-      <div className="card mb-20">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div>
-        </div>
-        <div className="card-body">
-          <div className="qa-grid">
-            {[
-              { href: "/dashboard/approvals",       icon: "ti-checks",        bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "Review Approvals"  },
-              { href: "/dashboard/leave",            icon: "ti-beach",         bg: "rgba(27,138,107,0.12)", color: "var(--success)", label: "Apply Leave"       },
-              { href: "/dashboard/my-payslip",       icon: "ti-receipt",       bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "My Payslip"        },
-              { href: "/dashboard/employees",        icon: "ti-users",         bg: "rgba(14,124,134,0.12)", color: "var(--info)",    label: "Team Members"      },
-              { href: "/dashboard/interview-list",   icon: "ti-user-search",   bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Interviews"        },
-              { href: "/dashboard/my-requests",      icon: "ti-inbox",         bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "My Requests"       },
-            ].map(a => (
-              <a key={a.href} href={a.href} className="qa-tile">
-                <div className="qa-icon" style={{ background: a.bg, color: a.color }}>
-                  <i className={`ti ${a.icon}`} />
-                </div>
-                <span className="qa-label">{a.label}</span>
-              </a>
-            ))}
+      {actions.length > 0 && (
+        <div className="card mb-20">
+          <div className="card-header"><div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div></div>
+          <div className="card-body">
+            <div className="qa-grid">
+              {actions.map(action => {
+                const meta = QA_META[action.id] ?? { icon: "ti-link", bg: "var(--bg-low)", color: "var(--primary)" };
+                return (
+                  <a key={action.id} href={action.url} className="qa-tile" style={{ position: "relative" }}>
+                    <div className="qa-icon" style={{ background: meta.bg, color: meta.color }}>
+                      <i className={`ti ${meta.icon}`} />
+                    </div>
+                    <span className="qa-label">{action.label}</span>
+                    {action.count !== null && action.count > 0 && (
+                      <span style={{ position: "absolute", top: 4, right: 4, background: "var(--error)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 5px", lineHeight: 1.4 }}>
+                        {action.count}
+                      </span>
+                    )}
+                  </a>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="grid-2">
-        {/* Left */}
+        {/* Left column */}
         <div>
+          {/* Pending Approvals */}
           <div className="card mb-16">
             <div className="card-header">
               <div className="card-title"><i className="ti ti-checks" /> Pending Approvals</div>
-              <span className="badge badge-warn">3 items</span>
+              {pending.length > 0 && <span className="badge badge-warn">{pending.length} item{pending.length !== 1 ? "s" : ""}</span>}
             </div>
-            <div style={{ padding: 0 }}>
-              {[
-                { name: "Meena Iyer",  type: "Earned Leave · 5 days",       date: "Jul 1–5", icon: "ti-beach",   color: "var(--success)" },
-                { name: "Raj Kumar",   type: "Expense Claim · ₹4,800",      date: "Jun 24",  icon: "ti-wallet",  color: "var(--warn)"    },
-                { name: "Priya Sharma",type: "Work From Home · 2 days",     date: "Jun 27–28", icon: "ti-home",  color: "var(--info)"    },
-              ].map(item => (
-                <div key={item.name} style={{ display:"flex",alignItems:"center",gap:12,padding:"14px 20px",borderBottom:"1px solid var(--bg-high)" }}>
-                  <div className="qa-icon" style={{ background: "var(--bg-low)", color: item.color, width:36,height:36,fontSize:16,flexShrink:0 }}>
-                    <i className={`ti ${item.icon}`} />
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13,fontWeight:500,color:"var(--on-bg)" }}>{item.name}</div>
-                    <div style={{ fontSize:11,color:"var(--on-variant)" }}>{item.type} · {item.date}</div>
-                  </div>
-                  <div style={{ display:"flex",gap:6 }}>
-                    <button className="btn btn-success btn-sm"><i className="ti ti-check" /></button>
-                    <button className="btn btn-ghost btn-sm"><i className="ti ti-x" /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {pending.length === 0 ? (
+              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No pending approvals."}</div>
+            ) : (
+              <div style={{ padding: 0 }}>
+                {pending.map(item => {
+                  const meta = APPROVAL_META[item.approval_type] ?? APPROVAL_META.leave;
+                  return (
+                    <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: "1px solid var(--bg-high)" }}>
+                      <div className="qa-icon" style={{ background: meta.bg, color: meta.color, width: 36, height: 36, fontSize: 16, flexShrink: 0 }}>
+                        <i className={`ti ${meta.icon}`} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {item.employee_name} <span style={{ fontSize: 11, color: "var(--on-variant)", fontWeight: 400 }}>({item.employee_id})</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{item.summary} · Applied {fmtDate(item.applied_on)}</div>
+                      </div>
+                      <a href="/dashboard/approvals" className="btn btn-ghost btn-sm" style={{ flexShrink: 0, fontSize: 11 }}>Review</a>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
+          {/* Recent Team Activity */}
           <div className="card">
-            <div className="card-header">
-              <div className="card-title"><i className="ti ti-activity" /> Recent Team Activity</div>
-            </div>
+            <div className="card-header"><div className="card-title"><i className="ti ti-activity" /> Recent Team Activity</div></div>
             <div className="card-body">
-              <div className="timeline">
-                <div className="tl-item">
-                  <div className="tl-dot tl-info"><i className="ti ti-clock" /></div>
-                  <div className="tl-body"><div className="tl-title">Raj Kumar clocked in</div><div className="tl-time">Today, 8:58 AM</div></div>
-                </div>
-                <div className="tl-item">
-                  <div className="tl-dot tl-warn"><i className="ti ti-beach" /></div>
-                  <div className="tl-body"><div className="tl-title">Meena Iyer applied for leave</div><div className="tl-time">Yesterday, 5:30 PM</div></div>
-                </div>
-                <div className="tl-item">
-                  <div className="tl-dot tl-success"><i className="ti ti-user-check" /></div>
-                  <div className="tl-body"><div className="tl-title">Interview completed — Vikram Das</div><div className="tl-time">Jun 21, 3:00 PM</div></div>
-                </div>
-              </div>
+              {activity.length === 0 ? (
+                <div style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No recent activity."}</div>
+              ) : (
+                <>
+                  <div className="timeline">
+                    {activity.map((item, idx) => {
+                      const meta = ACTIVITY_ICON[item.action] ?? { icon: "ti-point", cls: "tl-neutral" };
+                      return (
+                        <div key={idx} className="tl-item">
+                          <div className={`tl-dot ${meta.cls}`}><i className={`ti ${meta.icon}`} /></div>
+                          <div className="tl-body">
+                            <div className="tl-title">{item.employee_name} — {item.description}</div>
+                            <div className="tl-time">{timeAgo(item.created_at)}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right */}
+        {/* Right column */}
         <div>
-          <BirthdayWidget />
+          {/* Birthdays */}
+          {(todayBd.length > 0 || upcomBd.length > 0) && (
+            <div className="card mb-16">
+              <div className="card-header"><div className="card-title"><i className="ti ti-cake" /> Birthdays</div></div>
+              {todayBd.length > 0 && (
+                <div style={{ padding: "10px 20px 0" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Today</div>
+                  {todayBd.map(b => (
+                    <div key={b.employee_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--bg-high)" }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(27,138,107,0.15)", color: "var(--success)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{initials(b.full_name)}</div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{b.full_name} 🎂</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{b.department}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {upcomBd.length > 0 && (
+                <div style={{ padding: "10px 20px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Upcoming (30 days)</div>
+                  {upcomBd.slice(0, 5).map(b => (
+                    <div key={b.employee_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--bg-high)" }}>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--bg-low)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{initials(b.full_name)}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{b.full_name}</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{b.department}</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)", whiteSpace: "nowrap" }}>in {b.days_until}d</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Team Attendance Today */}
           <div className="card mb-16">
             <div className="card-header">
               <div className="card-title"><i className="ti ti-users" /> Team Attendance Today</div>
-              <span className="badge badge-success">10/12 present</span>
+              {ov && <span className="badge badge-success">{presentCount}/{ov.team_size} present</span>}
             </div>
-            <div style={{ padding: 0 }}>
-              {[
-                { initials:"RK", name:"Raj Kumar",    status:"Present",     time:"9:02 AM",  badge:"badge-success" },
-                { initials:"PS", name:"Priya Sharma", status:"Present",     time:"9:15 AM",  badge:"badge-success" },
-                { initials:"MI", name:"Meena Iyer",   status:"On Leave",    time:"—",        badge:"badge-warn"    },
-                { initials:"AK", name:"Anil Kumar",   status:"Late",        time:"10:30 AM", badge:"badge-error"   },
-                { initials:"SS", name:"Sonal Shah",   status:"WFH",         time:"9:05 AM",  badge:"badge-info"    },
-              ].map(u => (
-                <div key={u.name} style={{ display:"flex",alignItems:"center",gap:12,padding:"11px 20px",borderBottom:"1px solid var(--bg-high)" }}>
-                  <div style={{ width:30,height:30,borderRadius:"50%",background:"var(--primary)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,flexShrink:0 }}>{u.initials}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13,fontWeight:500 }}>{u.name}</div>
-                    <div style={{ fontSize:11,color:"var(--on-variant)" }}>{u.time}</div>
+            {teamAtt.length === 0 ? (
+              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No attendance data."}</div>
+            ) : (
+              <div style={{ padding: 0, maxHeight: 340, overflowY: "auto" }}>
+                {teamAtt.map(emp => (
+                  <div key={emp.employee_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: "1px solid var(--bg-high)" }}>
+                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{initials(emp.employee_name)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.employee_name}</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{emp.designation} · {emp.clock_in ?? "—"}</div>
+                    </div>
+                    <span className={ATTENDANCE_BADGE[emp.status] ?? "badge badge-neutral"} style={{ flexShrink: 0, textTransform: "capitalize" }}>
+                      {emp.status.replace(/_/g, " ")}
+                    </span>
                   </div>
-                  <span className={`badge ${u.badge}`}>{u.status}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Upcoming Leaves */}
           <div className="card">
-            <div className="card-header">
-              <div className="card-title"><i className="ti ti-calendar" /> Upcoming Leaves</div>
-            </div>
-            <div style={{ padding: 0 }}>
-              {[
-                { initials:"MI", name:"Meena Iyer",  dates:"Jul 1–5",  type:"Earned Leave",   status:"Pending your approval" },
-                { initials:"RK", name:"Raj Kumar",   dates:"Jul 10",   type:"Sick Leave",     status:"Approved"              },
-              ].map(u => (
-                <div key={u.name} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 20px",borderBottom:"1px solid var(--bg-high)" }}>
-                  <div style={{ width:32,height:32,borderRadius:"50%",background:"var(--primary)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,flexShrink:0 }}>{u.initials}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13,fontWeight:500 }}>{u.name}</div>
-                    <div style={{ fontSize:11,color:"var(--on-variant)" }}>{u.dates} · {u.type}</div>
+            <div className="card-header"><div className="card-title"><i className="ti ti-calendar" /> Upcoming Leaves</div></div>
+            {leaves.length === 0 ? (
+              <div className="card-body" style={{ color: "var(--on-variant)", fontSize: 13 }}>{loading ? "Loading…" : "No upcoming leaves."}</div>
+            ) : (
+              <div style={{ padding: 0 }}>
+                {leaves.map(lv => (
+                  <div key={lv.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", borderBottom: "1px solid var(--bg-high)" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg-low)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{initials(lv.employee_name)}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{lv.employee_name}</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{lv.leave_type} · {fmtDate(lv.date_from)} – {fmtDate(lv.date_to)} ({lv.total_days}d)</div>
+                    </div>
+                    <span className={LEAVE_STATUS_BADGE[lv.status] ?? "badge badge-neutral"} style={{ flexShrink: 0, textTransform: "capitalize" }}>
+                      {lv.status.replace(/_/g, " ")}
+                    </span>
                   </div>
-                  <div style={{ fontSize:11,color:"var(--outline)",textAlign:"right" }}>{u.status}</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

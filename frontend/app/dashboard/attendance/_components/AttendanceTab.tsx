@@ -138,6 +138,7 @@ export default function AttendanceTab({ onMutated }: Props) {
           className="field-input"
           style={{ width: 160 }}
           value={date}
+          max={todayISO()}
           onChange={e => { setDate(e.target.value); setPage(1); }}
         />
         <button

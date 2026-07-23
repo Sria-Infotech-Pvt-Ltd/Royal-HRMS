@@ -287,7 +287,10 @@ export default function CompanyInfoPage() {
             <div style={{
               width: 80, height: 80, borderRadius: 10,
               border: "1.5px dashed var(--outline-v)", overflow: "hidden",
-              background: "var(--bg-low)", flexShrink: 0,
+              background: displayLogo
+                ? "repeating-conic-gradient(#e5e7eb 0% 25%, #fff 0% 50%) 0 0 / 12px 12px"
+                : "var(--bg-low)",
+              flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               {displayLogo
