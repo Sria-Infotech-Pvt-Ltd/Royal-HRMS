@@ -2164,3 +2164,179 @@ frontend/app/dashboard/approvals/page.tsx
 **Note for the team:** the standalone `/dashboard/my-requests` page and its sidebar nav link are untouched — that remains the self-service entry point for leave/expense requests. One behavioural side effect: an employee with no approval permission (`leave.approve`, `expenses.approve`, `payroll.view`, `payroll.approve`) who navigates directly to `/dashboard/approvals` will now see an empty tab bar, since "My Requests" was previously the only tab available to them there. Flagged, not addressed — no redirect/fallback was requested.
 
 Verified with `eslint` (0 errors, 0 warnings) and `tsc --noEmit` (0 errors) on the changed file.
+
+---
+
+## Session Log — 2026-07-21
+**Author: Swetha**
+
+Full-stack validation and bug-fix pass across Add Candidate, Leave Policy settings, and Holiday Calendar — reported as three separate bug lists, fixed backend + frontend together for each.
+
+### 1. Add Candidate — Field Validation
+
+**Reported:** Full Name accepted numbers; Position Applied accepted numbers/special characters; Phone accepted unlimited length plus letters/symbols; Interview Date accepted past dates.
+
+**Backend** (`backend/apps/recruitment/serializers.py`):
+- `_NAME_RE`, `_POSITION_RE` added; tightened `_PHONE_RE` to `^\+?[0-9]{10,15}$` (digits only, optional leading `+`)
+- Applied to both `CandidateCreateSerializer` (covers Add Candidate **and** the Refer & Earn submit path — same serializer) and `CandidateUpdateSerializer` (edit path had the identical bug)
+- `validate_interview_date()` added to both — rejects any date before `timezone.localdate()` (IST-aware, matches project convention)
+- Bulk CSV import serializer left untouched — imports legitimately carry historical dates
+
+**Frontend:**
+- New shared `lib/candidateValidation.ts` — `NAME_RE`, `POSITION_RE`, `PHONE_RE`, `sanitizeName/Position/Phone`, `todayDateString()` (mirrors backend regexes exactly)
+- `app/dashboard/interview-list/AddCandidateModal.tsx` — inputs sanitize on keystroke (bad chars never land in the field), `handleSave()` re-validates before the API call, date input gets `min={today}`
+- `app/dashboard/interview-list/EditCandidateModal.tsx` — same treatment for Name/Position/Interview Date (no phone field here); past-date check only fires when the date is actually *changed* — resaving a candidate with an already-past interview date (interview already happened) must not be blocked
+
+### 2. Leave Policy Settings (`/dashboard/settings/leave-policy`)
+
+**Reported:** Add Leave Type → Display Name accepted numbers/symbols; no delete/deactivate option on leave types; Max Carry Fwd behaved oddly; Add Credit Rule → Leave Type field accepted numbers/symbols and duplicate leave types.
+
+**Backend** (`backend/apps/hrms/serializers.py`):
+- `_LEAVE_NAME_RE` + `validate_leave_type_label()` on `LeavePolicyCreateSerializer` — letters/spaces/hyphens only
+- `LeavePolicyCreateSerializer.validate()` / `LeavePolicyUpdateSerializer.validate()` — when `can_carry_forward` is off, `max_carry_forward_days` is force-reset to 0 server-side (was silently keeping a stale disabled-field value); when on, must be ≥ 1
+- **Correction made mid-fix:** initially also capped `max_carry_forward_days` at `annual_days`, but the real `earned` leave policy already has `annual_days: 15` / `max_carry_forward_days: 30` (multi-year rollover cap, not a per-year figure) — that check would have broken saving existing data, confirmed against the live DB row and reverted
+- Delete (`DELETE /api/leave/policy/<leave_type>/`) and deactivate (`is_active` via PUT/PATCH) already existed server-side — the 6 built-in types were already delete-protected. No backend gap here, only frontend was missing the buttons
+
+**Frontend:**
+- New shared `lib/leaveValidation.ts` — `LEAVE_NAME_RE` / `sanitizeLeaveName`, used by both tabs below
+- `PolicyTab.tsx` — Display Name sanitizes/validates; Actions column gained a working Deactivate/Activate toggle (`ti-toggle-left/right`, same icon convention as `settings/permissions/page.tsx`) and a Delete button (disabled + tooltipped for the 6 built-in types via a local `BUILTIN_TYPES` set mirroring the backend's `_BUILTIN`); unchecking "Allow Carry Forward" now auto-resets Max Carry Fwd to 0 in both Edit and Create forms instead of leaving a stale disabled value
+- `CreditTab.tsx` — Leave Type field now sanitizes/validates the same way; duplicate leave types (case-insensitive, excluding the row being edited) now rejected client-side
+- **Note:** Credit Rules has no backend API yet — `CreditTab.tsx` is local mock state only (`SEED` array, `setTimeout` fake save), labelled "Automation coming soon" in the UI. Issues 4/5 there were necessarily frontend-only fixes; a real backend for Credit Rules is still unbuilt
+
+### 3. Holiday Calendar
+
+**Reported:** Add Holiday name field accepted numbers/symbols; same holiday name accepted with different dates; holiday name not shown on employee calendar; system admin not seeing branch-wise holidays in the system calendar or the holiday list.
+
+**Backend:**
+- `backend/apps/hrms/serializers.py` — `_HOLIDAY_NAME_RE` + `validate_name()` on `HolidayCreateSerializer` (letters/spaces/apostrophe/period/hyphen, must contain a letter); `validate()` blocks creating/renaming a holiday to a name that already exists in the same year for the same branch scope — **but skips the check entirely when editing without touching name/date/branch**, because the live DB already had 3 duplicate "Bonalu" rows for branch 10 (2026-07-23 / 07-30 / 08-19) predating this fix; without the skip, any future edit to those rows (even an unrelated field) would falsely reject as a duplicate against its own siblings
+- `backend/apps/hrms/views/holidays.py` — root cause of the two "branch holidays missing for system admin" reports: `HolidayListCreateView.get()` fell back to `qs.filter(branch__isnull=True)` (or the admin's own mismatched `.branch` string) whenever no `?branch=` param was sent. Added `_is_unrestricted(user)` (same pattern as `apps/attendance/views/hr_attendance.py`) so `system_admin`/superuser see every branch's holidays by default. Verified directly against the live `sysadmin@royal.com` account — before the fix they saw only the 1 company-wide holiday; after, all 5 (4 branch + 1 company-wide)
+- `backend/apps/attendance/services_attendance.py` + `serializers_my_attendance.py` — the attendance calendar only ever stored the literal string `"Holiday"` per day, never the actual holiday's name. Added `_holiday_name()` (used when building the `AttendanceRecord.note` for a holiday day) and `_holiday_names()` (used by `get_calendar()`, backed by the existing `HolidayCacheService.get_holidays_with_names`); new `holiday_name` field added to each calendar day and to `DayRecordSerializer`
+
+**Frontend:**
+- `app/dashboard/my-attendance/_components/AttendanceCalendar.tsx` — now renders the specific holiday name under the day cell when `status === "Holiday"`. Confirmed this is the live, wired-up employee calendar (`my-attendance/page.tsx` → `CalendarAndHistory` → `AttendanceCalendar`) — `/dashboard/my-calendar` and `_components/MyCalendarTab.tsx` are dead/mock-data code with zero real importers, left untouched
+- `types/attendance.ts` — `holiday_name?: string | null` added to `DayRecord`
+- `app/dashboard/settings/holiday-calendar/_components/HolidayFormModal.tsx` — Holiday Name field sanitizes/validates, mirroring the backend regex
+- Issues 4/5 needed **no** frontend change — `holiday-calendar/page.tsx` already calls the same `/leave/holidays/` endpoint and filters branch client-side; once the backend stopped hiding branch-specific rows, both the List and Calendar views picked them up automatically
+
+### Files Changed (2026-07-21)
+
+```
+backend/apps/recruitment/serializers.py       — name/position/phone regex, interview_date past-block
+backend/apps/hrms/serializers.py              — leave type label regex, carry-forward reset,
+                                                 holiday name regex + duplicate-name check
+backend/apps/hrms/views/holidays.py           — _is_unrestricted() branch-visibility fix
+backend/apps/attendance/services_attendance.py — _holiday_name(), _holiday_names(), holiday_name field
+backend/apps/attendance/serializers_my_attendance.py — DayRecordSerializer.holiday_name
+
+frontend/lib/candidateValidation.ts   (NEW)
+frontend/lib/leaveValidation.ts       (NEW)
+frontend/app/dashboard/interview-list/AddCandidateModal.tsx
+frontend/app/dashboard/interview-list/EditCandidateModal.tsx
+frontend/app/dashboard/settings/leave-policy/_components/PolicyTab.tsx
+frontend/app/dashboard/settings/leave-policy/_components/CreditTab.tsx
+frontend/app/dashboard/settings/holiday-calendar/_components/HolidayFormModal.tsx
+frontend/app/dashboard/my-attendance/_components/AttendanceCalendar.tsx
+frontend/types/attendance.ts
+```
+
+All backend changes verified by direct invocation against the real database (not just synthetic payloads) — including catching and reverting the annual-days carry-forward cap before it could ship and break the existing `earned` leave policy. `npx tsc --noEmit` clean after every frontend batch.
+
+### Pending
+
+- Credit Rules module still has no backend (`GET/POST/PUT/DELETE /api/leave/credit-rules/` or similar) — `CreditTab.tsx` is mock state only
+- Everything listed as Pending in the 2026-07-20 (Part 2) entry above is still outstanding
+
+---
+
+## Session Log — 22/07/2026
+**Author: G.Durga Prasad**
+**Branch: Backend/prasad**
+
+Started the session by merging `origin/demo` (18 commits — carry-forward leave settings, payroll bonus/reimbursement edit modals, candidate bulk import, financial year section) into the working branch. Rest of the session was a mix of permission-architecture fixes, a new dynamic Manager Dashboard, live production debugging (payslips + attendance geofencing), and a broad codebase audit.
+
+### Bug Fixes Shipped
+
+**1. "My Payslips" missing from employee sidebar**
+- Root cause: nav item and the `proxy.ts` route guard were both gated on `payroll.view`, which migration `0042` had (correctly) removed from the `employee` role — that permission is for HR's "view every employee's payroll" admin page, not self-service payslips
+- Proper fix (not just `permission: null`): added a new, distinct RBAC permission `payroll.view_own`, seeded to all 4 roles by default, kept separate from `payroll.view` so employees still can't see the HR admin Payroll page
+- Backend: `MyPayslipsView.get` and `AcknowledgePayslipView.post` now check `payroll.view_own` via a new `_has_perm()` helper (matches the pattern already used in `payroll/views/structures.py`)
+- Note: permissions are baked into the JWT at login — anyone already logged in needs to log out/in to pick up the new grant
+- Files: `backend/apps/accounts/migrations/0043_seed_payroll_view_own_permission.py` (new), `backend/apps/payroll/views/payslips.py`, `frontend/lib/navConfig.ts`, `frontend/proxy.ts`
+
+**2. Payroll wizard silently skipped employees with no salary configured**
+- Root cause: `ProcessPayrollView` (`backend/apps/payroll/views/cycles.py`) already returned a `skipped: [...]` list of employee names lacking an `EmployeeSalaryConfig`, but the frontend "Compute Salaries" step discarded the response body entirely — HR had zero visibility that anyone was excluded
+- Fix: capture the response and show a warning banner naming exactly who was skipped and why, with a pointer to fix it (Employees → Salary tab)
+- This is how a live bug was diagnosed: `gdurgaprasad065@gmail.com` (joined 2026-07-21) had no payslip because no `EmployeeSalaryConfig` existed when the June 25–July 24 cycle was processed, and that cycle is already `PAID` (closed) — no way to retroactively generate it; will resolve automatically from the next cycle once salary is configured
+- Files: `frontend/types/payroll.ts` (new `ProcessPayrollResult` type), `frontend/app/dashboard/payroll/_components/EarningsDeductionsStep.tsx`
+
+**3. Attendance clock-in false 403 ("outside assigned office location")**
+- Diagnosed for an employee at the Hyderabad branch (150m geofence radius) whose GPS reading was accurate but imprecise enough to land just outside the radius
+- Two real, verified fixes (not a radius change): (a) frontend now requests `enableHighAccuracy: true` from the browser's Geolocation API — previously left at the default `false`, which lets the browser use a fast, low-precision Wi-Fi/IP-based fix instead of real GPS; (b) backend geofence distance check now widens the branch radius by the device's self-reported `accuracy` value, capped at 100m so a wildly imprecise reading (e.g. a laptop's IP-based location, often 1-2km off) still can't bypass geofencing entirely
+- Also added a `logger.warning(...)` on rejection (distance, branch, effective radius, reported accuracy) — discovered mid-debugging that this app's logger had no handler wired up in `settings.py` (`LOGGING` only configures the `accounts` logger), so `.info()` calls were being silently dropped everywhere in `attendance`; used `.warning()` so it reaches Python's default stderr fallback and actually shows up in the runserver console
+- Verified by simulation against real branch data: a reading 220m away with 90m reported accuracy is now correctly allowed; a reading 2000m away with 2000m reported accuracy is still correctly rejected (the 100m cap holds)
+- Separately, a **second, unrelated** 403 case for a different "Nithin" account (`sandalanithinkumar123@gmail.com`) turned out to be a pure data issue, not a code bug: his `branch` field was set to `"TASK"` (code `WGL`), whose registered coordinates are ~185km from Hyderabad, while his real GPS position was essentially exactly at the Hyderabad branch. Needs a manual fix (not done this session): Employees → his profile → change Branch from "TASK" to "Hyderabad"
+- Files: `backend/apps/attendance/services_geofencing.py`, `backend/apps/attendance/services_attendance.py`, `frontend/hooks/useClockWidget.ts`
+
+### Features Shipped
+
+**4. Manager Dashboard — replaced 100% hardcoded/fake data with live backend-driven widgets**
+- New backend views, all scoped to `request.user.direct_reports` (via the `reporting_manager` FK) and gated by role name (`manager__team_lead`, matching the existing `_is_hr_or_admin`-style convention in this app rather than RBAC codenames): `ManagerKPIView` (team size, pending approvals, on-leave-today, attendance rate), `ManagerPendingApprovalsView` (real top-5 pending leave/expense items, links through to `/dashboard/approvals` for the actual approve/reject — not duplicated here), `ManagerTeamAttendanceTodayView`, `ManagerUpcomingLeaveView`, `ManagerRecentActivityView` (merged clock-in + leave-application feed)
+- New routes under `/dashboard/manager/*`
+- Frontend: `types/managerDashboard.ts`, `hooks/useManagerDashboard.ts`, 5 new components under `components/dashboard/manager/` (Console, PendingApprovals, TeamAttendance, UpcomingLeave, RecentActivity) — same `useFetch` pattern as the HR/Employee dashboards
+- Verified directly against real dev data (a manager with 5 direct reports, and one with 0) — all 5 endpoints return correct data, zero-report edge case handled without errors
+- Files: `backend/apps/dashboard/views/manager.py` (new), `backend/apps/dashboard/views/__init__.py`, `backend/apps/dashboard/urls.py`, `frontend/types/managerDashboard.ts` (new), `frontend/hooks/useManagerDashboard.ts` (new), `frontend/components/dashboard/manager/*.tsx` (new, 5 files), `frontend/app/dashboard/_components/ManagerDashboard.tsx` (rewritten)
+
+### Codebase Audit — findings only, NOT yet fixed
+
+Ran a broad audit (error handling / input validation / permission architecture) across `accounts`, `branch`, `recruitment`, `hrms`, `attendance`, `payroll`. The `dashboard`/`assessments`/`notifications` pass was **not completed** — session moved on before it ran. None of the ~65 findings below were fixed this session; this is a punch list for whoever picks it up next. Most notable (full detail was posted in chat, not reproduced here):
+
+- **CRITICAL** — `backend/apps/payroll/views/payslips.py`: `UpdatePayslipReimbBonusView`, `ExpenseSummaryForCycleView`, `ReferralBonusSummaryForCycleView` all call `_is_hr_admin(request.user)`, which is never defined anywhere — every call 500s. Breaks the Bonuses/Reimbursements payroll wizard step completely.
+- **CRITICAL** — `backend/apps/attendance/views/late_mark_lop.py` + `absence_alert.py` use Django's built-in `user.has_perm(...)` instead of this project's custom RBAC (`role.role_permissions.filter(...)`) — always `False` for non-superusers regardless of actual role grants, since the two systems are never synced.
+- **CRITICAL** — `backend/apps/accounts/serializers.py` (`ForgotPasswordSerializer`): fully enumerates whether an email exists (400 vs 200), contradicting its own anti-enumeration comment.
+- **CRITICAL** — `frontend/proxy.ts` `getPermissions()`: falls back to the unsigned, client-writable `royal_hrms_user` cookie when the JWT lacks a `permissions` claim.
+- **HIGH** — several `payroll` money-field gaps: no min/max validators on statutory rates or salary component percentages (components can sum >100% of CTC with no rejection), `annual_ctc` can be negative, bonus/reimbursement edits accept negative amounts.
+- **HIGH** — `payroll/views/attendance_approval.py` `CycleEmployeeDailyView`: reportee-scoping check compares against the literal string `'manager'`, but the role is actually named `'manager__team_lead'` — the scoping is dead code, any manager can query any employee's daily attendance.
+- **HIGH** — `hrms/views/leave.py`: HR approval-queue *list* is correctly scoped by `employee__hr=user` for branchless HR users, but the *detail/approve* endpoints (`_can_hr_access_request`) skip that check entirely for the same case — guessable-UUID bypass of the approval scope.
+- Full list (~15 findings per app, ranked by severity) is in the chat history for this session — re-run the audit prompts or ask Claude to recall specifics rather than re-deriving from scratch.
+
+### Uninvestigated — found mid-session, not caused by this session's work
+
+Two unexplained changes appeared in the working tree that neither this session nor any command run in it produced: `backend/apps/recruitment/views.py` had several class docstrings stripped (code unchanged), and a new Django merge migration `backend/apps/hrms/migrations/0015_merge_20260722_1100.py` appeared. Left untouched at the user's instruction pending their own investigation — worth checking before the next session if the source is still unknown.
+
+### Files Changed (22/07/2026)
+
+```
+backend/apps/accounts/migrations/0043_seed_payroll_view_own_permission.py  (NEW)
+backend/apps/payroll/views/payslips.py           — _has_perm() added; MyPayslipsView + AcknowledgePayslipView
+                                                     gated by payroll.view_own
+backend/apps/dashboard/views/manager.py           (NEW) — ManagerKPIView, ManagerPendingApprovalsView,
+                                                     ManagerTeamAttendanceTodayView, ManagerUpcomingLeaveView,
+                                                     ManagerRecentActivityView
+backend/apps/dashboard/views/__init__.py          — exports for the above
+backend/apps/dashboard/urls.py                    — /dashboard/manager/* routes
+backend/apps/attendance/services_geofencing.py    — accuracy-tolerance cap, rejection logging
+backend/apps/attendance/services_attendance.py    — passes employee_accuracy through to GeofencingService
+
+frontend/lib/navConfig.ts                         — my-payslip: permission changed to payroll.view_own
+frontend/proxy.ts                                 — /dashboard/my-payslip route guard restored, payroll.view_own
+frontend/types/managerDashboard.ts                (NEW)
+frontend/hooks/useManagerDashboard.ts             (NEW)
+frontend/components/dashboard/manager/            (NEW — ManagerConsole.tsx, ManagerPendingApprovals.tsx,
+                                                     ManagerTeamAttendance.tsx, ManagerUpcomingLeave.tsx,
+                                                     ManagerRecentActivity.tsx)
+frontend/app/dashboard/_components/ManagerDashboard.tsx   — rewritten to use the components above
+frontend/types/payroll.ts                         — ProcessPayrollResult type added
+frontend/app/dashboard/payroll/_components/EarningsDeductionsStep.tsx  — skipped-employees warning banner
+frontend/hooks/useClockWidget.ts                  — enableHighAccuracy: true
+```
+
+All backend changes verified by direct invocation against the real dev database (not synthetic payloads) — migration applied and role grants confirmed, all 5 new manager dashboard endpoints hit with a real manager account, geofencing tolerance fix verified with distance simulations against the real Hyderabad branch record. `npx tsc --noEmit` and `eslint` clean after every frontend batch.
+
+### Pending
+
+- Fix the `_is_hr_admin` NameError in `payroll/views/payslips.py` (breaks Bonuses/Reimbursements step) — highest-priority carryover
+- `gdurgaprasad065@gmail.com`: needs `EmployeeSalaryConfig` created (Salary tab) before the next payroll cycle
+- `sandalanithinkumar123@gmail.com`: needs Branch corrected from "TASK" to "Hyderabad"
+- Finish the `dashboard`/`assessments`/`notifications` audit pass (not started)
+- Work through the ~65 audit findings above — none fixed yet, only diagnosed
+- Investigate the source of the unexplained `recruitment/views.py` docstring stripping and the stray `hrms/migrations/0015_merge_20260722_1100.py`

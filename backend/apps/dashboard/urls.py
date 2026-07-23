@@ -34,4 +34,11 @@ urlpatterns = [
     path('employee/recent-requests/',    views.EmployeeRecentRequestsView.as_view()),
     path('employee/attendance-summary/', views.EmployeeAttendanceSummaryView.as_view()),
     path('employee/attendance-status/',  views.EmployeeAttendanceStatusView.as_view()),
+
+    # ── Manager Dashboard ─────────────────────────────────────────────────────
+    path('manager/kpis/',               views.ManagerKPIView.as_view()),
+    path('manager/pending-approvals/',  views.ManagerPendingApprovalsView.as_view()),
+    path('manager/team-attendance/',    views.ManagerTeamAttendanceTodayView.as_view()),
+    path('manager/upcoming-leave/',     views.ManagerUpcomingLeaveView.as_view()),
+    path('manager/recent-activity/',    views.ManagerRecentActivityView.as_view()),
 ]

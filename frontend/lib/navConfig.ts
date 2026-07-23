@@ -36,7 +36,6 @@ const ALL_NAV: NavEntry[] = [
   { section: "Time & Pay" },
   { id: "attendance",       icon: "ti-clock",                label: "Attendance",       path: "/dashboard/attendance",       permission: "attendance.view", excludeRoles: ["employee"] },
   { id: "payroll",          icon: "ti-report-money",         label: "Payroll",          path: "/dashboard/payroll",          permission: "payroll.view" },
-  { id: "my-payslip",       icon: "ti-receipt",              label: "My Payslips",      path: "/dashboard/my-payslip",       permission: "payroll.view" },
   { id: "leave",            icon: "ti-beach",                label: "Leave Management", path: "/dashboard/leave",            permission: "leave.view" },
   { id: "expenses",         icon: "ti-wallet",               label: "Expenses",         path: "/dashboard/expenses",         permission: "expenses.view" },
 
@@ -47,6 +46,7 @@ const ALL_NAV: NavEntry[] = [
 
   { section: "My" },
   { id: "my-attendance",    icon: "ti-clock-check",          label: "My Attendance",    path: "/dashboard/my-attendance",    permission: null },
+  { id: "my-payslip",       icon: "ti-receipt",              label: "My Payslips",      path: "/dashboard/my-payslip",       permission: "payroll.view_own" },
   { id: "referrals",        icon: "ti-user-plus",            label: "My Referrals",     path: "/dashboard/referrals",        permission: null },
   { id: "profile",          icon: "ti-user-circle",          label: "My Profile",       path: "/dashboard/profile",          permission: null },
 

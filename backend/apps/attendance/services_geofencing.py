@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 # Earth's mean radius in metres (WGS-84)
 _EARTH_RADIUS_M = 6_371_000
 
+# Cap on how much of the device's self-reported GPS accuracy (margin of
+# error) we'll forgive against the geofence radius. Without a cap, a
+# low-precision reading (e.g. Wi-Fi/IP-based location on a laptop, often
+# accurate to only 1-2km) would make the geofence meaningless.
+_MAX_ACCURACY_TOLERANCE_M = 100
+
 
 # ── Data structures ────────────────────────────────────────────────────────────
 
@@ -159,9 +165,10 @@ class GeofencingService:
         attendance_mode: str,
         employee_lat: Optional[float] = None,
         employee_lon: Optional[float] = None,
+        employee_accuracy: Optional[float] = None,
     ) -> GeofenceResult:
         validator = _MODE_VALIDATORS.get(attendance_mode, _validate_office)
-        return validator(employee, employee_lat, employee_lon)
+        return validator(employee, employee_lat, employee_lon, employee_accuracy)
 
 
 # ── Mode validators ────────────────────────────────────────────────────────────
@@ -170,6 +177,7 @@ def _validate_office(
     employee,
     employee_lat: Optional[float],
     employee_lon: Optional[float],
+    employee_accuracy: Optional[float] = None,
 ) -> GeofenceResult:
     """
     Office mode: validate GPS against the employee's allowed branch geofences.
@@ -179,9 +187,13 @@ def _validate_office(
     2. No branches resolved → allow punch (unassigned, log warning).
     3. None of the branches have geofencing enabled + coordinates → allow.
     4. Employee sent no GPS → reject (coordinates required).
-    5. Check Haversine distance against every geofenced branch.
-       Allow if within ANY one of them; reject if outside all.
+    5. Check Haversine distance against every geofenced branch, with the
+       branch radius widened by the device's reported GPS accuracy (capped
+       at _MAX_ACCURACY_TOLERANCE_M) so a genuinely uncertain-but-plausibly-
+       inside reading isn't hard-rejected. Allow if within ANY one of them;
+       reject if outside all.
     """
+    tolerance_m = min(employee_accuracy, _MAX_ACCURACY_TOLERANCE_M) if employee_accuracy else 0
     allowed_branches = _resolve_all_allowed_branches(employee)
 
     if not allowed_branches:
@@ -232,7 +244,7 @@ def _validate_office(
             longitude=float(branch.longitude),
         )
         distance_m = haversine_distance(employee_coord, branch_coord)
-        if distance_m <= branch.allowed_radius_meters:
+        if distance_m <= branch.allowed_radius_meters + tolerance_m:
             if best_distance is None or distance_m < best_distance:
                 best_branch   = branch
                 best_distance = distance_m
@@ -259,6 +271,13 @@ def _validate_office(
         GpsCoordinate(float(closest_branch.latitude), float(closest_branch.longitude)),
     )
 
+    logger.warning(
+        'Geofence reject: employee %s at (%.6f, %.6f) is %.1fm from "%s" '
+        '(radius %sm + accuracy tolerance %.1fm = effective %.1fm; device-reported accuracy %s).',
+        employee.pk, employee_coord.latitude, employee_coord.longitude, closest_distance,
+        closest_branch.branch_name, closest_branch.allowed_radius_meters, tolerance_m,
+        closest_branch.allowed_radius_meters + tolerance_m, employee_accuracy,
+    )
     return GeofenceResult(
         is_allowed=False,
         is_inside_geofence=False,
@@ -274,6 +293,7 @@ def _validate_no_geofence(
     employee,
     employee_lat: Optional[float],
     employee_lon: Optional[float],
+    employee_accuracy: Optional[float] = None,
 ) -> GeofenceResult:
     """
     WFH / Field / Client Location / Remote Office modes:

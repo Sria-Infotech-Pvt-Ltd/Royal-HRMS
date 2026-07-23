@@ -16,7 +16,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/dashboard/branches":         "settings.view",
   "/dashboard/attendance":       "attendance.view",
   "/dashboard/payroll":          "payroll.view",
-  "/dashboard/my-payslip":       "payroll.view",
+  "/dashboard/my-payslip":       "payroll.view_own",
   "/dashboard/leave":            "leave.view",
   "/dashboard/expenses":         "expenses.view",
   "/dashboard/approvals":        "leave.view",

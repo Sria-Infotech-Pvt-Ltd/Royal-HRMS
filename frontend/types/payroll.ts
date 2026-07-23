@@ -94,6 +94,11 @@ export interface EmployeeSalaryConfig {
   updated_at: string;
 }
 
+export interface ProcessPayrollResult {
+  payslip_count: number;
+  skipped: string[];
+}
+
 export interface PayrollCycle {
   id: string;
   cycle_start: string;

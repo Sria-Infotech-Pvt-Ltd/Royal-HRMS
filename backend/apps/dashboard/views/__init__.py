@@ -25,6 +25,13 @@ from apps.dashboard.views.people import (
     EmployeeActionItemsView,
     EmployeeRecentRequestsView,
 )
+from apps.dashboard.views.manager import (
+    ManagerKPIView,
+    ManagerPendingApprovalsView,
+    ManagerTeamAttendanceTodayView,
+    ManagerUpcomingLeaveView,
+    ManagerRecentActivityView,
+)
 
 __all__ = [
     'SystemAdminKPIView',
@@ -50,4 +57,9 @@ __all__ = [
     'HRBirthdayUpcomingView',
     'EmployeeActionItemsView',
     'EmployeeRecentRequestsView',
+    'ManagerKPIView',
+    'ManagerPendingApprovalsView',
+    'ManagerTeamAttendanceTodayView',
+    'ManagerUpcomingLeaveView',
+    'ManagerRecentActivityView',
 ]

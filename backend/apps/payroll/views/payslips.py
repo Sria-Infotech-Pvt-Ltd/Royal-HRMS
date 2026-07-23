@@ -25,11 +25,18 @@ logger = logging.getLogger(__name__)
 def _is_payroll_admin(user) -> bool:
     """
     HR and system_admin manage/view every payslip; plain employees only see
-    their own via MyPayslipsView. payroll.view is held by both hr and
-    employee (it also gates My Payslips), so it can't distinguish "view all"
-    from "view own" — this checks role identity directly instead.
+    their own via MyPayslipsView, gated by payroll.view_own instead (see
+    _has_perm) since employees don't hold payroll.view.
     """
     return bool(user.role and user.role.name in ('hr', 'system_admin'))
+
+
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class CyclePayslipListView(APIView):
@@ -322,6 +329,9 @@ class MyPayslipsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'payroll.view_own'):
+            return error('You do not have permission to view payslips.', http_status=403)
+
         payslips = EmployeePayslip.objects.filter(
             employee=request.user,
         ).select_related('cycle').order_by('-cycle__cycle_start')
@@ -340,6 +350,9 @@ class AcknowledgePayslipView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
+        if not _has_perm(request.user, 'payroll.view_own'):
+            return error('You do not have permission to view payslips.', http_status=403)
+
         payslip = get_object_or_404(EmployeePayslip, pk=pk, employee=request.user)
         if payslip.status != EmployeePayslip.STATUS_SENT:
             return error('Payslip is not in a state that can be acknowledged.')

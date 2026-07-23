@@ -129,6 +129,7 @@ class PunchService:
             attendance_mode=mode,
             employee_lat=punch_data.get('latitude'),
             employee_lon=punch_data.get('longitude'),
+            employee_accuracy=punch_data.get('accuracy'),
         )
         if not geo.is_allowed:
             raise PermissionError(geo.rejection_message)
