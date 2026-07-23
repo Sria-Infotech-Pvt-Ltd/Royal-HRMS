@@ -148,7 +148,7 @@ class CycleEmployeeDailyView(APIView):
         if not employee:
             return error('Employee not found.', http_status=404)
 
-        if role == 'manager' and employee.reporting_manager_id != request.user.pk:
+        if role == 'manager__team_lead' and employee.reporting_manager_id != request.user.pk:
             return error('Access denied.', http_status=403)
 
         from apps.attendance.models import AttendanceRecord

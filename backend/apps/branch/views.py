@@ -15,7 +15,7 @@ from apps.branch.models import Branch, City, State
 from apps.branch.serializers import BranchSerializer, CitySerializer, StateSerializer
 from apps.branch.utils import generate_branch_code
 
-logger = logging.getLogger('branch')
+logger = logging.getLogger(__name__)
 
 
 def _has_perm(user, codename):

@@ -3753,6 +3753,24 @@ class OnboardingApprovalView(APIView):
                 linked_candidate.hr_approved = True
                 linked_candidate.save(update_fields=['status', 'hr_approved', 'updated_at'])
 
+                # Auto-create the referral bonus record on conversion so referrers
+                # are never missed. (A duplicate auto-creation existed in
+                # CandidateStatusView.patch() in the recruitment app, but that
+                # view's own status whitelist excludes STATUS_CONVERTED, so it
+                # was dead code — this is the only place a candidate is ever
+                # actually marked converted.)
+                if linked_candidate.referral_by_id:
+                    from apps.recruitment.models import ReferralBonus
+                    _, _bonus_created = ReferralBonus.objects.get_or_create(
+                        candidate=linked_candidate,
+                        defaults={'referrer': linked_candidate.referral_by, 'bonus_amount': 0},
+                    )
+                    if _bonus_created:
+                        logger.info(
+                            'Referral bonus record created for referrer %s (candidate %s)',
+                            linked_candidate.referral_by_id, linked_candidate.pk,
+                        )
+
             # Auto-assign default assessments — employee must complete these to unlock full portal.
             # Works for both recruited candidates (candidate FK) and direct hires (employee FK).
             from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
@@ -4656,7 +4674,11 @@ class EmployeeBulkImportView(APIView):
                     secrets.choice(string.ascii_letters + string.digits)
                     for _ in range(12)
                 )
-                employee_id = EmployeeCodeSettings.generate_employee_id()
+                employee_id = EmployeeCodeSettings.generate_employee_id(
+                    first_name=vd['first_name'],
+                    last_name=vd['last_name'],
+                    date_of_joining=vd.get('date_of_joining'),
+                )
                 full_name   = f'{vd["first_name"]} {vd["last_name"]}'
 
                 user = User.objects.create_user(

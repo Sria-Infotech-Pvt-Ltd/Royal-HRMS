@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import logging
 
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.request import Request
-from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
@@ -33,17 +32,21 @@ from apps.attendance.serializers import (
 
 logger = logging.getLogger(__name__)
 
+_PERM_DENIED = 'You do not have permission to perform this action.'
+
 
 def _has_perm(user, codename: str) -> bool:
-    return user.is_superuser or user.has_perm(f'attendance.{codename}')
+    if not user or not user.role:
+        return False
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class AbsenceAlertPolicyListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request) -> Response:
-        if not _has_perm(request.user, 'view_absencealertpolicy'):
-            return error('You do not have permission to view absence alert policies.', status=403)
+    def get(self, request):
+        if not _has_perm(request.user, 'attendance.view'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         qs = (
             AbsenceAlertPolicy.objects
@@ -56,25 +59,29 @@ class AbsenceAlertPolicyListCreateView(APIView):
         if is_enabled is not None:
             qs = qs.filter(is_enabled=(is_enabled.lower() == 'true'))
 
-        page = paginate(request, qs)
-        serializer = AbsenceAlertPolicyListSerializer(page, many=True)
+        page_obj, paginator = paginate(qs, request)
+        serializer = AbsenceAlertPolicyListSerializer(page_obj, many=True)
         return success(
             'Absence alert policies retrieved successfully.',
-            paginated_data(request, qs, serializer.data),
+            data=paginated_data(paginator, page_obj, serializer.data),
         )
 
-    def post(self, request: Request) -> Response:
-        if not _has_perm(request.user, 'add_absencealertpolicy'):
-            return error('You do not have permission to create absence alert policies.', status=403)
+    def post(self, request):
+        if not _has_perm(request.user, 'attendance.create'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
-        serializer = AbsenceAlertPolicyCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return first_error(serializer.errors)
-
-        # Auto-generate policy_code when omitted
-        if not serializer.validated_data.get('policy_code'):
+        data = request.data.copy()
+        if not data.get('policy_code'):
             existing_count = AbsenceAlertPolicy.objects.count()
-            serializer.validated_data['policy_code'] = f'AA-{existing_count + 1:03d}'
+            data['policy_code'] = f'AA-{existing_count + 1:03d}'
+
+        serializer = AbsenceAlertPolicyCreateSerializer(data=data)
+        if not serializer.is_valid():
+            return error(
+                first_error(serializer.errors),
+                data=serializer.errors,
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         policy = serializer.save(
             created_by=request.user,
@@ -86,8 +93,8 @@ class AbsenceAlertPolicyListCreateView(APIView):
         )
         return success(
             'Absence alert policy created successfully.',
-            AbsenceAlertPolicyRetrieveSerializer(policy).data,
-            status=201,
+            data=AbsenceAlertPolicyRetrieveSerializer(policy).data,
+            http_status=status.HTTP_201_CREATED,
         )
 
 
@@ -101,41 +108,45 @@ class AbsenceAlertPolicyDetailView(APIView):
                 .select_related('created_by', 'updated_by')
                 .get(pk=pk)
             )
-        except AbsenceAlertPolicy.DoesNotExist:
+        except (AbsenceAlertPolicy.DoesNotExist, ValueError):
             return None
 
-    def get(self, request: Request, pk) -> Response:
-        if not _has_perm(request.user, 'view_absencealertpolicy'):
-            return error('You do not have permission to view absence alert policies.', status=403)
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'attendance.view'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         policy = self._get_object(pk)
         if policy is None:
-            return error('Absence alert policy not found.', status=404)
+            return error('Absence alert policy not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         return success(
             'Absence alert policy retrieved successfully.',
-            AbsenceAlertPolicyRetrieveSerializer(policy).data,
+            data=AbsenceAlertPolicyRetrieveSerializer(policy).data,
         )
 
-    def put(self, request: Request, pk) -> Response:
+    def put(self, request, pk):
         return self._update(request, pk, partial=False)
 
-    def patch(self, request: Request, pk) -> Response:
+    def patch(self, request, pk):
         return self._update(request, pk, partial=True)
 
-    def _update(self, request: Request, pk, *, partial: bool) -> Response:
-        if not _has_perm(request.user, 'change_absencealertpolicy'):
-            return error('You do not have permission to update absence alert policies.', status=403)
+    def _update(self, request, pk, *, partial: bool):
+        if not _has_perm(request.user, 'attendance.edit'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         policy = self._get_object(pk)
         if policy is None:
-            return error('Absence alert policy not found.', status=404)
+            return error('Absence alert policy not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         serializer = AbsenceAlertPolicyUpdateSerializer(
             policy, data=request.data, partial=partial,
         )
         if not serializer.is_valid():
-            return first_error(serializer.errors)
+            return error(
+                first_error(serializer.errors),
+                data=serializer.errors,
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         policy = serializer.save(updated_by=request.user)
         logger.info(
@@ -144,23 +155,25 @@ class AbsenceAlertPolicyDetailView(APIView):
         )
         return success(
             'Absence alert policy updated successfully.',
-            AbsenceAlertPolicyRetrieveSerializer(policy).data,
+            data=AbsenceAlertPolicyRetrieveSerializer(policy).data,
         )
 
-    def delete(self, request: Request, pk) -> Response:
-        if not _has_perm(request.user, 'delete_absencealertpolicy'):
-            return error('You do not have permission to delete absence alert policies.', status=403)
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'attendance.delete'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         policy = self._get_object(pk)
         if policy is None:
-            return error('Absence alert policy not found.', status=404)
+            return error('Absence alert policy not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if policy.is_default:
             return error(
                 'Cannot delete the default absence alert policy. '
                 'Assign another policy as default before deleting this one.',
-                status=400,
+                http_status=status.HTTP_409_CONFLICT,
             )
+        if not policy.is_active:
+            return error('Absence alert policy is already inactive.', http_status=status.HTTP_409_CONFLICT)
 
         policy.is_active = False
         policy.updated_by = request.user

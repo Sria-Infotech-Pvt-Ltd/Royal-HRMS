@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import models as django_models
 from django.utils import timezone
@@ -115,7 +115,10 @@ class UpdatePayslipReimbBonusView(APIView):
             payslip.reimbursements = _apply_expense_ids(payslip, request.data['expense_ids'])
             updated_fields.append('reimbursements')
         elif 'reimbursements' in request.data and settings_obj and settings_obj.enable_reimbursements:
-            payslip.reimbursements = request.data['reimbursements']
+            try:
+                payslip.reimbursements = Decimal(str(request.data['reimbursements']))
+            except (InvalidOperation, TypeError, ValueError):
+                return error('reimbursements must be a valid number.')
             updated_fields.append('reimbursements')
 
         # Bonuses: prefer breakdown (typed) over flat amount
@@ -123,15 +126,27 @@ class UpdatePayslipReimbBonusView(APIView):
             breakdown = request.data['bonus_breakdown']
             if not isinstance(breakdown, list):
                 return error('bonus_breakdown must be a list.')
+            try:
+                payslip.bonus = sum(
+                    (Decimal(str(e.get('amount', 0) or 0)) for e in breakdown),
+                    Decimal('0'),
+                )
+            except (InvalidOperation, TypeError, ValueError):
+                return error('bonus_breakdown amounts must be valid numbers.')
             payslip.bonus_breakdown = breakdown
-            payslip.bonus = Decimal(str(sum(float(e.get('amount', 0) or 0) for e in breakdown)))
             updated_fields.extend(['bonus_breakdown', 'bonus'])
         elif 'bonus' in request.data and settings_obj and settings_obj.enable_bonuses:
-            payslip.bonus = request.data['bonus']
+            try:
+                payslip.bonus = Decimal(str(request.data['bonus']))
+            except (InvalidOperation, TypeError, ValueError):
+                return error('bonus must be a valid number.')
             updated_fields.append('bonus')
 
         if 'lop_days' in request.data:
-            payslip.lop_days = request.data['lop_days']
+            try:
+                payslip.lop_days = Decimal(str(request.data['lop_days']))
+            except (InvalidOperation, TypeError, ValueError):
+                return error('lop_days must be a valid number.')
             per_day = payslip.gross_earnings / payslip.total_working_days if payslip.total_working_days else 0
             payslip.lop_deduction = per_day * payslip.lop_days
             updated_fields.extend(['lop_days', 'lop_deduction'])

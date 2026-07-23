@@ -140,13 +140,13 @@ class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value: str) -> str:
-        try:
-            user = User.objects.get(email__iexact=value, is_active=True)
-        except User.DoesNotExist:
-            raise serializers.ValidationError(
-                'No active account found with this email address.'
-            )
-        self.context['user'] = user
+        # Never raise here for an unknown/inactive email — doing so makes this
+        # field fail validation, which short-circuits before the view's own
+        # "same response either way" branch ever runs, defeating the whole
+        # point of that branch (silently leaking which emails are registered).
+        user = User.objects.filter(email__iexact=value, is_active=True).first()
+        if user:
+            self.context['user'] = user
         return value
 
 

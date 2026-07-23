@@ -97,7 +97,7 @@ class PayrollCycleListView(APIView):
             from apps.notifications.signals import _notify
             period = f'{cycle_start} – {cycle_end}'
             managers = User.objects.filter(
-                is_active=True, role__name='manager',
+                is_active=True, role__name='manager__team_lead',
             ).exclude(pk=request.user.pk)
             for manager in managers:
                 _notify(
@@ -267,6 +267,7 @@ class ProcessPayrollView(APIView):
                 hra = Decimal('0')
                 special_allowance = Decimal('0')
                 other_earnings = {}
+                other_earnings_total = Decimal('0')
 
                 for component in structure.components.filter(is_active=True).order_by('order'):
                     if component.calculation_type == SalaryComponent.CALC_PCT_CTC:
@@ -284,9 +285,12 @@ class ProcessPayrollView(APIView):
                     elif name_lower == 'special allowance':
                         special_allowance = amount
                     else:
+                        # JSONField can't store Decimal directly — cast to float for storage,
+                        # but keep the running total in Decimal to avoid binary float noise.
                         other_earnings[component.name] = float(amount)
+                        other_earnings_total += amount
 
-                gross = basic + hra + special_allowance + Decimal(sum(other_earnings.values()))
+                gross = basic + hra + special_allowance + other_earnings_total
 
                 # LOP deduction (placeholder — real value fed in later from attendance)
                 lop_days = Decimal('0')

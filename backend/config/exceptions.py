@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.utils import OperationalError as DBOperationalError
 from django.http import Http404
 
-logger = logging.getLogger('accounts')
+logger = logging.getLogger(__name__)
 
 
 def custom_exception_handler(exc, context):

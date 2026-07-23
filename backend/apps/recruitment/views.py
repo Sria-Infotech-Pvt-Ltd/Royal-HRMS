@@ -3,6 +3,7 @@ import io
 import logging
 import secrets
 import string
+from decimal import Decimal, InvalidOperation
 
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -563,16 +564,11 @@ class CandidateStatusView(APIView):
                 description=f'Template: {template_slug}',
             )
 
-        # Auto-create referral bonus record when candidate is converted
-        if new_status == Candidate.STATUS_CONVERTED and candidate.referral_by_id:
-            ReferralBonus.objects.get_or_create(
-                candidate=candidate,
-                defaults={'referrer': candidate.referral_by, 'bonus_amount': 0},
-            )
-            logger.info(
-                'Referral bonus record created for referrer %s (candidate %s)',
-                candidate.referral_by_id, candidate.pk,
-            )
+        # Note: referral bonus auto-creation on conversion lives in
+        # OnboardingApprovalView (apps/accounts/views.py) — STATUS_CONVERTED
+        # is never a reachable value here (excluded from _VALID_STATUS_VALUES
+        # above), since candidates are only ever converted via onboarding
+        # approval, not through this status-change endpoint.
 
         AuditLog.objects.create(
             user=request.user, action=f'candidate_{new_status}', module='recruitment',
@@ -718,16 +714,13 @@ class CandidateHRDecisionView(APIView):
             # before accessing the employment portal
             if candidate.portal_user_id:
                 from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
-                from django.db.models import Sum as DbSum
                 from apps.accounts.models import User as _User
                 default_assessments = list(
                     Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
                 )
                 assigned_assessments = []
                 for assessment in default_assessments:
-                    max_score = assessment.items.filter(
-                        item_type=AssessmentItem.TYPE_QUIZ
-                    ).aggregate(total=DbSum('pass_score'))['total'] or 0
+                    max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
                     _, created = CandidateAssignment.objects.get_or_create(
                         candidate=candidate,
                         assessment=assessment,
@@ -1629,10 +1622,10 @@ class ReferralBonusDetailView(APIView):
 
         if 'bonus_amount' in request.data:
             try:
-                amount = float(request.data['bonus_amount'])
+                amount = Decimal(str(request.data['bonus_amount']))
                 if amount < 0:
                     raise ValueError
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, InvalidOperation):
                 return error('bonus_amount must be a non-negative number.')
             bonus.bonus_amount = amount
 
@@ -1672,11 +1665,11 @@ class ReferralBonusApproveView(APIView):
 
         if 'bonus_amount' in request.data:
             try:
-                amount = float(request.data['bonus_amount'])
+                amount = Decimal(str(request.data['bonus_amount']))
                 if amount < 0:
                     raise ValueError
                 bonus.bonus_amount = amount
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, InvalidOperation):
                 return error('bonus_amount must be a non-negative number.')
 
         if 'notes' in request.data:

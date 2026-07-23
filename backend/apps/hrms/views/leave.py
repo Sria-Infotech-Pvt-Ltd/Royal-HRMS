@@ -1,6 +1,6 @@
 import logging
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.db.models import Count, F, Q, Sum
@@ -568,18 +568,18 @@ class LeaveBalanceAdjustView(APIView):
             return error('Provide at least one of total_days or used_days to adjust.')
         if total is not None:
             try:
-                total = float(total)
+                total = Decimal(str(total))
                 if total < 0:
                     raise ValueError
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, InvalidOperation):
                 return error('total_days must be a non-negative number.')
             balance.total_days = total
         if used is not None:
             try:
-                used = float(used)
+                used = Decimal(str(used))
                 if used < 0:
                     raise ValueError
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, InvalidOperation):
                 return error('used_days must be a non-negative number.')
             balance.used_days = used
         balance.save(update_fields=['total_days', 'used_days', 'updated_at'])

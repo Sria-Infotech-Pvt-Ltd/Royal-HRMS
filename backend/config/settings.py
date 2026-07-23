@@ -206,7 +206,7 @@ REST_FRAMEWORK = {
 
 # ─── JWT ─────────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -226,12 +226,15 @@ OTP_MAX_ATTEMPTS = 5
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 30
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    # TODO: add production domain, e.g. "https://royalhrms.com"
-]
+CORS_ALLOWED_ORIGINS = env.list(
+    'CORS_ALLOWED_ORIGINS',
+    default=['http://localhost:3000'],
+)
 CORS_ALLOW_CREDENTIALS = True
 CORS_PREFLIGHT_MAX_AGE = 86400
+
+# Production origins (e.g. the deployed frontend/admin domain) must be supplied via env.
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 if DEBUG:
     # Dev-only: allow any localhost port (Flutter web) and any 192.168.x.x port
@@ -241,7 +244,7 @@ if DEBUG:
         r'^http://192\.168\.\d+\.\d+(:\d+)?$',
     ]
     # Allow Django admin CSRF from localhost (any port) in development.
-    CSRF_TRUSTED_ORIGINS = [
+    CSRF_TRUSTED_ORIGINS += [
         'http://localhost:8000',
         'http://localhost:8008',
         'http://127.0.0.1:8000',
@@ -286,6 +289,14 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'verbose',
         },
+        'error_file': {
+            'level': 'WARNING',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'errors.log',
+            'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
@@ -297,5 +308,14 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'django': {
+            'handlers': ['error_file', 'console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['error_file', 'console'],
+        'level': 'WARNING',
     },
 }
