@@ -2137,6 +2137,297 @@ backend/apps/accounts/views.py
 ---
 
 ## Session Log — 2026-07-21
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Carry Forward Leave — Configuration & Process** (backend complete)
+
+Full carry-forward leave workflow implemented. Extends the existing `can_carry_forward` / `max_carry_forward_days` partial implementation with type, mode, expiry, manual execution APIs, and audit log.
+
+---
+
+#### Model Changes
+
+**`LeavePolicy` — 3 new fields:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `carry_forward_type` | CharField | `limited` | `limited` = cap at `max_carry_forward_days`; `unlimited` = carry all unused days |
+| `carry_forward_mode` | CharField | `automatic` | `automatic` = handled by Celery on 1 Jan; `manual` = HR/Admin executes via API |
+| `carry_forward_expiry_days` | PositiveIntegerField | `0` | Days before carry-forwarded balance expires (0 = never) |
+
+**`LeaveBalance` — 1 new field:**
+
+| Field | Type | Description |
+|---|---|---|
+| `carry_forward_expiry_date` | DateField (nullable) | Set when carry forward is applied; `null` if `expiry_days == 0` |
+
+**`CarryForwardLog` — new audit model** (`hrms_carry_forward_logs`):
+
+| Field | Description |
+|---|---|
+| `from_year` / `to_year` | Year range of the carry-forward run |
+| `leave_type` | Leave type (blank = all types) |
+| `executed_by` | FK to User who triggered the run |
+| `process_mode` | `execute` |
+| `total_processed` | Balances successfully created |
+| `total_skipped` | Rows skipped (already existed, ineligible, or zero unused) |
+| `total_failed` | Rows that raised an exception |
+| `is_completed` | `True` on successful run completion |
+| `notes` | Free-text field for run notes |
+
+Migration: `0014_carry_forward` — applied ✓
+
+---
+
+#### API Endpoints
+
+All 4 endpoints require `system_admin`, `hr_admin`, or `hr` role — others get 403.
+
+| Method | URL | Description |
+|---|---|---|
+| `GET` | `/api/hrms/leave/carry-forward/years/` | Available from/to year pairs derived from existing `LeaveBalance.year` values; includes `default_from` and `default_to` based on current year |
+| `POST` | `/api/hrms/leave/carry-forward/preview/` | Dry-run — shows every row that would be processed without writing to DB |
+| `POST` | `/api/hrms/leave/carry-forward/run/` | Executes carry forward; returns `409` if this `from_year→to_year` pair was already completed |
+| `GET` | `/api/hrms/leave/carry-forward/history/` | Paginated audit log of all past runs |
+
+**Preview request / response:**
+```json
+// POST /api/hrms/leave/carry-forward/preview/
+{ "from_year": 2025, "to_year": 2026 }
+
+// Response
+{
+  "from_year": 2025, "to_year": 2026,
+  "total_rows": 12, "pending_count": 10, "already_processed_count": 2,
+  "preview_rows": [
+    {
+      "employee_id": "RSS00001", "employee_name": "Arun Kumar",
+      "leave_type": "earned", "leave_type_display": "Earned Leave",
+      "unused_days": 8.0, "carry_forward_amount": 5.0,
+      "expiry_date": "2026-12-31", "already_processed": false
+    }
+  ]
+}
+```
+
+**Run request / response:**
+```json
+// POST /api/hrms/leave/carry-forward/run/
+{ "from_year": 2025, "to_year": 2026 }
+
+// Response (CarryForwardLog)
+{
+  "id": "...", "from_year": 2025, "to_year": 2026,
+  "process_mode": "execute", "executed_by_name": "Teerdaveni",
+  "total_processed": 10, "total_skipped": 2, "total_failed": 0,
+  "is_completed": true, "created_at": "2026-07-21T..."
+}
+```
+
+---
+
+#### Carry Forward Logic
+
+**For manual run (`/run/`):**
+- Only processes policies where `carry_forward_mode = manual`
+- Skips employees who already have a `to_year` balance for a given leave type (idempotent)
+- `carry_forward_type = unlimited` → carries all unused days; `limited` → capped by `max_carry_forward_days`
+- If `carry_forward_expiry_days > 0` → sets `carry_forward_expiry_date = today + expiry_days` on the created balance
+- Duplicate-run guard: returns `409` if a completed log already exists for the same `from_year→to_year`
+
+**For Celery automatic run (`reset_annual_leave_balances`):**
+- Skips policies where `carry_forward_mode = manual` (those are HR-managed only)
+- Respects new `carry_forward_type` (unlimited removes the `max_carry_forward_days` cap)
+- Sets `carry_forward_expiry_date` on each new balance when `expiry_days > 0`
+- Remains idempotent (`get_or_create`)
+
+---
+
+#### Files Modified
+
+```
+backend/apps/hrms/models.py
+  — CARRY_FORWARD_* constants added
+  — LeavePolicy: carry_forward_type, carry_forward_mode, carry_forward_expiry_days added
+  — LeaveBalance: carry_forward_expiry_date added
+  — CarryForwardLog model added
+
+backend/apps/hrms/migrations/0014_carry_forward.py     (NEW — applied)
+
+backend/apps/hrms/serializers.py
+  — CarryForwardLog imported
+  — LeavePolicySerializer, LeavePolicyCreateSerializer, LeavePolicyUpdateSerializer:
+      carry_forward_type, carry_forward_mode, carry_forward_expiry_days added
+  — LeaveBalanceSerializer: carry_forward_expiry_date added
+  — CarryForwardInputSerializer, CarryForwardLogSerializer added
+
+backend/apps/hrms/views/leave.py
+  — imports: timedelta, CARRY_FORWARD_UNLIMITED, CARRY_FORWARD_MANUAL,
+      CarryForwardLog, CarryForwardInputSerializer, CarryForwardLogSerializer added
+  — _eligible_for_policy(), _build_carry_forward_rows() helpers added
+  — CarryForwardYearsView, CarryForwardPreviewView, CarryForwardRunView,
+      CarryForwardHistoryView added
+
+backend/apps/hrms/views/__init__.py
+  — All 4 carry-forward views exported
+
+backend/apps/hrms/urls.py
+  — All 4 carry-forward views imported
+  — 4 URL patterns added under leave/carry-forward/
+
+backend/apps/hrms/tasks.py
+  — timedelta imported
+  — CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED imported from hrms.models
+  — reset_annual_leave_balances: excludes manual-mode policies; respects carry_forward_type;
+      sets carry_forward_expiry_date on created balances
+```
+
+### Pending
+
+- Frontend implementation of Carry Forward Leave UI (years selector, preview table, run button, history log)
+- Frontend implementation of Employee Bulk Import modal
+- Frontend implementation of Candidate Bulk Import modal
+- Frontend implementation of all 3 dashboard pages
+- Frontend: Leave application preview summary panel
+- Frontend: Leave stats page — `lop_days` and `lop_requests` fields
+- Frontend: Leave approvals — Branch + Department + Status filter dropdowns
+- Frontend: Employee Profile page — `?employee_id=` wiring to leave + attendance tabs
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-21 (Part 2)
+**Author: Teerdaveni**
+
+### Features Shipped
+
+---
+
+**1. Financial Year Configuration**
+
+Single source of truth for Financial Year is `Company.financial_year_start_month` (CharField, default `'April'`). Computed FY strings are never persisted — always derived at runtime.
+
+**Endpoints:**
+
+| Method | URL | Roles |
+|---|---|---|
+| `GET` | `/api/settings/company/financial-year/` | Any authenticated user |
+| `PUT` | `/api/settings/company/financial-year/` | `system_admin` only |
+
+**Response shape:**
+```json
+{
+  "financial_year_start_month": "April",
+  "previous_financial_year": "FY 2025-26",
+  "current_financial_year": "FY 2026-27",
+  "next_financial_year": "FY 2027-28"
+}
+```
+
+- Cached 24 h via `FinancialYearCacheService` in `core/cache_service.py`
+- Cache invalidated on every `Company` model `post_save` signal (`apps/accounts/signals.py`)
+- All modules consume `get_company_financial_year_config()` from `apps/accounts/utils.py`
+- `_current_year()` in `apps/hrms/views/leave.py` updated to return FY start year (not calendar year)
+- Migration: `apps/accounts/migrations/0043_company_financial_year.py`
+
+**Files modified:** `apps/accounts/models.py`, `apps/accounts/utils.py`, `apps/accounts/views.py`, `apps/accounts/urls.py`, `apps/accounts/signals.py`, `apps/accounts/migrations/0043_company_financial_year.py`, `core/cache_service.py`, `apps/hrms/views/leave.py`
+
+---
+
+**2. Sample Template Downloads — All 3 Bulk Import Modules**
+
+Shared utility `core/file_utils.py` with `build_sample_csv()` and `build_sample_xlsx()`:
+- CSV: UTF-8 BOM so Excel opens without encoding prompts
+- XLSX: bold/blue header row, first row frozen, auto column widths via `openpyxl`
+
+| Endpoint | View | Roles |
+|---|---|---|
+| `GET /api/employees/bulk-import/sample/?format=csv\|xlsx` | `EmployeeBulkImportSampleView` | `system_admin`, `hr_admin` |
+| `GET /api/attendance/import/sample/?format=csv\|xlsx` | `HRAttendanceImportSampleView` | `attendance.create` permission |
+| `GET /api/recruitment/candidates/bulk-import/sample/?format=csv\|xlsx` | `CandidateBulkImportSampleView` | `system_admin`, `hr`, `hr_admin` |
+
+Column headers verified to exactly match each module's `_COL_MAP` aliases — imports work from any downloaded template without header edits.
+
+**Files modified:** `core/file_utils.py` (new), `apps/accounts/views.py`, `apps/accounts/urls.py`, `apps/attendance/views/hr_attendance.py`, `apps/attendance/views/__init__.py`, `apps/attendance/urls.py`, `apps/recruitment/views.py`, `apps/recruitment/urls.py`
+
+---
+
+**3. Leave Opening Balance Import (Migration Tool)**
+
+Enterprise-scale one-time import for onboarding leave history from a previous HRMS. Writes directly to the existing `LeaveBalance` model — no new models.
+
+**Endpoints:**
+
+| Method | URL | Roles |
+|---|---|---|
+| `POST` | `/api/leave/balance/import/` | `system_admin`, `hr_admin`, `hr` |
+| `GET` | `/api/leave/balance/import/sample/?format=csv\|xlsx` | `system_admin`, `hr_admin`, `hr` |
+
+**POST request:** `multipart/form-data`, field `file` — CSV or XLSX, max 5 MB
+
+**POST response:**
+```json
+{
+  "success": true,
+  "message": "Import complete. 45 created, 0 failed, 2 skipped.",
+  "data": {
+    "total_rows": 47,
+    "created": 45,
+    "failed": 0,
+    "skipped": 2,
+    "processing_time_ms": 312,
+    "error_report_csv": "<base64 UTF-8 BOM CSV, present only when failures > 0>"
+  }
+}
+```
+
+**CSV template columns:**
+`Employee ID`, `Leave Type`, `Financial Year`, `Opening Balance`, `Leave Allocated`, `Leave Availed`, `Leave Balance`, `Carry Forward Days`, `Remarks`
+
+**Key implementation details:**
+- Flexible header aliasing via `_LEAVE_IMPORT_COL_MAP` — accepts `emp_id`, `employee code`, `cf_days`, `carried forward`, etc.
+- FY parsing: `"FY 2026-27"` / `"2026-27"` / `"2026"` all normalise to integer start year `2026`
+- `LeaveBalance` mapping: `total_days = opening_balance + carry_forward + allocated`, `used_days = availed`, `carried_forward = carry_forward`
+- N+1 free: 3 queries pre-load all reference data (employees, leave types, existing balances) before row loop
+- `unique_together = (employee, leave_type, year)` — existing rows reported as errors, not silently overwritten
+- Intra-file duplicates: first occurrence wins; subsequent rows skipped with count increment
+- 500-row batches via `LeaveBalance.objects.bulk_create()` inside `transaction.atomic()`
+- `AuditLog` created on every import call (including partial failures)
+- `error_report_csv` is base64-encoded UTF-8 BOM CSV — frontend decodes and offers as file download
+- URL ordering: `leave/balance/import/` and `leave/balance/import/sample/` placed **before** `leave/balance/<str:balance_id>/` to prevent static paths being matched as the wildcard
+
+**Files modified:** `apps/hrms/views/leave.py`, `apps/hrms/views/__init__.py`, `apps/hrms/urls.py`
+
+---
+
+**4. Dev Server Orphan Process — Documented Gotcha**
+
+Django `runserver` spawns a child request-handler process. Killing the parent with `Ctrl+C` does not always terminate the child. The orphan keeps port 8000 bound with old code — subsequent restarts may attach a second process that never receives traffic, causing newly registered URLs to 404 even though `manage.py shell resolve()` confirms the pattern exists.
+
+**Fix — kill all manage.py processes before every restart:**
+```powershell
+Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like "*manage.py*" } | Stop-Process -Force
+python manage.py runserver 0.0.0.0:8000
+```
+
+---
+
+### Pending
+
+- Frontend: Leave Opening Balance Import modal (file upload, progress indicator, error CSV download button)
+- Frontend: Financial Year Configuration settings page
+- Frontend: Carry Forward Leave UI (years selector, preview table, run button, history log)
+- Frontend: Employee Bulk Import modal
+- Frontend: Candidate Bulk Import modal
+- Leave integration — auto-mark employee `on_leave` in attendance when leave approved
+- Attendance reports — CSV/PDF export for HR
+
+---
+
+## Session Log — 2026-07-21
 **Author: SandalaNithin**
 
 ### Changes Shipped
@@ -2340,3 +2631,130 @@ All backend changes verified by direct invocation against the real dev database 
 - Finish the `dashboard`/`assessments`/`notifications` audit pass (not started)
 - Work through the ~65 audit findings above — none fixed yet, only diagnosed
 - Investigate the source of the unexplained `recruitment/views.py` docstring stripping and the stray `hrms/migrations/0015_merge_20260722_1100.py`
+
+---
+
+## Session Log — 2026-07-22
+**Author: Teerdaveni**
+
+### Bug Fixes Shipped
+
+**1. Sample Download 404 — All Bulk Import Endpoints**
+
+All four `?format=csv` / `?format=xlsx` sample download endpoints returned 404 before authentication was even reached.
+
+**Root cause:** DRF 3.15.2 `DefaultContentNegotiation.filter_renderers()` raises `Http404` (not `NotAcceptable`) when `?format=csv` has no matching renderer. This fires inside `APIView.initial()` before any view logic or auth check.
+
+**Fix pattern applied to all four sample views:**
+```python
+def perform_content_negotiation(self, request, force=False):
+    # ?format= selects csv/xlsx file type, not DRF renderer.
+    # Bypass renderer filtering to prevent Http404 on unknown formats.
+    from rest_framework.renderers import JSONRenderer
+    return (JSONRenderer(), 'application/json')
+```
+These views return `HttpResponse` directly so the renderer is bypassed in `finalize_response` anyway — the override has zero side effects.
+
+**Also fixed:** `_EMP_ALLOWED_ROLES` (accounts) and `_ALLOWED_IMPORT_ROLES` (recruitment) module-level constants were silently removed by a `git pull origin demo` auto-merge, causing `NameError` on every sample request. Restored from view docstrings.
+
+| Endpoint | File |
+|---|---|
+| `GET /api/employees/bulk-import/sample/?format=csv\|xlsx` | `apps/accounts/views.py` |
+| `GET /api/attendance/import/sample/?format=csv\|xlsx` | `apps/attendance/views/hr_attendance.py` |
+| `GET /api/leave/balance/import/sample/?format=csv\|xlsx` | `apps/hrms/views/leave.py` |
+| `GET /api/recruitment/candidates/bulk-import/sample/?format=csv\|xlsx` | `apps/recruitment/views.py` |
+
+---
+
+**2. Manager / Team Lead Dashboard — New Endpoint**
+
+Single endpoint returns all dashboard data in one request. Designed for enterprise orgs (2,000+ employees) — no N+1 queries.
+
+**Endpoint:** `GET /api/dashboard/manager/`
+
+**Roles allowed:** `manager`, `team_lead`, `hr_admin`, `hr`, `system_admin`
+
+**Response — 8 widgets:**
+
+| Widget | Key | Contents |
+|---|---|---|
+| Team Overview | `team_overview` | total_members, present_today, absent_today, on_leave_today, remote_today |
+| Quick Actions | `quick_actions` | pending_leave_approvals, pending_expense_approvals, correction_requests |
+| Pending Approvals | `pending_approvals` | List of leave requests awaiting this manager (L1 or L2) |
+| Today's Birthdays | `birthdays_today` | Employees with birthday today |
+| Upcoming Birthdays | `upcoming_birthdays` | Employees with birthday in next 30 days |
+| Recent Activity | `recent_team_activity` | Last 10 AuditLog entries for team |
+| Team Attendance | `team_attendance` | Per-member attendance status for today |
+| Upcoming Leaves | `upcoming_leaves` | Approved leaves starting in next 30 days |
+
+**Performance design:**
+- Team IDs fetched once: `manager.direct_reports.filter(is_active=True).values_list('id', flat=True)` — reused across all widgets
+- Attendance aggregated via `GROUP BY` (single query, not per-row loop)
+- Birthday cache: `dashboard:manager:birthdays:today:{hash}` and `upcoming:{hash}` — 6h TTL, keyed by manager ID
+- Leave pending query: `Q(l1_approver=manager, status=REQ_PENDING) | Q(l2_approver=manager, status=REQ_L2_PENDING)`
+- All list queries use `.only()` to avoid fetching unused columns
+
+**Files changed:**
+```
+backend/apps/dashboard/views/manager.py      — NEW: ManagerDashboardView + 7 widget builder functions
+backend/apps/dashboard/views/__init__.py     — ManagerDashboardView imported + added to __all__
+backend/apps/dashboard/urls.py               — path('manager/', ...) added
+```
+
+---
+
+**3. Leave Opening Balance Import — Integration Fix**
+
+After a successful import via `POST /api/leave/balance/import/`, the imported balances were not visible in Employee Dashboard, Apply Leave, HR management, reports, or carry forward. Three bugs found and fixed.
+
+**Bug 1 — Cache key ignored `year` parameter** (`apps/dashboard/views/overview.py:450`)
+
+`EmployeeLeaveBalanceView` cached results under `dashboard:employee:leave_balance:{employee.id}`. Because the key had no year, a request for `?year=2026` could return a cached `?year=2025` response (or vice versa). After import, the new data was never served until the 10-minute TTL expired — and even then, the first re-fetch could re-cache the wrong year indefinitely.
+
+```python
+# Before:
+cache_key = f'dashboard:employee:leave_balance:{employee.id}'
+# After:
+cache_key = f'dashboard:employee:leave_balance:{employee.id}:{year}'
+```
+
+**Bug 2 — No cache invalidation after import** (`apps/hrms/views/leave.py` — `LeaveOpeningBalanceImportView.post()`)
+
+After `_bulk_insert_leave_balances()` completes, the affected employees' cache entries are now explicitly deleted so the dashboard reflects the import on the very next request.
+
+```python
+if created > 0:
+    from django.core.cache import cache as _cache
+    _cache.delete_many(list({
+        f'dashboard:employee:leave_balance:{lb.employee_id}:{lb.year}'
+        for lb in to_create
+    }))
+```
+
+**Bug 3 — `valid_lt` label override in `_load_leave_ref_data()`** (`apps/hrms/views/leave.py:1538`)
+
+The second loop (LeavePolicy) could override canonical `LEAVE_TYPE_CHOICES` mappings. Example: if a `LeavePolicy` had `leave_type='earned'` but `leave_type_label='Sick'`, then `valid_lt['sick'] = 'earned'` — any CSV row with "Sick" would be imported as `earned` leave, then fail to match the `sick` balance that apply-leave queries.
+
+```python
+# Before (unsafe override):
+if p.get('leave_type_label'):
+    valid_lt[p['leave_type_label'].lower()] = p['leave_type']
+
+# After (labels only add new aliases, never override canonical codes):
+if p.get('leave_type_label') and p['leave_type_label'].lower() not in valid_lt:
+    valid_lt[p['leave_type_label'].lower()] = p['leave_type']
+```
+
+**Result:** After import, affected employees see their new balances on the next dashboard load (instant if cache was cold, ≤10 minutes if warm). All other leave views — Apply Leave, HR Management, Leave Reports, Carry Forward — read `LeaveBalance` directly with no cache, so they always reflect imports immediately.
+
+**Files changed:**
+```
+backend/apps/dashboard/views/overview.py   — cache key includes year
+backend/apps/hrms/views/leave.py           — cache invalidation after bulk insert; valid_lt label guard
+```
+
+### Pending
+
+- Manager Dashboard frontend implementation (API prompt to be provided)
+- Credit Rules backend (`GET/POST/PUT/DELETE /api/leave/credit-rules/`) — `CreditTab.tsx` is still mock-only
+- Everything listed as Pending in the 2026-07-21 entry above is still outstanding

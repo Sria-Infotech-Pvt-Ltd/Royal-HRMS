@@ -13,7 +13,9 @@ from apps.accounts.views import (
     MyProfileView,
     OnboardingView,
     OnboardingApprovalView,
+    CompanyFinancialYearView,
     CompanyRetrieveUpdateView,
+    EmployeeBulkImportSampleView,
     DepartmentDetailView,
     DepartmentListCreateView,
     DesignationDetailView,
@@ -57,6 +59,7 @@ urlpatterns = [
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
+    path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
     path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),
@@ -88,7 +91,8 @@ urlpatterns = [
     path('permissions/<int:pk>/', PermissionDetailView.as_view(), name='permission-detail'),
 
     # Company (singleton)
-    path('settings/company/',          CompanyRetrieveUpdateView.as_view(),  name='company'),
+    path('settings/company/',                     CompanyRetrieveUpdateView.as_view(),     name='company'),
+    path('settings/company/financial-year/',      CompanyFinancialYearView.as_view(),      name='company-financial-year'),
     path('settings/employee-code/',    EmployeeCodeSettingsView.as_view(),   name='employee-code-settings'),
     path('settings/approval-rules/',   ApprovalWorkflowRuleView.as_view(),   name='approval-workflow-rules'),
 

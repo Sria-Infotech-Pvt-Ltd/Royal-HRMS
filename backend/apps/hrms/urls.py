@@ -2,6 +2,10 @@ from django.urls import path
 
 from .views import (
     BirthdayView,
+    CarryForwardHistoryView,
+    CarryForwardPreviewView,
+    CarryForwardRunView,
+    CarryForwardYearsView,
     ExpenseCategoryListView,
     ExpenseDetailView,
     ExpenseListCreateView,
@@ -13,6 +17,8 @@ from .views import (
     LeaveBalanceAdjustView,
     LeaveBalanceView,
     LeaveCalendarView,
+    LeaveOpeningBalanceImportView,
+    LeaveOpeningBalanceSampleView,
     LeavePolicyView,
     LeaveRequestDetailView,
     LeaveRequestListCreateView,
@@ -34,10 +40,12 @@ urlpatterns = [
     path('leave/policy/',                LeavePolicyView.as_view(),       name='leave-policy-list'),
     path('leave/policy/<str:leave_type>/', LeavePolicyView.as_view(),     name='leave-policy-detail'),
 
-    # Leave — balance
-    path('leave/balance/',              LeaveBalanceView.as_view(),       name='leave-balance'),
-    path('leave/balance/credit/',       LeaveBalanceView.as_view(),       name='leave-balance-credit'),
-    path('leave/balance/<str:balance_id>/', LeaveBalanceAdjustView.as_view(), name='leave-balance-adjust'),
+    # Leave — balance (import paths must come before the <str:balance_id> catch-all)
+    path('leave/balance/',                   LeaveBalanceView.as_view(),              name='leave-balance'),
+    path('leave/balance/credit/',            LeaveBalanceView.as_view(),              name='leave-balance-credit'),
+    path('leave/balance/import/',            LeaveOpeningBalanceImportView.as_view(), name='leave-balance-import'),
+    path('leave/balance/import/sample/',     LeaveOpeningBalanceSampleView.as_view(), name='leave-balance-import-sample'),
+    path('leave/balance/<str:balance_id>/',  LeaveBalanceAdjustView.as_view(),        name='leave-balance-adjust'),
 
     # Leave — requests
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),
@@ -47,6 +55,12 @@ urlpatterns = [
     # Leave — stats & calendar
     path('leave/stats/',    LeaveStatsView.as_view(),    name='leave-stats'),
     path('leave/calendar/', LeaveCalendarView.as_view(), name='leave-calendar'),
+
+    # Leave — carry forward
+    path('leave/carry-forward/years/',   CarryForwardYearsView.as_view(),   name='carry-forward-years'),
+    path('leave/carry-forward/preview/', CarryForwardPreviewView.as_view(), name='carry-forward-preview'),
+    path('leave/carry-forward/run/',     CarryForwardRunView.as_view(),     name='carry-forward-run'),
+    path('leave/carry-forward/history/', CarryForwardHistoryView.as_view(), name='carry-forward-history'),
 
     # Holiday Calendar
     path('leave/holidays/',              HolidayListCreateView.as_view(), name='holiday-list'),

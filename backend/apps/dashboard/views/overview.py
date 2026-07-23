@@ -447,7 +447,7 @@ class EmployeeLeaveBalanceView(APIView):
         except (ValueError, TypeError):
             year = timezone.localdate().year
 
-        cache_key = f'dashboard:employee:leave_balance:{employee.id}'
+        cache_key = f'dashboard:employee:leave_balance:{employee.id}:{year}'
         cached    = cache.get(cache_key)
         if cached is not None:
             return success('Leave balances retrieved.', data=cached)

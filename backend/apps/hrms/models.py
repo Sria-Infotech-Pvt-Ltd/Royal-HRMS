@@ -167,6 +167,20 @@ class Holiday(models.Model):
 
 # ─── Leave Policy ─────────────────────────────────────────────────────────────
 
+CARRY_FORWARD_LIMITED   = 'limited'
+CARRY_FORWARD_UNLIMITED = 'unlimited'
+CARRY_FORWARD_TYPE_CHOICES = [
+    (CARRY_FORWARD_LIMITED,   'Limited'),
+    (CARRY_FORWARD_UNLIMITED, 'Unlimited'),
+]
+
+CARRY_FORWARD_AUTO   = 'automatic'
+CARRY_FORWARD_MANUAL = 'manual'
+CARRY_FORWARD_MODE_CHOICES = [
+    (CARRY_FORWARD_AUTO,   'Automatic'),
+    (CARRY_FORWARD_MANUAL, 'Manual'),
+]
+
 GENDER_CHOICES = [('all', 'All'), ('male', 'Male'), ('female', 'Female')]
 
 
@@ -175,9 +189,12 @@ class LeavePolicy(models.Model):
     leave_type             = models.CharField(max_length=50, unique=True)
     leave_type_label       = models.CharField(max_length=100, blank=True, default='')
     annual_days            = models.DecimalField(max_digits=5, decimal_places=1, default=0)
-    can_carry_forward      = models.BooleanField(default=False)
-    max_carry_forward_days = models.PositiveIntegerField(default=0)
-    policy_note            = models.TextField(blank=True, default='')
+    can_carry_forward         = models.BooleanField(default=False)
+    max_carry_forward_days    = models.PositiveIntegerField(default=0)
+    carry_forward_type        = models.CharField(max_length=20, choices=CARRY_FORWARD_TYPE_CHOICES, default=CARRY_FORWARD_LIMITED)
+    carry_forward_mode        = models.CharField(max_length=20, choices=CARRY_FORWARD_MODE_CHOICES, default=CARRY_FORWARD_AUTO)
+    carry_forward_expiry_days = models.PositiveIntegerField(default=0, help_text='Days before carry-forwarded balance expires. 0 = never.')
+    policy_note               = models.TextField(blank=True, default='')
     is_active              = models.BooleanField(default=True)
 
     # ── Leave Application Rules ──
@@ -239,11 +256,12 @@ class LeaveBalance(models.Model):
     employee         = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='leave_balances')
     leave_type       = models.CharField(max_length=20, choices=LEAVE_TYPE_CHOICES)
     year             = models.PositiveIntegerField()
-    total_days       = models.DecimalField(max_digits=5, decimal_places=1, default=0)
-    used_days        = models.DecimalField(max_digits=5, decimal_places=1, default=0)
-    carried_forward  = models.DecimalField(max_digits=5, decimal_places=1, default=0)
-    created_at       = models.DateTimeField(auto_now_add=True)
-    updated_at       = models.DateTimeField(auto_now=True)
+    total_days                = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    used_days                 = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    carried_forward           = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    carry_forward_expiry_date = models.DateField(null=True, blank=True)
+    created_at                = models.DateTimeField(auto_now_add=True)
+    updated_at                = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table      = 'hrms_leave_balances'
@@ -255,6 +273,35 @@ class LeaveBalance(models.Model):
     @property
     def available_days(self):
         return self.total_days - self.used_days
+
+
+# ─── Carry Forward Log ───────────────────────────────────────────────────────
+
+class CarryForwardLog(models.Model):
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    from_year       = models.PositiveIntegerField()
+    to_year         = models.PositiveIntegerField()
+    leave_type      = models.CharField(max_length=50, blank=True, default='')
+    executed_by     = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='carry_forward_executions',
+    )
+    process_mode    = models.CharField(max_length=20, default='execute')
+    total_processed = models.PositiveIntegerField(default=0)
+    total_skipped   = models.PositiveIntegerField(default=0)
+    total_failed    = models.PositiveIntegerField(default=0)
+    is_completed    = models.BooleanField(default=False)
+    notes           = models.TextField(blank=True, default='')
+    created_at      = models.DateTimeField(auto_now_add=True)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_carry_forward_logs'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        by = self.executed_by.full_name if self.executed_by_id else 'System'
+        return f'CarryForward {self.from_year}→{self.to_year} by {by}'
 
 
 # ─── Leave Request ────────────────────────────────────────────────────────────

@@ -1,9 +1,14 @@
+import base64
+import csv
+import io
 import logging
-from datetime import date
+import time
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.db.models import Count, F, Q, Sum
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -11,15 +16,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
-from core.responses import error, first_error, success
+from core.responses import error, first_error, get_client_ip, success
 
 from ..models import (
     APPROVAL_APPROVED, APPROVAL_REJECTED,
+    CARRY_FORWARD_UNLIMITED, CARRY_FORWARD_MANUAL,
     LEAVE_LWP, LEAVE_TYPE_CHOICES,
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
-    LeaveBalance, LeavePolicy, LeaveRequest,
+    CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
 )
 from ..serializers import (
+    CarryForwardInputSerializer,
+    CarryForwardLogSerializer,
     LeaveBalanceSerializer,
     LeavePolicyCreateSerializer,
     LeavePolicySerializer,
@@ -38,7 +46,9 @@ def _has_perm(user, codename: str) -> bool:
 
 
 def _current_year() -> int:
-    return date.today().year
+    from apps.accounts.utils import get_company_financial_year_config, get_fy_start_year
+    config = get_company_financial_year_config()
+    return get_fy_start_year(date.today(), config.get('financial_year_start_month', 'April'))
 
 
 def _resolve_approver(role_str: str, employee) -> 'accounts.User | None':
@@ -1108,3 +1118,587 @@ class LeaveCalendarView(APIView):
             for lr in qs.order_by('start_date')
         ]
         return success('Calendar events retrieved.', events)
+
+
+# ─── Carry Forward ────────────────────────────────────────────────────────────
+
+def _eligible_for_policy(employee, policy, today) -> bool:
+    """Return False if the employee doesn't meet the policy's eligibility rules."""
+    doj = getattr(employee, 'date_of_joining', None)
+    if policy.minimum_service_period > 0 and doj:
+        months_served = (today.year - doj.year) * 12 + (today.month - doj.month)
+        if months_served < policy.minimum_service_period:
+            return False
+    if policy.applicable_branches and (
+        not employee.branch or employee.branch not in policy.applicable_branches
+    ):
+        return False
+    if policy.applicable_departments and (
+        not employee.department or employee.department not in policy.applicable_departments
+    ):
+        return False
+    if policy.applicable_designations and (
+        not employee.designation or employee.designation not in policy.applicable_designations
+    ):
+        return False
+    return True
+
+
+def _build_carry_forward_rows(employees, policies, from_year, to_year, today):
+    """
+    Return a list of preview dicts and a set of (employee_id, leave_type) keys
+    that already have a to_year balance.
+    """
+    leave_type_label_map = dict(LEAVE_TYPE_CHOICES)
+
+    existing_to_year = set(
+        LeaveBalance.objects.filter(year=to_year)
+        .values_list('employee_id', 'leave_type')
+    )
+
+    rows = []
+    for employee in employees:
+        for policy in policies:
+            if not policy.can_carry_forward:
+                continue
+            if not _eligible_for_policy(employee, policy, today):
+                continue
+
+            prev = LeaveBalance.objects.filter(
+                employee=employee, leave_type=policy.leave_type, year=from_year,
+            ).first()
+            if not prev:
+                continue
+
+            unused = prev.total_days - prev.used_days
+            if unused <= 0:
+                continue
+
+            if policy.carry_forward_type == CARRY_FORWARD_UNLIMITED:
+                cf_amount = unused
+            else:
+                cf_amount = min(unused, Decimal(str(policy.max_carry_forward_days)))
+
+            expiry_date = None
+            if policy.carry_forward_expiry_days > 0:
+                expiry_date = today + timedelta(days=policy.carry_forward_expiry_days)
+
+            already = (employee.id, policy.leave_type) in existing_to_year
+
+            rows.append({
+                'employee_id':          employee.employee_id or '',
+                'employee_name':        employee.full_name,
+                'leave_type':           policy.leave_type,
+                'leave_type_display':   leave_type_label_map.get(policy.leave_type, policy.leave_type),
+                'unused_days':          float(unused),
+                'carry_forward_amount': float(cf_amount),
+                'expiry_date':          expiry_date.isoformat() if expiry_date else None,
+                'already_processed':    already,
+            })
+
+    return rows
+
+
+class CarryForwardYearsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        role = _role_name(request.user)
+        if role not in ('system_admin', 'hr_admin', 'hr'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        today = date.today()
+        years = (
+            LeaveBalance.objects
+            .values_list('year', flat=True)
+            .distinct()
+            .order_by('year')
+        )
+
+        pairs = [
+            {'from_year': y, 'to_year': y + 1}
+            for y in years
+        ]
+
+        return success('Available carry-forward year pairs.', {
+            'years':        pairs,
+            'default_from': today.year - 1,
+            'default_to':   today.year,
+        })
+
+
+class CarryForwardPreviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        role = _role_name(request.user)
+        if role not in ('system_admin', 'hr_admin', 'hr'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        ser = CarryForwardInputSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors), http_status=status.HTTP_400_BAD_REQUEST)
+
+        from_year = ser.validated_data['from_year']
+        to_year   = ser.validated_data['to_year']
+        today     = date.today()
+
+        from apps.accounts.models import User
+        employees = list(
+            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+        )
+        policies = list(LeavePolicy.objects.filter(is_active=True, can_carry_forward=True))
+
+        rows = _build_carry_forward_rows(employees, policies, from_year, to_year, today)
+
+        already_count = sum(1 for r in rows if r['already_processed'])
+
+        return success('Carry-forward preview.', {
+            'from_year':               from_year,
+            'to_year':                 to_year,
+            'preview_rows':            rows,
+            'total_rows':              len(rows),
+            'already_processed_count': already_count,
+            'pending_count':           len(rows) - already_count,
+        })
+
+
+class CarryForwardRunView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        role = _role_name(request.user)
+        if role not in ('system_admin', 'hr_admin', 'hr'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        ser = CarryForwardInputSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors), http_status=status.HTTP_400_BAD_REQUEST)
+
+        from_year = ser.validated_data['from_year']
+        to_year   = ser.validated_data['to_year']
+        today     = date.today()
+
+        if CarryForwardLog.objects.filter(
+            from_year=from_year, to_year=to_year, is_completed=True,
+        ).exists():
+            return error(
+                f'Carry forward for {from_year}→{to_year} has already been executed. '
+                'Check history for details.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        from apps.accounts.models import User
+        employees = list(
+            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+        )
+        policies = list(
+            LeavePolicy.objects.filter(
+                is_active=True, can_carry_forward=True, carry_forward_mode=CARRY_FORWARD_MANUAL,
+            )
+        )
+
+        processed = 0
+        skipped   = 0
+        failed    = 0
+
+        for employee in employees:
+            for policy in policies:
+                if not _eligible_for_policy(employee, policy, today):
+                    skipped += 1
+                    continue
+
+                prev = LeaveBalance.objects.filter(
+                    employee=employee, leave_type=policy.leave_type, year=from_year,
+                ).first()
+                if not prev:
+                    skipped += 1
+                    continue
+
+                unused = prev.total_days - prev.used_days
+                if unused <= 0:
+                    skipped += 1
+                    continue
+
+                if policy.carry_forward_type == CARRY_FORWARD_UNLIMITED:
+                    cf_amount = unused
+                else:
+                    cf_amount = min(unused, Decimal(str(policy.max_carry_forward_days)))
+
+                expiry_date = None
+                if policy.carry_forward_expiry_days > 0:
+                    expiry_date = today + timedelta(days=policy.carry_forward_expiry_days)
+
+                try:
+                    existing = LeaveBalance.objects.filter(
+                        employee=employee, leave_type=policy.leave_type, year=to_year,
+                    ).first()
+                    if existing:
+                        skipped += 1
+                        continue
+
+                    LeaveBalance.objects.create(
+                        employee=employee,
+                        leave_type=policy.leave_type,
+                        year=to_year,
+                        total_days=policy.annual_days + cf_amount,
+                        carried_forward=cf_amount,
+                        carry_forward_expiry_date=expiry_date,
+                    )
+                    processed += 1
+                except Exception:
+                    logger.exception(
+                        'CarryForward failed for employee=%s leave_type=%s',
+                        employee.employee_id, policy.leave_type,
+                    )
+                    failed += 1
+
+        log = CarryForwardLog.objects.create(
+            from_year=from_year,
+            to_year=to_year,
+            executed_by=request.user,
+            process_mode='execute',
+            total_processed=processed,
+            total_skipped=skipped,
+            total_failed=failed,
+            is_completed=True,
+        )
+
+        return success('Carry forward executed.', CarryForwardLogSerializer(log).data)
+
+
+class CarryForwardHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        role = _role_name(request.user)
+        if role not in ('system_admin', 'hr_admin', 'hr'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        qs                  = CarryForwardLog.objects.select_related('executed_by').order_by('-created_at')
+        page_obj, paginator = paginate(qs, request)
+        results             = CarryForwardLogSerializer(page_obj, many=True).data
+        return success('Carry-forward history.', paginated_data(paginator, page_obj, results))
+
+
+# ─── Leave Opening Balance Import ─────────────────────────────────────────────
+
+_LEAVE_IMPORT_ALLOWED_ROLES = frozenset({'system_admin', 'hr_admin', 'hr'})
+_LEAVE_IMPORT_BATCH_SIZE    = 500
+_LEAVE_IMPORT_MAX_BYTES     = 5 * 1024 * 1024  # 5 MB
+
+_LEAVE_IMPORT_COL_MAP = {
+    'employee id': 'employee_id',         'employee_id': 'employee_id',
+    'employee code': 'employee_id',       'employee_code': 'employee_id',
+    'emp id': 'employee_id',              'emp_id': 'employee_id',
+    'emp code': 'employee_id',            'emp_code': 'employee_id',
+    'leave type': 'leave_type',           'leave_type': 'leave_type',
+    'financial year': 'financial_year',   'financial_year': 'financial_year',
+    'fy': 'financial_year',               'year': 'financial_year',
+    'fy year': 'financial_year',
+    'opening balance': 'opening_balance', 'opening_balance': 'opening_balance',
+    'opening': 'opening_balance',
+    'leave allocated': 'allocated',       'leave_allocated': 'allocated',
+    'allocated': 'allocated',             'allocation': 'allocated',
+    'leave availed': 'availed',           'leave_availed': 'availed',
+    'availed': 'availed',                 'used': 'availed',
+    'used days': 'availed',               'leaves used': 'availed',
+    'carry forward': 'carry_forward',         'carry_forward': 'carry_forward',
+    'carry forward days': 'carry_forward',    'carry_forward_days': 'carry_forward',
+    'cf days': 'carry_forward',               'cf_days': 'carry_forward',
+    'carried forward': 'carry_forward',       'carried_forward': 'carry_forward',
+    'leave balance': 'balance',           'leave_balance': 'balance',
+    'balance': 'balance',                 'closing balance': 'balance',
+    'lop days': 'lop_days',               'lop_days': 'lop_days',
+    'lop': 'lop_days',
+    'remarks': 'remarks',                 'notes': 'remarks',
+    'comments': 'remarks',
+}
+
+_LEAVE_IMPORT_SAMPLE_HEADERS = [
+    'Employee ID', 'Leave Type', 'Financial Year',
+    'Opening Balance', 'Leave Allocated', 'Leave Availed',
+    'Leave Balance', 'Carry Forward Days', 'Remarks',
+]
+
+_LEAVE_IMPORT_SAMPLE_ROWS = [
+    ['RSS00001', 'Casual Leave', 'FY 2026-27', '6',  '6',  '2', '10', '0', 'Opening migration'],
+    ['RSS00001', 'Earned Leave', 'FY 2026-27', '15', '15', '5', '30', '5', ''],
+    ['RSS00002', 'Casual Leave', 'FY 2026-27', '6',  '6',  '0', '12', '0', ''],
+    ['RSS00002', 'Sick Leave',   'FY 2026-27', '7',  '7',  '3', '11', '0', ''],
+]
+
+
+def _leave_err(row_num, emp_id, lt, fy, reason) -> dict:
+    return {'row': row_num, 'employee_id': emp_id, 'leave_type': lt, 'financial_year': fy, 'reason': reason}
+
+
+def _normalize_leave_row(raw: dict) -> dict:
+    return {
+        _LEAVE_IMPORT_COL_MAP[(k or '').strip().lower()]: (v or '').strip()
+        for k, v in raw.items()
+        if _LEAVE_IMPORT_COL_MAP.get((k or '').strip().lower())
+    }
+
+
+def _parse_fy_year(value: str):
+    val = str(value or '').strip().upper().replace('FY', '').strip()
+    if '-' in val:
+        try:
+            start = int(val.split('-')[0].strip())
+            return (2000 + start) if start < 100 else start
+        except (ValueError, IndexError):
+            return None
+    try:
+        year = int(val)
+        return year if 2000 <= year <= 2100 else None
+    except ValueError:
+        return None
+
+
+def _to_decimal_safe(value, label: str):
+    try:
+        d = Decimal(str(value or 0).strip())
+        if d < 0:
+            return None, f'{label} must be ≥ 0.'
+        return d, None
+    except Exception:
+        return None, f'{label} must be a valid number.'
+
+
+def _parse_leave_row_amounts(row: dict):
+    fields = [
+        ('opening_balance', 'Opening Balance'), ('allocated', 'Leave Allocated'),
+        ('availed', 'Leave Availed'),           ('carry_forward', 'Carry Forward Days'),
+    ]
+    vals = []
+    for key, label in fields:
+        val, err = _to_decimal_safe(row.get(key, 0), label)
+        if err:
+            return None, None, None, None, err
+        vals.append(val)
+    return vals[0], vals[1], vals[2], vals[3], None
+
+
+def _parse_leave_import_xlsx(file_obj):
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_obj, read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = iter(ws.iter_rows(values_only=True))
+        header_row = next(rows_iter, None)
+        if not header_row:
+            return [], 'The XLSX file has no header row.'
+        headers = [str(h).strip() if h is not None else '' for h in header_row]
+        rows = []
+        for raw in rows_iter:
+            if all(v is None or str(v).strip() == '' for v in raw):
+                continue
+            rows.append({headers[i]: (str(raw[i]).strip() if raw[i] is not None else '') for i in range(len(headers))})
+        wb.close()
+        return rows, None
+    except Exception as exc:
+        return [], f'Could not parse XLSX: {exc}'
+
+
+def _parse_leave_import_csv(file_obj):
+    try:
+        text = file_obj.read().decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(text))
+        return [
+            {k: (v or '').strip() for k, v in row.items()}
+            for row in reader
+            if any((v or '').strip() for v in row.values())
+        ], None
+    except Exception as exc:
+        return [], f'Could not parse CSV: {exc}'
+
+
+def _build_leave_error_csv(errors: list) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['Row', 'Employee ID', 'Leave Type', 'Financial Year', 'Reason'])
+    for e in errors:
+        writer.writerow([e.get('row'), e.get('employee_id'), e.get('leave_type'), e.get('financial_year'), e.get('reason')])
+    return base64.b64encode(buf.getvalue().encode('utf-8-sig')).decode('ascii')
+
+
+def _load_leave_ref_data(emp_ids: set):
+    from apps.accounts.models import User
+    emp_map = {
+        u.employee_id: u
+        for u in User.objects.filter(employee_id__in=emp_ids, is_active=True).only('id', 'employee_id', 'full_name')
+    }
+    valid_lt = {}
+    for code, label in LEAVE_TYPE_CHOICES:
+        valid_lt[code.lower()] = code
+        valid_lt[label.lower()] = code
+    for p in LeavePolicy.objects.filter(is_active=True).values('leave_type', 'leave_type_label'):
+        valid_lt[p['leave_type'].lower()] = p['leave_type']
+        if p.get('leave_type_label') and p['leave_type_label'].lower() not in valid_lt:
+            valid_lt[p['leave_type_label'].lower()] = p['leave_type']
+    existing = {
+        (b['employee_id'], b['leave_type'], b['year'])
+        for b in LeaveBalance.objects.filter(
+            employee_id__in=[u.pk for u in emp_map.values()]
+        ).values('employee_id', 'leave_type', 'year')
+    }
+    return emp_map, valid_lt, existing
+
+
+def _validate_leave_rows(normalized: list, emp_map: dict, valid_lt: dict, existing: set):
+    to_create, errors = [], []
+    fail_count, skip_count = 0, 0
+    seen: set = set()
+
+    for i, row in enumerate(normalized, 1):
+        emp_id = row.get('employee_id', '')
+        raw_lt = row.get('leave_type', '')
+        raw_fy = row.get('financial_year', '')
+
+        user = emp_map.get(emp_id)
+        if not user:
+            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, f'Employee "{emp_id}" not found or inactive.'))
+            fail_count += 1; continue
+
+        lt_code = valid_lt.get(raw_lt.lower())
+        if not lt_code:
+            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, f'Leave type "{raw_lt}" is not recognised.'))
+            fail_count += 1; continue
+
+        year = _parse_fy_year(raw_fy)
+        if year is None:
+            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, f'Financial year "{raw_fy}" is invalid. Use YYYY or "FY 2026-27".'))
+            fail_count += 1; continue
+
+        row_key = (user.pk, lt_code, year)
+        if row_key in seen:
+            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, 'Duplicate row in file — first occurrence wins.'))
+            skip_count += 1; continue
+        seen.add(row_key)
+
+        if row_key in existing:
+            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, 'Opening balance already exists for this employee, leave type, and year.'))
+            fail_count += 1; continue
+
+        opening, allocated, availed, carry_fwd, err = _parse_leave_row_amounts(row)
+        if err:
+            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, err))
+            fail_count += 1; continue
+
+        to_create.append(LeaveBalance(
+            employee=user, leave_type=lt_code, year=year,
+            total_days=opening + carry_fwd + allocated,
+            used_days=availed, carried_forward=carry_fwd,
+        ))
+
+    return to_create, errors, fail_count, skip_count
+
+
+def _bulk_insert_leave_balances(to_create: list):
+    created, batch_errors = 0, 0
+    for i in range(0, len(to_create), _LEAVE_IMPORT_BATCH_SIZE):
+        batch = to_create[i:i + _LEAVE_IMPORT_BATCH_SIZE]
+        try:
+            with transaction.atomic():
+                LeaveBalance.objects.bulk_create(batch)
+            created += len(batch)
+        except Exception as exc:
+            logger.error('Leave balance import batch %d error: %s', i // _LEAVE_IMPORT_BATCH_SIZE + 1, exc, exc_info=True)
+            batch_errors += len(batch)
+    return created, batch_errors
+
+
+class LeaveOpeningBalanceImportView(APIView):
+    """POST /api/leave/balance/import/ — bulk import opening leave balances (migration tool)."""
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        role = _role_name(request.user)
+        if role not in _LEAVE_IMPORT_ALLOWED_ROLES:
+            return error('Only System Admin, HR Admin, and HR can import leave balances.', http_status=status.HTTP_403_FORBIDDEN)
+
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return error('Attach a CSV or XLSX file as "file".')
+        if uploaded.size > _LEAVE_IMPORT_MAX_BYTES:
+            return error('File must not exceed 5 MB.')
+
+        fname = uploaded.name.lower()
+        if fname.endswith('.xlsx'):
+            rows, parse_err = _parse_leave_import_xlsx(uploaded)
+        elif fname.endswith('.csv'):
+            rows, parse_err = _parse_leave_import_csv(uploaded)
+        else:
+            return error('Unsupported file type. Upload a .csv or .xlsx file.')
+        if parse_err:
+            return error(parse_err)
+        if not rows:
+            return error('The file contains no data rows.')
+
+        normalized = [_normalize_leave_row(r) for r in rows]
+        emp_ids = {r.get('employee_id', '') for r in normalized} - {''}
+        emp_map, valid_lt, existing = _load_leave_ref_data(emp_ids)
+
+        start_ts = time.monotonic()
+        to_create, errors, fail_count, skip_count = _validate_leave_rows(normalized, emp_map, valid_lt, existing)
+        created, batch_errors = _bulk_insert_leave_balances(to_create)
+        fail_count += batch_errors
+
+        if created > 0:
+            from django.core.cache import cache as _cache
+            _cache.delete_many(list({
+                f'dashboard:employee:leave_balance:{lb.employee_id}:{lb.year}'
+                for lb in to_create
+            }))
+
+        from apps.accounts.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user, action='leave_opening_balance_import', module='leave',
+            changes={'file': uploaded.name, 'total': len(rows), 'created': created, 'failed': fail_count, 'skipped': skip_count},
+            ip_address=get_client_ip(request),
+        )
+        logger.info('Leave balance import by %s: %d created / %d failed / %d skipped (%.1fs)',
+                    request.user.email, created, fail_count, skip_count, time.monotonic() - start_ts)
+
+        result = {
+            'total_records': len(rows),
+            'successful':    created,
+            'failed':        fail_count,
+            'skipped':       skip_count,
+            'errors':        errors[:100],
+            'error_report_csv': _build_leave_error_csv(errors) if errors else None,
+        }
+        return success('Leave opening balance import completed.', result)
+
+
+class LeaveOpeningBalanceSampleView(APIView):
+    """GET /api/leave/balance/import/sample/?format=csv|xlsx — download import template."""
+    permission_classes = [IsAuthenticated]
+
+    def perform_content_negotiation(self, request, force=False):
+        # ?format= selects csv/xlsx file type, not DRF response renderer.
+        # Bypass DRF's renderer filtering to prevent Http404 on unknown formats.
+        from rest_framework.renderers import JSONRenderer
+        return (JSONRenderer(), 'application/json')
+
+    def get(self, request):
+        role = _role_name(request.user)
+        if role not in _LEAVE_IMPORT_ALLOWED_ROLES:
+            return error('Only System Admin, HR Admin, and HR can download the leave balance import template.', http_status=status.HTTP_403_FORBIDDEN)
+
+        from core.file_utils import _CSV_MIME, _XLSX_MIME, build_sample_csv, build_sample_xlsx
+        fmt = (request.query_params.get('format') or 'csv').lower().strip()
+        if fmt == 'xlsx':
+            content  = build_sample_xlsx(_LEAVE_IMPORT_SAMPLE_HEADERS, _LEAVE_IMPORT_SAMPLE_ROWS, 'Leave Opening Balance')
+            filename = 'leave_opening_balance_sample.xlsx'
+            mime     = _XLSX_MIME
+        else:
+            content  = build_sample_csv(_LEAVE_IMPORT_SAMPLE_HEADERS, _LEAVE_IMPORT_SAMPLE_ROWS)
+            filename = 'leave_opening_balance_sample.csv'
+            mime     = _CSV_MIME
+
+        response = HttpResponse(content, content_type=mime)
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response

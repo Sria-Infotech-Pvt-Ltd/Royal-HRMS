@@ -6,6 +6,7 @@ Registered in CELERY_BEAT_SCHEDULE (config/settings.py) for periodic execution.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from celery import shared_task
 from django.db.models.functions import ExtractDay, ExtractMonth
@@ -29,7 +30,7 @@ def reset_annual_leave_balances(self):
     try:
         from decimal import Decimal
         from apps.accounts.models import User
-        from apps.hrms.models import LeaveBalance, LeavePolicy
+        from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
 
         today    = timezone.localdate()
         new_year = today.year
@@ -38,7 +39,8 @@ def reset_annual_leave_balances(self):
         active_employees = list(
             User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
         )
-        policies = list(LeavePolicy.objects.filter(is_active=True))
+        # Automatic task only runs policies set to automatic carry-forward mode
+        policies = list(LeavePolicy.objects.filter(is_active=True).exclude(carry_forward_mode=CARRY_FORWARD_MANUAL))
 
         created_total = 0
         skipped_total = 0
@@ -69,22 +71,30 @@ def reset_annual_leave_balances(self):
                     continue
 
                 carry_forward = Decimal('0')
-                if policy.can_carry_forward and policy.max_carry_forward_days > 0:
+                expiry_date   = None
+                if policy.can_carry_forward:
                     prev = LeaveBalance.objects.filter(
                         employee=employee, leave_type=policy.leave_type, year=prev_year,
                     ).first()
                     if prev:
                         unused = prev.total_days - prev.used_days
                         if unused > 0:
-                            carry_forward = min(unused, Decimal(str(policy.max_carry_forward_days)))
+                            if policy.carry_forward_type == CARRY_FORWARD_UNLIMITED:
+                                carry_forward = unused
+                            elif policy.max_carry_forward_days > 0:
+                                carry_forward = min(unused, Decimal(str(policy.max_carry_forward_days)))
+
+                            if carry_forward > 0 and policy.carry_forward_expiry_days > 0:
+                                expiry_date = today + timedelta(days=policy.carry_forward_expiry_days)
 
                 _, created = LeaveBalance.objects.get_or_create(
                     employee=employee,
                     leave_type=policy.leave_type,
                     year=new_year,
                     defaults={
-                        'total_days':      policy.annual_days + carry_forward,
-                        'carried_forward': carry_forward,
+                        'total_days':               policy.annual_days + carry_forward,
+                        'carried_forward':          carry_forward,
+                        'carry_forward_expiry_date': expiry_date,
                     },
                 )
                 if created:

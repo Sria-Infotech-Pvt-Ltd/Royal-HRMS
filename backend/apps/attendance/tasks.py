@@ -34,6 +34,46 @@ def check_missing_clockouts(self):
         raise self.retry(exc=exc)
 
 
+@shared_task(bind=True, max_retries=0, default_retry_delay=0)
+def process_attendance_import(self, import_log_id: str, imported_by_pk: str, csv_content: str):
+    """
+    Async worker for large CSV imports (> SYNC_THRESHOLD rows).
+
+    Dispatched by import_attendance_csv when the file exceeds the synchronous
+    processing threshold.  Reads the CSV content passed as a task argument,
+    runs the same bulk import engine used by the sync path, and writes the
+    final status back to AttendanceImportLog.
+    """
+    from apps.attendance.models import AttendanceImportLog
+    from apps.attendance.services_hr_ops import _run_import_bulk
+    from django.contrib.auth import get_user_model
+    import csv as _csv
+    import io as _io
+
+    _User = get_user_model()
+
+    try:
+        import_log   = AttendanceImportLog.objects.get(id=import_log_id)
+        imported_by  = _User.objects.get(pk=imported_by_pk)
+        rows         = list(_csv.DictReader(_io.StringIO(csv_content)))
+        _run_import_bulk(import_log, rows, imported_by)
+        logger.info('process_attendance_import finished | import_id=%s', import_log_id)
+    except AttendanceImportLog.DoesNotExist:
+        logger.error('process_attendance_import: import_log %s not found', import_log_id)
+    except _User.DoesNotExist:
+        logger.error('process_attendance_import: user %s not found', imported_by_pk)
+    except Exception as exc:
+        logger.error('process_attendance_import failed: %s', exc, exc_info=True)
+        try:
+            log = AttendanceImportLog.objects.get(id=import_log_id)
+            if log.status == AttendanceImportLog.STATUS_PROCESSING:
+                log.status = AttendanceImportLog.STATUS_FAILED
+                log.save(update_fields=['status', 'updated_at'])
+        except Exception:
+            pass
+        raise
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def check_absence_alerts(self):
     """

@@ -15,6 +15,7 @@ class CacheTTL:
     BRANCHES            = 12 * 3600
     DEPARTMENTS         = 12 * 3600
     DESIGNATIONS        = 12 * 3600
+    FINANCIAL_YEAR      = 24 * 3600
 
 
 def _slug(s: str) -> str:
@@ -337,3 +338,33 @@ class DesignationCacheService:
             cache.delete(cls._KEY)
         except Exception:
             logger.warning('Cache delete failed for designations:all')
+
+
+# ── Financial Year ─────────────────────────────────────────────────────────────
+
+class FinancialYearCacheService:
+    _KEY = 'financial_year_config'
+
+    @classmethod
+    def get(cls) -> dict | None:
+        try:
+            cached = cache.get(cls._KEY)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for financial_year_config')
+        return None
+
+    @classmethod
+    def set(cls, data: dict) -> None:
+        try:
+            cache.set(cls._KEY, data, CacheTTL.FINANCIAL_YEAR)
+        except Exception:
+            logger.warning('Cache write failed for financial_year_config')
+
+    @classmethod
+    def invalidate(cls) -> None:
+        try:
+            cache.delete(cls._KEY)
+        except Exception:
+            logger.warning('Cache delete failed for financial_year_config')
