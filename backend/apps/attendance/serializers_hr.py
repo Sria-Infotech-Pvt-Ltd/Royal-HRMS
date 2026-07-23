@@ -163,34 +163,42 @@ class UnpunchRowSerializer(serializers.Serializer):
 
 class CorrectionRowSerializer(serializers.Serializer):
     """One row in the HR corrections list."""
-    id                  = serializers.UUIDField()
-    employee_id         = serializers.CharField()
-    name                = serializers.CharField()
-    department          = serializers.CharField()
-    branch              = serializers.CharField()
-    date                = serializers.CharField()
-    punch_type          = serializers.CharField()
-    requested_in_time   = serializers.CharField(allow_null=True)
-    requested_out_time  = serializers.CharField(allow_null=True)
-    reason              = serializers.CharField()
-    notes               = serializers.CharField()
-    status              = serializers.CharField()
-    reviewed_by         = serializers.CharField(allow_null=True)
-    reviewed_at         = serializers.CharField(allow_null=True)
-    created_at          = serializers.CharField()
+    id                 = serializers.UUIDField()
+    employee_id        = serializers.CharField()
+    name               = serializers.CharField()
+    department         = serializers.CharField()
+    branch             = serializers.CharField()
+    date               = serializers.CharField()
+    punch_type         = serializers.CharField()
+    requested_in       = serializers.CharField(allow_null=True)
+    requested_out      = serializers.CharField(allow_null=True)
+    reason             = serializers.CharField()
+    notes              = serializers.CharField()
+    status             = serializers.CharField()
+    l1_approver_name   = serializers.CharField(allow_null=True)
+    l1_status          = serializers.CharField(allow_null=True)
+    l1_remarks         = serializers.CharField()
+    l2_approver_name   = serializers.CharField(allow_null=True)
+    l2_status          = serializers.CharField(allow_null=True)
+    l2_remarks         = serializers.CharField()
+    can_action         = serializers.BooleanField()
+    reviewed_by        = serializers.CharField(allow_null=True)
+    reviewed_at        = serializers.CharField(allow_null=True)
+    created_at         = serializers.CharField()
 
 
 class CorrectionListFilterSerializer(serializers.Serializer):
     branch     = serializers.CharField(required=False, allow_blank=True, default='')
     department = serializers.CharField(required=False, allow_blank=True, default='')
     status     = serializers.ChoiceField(
-        choices=['', 'pending', 'approved', 'rejected'],
+        choices=['', 'pending', 'l2_pending', 'approved', 'rejected'],
         required=False, allow_blank=True, default='',
     )
 
 
 class CorrectionReviewSerializer(serializers.Serializer):
-    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    action  = serializers.ChoiceField(choices=['approve', 'reject'])
+    remarks = serializers.CharField(required=False, allow_blank=True, default='')
 
 
 # ── Write serializers ─────────────────────────────────────────────────────────

@@ -803,15 +803,17 @@ class EmployeeDocument(models.Model):
 # ─── Approval Workflow Rules (global defaults) ────────────────────────────────
 
 class ApprovalWorkflowRule(models.Model):
-    WORKFLOW_LEAVE       = 'leave'
-    WORKFLOW_EXPENSE     = 'expense'
-    WORKFLOW_RESIGNATION = 'resignation'
-    WORKFLOW_LOAN        = 'loan'
+    WORKFLOW_LEAVE                 = 'leave'
+    WORKFLOW_EXPENSE               = 'expense'
+    WORKFLOW_RESIGNATION           = 'resignation'
+    WORKFLOW_LOAN                  = 'loan'
+    WORKFLOW_ATTENDANCE_CORRECTION = 'attendance_correction'
     WORKFLOW_CHOICES = [
-        (WORKFLOW_LEAVE,       'Leave Request'),
-        (WORKFLOW_EXPENSE,     'Expense Claim'),
-        (WORKFLOW_RESIGNATION, 'Resignation'),
-        (WORKFLOW_LOAN,        'Loan Request'),
+        (WORKFLOW_LEAVE,                 'Leave Request'),
+        (WORKFLOW_EXPENSE,               'Expense Claim'),
+        (WORKFLOW_RESIGNATION,           'Resignation'),
+        (WORKFLOW_LOAN,                  'Loan Request'),
+        (WORKFLOW_ATTENDANCE_CORRECTION, 'Attendance Correction'),
     ]
 
     ROLE_REPORTING_MANAGER = 'reporting_manager'
@@ -823,7 +825,7 @@ class ApprovalWorkflowRule(models.Model):
         (ROLE_ADMIN,             'Admin'),
     ]
 
-    workflow_type    = models.CharField(max_length=15, choices=WORKFLOW_CHOICES, unique=True)
+    workflow_type    = models.CharField(max_length=25, choices=WORKFLOW_CHOICES, unique=True)
     l1_approver_role = models.CharField(
                            max_length=20,
                            choices=APPROVER_ROLE_CHOICES,
@@ -863,7 +865,7 @@ class EmployeeApprovalOverride(models.Model):
                         related_name='approval_overrides',
                     )
     workflow_type = models.CharField(
-                        max_length=15,
+                        max_length=25,
                         choices=ApprovalWorkflowRule.WORKFLOW_CHOICES,
                     )
     l1_override   = models.ForeignKey(

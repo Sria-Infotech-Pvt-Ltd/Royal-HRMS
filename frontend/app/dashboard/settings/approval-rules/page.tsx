@@ -8,10 +8,11 @@ import clientApi from "@/lib/clientApi";
 import type { GlobalApprovalRule, ApprovalWorkflowType, ApproverRole } from "@/types/approvalMatrix";
 
 const WORKFLOW_ICONS: Record<string, string> = {
-  leave:       "ti-beach",
-  expense:     "ti-wallet",
-  resignation: "ti-logout",
-  loan:        "ti-coin",
+  leave:                 "ti-beach",
+  expense:               "ti-wallet",
+  resignation:           "ti-logout",
+  loan:                  "ti-coin",
+  attendance_correction: "ti-clock-edit",
 };
 
 const APPROVER_ROLE_OPTIONS: { value: ApproverRole; label: string }[] = [

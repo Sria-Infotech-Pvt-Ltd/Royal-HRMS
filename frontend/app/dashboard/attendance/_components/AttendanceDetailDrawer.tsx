@@ -27,9 +27,10 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const CORRECTION_STATUS_BADGE: Record<CorrectionStatus, string> = {
-  pending:  "badge badge-warn",
-  approved: "badge badge-success",
-  rejected: "badge badge-error",
+  pending:    "badge badge-warn",
+  l2_pending: "badge badge-info",
+  approved:   "badge badge-success",
+  rejected:   "badge badge-error",
 };
 
 const PUNCH_TYPE_LABEL: Record<PunchType, string> = {

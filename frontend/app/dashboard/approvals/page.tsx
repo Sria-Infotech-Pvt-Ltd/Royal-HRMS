@@ -12,6 +12,7 @@ import StatusCell from "../leave/_components/StatusCell";
 import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModal";
 import { LeaveRequest } from "../leave/_data";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
+import CorrectionsTab from "../attendance/_components/CorrectionsTab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ type LeaveListResponse   = PaginatedResponse<LeaveRequest>;
 type ExpenseListResponse = PaginatedResponse<ExpenseRequest>;
 
 type Section = "approvals" | "attendance";
-type RequestType = "leave" | "expense";
+type RequestType = "leave" | "expense" | "attendance_correction";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -150,6 +151,7 @@ function TypeDropdown({ value, onChange }: { value: RequestType; onChange: (v: R
     >
       <option value="leave">Leave</option>
       <option value="expense">Expense</option>
+      <option value="attendance_correction">Attendance Correction</option>
     </select>
   );
 }
@@ -319,6 +321,8 @@ function TeamApprovalsSection() {
         )
       )}
 
+      {type === "attendance_correction" && <CorrectionsTab />}
+
       {modal && (
         <ApprovalModal
           action={modal.action}
@@ -341,7 +345,7 @@ export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
   const isHR = user?.role === "hr" || user?.role === "hr_admin";
-  const canApprove         = useAnyPermission("leave.approve", "expenses.approve");
+  const canApprove         = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
   // Attendance sign-off moved to Leave Management for HR — keep it here for other roles (e.g. manager).
   const canApproveAttendance = useAnyPermission("payroll.view", "payroll.approve") && !isHR;
 

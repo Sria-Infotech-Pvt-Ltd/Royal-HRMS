@@ -76,9 +76,13 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
                 target_branch__branch_name=request.user.branch)
         )
 
+    # Meta.ordering alone isn't enough here — annotate() below adds a GROUP BY,
+    # which makes Django treat the queryset as unordered unless order_by() is
+    # called explicitly. Without this, pagination can show duplicate or
+    # skipped rows as the underlying table changes between page requests.
     return qs.annotate(
         reaction_count=Count('reactions', distinct=True)
-    ).prefetch_related(
+    ).order_by('-is_pinned', '-created_at').prefetch_related(
         Prefetch(
             'reactions',
             queryset=AnnouncementReaction.objects.filter(user=request.user),

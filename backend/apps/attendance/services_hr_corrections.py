@@ -1,10 +1,17 @@
 """
 HR Attendance Correction Management services.
 
-Handles listing pending corrections and approving/rejecting them.
-Approval creates the missing AttendancePunch(es) and reprocesses the day,
-which changes the AttendanceRecord from STATUS_INCOMPLETE → present/late
-and removes the employee from the Un-Punches list automatically.
+Handles submitting, listing, and approving/rejecting missed-punch correction
+requests through a two-stage L1 (reporting manager) → L2 (HR) approval chain
+— the same ApprovalWorkflowRule / EmployeeApprovalOverride mechanism used by
+leave requests (workflow_type='attendance_correction'), so routing is
+configurable from Settings → Approval Rules instead of hardcoded.
+
+Approval creates the missing AttendancePunch(es) and reprocesses the day —
+but only once the request reaches its FINAL approval (L1 approval with no
+L2 configured, or L2 approval) — which changes the AttendanceRecord from
+STATUS_INCOMPLETE → present/late and removes the employee from the
+Un-Punches list automatically.
 """
 from __future__ import annotations
 
@@ -14,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.attendance.models import AttendanceCorrection, AttendancePunch
@@ -24,17 +32,159 @@ User = get_user_model()
 _IST = ZoneInfo('Asia/Kolkata')
 
 
+# ── Approval chain resolution (mirrors apps/hrms/views/leave.py) ──────────────
+
+def _role_name(user) -> str:
+    return user.role.name if user.role else 'employee'
+
+
+def _user_branch(user) -> str:
+    return (getattr(user, 'branch', '') or '').strip()
+
+
+def _resolve_approver(role_str: str, employee):
+    """Map a role string from ApprovalWorkflowRule to an actual User on the employee."""
+    if role_str in ('reporting_manager', 'rm', 'manager'):
+        return getattr(employee, 'reporting_manager', None)
+    if role_str in ('hr', 'hr_manager', 'hr_admin'):
+        return getattr(employee, 'hr', None)
+    return None
+
+
+def _resolve_approval_chain(employee):
+    """
+    Return (l1_approver, l2_approver) for an attendance correction request.
+    Checks EmployeeApprovalOverride first, falls back to ApprovalWorkflowRule.
+    """
+    from apps.accounts.models import ApprovalWorkflowRule, EmployeeApprovalOverride
+
+    workflow_type = ApprovalWorkflowRule.WORKFLOW_ATTENDANCE_CORRECTION
+
+    override = EmployeeApprovalOverride.objects.filter(
+        employee=employee, workflow_type=workflow_type
+    ).first()
+    if override:
+        return override.l1_override, override.l2_override
+
+    from core.cache_service import ApprovalWorkflowCacheService
+    rule = ApprovalWorkflowCacheService.get_rule(workflow_type)
+    if not rule:
+        return None, None
+
+    l1 = _resolve_approver(rule.l1_approver_role, employee) if rule.l1_approver_role else None
+    l2 = _resolve_approver(rule.l2_approver_role, employee) if rule.l2_approver_role else None
+    return l1, l2
+
+
+def _is_hr_role(role: str) -> bool:
+    return role in ('hr', 'hr_admin')
+
+
+def _can_hr_access_request(hr_user, correction: AttendanceCorrection) -> bool:
+    """Branch guard for HR: True when no branch set (no restriction) or branches match."""
+    branch = _user_branch(hr_user)
+    if not branch:
+        return True
+    return (getattr(correction.employee, 'branch', '') or '').strip() == branch
+
+
+def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) -> bool:
+    """
+    Mirrors leave.py's _can_approve_at_stage — enforces that only the
+    designated approver for the current stage may act, so anyone holding
+    attendance.create can't jump the queue or act at the wrong stage.
+    """
+    role = _role_name(user)
+    if role == 'system_admin':
+        return True
+
+    if stage == 'l1':
+        if correction.l1_approver_id:
+            return correction.l1_approver_id == user.id
+        return False
+
+    if stage == 'l2':
+        if correction.l2_approver_id:
+            return correction.l2_approver_id == user.id
+        return role in ('hr_admin', 'hr') and _can_hr_access_request(user, correction)
+
+    return False
+
+
+def _approval_scope_filter(user) -> Q:
+    """
+    Scope filter for who may see which correction requests in the review queue.
+    manager__team_lead → requests where they are the designated L1 approver.
+    hr / hr_admin       → all requests in their branch (existing browse behaviour).
+    system_admin        → all requests.
+    """
+    role = _role_name(user)
+    if role == 'system_admin':
+        return Q()
+    if _is_hr_role(role):
+        branch = _user_branch(user)
+        return Q(employee__branch=branch) if branch else Q()
+    if role == 'manager__team_lead':
+        return Q(l1_approver=user)
+    return Q(pk=None)  # no other role gets a review queue
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+def submit_correction(
+    employee,
+    date: datetime.date,
+    punch_type: str,
+    requested_in_time,
+    requested_out_time,
+    reason: str,
+    notes: str,
+) -> AttendanceCorrection:
+    """
+    Create a correction request, resolving and stamping its L1/L2 approval
+    chain at submission time (mirrors LeaveRequest creation).
+
+    Managers skip L1 — their own correction routes directly to HR (L2), same
+    escalation rule leave requests use. Also escalates to L2 when the
+    employee has no reporting manager set, so the request is never orphaned.
+    """
+    l1, l2 = _resolve_approval_chain(employee)
+
+    role = _role_name(employee)
+    if role == 'manager__team_lead' or l1 is None:
+        initial_status = AttendanceCorrection.STATUS_L2_PENDING
+        l1_approver    = None
+        l2_approver    = l2
+    else:
+        initial_status = AttendanceCorrection.STATUS_PENDING
+        l1_approver    = l1
+        l2_approver    = l2
+
+    return AttendanceCorrection.objects.create(
+        employee=employee,
+        date=date,
+        punch_type=punch_type,
+        requested_in_time=requested_in_time,
+        requested_out_time=requested_out_time,
+        reason=reason,
+        notes=notes,
+        status=initial_status,
+        created_by=employee,
+        l1_approver=l1_approver,
+        l2_approver=l2_approver,
+    )
+
+
 def list_corrections(
+    user,
     branch: str = '',
     department: str = '',
     status_filter: str = '',
 ) -> list[dict]:
     """
-    Return correction requests for HR review, newest first.
+    Return correction requests visible to `user`, newest first.
 
-    status_filter: 'pending' | 'approved' | 'rejected' | '' (all)
+    status_filter: 'pending' | 'l2_pending' | 'approved' | 'rejected' | '' (all)
     """
     employee_qs = User.objects.filter(is_active=True)
     if branch:
@@ -44,83 +194,104 @@ def list_corrections(
 
     qs = (
         AttendanceCorrection.objects
+        .filter(_approval_scope_filter(user))
         .filter(employee__in=employee_qs)
-        .select_related('employee', 'reviewed_by')
+        .select_related('employee', 'reviewed_by', 'l1_approver', 'l2_approver')
         .order_by('-created_at')
     )
     if status_filter:
         qs = qs.filter(status=status_filter)
 
-    return [_build_row(c) for c in qs]
+    return [_build_row(c, user) for c in qs]
 
 
-def approve_correction(correction_id: str, reviewed_by) -> dict:
-    """
-    Approve a pending correction.
-
-    1. Creates the missing AttendancePunch record(s) with source='manual'.
-    2. Calls AttendanceProcessorService.process_day() to recompute the record.
-    3. The reprocessed record gets last_punch_out set → status changes from
-       incomplete → present or late → employee drops off the Un-Punches list.
-    """
-    from apps.attendance.services_attendance import AttendanceProcessorService
-
-    with transaction.atomic():
-        correction = _get_pending(correction_id)
-
-        if correction.punch_type in (AttendanceCorrection.PUNCH_IN, AttendanceCorrection.PUNCH_BOTH):
-            _create_punch(
-                correction.employee, correction.date,
-                correction.requested_in_time, AttendancePunch.PUNCH_IN,
-            )
-
-        if correction.punch_type in (AttendanceCorrection.PUNCH_OUT, AttendanceCorrection.PUNCH_BOTH):
-            _create_punch(
-                correction.employee, correction.date,
-                correction.requested_out_time, AttendancePunch.PUNCH_OUT,
-            )
-
-        AttendanceProcessorService.process_day(correction.employee, correction.date)
-
-        correction.status      = AttendanceCorrection.STATUS_APPROVED
-        correction.reviewed_by = reviewed_by
-        correction.reviewed_at = timezone.now()
-        correction.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
-
-        _write_correction_audit(correction, reviewed_by, approved=True)
-        logger.info(
-            'Correction %s approved by %s (employee=%s date=%s)',
-            correction.pk, reviewed_by.pk, correction.employee_id, correction.date,
-        )
-
-    return _build_row(correction)
+def approve_correction(correction_id: str, actioning_user, remarks: str = '') -> dict:
+    """Approve a correction at whichever stage it currently sits at."""
+    return _act_on_correction(correction_id, actioning_user, approve=True, remarks=remarks)
 
 
-def reject_correction(correction_id: str, reviewed_by) -> dict:
-    """Mark a pending correction as rejected. Does not alter any punch records."""
-    with transaction.atomic():
-        correction = _get_pending(correction_id)
-        correction.status      = AttendanceCorrection.STATUS_REJECTED
-        correction.reviewed_by = reviewed_by
-        correction.reviewed_at = timezone.now()
-        correction.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
-
-        _write_correction_audit(correction, reviewed_by, approved=False)
-        logger.info(
-            'Correction %s rejected by %s (employee=%s date=%s)',
-            correction.pk, reviewed_by.pk, correction.employee_id, correction.date,
-        )
-
-    return _build_row(correction)
+def reject_correction(correction_id: str, actioning_user, remarks: str = '') -> dict:
+    """Reject a correction at whichever stage it currently sits at."""
+    return _act_on_correction(correction_id, actioning_user, approve=False, remarks=remarks)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
 
-def _get_pending(correction_id: str) -> AttendanceCorrection:
+def _act_on_correction(correction_id: str, actioning_user, *, approve: bool, remarks: str = '') -> dict:
+    from apps.attendance.services_attendance import AttendanceProcessorService
+
+    with transaction.atomic():
+        correction = _get_actionable(correction_id)
+
+        if correction.status == AttendanceCorrection.STATUS_PENDING:
+            stage = 'l1'
+        elif correction.status == AttendanceCorrection.STATUS_L2_PENDING:
+            stage = 'l2'
+        else:
+            raise ValueError('Correction not found or already reviewed.')
+
+        if not _can_approve_at_stage(actioning_user, correction, stage):
+            raise PermissionError(
+                f'You are not authorised to act on this request at the {stage.upper()} stage.'
+            )
+
+        now = timezone.now()
+        stage_status = AttendanceCorrection.STAGE_APPROVED if approve else AttendanceCorrection.STAGE_REJECTED
+        is_final = False
+
+        if stage == 'l1':
+            correction.l1_approver    = actioning_user
+            correction.l1_status      = stage_status
+            correction.l1_remarks     = remarks
+            correction.l1_actioned_at = now
+            if not approve:
+                correction.status = AttendanceCorrection.STATUS_REJECTED
+                is_final = True
+            elif correction.l2_approver_id:
+                correction.status = AttendanceCorrection.STATUS_L2_PENDING
+            else:
+                correction.status = AttendanceCorrection.STATUS_APPROVED
+                is_final = True
+        else:  # l2
+            correction.l2_approver    = actioning_user
+            correction.l2_status      = stage_status
+            correction.l2_remarks     = remarks
+            correction.l2_actioned_at = now
+            correction.status = AttendanceCorrection.STATUS_APPROVED if approve else AttendanceCorrection.STATUS_REJECTED
+            is_final = True
+
+        if is_final:
+            correction.reviewed_by = actioning_user
+            correction.reviewed_at = now
+
+            if approve:
+                if correction.punch_type in (AttendanceCorrection.PUNCH_IN, AttendanceCorrection.PUNCH_BOTH):
+                    _create_punch(
+                        correction.employee, correction.date,
+                        correction.requested_in_time, AttendancePunch.PUNCH_IN,
+                    )
+                if correction.punch_type in (AttendanceCorrection.PUNCH_OUT, AttendanceCorrection.PUNCH_BOTH):
+                    _create_punch(
+                        correction.employee, correction.date,
+                        correction.requested_out_time, AttendancePunch.PUNCH_OUT,
+                    )
+                AttendanceProcessorService.process_day(correction.employee, correction.date)
+
+        correction.save()
+        _write_correction_audit(correction, actioning_user, stage=stage, approved=approve)
+        logger.info(
+            'Correction %s %s at %s stage by %s (employee=%s date=%s)',
+            correction.pk, stage_status, stage, actioning_user.pk, correction.employee_id, correction.date,
+        )
+
+    return _build_row(correction, actioning_user)
+
+
+def _get_actionable(correction_id: str) -> AttendanceCorrection:
     try:
-        return AttendanceCorrection.objects.select_related('employee').get(
+        return AttendanceCorrection.objects.select_related('employee', 'l1_approver', 'l2_approver').get(
             id=correction_id,
-            status=AttendanceCorrection.STATUS_PENDING,
+            status__in=[AttendanceCorrection.STATUS_PENDING, AttendanceCorrection.STATUS_L2_PENDING],
         )
     except AttendanceCorrection.DoesNotExist:
         raise ValueError('Correction not found or already reviewed.')
@@ -145,7 +316,7 @@ def _create_punch(
     )
 
 
-def _write_correction_audit(correction: AttendanceCorrection, reviewed_by, *, approved: bool) -> None:
+def _write_correction_audit(correction: AttendanceCorrection, actioning_user, *, stage: str, approved: bool) -> None:
     """Write CORRECTION_APPROVED or CORRECTION_REJECTED audit entry."""
     from apps.attendance.models import AttendanceAuditLog, AttendanceRecord
     from apps.attendance.services_audit_log import write_audit_log
@@ -154,6 +325,7 @@ def _write_correction_audit(correction: AttendanceCorrection, reviewed_by, *, ap
         employee=correction.employee, date=correction.date,
     ).first()
 
+    stage_label = 'Manager' if stage == 'l1' else 'HR'
     if approved:
         parts = []
         if correction.requested_in_time:
@@ -162,38 +334,51 @@ def _write_correction_audit(correction: AttendanceCorrection, reviewed_by, *, ap
             parts.append(f'OUT {correction.requested_out_time.strftime("%H:%M")}')
         new_value = ', '.join(parts) if parts else ''
         event  = AttendanceAuditLog.EVENT_CORRECTION_APPROVED
-        action = 'Attendance correction approved by HR'
+        action = f'Attendance correction approved by {stage_label}'
     else:
         new_value = ''
         event  = AttendanceAuditLog.EVENT_CORRECTION_REJECTED
-        action = 'Attendance correction rejected by HR'
+        action = f'Attendance correction rejected by {stage_label}'
 
     write_audit_log(
         employee=correction.employee,
         date=correction.date,
         event=event,
-        performed_by=reviewed_by,
+        performed_by=actioning_user,
         record=record,
         new_value=new_value,
         action=action,
     )
 
 
-def _build_row(c: AttendanceCorrection) -> dict:
-    user = c.employee
+def _build_row(c: AttendanceCorrection, user=None) -> dict:
+    can_action = False
+    if user and c.status == AttendanceCorrection.STATUS_PENDING:
+        can_action = _can_approve_at_stage(user, c, 'l1')
+    elif user and c.status == AttendanceCorrection.STATUS_L2_PENDING:
+        can_action = _can_approve_at_stage(user, c, 'l2')
+
+    employee = c.employee
     return {
         'id':                 str(c.pk),
-        'employee_id':        user.employee_id or '',
-        'name':               user.full_name or '',
-        'department':         user.department or '',
-        'branch':             user.branch or '',
+        'employee_id':        employee.employee_id or '',
+        'name':               employee.full_name or '',
+        'department':         employee.department or '',
+        'branch':             employee.branch or '',
         'date':               c.date.strftime('%Y-%m-%d'),
         'punch_type':         c.punch_type,
-        'requested_in_time':  c.requested_in_time.strftime('%H:%M') if c.requested_in_time else None,
-        'requested_out_time': c.requested_out_time.strftime('%H:%M') if c.requested_out_time else None,
+        'requested_in':       c.requested_in_time.strftime('%H:%M') if c.requested_in_time else None,
+        'requested_out':      c.requested_out_time.strftime('%H:%M') if c.requested_out_time else None,
         'reason':             c.reason,
         'notes':              c.notes or '',
         'status':             c.status,
+        'l1_approver_name':   c.l1_approver.full_name if c.l1_approver else None,
+        'l1_status':          c.l1_status,
+        'l1_remarks':         c.l1_remarks or '',
+        'l2_approver_name':   c.l2_approver.full_name if c.l2_approver else None,
+        'l2_status':          c.l2_status,
+        'l2_remarks':         c.l2_remarks or '',
+        'can_action':         can_action,
         'reviewed_by':        c.reviewed_by.full_name if c.reviewed_by else None,
         'reviewed_at':        c.reviewed_at.strftime('%Y-%m-%d %H:%M') if c.reviewed_at else None,
         'created_at':         c.created_at.strftime('%Y-%m-%d %H:%M'),

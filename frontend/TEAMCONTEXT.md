@@ -2871,4 +2871,114 @@ Added to `globals.css` rather than duplicating one-off styles per component:
 
 - **Opening Leave Balance Import is frontend-ready but not confirmed against a running backend** — same standing caveat as every other frontend-ahead-of-backend feature in this doc. The 9-column sample file layout and row-level `reason` strings are taken directly from the given contract.
 - **This is a genuinely different feature from both "carry forward" features documented in the 21 July session** — it's a one-time historical migration (opening balances), not the annual carry-forward execution or its per-policy settings. Don't conflate the three.
+
+---
+
+## Session — G.Durga Prasad (23 July 2026)
+
+**Branch:** `Backend/DP`
+
+---
+
+### 1. Announcement Email — Fixed Raw HTML Showing in Recipients' Inboxes
+
+**File:** `backend/apps/announcements/views.py` — `_send_announcement_email()`
+
+HR reported that announcement emails arrived showing literal `<div>`/`<table>` markup as plain text instead of a rendered email. Root cause: the function hand-built `EmailMultiAlternatives(body=full_html_string, ...)` and never called `.attach_alternative(html, 'text/html')` — so the message had no HTML part at all; every mail client fell back to showing the raw markup.
+
+Fixed by replacing the duplicated, broken construction with the existing `_build_message()` helper from `accounts/utils.py` — the same one already used correctly by OTP emails, template emails, and payslip emails. This also removes a second, inconsistent copy of email-building logic from the codebase (now there's exactly one place that constructs outgoing HTML emails).
+
+### 2. Announcements Pagination — `UnorderedObjectListWarning`
+
+**File:** `backend/apps/announcements/views.py` — `_visible_qs()`
+
+`Announcement.Meta.ordering = ['-is_pinned', '-created_at']` was already declared on the model, but `_visible_qs()` calls `.annotate(reaction_count=Count('reactions', distinct=True))`, which adds a GROUP BY — and Django silently drops recognition of `Meta.ordering` once an aggregate annotation is added, unless `.order_by()` is called explicitly afterward. Not just a log warning: without a real deterministic order, pagination could show duplicate or skipped rows as the table changed between page requests.
+
+Fixed by adding `.order_by('-is_pinned', '-created_at')` explicitly after the `.annotate()` call. Verified via `qs.ordered` flipping to `True` and the warning disappearing under `warnings.simplefilter('error', ...)`.
+
+> Applied twice — once on the `Backend/prasad` branch (stashed), then reapplied directly on `demo` after pulling 73 commits from origin, since `demo`'s copy of this file predates the fix.
+
+### 3. Announcements Delete — 404 on Stale Rows
+
+**File:** `frontend/app/dashboard/announcements/page.tsx` — `handleDelete()`
+
+`DELETE /api/announcements/<id>/` returning 404 was correct backend behavior (the row was already deleted — confirmed via `hr_admin`/`system_admin` announcement permissions being symmetric, ruling out a permission-scoping bug), but the frontend had no recovery path: a stale row stayed on screen with a permanently broken Delete button after the first deletion attempt.
+
+Fixed: `handleDelete()` now treats a 404 as "already in the desired end state" — closes the modal and refetches the list instead of showing an alarming error for something that's already resolved.
+
+### 4. Production Build (`npm run build`) — Fixed, Root-Caused to Dead Code
+
+`next build`'s full-project type-check (which `next dev` skips) surfaced 13 TypeScript errors, all tracing back to one root cause: an entire earlier draft of the **Manager Dashboard** — `hooks/useManagerDashboard.ts` + 5 components in `components/dashboard/manager/` — assumed 5 separate backend endpoints (`/dashboard/manager/kpis/`, `/pending-approvals/`, etc.) that were never actually built. The real backend has exactly **one** combined `/dashboard/manager/` endpoint, and that draft was fully superseded by a working implementation (`app/dashboard/_components/ManagerDashboard.tsx` + `lib/teamContext.tsx`, confirmed as what actually renders on `/dashboard`) — but the dead draft was never deleted, so it sat there until a full build finally type-checked it.
+
+- **Deleted** (zero references anywhere in the app, confirmed via grep before removal): `hooks/useManagerDashboard.ts`, `components/dashboard/manager/{ManagerConsole,ManagerPendingApprovals,ManagerRecentActivity,ManagerTeamAttendance,ManagerUpcomingLeave}.tsx`.
+- **Fixed** in `lib/api/endpoints.ts`: removed a duplicate `dashboard.manager` key (defined twice with the same value) and the dead `managerDashboard` block of 5 nonexistent URLs.
+- `npm run build` now completes cleanly — all 54 routes compile.
+
+> **Also found and fixed while touching migrations for §5 below:** the repo had two separate pairs of conflicting leaf migrations (`accounts`, `attendance`, `hrms`) left over from the big `demo` merge, blocking `makemigrations` entirely. Resolved with `python manage.py makemigrations --merge`. Unrelated to this session's feature work, but had to be cleared before any new migration could be generated.
+
+### 5. Attendance Correction (Missed Clock-Out) Requests — Full Two-Stage L1 → L2 Approval Workflow
+
+The big feature this session. Employee raises a missed-clockout / regularization request → previously it was single-stage: **any** user holding `attendance.create` (any manager *or* HR, org-wide) could approve or reject *any* employee's request directly — no routing, no scoping. Rebuilt to mirror the leave-request approval architecture exactly, and made fully **permission-based** per explicit instruction — no hardcoded role names gate any approval action; only the `attendance.create` codename plus the resolved `l1_approver`/`l2_approver` identity stamped on each specific request authorizes an action.
+
+**Backend:**
+- `ApprovalWorkflowRule` / `EmployeeApprovalOverride` (`accounts/models.py`) — already generic via a `workflow_type` field; added `attendance_correction` as a new type (also had to widen `workflow_type`'s `max_length` from 15→25, since `'attendance_correction'` is 21 chars). Now configurable from **Settings → Approval Rules** alongside Leave/Expense/Resignation/Loan, with per-employee overrides via the existing Employee Approval Matrix tab. Added to `_WORKFLOW_ORDER` (`accounts/views.py`) so it auto-seeds.
+- `AttendanceCorrection` model (`attendance/models.py`) — added `l1_approver`/`l1_status`/`l1_remarks`/`l1_actioned_at` and the L2 equivalents, plus a new `l2_pending` status stage. Kept `reviewed_by`/`reviewed_at` as "whoever finalized it" convenience fields for existing consumers.
+- `services_hr_corrections.py` — full rewrite mirroring `hrms/views/leave.py`'s exact pattern: `_resolve_approval_chain()` (override-first, then `ApprovalWorkflowRule` fallback, cached via `ApprovalWorkflowCacheService`), the "manager submitting their own request skips L1 and routes straight to HR" escalation rule, `_can_approve_at_stage()` (only the specific designated approver may act — `system_admin` can always unblock a stuck request), and `_approval_scope_filter()` for the list/queue view. Punch creation + attendance reprocessing now only fires on the **final** approval (L1-with-no-L2, or L2), not at an intermediate L1-approve-pending-L2 step.
+- `submit_correction()` (new) — resolves and stamps the L1/L2 chain at submission time, called from `AttendanceCorrectionView.post()` instead of a bare `.objects.create()`.
+- `HRCorrectionReviewView`/`HRCorrectionListView` (`hr_attendance.py`) — removed the old branch-only pre-check (it conflicted with per-request stage authorization for managers) in favor of catching `PermissionError`/`ValueError` from the service and returning 403/404, matching how leave's approve view already behaves.
+- Added optional `remarks` support end-to-end (`CorrectionReviewSerializer` → service → `l1_remarks`/`l2_remarks`) — didn't exist before at all.
+- **Incidental bug fixes found while touching this code:** backend was returning `requested_in_time`/`requested_out_time` but the frontend type/component already expected `requested_in`/`requested_out` — pre-existing mismatch, fixed by renaming the backend dict keys. Also added `loan` back into the frontend's `ApprovalWorkflowType` union (it existed on the backend and in `WORKFLOW_ICONS` but was missing from the type).
+
+**Frontend:**
+- `types/attendance.ts` — `CorrectionStatus` gained `l2_pending`; `CorrectionRow` gained the L1/L2 fields and a backend-computed `can_action: boolean` (drives whether Approve/Reject render as real buttons or read-only status — the backend decides who's authorized, not a frontend permission blanket-check).
+- `CorrectionsTab.tsx` (Attendance module) — shows current stage + who it's awaiting; Approve/Reject now gated by `can_action` instead of a flat `attendance.create` check.
+- `AttendanceDetailDrawer.tsx` — status badge map needed the new `l2_pending` entry too (caught by `tsc`, not by inspection).
+- **Closed a real visibility gap**, per explicit ask: correction requests previously only appeared in the Attendance module's own Corrections tab — neither the manager's approvals page nor HR's showed them at all. Since `CorrectionsTab` is fully self-contained (fetches its own data, no props), reused it directly rather than duplicating: added as a third "Attendance Correction" option in the manager's Team Approvals dropdown (`app/dashboard/approvals/page.tsx`), and as a new "Attendance Corrections" tab on HR's Leave Management page (`app/dashboard/leave/_client.tsx`) — HR is redirected to that page instead of `/dashboard/approvals`, so it needed its own entry point.
+
+**Verified end-to-end against real employee/manager/HR records** (not just type-checks): standard single-stage L1-approves-final path, manager-submits-own-request escalation straight to L2, wrong-approver correctly blocked with `PermissionError`, and list scoping (unrelated manager sees 0 rows, correct manager/HR see the right ones). All test data cleaned up after.
+
+### 6. Diagnosed, Not Fixed (Environment/Infra — Documented for Whoever Hits These Next)
+
+- **Celery on Windows crashes with `OSError: [WinError 6] The handle is invalid`** — the default *prefork* worker pool doesn't work on Windows. Fix: run with `--pool=solo`. Also `-B` (embedded beat) is explicitly rejected by the Celery CLI on Windows — worker and beat must run as two separate terminal processes. Updated the docstring in `backend/config/celery.py` with the correct Windows commands, and corrected a wrong claim in it — the file said to run beat with `--scheduler django_celery_beat.schedulers:DatabaseScheduler`, but `django-celery-beat` isn't installed in this project at all; it uses Celery's plain default scheduler (backed by `backend/celerybeat-schedule.dat`/`.dir`, already in the repo).
+- **`kombu.exceptions.OperationalError` / `Error 10054` talking to Redis** — traced to Redis running in *protected mode* because its Windows service config (`C:\Program Files\Redis\redis.windows-service.conf`) had `bind` fully commented out (defaults to all interfaces + no password). Fix identified (`bind 127.0.0.1 -::1` + restart the `Redis` service) but requires admin privileges to edit a file under `Program Files` — couldn't apply directly, handed off as exact manual steps.
+- **Slow initial page loads in `npm run dev`** — Turbopack compiles each route on first hit; the compile time gets counted into that request's response time (12.5s → 161ms on the 2nd hit to the same route, in the log that prompted this). Not a bug — recommended `npm run build && npm run start` for anything where "feels slow on the first click" isn't acceptable, since that pre-compiles everything upfront.
+
+---
+
+### Key Files Changed / Created (23 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/announcements/views.py` | Fixed HTML email (reused `_build_message`); added `.order_by()` to fix pagination ordering |
+| `frontend/app/dashboard/announcements/page.tsx` | 404-on-delete now refetches instead of erroring |
+| `backend/config/celery.py` | Corrected/expanded Windows + scheduler docstring |
+| `frontend/hooks/useManagerDashboard.ts` | **DELETED** — dead code, zero references |
+| `frontend/components/dashboard/manager/*.tsx` (5 files) | **DELETED** — dead code, superseded by `ManagerDashboard.tsx` + `teamContext.tsx` |
+| `frontend/lib/api/endpoints.ts` | Removed duplicate `dashboard.manager` key and dead `managerDashboard` block |
+| `backend/apps/accounts/models.py` | Added `attendance_correction` to `ApprovalWorkflowRule.WORKFLOW_CHOICES`; widened `workflow_type` max_length 15→25 |
+| `backend/apps/accounts/views.py` | Added `attendance_correction` to `_WORKFLOW_ORDER` |
+| `backend/apps/accounts/migrations/0044_merge_*.py`, `0045_alter_approvalworkflowrule_*.py` | **NEW** — merge conflict resolution + workflow_type change |
+| `backend/apps/attendance/models.py` | Added `l1_*`/`l2_*` approval fields + `STATUS_L2_PENDING` to `AttendanceCorrection` |
+| `backend/apps/attendance/migrations/0017_merge_*.py`, `0018_attendancecorrection_l1_actioned_at_and_more.py` | **NEW** |
+| `backend/apps/attendance/services_hr_corrections.py` | Full rewrite — chain resolution, stage-aware approve/reject, scoped listing |
+| `backend/apps/attendance/serializers_hr.py` | `CorrectionReviewSerializer` gained `remarks`; `CorrectionRowSerializer` field names/list corrected |
+| `backend/apps/attendance/views/hr_attendance.py` | Stage-aware auth (403/404 via exceptions), removed conflicting branch pre-check |
+| `backend/apps/attendance/views/my_attendance.py` | Submission now calls `submit_correction()`; dedup guard covers `l2_pending` too |
+| `backend/apps/hrms/migrations/0016_merge_*.py` | **NEW** — merge conflict resolution |
+| `frontend/types/attendance.ts` | `CorrectionStatus` +`l2_pending`; `CorrectionRow` +L1/L2 fields +`can_action` |
+| `frontend/types/approvalMatrix.ts` | Added `attendance_correction` (and `loan`) to `ApprovalWorkflowType` |
+| `frontend/app/dashboard/settings/approval-rules/page.tsx` | Added icon for `attendance_correction` |
+| `frontend/app/dashboard/attendance/_components/CorrectionsTab.tsx` | Stage display, `can_action`-gated buttons |
+| `frontend/app/dashboard/attendance/_components/AttendanceDetailDrawer.tsx` | Status badge map +`l2_pending` |
+| `frontend/app/dashboard/approvals/page.tsx` | Added "Attendance Correction" as a third type, reusing `CorrectionsTab` |
+| `frontend/app/dashboard/leave/_client.tsx` | Added "Attendance Corrections" tab for HR, reusing `CorrectionsTab` |
+
+---
+
+### Notes for Next Developer
+
+- **`CorrectionsTab` is now rendered in three places** (`/dashboard/attendance`, `/dashboard/approvals`, `/dashboard/leave`) — it's fully self-contained (own `useFetch`, own permission checks), so this was safe to do without prop-drilling. If it ever needs page-specific behavior, resist adding props for "which page am I on" — that's a sign it should split instead.
+- **Migration merge commits (`0044`/`0045` accounts, `0017`/`0018` attendance, `0016` hrms) are a mix of unrelated conflict-resolution and this session's real schema changes** — don't try to cherry-pick around them individually; they're sequential and depend on each other.
+- **The Redis `bind 127.0.0.1 -::1` fix is still unapplied** — needs someone with admin rights on this machine to edit `C:\Program Files\Redis\redis.windows-service.conf` and restart the `Redis` service. Until then, Celery/Redis connection resets during dev sessions are expected, not a regression.
+- **`AttendanceApprovalTab.tsx`** (existing, unmodified) **is unrelated to `CorrectionsTab`** despite similar names — it's the payroll-cycle bulk attendance sign-off before running payroll, not individual correction requests. Don't conflate the two when reading `/dashboard/leave`'s tab list.
 - **New shared CSS utilities (`.text-*`, `.spin`, `.upload-zone--active`) are available app-wide now** — reach for these instead of inline `style` in any file touched next, per the standing "no inline CSS" instruction.

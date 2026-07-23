@@ -619,8 +619,10 @@ class HRCorrectionListView(APIView):
     """
     GET /api/attendance/corrections/
 
-    List all employee correction requests HR needs to action.
-    Query params: branch, department, status (pending|approved|rejected)
+    List correction requests visible to the caller — managers see requests
+    where they're the designated L1 approver; HR/system_admin see the full
+    branch-scoped/unrestricted list, same as before.
+    Query params: branch, department, status (pending|l2_pending|approved|rejected)
     """
     permission_classes = [IsAuthenticated]
 
@@ -634,6 +636,7 @@ class HRCorrectionListView(APIView):
 
         from apps.attendance.services_hr_corrections import list_corrections
         rows = list_corrections(
+            request.user,
             branch=_branch_scope(request.user, ser.validated_data['branch']),
             department=ser.validated_data['department'],
             status_filter=ser.validated_data['status'],
@@ -650,8 +653,15 @@ class HRCorrectionReviewView(APIView):
     PATCH /api/attendance/corrections/<uuid:pk>/review/
     Body: { "action": "approve" | "reject" }
 
-    Approve: creates the missing punch(es), reprocesses the attendance record.
-             Status changes incomplete → present/late; employee drops from Un-Punches.
+    Two-stage: L1 (reporting manager) approval routes to L2 (HR) unless no
+    L2 is configured for the employee, in which case L1 approval is final.
+    Only the designated approver for the request's current stage may act
+    (enforced in services_hr_corrections._can_approve_at_stage) —
+    system_admin may always unblock a stuck request.
+
+    Approve (final stage only): creates the missing punch(es), reprocesses
+             the attendance record. Status changes incomplete → present/late;
+             employee drops from Un-Punches.
     Reject:  marks the correction rejected, no punch changes.
     """
     permission_classes = [IsAuthenticated]
@@ -660,28 +670,22 @@ class HRCorrectionReviewView(APIView):
         if not _has_hr_permission(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
-        # Branch-restricted reviewers may only act on corrections for
-        # employees in their own branch — mirrors the GET list's branch scope.
-        if not _is_unrestricted(request.user):
-            from apps.attendance.models import AttendanceCorrection
-            correction = AttendanceCorrection.objects.select_related('employee').filter(pk=pk).first()
-            if correction is None:
-                return error('Correction request not found.', http_status=404)
-            if correction.employee.branch != request.user.branch:
-                return error('Correction request not found.', http_status=404)
-
         ser = CorrectionReviewSerializer(data=request.data)
         if not ser.is_valid():
             return error(first_error(ser.errors))
 
+        remarks = ser.validated_data.get('remarks', '')
+
         from apps.attendance.services_hr_corrections import approve_correction, reject_correction
         try:
             if ser.validated_data['action'] == 'approve':
-                result = approve_correction(str(pk), reviewed_by=request.user)
-                msg = 'Correction approved. Attendance record updated.'
+                result = approve_correction(str(pk), actioning_user=request.user, remarks=remarks)
+                msg = 'Correction approved. Attendance record updated.' if result['status'] == 'approved' else 'Correction approved. Awaiting HR review.'
             else:
-                result = reject_correction(str(pk), reviewed_by=request.user)
+                result = reject_correction(str(pk), actioning_user=request.user, remarks=remarks)
                 msg = 'Correction rejected.'
+        except PermissionError as exc:
+            return error(str(exc), http_status=403)
         except ValueError as exc:
             return error(str(exc), http_status=404)
 
