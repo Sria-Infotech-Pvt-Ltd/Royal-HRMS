@@ -79,3 +79,28 @@ export interface CarryForwardInput {
   from_year: number;
   to_year: number;
 }
+
+// ─── Opening Leave Balance Import ──────────────────────────────────────────────
+// One-time historical data migration (onboarding an existing company / moving
+// off another HRMS). Once run, ongoing balances/carry-forward/allocations are
+// owned entirely by the Leave module — this is not a recurring import. There is
+// no separate "already imported" status endpoint; per-row duplicate detection
+// (see `reason` values below) is what actually prevents re-importing the same
+// employee/leave-type/year combination.
+
+export interface OpeningBalanceImportRowError {
+  row:            number;
+  employee_id:    string;
+  leave_type:     string;
+  financial_year: string;
+  reason:         string;
+}
+
+export interface OpeningBalanceImportResult {
+  total_records:    number;
+  successful:       number;
+  failed:           number;
+  skipped:          number;
+  errors:           OpeningBalanceImportRowError[];
+  error_report_csv: string | null;
+}

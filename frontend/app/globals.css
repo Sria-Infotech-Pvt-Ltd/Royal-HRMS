@@ -310,6 +310,12 @@ tr:hover td {
   color: var(--on-variant);
 }
 
+/* Text color utilities — for coloring a value without wrapping it in a badge/alert */
+.text-success { color: var(--success); }
+.text-error   { color: var(--error); }
+.text-warn    { color: var(--warn); }
+.text-muted   { color: var(--on-variant); }
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -925,6 +931,12 @@ textarea.field-input {
   to   { transform: rotate(360deg); }
 }
 
+/* Reusable spinner utility — pair with any icon (e.g. `ti ti-loader-2 spin`)
+   instead of inline style={{ animation: "spin 1s linear infinite" }} */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 @keyframes clockPulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
   50%       { box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); }
@@ -956,6 +968,16 @@ textarea.field-input {
 .upload-zone:hover {
   border-color: var(--primary);
   background: rgba(30, 78, 140, 0.04);
+}
+
+/* A file has been picked — same visual treatment as :hover, but persistent */
+.upload-zone--active {
+  border-color: var(--primary);
+  background: rgba(30, 78, 140, 0.04);
+}
+
+.upload-zone--active i {
+  color: var(--primary);
 }
 
 .upload-zone i {
