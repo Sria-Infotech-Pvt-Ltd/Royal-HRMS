@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useAnyPermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { ApprovalModal } from "./ApprovalModal";
 import StatusCell from "../leave/_components/StatusCell";
 import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModal";
@@ -335,9 +337,13 @@ function TeamApprovalsSection() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ApprovalsPage() {
+  const router = useRouter();
+  const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
+  const isHR = user?.role === "hr" || user?.role === "hr_admin";
   const canApprove         = useAnyPermission("leave.approve", "expenses.approve");
-  const canApproveAttendance = useAnyPermission("payroll.view", "payroll.approve");
+  // Attendance sign-off moved to Leave Management for HR — keep it here for other roles (e.g. manager).
+  const canApproveAttendance = useAnyPermission("payroll.view", "payroll.approve") && !isHR;
 
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
     ...(canApprove           ? [{ key: "approvals"  as Section, label: "Team Approvals",       icon: "ti-checks"       }] : []),
@@ -349,6 +355,12 @@ export default function ApprovalsPage() {
       setSection(sections[0].key);
     }
   }, [section, sections]);
+
+  useEffect(() => {
+    if (isHR) router.replace("/dashboard/leave");
+  }, [isHR, router]);
+
+  if (isHR) return null;
 
   return (
     <div>

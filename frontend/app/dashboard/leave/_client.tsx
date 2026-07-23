@@ -3,28 +3,34 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import { usePermission } from "@/hooks/usePermission";
+import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import LeaveDashboard from "./_components/LeaveDashboard";
 import LeaveApprovals from "./_components/LeaveApprovals";
 import ApplyLeaveForm from "./_components/ApplyLeaveForm";
 import TeamCalendar   from "./_components/TeamCalendar";
 import LeaveAnalytics from "./_components/LeaveAnalytics";
+import AttendanceApprovalTab from "../approvals/_components/AttendanceApprovalTab";
 
 interface BranchOption { id: number; branch_name: string }
 
-type TabId = "dashboard" | "apply" | "approvals" | "calendar" | "analytics";
+type TabId = "dashboard" | "apply" | "approvals" | "attendance" | "calendar" | "analytics";
 
 interface Props { role: string }
 
 export default function LeavePageClient({ role }: Props) {
   const isSystemAdmin = role === "system_admin";
   const canApprove    = usePermission("leave.approve");
+  // Attendance sign-off lives here only for HR — other roles still use /dashboard/approvals.
+  const isHR = role === "hr" || role === "hr_admin";
+  const hasAttendanceApprovalPermission = useAnyPermission("payroll.view", "payroll.approve");
+  const canApproveAttendance = isHR && hasAttendanceApprovalPermission;
 
   const ALL_TABS: { id: TabId; label: string }[] = [
     { id: "dashboard",  label: "Dashboard"   },
     { id: "apply",      label: "Apply Leave" },
     ...(canApprove ? [{ id: "approvals" as TabId, label: "Approvals" }] : []),
+    ...(canApproveAttendance ? [{ id: "attendance" as TabId, label: "Attendance Approvals" }] : []),
     { id: "calendar",   label: "Team Calendar" },
     { id: "analytics",  label: "Analytics"    },
   ];
@@ -73,9 +79,10 @@ export default function LeavePageClient({ role }: Props) {
             onApply={() => setActive("apply")}
           />
         )}
-        {active === "apply"     && <ApplyLeaveForm onCancel={() => setActive("dashboard")} />}
-        {active === "approvals" && <LeaveApprovals role={role} />}
-        {active === "calendar"  && <TeamCalendar />}
+        {active === "apply"      && <ApplyLeaveForm onCancel={() => setActive("dashboard")} />}
+        {active === "approvals"  && <LeaveApprovals role={role} />}
+        {active === "attendance" && canApproveAttendance && <AttendanceApprovalTab />}
+        {active === "calendar"   && <TeamCalendar />}
         {active === "analytics" && <LeaveAnalytics role={role} />}
       </div>
     </div>
