@@ -1,57 +1,84 @@
-export interface ManagerKPIs {
-  team_size:         number;
-  pending_approvals: number;
-  on_leave_today:    number;
-  attendance_rate:   number;
+export interface ManagerTeamOverview {
+  greeting:                    string;
+  manager_name:                string;
+  current_date:                string;
+  team_size:                   number;
+  pending_approvals:           number;
+  employees_on_leave_today:    number;
+  team_attendance_percentage:  number;
 }
 
-export interface PendingApprovalItem {
-  type:          "leave" | "expense";
+export interface ManagerQuickAction {
+  id:    string;
+  label: string;
+  url:   string;
+  count: number | null;
+}
+
+export type ApprovalType = "leave" | "expense" | "attendance_correction";
+
+export interface ManagerPendingApproval {
   id:            string;
+  approval_type: ApprovalType;
   employee_name: string;
+  employee_id:   string;
+  summary:       string;
+  date_from:     string;
+  date_to:       string;
+  applied_on:    string;
+  status:        "pending" | "l2_pending";
+}
+
+export interface ManagerBirthdayEntry {
+  employee_id:   string;
+  full_name:     string;
+  email:         string;
+  department:    string;
+  branch:        string;
+  date_of_birth: string;
+  days_until:    number;
+}
+
+export interface ManagerActivityEntry {
+  employee_name: string;
+  employee_id:   string;
+  action:        string;
+  module:        string;
+  description:   string;
   created_at:    string;
-  details:       Record<string, unknown>;
 }
 
-export interface PendingApprovalsResponse {
-  total_pending: number;
-  items:         PendingApprovalItem[];
+export type AttendanceStatus =
+  | "present" | "late" | "half_day" | "incomplete"
+  | "on_leave" | "weekly_off" | "holiday" | "absent";
+
+export interface ManagerTeamAttendanceEntry {
+  employee_id:   string;
+  employee_name: string;
+  designation:   string;
+  clock_in:      string | null;
+  clock_out:     string | null;
+  status:        AttendanceStatus;
 }
 
-export interface TeamAttendanceRow {
-  employee_id:    string;
-  employee_name:  string;
-  status:         string;
-  status_display: string;
-  first_punch_in: string | null;
-}
-
-export interface TeamAttendanceResponse {
-  team_size:     number;
-  present_count: number;
-  rows:          TeamAttendanceRow[];
-}
-
-export interface UpcomingLeaveItem {
+export interface ManagerUpcomingLeave {
   id:            string;
+  employee_id:   string;
   employee_name: string;
   leave_type:    string;
-  start_date:    string;
-  end_date:      string;
+  date_from:     string;
+  date_to:       string;
   total_days:    number;
+  status:        "approved" | "pending" | "l2_pending";
 }
 
-export interface UpcomingLeaveResponse {
-  items: UpcomingLeaveItem[];
-}
-
-export interface RecentActivityItem {
-  type:          "clock_in" | "leave_applied";
-  employee_name: string;
-  created_at:    string;
-  details?:      Record<string, unknown>;
-}
-
-export interface RecentActivityResponse {
-  items: RecentActivityItem[];
+export interface ManagerDashboardData {
+  team_overview:        ManagerTeamOverview;
+  quick_actions:        ManagerQuickAction[];
+  pending_approvals:    ManagerPendingApproval[];
+  todays_birthdays:     ManagerBirthdayEntry[];
+  upcoming_birthdays:   ManagerBirthdayEntry[];
+  recent_team_activity: ManagerActivityEntry[];
+  team_attendance:      ManagerTeamAttendanceEntry[];
+  upcoming_leaves:      ManagerUpcomingLeave[];
 }

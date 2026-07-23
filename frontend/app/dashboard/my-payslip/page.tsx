@@ -56,13 +56,15 @@ interface ApiMe {
 }
 
 interface ApiCompany {
-  company_name: string;
-  address: string;
-  city: string;
-  state: string;
-  pin_code: string;
-  cin: string;
+  company_name:   string;
+  address:        string;
+  city:           string;
+  state:          string;
+  pin_code:       string;
+  cin:            string;
   official_phone: string;
+  logo_url?:      string | null;
+  logo?:          string | null;
 }
 
 interface PagedResponse<T> { results: T[]; count: number; }
@@ -303,6 +305,13 @@ export default function MyPayslipPage() {
             <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-700 px-7 py-6">
               <div className="flex items-start justify-between">
                 <div>
+                  {(company?.logo_url || company?.logo) && (
+                    <img
+                      src={company.logo_url ?? company.logo ?? ""}
+                      alt={company.company_name}
+                      style={{ maxHeight: 48, maxWidth: 160, objectFit: "contain", marginBottom: 8 }}
+                    />
+                  )}
                   <div className="text-white font-bold text-lg leading-tight">
                     {company?.company_name ?? "—"}
                   </div>
