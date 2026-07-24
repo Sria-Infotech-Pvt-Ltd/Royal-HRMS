@@ -6,20 +6,29 @@ import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailP
 import { EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
 
-const AUTO_KEYS = new Set(["FULL_NAME", "FNAME", "LNAME", "EMAIL", "COMPANY"]);
+// Variables always derivable from props — never shown as manual fields.
+const AUTO_KEYS = new Set([
+  "FULL_NAME", "FNAME", "LNAME", "EMAIL", "COMPANY",
+  // Leave fields — provided via autoVars
+  "LEAVE_TYPE", "START_DATE", "END_DATE", "TOTAL_DAYS", "REASON", "EMPLOYEE_CODE", "EMPLOYEE_ID",
+  // Expense fields — provided via autoVars
+  "AMOUNT", "CATEGORY", "EXPENSE_DATE", "EXPENSE_NUMBER",
+]);
 
 interface Props {
-  action:       "approve" | "reject";
-  itemLabel:    string;
-  employeeName: string;
+  action:        "approve" | "reject";
+  itemLabel:     string;
+  employeeName:  string;
   employeeEmail?: string;
-  onConfirm:    (remarks: string, templateName?: string, extraContext?: Record<string, string>) => void;
-  onClose:      () => void;
-  saving:       boolean;
+  kind?:         "leave" | "expense";
+  autoVars?:     Record<string, string>;
+  onConfirm:     (remarks: string, templateName?: string, extraContext?: Record<string, string>) => void;
+  onClose:       () => void;
+  saving:        boolean;
 }
 
 export function ApprovalModal({
-  action, itemLabel, employeeName, employeeEmail, onConfirm, onClose, saving,
+  action, itemLabel, employeeName, employeeEmail, kind, autoVars, onConfirm, onClose, saving,
 }: Props) {
   const isApprove = action === "approve";
 
@@ -45,21 +54,25 @@ export function ApprovalModal({
           .map(([category, items]) => ({ category, templates: items.filter(t => t.is_active) }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
-        setSelectedTemplate(groups.flatMap(g => g.templates)[0] ?? null);
+        setSelectedTemplate(_pickDefaultTemplate(groups, kind, action));
         setCompany(coRes.data?.data ?? null);
       })
       .catch(() => setTemplateErr("Could not load email templates."))
       .finally(() => setLoadingTemplates(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApprove]);
 
+  // Pre-fill extraVars whenever the template changes; merge autoVars into pre-fillable slots.
   useEffect(() => {
     if (!selectedTemplate) { setExtraVars({}); return; }
     const manual: Record<string, string> = {};
     for (const v of (selectedTemplate.available_variables ?? [])) {
-      if (!AUTO_KEYS.has(v)) manual[v] = "";
+      if (!AUTO_KEYS.has(v)) {
+        manual[v] = autoVars?.[v] ?? "";
+      }
     }
     setExtraVars(manual);
-  }, [selectedTemplate]);
+  }, [selectedTemplate, autoVars]);
 
   function previewVars(): Record<string, string> {
     const parts = employeeName.trim().split(/\s+/);
@@ -69,6 +82,7 @@ export function ApprovalModal({
       LNAME:     parts.length > 1 ? parts[parts.length - 1] : "",
       EMAIL:     employeeEmail ?? "[Employee Email]",
       COMPANY:   company?.company_name ?? "[Company]",
+      ...(autoVars ?? {}),
       ...extraVars,
     };
   }
@@ -82,7 +96,7 @@ export function ApprovalModal({
 
   function handleConfirm() {
     if (isApprove) {
-      onConfirm(remarks, selectedTemplate?.name, extraVars);
+      onConfirm(remarks, selectedTemplate?.name, { ...(autoVars ?? {}), ...extraVars });
     } else {
       onConfirm(remarks);
     }
@@ -226,4 +240,41 @@ export function ApprovalModal({
       </div>
     </div>
   );
+}
+
+// Pick the best default template for the given kind and action.
+function _pickDefaultTemplate(
+  groups: { category: string; templates: EmailTemplate[] }[],
+  kind: "leave" | "expense" | undefined,
+  action: "approve" | "reject",
+): EmailTemplate | null {
+  const all = groups.flatMap(g => g.templates);
+  if (!kind) return all[0] ?? null;
+
+  const actionWords = action === "approve"
+    ? ["approv", "grant", "accept"]
+    : ["reject", "decline", "deny"];
+
+  // First: find a template in the matching category with the right action keyword
+  const kindGroups = groups.filter(g => g.category.toLowerCase().includes(kind));
+  const kindAll = kindGroups.flatMap(g => g.templates);
+
+  const exact = kindAll.find(t =>
+    actionWords.some(w =>
+      t.name.toLowerCase().includes(w) || t.display_name.toLowerCase().includes(w)
+    )
+  );
+  if (exact) return exact;
+
+  // Second: any template in the matching category
+  if (kindAll.length > 0) return kindAll[0];
+
+  // Third: any template whose name/display_name mentions the kind
+  const byName = all.find(t =>
+    t.name.toLowerCase().includes(kind) || t.display_name.toLowerCase().includes(kind)
+  );
+  if (byName) return byName;
+
+  // Fallback: first available
+  return all[0] ?? null;
 }

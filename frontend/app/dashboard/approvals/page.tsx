@@ -173,6 +173,7 @@ function TeamApprovalsSection() {
     kind:          RequestType;
     employeeName:  string;
     employeeEmail: string;
+    autoVars?:     Record<string, string>;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [apiErr, setApiErr] = useState("");
@@ -258,8 +259,8 @@ function TeamApprovalsSection() {
           requestId={detailRequest.id}
           initialData={detailRequest}
           onClose={() => setDetailRequest(null)}
-          onApprove={() => setModal({ id: detailRequest.id, action: "approve", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "" })}
-          onReject={() => setModal({ id: detailRequest.id, action: "reject", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "" })}
+          onApprove={() => setModal({ id: detailRequest.id, action: "approve", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "", autoVars: _leaveAutoVars(detailRequest) })}
+          onReject={() => setModal({ id: detailRequest.id, action: "reject", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "", autoVars: _leaveAutoVars(detailRequest) })}
         />
       )}
 
@@ -328,6 +329,8 @@ function TeamApprovalsSection() {
           itemLabel={modal.label}
           employeeName={modal.employeeName}
           employeeEmail={modal.employeeEmail}
+          kind={modal.kind === "leave" || modal.kind === "expense" ? modal.kind : undefined}
+          autoVars={modal.autoVars}
           onConfirm={handleConfirm}
           onClose={() => setModal(null)}
           saving={saving}
@@ -388,4 +391,20 @@ export default function ApprovalsPage() {
       </div>
     </div>
   );
+}
+
+function _leaveAutoVars(req: LeaveRequest): Record<string, string> {
+  const fmt = (d: string) => {
+    if (!d) return "";
+    return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  };
+  return {
+    LEAVE_TYPE:    req.leave_type_display ?? req.leave_type ?? "",
+    START_DATE:    fmt(req.start_date),
+    END_DATE:      fmt(req.end_date),
+    TOTAL_DAYS:    String(req.total_days ?? ""),
+    REASON:        req.reason ?? "",
+    EMPLOYEE_CODE: req.employee_code ?? "",
+    EMPLOYEE_ID:   req.employee_code ?? "",
+  };
 }
