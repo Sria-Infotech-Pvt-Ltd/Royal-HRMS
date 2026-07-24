@@ -2982,3 +2982,76 @@ The big feature this session. Employee raises a missed-clockout / regularization
 - **The Redis `bind 127.0.0.1 -::1` fix is still unapplied** — needs someone with admin rights on this machine to edit `C:\Program Files\Redis\redis.windows-service.conf` and restart the `Redis` service. Until then, Celery/Redis connection resets during dev sessions are expected, not a regression.
 - **`AttendanceApprovalTab.tsx`** (existing, unmodified) **is unrelated to `CorrectionsTab`** despite similar names — it's the payroll-cycle bulk attendance sign-off before running payroll, not individual correction requests. Don't conflate the two when reading `/dashboard/leave`'s tab list.
 - **New shared CSS utilities (`.text-*`, `.spin`, `.upload-zone--active`) are available app-wide now** — reach for these instead of inline `style` in any file touched next, per the standing "no inline CSS" instruction.
+
+---
+
+## Session — Rithwika (23 July 2026)
+
+**Branch:** `frontend/22-7`
+
+---
+
+### 1. Payroll / My Payslips — Permission Architecture Audit
+
+**Files:** `lib/navConfig.ts`, `proxy.ts` (frontend fixes); backend changes documented but **not made** — see note below.
+
+Walked the full `payroll.view` permission chain end to end (sidebar nav, route guard, every backend view in `apps/payroll/`) after being asked what should be visible to HR / Employee / Manager. Found the sidebar's "My Payslips" entry and its route were both incorrectly gated behind `payroll.view` — the *admin* payroll permission — instead of being self-service like "My Attendance." Since `payroll.view` was removed from the `employee` role in migration `0042_clean_employee_role_permissions.py`, this meant employees currently could not see or reach "My Payslips" at all, despite the backend's `MyPayslipsView` being `IsAuthenticated`-only with no codename check.
+
+**Fixed on the frontend only** (explicit instruction — no backend edits made this session):
+- `lib/navConfig.ts` — `my-payslip` nav item → `permission: null` (matches `my-attendance` exactly).
+- `proxy.ts` — removed `/dashboard/my-payslip` from `ROUTE_PERMISSIONS` entirely, so it falls through on authentication alone, same as `/dashboard/my-attendance` (also absent from that map).
+
+**Backend gaps found, written up as a request for the backend team instead of touched here:**
+- `apps/payroll/views/payslips.py`'s `_is_payroll_admin()` hardcodes `user.role.name in ('hr', 'system_admin')` — every other payroll view file (`cycles.py`, `employee_salary.py`) already uses a local `_has_perm(user, codename)` helper instead; this one file is the outlier.
+- No `payroll.view_own` permission exists in the backend at all (only `.view`/`.create`/`.edit`/`.delete`/`.export`) — needed to properly distinguish "view your own payslip" from "view everyone's" without a role-name hack.
+- `manager` role still holds `payroll.view` from the original seed (`0002_seed_roles_permissions.py`) — never removed the way it was from `employee` in migration 0042, so Manager can still reach the full admin Payroll module today.
+- **Real bug, unrelated to the permission work but found while reading the same file:** `UpdatePayslipReimbBonusView`, `ExpenseSummaryForCycleView`, and `ReferralBonusSummaryForCycleView` all call `_is_hr_admin(request.user)` — a function that is never defined or imported anywhere in the codebase. Any request to these three endpoints throws `NameError` today.
+
+> **These four backend items were drafted into a message for the backend team, not implemented.** Full text saved at `<scratchpad>/backend-payroll-permissions-request.md` for this session — whoever picks it up next should pull the exact wording from there rather than re-deriving it.
+
+---
+
+### 2. Console Error — Duplicate `my-payslip` Nav Key
+
+**Files:** `lib/navConfig.ts`
+
+Reported symptom: `Encountered two children with the same key, "my-payslip"` in `DashboardShell.tsx`. Root cause: two separate `NavItem` entries in `ALL_NAV` both had `id: "my-payslip"` — one left over under "Time & Pay" (`permission: "payroll.view"`, the pre-fix version) and one under "My" (added as part of §1's fix, `permission: "payroll.view_own"` at the time). Removed the "Time & Pay" duplicate entirely and standardized the single remaining "My" section entry on `permission: null` — `payroll.view_own` doesn't exist as a real backend permission yet (see §1), so keying the nav item to it would have made "My Payslips" invisible to everyone until that backend work ships. Left a comment on the entry noting to switch to `"payroll.view_own"` once it does.
+
+---
+
+### 3. Build Failure — Dead Manager-Dashboard-Widget Code
+
+**Files:** `lib/api/endpoints.ts`; **deleted** `hooks/useManagerDashboard.ts`, `components/dashboard/manager/{ManagerConsole,ManagerPendingApprovals,ManagerRecentActivity,ManagerTeamAttendance,ManagerUpcomingLeave}.tsx`
+
+`npm run build` was failing: `types/managerDashboard.ts` has no exports named `PendingApprovalItem`, `ManagerKPIs`, `PendingApprovalsResponse`, `TeamAttendanceResponse`, `UpcomingLeaveResponse`, or `RecentActivityResponse`, but `hooks/useManagerDashboard.ts` and five components under `components/dashboard/manager/` imported all six. Also a second, unrelated hard error in the same area: `lib/api/endpoints.ts` had two `manager:` keys in the same `dashboard` object literal (`"An object literal cannot have multiple properties with the same name"`).
+
+Traced both back to the same root cause rather than inventing the missing types: these 6 files implement a **parallel, never-wired manager dashboard** — each widget fetching its own slice from 5 endpoints (`/dashboard/manager/kpis/`, `/pending-approvals/`, `/team-attendance/`, `/upcoming-leave/`, `/recent-activity/`) that **don't exist anywhere in the backend** (`apps/dashboard/urls.py` only registers one: `path('manager/', views.ManagerDashboardView.as_view())`, a single combined payload). Confirmed via search that none of the 6 files are imported by any page — the real, working manager dashboard is `app/dashboard/_components/ManagerDashboard.tsx`, which already fetches that one real endpoint through `lib/teamContext.tsx`'s `useTeam()`/`TeamProvider` and renders every one of these same widgets (console stats, pending approvals, recent activity, team attendance, upcoming leaves) inline, correctly typed against the existing `ManagerDashboardData` in `types/managerDashboard.ts`.
+
+Given the choice between (a) inventing 6 new types pointing at 5 endpoints that would 404 the moment anything actually rendered them, or (b) deleting unreachable, non-functional duplicate code with a working equivalent already in production — deleted the 6 files, and removed the now-orphaned `managerDashboard` endpoint block plus the duplicate `manager:` key from `lib/api/endpoints.ts` (kept the one already documented "single aggregated endpoint"). `types/managerDashboard.ts` itself was untouched — it's correct and is what the real `ManagerDashboard.tsx`/`teamContext.tsx` actually use.
+
+> **If a per-widget-component split of `ManagerDashboard.tsx` is wanted later** (it's 327 lines, over this repo's 200-line component guideline) — that's a legitimate refactor, but it should be done as prop-driven components fed from the *existing* single `useTeam()` fetch, not by resurrecting these deleted files' independent-fetch design against endpoints that were never built.
+
+---
+
+### Key Files Changed (23 July 2026)
+
+| File | Change |
+|------|--------|
+| `lib/navConfig.ts` | `my-payslip` deduplicated to a single entry under "My", `permission: null` |
+| `proxy.ts` | Removed `/dashboard/my-payslip` from `ROUTE_PERMISSIONS` |
+| `lib/api/endpoints.ts` | Removed duplicate `dashboard.manager` key; deleted the orphaned `managerDashboard` block (5 nonexistent endpoints) |
+| `hooks/useManagerDashboard.ts` | **DELETED** — dead code, fetched from endpoints that don't exist |
+| `components/dashboard/manager/ManagerConsole.tsx` | **DELETED** — same, never wired into any page |
+| `components/dashboard/manager/ManagerPendingApprovals.tsx` | **DELETED** — same |
+| `components/dashboard/manager/ManagerRecentActivity.tsx` | **DELETED** — same |
+| `components/dashboard/manager/ManagerTeamAttendance.tsx` | **DELETED** — same |
+| `components/dashboard/manager/ManagerUpcomingLeave.tsx` | **DELETED** — same |
+
+---
+
+### Notes for Next Developer
+
+- **`my-payslip`'s permission is `null`, not `"payroll.view_own"`, on purpose** — that codename doesn't exist in the backend yet. Don't "fix" this back to a permission string until the backend request in §1 actually ships; doing so today would hide "My Payslips" from every role.
+- **Backend permission-architecture work for Payroll is fully scoped but not started** — see §1 and `<scratchpad>/backend-payroll-permissions-request.md`. Four items: swap `_is_payroll_admin()`'s role-name check for `_has_perm`, add a real `payroll.view_own` permission, remove `payroll.view` from `manager`, and fix the undefined `_is_hr_admin()` crash bug.
+- **If you see `lib/navConfig.ts` or `proxy.ts` with unfamiliar whitespace/formatting** — both files got reformatted (alignment spacing stripped) by an external process partway through this session; functionally nothing changed from that pass, only the fixes described above are meaningful diffs.
+- **The manager dashboard is `app/dashboard/_components/ManagerDashboard.tsx` + `lib/teamContext.tsx` — full stop.** There is no other manager dashboard implementation anymore; §3's deleted files were a dead, never-wired duplicate. Don't recreate `hooks/useManagerDashboard.ts` or per-widget manager endpoints without first checking whether `ManagerDashboard.tsx` already covers it (it almost certainly does).
