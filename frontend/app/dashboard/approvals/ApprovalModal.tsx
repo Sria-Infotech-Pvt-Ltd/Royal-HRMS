@@ -1,19 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { API } from "@/lib/api/endpoints";
 import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailPreview";
 import { EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
-
-// Variables always derivable from props — never shown as manual fields.
-const AUTO_KEYS = new Set([
-  "FULL_NAME", "FNAME", "LNAME", "EMAIL", "COMPANY",
-  // Leave fields — provided via autoVars
-  "LEAVE_TYPE", "START_DATE", "END_DATE", "TOTAL_DAYS", "REASON", "EMPLOYEE_CODE", "EMPLOYEE_ID",
-  // Expense fields — provided via autoVars
-  "AMOUNT", "CATEGORY", "EXPENSE_DATE", "EXPENSE_NUMBER",
-]);
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface Props {
   action:        "approve" | "reject";
@@ -30,7 +22,8 @@ interface Props {
 export function ApprovalModal({
   action, itemLabel, employeeName, employeeEmail, kind, autoVars, onConfirm, onClose, saving,
 }: Props) {
-  const isApprove = action === "approve";
+  const isApprove  = action === "approve";
+  const currentUser = useCurrentUser();
 
   const [remarks,          setRemarks]          = useState("");
   const [templateGroups,   setTemplateGroups]   = useState<{ category: string; templates: EmailTemplate[] }[]>([]);
@@ -39,6 +32,40 @@ export function ApprovalModal({
   const [extraVars,        setExtraVars]        = useState<Record<string, string>>({});
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
   const [templateErr,      setTemplateErr]      = useState("");
+
+  // Full context of all auto-derivable variables (both cases).
+  const autoContext = useMemo<Record<string, string>>(() => {
+    const parts        = employeeName.trim().split(/\s+/);
+    const fname        = parts[0] ?? employeeName;
+    const lname        = parts.length > 1 ? parts[parts.length - 1] : "";
+    const companyName  = company?.company_name ?? "";
+    const approverName = currentUser?.name ?? "";
+    const approverRole = (currentUser?.role ?? "").replace(/_/g, " ");
+
+    const ctx: Record<string, string> = {
+      // Name — all common aliases in both cases
+      FULL_NAME: employeeName,     full_name: employeeName,
+      EMPLOYEE_NAME: employeeName, employee_name: employeeName,
+      FNAME: fname,                fname: fname,
+      LNAME: lname,                lname: lname,
+      // Contact
+      EMAIL: employeeEmail ?? "",  email: employeeEmail ?? "",
+      // Company
+      COMPANY: companyName, COMPANY_NAME: companyName, company_name: companyName, company: companyName,
+      // Approver
+      APPROVER_NAME: approverName, approver_name: approverName,
+      APPROVER_ROLE: approverRole, approver_role: approverRole,
+    };
+
+    // Merge request-specific autoVars in all three casings
+    for (const [k, v] of Object.entries(autoVars ?? {})) {
+      ctx[k]               = v;
+      ctx[k.toUpperCase()] = v;
+      ctx[k.toLowerCase()] = v;
+    }
+
+    return ctx;
+  }, [employeeName, employeeEmail, company, currentUser, autoVars]);
 
   useEffect(() => {
     if (!isApprove) return;
@@ -62,29 +89,21 @@ export function ApprovalModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApprove]);
 
-  // Pre-fill extraVars whenever the template changes; merge autoVars into pre-fillable slots.
+  // Pre-fill extraVars from autoContext; only variables NOT resolvable from context become manual fields.
   useEffect(() => {
     if (!selectedTemplate) { setExtraVars({}); return; }
     const manual: Record<string, string> = {};
     for (const v of (selectedTemplate.available_variables ?? [])) {
-      if (!AUTO_KEYS.has(v)) {
-        manual[v] = autoVars?.[v] ?? "";
+      const resolved = autoContext[v] ?? autoContext[v.toUpperCase()] ?? autoContext[v.toLowerCase()];
+      if (resolved === undefined) {
+        manual[v] = "";
       }
     }
     setExtraVars(manual);
-  }, [selectedTemplate, autoVars]);
+  }, [selectedTemplate, autoContext]);
 
   function previewVars(): Record<string, string> {
-    const parts = employeeName.trim().split(/\s+/);
-    return {
-      FULL_NAME: employeeName,
-      FNAME:     parts[0] ?? employeeName,
-      LNAME:     parts.length > 1 ? parts[parts.length - 1] : "",
-      EMAIL:     employeeEmail ?? "[Employee Email]",
-      COMPANY:   company?.company_name ?? "[Company]",
-      ...(autoVars ?? {}),
-      ...extraVars,
-    };
+    return { ...autoContext, ...extraVars };
   }
 
   function previewHtml(): string {
@@ -96,7 +115,7 @@ export function ApprovalModal({
 
   function handleConfirm() {
     if (isApprove) {
-      onConfirm(remarks, selectedTemplate?.name, { ...(autoVars ?? {}), ...extraVars });
+      onConfirm(remarks, selectedTemplate?.name, { ...autoContext, ...extraVars });
     } else {
       onConfirm(remarks);
     }
@@ -242,7 +261,6 @@ export function ApprovalModal({
   );
 }
 
-// Pick the best default template for the given kind and action.
 function _pickDefaultTemplate(
   groups: { category: string; templates: EmailTemplate[] }[],
   kind: "leave" | "expense" | undefined,
@@ -255,26 +273,17 @@ function _pickDefaultTemplate(
     ? ["approv", "grant", "accept"]
     : ["reject", "decline", "deny"];
 
-  // First: find a template in the matching category with the right action keyword
-  const kindGroups = groups.filter(g => g.category.toLowerCase().includes(kind));
-  const kindAll = kindGroups.flatMap(g => g.templates);
+  const kindGroups   = groups.filter(g => g.category.toLowerCase().includes(kind));
+  const kindAll      = kindGroups.flatMap(g => g.templates);
 
   const exact = kindAll.find(t =>
-    actionWords.some(w =>
-      t.name.toLowerCase().includes(w) || t.display_name.toLowerCase().includes(w)
-    )
+    actionWords.some(w => t.name.toLowerCase().includes(w) || t.display_name.toLowerCase().includes(w))
   );
   if (exact) return exact;
-
-  // Second: any template in the matching category
   if (kindAll.length > 0) return kindAll[0];
 
-  // Third: any template whose name/display_name mentions the kind
   const byName = all.find(t =>
     t.name.toLowerCase().includes(kind) || t.display_name.toLowerCase().includes(kind)
   );
-  if (byName) return byName;
-
-  // Fallback: first available
-  return all[0] ?? null;
+  return byName ?? all[0] ?? null;
 }
