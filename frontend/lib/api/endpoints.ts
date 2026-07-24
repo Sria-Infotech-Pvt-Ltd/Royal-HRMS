@@ -183,6 +183,10 @@ export const API = {
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
   },
 
+  voice: {
+    parse: "/voice/parse/",
+  },
+
   notifications: {
     list: "/notifications/",
     unreadCount: "/notifications/unread-count/",

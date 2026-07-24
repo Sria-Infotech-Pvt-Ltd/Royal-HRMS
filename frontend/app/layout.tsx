@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
+import VoiceCommandButton from "@/components/VoiceCommandButton";
+import { ToastProvider } from "@/components/ToastProvider";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -35,7 +37,15 @@ export default function RootLayout({
         />
       </head>
       <body className={poppins.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
-        {children}
+        <ToastProvider>
+          {children}
+          {/* Global floating action button — every authenticated page and
+              every role. Disabled+tooltip when logged out elsewhere, hidden
+              entirely on /login and /signup (see VoiceCommandButton.tsx).
+              Lives here, not inside DashboardShell, so it isn't tied to the
+              dashboard route tree or duplicated per role. */}
+          <VoiceCommandButton />
+        </ToastProvider>
         <SessionExpiredOverlay />
       </body>
     </html>

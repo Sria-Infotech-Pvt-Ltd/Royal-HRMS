@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'apps.assessments',
     'apps.notifications',
     'apps.dashboard',
+    'apps.voice_commands',
 ]
 
 MIDDLEWARE = [
@@ -111,7 +112,16 @@ CLOUDINARY_STORAGE = {
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
 
 # ─── Cache ───────────────────────────────────────────────────────────────────
-_REDIS_URL = env('REDIS_URL', default='')
+# rediss:// (SSL) requires ssl_cert_reqs; append it when the URL uses that scheme.
+# redis-py only accepts the lowercase strings "none"/"optional"/"required" here,
+# not the ssl.CERT_REQUIRED constant name.
+def _with_ssl_cert_reqs(url: str) -> str:
+    if url.startswith('rediss://') and 'ssl_cert_reqs' not in url:
+        sep = '&' if '?' in url else '?'
+        url = f'{url}{sep}ssl_cert_reqs=required'
+    return url
+
+_REDIS_URL = _with_ssl_cert_reqs(env('REDIS_URL', default=''))
 
 if _REDIS_URL:
     CACHES = {
@@ -136,13 +146,8 @@ else:
 # ─── Celery ──────────────────────────────────────────────────────────────────
 # Broker: reuse the same Redis URL used by the cache layer.
 # Falls back to localhost Redis in development when REDIS_URL is not set.
-# rediss:// (SSL) requires ssl_cert_reqs; append it when the URL uses that scheme.
 def _celery_redis_url(default: str) -> str:
-    url = env('REDIS_URL', default=default)
-    if url.startswith('rediss://') and 'ssl_cert_reqs' not in url:
-        sep = '&' if '?' in url else '?'
-        url = f'{url}{sep}ssl_cert_reqs=CERT_REQUIRED'
-    return url
+    return _with_ssl_cert_reqs(env('REDIS_URL', default=default))
 
 CELERY_BROKER_URL        = _celery_redis_url('redis://localhost:6379/1')
 CELERY_RESULT_BACKEND    = _celery_redis_url('redis://localhost:6379/1')
@@ -278,6 +283,14 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'verbose',
         },
+        'voice_commands_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'voice_commands.log',
+            'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
@@ -286,6 +299,19 @@ LOGGING = {
     'loggers': {
         'accounts': {
             'handlers': ['auth_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Keyed 'apps.voice_commands' (not a bare 'voice_commands' string) —
+        # every module in this app logs via logging.getLogger(__name__), which
+        # resolves to 'apps.voice_commands.<module>' (e.g.
+        # 'apps.voice_commands.conversation'). Python's logging hierarchy walks
+        # up dotted parents, so a logger registered here as 'apps.voice_commands'
+        # catches every submodule's calls via propagation. A bare 'voice_commands'
+        # key (mirroring the 'accounts' entry above literally) would NOT match
+        # that hierarchy and would silently catch nothing.
+        'apps.voice_commands': {
+            'handlers': ['voice_commands_file', 'console'],
             'level': 'INFO',
             'propagate': False,
         },

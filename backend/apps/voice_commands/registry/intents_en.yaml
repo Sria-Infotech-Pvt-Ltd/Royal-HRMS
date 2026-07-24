@@ -1,0 +1,361 @@
+# `conversational: true` marks an intent as multi-turn — voice_commands/conversation.py
+# may need several exchanges (slot-filling questions, disambiguation, etc.)
+# before the intent is actually carried out, rather than dispatching
+# immediately from the first utterance. /api/voice/parse/ echoes this back on
+# every response as the "conversational" field so the frontend doesn't need
+# its own per-intent list of "which commands might need follow-up turns" —
+# it reads it straight off the response instead. It's a property of the
+# INTENT, not of any one exchange: even a single apply_leave utterance that
+# happens to include every slot ("apply for sick leave from july 22 to july
+# 24 because i am unwell") still reports conversational: true on its
+# (immediate) response — see executor.py/conversation.py's handling of
+# "awaiting_input" for the per-turn part of that signal.
+#
+# apply_leave is the only conversational intent today. Any future intent
+# that can need a follow-up question — e.g. a Round 2 approve/reject intent
+# that must disambiguate which of several pending requests the caller means
+# — should set conversational: true here too.
+intents:
+  clock_in:
+    # No domain codename required — matches AttendancePunchView, which is
+    # gated by IsAuthenticated only (backend/apps/attendance/views/my_attendance.py:102).
+    required_permission: null
+    conversational: false
+    phrases:
+      - "mark my attendance"
+      - "clock in"
+      - "clock me in"
+      - "punch in"
+      - "i'm here"
+      - "i've arrived"
+      - "i just got in"
+      - "i'm at work"
+      - "start my shift"
+      - "starting my shift"
+      - "get me clocked in"
+      - "i showed up"
+      - "mark me present"
+      - "i'm at the office now"
+
+  clock_out:
+    # Same as clock_in — AttendancePunchView has no per-punch-type permission check.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "clock out"
+      - "clock me out"
+      - "punch out"
+      - "check out"
+      - "i am leaving"
+      - "i'm leaving"
+      - "i'm done for the day"
+      - "i'm heading out"
+      - "i'm heading home"
+      - "wrapping up for the day"
+      - "i'm calling it a day"
+      - "ending my shift"
+      - "i'm out for the day"
+      - "i'm done for today"
+      - "signing off for the day"
+
+  check_leave_balance:
+    # No domain codename required for the caller's own balance — matches the
+    # own-balance branch of LeaveBalanceView.get() (hrms/views/leave.py:361-362),
+    # which only checks 'employees.view' on the ?employee_id= cross-lookup path.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "check my leave balance"
+      - "how many leaves do i have"
+      - "leave balance"
+      - "how much leave do i have left"
+      - "what's my leave balance"
+      - "how many leave days do i have left"
+      - "how many vacation days do i have"
+      - "show me my leave balance"
+      - "tell me my leave balance"
+      - "what's my remaining leave"
+      - "how much leave is left"
+      - "how many sick days do i have left"
+      - "how many days of leave do i have"
+      - "my remaining leaves"
+      - "what leave do i have left"
+
+  check_leave_status:
+    # No domain codename required — matches the own-requests default branch
+    # of LeaveRequestListCreateView.get() (hrms/views/leave.py:538-561), which
+    # only checks a codename on the ?employee_id= / ?scope=team branches, not
+    # the plain "my own requests" case this intent uses.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "check my leave status"
+      - "show my leave requests"
+      - "did my leave get approved"
+      - "what's the status of my leave"
+      - "have i been approved for leave"
+      - "is my leave request approved"
+      - "show me my leave applications"
+      - "what is my leave status"
+      - "my leave status"
+      - "how many unapproved leaves i have"
+      - "how many unapproved leaves do i have"
+      - "has my leave been approved yet"
+      - "what happened to my leave request"
+      - "is my leave approved yet"
+      - "any update on my leave request"
+      - "did they approve my leave"
+
+  cancel_leave:
+    # No domain codename required — LeaveRequestDetailView.patch() (the cancel
+    # path, hrms/views/leave.py:716-731) enforces ownership in code
+    # (leave_request.employee_id != request.user.id), not a permission
+    # codename. Self-only by construction, same as clock_in/clock_out.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "cancel my leave"
+      - "withdraw my leave request"
+      - "cancel my leave application"
+      - "withdraw my leave"
+      - "cancel my leave request"
+      - "please cancel my leave request"
+      - "i don't need that leave anymore"
+      - "i want to withdraw my leave application"
+      - "i need to cancel my leave request"
+      - "that leave request needs to be cancelled"
+      - "i'm not going to need that leave after all"
+      - "please withdraw my leave application"
+      - "can you cancel my leave request"
+      - "i'd like to cancel my leave"
+
+  check_attendance_stats:
+    # No domain codename required — matches the own-stats default branch
+    # of AttendanceStatsView.get() (attendance/views/my_attendance.py:153-177),
+    # which only checks a codename via _resolve_target_user() on the
+    # ?employee_id= cross-lookup path, not the plain "my own stats" case
+    # this intent uses.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "check my attendance"
+      - "how's my attendance this month"
+      - "what's my attendance percentage"
+      - "how many days have i been present"
+      - "show my attendance stats"
+      - "what is my attendance percentage this month"
+      - "my attendance stats"
+      - "how is my attendance"
+      - "what's my attendance rate"
+      - "how many days was i present this month"
+      - "tell me my attendance percentage"
+      - "what's my attendance like this month"
+      - "how many days did i attend this month"
+
+  check_attendance_summary:
+    # No domain codename required — matches the own-summary default branch
+    # of AttendanceSummaryView.get() (attendance/views/my_attendance.py:182-209),
+    # same _resolve_target_user() gate as check_attendance_stats above.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "show my attendance summary"
+      - "monthly attendance summary"
+      - "my attendance summary"
+      - "give me my attendance summary"
+      - "show me my monthly attendance summary"
+      - "give me my monthly attendance report"
+      - "show my attendance report"
+      - "attendance summary please"
+      - "can i see my attendance summary"
+      - "pull up my attendance summary"
+      - "show my attendance breakdown"
+      - "my monthly attendance report"
+      - "give me a summary of my attendance"
+      - "summarize my attendance for this month"
+
+  apply_leave:
+    # No domain codename required — matches LeaveRequestListCreateView.post()
+    # (hrms/views/leave.py:590), which is IsAuthenticated-only; the balance/
+    # overlap/approval-chain rules are business validation, not a permission
+    # gate. Multi-turn slot-filling (leave_type, start_date, end_date, reason)
+    # is handled by voice_commands/conversation.py, not here — this entry only
+    # controls whether the *initial* utterance is recognized as this intent.
+    required_permission: null
+    conversational: true
+    phrases:
+      - "apply for leave"
+      - "i want to apply for leave"
+      - "i need to take leave"
+      - "request leave"
+      - "i want to take leave"
+      - "apply for a leave"
+      - "i need leave"
+      - "i would like to apply for leave"
+      - "i want to book leave"
+      - "can i take a day off"
+      - "i need a day off"
+      - "book me some leave"
+      - "i'd like to request leave"
+      - "put in a leave request for me"
+      - "i want to go on leave"
+      - "submit a leave request"
+      - "i need some time off"
+      - "help me apply for leave"
+
+  check_team_leave_queue:
+    # Requires leave.approve — matches the scope=team approval-queue branch
+    # of LeaveRequestListCreateView.get() (hrms/views/leave.py:556-558).
+    # That view branch does NOT reject a scope=team request without
+    # leave.approve; it silently falls back to the caller's own requests
+    # (hrms/views/leave.py:559-561). Voice deliberately does NOT mirror that
+    # fallback — a caller without leave.approve gets an explicit permission-
+    # denied message from execute_intent()'s gate instead (see executor.py's
+    # _execute_check_team_leave_queue docstring). Silently answering a
+    # different question than the one asked would be confusing over voice.
+    required_permission: leave.approve
+    conversational: false
+    phrases:
+      - "show my team's leave requests"
+      - "check pending leave approvals"
+      - "how many leave requests are pending"
+      - "show the approval queue"
+      - "show pending leave requests"
+      - "how many pending leave approvals are there"
+      - "what's in my approval queue"
+      - "check the leave approval queue"
+      - "show team leave requests awaiting approval"
+      - "who's waiting for leave approval"
+      - "show me leave requests waiting for approval"
+      - "what leave requests need my approval"
+
+  check_team_attendance:
+    # Requires attendance.view — matches HRAttendanceDashboardView.get()
+    # (attendance/views/hr_attendance.py:88-105), which already rejects
+    # outright (403) without attendance.view rather than falling back to
+    # anything, so this codename mirrors the view's own gate rather than
+    # working around a silent-fallback gap like check_team_leave_queue above.
+    required_permission: attendance.view
+    conversational: false
+    phrases:
+      - "check team attendance"
+      - "show attendance dashboard"
+      - "how's the team's attendance today"
+      - "how is the team's attendance today"
+      - "show me the attendance dashboard"
+      - "check the team's attendance"
+      - "how many people are present today"
+      - "show today's attendance summary for the team"
+      - "who's present today"
+      - "who's absent today"
+      - "give me the team attendance report"
+      - "show me who's in today"
+      - "pull up team attendance"
+
+  approve_leave:
+    # Requires leave.approve — same codename LeaveApprovalView.post() itself
+    # checks (hrms/views/leave.py:775). Identify-then-confirm, not
+    # slot-filling: voice_commands/conversation.py extracts an employee name
+    # if the first utterance has one, fuzzy-matches it against the caller's
+    # team's pending leave requests only (check_team_leave_queue's own
+    # scope=team query), then reads back the match and asks for an explicit
+    # yes/no before actually calling LeaveApprovalView.post().
+    required_permission: leave.approve
+    conversational: true
+    phrases:
+      - "approve leave for"
+      - "approve this leave request"
+      - "approve the leave request"
+      - "approve leave request"
+      - "approve leave"
+      - "approve pending leave"
+      - "go ahead and approve the leave"
+      - "yes approve the leave"
+      - "approve that leave request"
+      - "give the green light on this leave request"
+      - "sign off on this leave request"
+      - "approve her leave"
+      - "approve his leave"
+
+  reject_leave:
+    # Same identify-then-confirm flow as approve_leave, action=reject instead
+    # of approve — same leave.approve codename (LeaveApprovalView has no
+    # separate leave.reject permission; see accounts/migrations/0002_seed_roles_permissions.py).
+    required_permission: leave.approve
+    conversational: true
+    phrases:
+      - "reject leave for"
+      - "deny leave for"
+      - "reject this leave request"
+      - "deny this leave request"
+      - "reject the leave request"
+      - "deny the leave request"
+      - "reject leave request"
+      - "deny leave request"
+      - "reject leave"
+      - "deny leave"
+      - "turn down this leave request"
+      - "decline this leave request"
+      - "decline leave for"
+      - "please reject this leave request"
+      - "i want to reject this leave"
+
+  request_attendance_correction:
+    # No domain codename required — matches AttendanceCorrectionView.post()
+    # (attendance/views/my_attendance.py:252-265), which is IsAuthenticated-only.
+    # Voice can't yet capture the required slots (date, punch type, in/out
+    # time, reason) — the executor always defers this one to the dashboard
+    # until slot-filling infrastructure exists.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "request attendance correction"
+      - "correct my attendance"
+      - "fix my attendance"
+      - "submit an attendance correction"
+      - "my attendance is wrong"
+      - "correct my punch"
+      - "file an attendance correction"
+      - "there's a mistake in my attendance"
+      - "my punch time is wrong"
+      - "i need to fix my punch"
+      - "raise an attendance correction request"
+      - "my attendance record is incorrect"
+      - "help me correct my attendance"
+      - "i missed a punch can you fix it"
+      - "i need to correct my punch time"
+
+# Attendance mode phrases — scanned independently of which intent matched.
+# Shared by clock_in and clock_out since PunchService.record_punch() reads
+# attendance_mode for both punch directions (services_attendance.py:114).
+#
+# These are bare core phrases — no baked-in "at X"/"from X"/"for X" variants
+# per mode. mode_extractor.extract_attendance_mode() strips a leading
+# preposition generically wherever one is spoken directly before any of
+# these, so "from office", "at client location", and "for field work" are
+# all handled by one mechanism instead of needing three more registry
+# entries each. The two phrases that already start with "in" ("in office",
+# "in the field") stay as literal entries — see mode_extractor.py for why
+# "in" specifically isn't handled generically.
+mode_phrases:
+  office:
+    - "in office"
+    - "office"
+
+  wfh:
+    - "home"
+    - "work from home"
+    - "wfh"
+
+  field:
+    - "field work"
+    - "in the field"
+
+  client_location:
+    - "client location"
+    - "client site"
+    - "the client"
+
+  remote_office:
+    - "remote office"
+    - "remote"
