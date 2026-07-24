@@ -21,6 +21,7 @@ from core.responses import error, first_error, get_client_ip, success
 from ..models import (
     APPROVAL_APPROVED, APPROVAL_REJECTED,
     CARRY_FORWARD_UNLIMITED, CARRY_FORWARD_MANUAL,
+    DURATION_FULL,
     LEAVE_LWP, LEAVE_TYPE_CHOICES,
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
