@@ -2758,3 +2758,60 @@ backend/apps/hrms/views/leave.py           — cache invalidation after bulk ins
 - Manager Dashboard frontend implementation (API prompt to be provided)
 - Credit Rules backend (`GET/POST/PUT/DELETE /api/leave/credit-rules/`) — `CreditTab.tsx` is still mock-only
 - Everything listed as Pending in the 2026-07-21 entry above is still outstanding
+
+---
+
+## Session Log — 2026-07-23
+**Author: Swetha**
+
+Backend-only follow-up on the payroll permission model, picked up from a frontend Payroll/My Payslips permission audit (5 numbered findings) and from the "_is_hr_admin NameError" item on the 22/07 audit punch list above. Also resolved a live migration-graph conflict that blocked `makemigrations`/`migrate` entirely, and along the way found this backend points at a **shared remote database** other sessions are actively writing to.
+
+### 1. Payroll Permission Model — Audit Findings
+
+**Before writing anything, verified each finding against the actual current code/DB rather than trusting the report at face value** — several had already been fixed or didn't match reality:
+
+- **`_is_hr_admin` NameError** — already fixed before this session (confirmed via `git log`, commit `1ef85c0` era); the three endpoints already called `_is_payroll_admin()` instead. No `_is_hr_admin` reference exists anywhere in the codebase.
+- **Remove hardcoded role-name checks in `payslips.py`** — `_is_payroll_admin()` (`user.role.name in ('hr', 'system_admin')`) removed entirely; all 8 call sites replaced with `_has_perm(user, codename)`, split by what each endpoint actually does: `payroll.view` for pure reads (`CyclePayslipListView`, `PayslipDetailView`'s admin branch, `ExpenseSummaryForCycleView`, `ReferralBonusSummaryForCycleView`, `PayslipQueryListView.get()`), `payroll.edit` for mutations (`UpdatePayslipReimbBonusView`, `DispatchPayslipsView`, `PayslipQueryResolveView`).
+- **`payroll.view_own`** — permission and its seed migration (`0043_seed_payroll_view_own_permission`, granted to every role) already existed from the 22/07 session above; `MyPayslipsView`/`AcknowledgePayslipView` were already wired to it. The one gap: `PayslipQueryListView.post()` (raising a query) had zero permission check — added the same `payroll.view_own` gate there.
+- **Remove `payroll.view` from manager** — added `0045_remove_payroll_view_from_manager.py`.
+- **Verify role names before hardcoding (explicit ask)** — confirmed directly against the DB: `hr` is correct (not `hr_admin`); the "manager" role's actual `name` is **`manager__team_lead`**, not `manager` — the same drift already flagged in the 22/07 audit's `attendance_approval.py` finding above (`CycleEmployeeDailyView` comparing against the literal string `'manager'`, permanently dead code) and independently documented in `0043_seed_payroll_view_own_permission`'s own docstring. The new migration targets the real name.
+
+**Caught mid-fix, before it shipped:** `payroll.edit` was granted **only** to `system_admin` — not `hr`. Naively swapping the role check for `_has_perm(user, 'payroll.edit')` on the three mutating endpoints would have silently locked HR out of editing payslips, dispatching them, and resolving queries — a functional regression, not just a cleanup. Added `0044_grant_payroll_edit_to_hr.py` to close this gap. Final grants verified directly against the DB after migrating:
+
+```
+payroll.view      -> hr, system_admin
+payroll.view_own  -> employee, hr, manager__team_lead, system_admin
+payroll.edit      -> hr, system_admin
+```
+
+Matches the target matrix exactly.
+
+**Files changed:**
+```
+backend/apps/payroll/views/payslips.py                      — _is_payroll_admin() removed; 8 call sites → _has_perm();
+                                                                 payroll.view_own gate added to PayslipQueryListView.post()
+backend/apps/accounts/migrations/0044_grant_payroll_edit_to_hr.py            (NEW)
+backend/apps/accounts/migrations/0045_remove_payroll_view_from_manager.py    (NEW)
+```
+
+### 2. Migration Graph Conflict — Resolved, and Explains Last Session's "Uninvestigated" Note
+
+`makemigrations`/`migrate` were completely broken project-wide: "Conflicting migrations detected; multiple leaf nodes" across **both** `hrms` (`0014_carry_forward` vs `0015_merge_20260722_1100`) and `attendance` (`0016_attendance_import_log_task_id` vs `0016_seed_missing_clockout_email_template`). This is the same stray `hrms/migrations/0015_merge_20260722_1100.py` the 22/07 session flagged as "uninvestigated, not caused by this session" — now explained: `0015_merge_20260722_1100` is a legitimate auto-generated Django merge migration (from a `git pull origin demo` bringing in a diverged branch), it just never picked up `0014_carry_forward` as a third branch because that migration was created independently around the same time.
+
+Verified both conflicts were genuinely safe to auto-merge (each pair touches entirely different fields/models, zero overlap) before running `makemigrations --merge --noinput`, which created two empty, no-op reconciliation migrations:
+```
+backend/apps/hrms/migrations/0016_merge_0014_carry_forward_0015_merge_20260722_1100.py   (NEW, empty)
+backend/apps/attendance/migrations/0017_merge_20260723_1644.py                            (NEW, empty)
+```
+
+**Important discovery while doing this — read before touching migrations on this project again:** this backend's `.env` points at a **shared remote Postgres database** (Neon, `neondb`), not a local dev DB. Mid-investigation, found the hrms merge migration was *already marked applied* in that shared DB under the exact same filename — Django names simple two-branch merges deterministically, so another concurrent session hit the identical hrms conflict and had already pushed the identical fix through. Worse, for `attendance`, the DB had **two migrations applied that don't exist as files anywhere in this checkout or on any pushed branch**: `attendance.0017_merge_20260723_1558` and `attendance.0018_attendancecorrection_l1_actioned_at_and_more` (looks like real schema work — AttendanceCorrection L1/L2 fields — applied directly to the shared DB from someone else's local checkout, not yet committed anywhere).
+
+Checked every branch on `origin` for those two files — not pushed anywhere, so there was nothing to pull. Confirmed with the user before proceeding: since both merge migrations are empty no-ops (no schema/data risk either way), migrated this checkout's own state now; the only follow-up cost is one more trivial merge migration whenever that other work is finally pushed and the two divergent `0017_` files for `attendance` need reconciling in git.
+
+**Action needed from whoever owns that AttendanceCorrection work:** commit and push it — it currently only exists as applied database state, with no corresponding code anywhere in version control. If that database is reset or another merge migration is generated carelessly, that schema change has no source of truth to recover from.
+
+### Pending
+
+- **Get the AttendanceCorrection L1/L2 migration (`attendance.0018_attendancecorrection_l1_actioned_at_and_more` + its `0017_merge_20260723_1558`) committed and pushed** — currently only exists as applied state in the shared Neon DB, not in git anywhere. Next `makemigrations --merge` will need to reconcile two divergent `0017_` files for `attendance` once it lands.
+- Frontend already expects `payroll.view_own` for My Payslips (per the 22/07 session) — no further frontend work needed for this session's changes.
+- Everything else listed as Pending in the 2026-07-22 entries above is still outstanding.

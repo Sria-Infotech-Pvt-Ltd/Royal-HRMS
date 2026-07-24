@@ -22,15 +22,6 @@ from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySeri
 logger = logging.getLogger(__name__)
 
 
-def _is_payroll_admin(user) -> bool:
-    """
-    HR and system_admin manage/view every payslip; plain employees only see
-    their own via MyPayslipsView, gated by payroll.view_own instead (see
-    _has_perm) since employees don't hold payroll.view.
-    """
-    return bool(user.role and user.role.name in ('hr', 'system_admin'))
-
-
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False
@@ -45,7 +36,7 @@ class CyclePayslipListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_payroll_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view all payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -67,7 +58,7 @@ class PayslipDetailView(APIView):
     def get(self, request, pk):
         payslip = get_object_or_404(EmployeePayslip.objects.select_related('employee', 'cycle'), pk=pk)
 
-        if not _is_payroll_admin(request.user) and payslip.employee_id != request.user.id:
+        if not _has_perm(request.user, 'payroll.view') and payslip.employee_id != request.user.id:
             return error('You can only view your own payslips.', http_status=403)
 
         return success('Payslip retrieved.', EmployeePayslipSerializer(payslip).data)
@@ -107,7 +98,7 @@ class UpdatePayslipReimbBonusView(APIView):
         return self._update(request, pk)
 
     def _update(self, request, pk):
-        if not _is_payroll_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can update payslip reimbursements.', http_status=403)
 
         payslip = get_object_or_404(EmployeePayslip, pk=pk)
@@ -185,7 +176,7 @@ class ExpenseSummaryForCycleView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_payroll_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view this.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -242,7 +233,7 @@ class ReferralBonusSummaryForCycleView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not _is_payroll_admin(request.user):
+        if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view this.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -291,7 +282,7 @@ class DispatchPayslipsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, cycle_pk):
-        if not _is_payroll_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can dispatch payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
@@ -368,7 +359,7 @@ class PayslipQueryListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if _is_payroll_admin(request.user):
+        if _has_perm(request.user, 'payroll.view'):
             queries = PayslipQuery.objects.filter(
                 status=PayslipQuery.STATUS_OPEN,
             ).select_related('payslip', 'payslip__employee', 'raised_by').order_by('-created_at')
@@ -381,6 +372,9 @@ class PayslipQueryListView(APIView):
         return success('Queries retrieved.', serializer.data)
 
     def post(self, request):
+        if not _has_perm(request.user, 'payroll.view_own'):
+            return error('You do not have permission to view payslips.', http_status=403)
+
         payslip_id = request.data.get('payslip')
         description = request.data.get('description', '').strip()
 
@@ -413,7 +407,7 @@ class PayslipQueryResolveView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _is_payroll_admin(request.user):
+        if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can resolve queries.', http_status=403)
 
         query = get_object_or_404(PayslipQuery, pk=pk, status=PayslipQuery.STATUS_OPEN)
