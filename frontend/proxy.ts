@@ -1,33 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const AUTH_COOKIE   = "royal_hrms_auth";
+const AUTH_COOKIE = "royal_hrms_auth";
 const ACCESS_COOKIE = "royal_access_token";
-const USER_COOKIE   = "royal_hrms_user";
+const USER_COOKIE = "royal_hrms_user";
 
 const ROUTE_PERMISSIONS: Record<string, string> = {
-  "/dashboard/announcements":    "announcements.view",
-  "/dashboard/interview-list":   "recruitment.view",
-  "/dashboard/candidate-review":        "recruitment.view",
-  "/dashboard/assessments":            "assessments.view",
-  "/dashboard/onboarding-approvals":   "employees.approve",
-  "/dashboard/email-logs":             "recruitment.view",
-  "/dashboard/employees":        "employees.view",
-  "/dashboard/org-chart":        "employees.view",
-  "/dashboard/branches":         "settings.view",
-  "/dashboard/attendance":       "attendance.view",
-  "/dashboard/payroll":          "payroll.view",
-  "/dashboard/my-payslip":       "payroll.view_own",
-  "/dashboard/leave":            "leave.view",
-  "/dashboard/expenses":         "expenses.view",
-  "/dashboard/approvals":        "leave.view",
-  "/dashboard/separation":       "employees.view",
-  "/dashboard/documents":        "documents.view",
-  "/dashboard/reports":          "reports.view",
-  "/dashboard/audit":            "audit.view",
-  "/dashboard/settings":                      "settings.view",
-  "/dashboard/settings/leave-policy":        "settings.view",
-  "/dashboard/settings/leave-credit-rules":  "settings.view",
-  "/dashboard/settings/holiday-calendar":    "settings.view",
+  "/dashboard/announcements": "announcements.view",
+  "/dashboard/interview-list": "recruitment.view",
+  "/dashboard/candidate-review": "recruitment.view",
+  "/dashboard/assessments": "assessments.view",
+  "/dashboard/onboarding-approvals": "employees.approve",
+  "/dashboard/email-logs": "recruitment.view",
+  "/dashboard/employees": "employees.view",
+  "/dashboard/org-chart": "employees.view",
+  "/dashboard/branches": "settings.view",
+  "/dashboard/attendance": "attendance.view",
+  "/dashboard/payroll": "payroll.view",
+  // /dashboard/my-payslip intentionally absent — self-service, same as
+  // /dashboard/my-attendance (also absent). Backend's MyPayslipsView is
+  // IsAuthenticated-only; gating the route behind payroll.view (the admin
+  // permission) would redirect away anyone who's never been granted it.
+  "/dashboard/leave": "leave.view",
+  "/dashboard/expenses": "expenses.view",
+  "/dashboard/approvals": "leave.view",
+  "/dashboard/separation": "employees.view",
+  "/dashboard/documents": "documents.view",
+  "/dashboard/reports": "reports.view",
+  "/dashboard/audit": "audit.view",
+  "/dashboard/settings": "settings.view",
+  "/dashboard/settings/leave-policy": "settings.view",
+  "/dashboard/settings/leave-credit-rules": "settings.view",
+  "/dashboard/settings/holiday-calendar": "settings.view",
 };
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -98,8 +101,8 @@ export function proxy(request: NextRequest) {
   }
 
   const isAuthenticated = request.cookies.get(AUTH_COOKIE)?.value === "1";
-  const isLoginPage     = pathname.startsWith("/login");
-  const isOnboarding    = pathname.startsWith("/onboarding");
+  const isLoginPage = pathname.startsWith("/login");
+  const isOnboarding = pathname.startsWith("/onboarding");
 
   if (!isAuthenticated && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -119,13 +122,13 @@ export function proxy(request: NextRequest) {
   }
 
   if (isAuthenticated) {
-    const onboardingStatus  = getOnboardingStatus(request);
-    const assessmentStatus  = getAssessmentStatus(request);
+    const onboardingStatus = getOnboardingStatus(request);
+    const assessmentStatus = getAssessmentStatus(request);
     const isAssessmentsPage = pathname.startsWith("/onboarding/assessments");
 
     // "approved" means HR has approved the onboarding form; only then can
     // the employee access the assessment portal.
-    const needsOnboarding  = onboardingStatus !== "complete";
+    const needsOnboarding = onboardingStatus !== "complete";
     const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending";
 
     // Block /onboarding/assessments until HR has approved the onboarding form.
@@ -158,7 +161,7 @@ export function proxy(request: NextRequest) {
       .sort((a, b) => b.length - a.length)[0];
 
     if (matchedRoute) {
-      const needed      = ROUTE_PERMISSIONS[matchedRoute];
+      const needed = ROUTE_PERMISSIONS[matchedRoute];
       const permissions = getPermissions(request);
       if (!permissions.includes(needed)) {
         return NextResponse.redirect(new URL("/dashboard", request.url));

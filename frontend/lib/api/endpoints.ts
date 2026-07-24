@@ -292,15 +292,5 @@ export const API = {
     hrEmployeeLifecycle:   "/dashboard/hr/employee-lifecycle/",
     hrBirthdaysToday:      "/dashboard/hr/birthdays/today/",
     hrBirthdaysUpcoming:   "/dashboard/hr/birthdays/upcoming/",
-    // Manager / Team Lead dashboard
-    manager:               "/dashboard/manager/",
-  },
-
-  managerDashboard: {
-    kpis:              "/dashboard/manager/kpis/",
-    pendingApprovals:  "/dashboard/manager/pending-approvals/",
-    teamAttendance:    "/dashboard/manager/team-attendance/",
-    upcomingLeave:     "/dashboard/manager/upcoming-leave/",
-    recentActivity:    "/dashboard/manager/recent-activity/",
   },
 } as const;
