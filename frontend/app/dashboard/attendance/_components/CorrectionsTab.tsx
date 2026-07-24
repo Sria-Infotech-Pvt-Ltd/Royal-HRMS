@@ -21,16 +21,25 @@ const PUNCH_TYPE_LABEL: Record<PunchType, string> = {
 };
 
 const STATUS_BADGE: Record<CorrectionStatus, string> = {
-  pending:  "badge badge-warn",
-  approved: "badge badge-success",
-  rejected: "badge badge-error",
+  pending:    "badge badge-warn",
+  l2_pending: "badge badge-info",
+  approved:   "badge badge-success",
+  rejected:   "badge badge-error",
+};
+
+const STATUS_LABEL: Record<CorrectionStatus, string> = {
+  pending:    "Pending (Manager)",
+  l2_pending: "Pending (HR)",
+  approved:   "Approved",
+  rejected:   "Rejected",
 };
 
 const STATUS_OPTIONS: { value: CorrectionStatus | ""; label: string }[] = [
-  { value: "",         label: "All"      },
-  { value: "pending",  label: "Pending"  },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
+  { value: "",           label: "All"              },
+  { value: "pending",    label: "Pending — Manager" },
+  { value: "l2_pending", label: "Pending — HR"      },
+  { value: "approved",   label: "Approved"          },
+  { value: "rejected",   label: "Rejected"          },
 ];
 
 function toQuery(params: Record<string, string | number | undefined>): string {
@@ -145,9 +154,18 @@ export default function CorrectionsTab() {
                   <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.requested_in ?? "—"}</td>
                   <td style={{ fontFamily: "Menlo, Consolas, monospace", fontSize: 12 }}>{r.requested_out ?? "—"}</td>
                   <td style={{ maxWidth: 220, fontSize: 12, color: "var(--on-variant)" }}>{r.reason}</td>
-                  <td><span className={STATUS_BADGE[r.status]}>{r.status}</span></td>
                   <td>
-                    {r.status === "pending" && canReview ? (
+                    <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
+                    {(r.status === "pending" || r.status === "l2_pending") && (
+                      <div style={{ fontSize: 10, color: "var(--on-variant)", marginTop: 2 }}>
+                        {r.status === "pending"
+                          ? (r.l1_approver_name ? `Awaiting ${r.l1_approver_name}` : "Awaiting manager")
+                          : (r.l2_approver_name ? `Awaiting ${r.l2_approver_name}` : "Awaiting HR")}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {canReview && r.can_action ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <button
                           className="btn btn-outline btn-sm"
@@ -168,7 +186,9 @@ export default function CorrectionsTab() {
                       </div>
                     ) : (
                       <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                        {r.reviewed_by && <div>{r.reviewed_by}</div>}
+                        {r.l1_status && <div>L1: {r.l1_approver_name} — {r.l1_status}</div>}
+                        {r.l2_status && <div>L2: {r.l2_approver_name} — {r.l2_status}</div>}
+                        {!r.l1_status && !r.l2_status && r.reviewed_by && <div>{r.reviewed_by}</div>}
                         {r.reviewed_at && <div>{r.reviewed_at}</div>}
                       </div>
                     )}

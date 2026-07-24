@@ -216,22 +216,35 @@ export interface UnpunchRow {
   correction_id:       string | null;
 }
 
-export type CorrectionStatus = "pending" | "approved" | "rejected";
+export type CorrectionStatus = "pending" | "l2_pending" | "approved" | "rejected";
+export type CorrectionStageStatus = "approved" | "rejected" | null;
 
 export interface CorrectionRow {
-  id:             string;
-  employee_id:    string;
-  name:           string;
-  department:     string;
-  branch:         string;
-  date:           string;
-  punch_type:     PunchType;
-  requested_in:   string | null;
-  requested_out:  string | null;
-  reason:         string;
-  status:         CorrectionStatus;
-  reviewed_by:    string | null;
-  reviewed_at:    string | null;
+  id:               string;
+  employee_id:      string;
+  name:             string;
+  department:       string;
+  branch:           string;
+  date:             string;
+  punch_type:       PunchType;
+  requested_in:     string | null;
+  requested_out:    string | null;
+  reason:           string;
+  status:           CorrectionStatus;
+  // L1 (manager) stage
+  l1_approver_name: string | null;
+  l1_status:        CorrectionStageStatus;
+  l1_remarks:       string;
+  // L2 (HR) stage
+  l2_approver_name: string | null;
+  l2_status:        CorrectionStageStatus;
+  l2_remarks:       string;
+  // True when the current user is the designated approver for whichever
+  // stage this request currently sits at — drives whether Approve/Reject
+  // render as functional buttons or read-only status.
+  can_action:       boolean;
+  reviewed_by:      string | null;
+  reviewed_at:      string | null;
 }
 
 export type PaginatedCorrections = PaginatedResponse<CorrectionRow>;

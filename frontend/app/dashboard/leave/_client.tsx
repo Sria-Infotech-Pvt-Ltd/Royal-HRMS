@@ -11,10 +11,11 @@ import ApplyLeaveForm from "./_components/ApplyLeaveForm";
 import TeamCalendar   from "./_components/TeamCalendar";
 import LeaveAnalytics from "./_components/LeaveAnalytics";
 import AttendanceApprovalTab from "../approvals/_components/AttendanceApprovalTab";
+import CorrectionsTab from "../attendance/_components/CorrectionsTab";
 
 interface BranchOption { id: number; branch_name: string }
 
-type TabId = "dashboard" | "apply" | "approvals" | "attendance" | "calendar" | "analytics";
+type TabId = "dashboard" | "apply" | "approvals" | "attendance" | "corrections" | "calendar" | "analytics";
 
 interface Props { role: string }
 
@@ -25,12 +26,17 @@ export default function LeavePageClient({ role }: Props) {
   const isHR = role === "hr" || role === "hr_admin";
   const hasAttendanceApprovalPermission = useAnyPermission("payroll.view", "payroll.approve");
   const canApproveAttendance = isHR && hasAttendanceApprovalPermission;
+  // Attendance correction (missed-clockout) requests reach HR at the L2 stage —
+  // same permission managers use on /dashboard/approvals, HR-scoped here.
+  const hasCorrectionPermission = useAnyPermission("attendance.create");
+  const canApproveCorrections = isHR && hasCorrectionPermission;
 
   const ALL_TABS: { id: TabId; label: string }[] = [
     { id: "dashboard",  label: "Dashboard"   },
     { id: "apply",      label: "Apply Leave" },
     ...(canApprove ? [{ id: "approvals" as TabId, label: "Approvals" }] : []),
     ...(canApproveAttendance ? [{ id: "attendance" as TabId, label: "Attendance Approvals" }] : []),
+    ...(canApproveCorrections ? [{ id: "corrections" as TabId, label: "Attendance Corrections" }] : []),
     { id: "calendar",   label: "Team Calendar" },
     { id: "analytics",  label: "Analytics"    },
   ];
@@ -82,6 +88,7 @@ export default function LeavePageClient({ role }: Props) {
         {active === "apply"      && <ApplyLeaveForm onCancel={() => setActive("dashboard")} />}
         {active === "approvals"  && <LeaveApprovals role={role} />}
         {active === "attendance" && canApproveAttendance && <AttendanceApprovalTab />}
+        {active === "corrections" && canApproveCorrections && <CorrectionsTab />}
         {active === "calendar"   && <TeamCalendar />}
         {active === "analytics" && <LeaveAnalytics role={role} />}
       </div>

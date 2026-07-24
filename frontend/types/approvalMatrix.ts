@@ -1,4 +1,4 @@
-export type ApprovalWorkflowType = "leave" | "expense" | "resignation";
+export type ApprovalWorkflowType = "leave" | "expense" | "resignation" | "loan" | "attendance_correction";
 export type ApproverRole = "reporting_manager" | "hr_manager" | "admin";
 
 export interface WorkflowMatrixRow {

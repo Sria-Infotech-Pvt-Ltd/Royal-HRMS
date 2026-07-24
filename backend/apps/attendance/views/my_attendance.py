@@ -301,7 +301,7 @@ class AttendanceCorrectionView(APIView):
             if AttendanceCorrection.objects.select_for_update().filter(
                 employee=employee,
                 date=data['date'],
-                status=AttendanceCorrection.STATUS_PENDING,
+                status__in=[AttendanceCorrection.STATUS_PENDING, AttendanceCorrection.STATUS_L2_PENDING],
             ).exists():
                 return error(
                     'A correction request is already pending for this date. '
@@ -309,17 +309,16 @@ class AttendanceCorrectionView(APIView):
                     http_status=status.HTTP_409_CONFLICT,
                 )
 
-            correction = AttendanceCorrection.objects.create(
-            employee=employee,
-            date=data['date'],
-            punch_type=data['punch_type'],
-            requested_in_time=data.get('correct_in_time'),
-            requested_out_time=data.get('correct_out_time'),
-            reason=data['reason'],
-            notes=data.get('notes', ''),
-            status=AttendanceCorrection.STATUS_PENDING,
-            created_by=employee,
-        )
+            from apps.attendance.services_hr_corrections import submit_correction
+            correction = submit_correction(
+                employee=employee,
+                date=data['date'],
+                punch_type=data['punch_type'],
+                requested_in_time=data.get('correct_in_time'),
+                requested_out_time=data.get('correct_out_time'),
+                reason=data['reason'],
+                notes=data.get('notes', ''),
+            )
         _write_correction_submitted_audit(employee, data)
 
         logger.info(

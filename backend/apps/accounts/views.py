@@ -4253,6 +4253,7 @@ _WORKFLOW_ORDER = [
     ApprovalWorkflowRule.WORKFLOW_EXPENSE,
     ApprovalWorkflowRule.WORKFLOW_RESIGNATION,
     ApprovalWorkflowRule.WORKFLOW_LOAN,
+    ApprovalWorkflowRule.WORKFLOW_ATTENDANCE_CORRECTION,
 ]
 
 

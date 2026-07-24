@@ -1155,13 +1155,22 @@ class AttendanceCorrection(models.Model):
         (REASON_OTHER,      'Other'),
     ]
 
-    STATUS_PENDING  = 'pending'
-    STATUS_APPROVED = 'approved'
-    STATUS_REJECTED = 'rejected'
+    STATUS_PENDING    = 'pending'
+    STATUS_L2_PENDING = 'l2_pending'
+    STATUS_APPROVED   = 'approved'
+    STATUS_REJECTED   = 'rejected'
     STATUS_CHOICES  = [
-        (STATUS_PENDING,  'Pending'),
-        (STATUS_APPROVED, 'Approved'),
-        (STATUS_REJECTED, 'Rejected'),
+        (STATUS_PENDING,    'Pending'),
+        (STATUS_L2_PENDING, 'L2 Pending'),
+        (STATUS_APPROVED,   'Approved'),
+        (STATUS_REJECTED,   'Rejected'),
+    ]
+
+    STAGE_APPROVED = 'approved'
+    STAGE_REJECTED = 'rejected'
+    STAGE_STATUS_CHOICES = [
+        (STAGE_APPROVED, 'Approved'),
+        (STAGE_REJECTED, 'Rejected'),
     ]
 
     id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1192,6 +1201,25 @@ class AttendanceCorrection(models.Model):
         related_name='reviewed_corrections',
     )
     reviewed_at         = models.DateTimeField(null=True, blank=True)
+
+    # L1 approval (manager)
+    l1_approver    = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='l1_attendance_corrections',
+    )
+    l1_status      = models.CharField(max_length=10, choices=STAGE_STATUS_CHOICES, null=True, blank=True)
+    l1_remarks     = models.TextField(blank=True, default='')
+    l1_actioned_at = models.DateTimeField(null=True, blank=True)
+
+    # L2 approval (HR)
+    l2_approver    = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='l2_attendance_corrections',
+    )
+    l2_status      = models.CharField(max_length=10, choices=STAGE_STATUS_CHOICES, null=True, blank=True)
+    l2_remarks     = models.TextField(blank=True, default='')
+    l2_actioned_at = models.DateTimeField(null=True, blank=True)
+
     created_by          = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
