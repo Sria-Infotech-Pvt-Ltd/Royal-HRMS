@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -341,7 +340,6 @@ function TeamApprovalsSection() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ApprovalsPage() {
-  const router = useRouter();
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
   const isHR = user?.role === "hr" || user?.role === "hr_admin";
@@ -359,12 +357,6 @@ export default function ApprovalsPage() {
       setSection(sections[0].key);
     }
   }, [section, sections]);
-
-  useEffect(() => {
-    if (isHR) router.replace("/dashboard/leave");
-  }, [isHR, router]);
-
-  if (isHR) return null;
 
   return (
     <div>
