@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/dashboard/',     include('apps.dashboard.urls')),
     path('api/payroll/',       include('apps.payroll.urls')),
+    path('api/voice/',         include('apps.voice_commands.urls')),
 ]
 
 if settings.DEBUG:

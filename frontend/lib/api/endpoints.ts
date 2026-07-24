@@ -201,6 +201,10 @@ export const API = {
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
   },
 
+  voice: {
+    parse: "/voice/parse/",
+  },
+
   notifications: {
     list: "/notifications/",
     unreadCount: "/notifications/unread-count/",

@@ -10,7 +10,6 @@ import {
   buildNav, isSection,
   type NavItem,
 } from "@/lib/navConfig";
-import { ToastProvider } from "@/components/ToastProvider";
 import { NotificationBell } from "@/components/NotificationBell";
 
 function initials(name: string) {
@@ -88,7 +87,6 @@ export default function DashboardShell({
   }
 
   return (
-    <ToastProvider>
     <div className="flex h-screen overflow-hidden">
 
       {/* Mobile overlay */}
@@ -297,6 +295,5 @@ export default function DashboardShell({
         </main>
       </div>
     </div>
-    </ToastProvider>
   );
 }
