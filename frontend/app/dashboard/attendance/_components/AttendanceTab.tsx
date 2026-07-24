@@ -283,6 +283,10 @@ export default function AttendanceTab({ onMutated }: Props) {
           onClose={() => setShowImport(false)}
           onImported={result => {
             setShowImport(false);
+            if (result.first_imported_date) {
+              setDate(result.first_imported_date);
+              setPage(1);
+            }
             refetchAll();
             if (result.failed > 0) {
               showToast(`Import complete: ${result.successful} succeeded, ${result.failed} failed.`, "error");

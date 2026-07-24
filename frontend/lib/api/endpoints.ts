@@ -152,8 +152,9 @@ export const API = {
     balance: "/leave/balance/",
     balanceCredit: "/leave/balance/credit/",
     balanceAdjust: (id: string) => `/leave/balance/${id}/`,
-    balanceImportSample: "/leave/balance/import/sample/", // + ?format=csv|xlsx
-    balanceImport:       "/leave/balance/import/",
+    balanceImportSample:   "/leave/balance/import/sample/", // + ?format=csv|xlsx
+    balanceImport:         "/leave/balance/import/",
+    balanceImportValidate: "/leave/balance/import/validate/",
     requests: "/leave/requests/",
     requestDetail: (id: string) => `/leave/requests/${id}/`,
     approve: (id: string) => `/leave/requests/${id}/approve/`,
@@ -271,9 +272,6 @@ export const API = {
   },
 
   dashboard: {
-    // Manager (single aggregated endpoint)
-    manager:             "/dashboard/manager/",
-
     // System Admin
     kpis:                "/dashboard/system-admin/kpis/",
     announcement:        "/dashboard/system-admin/announcement/",

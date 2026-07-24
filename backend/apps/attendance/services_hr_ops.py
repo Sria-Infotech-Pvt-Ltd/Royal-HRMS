@@ -433,15 +433,17 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
         created_count, updated_count, failed_count, skipped_count, duration,
     )
 
+    all_imported_dates = sorted({str(v['date']) for _, v, _ in deduped.values()})
     result: dict = {
-        'import_id':     str(import_log.id),
-        'status':        status_label,
-        'message':       status_msg,
-        'total_records': total,
-        'successful':    success_count,
-        'failed':        failed_count,
-        'skipped':       skipped_count,
-        'errors':        errors[:50],
+        'import_id':          str(import_log.id),
+        'status':             status_label,
+        'message':            status_msg,
+        'total_records':      total,
+        'successful':         success_count,
+        'failed':             failed_count,
+        'skipped':            skipped_count,
+        'errors':             errors[:50],
+        'first_imported_date': all_imported_dates[0] if all_imported_dates else None,
     }
     if errors:
         result['error_report_csv'] = _build_error_report_csv(errors)

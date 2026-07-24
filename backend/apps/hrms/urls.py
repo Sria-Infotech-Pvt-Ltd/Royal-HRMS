@@ -19,6 +19,7 @@ from .views import (
     LeaveCalendarView,
     LeaveOpeningBalanceImportView,
     LeaveOpeningBalanceSampleView,
+    LeaveOpeningBalanceValidateView,
     LeavePolicyView,
     LeaveRequestDetailView,
     LeaveRequestListCreateView,
@@ -43,8 +44,9 @@ urlpatterns = [
     # Leave — balance (import paths must come before the <str:balance_id> catch-all)
     path('leave/balance/',                   LeaveBalanceView.as_view(),              name='leave-balance'),
     path('leave/balance/credit/',            LeaveBalanceView.as_view(),              name='leave-balance-credit'),
-    path('leave/balance/import/',            LeaveOpeningBalanceImportView.as_view(), name='leave-balance-import'),
-    path('leave/balance/import/sample/',     LeaveOpeningBalanceSampleView.as_view(), name='leave-balance-import-sample'),
+    path('leave/balance/import/',             LeaveOpeningBalanceImportView.as_view(),  name='leave-balance-import'),
+    path('leave/balance/import/validate/',   LeaveOpeningBalanceValidateView.as_view(), name='leave-balance-import-validate'),
+    path('leave/balance/import/sample/',     LeaveOpeningBalanceSampleView.as_view(),   name='leave-balance-import-sample'),
     path('leave/balance/<str:balance_id>/',  LeaveBalanceAdjustView.as_view(),        name='leave-balance-adjust'),
 
     # Leave — requests

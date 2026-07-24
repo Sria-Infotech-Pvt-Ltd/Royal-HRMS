@@ -1411,6 +1411,17 @@ _LEAVE_IMPORT_COL_MAP = {
     'balance': 'balance',                 'closing balance': 'balance',
     'lop days': 'lop_days',               'lop_days': 'lop_days',
     'lop': 'lop_days',
+    # History row date columns
+    'from date': 'from_date',             'from_date': 'from_date',
+    'start date': 'from_date',            'start_date': 'from_date',
+    'leave from': 'from_date',            'leave from date': 'from_date',
+    'to date': 'to_date',                 'to_date': 'to_date',
+    'end date': 'to_date',                'end_date': 'to_date',
+    'leave to': 'to_date',                'leave to date': 'to_date',
+    'total days': 'days',                 'total_days': 'days',
+    'days': 'days',                       'no of days': 'days',
+    'leave days': 'days',                 'no. of days': 'days',
+    'duration': 'days',
     'remarks': 'remarks',                 'notes': 'remarks',
     'comments': 'remarks',
 }
@@ -1418,19 +1429,28 @@ _LEAVE_IMPORT_COL_MAP = {
 _LEAVE_IMPORT_SAMPLE_HEADERS = [
     'Employee ID', 'Leave Type', 'Financial Year',
     'Opening Balance', 'Leave Allocated', 'Leave Availed',
-    'Leave Balance', 'Carry Forward Days', 'Remarks',
+    'Leave Balance', 'Carry Forward Days',
+    'From Date', 'To Date', 'Total Days',
+    'Remarks',
 ]
 
 _LEAVE_IMPORT_SAMPLE_ROWS = [
-    ['RSS00001', 'Casual Leave', 'FY 2026-27', '6',  '6',  '2', '10', '0', 'Opening migration'],
-    ['RSS00001', 'Earned Leave', 'FY 2026-27', '15', '15', '5', '30', '5', ''],
-    ['RSS00002', 'Casual Leave', 'FY 2026-27', '6',  '6',  '0', '12', '0', ''],
-    ['RSS00002', 'Sick Leave',   'FY 2026-27', '7',  '7',  '3', '11', '0', ''],
+    # Balance rows — set annual opening numbers (leave From Date / To Date empty)
+    ['RSS00001', 'Casual Leave', 'FY 2026-27', '6',  '6',  '2', '10', '0', '', '', '', 'Opening migration'],
+    ['RSS00001', 'Earned Leave', 'FY 2026-27', '15', '15', '5', '30', '5', '', '', '', ''],
+    ['RSS00002', 'Casual Leave', 'FY 2026-27', '6',  '6',  '0', '12', '0', '', '', '', ''],
+    # History rows — individual leave dates (leave balance columns empty)
+    ['RSS00001', 'Casual Leave', 'FY 2026-27', '', '', '', '', '', '05-Apr-2025', '06-Apr-2025', '2', 'Annual leave'],
+    ['RSS00001', 'Casual Leave', 'FY 2026-27', '', '', '', '', '', '15-May-2025', '15-May-2025', '1', ''],
 ]
 
 
-def _leave_err(row_num, emp_id, lt, fy, reason) -> dict:
-    return {'row': row_num, 'employee_id': emp_id, 'leave_type': lt, 'financial_year': fy, 'reason': reason}
+def _leave_err(row_num, emp_id, lt, fy, reason, *, from_date='', to_date='') -> dict:
+    d = {'row': row_num, 'employee_id': emp_id, 'leave_type': lt, 'financial_year': fy, 'reason': reason}
+    if from_date or to_date:
+        d['from_date'] = from_date
+        d['to_date'] = to_date
+    return d
 
 
 def _normalize_leave_row(raw: dict) -> dict:
@@ -1517,9 +1537,18 @@ def _parse_leave_import_csv(file_obj):
 def _build_leave_error_csv(errors: list) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(['Row', 'Employee ID', 'Leave Type', 'Financial Year', 'Reason'])
+    has_dates = any('from_date' in e for e in errors)
+    headers = ['Row', 'Employee ID', 'Leave Type', 'Financial Year']
+    if has_dates:
+        headers += ['From Date', 'To Date']
+    headers.append('Reason')
+    writer.writerow(headers)
     for e in errors:
-        writer.writerow([e.get('row'), e.get('employee_id'), e.get('leave_type'), e.get('financial_year'), e.get('reason')])
+        row = [e.get('row'), e.get('employee_id'), e.get('leave_type'), e.get('financial_year')]
+        if has_dates:
+            row += [e.get('from_date', ''), e.get('to_date', '')]
+        row.append(e.get('reason'))
+        writer.writerow(row)
     return base64.b64encode(buf.getvalue().encode('utf-8-sig')).decode('ascii')
 
 
@@ -1552,38 +1581,39 @@ def _validate_leave_rows(normalized: list, emp_map: dict, valid_lt: dict, existi
     seen: set = set()
 
     for i, row in enumerate(normalized, 1):
+        row_num = row.get('__row__', i)
         emp_id = row.get('employee_id', '')
         raw_lt = row.get('leave_type', '')
         raw_fy = row.get('financial_year', '')
 
         user = emp_map.get(emp_id)
         if not user:
-            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, f'Employee "{emp_id}" not found or inactive.'))
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'Employee "{emp_id}" not found or inactive.'))
             fail_count += 1; continue
 
         lt_code = valid_lt.get(raw_lt.lower())
         if not lt_code:
-            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, f'Leave type "{raw_lt}" is not recognised.'))
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'Leave type "{raw_lt}" is not recognised.'))
             fail_count += 1; continue
 
         year = _parse_fy_year(raw_fy)
         if year is None:
-            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, f'Financial year "{raw_fy}" is invalid. Use YYYY or "FY 2026-27".'))
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'Financial year "{raw_fy}" is invalid. Use YYYY or "FY 2026-27".'))
             fail_count += 1; continue
 
         row_key = (user.pk, lt_code, year)
         if row_key in seen:
-            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, 'Duplicate row in file — first occurrence wins.'))
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, 'Duplicate row in file — first occurrence wins.'))
             skip_count += 1; continue
         seen.add(row_key)
 
         if row_key in existing:
-            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, 'Opening balance already exists for this employee, leave type, and year.'))
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, 'Opening balance already exists for this employee, leave type, and year.'))
             fail_count += 1; continue
 
         opening, allocated, availed, carry_fwd, err = _parse_leave_row_amounts(row)
         if err:
-            errors.append(_leave_err(i, emp_id, raw_lt, raw_fy, err))
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, err))
             fail_count += 1; continue
 
         to_create.append(LeaveBalance(
@@ -1607,6 +1637,156 @@ def _bulk_insert_leave_balances(to_create: list):
             logger.error('Leave balance import batch %d error: %s', i // _LEAVE_IMPORT_BATCH_SIZE + 1, exc, exc_info=True)
             batch_errors += len(batch)
     return created, batch_errors
+
+
+# ── Leave history import helpers ───────────────────────────────────────────────
+
+def _parse_date_value(value: str):
+    """Parse a date string in common formats. Returns a date object or None."""
+    from datetime import datetime
+    val = str(value or '').strip()
+    if not val or val.lower() in ('-', 'n/a', 'na', 'none', 'null'):
+        return None
+    for fmt in ('%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d', '%d-%b-%Y',
+                '%d %b %Y', '%d-%B-%Y', '%d/%m/%y', '%m/%d/%Y'):
+        try:
+            return datetime.strptime(val, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _is_history_row(row: dict) -> bool:
+    return bool(row.get('from_date') or row.get('to_date'))
+
+
+def _check_overlap(emp_pk, from_d, to_d, by_emp: dict) -> bool:
+    for s, e in by_emp.get(emp_pk, []):
+        if s <= to_d and e >= from_d:
+            return True
+    return False
+
+
+def _build_leave_request(user, lt_code: str, from_d, to_d, days_val, remarks: str):
+    reason = (remarks or '').strip() or 'Imported historical leave record.'
+    return LeaveRequest(
+        employee=user,
+        leave_type=lt_code,
+        start_date=from_d,
+        end_date=to_d,
+        total_days=days_val,
+        reason=reason,
+        status=REQ_APPROVED,
+        duration=DURATION_FULL,
+        l1_status=APPROVAL_APPROVED,
+        l1_actioned_at=timezone.now(),
+        is_lwp=(lt_code == LEAVE_LWP),
+    )
+
+
+def _load_existing_requests(emp_map: dict) -> dict:
+    """Return {employee_pk: [(start_date, end_date), ...]} for non-cancelled requests."""
+    if not emp_map:
+        return {}
+    emp_pks = [u.pk for u in emp_map.values()]
+    result: dict = {}
+    for lr in LeaveRequest.objects.filter(
+        employee_id__in=emp_pks,
+        status__in=[REQ_APPROVED, REQ_PENDING, REQ_L2_PENDING],
+    ).values('employee_id', 'start_date', 'end_date'):
+        result.setdefault(lr['employee_id'], []).append((lr['start_date'], lr['end_date']))
+    return result
+
+
+def _validate_leave_history_rows(normalized: list, emp_map: dict, valid_lt: dict, existing_by_emp: dict):
+    to_create, errors = [], []
+    fail_count, skip_count = 0, 0
+    seen_by_emp: dict = {}
+
+    for i, row in enumerate(normalized, 1):
+        row_num = row.get('__row__', i)
+        emp_id  = row.get('employee_id', '')
+        raw_lt  = row.get('leave_type', '')
+        raw_fy  = row.get('financial_year', '')
+        raw_from = row.get('from_date', '')
+        raw_to   = row.get('to_date', '')
+
+        user = emp_map.get(emp_id)
+        if not user:
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'Employee "{emp_id}" not found or inactive.', from_date=raw_from, to_date=raw_to))
+            fail_count += 1; continue
+
+        lt_code = valid_lt.get(raw_lt.lower())
+        if not lt_code:
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'Leave type "{raw_lt}" is not recognised.', from_date=raw_from, to_date=raw_to))
+            fail_count += 1; continue
+
+        from_d = _parse_date_value(raw_from)
+        to_d   = _parse_date_value(raw_to)
+        if not from_d:
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'From Date "{raw_from}" is invalid.', from_date=raw_from, to_date=raw_to))
+            fail_count += 1; continue
+        if not to_d:
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, f'To Date "{raw_to}" is invalid.', from_date=raw_from, to_date=raw_to))
+            fail_count += 1; continue
+        if from_d > to_d:
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, 'From Date must be on or before To Date.', from_date=raw_from, to_date=raw_to))
+            fail_count += 1; continue
+
+        raw_days = row.get('days', '')
+        days_val, days_err = _to_decimal_safe(raw_days, 'Total Days') if raw_days else (None, None)
+        if days_err:
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, days_err, from_date=raw_from, to_date=raw_to))
+            fail_count += 1; continue
+        if not days_val:
+            days_val = Decimal((to_d - from_d).days + 1)
+
+        if _check_overlap(user.pk, from_d, to_d, existing_by_emp):
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, 'Overlaps with an existing leave record — skipped.', from_date=raw_from, to_date=raw_to))
+            skip_count += 1; continue
+
+        if _check_overlap(user.pk, from_d, to_d, seen_by_emp):
+            errors.append(_leave_err(row_num, emp_id, raw_lt, raw_fy, 'Duplicate date range in file — first occurrence wins.', from_date=raw_from, to_date=raw_to))
+            skip_count += 1; continue
+
+        seen_by_emp.setdefault(user.pk, []).append((from_d, to_d))
+        to_create.append(_build_leave_request(user, lt_code, from_d, to_d, days_val, row.get('remarks', '')))
+
+    return to_create, errors, fail_count, skip_count
+
+
+def _bulk_insert_leave_requests(to_create: list):
+    created, batch_errors = 0, 0
+    for i in range(0, len(to_create), _LEAVE_IMPORT_BATCH_SIZE):
+        batch = to_create[i:i + _LEAVE_IMPORT_BATCH_SIZE]
+        try:
+            with transaction.atomic():
+                LeaveRequest.objects.bulk_create(batch)
+            created += len(batch)
+        except Exception as exc:
+            logger.error('Leave history import batch %d error: %s', i // _LEAVE_IMPORT_BATCH_SIZE + 1, exc, exc_info=True)
+            batch_errors += len(batch)
+    return created, batch_errors
+
+
+def _normalize_and_index_rows(rows: list) -> list:
+    """Normalize all rows and stamp each with its 1-based file row number."""
+    result = []
+    for i, row in enumerate(rows, 1):
+        n = _normalize_leave_row(row)
+        n['__row__'] = i
+        result.append(n)
+    return result
+
+
+def _parse_and_validate_file(uploaded):
+    """Parse uploaded file. Returns (rows, error_message)."""
+    fname = uploaded.name.lower()
+    if fname.endswith('.xlsx'):
+        return _parse_leave_import_xlsx(uploaded)
+    if fname.endswith('.csv'):
+        return _parse_leave_import_csv(uploaded)
+    return [], 'Unsupported file type. Upload a .csv or .xlsx file.'
 
 
 class LeaveOpeningBalanceImportView(APIView):
@@ -1637,40 +1817,60 @@ class LeaveOpeningBalanceImportView(APIView):
         if not rows:
             return error('The file contains no data rows.')
 
-        normalized = [_normalize_leave_row(r) for r in rows]
+        normalized = _normalize_and_index_rows(rows)
         emp_ids = {r.get('employee_id', '') for r in normalized} - {''}
-        emp_map, valid_lt, existing = _load_leave_ref_data(emp_ids)
+        emp_map, valid_lt, existing_balances = _load_leave_ref_data(emp_ids)
+        existing_requests = _load_existing_requests(emp_map)
+
+        balance_rows = [r for r in normalized if not _is_history_row(r)]
+        history_rows  = [r for r in normalized if _is_history_row(r)]
 
         start_ts = time.monotonic()
-        to_create, errors, fail_count, skip_count = _validate_leave_rows(normalized, emp_map, valid_lt, existing)
-        created, batch_errors = _bulk_insert_leave_balances(to_create)
-        fail_count += batch_errors
+        bal_to_create, bal_errors, bal_fail, bal_skip = _validate_leave_rows(balance_rows, emp_map, valid_lt, existing_balances)
+        req_to_create, req_errors, req_fail, req_skip = _validate_leave_history_rows(history_rows, emp_map, valid_lt, existing_requests)
 
-        if created > 0:
+        all_errors = bal_errors + req_errors
+        fail_count = bal_fail + req_fail
+        skip_count = bal_skip + req_skip
+
+        bal_created, bal_batch_err = _bulk_insert_leave_balances(bal_to_create)
+        req_created, req_batch_err = _bulk_insert_leave_requests(req_to_create)
+        fail_count += bal_batch_err + req_batch_err
+
+        if bal_created > 0:
             from django.core.cache import cache as _cache
             _cache.delete_many(list({
                 f'dashboard:employee:leave_balance:{lb.employee_id}:{lb.year}'
-                for lb in to_create
+                for lb in bal_to_create
             }))
 
         from apps.accounts.models import AuditLog
         AuditLog.objects.create(
             user=request.user, action='leave_opening_balance_import', module='leave',
-            changes={'file': uploaded.name, 'total': len(rows), 'created': created, 'failed': fail_count, 'skipped': skip_count},
+            changes={
+                'file': uploaded.name, 'total': len(rows),
+                'balances_created': bal_created, 'history_imported': req_created,
+                'failed': fail_count, 'skipped': skip_count,
+            },
             ip_address=get_client_ip(request),
         )
-        logger.info('Leave balance import by %s: %d created / %d failed / %d skipped (%.1fs)',
-                    request.user.email, created, fail_count, skip_count, time.monotonic() - start_ts)
+        logger.info(
+            'Leave import by %s: %d balances / %d history / %d failed / %d skipped (%.1fs)',
+            request.user.email, bal_created, req_created, fail_count, skip_count,
+            time.monotonic() - start_ts,
+        )
 
         result = {
-            'total_records': len(rows),
-            'successful':    created,
-            'failed':        fail_count,
-            'skipped':       skip_count,
-            'errors':        errors[:100],
-            'error_report_csv': _build_leave_error_csv(errors) if errors else None,
+            'total_records':    len(rows),
+            'balances_created': bal_created,
+            'history_imported': req_created,
+            'successful':       bal_created + req_created,
+            'failed':           fail_count,
+            'skipped':          skip_count,
+            'errors':           all_errors[:100],
+            'error_report_csv': _build_leave_error_csv(all_errors) if all_errors else None,
         }
-        return success('Leave opening balance import completed.', result)
+        return success('Leave import completed.', result)
 
 
 class LeaveOpeningBalanceSampleView(APIView):
@@ -1702,3 +1902,67 @@ class LeaveOpeningBalanceSampleView(APIView):
         response = HttpResponse(content, content_type=mime)
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+class LeaveOpeningBalanceValidateView(APIView):
+    """POST /api/leave/balance/import/validate/ — validate file and return row-by-row preview without saving."""
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        role = _role_name(request.user)
+        if role not in _LEAVE_IMPORT_ALLOWED_ROLES:
+            return error('Only System Admin, HR Admin, and HR can validate import files.', http_status=status.HTTP_403_FORBIDDEN)
+
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return error('Attach a CSV or XLSX file as "file".')
+        if uploaded.size > _LEAVE_IMPORT_MAX_BYTES:
+            return error('File must not exceed 5 MB.')
+
+        rows, parse_err = _parse_and_validate_file(uploaded)
+        if parse_err:
+            return error(parse_err)
+        if not rows:
+            return error('The file contains no data rows.')
+
+        normalized = _normalize_and_index_rows(rows)
+        emp_ids = {r.get('employee_id', '') for r in normalized} - {''}
+        emp_map, valid_lt, existing_balances = _load_leave_ref_data(emp_ids)
+        existing_requests = _load_existing_requests(emp_map)
+
+        balance_rows = [r for r in normalized if not _is_history_row(r)]
+        history_rows  = [r for r in normalized if _is_history_row(r)]
+
+        _, bal_errors, _, _ = _validate_leave_rows(balance_rows, emp_map, valid_lt, existing_balances)
+        _, req_errors, _, _ = _validate_leave_history_rows(history_rows, emp_map, valid_lt, existing_requests)
+
+        error_by_row = {e['row']: e for e in (bal_errors + req_errors)}
+
+        preview = []
+        for row in normalized:
+            row_num = row['__row__']
+            is_hist = _is_history_row(row)
+            err     = error_by_row.get(row_num)
+            preview.append({
+                'row':            row_num,
+                'row_type':       'history' if is_hist else 'balance',
+                'employee_id':    row.get('employee_id', ''),
+                'leave_type':     row.get('leave_type', ''),
+                'financial_year': row.get('financial_year', ''),
+                'from_date':      row.get('from_date') or None,
+                'to_date':        row.get('to_date') or None,
+                'days':           row.get('days') or None,
+                'valid':          err is None,
+                'error':          err['reason'] if err else None,
+            })
+
+        valid_count = sum(1 for p in preview if p['valid'])
+        return success('File validated.', {
+            'total_rows':   len(rows),
+            'valid_rows':   valid_count,
+            'error_rows':   len(rows) - valid_count,
+            'balance_rows': len(balance_rows),
+            'history_rows': len(history_rows),
+            'preview':      preview,
+        })

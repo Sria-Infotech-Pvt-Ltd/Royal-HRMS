@@ -258,13 +258,14 @@ export interface ImportRowError {
 }
 
 export interface ImportResult {
-  import_id:        string;
-  status:           "success" | "partial_success" | "failed";
-  message:          string;
-  total_records:    number;
-  successful:       number;
-  failed:           number;
-  skipped:          number;
-  errors:           ImportRowError[];
-  error_report_csv: string;
+  import_id:          string;
+  status:             "success" | "partial_success" | "failed";
+  message:            string;
+  total_records:      number;
+  successful:         number;
+  failed:             number;
+  skipped:            number;
+  errors:             ImportRowError[];
+  error_report_csv:   string;
+  first_imported_date?: string | null; // ISO date of earliest successfully imported record
 }

@@ -11,6 +11,7 @@ from .leave import (
     LeaveBalanceAdjustView,
     LeaveOpeningBalanceImportView,
     LeaveOpeningBalanceSampleView,
+    LeaveOpeningBalanceValidateView,
     LeaveRequestListCreateView,
     LeaveRequestDetailView,
     LeaveApprovalView,
