@@ -294,5 +294,7 @@ export const API = {
     hrEmployeeLifecycle:   "/dashboard/hr/employee-lifecycle/",
     hrBirthdaysToday:      "/dashboard/hr/birthdays/today/",
     hrBirthdaysUpcoming:   "/dashboard/hr/birthdays/upcoming/",
+    // Manager / Team Lead dashboard
+    manager:               "/dashboard/manager/",
   },
 } as const;
