@@ -140,7 +140,9 @@ def _approval_scope_filter(user) -> 'Q':
     """
     Scope filter for the approval queue — enforces both role and status visibility.
     manager__team_lead → REQ_PENDING requests where they are the designated L1 approver.
-    hr / hr_admin      → REQ_L2_PENDING requests in their branch.
+    hr / hr_admin      → REQ_L2_PENDING requests in their branch (case-insensitive).
+                         If no branch is set on the HR user they see all REQ_L2_PENDING
+                         requests org-wide (company-wide HR role).
     system_admin       → all statuses, all employees except own.
     """
     role = _role_name(user)
@@ -149,8 +151,10 @@ def _approval_scope_filter(user) -> 'Q':
     if _is_hr_role(role):
         branch = _user_branch(user)
         if branch:
-            return Q(employee__branch=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
-        return Q(employee__hr=user, status=REQ_L2_PENDING) & ~Q(employee=user)
+            # iexact prevents mismatches from casing differences in branch names.
+            return Q(employee__branch__iexact=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
+        # No branch set → treat as company-wide HR; see all L2-pending requests.
+        return Q(status=REQ_L2_PENDING) & ~Q(employee=user)
     if role == 'manager__team_lead':
         # Show only requests where this manager is the designated L1 approver.
         # Scoping by l1_approver (not reporting_manager) is precise — it respects
@@ -171,7 +175,7 @@ def _calendar_scope_filter(user) -> 'Q':
     if role == 'system_admin':
         return Q()
     if _is_hr_role(role):
-        return Q(employee__branch=user.branch) if user.branch else Q()
+        return Q(employee__branch__iexact=user.branch) if user.branch else Q()
     if role == 'manager__team_lead':
         return Q(employee__reporting_manager=user) | Q(employee=user)
     return Q()  # employee: see all approved leaves to plan around absences
