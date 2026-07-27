@@ -14,6 +14,7 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 INSTALLED_APPS = [
+    'channels',                    # first: replaces runserver with an ASGI-aware one
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -69,6 +70,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # ─── Database ────────────────────────────────────────────────────────────────
 DATABASES = {
@@ -143,6 +145,23 @@ else:
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         }
+    }
+
+# ─── Channels (WebSocket notifications) ──────────────────────────────────────
+# Mirrors the CACHES fallback above: real Redis when REDIS_URL is configured,
+# otherwise the in-memory layer. Like LocMemCache, that only works within a
+# single process — fine for `runserver`, not multiple gunicorn/daphne workers
+# in production, where REDIS_URL must be set.
+if _REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [_REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
     }
 
 # ─── Celery ──────────────────────────────────────────────────────────────────

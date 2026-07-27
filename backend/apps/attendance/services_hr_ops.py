@@ -50,8 +50,16 @@ _OT_MULTIPLIERS = {
 
 # ── OT Entry ──────────────────────────────────────────────────────────────────
 
-def list_overtime(date: datetime.date | None, branch: str, department: str) -> list[dict]:
-    """Return OT rows filtered by optional date/branch/department."""
+def list_overtime(
+    date: datetime.date | None, branch: str, department: str,
+    employee_ids: list[str] | None = None,
+) -> list[dict]:
+    """
+    Return OT rows filtered by optional date/branch/department.
+
+    employee_ids: when provided (a manager's direct reports), restricts the
+    scope to exactly those employees instead of branch.
+    """
     qs = (
         AttendanceOvertime.objects
         .select_related('employee', 'approved_by')
@@ -59,7 +67,9 @@ def list_overtime(date: datetime.date | None, branch: str, department: str) -> l
     )
     if date:
         qs = qs.filter(date=date)
-    if branch:
+    if employee_ids is not None:
+        qs = qs.filter(employee_id__in=employee_ids)
+    elif branch:
         qs = qs.filter(employee__branch=branch)
     if department:
         qs = qs.filter(employee__department=department)
@@ -82,11 +92,20 @@ def list_overtime(date: datetime.date | None, branch: str, department: str) -> l
     return rows
 
 
-def create_overtime(data: dict, created_by) -> AttendanceOvertime:
-    """Create an OT entry from validated OvertimeWriteSerializer data."""
+def create_overtime(data: dict, created_by, employee_ids: list[str] | None = None) -> AttendanceOvertime:
+    """
+    Create an OT entry from validated OvertimeWriteSerializer data.
+
+    employee_ids: when provided (a manager's direct reports), the target
+    employee must be in this set — reported as "not found" rather than
+    "forbidden" so a manager can't probe for employees outside their team.
+    """
     try:
         employee = User.objects.get(employee_id=data['employee_id'])
     except User.DoesNotExist:
+        raise ValueError(f"Employee '{data['employee_id']}' not found.")
+
+    if employee_ids is not None and str(employee.pk) not in {str(i) for i in employee_ids}:
         raise ValueError(f"Employee '{data['employee_id']}' not found.")
 
     approved_by = None

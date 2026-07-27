@@ -9,18 +9,29 @@ function todayString() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default function ClockInButton() {
+interface Props {
+  /** Called after a clock in/out request succeeds — lets the parent refresh
+   *  any sibling widgets (KPIs, attendance status) that read the same data. */
+  onPunchSuccess?: () => void;
+}
+
+export default function ClockInButton({ onPunchSuccess }: Props) {
   const { session, isLoading, isPunching, punch } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
 
   const isClockedIn = session?.is_clocked_in ?? false;
   const isBusy      = isLoading || isPunching;
 
+  async function handlePunch() {
+    const ok = await punch(isClockedIn ? "OUT" : "IN");
+    if (ok) onPunchSuccess?.();
+  }
+
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
         <button
-          onClick={() => punch(isClockedIn ? "OUT" : "IN")}
+          onClick={handlePunch}
           disabled={isBusy}
           style={{
             display: "inline-flex", alignItems: "center", gap: 7,

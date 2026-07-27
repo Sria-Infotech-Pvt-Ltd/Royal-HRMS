@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionItems } from "@/hooks/useEmployeeDashboard";
 import type { ActionItem } from "@/types/employeeDashboard";
+import AssessmentLockedNotice from "./AssessmentLockedNotice";
 
 const ACTION_ICON: Record<string, { icon: string; color: string; bg: string }> = {
   profile_incomplete:   { icon: "ti-user-exclamation", color: "var(--error)",   bg: "rgba(220,38,38,0.10)"   },
@@ -28,7 +29,7 @@ const isDone = (item: ActionItem) =>
   item.status === "approved" || item.action_type === "leave_approved";
 
 export default function EmpActionItems() {
-  const { data, loading } = useActionItems();
+  const { data, loading, status } = useActionItems();
 
   const items   = data?.action_items ?? [];
   const pending = items.filter(i => !isDone(i)).length;
@@ -44,6 +45,8 @@ export default function EmpActionItems() {
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
         </div>
+      ) : status === 403 ? (
+        <AssessmentLockedNotice />
       ) : items.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center" }}>
           <i className="ti ti-circle-check" style={{ fontSize: 26, color: "var(--success)", display: "block", marginBottom: 8, opacity: 0.6 }} />

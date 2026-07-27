@@ -728,10 +728,40 @@ class RoleDetailView(APIView):
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Role retrieved successfully.', data=RoleSerializer(role).data)
 
+    @staticmethod
+    def _check_conflict(role: Role, expected_updated_at: str | None):
+        """
+        Optimistic-concurrency guard for permission edits.
+
+        Permission saves do a full delete-then-recreate of the role's
+        permission set (see RoleSerializer._sync_permissions) — with no
+        version check, a second save based on stale data silently wins and
+        reverts an earlier save (e.g. two admins/tabs editing the same role
+        around the same time). When the client sends back the updated_at it
+        loaded the role at, reject the write if the role has changed since.
+        Optional — a request without expected_updated_at skips the check
+        (used by the is_active-only PATCH, which never touches permissions).
+        """
+        if not expected_updated_at:
+            return None
+        from django.utils.dateparse import parse_datetime
+        expected_dt = parse_datetime(expected_updated_at)
+        if expected_dt and expected_dt != role.updated_at:
+            return error(
+                'This role was changed by someone else since you loaded it. '
+                'Reload the page and try again.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        return None
+
     def put(self, request, pk):
         role = self._get_role(pk)
         if not role:
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        conflict = self._check_conflict(role, request.data.get('expected_updated_at'))
+        if conflict:
+            return conflict
 
         serializer = RoleSerializer(role, data=request.data)
         if not serializer.is_valid():

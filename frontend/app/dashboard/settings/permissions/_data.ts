@@ -7,6 +7,7 @@ export interface ApiRole {
   is_active: boolean;
   user_count: number;
   permissions: string[];  // codenames, e.g. ["employees.view", "employees.create"]
+  updated_at: string;     // used to detect concurrent edits on save
 }
 
 export interface ApiPermission {
