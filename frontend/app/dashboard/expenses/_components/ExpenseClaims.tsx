@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import type { PaginatedResponse } from "@/types/attendance";
 import ExpenseFormModal from "./ExpenseFormModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ type ExpenseStatus   = "pending" | "approved" | "rejected";
 type FilterTab       = "all" | ExpenseCategory;
 
 interface Expense {
-  id:            string;
+  expense_number: number;
   title:         string;
   category:      ExpenseCategory;
   amount:        number | string;
@@ -96,10 +97,10 @@ export default function ExpenseClaims() {
     return `${API.expenses.list}?category=${activeFilter}`;
   }, [activeFilter]);
 
-  const { data: expenses, loading, error, refetch }      = useFetch<Expense[]>(listUrl);
+  const { data: expenses, loading, error, refetch }      = useFetch<PaginatedResponse<Expense>>(listUrl);
   const { data: stats,    refetch: refetchStats }        = useFetch<ExpenseStats>(API.expenses.stats);
 
-  const expenseList = Array.isArray(expenses) ? expenses : [];
+  const expenseList = expenses?.results ?? [];
 
   function handleSaved() {
     setShowNewExpense(false);
@@ -195,7 +196,7 @@ export default function ExpenseClaims() {
 
             return (
               <div
-                key={expense.id}
+                key={expense.expense_number}
                 style={{
                   display:     "flex",
                   alignItems:  "center",
