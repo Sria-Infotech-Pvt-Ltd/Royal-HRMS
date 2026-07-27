@@ -17,8 +17,13 @@ _DENIED = 'You do not have permission to perform this action.'
 
 _TTL_BIRTHDAYS = 6 * 3600   # 6 h — team birthday data is stable
 
-# Roles that always qualify as managers regardless of direct-report count
-_MANAGER_ROLES = frozenset({'manager', 'team_lead', 'hr_admin', 'hr', 'system_admin'})
+# Roles that always qualify as managers regardless of direct-report count.
+# 'manager__team_lead' is the actual DB role name — the separate strings
+# 'manager' and 'team_lead' are never set on their own in this system.
+_MANAGER_ROLES = frozenset({
+    'manager__team_lead', 'manager', 'team_lead',
+    'hr_admin', 'hr', 'system_admin',
+})
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

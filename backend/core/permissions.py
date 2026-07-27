@@ -1,7 +1,9 @@
 from rest_framework.permissions import BasePermission
 
 _SAFE_METHODS = frozenset(('GET', 'HEAD', 'OPTIONS'))
-_ONBOARDING_EXEMPT_ROLES = frozenset(('system_admin', 'hr', 'hr_admin'))
+# Roles exempt from the onboarding/assessment gate on employee-facing endpoints.
+# manager__team_lead is the actual DB role name for managers in this system.
+_ONBOARDING_EXEMPT_ROLES = frozenset(('system_admin', 'hr', 'hr_admin', 'manager__team_lead'))
 
 
 class HasSettingsPermission(BasePermission):
