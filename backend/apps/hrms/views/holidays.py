@@ -1,6 +1,5 @@
 import logging
 
-from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -44,41 +43,49 @@ class HolidayListCreateView(APIView):
         optional = request.query_params.get('optional')  # "true" → is_optional=True tab
         branch   = request.query_params.get('branch')
 
-        qs = Holiday.objects.all()
-
         if year:
             try:
-                qs = qs.filter(date__year=int(year))
+                year_int = int(year)
             except (TypeError, ValueError):
                 return error('Invalid year parameter.')
-
-        if month:
-            try:
-                qs = qs.filter(date__month=int(month))
-            except (TypeError, ValueError):
-                return error('Invalid month parameter.')
+            from core.cache_service import HolidayCacheService
+            holidays = HolidayCacheService.get_list_for_year(year_int)
+            if month:
+                try:
+                    month_int = int(month)
+                except (TypeError, ValueError):
+                    return error('Invalid month parameter.')
+                holidays = [h for h in holidays if h.date.month == month_int]
+        else:
+            qs = Holiday.objects.select_related('branch').all()
+            if month:
+                try:
+                    qs = qs.filter(date__month=int(month))
+                except (TypeError, ValueError):
+                    return error('Invalid month parameter.')
+            holidays = list(qs)
 
         if htype:
-            qs = qs.filter(holiday_type=htype)
+            holidays = [h for h in holidays if h.holiday_type == htype]
 
         if optional and optional.lower() == 'true':
-            qs = qs.filter(is_optional=True)
+            holidays = [h for h in holidays if h.is_optional]
 
         if branch:
-            qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch))
+            holidays = [h for h in holidays if h.branch_id is None or h.branch.branch_name == branch]
         elif not _is_unrestricted(request.user):
             user_branch = (getattr(request.user, 'branch', '') or '').strip()
             if user_branch:
-                qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=user_branch))
+                holidays = [h for h in holidays if h.branch_id is None or h.branch.branch_name == user_branch]
             else:
-                qs = qs.filter(branch__isnull=True)
+                holidays = [h for h in holidays if h.branch_id is None]
         # else: unrestricted user (system_admin / superuser) with no branch
         # filter requested — see every branch's holidays plus company-wide ones.
 
-        holidays = HolidaySerializer(qs, many=True).data
+        serialized = HolidaySerializer(holidays, many=True).data
         return success('Holidays retrieved.', {
-            'holidays': holidays,
-            'total':    len(holidays),
+            'holidays': serialized,
+            'total':    len(serialized),
         })
 
     def post(self, request):

@@ -8,7 +8,9 @@ logger = logging.getLogger(__name__)
 
 class CacheTTL:
     LEAVE_POLICY        = 6  * 3600
+    LEAVE_POLICY_LIST   = 300
     HOLIDAY             = 24 * 3600
+    HOLIDAY_LIST        = 600
     WEEKLY_OFF          = 24 * 3600
     ATTENDANCE_SETTINGS = 6  * 3600
     APPROVAL_WORKFLOW   = 6  * 3600
@@ -16,6 +18,7 @@ class CacheTTL:
     DEPARTMENTS         = 12 * 3600
     DESIGNATIONS        = 12 * 3600
     FINANCIAL_YEAR      = 24 * 3600
+    COMPANY             = 600
 
 
 def _slug(s: str) -> str:
@@ -25,6 +28,8 @@ def _slug(s: str) -> str:
 # ── Leave Policy ──────────────────────────────────────────────────────────────
 
 class LeavePolicyCacheService:
+    _ALL_KEY = 'leave_policy:all'
+
     @staticmethod
     def _key(leave_type: str) -> str:
         return f'leave_policy:{leave_type}'
@@ -49,9 +54,26 @@ class LeavePolicyCacheService:
         return policy
 
     @classmethod
+    def get_all(cls) -> list:
+        """All leave policy rows (any active state), for the settings list page."""
+        try:
+            cached = cache.get(cls._ALL_KEY)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for leave_policy:all')
+        from apps.hrms.models import LeavePolicy
+        data = list(LeavePolicy.objects.all().order_by('leave_type'))
+        try:
+            cache.set(cls._ALL_KEY, data, CacheTTL.LEAVE_POLICY_LIST)
+        except Exception:
+            logger.warning('Cache write failed for leave_policy:all')
+        return data
+
+    @classmethod
     def invalidate(cls, leave_type: str) -> None:
         try:
-            cache.delete(cls._key(leave_type))
+            cache.delete_many([cls._key(leave_type), cls._ALL_KEY])
         except Exception:
             logger.warning('Cache delete failed for leave_policy:%s', leave_type)
 
@@ -115,16 +137,39 @@ class HolidayCacheService:
         holidays = cls._get_year(branch_name, start.year)
         return [h for h in holidays if start <= h['date'] <= end]
 
+    @staticmethod
+    def _list_key(year: int) -> str:
+        return f'holiday:list:{year}'
+
+    @classmethod
+    def get_list_for_year(cls, year: int) -> list:
+        """Full Holiday rows (any active state, every branch) for a given year —
+        used by the settings/calendar list page, which filters further in Python."""
+        key = cls._list_key(year)
+        try:
+            cached = cache.get(key)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for %s', key)
+        from apps.hrms.models import Holiday
+        data = list(Holiday.objects.filter(date__year=year).select_related('branch').order_by('date'))
+        try:
+            cache.set(key, data, CacheTTL.HOLIDAY_LIST)
+        except Exception:
+            logger.warning('Cache write failed for %s', key)
+        return data
+
     @classmethod
     def invalidate_branch(cls, branch_name: str, year: int) -> None:
         try:
-            cache.delete(cls._key(branch_name, year))
+            cache.delete_many([cls._key(branch_name, year), cls._list_key(year)])
         except Exception:
             logger.warning('Cache delete failed for holiday:%s:%s', _slug(branch_name), year)
 
     @classmethod
     def invalidate_year(cls, year: int) -> None:
-        keys = [cls._key('', year)]
+        keys = [cls._key('', year), cls._list_key(year)]
         try:
             from apps.branch.models import Branch
             for name in Branch.objects.values_list('branch_name', flat=True):
@@ -233,7 +278,10 @@ class AttendanceSettingsCacheService:
         from apps.attendance.models import AttendanceSettings
         settings = (
             AttendanceSettings.objects
-            .select_related('working_hours', 'weekly_off', 'punch_rules', 'overtime_rules')
+            .select_related(
+                'working_hours', 'weekly_off', 'punch_rules', 'overtime_rules',
+                'late_mark_rules', 'absence_alert', 'updated_by',
+            )
             .filter(is_active=True)
             .order_by('-created_at')
             .first()
@@ -368,3 +416,34 @@ class FinancialYearCacheService:
             cache.delete(cls._KEY)
         except Exception:
             logger.warning('Cache delete failed for financial_year_config')
+
+
+# ── Company ───────────────────────────────────────────────────────────────────
+
+class CompanyCacheService:
+    """Company is an enforced singleton (Company.objects.first()) — a single key is enough."""
+    _KEY = 'company:info'
+
+    @classmethod
+    def get(cls):
+        try:
+            cached = cache.get(cls._KEY)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for company:info')
+        from apps.accounts.models import Company
+        company = Company.objects.first()
+        if company is not None:
+            try:
+                cache.set(cls._KEY, company, CacheTTL.COMPANY)
+            except Exception:
+                logger.warning('Cache write failed for company:info')
+        return company
+
+    @classmethod
+    def invalidate(cls) -> None:
+        try:
+            cache.delete(cls._KEY)
+        except Exception:
+            logger.warning('Cache delete failed for company:info')
