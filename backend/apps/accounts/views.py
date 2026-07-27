@@ -4184,16 +4184,14 @@ class ManagerListView(APIView):
         branch = (request.query_params.get('branch') or '').strip()
         if not branch:
             return error('branch query parameter is required.')
-        # Filter by permission so any role named manager/team_lead/etc. is included
         managers = (
             User.objects
             .filter(
-                role__role_permissions__permission__codename='leave.approve',
+                role__name='manager__team_lead',
                 is_active=True,
                 branch__iexact=branch,
             )
             .select_related('role')
-            .distinct()
             .order_by('full_name')
         )
         data = [
