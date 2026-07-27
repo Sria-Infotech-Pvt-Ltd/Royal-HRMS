@@ -21,10 +21,10 @@ class GeolocationForwardingTests(SimpleTestCase):
     actually get a clock_in/clock_out past a geofencing rejection. No new
     validation happens anywhere in this path; PunchWriteSerializer and
     GeofencingService are the same real checks the manual ClockWidget punch
-    already goes through (see executor._execute_punch).
+    already goes through (see executor_attendance._execute_punch).
     """
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_in_forwards_latitude_and_longitude_when_present(self, mock_record_punch):
         execute_intent(
             INTENT_CLOCK_IN, _fake_request(), attendance_mode=AttendancePunch.MODE_OFFICE,
@@ -35,7 +35,7 @@ class GeolocationForwardingTests(SimpleTestCase):
         self.assertEqual(punch_data['latitude'], 17.385044)
         self.assertEqual(punch_data['longitude'], 78.486671)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_out_forwards_latitude_and_longitude_when_present(self, mock_record_punch):
         execute_intent(
             INTENT_CLOCK_OUT, _fake_request(), attendance_mode=AttendancePunch.MODE_OFFICE,
@@ -46,7 +46,7 @@ class GeolocationForwardingTests(SimpleTestCase):
         self.assertEqual(punch_data['latitude'], 12.9716)
         self.assertEqual(punch_data['longitude'], 77.5946)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_in_with_no_coordinates_forwards_none(self, mock_record_punch):
         # The original (pre-retry) attempt — no coordinates yet, exactly like
         # every voice clock_in before this feature existed.
@@ -56,7 +56,7 @@ class GeolocationForwardingTests(SimpleTestCase):
         self.assertIsNone(punch_data['latitude'])
         self.assertIsNone(punch_data['longitude'])
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_non_office_mode_forwards_coordinates_harmlessly(self, mock_record_punch):
         # GeofencingService's non-office validators never look at
         # employee_lat/employee_lon (services_geofencing._validate_no_geofence)

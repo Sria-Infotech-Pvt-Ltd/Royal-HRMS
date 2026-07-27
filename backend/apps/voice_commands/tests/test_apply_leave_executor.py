@@ -22,15 +22,15 @@ def _fake_slots():
     }
 
 
-# _execute_apply_leave submits through LeaveRequestListCreateView directly
+# execute_apply_leave (executor_leave.py) submits through LeaveRequestListCreateView directly
 # (APIRequestFactory + force_authenticate) rather than duplicating that
 # view's balance/overlap/approval-chain business rules — these tests mock
 # the view call itself, isolating the executor's own request-building and
 # message-construction logic.
 
 class ApplyLeaveExecutorTests(SimpleTestCase):
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
-    @patch('apps.voice_commands.executor.force_authenticate')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_leave.force_authenticate')
     def test_successful_submission_returns_success_with_dates_and_type_in_message(
         self, mock_force_authenticate, mock_view_cls,
     ):
@@ -49,8 +49,8 @@ class ApplyLeaveExecutorTests(SimpleTestCase):
         self.assertIn('2026-07-24', result.message)
         self.assertEqual(result.data, {'id': 'req-1'})
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
-    @patch('apps.voice_commands.executor.force_authenticate')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_leave.force_authenticate')
     def test_authenticates_the_synthetic_request_as_the_calling_user(self, mock_force_authenticate, mock_view_cls):
         mock_view_cls.as_view.return_value.return_value = MagicMock(status_code=201, data={'data': {}})
         request = _fake_request()
@@ -60,8 +60,8 @@ class ApplyLeaveExecutorTests(SimpleTestCase):
         mock_force_authenticate.assert_called_once()
         self.assertEqual(mock_force_authenticate.call_args.kwargs['user'], request.user)
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
-    @patch('apps.voice_commands.executor.force_authenticate')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_leave.force_authenticate')
     def test_business_rule_failure_surfaces_the_views_error_message(self, mock_force_authenticate, mock_view_cls):
         mock_response = MagicMock(
             status_code=422,
@@ -75,8 +75,8 @@ class ApplyLeaveExecutorTests(SimpleTestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.message, 'Insufficient balance. You have 2.0 day(s) available.')
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
-    @patch('apps.voice_commands.executor.force_authenticate')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_leave.force_authenticate')
     def test_failure_without_a_message_falls_back_to_generic_message(self, mock_force_authenticate, mock_view_cls):
         mock_response = MagicMock(status_code=500, data={})
         mock_view_cls.as_view.return_value.return_value = mock_response
@@ -87,8 +87,8 @@ class ApplyLeaveExecutorTests(SimpleTestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.message, 'Could not submit the leave request.')
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
-    @patch('apps.voice_commands.executor.force_authenticate')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_leave.force_authenticate')
     def test_payload_sent_to_the_view_contains_only_the_four_collected_slots(
         self, mock_force_authenticate, mock_view_cls,
     ):

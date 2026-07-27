@@ -35,8 +35,8 @@ def _fake_serialized_request(**overrides):
 # real serialization and the live Neon Postgres DATABASE_URL in backend/.env.
 
 class CheckLeaveStatusTests(SimpleTestCase):
-    @patch('apps.voice_commands.executor.LeaveRequestSerializer')
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestSerializer')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_no_requests_returns_friendly_message(self, mock_objects, mock_serializer_cls):
         mock_objects.filter.return_value.order_by.return_value.__getitem__.return_value = []
         mock_serializer_cls.return_value.data = []
@@ -46,8 +46,8 @@ class CheckLeaveStatusTests(SimpleTestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.message, 'You have no leave requests on record.')
 
-    @patch('apps.voice_commands.executor.LeaveRequestSerializer')
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestSerializer')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_summarizes_single_most_recent_request(self, mock_objects, mock_serializer_cls):
         mock_objects.filter.return_value.order_by.return_value.__getitem__.return_value = [MagicMock()]
         mock_serializer_cls.return_value.data = [_fake_serialized_request()]
@@ -61,8 +61,8 @@ class CheckLeaveStatusTests(SimpleTestCase):
         self.assertIn('pending manager approval', result.message)
         self.assertNotIn('more recent request', result.message)
 
-    @patch('apps.voice_commands.executor.LeaveRequestSerializer')
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestSerializer')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_mentions_additional_requests_when_more_than_one(self, mock_objects, mock_serializer_cls):
         mock_objects.filter.return_value.order_by.return_value.__getitem__.return_value = [MagicMock(), MagicMock()]
         mock_serializer_cls.return_value.data = [
@@ -76,8 +76,8 @@ class CheckLeaveStatusTests(SimpleTestCase):
         self.assertIn('pending HR approval', result.message)
         self.assertIn('1 more recent request', result.message)
 
-    @patch('apps.voice_commands.executor.LeaveRequestSerializer')
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestSerializer')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_queries_only_own_requests_most_recent_first(self, mock_objects, mock_serializer_cls):
         mock_objects.filter.return_value.order_by.return_value.__getitem__.return_value = []
         mock_serializer_cls.return_value.data = []
@@ -100,7 +100,7 @@ def _fake_pending_request(leave_type_display='Earned Leave', start_date='2026-08
 
 
 class CancelLeaveTests(SimpleTestCase):
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_no_cancellable_requests_returns_rejection(self, mock_objects):
         mock_objects.filter.return_value.order_by.return_value = []
 
@@ -109,7 +109,7 @@ class CancelLeaveTests(SimpleTestCase):
         self.assertFalse(result.success)
         self.assertIn("don't have any pending", result.message)
 
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_more_than_one_cancellable_request_asks_to_be_specific(self, mock_objects):
         mock_objects.filter.return_value.order_by.return_value = [
             _fake_pending_request(), _fake_pending_request(),
@@ -121,7 +121,7 @@ class CancelLeaveTests(SimpleTestCase):
         self.assertIn('more than one pending', result.message)
         self.assertIn('dashboard', result.message)
 
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_exactly_one_cancellable_request_gets_cancelled(self, mock_objects):
         pending = _fake_pending_request()
         mock_objects.filter.return_value.order_by.return_value = [pending]
@@ -135,7 +135,7 @@ class CancelLeaveTests(SimpleTestCase):
         self.assertIn('cancelled', result.message)
         pending.save.assert_called_once_with(update_fields=['status', 'updated_at'])
 
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_cancellation_sets_status_to_cancelled(self, mock_objects):
         from apps.hrms.models import REQ_CANCELLED
 
@@ -146,7 +146,7 @@ class CancelLeaveTests(SimpleTestCase):
 
         self.assertEqual(pending.status, REQ_CANCELLED)
 
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_only_queries_pending_and_l2_pending_statuses_for_own_requests(self, mock_objects):
         mock_objects.filter.return_value.order_by.return_value = []
         request = _fake_request()

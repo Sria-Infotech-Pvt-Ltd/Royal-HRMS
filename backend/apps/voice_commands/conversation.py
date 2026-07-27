@@ -9,10 +9,29 @@ from apps.voice_commands.approval_extractor import (
     strip_employee_name_phrases,
 )
 from apps.voice_commands.clarification import clear_pending, get_pending, set_pending
-from apps.voice_commands.executor import INTENT_APPLY_LEAVE, INTENT_APPROVE_LEAVE, INTENT_REJECT_LEAVE, execute_intent
+from apps.voice_commands.conversation_clarification import (
+    CLARIFICATION_STAGE,
+    continue_clarification,
+    start_clarification,
+)
+from apps.voice_commands.conversation_payroll import (
+    PAYROLL_CONVERSATIONAL_INTENTS,
+    continue_payroll_conversation,
+    start_payroll_conversation,
+)
+from apps.voice_commands.executor import (
+    INTENT_APPLY_LEAVE,
+    INTENT_APPROVE_LEAVE,
+    INTENT_REJECT_LEAVE,
+    execute_intent,
+)
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational, match_intent
 from apps.voice_commands.mode_extractor import extract_attendance_mode
 from apps.voice_commands.normalizer import normalize_transcript
+from apps.voice_commands.payslip_extractor import (
+    strip_employee_name_phrases as strip_payslip_employee_name_phrases,
+    strip_payslip_query_phrases,
+)
 from apps.voice_commands.slot_extractor import (
     extract_apply_leave_slots,
     extract_date_range,
@@ -51,7 +70,9 @@ def handle_transcript(
     enough confidence to be recognized at all, the pending state is dropped
     and the transcript is treated as a new command instead — a user who's
     moved on shouldn't be trapped answering questions for a leave request
-    they've abandoned.
+    they've abandoned. This also covers a pending "did you mean" clarification
+    (see conversation_clarification.start_clarification) — a clear, confident
+    new command takes priority over a still-unanswered guess.
 
     latitude/longitude come from the browser only when the frontend already
     has them — either a manual-parity capture on the original request, or a
@@ -66,13 +87,15 @@ def handle_transcript(
     normalized = normalize_transcript(transcript)
     attendance_mode, intent_text = extract_attendance_mode(normalized, lang=lang)
 
-    # Leave-slot phrases (dates, leave-type keywords, a reason clause) and an
-    # approve/reject target name are stripped before matching only — never
-    # before extraction — for the same reason mode_extractor strips mode
-    # phrases first: left in, a fully slot-filled or name-bearing utterance
-    # drags the fuzzy score against the short registered phrase below
-    # match_intent()'s threshold.
-    matching_text = strip_employee_name_phrases(strip_leave_slot_phrases(intent_text))
+    # Slot/name/reason phrases are stripped before matching only, never
+    # before extraction — same reason mode_extractor strips mode phrases
+    # first: left in, a slot-filled or name-bearing utterance drags the
+    # fuzzy score below match_intent()'s threshold. Each strip_*() no-ops
+    # when its own pattern is absent, so chaining is safe either way.
+    text = strip_leave_slot_phrases(intent_text)
+    text = strip_employee_name_phrases(text)
+    text = strip_payslip_query_phrases(text)
+    matching_text = strip_payslip_employee_name_phrases(text)
     fresh_match = match_intent(matching_text, lang=lang)
 
     if pending and fresh_match.intent != NO_MATCH_INTENT and fresh_match.intent != pending['intent']:
@@ -84,8 +107,12 @@ def handle_transcript(
         pending = None
 
     if pending:
+        if pending['slots'].get('stage') == CLARIFICATION_STAGE:
+            return continue_clarification(request, pending, normalized, _dispatch_matched_intent)
         if pending['intent'] in _LEAVE_APPROVAL_INTENTS:
             return _continue_leave_approval(request, pending, normalized)
+        if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
+            return continue_payroll_conversation(request, pending, normalized)
         return _continue_apply_leave(request, pending, normalized)
 
     if fresh_match.intent == NO_MATCH_INTENT:
@@ -95,24 +122,56 @@ def handle_transcript(
                 'clarification answer — user=%s transcript=%r', user.pk, transcript,
             )
             return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, _EXPIRED_CLARIFICATION_MESSAGE, success=False)
-        logger.info('Voice command no match: user=%s transcript=%r', user.pk, transcript)
+        if fresh_match.candidate_intent:
+            return start_clarification(
+                request, fresh_match.candidate_intent, fresh_match.matched_phrase,
+                fresh_match.confidence, intent_text, attendance_mode, lang,
+            )
+        logger.info(
+            'Voice command no match: user=%s transcript=%r confidence=%s',
+            user.pk, transcript, fresh_match.confidence,
+        )
         return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, _NO_MATCH_MESSAGE, success=False)
 
-    if fresh_match.intent == INTENT_APPLY_LEAVE:
-        return _start_apply_leave(request, intent_text, fresh_match.confidence)
+    return _dispatch_matched_intent(
+        request, fresh_match.intent, intent_text, fresh_match.confidence,
+        attendance_mode=attendance_mode, lang=lang, latitude=latitude, longitude=longitude,
+    )
 
-    if fresh_match.intent in _LEAVE_APPROVAL_INTENTS:
-        return _start_leave_approval(request, fresh_match.intent, intent_text, fresh_match.confidence)
+
+def _dispatch_matched_intent(
+    request, intent: str, intent_text: str, confidence: Optional[float],
+    attendance_mode: Optional[str] = None, lang: str = DEFAULT_LANG,
+    latitude: Optional[float] = None, longitude: Optional[float] = None,
+) -> dict:
+    """
+    Dispatch an intent already resolved with enough confidence to act on —
+    either a fresh match straight out of match_intent(), or a middle-
+    confidence candidate the caller just confirmed via the "did you mean"
+    clarification flow (see conversation_clarification.continue_clarification,
+    which receives this function injected as a callback to avoid a circular
+    import). Both need the exact same per-intent-shape routing, so this is
+    the one place it lives instead of being duplicated between the two call
+    sites.
+    """
+    if intent == INTENT_APPLY_LEAVE:
+        return _start_apply_leave(request, intent_text, confidence)
+
+    if intent in _LEAVE_APPROVAL_INTENTS:
+        return _start_leave_approval(request, intent, intent_text, confidence)
+
+    if intent in PAYROLL_CONVERSATIONAL_INTENTS:
+        return start_payroll_conversation(request, intent, intent_text, confidence)
 
     outcome = execute_intent(
-        fresh_match.intent, request, attendance_mode=attendance_mode, lang=lang,
+        intent, request, attendance_mode=attendance_mode, lang=lang,
         latitude=latitude, longitude=longitude,
     )
     logger.info(
         'Voice command: user=%s intent=%s confidence=%s success=%s',
-        user.pk, fresh_match.intent, fresh_match.confidence, outcome.success,
+        request.user.pk, intent, confidence, outcome.success,
     )
-    return _payload(fresh_match.intent, fresh_match.confidence, outcome.data, outcome.message, success=outcome.success)
+    return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
 
 
 def _looks_like_expired_slot_answer(text: str) -> bool:
@@ -249,6 +308,8 @@ def _payload(
     the intent itself, true for apply_leave on every one of its responses
     (including an immediate single-utterance submission), false for
     everything else, including NO_MATCH_INTENT (never registered).
+    conversation_clarification.py's own _payload duplicate is the one place
+    that overrides this — see its docstring for why.
 
     awaiting_input reflects THIS response only: true exactly when pending
     clarification state now exists in Redis and the caller needs to answer a

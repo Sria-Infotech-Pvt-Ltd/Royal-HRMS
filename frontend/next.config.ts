@@ -5,6 +5,12 @@ import type { NextConfig } from "next";
 const API_HOST = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  // Pins the workspace root to this directory. Without this, Turbopack walks
+  // up looking for lockfiles and finds the repo-root package-lock.json above
+  // frontend/ too, so it guesses the wrong root and warns on every dev/build.
+  turbopack: {
+    root: __dirname,
+  },
   // Prevent Next.js from 308-redirecting /api/login/ → /api/login before the
   // rewrite runs. Without this, Django's APPEND_SLASH raises a RuntimeError on
   // POST because it cannot redirect and preserve the request body.
