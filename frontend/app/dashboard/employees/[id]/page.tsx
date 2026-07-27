@@ -174,6 +174,9 @@ export default function EmployeeProfilePage({
 }) {
   const { id } = use(params);
   const canEdit = usePermission("employees.edit");
+  // /roles/ is gated server-side to settings.edit holders — skip the call
+  // entirely for everyone else instead of firing a request that always 403s.
+  const canViewRoles = usePermission("settings.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
 
@@ -204,7 +207,9 @@ export default function EmployeeProfilePage({
     Promise.allSettled([
       clientApi.get<{ data: { results: { id: number; name: string }[] } }>(API.departments.list),
       clientApi.get<{ data: unknown }>(API.designations.list),
-      clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
+      canViewRoles
+        ? clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`)
+        : Promise.resolve(null),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
     ]).then(([depts, desigs, roles, branches]) => {
       if (depts.status === "fulfilled")
@@ -213,7 +218,7 @@ export default function EmployeeProfilePage({
         const desigData = desigs.value.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
         setAllDesigs(Array.isArray(desigData) ? desigData : (desigData.results ?? []));
       }
-      if (roles.status === "fulfilled")
+      if (roles.status === "fulfilled" && roles.value)
         setRoleOptions(
           roles.value.data.data.results
             .filter(r => r.name !== "system_admin")
@@ -222,7 +227,7 @@ export default function EmployeeProfilePage({
       if (branches.status === "fulfilled")
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
     });
-  }, []);
+  }, [canViewRoles]);
 
   // filter designations whenever the selected department changes
   useEffect(() => {

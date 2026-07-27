@@ -18,6 +18,14 @@ const AUTH_URLS = [
 let _intentionalLogout = false;
 export function markIntentionalLogout() { _intentionalLogout = true; }
 
+// Set to true once a refresh attempt has actually failed. Without this,
+// every widget still mounted during the few seconds between "session expired"
+// and the redirect to /login (dashboard pages fire many concurrent requests)
+// independently retries the refresh call and 401s again, hammering
+// /token/refresh/ in a burst. Reset on the next successful login.
+let _sessionKnownExpired = false;
+export function resetSessionExpired() { _sessionKnownExpired = false; }
+
 const clientApi = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
@@ -50,6 +58,7 @@ function flushQueue(err: unknown, succeeded: boolean) {
 function dispatchSessionExpired() {
   isRefreshing = false;
   refreshQueue = [];
+  _sessionKnownExpired = true;
   clearAuth();
   if (typeof window !== "undefined" && !_intentionalLogout) {
     window.dispatchEvent(new CustomEvent("session:expired"));
@@ -71,6 +80,13 @@ clientApi.interceptors.response.use(
       original._retry ||
       AUTH_URLS.some(u => original.url?.endsWith(u))
     ) {
+      return Promise.reject(normaliseError(await resolveBlobErrorData(err)));
+    }
+
+    // The session is already known dead (a prior refresh attempt failed) —
+    // don't spend another round-trip on /token/refresh/ for every request
+    // still in flight while the app finishes redirecting to /login.
+    if (_sessionKnownExpired) {
       return Promise.reject(normaliseError(await resolveBlobErrorData(err)));
     }
 

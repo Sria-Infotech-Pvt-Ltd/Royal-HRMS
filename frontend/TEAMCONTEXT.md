@@ -3055,3 +3055,77 @@ Given the choice between (a) inventing 6 new types pointing at 5 endpoints that 
 - **Backend permission-architecture work for Payroll is fully scoped but not started** — see §1 and `<scratchpad>/backend-payroll-permissions-request.md`. Four items: swap `_is_payroll_admin()`'s role-name check for `_has_perm`, add a real `payroll.view_own` permission, remove `payroll.view` from `manager`, and fix the undefined `_is_hr_admin()` crash bug.
 - **If you see `lib/navConfig.ts` or `proxy.ts` with unfamiliar whitespace/formatting** — both files got reformatted (alignment spacing stripped) by an external process partway through this session; functionally nothing changed from that pass, only the fixes described above are meaningful diffs.
 - **The manager dashboard is `app/dashboard/_components/ManagerDashboard.tsx` + `lib/teamContext.tsx` — full stop.** There is no other manager dashboard implementation anymore; §3's deleted files were a dead, never-wired duplicate. Don't recreate `hooks/useManagerDashboard.ts` or per-widget manager endpoints without first checking whether `ManagerDashboard.tsx` already covers it (it almost certainly does).
+
+---
+
+## Session — Rithwika (27 July 2026)
+
+**Branch:** `frontend/27-07`
+
+---
+
+### 1. Auth — Repeated 401/403 Retry Storm on Session Expiry
+
+**Files:** `lib/clientApi.ts`, `app/login/page.tsx`
+
+Reported symptom: after login, the app would eventually start returning 401 on `/api/roles/`, `/api/permissions/`, `/api/dashboard/*`, `/api/notifications/unread-count/`, and even `/api/token/refresh/` itself, repeatedly. Root cause traced to `clientApi.ts`'s response interceptor: `dispatchSessionExpired()` (fired once a refresh attempt genuinely fails) clears cookies and fires `session:expired`, but nothing marked the session as *known dead*. `SessionExpiredOverlay` waits 2.5s before redirecting to `/login`, and during that window `HRDashboard` still has ~7 mounted widgets plus `NotificationBell`'s 60s poll firing requests — every one of those 401s independently re-attempted a full `POST /token/refresh/`, failed again (refresh token already invalid), and re-fired the dispatch, hammering the endpoint in a burst until the redirect finally happened.
+
+Fix: added a module-level `_sessionKnownExpired` flag in `clientApi.ts`, set the moment a refresh attempt actually fails. Once set, every subsequent 401 rejects immediately with no network round-trip, until the next successful login. Exported `resetSessionExpired()`, called from `app/login/page.tsx` right after `saveAuth(user)` so the flag doesn't linger across a logout→login cycle in the same tab (the SPA never does a full page reload between them, so the in-memory flag would otherwise survive).
+
+---
+
+### 2. Roles/Permissions 403 on Employee Screens
+
+**Files:** `app/dashboard/employees/_components/AddEmployeeModal.tsx`, `app/dashboard/employees/[id]/page.tsx`
+
+Same bug report also covered legitimate-but-unguarded 403s on `/api/roles/`. Backend's `RoleListCreateView` requires `settings.edit` for GET as well as POST (`CanManageRoles`, `backend/apps/accounts/views.py:306-314`), but both files called `API.roles.list` unconditionally to populate a role dropdown, with no permission check first. Invisible with the seeded `hr_admin` role (gets all 46 permissions), but any **custom role** created via Settings → Permissions with `employees.create` but not `settings.edit` gets a real 403 every time it opens "Add Employee" or an employee's profile.
+
+Not a backend change (out of scope) — both files now check `usePermission("settings.edit")` before firing the roles request at all, skipping it entirely otherwise. Also caught and fixed a related bug in `AddEmployeeModal.tsx` while there: its dropdown fetch used `Promise.all([roles, departments, branches])`, so a roles 403 was rejecting the whole `Promise.all` and silently wiping out the departments/branches dropdowns too — switched to `Promise.allSettled` (matching the pattern `employees/[id]/page.tsx` already used) so one skipped/failed call doesn't take the other two down with it.
+
+---
+
+### 3. Expense Claims List Not Rendering + No Detail View
+
+**Files:** `app/dashboard/expenses/_components/ExpenseClaims.tsx`, `app/dashboard/expenses/_components/ExpenseDetailModal.tsx` (**new**)
+
+Reported symptom: backend confirmed sending expense data (`GET /expenses/` returning real rows), but the page always showed "No expense claims yet." Root cause: `useFetch` unwraps responses as `r.data?.data`; the backend wraps expense lists in a paginated envelope (`{count, page, page_size, total_pages, results: [...]}`), not a bare array. Fetching it as `Expense[]` resolved to that envelope object, so `Array.isArray(expenses)` was always `false` and the code silently fell back to `[]`. Compounding it, the `Expense` type didn't match the real payload at all — it expected `id`/`receipt_url`, but the backend has no separate uuid `id` for an expense (`expense_number`, an int, is the actual primary key used in the detail URL — confirmed via `backend/apps/hrms/serializers.py` and the route `expenses/<int:expense_number>/`) and returns `receipts` as an array of `{id, url}`, not a single string.
+
+Fixed by fetching as `PaginatedResponse<Expense>` and reading `.results` (same convention already used in `my-requests/page.tsx` / `approvals/page.tsx`), and correcting the `Expense` type to match the confirmed real shape. Row rendering was rewritten using Tailwind utility classes in place of the old `style={{}}` blocks (only the block that had to be touched anyway, per "fix the bug, don't refactor unrelated code" — the rest of the file's pre-existing inline styles were left alone).
+
+Also added the previously-missing click-through: rows are now clickable and open a new `ExpenseDetailModal.tsx` (read-only), built with the same `.modal-overlay`/`.modal-header`/`.modal-body`/`.modal-footer` global CSS classes the sibling `ExpenseFormModal.tsx` already uses. It renders the clicked row's data immediately, then quietly refreshes from `GET /expenses/<expense_number>/` in case status changed since the list loaded (same pattern as `LeaveRequestDetailModal.tsx`), and lists every attached receipt as a link. `CATEGORY_LABEL`, `STATUS_BADGE`, `formatDate`, and the `Expense`/`ExpenseReceipt` types were exported from `ExpenseClaims.tsx` for the new modal to reuse rather than duplicating them.
+
+> Confirmed with the user this should stay **read-only** for now, not become an editable form — the detail endpoint (`api/expenses/<expense_number>/`) does support PUT/PATCH already on the backend if edit capability is wanted later.
+
+---
+
+### 4. Referrals — "Refer Someone" Modal Not Blurring the Sidebar
+
+**File:** `app/dashboard/referrals/page.tsx`
+
+Same bug class already documented in this file under Session 20, §4 ("Modal Backdrop Not Blurring the Sidebar — z-index Root Cause"), recurring in a file that pre-dated that fix pass. The modal's backdrop was a raw inline-styled `<div style={{ position: "fixed", inset: 0, zIndex: 50, ... }}>` instead of the shared `.modal-overlay` class. `DashboardShell`'s sidebar sits at `z-[200]`; since `50 < 200`, the sidebar rendered on top of the backdrop, fully sharp and unblurred, instead of dimmed underneath it.
+
+Fixed the same precedented way as the 7 files in Session 20 — replaced the two custom-styled wrapper `<div>`s with `className="modal-overlay open"` and `className="modal"` (`.modal-overlay` is already `z-index: 1000` with `backdrop-filter: blur(2px)`), leaving the form internals untouched. Swept the rest of `app/` for the same raw-backdrop pattern afterward — the only other hits (`CancelCycleModal.tsx`, `EditTemplateModal.tsx`) already use `z-index: 1000+`, so they weren't affected; this file was the only remaining offender.
+
+---
+
+### Key Files Changed (27 July 2026)
+
+| File | Change |
+|------|--------|
+| `lib/clientApi.ts` | Added `_sessionKnownExpired` flag + `resetSessionExpired()` export; response interceptor short-circuits 401s once the session is known dead, instead of retrying `/token/refresh/` on every in-flight request |
+| `app/login/page.tsx` | Calls `resetSessionExpired()` right after `saveAuth(user)` on successful login |
+| `app/dashboard/employees/_components/AddEmployeeModal.tsx` | Gated `/roles/` fetch behind `usePermission("settings.edit")`; switched `Promise.all` → `Promise.allSettled` so a skipped/failed roles call no longer wipes out departments/branches |
+| `app/dashboard/employees/[id]/page.tsx` | Gated `/roles/` fetch behind `usePermission("settings.edit")` (already used `Promise.allSettled`) |
+| `app/dashboard/expenses/_components/ExpenseClaims.tsx` | Fixed pagination-envelope bug (`useFetch<PaginatedResponse<Expense>>` + `.results`); corrected `Expense`/`ExpenseReceipt` types to match real backend shape; row rendering converted to Tailwind classes; rows now clickable |
+| `app/dashboard/expenses/_components/ExpenseDetailModal.tsx` | **NEW** — read-only detail modal, `GET /expenses/<expense_number>/`, matches `ExpenseFormModal.tsx`'s modal-class convention |
+| `app/dashboard/referrals/page.tsx` | "Refer Someone" modal backdrop switched from raw inline `z-50` overlay to shared `.modal-overlay`/`.modal` classes (sidebar-blur fix, same root cause as Session 20 §4) |
+
+---
+
+### Notes for Next Developer
+
+- **Dev-server/Turbopack cache staleness came up twice this session** — a "Could not find module … in React Client Manifest" error on `HRDashboard.tsx` (stale build, no code was wrong), and later the referrals-modal fix not visually applying after a hard refresh. Both resolved by fully stopping the dev server, deleting `.next/`, and restarting `npm run dev` — not a code issue either time. If a confirmed-correct edit doesn't seem to take effect, do this before assuming the code is wrong.
+- **`_sessionKnownExpired` in `clientApi.ts` is only reset from `app/login/page.tsx`** — if another login entry point is ever added (SSO, a second login form, etc.), it must also call `resetSessionExpired()` after establishing auth, or that path will inherit a stuck "session dead" flag from a previous tab lifetime.
+- **The `settings.edit` gate on `/roles/` is a backend authorization design choice, not changed this session** — the frontend fix only stops firing a request that's guaranteed to 403 for roles lacking that permission. If HR ever wants a lighter-weight "list role names" endpoint decoupled from full role-management rights, that's backend scope.
+- **`ExpenseDetailModal.tsx` is deliberately read-only** — confirmed with the user before building it. Don't add PUT/PATCH editing to it without a fresh ask; the backend endpoint supports it, but the UI does not yet.
+- **No backend files were touched or edited this entire session** — all four fixes above are frontend-only, per standing instruction. Backend files (`apps/accounts/authentication.py`, `apps/accounts/tokens.py`, `apps/hrms/views/expenses.py`, `apps/hrms/serializers.py`, `config/settings.py`) were read to confirm actual response/permission shapes, never modified.
