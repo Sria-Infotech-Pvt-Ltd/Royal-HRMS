@@ -4187,7 +4187,7 @@ class ManagerListView(APIView):
         managers = (
             User.objects
             .filter(
-                role__name='manager__team_lead',
+                role__can_manage_team=True,
                 is_active=True,
                 branch__iexact=branch,
             )

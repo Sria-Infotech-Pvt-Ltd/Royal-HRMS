@@ -1,9 +1,8 @@
 from rest_framework.permissions import BasePermission
 
 _SAFE_METHODS = frozenset(('GET', 'HEAD', 'OPTIONS'))
-# Roles exempt from the onboarding/assessment gate on employee-facing endpoints.
-# manager__team_lead is the actual DB role name for managers in this system.
-_ONBOARDING_EXEMPT_ROLES = frozenset(('system_admin', 'hr', 'hr_admin', 'manager__team_lead'))
+# Static exempt roles (system-level roles that never go through employee onboarding).
+_ONBOARDING_EXEMPT_ROLES = frozenset(('system_admin', 'hr', 'hr_admin'))
 
 
 class HasSettingsPermission(BasePermission):
@@ -41,7 +40,10 @@ class HasCompletedOnboarding(BasePermission):
         if not (user and user.is_authenticated):
             return False
         role_name = user.role.name if user.role else ''
+        # Static system roles + any role flagged as a team-manager are exempt.
         if role_name in _ONBOARDING_EXEMPT_ROLES or user.is_superuser:
+            return True
+        if user.role and getattr(user.role, 'can_manage_team', False):
             return True
         if user.onboarding_status != user.ONBOARDING_COMPLETE:
             return False

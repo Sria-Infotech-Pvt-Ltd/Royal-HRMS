@@ -15,9 +15,13 @@ from django.utils import timezone
 # ─── Role & Permission ────────────────────────────────────────────────────────
 
 class Role(models.Model):
-    name         = models.CharField(max_length=50, unique=True)
-    display_name = models.CharField(max_length=100)
-    is_active    = models.BooleanField(default=True)
+    name             = models.CharField(max_length=50, unique=True)
+    display_name     = models.CharField(max_length=100)
+    is_active        = models.BooleanField(default=True)
+    can_manage_team  = models.BooleanField(
+        default=False,
+        help_text='Users with this role appear in manager dropdowns and can manage a team.',
+    )
     created_at   = models.DateTimeField(auto_now_add=True, null=True)
     updated_at   = models.DateTimeField(auto_now=True)
 

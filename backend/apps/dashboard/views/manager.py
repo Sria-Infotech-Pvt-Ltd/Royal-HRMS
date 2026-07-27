@@ -17,22 +17,19 @@ _DENIED = 'You do not have permission to perform this action.'
 
 _TTL_BIRTHDAYS = 6 * 3600   # 6 h — team birthday data is stable
 
-# Roles that always qualify as managers regardless of direct-report count.
-# 'manager__team_lead' is the actual DB role name — the separate strings
-# 'manager' and 'team_lead' are never set on their own in this system.
-_MANAGER_ROLES = frozenset({
-    'manager__team_lead', 'manager', 'team_lead',
-    'hr_admin', 'hr', 'system_admin',
-})
-
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _is_manager_or_lead(user) -> bool:
     if not user or not user.role:
         return False
-    if user.role.name in _MANAGER_ROLES:
+    # can_manage_team is the authoritative flag — set per-role in the admin,
+    # no role-name strings to maintain here.
+    if user.role.can_manage_team:
         return True
+    # system_admin and hr always have dashboard access too.
+    if user.role.name in ('system_admin', 'hr', 'hr_admin'):
+        return True
+    # Fallback: any user who has direct reports is effectively a manager.
     return user.direct_reports.filter(is_active=True).exists()
 
 
