@@ -198,6 +198,7 @@ export const API = {
     export: "/attendance/export/",
     corrections: "/attendance/corrections/",
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
+    myCorrections: "/attendance/corrections/my/",
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
   },
 
