@@ -405,8 +405,8 @@ export default function ReferralsPage() {
 
       {/* ── Refer Someone Modal ── */}
       {showModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "var(--surface, #fff)", borderRadius: 20, width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 25px 60px rgba(0,0,0,0.25)" }}>
+        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
+          <div className="modal" style={{ width: "min(680px, 95vw)" }}>
 
             {/* Modal header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--outline-v)" }}>
