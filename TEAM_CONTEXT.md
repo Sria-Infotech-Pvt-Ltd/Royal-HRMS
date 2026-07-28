@@ -2894,3 +2894,55 @@ Investigated a `/login` page failure: a React Client Manifest error (`global-err
 
 - Next.js dev server `.next` cache clear for the login-page slow-compile/timeout issue (diagnosed above, action pending confirmation)
 - Everything listed as Pending in the 2026-07-23 entry above is still outstanding
+
+---
+
+## Session Log — 2026-07-28
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Employee "My Corrections" — Attendance Correction / Un-Punch Status API**
+
+Before writing anything, searched the whole attendance module for an existing employee-facing "view my own correction requests" API — confirmed none existed. `POST /api/attendance/correction/` (`AttendanceCorrectionView`) only submits, no `GET`. `GET /api/attendance/corrections/` (`HRCorrectionListView`) requires `attendance.view` permission and is scoped to the manager/HR **approval queue** (`_approval_scope_filter`) — a plain employee gets `403`, and even if permitted it's not "my own requests." No duplicate API created.
+
+**New endpoint:** `GET /api/attendance/corrections/my/` — `IsAuthenticated` only (no special permission; always scoped to the caller). Filters: `status` (`pending`/`l2_pending`/`approved`/`rejected`), `date_from`, `date_to`; standard `?page=`/`?page_size=` pagination envelope; newest-first.
+
+Reused the existing shared row-builder (`_build_row()` in `services_hr_corrections.py`, already used by the HR list) rather than writing a second one — extended it with two new fields, `original_in`/`original_out` (the employee's actual punch times that day, derived from the existing `AttendanceRecord.first_punch_in`/`last_punch_out`, same lookup pattern already used in `_write_correction_audit`), so the response shows original-vs-requested times side by side. This addition is backward compatible — existing HR-list consumers just get two extra keys.
+
+**Files changed:**
+```
+backend/apps/attendance/services_hr_corrections.py     — list_my_corrections() added; _build_row() extended with
+                                                           original_in/original_out (from AttendanceRecord)
+backend/apps/attendance/serializers_my_attendance.py    — MyCorrectionsFilterSerializer added (status/date_from/date_to)
+backend/apps/attendance/serializers_hr.py               — original_in/original_out added to CorrectionRowSerializer
+backend/apps/attendance/views/my_attendance.py          — MyCorrectionsListView added
+backend/apps/attendance/views/__init__.py               — export added
+backend/apps/attendance/urls.py                         — path('corrections/my/', ...) added
+```
+
+**Verified** (real dev DB, wrapped in a rolled-back transaction/savepoint, nothing persisted): real HTTP request through the actual view/URL → `200` with correct pagination envelope; a genuine `role=employee` user gets `200` here and (unchanged) `403` on the HR-wide `/corrections/` endpoint — permission boundary intact; `status`/`date_from`/`date_to` filters all checked against real data; **isolation check** — a different employee cannot see another employee's correction rows; `original_in`/`original_out` populated correctly. `python manage.py check` clean.
+
+**Known gap, flagged not silently dropped:** the spec asked for a `Cancelled` status. This model only has `pending`/`l2_pending`/`approved`/`rejected` — there is no cancel action anywhere in the attendance-correction flow (unlike Leave Requests, which do support cancellation). Did not add one — that's a distinct write-path feature, out of scope for exposing an existing read.
+
+**Frontend prompt given:** endpoint/params/response shape/field meanings/status meanings + suggested UI (new "Corrections" tab on My Attendance, status badges, filter bar) — not yet implemented.
+
+### Debugging Done (not yet resolved)
+
+**2. New endpoint 404'd in the running backend — stale Daphne process, not a code bug**
+
+After implementing the above, `GET /api/attendance/corrections/my/` returned `404` both from a LAN device (`192.168.0.154`) and from a direct local `curl` — ruling out a network/CORS issue. Checked the actual running process (`tasklist` + `wmic process where ProcessId=... get CommandLine`): the backend on port 8000 is running via **`daphne -b 0.0.0.0 -p 8000 config.asgi:application`**, not `manage.py runserver`. Daphne loads the ASGI app and URL config once at startup and does **not** auto-reload on file changes, so the live process is still serving the route table from before `urls.py` was edited — the code on disk is correct (confirmed again via `manage.py check` and an `APIRequestFactory`/`reverse()` test that resolves the new route fine), it just hasn't been picked up by the running server yet.
+- **Not yet fixed.** Needs the Daphne process restarted to pick up the new route. Flagged to the user before acting, since it's bound to `0.0.0.0:8000` and reachable from at least one other LAN device that may be actively using it right now (restarting will cause a brief outage for that device too) — action pending confirmation.
+
+### Continued from 2026-07-27 — Next.js dev server instability (still unresolved)
+
+Picked back up the `.next` stale-cache issue from the prior session: stopped the dev server, deleted `frontend/.next`, restarted clean — `/login` compiled fast (`200` in 4.5s, was `500` in 36.7s) and a real login POST succeeded end-to-end. However, the dev server then **crashed silently** (no stack trace, no error in its own log, process just disappeared — confirmed via `tasklist` showing zero matching processes and port 3000 in `TIME_WAIT`) after serving a batch of requests successfully. Restarted a second time; it crashed again the same way, this time surfacing `Cannot find module '@swc/helpers-<hash>/_/_interop_require_default'` in the browser before dying — a content-hashed helper path baked into a Turbopack chunk that no longer resolves, which is a stronger signal than plain cache staleness. Both restarts served 20-30+ successful requests before dying, not immediately, which doesn't match a simple one-off corrupted-cache theory either.
+- **Not yet fixed / not yet root-caused.** This increasingly looks like a genuine Next.js 16.2.9 + Turbopack (preview/JIT engine, per its own startup warning) stability bug under this Windows dev setup, rather than something fixable purely by clearing `.next`. A background monitor was set up to catch the next crash with full output but the session moved to the attendance-corrections task before it could be root-caused further.
+- **Next step when picked back up:** consider running without Turbopack (plain `next dev` webpack fallback) as a diagnostic to confirm whether Turbopack itself is the crashing component, and capture stderr more reliably (the crashes produce no visible error text at all currently).
+
+### Pending
+
+- Restart the Daphne backend process so `/api/attendance/corrections/my/` (and any other code shipped after Daphne last started) actually goes live — action pending confirmation (see above).
+- Next.js dev server repeatedly crashing silently after a period of normal operation — not root-caused yet, worse than the simple stale-cache issue first diagnosed on 2026-07-27 (see above).
+- Frontend implementation of the "My Corrections" tab (prompt given, not yet built).
+- Everything listed as Pending in the 2026-07-27 entry above is still outstanding.
