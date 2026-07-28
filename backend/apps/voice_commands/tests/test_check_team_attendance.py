@@ -43,7 +43,7 @@ class CheckTeamAttendancePermissionDeniedTests(SimpleTestCase):
     clear rejection, not depend on the downstream view's own check.
     """
 
-    @patch('apps.voice_commands.executor.HRAttendanceDashboardView')
+    @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
     def test_user_without_attendance_view_is_rejected_before_reaching_the_view(self, mock_view_cls):
         request = _fake_request(has_attendance_view=False)
 
@@ -61,8 +61,8 @@ class CheckTeamAttendanceExecutorTests(SimpleTestCase):
     view call and check only the executor's own message-construction logic.
     """
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.HRAttendanceDashboardView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
     def test_summarizes_stat_cards_in_one_sentence(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(
             status_code=200,
@@ -82,8 +82,8 @@ class CheckTeamAttendanceExecutorTests(SimpleTestCase):
         self.assertIn('5', result.message)
         self.assertIn('2', result.message)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.HRAttendanceDashboardView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
     def test_authenticates_the_synthetic_request_as_the_calling_user(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(
             status_code=200, data={'data': {'stat_cards': _stat_cards()}},
@@ -95,8 +95,8 @@ class CheckTeamAttendanceExecutorTests(SimpleTestCase):
         mock_force_authenticate.assert_called_once()
         self.assertEqual(mock_force_authenticate.call_args.kwargs['user'], request.user)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.HRAttendanceDashboardView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
     def test_view_error_surfaces_its_message(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(
             status_code=403, data={'success': False, 'message': 'Permission denied.'},
@@ -108,8 +108,8 @@ class CheckTeamAttendanceExecutorTests(SimpleTestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.message, 'Permission denied.')
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.HRAttendanceDashboardView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
     def test_failure_without_a_message_falls_back_to_generic_message(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(status_code=500, data={})
         request = _fake_request(has_attendance_view=True)

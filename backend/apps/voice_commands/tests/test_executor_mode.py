@@ -19,28 +19,28 @@ class ExecutorModeForwardingTests(SimpleTestCase):
     services_attendance.py:114 — for both clock_in and clock_out.
     """
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_in_forwards_detected_mode(self, mock_record_punch):
         execute_intent(INTENT_CLOCK_IN, _fake_request(), attendance_mode=AttendancePunch.MODE_WFH)
 
         _, punch_data = mock_record_punch.call_args.args
         self.assertEqual(punch_data['attendance_mode'], AttendancePunch.MODE_WFH)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_out_forwards_detected_mode(self, mock_record_punch):
         execute_intent(INTENT_CLOCK_OUT, _fake_request(), attendance_mode=AttendancePunch.MODE_FIELD)
 
         _, punch_data = mock_record_punch.call_args.args
         self.assertEqual(punch_data['attendance_mode'], AttendancePunch.MODE_FIELD)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_in_defaults_to_office_when_no_mode_passed(self, mock_record_punch):
         execute_intent(INTENT_CLOCK_IN, _fake_request())
 
         _, punch_data = mock_record_punch.call_args.args
         self.assertEqual(punch_data['attendance_mode'], AttendancePunch.MODE_OFFICE)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_out_forwards_client_location_mode(self, mock_record_punch):
         execute_intent(INTENT_CLOCK_OUT, _fake_request(), attendance_mode=AttendancePunch.MODE_CLIENT_LOCATION)
 
@@ -63,8 +63,8 @@ class ClockOutModeInheritanceTests(SimpleTestCase):
     so this suite must not trigger test database creation against it.
     """
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
-    @patch('apps.voice_commands.executor.AttendancePunch.objects')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.AttendancePunch.objects')
     def test_clock_out_with_no_mode_inherits_open_in_punch_mode(self, mock_objects, mock_record_punch):
         open_in_punch = MagicMock(punch_type=AttendancePunch.PUNCH_IN, attendance_mode=AttendancePunch.MODE_WFH)
         mock_objects.filter.return_value.order_by.return_value.first.return_value = open_in_punch
@@ -74,8 +74,8 @@ class ClockOutModeInheritanceTests(SimpleTestCase):
         _, punch_data = mock_record_punch.call_args.args
         self.assertEqual(punch_data['attendance_mode'], AttendancePunch.MODE_WFH)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
-    @patch('apps.voice_commands.executor.AttendancePunch.objects')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.AttendancePunch.objects')
     def test_clock_out_with_explicit_mode_skips_open_in_punch_lookup(self, mock_objects, mock_record_punch):
         execute_intent(INTENT_CLOCK_OUT, _fake_request(), attendance_mode=AttendancePunch.MODE_FIELD)
 
@@ -83,8 +83,8 @@ class ClockOutModeInheritanceTests(SimpleTestCase):
         _, punch_data = mock_record_punch.call_args.args
         self.assertEqual(punch_data['attendance_mode'], AttendancePunch.MODE_FIELD)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
-    @patch('apps.voice_commands.executor.AttendancePunch.objects')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.AttendancePunch.objects')
     def test_clock_out_with_no_open_in_punch_falls_back_to_office(self, mock_objects, mock_record_punch):
         mock_objects.filter.return_value.order_by.return_value.first.return_value = None
 

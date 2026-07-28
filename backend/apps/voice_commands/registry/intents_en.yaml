@@ -300,6 +300,137 @@ intents:
       - "please reject this leave request"
       - "i want to reject this leave"
 
+  check_my_payslip:
+    # Requires payroll.view_own — the exact codename MyPayslipsView.get()
+    # itself checks (payroll/views/payslips.py:323-324), not a plain
+    # IsAuthenticated-only gate like most self-service intents above. Takes
+    # the caller's most recent payslip (ordered -cycle__cycle_start, same as
+    # the real endpoint) — there's no "current month" filter on the REST
+    # side either; the client just reads results[0].
+    required_permission: payroll.view_own
+    conversational: false
+    phrases:
+      - "check my salary"
+      - "check my payslip"
+      - "show my payslip"
+      - "what's my net pay"
+      - "what is my net pay"
+      - "how much did i get paid this month"
+      - "how much did i get paid"
+      - "show me my salary"
+      - "what's my salary this month"
+      - "tell me my payslip"
+      - "show my pay details"
+      - "what's my gross salary"
+      - "how much is my salary"
+      - "pull up my payslip"
+      - "what did i earn this month"
+      - "show me my pay"
+
+  acknowledge_payslip:
+    # Requires payroll.view_own — verified directly against
+    # AcknowledgePayslipView.post() (payroll/views/payslips.py:344-345), the
+    # SAME codename as check_my_payslip, not a mutation-flavored codename
+    # like payroll.edit despite this being a state-changing action.
+    required_permission: payroll.view_own
+    conversational: false
+    phrases:
+      - "acknowledge my payslip"
+      - "confirm my payslip"
+      - "i acknowledge my payslip"
+      - "mark my payslip as acknowledged"
+      - "i confirm my payslip"
+      - "acknowledge payslip"
+      - "yes i acknowledge my payslip"
+      - "please acknowledge my payslip"
+
+  raise_payslip_query:
+    # Requires payroll.view_own — verified directly against
+    # PayslipQueryListView.post() (payroll/views/payslips.py:375-376), the
+    # SAME codename again, not a separate query/dispute codename. Also the
+    # landing intent for "download my payslip"-style phrases: payslip PDFs
+    # were never wired up anywhere in the payroll app (no view builds one,
+    # nothing ever populates EmployeePayslip.payslip_pdf), so rather than a
+    # dead-end rejection, those phrases route into this same query flow —
+    # see conversation_payroll.py's download-redirect preamble.
+    required_permission: payroll.view_own
+    conversational: true
+    phrases:
+      - "raise a query about my payslip"
+      - "raise a payslip query"
+      - "i have a question about my payslip"
+      - "i want to dispute my payslip"
+      - "something's wrong with my payslip"
+      - "i want to ask hr about my payslip"
+      - "query my payslip"
+      - "raise a query on my payslip"
+      - "i have an issue with my payslip"
+      - "my payslip looks wrong"
+      - "download my payslip"
+      - "send me my payslip"
+      - "get my payslip pdf"
+      - "email me my payslip"
+      - "can i get a copy of my payslip"
+      - "i want a pdf of my payslip"
+      - "i want to download my payslip"
+      # Added after reports of repeated recognition failures for this intent:
+      # "regarding" (vs. "about"/"on") isn't stripped by normalize_transcript's
+      # filler list, so it acts as a genuine content-word substitution that
+      # drags the fuzzy score below match_intent()'s 80 threshold without a
+      # phrase like this one to anchor against. Same story for "concern" /
+      # "issue" / "complaint" as the query noun.
+      - "raise a query regarding my payslip"
+      - "i have a query regarding my payslip"
+      - "raise a concern about my payslip"
+      - "raise a concern regarding my payslip"
+      - "raise an issue about my payslip"
+      - "i have an issue regarding my payslip"
+      - "raise a complaint about my payslip"
+
+  check_employee_payslip:
+    # Requires payroll.view — the codename PayslipDetailView.get() checks
+    # for viewing anyone OTHER than yourself (payroll/views/payslips.py:61);
+    # payroll.view_own (the codename above) does not satisfy this gate.
+    # Identify-then-respond, not identify-then-confirm: viewing isn't a
+    # mutating action, so conversation_payroll.py never asks for a yes/no —
+    # a single employee match is already the terminal response.
+    #
+    # "check payslip" / "check payslip for" / "check employee payslip" are
+    # deliberately registered as their own short, literal phrases — not just
+    # the fuller natural-language ones below — because payslip_extractor.py
+    # strips the employee-name span before matching (same reason approve_leave
+    # registers bare "approve leave for"/"approve leave request" alongside its
+    # fuller phrases). "check sarah's payslip" strips down to "check payslip";
+    # without a phrase that short registered here, it would fuzzy-match
+    # check_my_payslip's "check my payslip" instead (one word closer) once the
+    # name is gone.
+    required_permission: payroll.view
+    conversational: true
+    phrases:
+      - "check payslip"
+      - "check payslip for"
+      - "check employee payslip"
+      - "show payslip"
+      - "show payslip for"
+      - "show employee payslip"
+      - "check salary"
+      - "look up payslip"
+      - "pull up payslip"
+      - "check an employee's payslip"
+      - "check someone's payslip"
+      - "show me an employee's payslip"
+      - "show an employee's salary"
+      - "look up an employee's payslip"
+      - "what is an employee's net pay"
+      - "how much did an employee get paid"
+      - "check payslip for an employee"
+      - "pull up an employee's payslip"
+      - "show me someone's salary"
+      - "check her payslip"
+      - "check his payslip"
+      - "look up someone's pay"
+      - "show me someone's payslip"
+
   request_attendance_correction:
     # No domain codename required — matches AttendanceCorrectionView.post()
     # (attendance/views/my_attendance.py:252-265), which is IsAuthenticated-only.

@@ -281,6 +281,19 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       setStatus("processing");
       clearAutoCloseTimer();
 
+      // Stop any question still being read aloud before replacing what's on
+      // screen. The voice-answer path (startListening's beginRecognition)
+      // already cancels playback before it ever opens the mic, so by the
+      // time recognition hands a transcript to this function nothing is
+      // speaking. But this function is also called directly by the typed-
+      // answer input, which has no such guard — without this, submitting an
+      // answer while a long question is still playing blanks the panel's
+      // text immediately while the old utterance keeps talking, audibly out
+      // of sync with what's on screen.
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+
       // Open the panel immediately with what was recognized, before the
       // response even comes back — same panel for every intent now, not
       // just conversational ones. Skipped only when the panel wouldn't

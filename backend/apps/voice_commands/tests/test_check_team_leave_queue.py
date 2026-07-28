@@ -36,7 +36,7 @@ class CheckTeamLeaveQueuePermissionDeniedTests(SimpleTestCase):
     called (proving no fallback-to-own-requests path was reached).
     """
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_user_without_leave_approve_is_rejected_not_given_own_requests(self, mock_view_cls):
         request = _fake_request(has_leave_approve=False)
 
@@ -65,32 +65,32 @@ class CheckTeamLeaveQueueExecutorTests(SimpleTestCase):
 
         return execute_intent(INTENT_CHECK_TEAM_LEAVE_QUEUE, request)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_zero_pending_requests(self, mock_view_cls, mock_force_authenticate):
         result = self._run(mock_view_cls, count=0)
 
         self.assertTrue(result.success)
         self.assertEqual(result.message, 'You have no leave requests pending your approval.')
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_singular_message_for_exactly_one(self, mock_view_cls, mock_force_authenticate):
         result = self._run(mock_view_cls, count=1)
 
         self.assertTrue(result.success)
         self.assertEqual(result.message, 'You have 1 leave request pending your approval.')
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_plural_message_and_count_for_several(self, mock_view_cls, mock_force_authenticate):
         result = self._run(mock_view_cls, count=5)
 
         self.assertTrue(result.success)
         self.assertEqual(result.message, 'You have 5 leave requests pending your approval.')
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_authenticates_the_synthetic_request_as_the_calling_user(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(
             status_code=200, data={'data': {'count': 0, 'results': []}},
@@ -102,8 +102,8 @@ class CheckTeamLeaveQueueExecutorTests(SimpleTestCase):
         mock_force_authenticate.assert_called_once()
         self.assertEqual(mock_force_authenticate.call_args.kwargs['user'], request.user)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_requests_scope_team(self, mock_view_cls, mock_force_authenticate):
         captured = {}
 
@@ -118,8 +118,8 @@ class CheckTeamLeaveQueueExecutorTests(SimpleTestCase):
 
         self.assertEqual(captured['scope'], 'team')
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_view_error_surfaces_its_message(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(
             status_code=403, data={'success': False, 'message': 'Permission denied.'},

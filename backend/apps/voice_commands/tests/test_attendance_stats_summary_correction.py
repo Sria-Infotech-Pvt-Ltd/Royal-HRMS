@@ -6,9 +6,9 @@ from apps.voice_commands.executor import (
     INTENT_CHECK_ATTENDANCE_STATS,
     INTENT_CHECK_ATTENDANCE_SUMMARY,
     INTENT_REQUEST_ATTENDANCE_CORRECTION,
-    _CORRECTION_NEEDS_DASHBOARD_MESSAGE,
     execute_intent,
 )
+from apps.voice_commands.executor_attendance import _CORRECTION_NEEDS_DASHBOARD_MESSAGE
 
 
 def _fake_request():
@@ -24,8 +24,8 @@ def _fake_request():
 # Postgres DATABASE_URL in backend/.env.
 
 class CheckAttendanceStatsTests(SimpleTestCase):
-    @patch('apps.voice_commands.executor.StatsSerializer')
-    @patch('apps.voice_commands.executor.AttendanceDashboardService')
+    @patch('apps.voice_commands.executor_attendance.StatsSerializer')
+    @patch('apps.voice_commands.executor_attendance.AttendanceDashboardService')
     def test_reports_stats_in_message(self, mock_service, mock_serializer_cls):
         mock_service.get_stats.return_value = {'raw': True}
         mock_serializer_cls.return_value.data = {
@@ -46,8 +46,8 @@ class CheckAttendanceStatsTests(SimpleTestCase):
         self.assertIn('2 late arrival', result.message)
         self.assertIn('8.5 hours', result.message)
 
-    @patch('apps.voice_commands.executor.StatsSerializer')
-    @patch('apps.voice_commands.executor.AttendanceDashboardService')
+    @patch('apps.voice_commands.executor_attendance.StatsSerializer')
+    @patch('apps.voice_commands.executor_attendance.AttendanceDashboardService')
     def test_queries_own_stats_for_current_month_and_year_no_employee_id(self, mock_service, mock_serializer_cls):
         from datetime import date
 
@@ -66,8 +66,8 @@ class CheckAttendanceStatsTests(SimpleTestCase):
 # ── check_attendance_summary ──────────────────────────────────────────────────
 
 class CheckAttendanceSummaryTests(SimpleTestCase):
-    @patch('apps.voice_commands.executor.MonthlySummarySerializer')
-    @patch('apps.voice_commands.executor.AttendanceDashboardService')
+    @patch('apps.voice_commands.executor_attendance.MonthlySummarySerializer')
+    @patch('apps.voice_commands.executor_attendance.AttendanceDashboardService')
     def test_reports_summary_in_message(self, mock_service, mock_serializer_cls):
         mock_service.get_monthly_summary.return_value = {'raw': True}
         mock_serializer_cls.return_value.data = {
@@ -87,8 +87,8 @@ class CheckAttendanceSummaryTests(SimpleTestCase):
         self.assertIn('2 leave day', result.message)
         self.assertIn('20 working days', result.message)
 
-    @patch('apps.voice_commands.executor.MonthlySummarySerializer')
-    @patch('apps.voice_commands.executor.AttendanceDashboardService')
+    @patch('apps.voice_commands.executor_attendance.MonthlySummarySerializer')
+    @patch('apps.voice_commands.executor_attendance.AttendanceDashboardService')
     def test_queries_own_summary_for_current_month_and_year_no_employee_id(self, mock_service, mock_serializer_cls):
         from datetime import date
 
