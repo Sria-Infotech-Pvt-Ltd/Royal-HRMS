@@ -203,3 +203,18 @@ class CorrectionReadSerializer(serializers.Serializer):
     reason     = serializers.CharField()
     status     = serializers.CharField()
     created_at = serializers.DateTimeField()
+
+
+class MyCorrectionsFilterSerializer(serializers.Serializer):
+    """Query params for GET /api/attendance/corrections/my/."""
+    status    = serializers.ChoiceField(
+        choices=['', 'pending', 'l2_pending', 'approved', 'rejected'],
+        required=False, allow_blank=True, default='',
+    )
+    date_from = serializers.DateField(required=False, allow_null=True, default=None)
+    date_to   = serializers.DateField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get('date_from') and attrs.get('date_to') and attrs['date_from'] > attrs['date_to']:
+            raise serializers.ValidationError({'date_to': 'date_to must be on or after date_from.'})
+        return attrs

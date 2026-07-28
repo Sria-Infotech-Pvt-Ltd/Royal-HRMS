@@ -205,6 +205,35 @@ def list_corrections(
     return [_build_row(c, user) for c in qs]
 
 
+def list_my_corrections(
+    employee,
+    status_filter: str = '',
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+) -> list[dict]:
+    """
+    Return `employee`'s own correction requests, newest first — for the
+    employee-facing "My Corrections" screen (as opposed to list_corrections()
+    above, which is scoped to what a manager/HR reviewer is allowed to act on).
+
+    status_filter: 'pending' | 'l2_pending' | 'approved' | 'rejected' | '' (all)
+    """
+    qs = (
+        AttendanceCorrection.objects
+        .filter(employee=employee)
+        .select_related('employee', 'reviewed_by', 'l1_approver', 'l2_approver')
+        .order_by('-created_at')
+    )
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    if date_from:
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+
+    return [_build_row(c) for c in qs]
+
+
 def approve_correction(correction_id: str, actioning_user, remarks: str = '') -> dict:
     """Approve a correction at whichever stage it currently sits at."""
     return _act_on_correction(correction_id, actioning_user, approve=True, remarks=remarks)
@@ -359,6 +388,15 @@ def _build_row(c: AttendanceCorrection, user=None) -> dict:
         can_action = _can_approve_at_stage(user, c, 'l2')
 
     employee = c.employee
+
+    # Original (as-punched) times for that date, for context alongside what was requested.
+    from apps.attendance.models import AttendanceRecord
+    record = AttendanceRecord.objects.filter(employee=employee, date=c.date).only(
+        'first_punch_in', 'last_punch_out',
+    ).first()
+    original_in  = record.first_punch_in.strftime('%H:%M') if record and record.first_punch_in else None
+    original_out = record.last_punch_out.strftime('%H:%M') if record and record.last_punch_out else None
+
     return {
         'id':                 str(c.pk),
         'employee_id':        employee.employee_id or '',
@@ -367,6 +405,8 @@ def _build_row(c: AttendanceCorrection, user=None) -> dict:
         'branch':             employee.branch or '',
         'date':               c.date.strftime('%Y-%m-%d'),
         'punch_type':         c.punch_type,
+        'original_in':        original_in,
+        'original_out':       original_out,
         'requested_in':       c.requested_in_time.strftime('%H:%M') if c.requested_in_time else None,
         'requested_out':      c.requested_out_time.strftime('%H:%M') if c.requested_out_time else None,
         'reason':             c.reason,

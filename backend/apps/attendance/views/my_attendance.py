@@ -12,6 +12,7 @@ Endpoints:
   GET    /api/attendance/summary/        — Monthly Summary grid (?month=&year=)
   GET    /api/attendance/calendar/       — Calendar + detail table (?month=&year=)
   POST   /api/attendance/correction/     — Submit Attendance Correction Request
+  GET    /api/attendance/corrections/my/ — Own correction requests + status (?status=&date_from=&date_to=)
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.pagination import paginate, paginated_data
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.attendance.models import AttendanceCorrection
@@ -34,6 +36,7 @@ from apps.attendance.serializers_my_attendance import (
     HistoryRowSerializer,
     MonthYearQuerySerializer,
     MonthlySummarySerializer,
+    MyCorrectionsFilterSerializer,
     PunchWriteSerializer,
     StatsSerializer,
     TodayAttendanceSerializer,
@@ -338,4 +341,34 @@ class AttendanceCorrectionView(APIView):
                 'created_at': correction.created_at,
             }).data,
             http_status=status.HTTP_201_CREATED,
+        )
+
+
+class MyCorrectionsListView(APIView):
+    """
+    GET /api/attendance/corrections/my/
+
+    An employee's own attendance correction / un-punch requests, newest
+    first, with approval status and reviewer info — read-only.
+    Query params: status, date_from, date_to; ?page=&page_size= for pagination.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        ser = MyCorrectionsFilterSerializer(data=request.query_params)
+        if not ser.is_valid():
+            return error(first_error(ser.errors))
+
+        from apps.attendance.services_hr_corrections import list_my_corrections
+        rows = list_my_corrections(
+            request.user,
+            status_filter=ser.validated_data['status'],
+            date_from=ser.validated_data['date_from'],
+            date_to=ser.validated_data['date_to'],
+        )
+        page_obj, paginator = paginate(rows, request)
+        return success(
+            f'{paginator.count} correction request(s) found.',
+            paginated_data(paginator, page_obj, list(page_obj)),
         )
