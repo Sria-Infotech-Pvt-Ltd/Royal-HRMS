@@ -28,5 +28,6 @@ def on_approval_workflow_rule_change(sender, instance, **kwargs):
 
 @receiver(post_save, sender='accounts.Company')
 def on_company_change(sender, instance, **kwargs):
-    from core.cache_service import FinancialYearCacheService
+    from core.cache_service import CompanyCacheService, FinancialYearCacheService
     FinancialYearCacheService.invalidate()
+    CompanyCacheService.invalidate()

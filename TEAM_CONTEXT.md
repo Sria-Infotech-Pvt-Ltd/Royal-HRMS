@@ -2815,3 +2815,82 @@ Checked every branch on `origin` for those two files — not pushed anywhere, so
 - **Get the AttendanceCorrection L1/L2 migration (`attendance.0018_attendancecorrection_l1_actioned_at_and_more` + its `0017_merge_20260723_1558`) committed and pushed** — currently only exists as applied state in the shared Neon DB, not in git anywhere. Next `makemigrations --merge` will need to reconcile two divergent `0017_` files for `attendance` once it lands.
 - Frontend already expects `payroll.view_own` for My Payslips (per the 22/07 session) — no further frontend work needed for this session's changes.
 - Everything else listed as Pending in the 2026-07-22 entries above is still outstanding.
+
+---
+
+## Session Log — 2026-07-27
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Enterprise Redis Caching — Master/Config Data**
+
+Before touching any code, analyzed what already existed: `core/cache_service.py` already had a complete cache-aside layer (`CacheTTL` constants + 9 `*CacheService` classes: LeavePolicy, Holiday, WeeklyOff, ApprovalWorkflow, AttendanceSettings, Branch, Department, Designation, FinancialYear) with `post_save`/`post_delete` signal-based invalidation across 5 `signals.py` files. The gap: several settings/admin **read** endpoints bypassed these services entirely and hit Postgres directly. Wired the existing services into their real read paths instead of duplicating cache logic anywhere.
+
+**Wired to existing/extended cache services:**
+
+| Endpoint | Now reads via | TTL |
+|---|---|---|
+| `GET /api/leave/policy/` (`LeavePolicyView.get()`) | new `LeavePolicyCacheService.get_all()` | 300s |
+| `GET /api/leave/holidays/` (`HolidayListCreateView.get()`) | new `HolidayCacheService.get_list_for_year()`, year-scoped; remaining filters (month/type/optional/branch) applied in Python on the cached list | 600s |
+| `GET /api/attendance/settings/` (`AttendanceSettingsAPIView.get()`) | existing `AttendanceSettingsCacheService.get()` (select_related widened to match the write-path service, avoiding N+1 on cache-hit) | 6h (unchanged) |
+| `GET /api/settings/approval-rules/` (`ApprovalWorkflowRuleView.get()`) | existing `ApprovalWorkflowCacheService.get_rule()` per workflow type | 6h (unchanged) |
+| `GET /api/settings/company/` (`CompanyRetrieveUpdateView.get()`) | new `CompanyCacheService` (singleton — Company has no `company_id`, this app is single-tenant) | 600s |
+
+New cache-invalidation wiring: `CompanyCacheService.invalidate()` added to the existing `on_company_change` signal in `apps/accounts/signals.py`. `LeavePolicyCacheService.invalidate()` and `HolidayCacheService.invalidate_year()`/`invalidate_branch()` extended to also clear the new list-level keys — no signal files needed new receivers for these.
+
+**Deliberately left unwired (investigated in depth, not an oversight):**
+- Branch/Department/Designation list endpoints — paginated, filterable (status/state/department/is_active), and combine live per-request employee-count aggregates that must stay fresh. The existing `*CacheService.get_all()` methods cache an unfiltered "all active" list that doesn't match these views' real semantics (e.g. the Designation list shows inactive rows too) — wiring them in would have silently changed API behavior, which was explicitly out of scope.
+- WeeklyDayPolicy admin CRUD list — paginated/searchable, low-frequency; the actually-hot read (the *effective* weekly-off set used by attendance/leave calculations) was already fully cached via `WeeklyOffCacheService.get()`.
+- Detail-by-id views (Holiday/WeeklyDayPolicy/Department/Designation/Branch) — single indexed PK lookups, already fast, low volume.
+
+**Verified against the real dev DB** (all writes wrapped in a rolled-back transaction/savepoint, nothing persisted): cache miss → DB → cache; cache hit → 0 queries; write → signal fires → cache invalidated → next read re-misses with fresh data; simulated Redis outage (mocked `cache.get`/`cache.set` to raise) → warning logged, DB fallback still serves correct data, no exception reaches the caller; Holiday filter-output parity (old ORM query vs new cache+Python-filter path) verified identical across 7 query-param combinations plus the no-year fallback.
+
+**Files changed:**
+```
+backend/core/cache_service.py                    — CompanyCacheService added; LeavePolicyCacheService.get_all() added;
+                                                     HolidayCacheService.get_list_for_year() added; AttendanceSettingsCacheService
+                                                     select_related widened (late_mark_rules, absence_alert, updated_by);
+                                                     new CacheTTL.COMPANY / LEAVE_POLICY_LIST / HOLIDAY_LIST constants
+backend/apps/hrms/views/leave.py                 — LeavePolicyView.get() reads via LeavePolicyCacheService.get_all()
+backend/apps/hrms/views/holidays.py              — HolidayListCreateView.get() reads via HolidayCacheService + Python filters
+backend/apps/attendance/views/settings_view.py   — AttendanceSettingsAPIView.get() reads via AttendanceSettingsCacheService
+backend/apps/accounts/views.py                   — ApprovalWorkflowRuleView.get(), CompanyRetrieveUpdateView.get() read via cache
+backend/apps/accounts/signals.py                 — on_company_change also invalidates CompanyCacheService
+```
+
+### Bug Fixes Shipped
+
+**2. Document Center — XLSX/Excel preview crash**
+
+UI showed: `Could not render spreadsheet — Cannot read properties of undefined (reading 'read')`. Confirmed upload/download and the API itself were not the problem — `GET /api/documents/{id}/?t=...` (`DocumentDetailView._stream_file`) correctly streams raw XLSX bytes with the right content-type. Two separate bugs found and fixed, in sequence, in the same component:
+
+**Bug A — `XLSX.read` undefined.** `frontend/app/dashboard/documents/_components/DocPreviewBody.tsx` did:
+```ts
+const XLSX = (await import("xlsx")).default;
+```
+SheetJS's `xlsx` package (v0.18.5, already installed — no new library added) has **no `default` export** in either its CJS (`xlsx.js`) or ESM (`xlsx.mjs`) build — confirmed by inspecting both files directly (only named exports: `read`, `utils`, etc.). Next.js/Turbopack resolves the dynamic `import("xlsx")` to the ESM build, so `.default` was genuinely `undefined`, and calling `.read()` on it threw exactly the reported error.
+- Fix: `const XLSX = await import("xlsx");` — use the namespace object directly.
+
+**Bug B — empty worksheet crash.** Fixing Bug A revealed a second, different error: `Cannot read properties of undefined (reading 'indexOf')`, thrown inside SheetJS's internal `decode_range()` (called by `sheet_to_html()`) whenever a worksheet has no `!ref` range — i.e. is completely empty. Reproduced against a real uploaded document (downloaded via the actual API and parsed with the exact same SheetJS ESM build used in the browser): the file has 3 sheets — Sheet1 has data (`!ref: "A1:AV61"`), Sheet2 and Sheet3 are empty (`!ref: undefined`). The old code called `sheet_to_html()` on every sheet unconditionally inside one `.map()`, so the first empty sheet crashed the entire preview — including Sheet1, which would have rendered fine alone.
+- Fix: skip `sheet_to_html()` for any sheet with no `!ref` and render a "This sheet is empty." placeholder instead.
+
+Both fixes verified end-to-end against the real downloaded file (not synthetic test data) — all 3 sheets now render without throwing. `tsc --noEmit` clean across the project. Diff is 2 small edits in 1 file — upload, download, and PDF/image/DOCX/CSV preview, auth, permissions, and Cloudinary storage were all left untouched.
+
+**Files changed:**
+```
+frontend/app/dashboard/documents/_components/DocPreviewBody.tsx   — XlsxPreview: namespace import instead of .default;
+                                                                      empty-sheet guard before sheet_to_html()
+```
+
+### Debugging Done (not yet resolved)
+
+**3. Next.js dev server — login timeout / stale build cache**
+
+Investigated a `/login` page failure: a React Client Manifest error (`global-error.js#default` not found in the bundler manifest) plus an 80–100s first-compile time for the route, followed by a `timeout of 15000ms exceeded` on the login POST with a `400 Bad Request` in the Django log around the same moment. Isolated the cause by testing each layer directly: `curl` straight to Django (`:8000/api/login/`) and through the Next.js rewrite proxy (`:3000/api/login/`) both succeeded in under 2s with the same credentials that failed in the browser — so the login view, the credentials, and the proxy rewrite are all correct. The symptoms (missing manifest entry + abnormally slow first compile) point to a stale/corrupted `.next` dev build cache, not a code bug: a form submit sent while the route is still mid-compile can go out malformed, get a fast `400` from `LoginSerializer` validation, while the browser's own independent 15s axios timeout fires around the same time.
+- **Not yet fixed.** Recommended fix: stop the dev server, delete `frontend/.next`, restart clean. Proposed to the user but not actioned — session moved to the Document Center task before confirming.
+
+### Pending
+
+- Next.js dev server `.next` cache clear for the login-page slow-compile/timeout issue (diagnosed above, action pending confirmation)
+- Everything listed as Pending in the 2026-07-23 entry above is still outstanding

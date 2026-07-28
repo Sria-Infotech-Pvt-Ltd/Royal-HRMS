@@ -54,7 +54,8 @@ class AttendanceSettingsAPIView(APIView):
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 
-        instance = AttendanceSettingsService.get_current()
+        from core.cache_service import AttendanceSettingsCacheService
+        instance = AttendanceSettingsCacheService.get()
 
         if instance is None:
             return success(

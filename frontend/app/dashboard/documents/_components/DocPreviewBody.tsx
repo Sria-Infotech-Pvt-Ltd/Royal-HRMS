@@ -84,7 +84,7 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
     let cancelled = false;
     async function render() {
       try {
-        const XLSX = (await import("xlsx")).default;
+        const XLSX = await import("xlsx");
         const res  = await fetch(fileUrl);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buf  = await res.arrayBuffer();
@@ -92,6 +92,11 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
         const wb   = XLSX.read(buf, { type: "array" });
         const htmlArr = wb.SheetNames.map(name => {
           const ws = wb.Sheets[name];
+          // sheet_to_html() throws internally when a sheet has no data (no "!ref" range) —
+          // render an empty-sheet placeholder instead of failing the whole preview.
+          if (!ws || !ws["!ref"]) {
+            return '<div style="padding:16px;color:#9aa0a6;font-size:12px;">This sheet is empty.</div>';
+          }
           return XLSX.utils.sheet_to_html(ws, { editable: false });
         });
         if (cancelled) return;

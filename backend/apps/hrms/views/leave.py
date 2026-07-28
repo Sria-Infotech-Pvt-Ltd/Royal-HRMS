@@ -424,7 +424,8 @@ class LeavePolicyView(APIView):
 
     def get(self, request):
         self._ensure_policies()
-        policies = LeavePolicy.objects.all().order_by('leave_type')
+        from core.cache_service import LeavePolicyCacheService
+        policies = LeavePolicyCacheService.get_all()
         return success('Leave policies retrieved.', LeavePolicySerializer(policies, many=True).data)
 
     def put(self, request, leave_type: str):

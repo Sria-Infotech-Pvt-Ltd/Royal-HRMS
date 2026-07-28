@@ -2286,7 +2286,8 @@ class CompanyRetrieveUpdateView(APIView):
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
-        company = Company.objects.first()
+        from core.cache_service import CompanyCacheService
+        company = CompanyCacheService.get()
         if not company:
             return success('No company info found.', data={})
         serializer = CompanySerializer(company, context={'request': request})
@@ -4319,8 +4320,12 @@ class ApprovalWorkflowRuleView(APIView):
 
     def get(self, request):
         _ensure_default_rules()
-        rules = {r.workflow_type: r for r in ApprovalWorkflowRule.objects.all()}
-        data  = [_serialize_rule(rules[wf]) for wf in _WORKFLOW_ORDER if wf in rules]
+        from core.cache_service import ApprovalWorkflowCacheService
+        data = [
+            _serialize_rule(rule)
+            for wf in _WORKFLOW_ORDER
+            if (rule := ApprovalWorkflowCacheService.get_rule(wf)) is not None
+        ]
         return success('Approval rules retrieved.', data=data)
 
     def patch(self, request):
