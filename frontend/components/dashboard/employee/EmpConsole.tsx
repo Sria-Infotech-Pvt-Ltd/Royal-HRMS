@@ -28,35 +28,47 @@ const ATTENDANCE_COLOR: Record<string, { color: string; bg: string }> = {
 interface Props { firstName: string }
 
 export default function EmpConsole({ firstName }: Props) {
-  const { data: kpis,   loading: kpiLoading }    = useEmployeeKPIs();
-  const { data: status, loading: statusLoading } = useAttendanceStatus();
+  const { data: kpis,   loading: kpiLoading,    status: kpiHttpStatus,    refetch: refetchKpis }   = useEmployeeKPIs();
+  const { data: status, loading: statusLoading, status: statusHttpStatus, refetch: refetchStatus } = useAttendanceStatus();
+
+  // Clocking in/out changes both of these, but each is fetched independently
+  // on mount — without this, the "Late"/attendance badge and stats here keep
+  // showing what they fetched at page-load until a full reload.
+  function handlePunchSuccess() {
+    refetchKpis();
+    refetchStatus();
+  }
 
   const loading = kpiLoading || statusLoading;
+  // Both endpoints are gated behind the same onboarding/assessment check —
+  // if either 403'd, the 0s below aren't real data, they're a locked widget.
+  const isLocked = kpiHttpStatus === 403 || statusHttpStatus === 403;
   const attendanceKey = kpis?.today_attendance?.status?.toLowerCase() ?? "";
   const attendanceInfo = ATTENDANCE_COLOR[attendanceKey] ?? { color: "rgba(255,255,255,0.5)", bg: "rgba(255,255,255,0.10)" };
 
+  const showDash = loading || isLocked;
   const stats = [
     {
       icon: "ti-fingerprint",
-      val:  loading ? "—" : `${kpis?.days_present ?? 0} / ${kpis?.working_days ?? 0}`,
+      val:  showDash ? "—" : `${kpis?.days_present ?? 0} / ${kpis?.working_days ?? 0}`,
       lbl:  "Days Present",
       sub:  "This month",
     },
     {
       icon: "ti-calendar-x",
-      val:  loading ? "—" : String(kpis?.absent_days ?? 0),
+      val:  showDash ? "—" : String(kpis?.absent_days ?? 0),
       lbl:  "Absent Days",
       sub:  "This month",
     },
     {
       icon: "ti-clipboard-list",
-      val:  loading ? "—" : String(kpis?.pending_action_items ?? 0),
+      val:  showDash ? "—" : String(kpis?.pending_action_items ?? 0),
       lbl:  "Action Items",
       sub:  "Require attention",
     },
     {
       icon: "ti-receipt",
-      val:  loading ? "—" : String(kpis?.pending_expense_claims ?? 0),
+      val:  showDash ? "—" : String(kpis?.pending_expense_claims ?? 0),
       lbl:  "Expense Claims",
       sub:  "Pending",
     },
@@ -88,11 +100,19 @@ export default function EmpConsole({ firstName }: Props) {
               {ATTENDANCE_LABEL[attendanceKey] ?? attendanceKey}
             </span>
           )}
-          <ClockInButton />
+          <ClockInButton onPunchSuccess={handlePunchSuccess} />
         </div>
       </div>
 
       <div style={{ margin: "6px 16px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
+
+      {!loading && isLocked && (
+        <div style={{ padding: "8px 16px 0", fontSize: 11, color: "rgba(255,255,255,0.7)", display: "flex", alignItems: "center", gap: 6 }}>
+          <i className="ti ti-lock" style={{ fontSize: 12 }} />
+          Complete your pending assessment to see your real stats —{" "}
+          <a href="/onboarding/assessments" style={{ color: "#fff", fontWeight: 600, textDecoration: "underline" }}>go to Assessments</a>
+        </div>
+      )}
 
       {/* KPI stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>

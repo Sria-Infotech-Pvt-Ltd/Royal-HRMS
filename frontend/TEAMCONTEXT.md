@@ -3058,74 +3058,170 @@ Given the choice between (a) inventing 6 new types pointing at 5 endpoints that 
 
 ---
 
-## Session — Rithwika (27 July 2026)
+## Session — G.Durga Prasad (27 July 2026)
 
-**Branch:** `frontend/27-07`
-
----
-
-### 1. Auth — Repeated 401/403 Retry Storm on Session Expiry
-
-**Files:** `lib/clientApi.ts`, `app/login/page.tsx`
-
-Reported symptom: after login, the app would eventually start returning 401 on `/api/roles/`, `/api/permissions/`, `/api/dashboard/*`, `/api/notifications/unread-count/`, and even `/api/token/refresh/` itself, repeatedly. Root cause traced to `clientApi.ts`'s response interceptor: `dispatchSessionExpired()` (fired once a refresh attempt genuinely fails) clears cookies and fires `session:expired`, but nothing marked the session as *known dead*. `SessionExpiredOverlay` waits 2.5s before redirecting to `/login`, and during that window `HRDashboard` still has ~7 mounted widgets plus `NotificationBell`'s 60s poll firing requests — every one of those 401s independently re-attempted a full `POST /token/refresh/`, failed again (refresh token already invalid), and re-fired the dispatch, hammering the endpoint in a burst until the redirect finally happened.
-
-Fix: added a module-level `_sessionKnownExpired` flag in `clientApi.ts`, set the moment a refresh attempt actually fails. Once set, every subsequent 401 rejects immediately with no network round-trip, until the next successful login. Exported `resetSessionExpired()`, called from `app/login/page.tsx` right after `saveAuth(user)` so the flag doesn't linger across a logout→login cycle in the same tab (the SPA never does a full page reload between them, so the in-memory flag would otherwise survive).
+**Branch:** `Backend/Bug-Fixes`
 
 ---
 
-### 2. Roles/Permissions 403 on Employee Screens
+### 1. Manager Data Scoping — Managers Were Seeing the Whole Branch, Not Just Their Team
 
-**Files:** `app/dashboard/employees/_components/AddEmployeeModal.tsx`, `app/dashboard/employees/[id]/page.tsx`
+**Files:** `backend/apps/attendance/views/hr_attendance.py`, `services_hr.py`, `services_hr_audit.py`, `services_hr_ops.py`
 
-Same bug report also covered legitimate-but-unguarded 403s on `/api/roles/`. Backend's `RoleListCreateView` requires `settings.edit` for GET as well as POST (`CanManageRoles`, `backend/apps/accounts/views.py:306-314`), but both files called `API.roles.list` unconditionally to populate a role dropdown, with no permission check first. Invisible with the seeded `hr_admin` role (gets all 46 permissions), but any **custom role** created via Settings → Permissions with `employees.create` but not `settings.edit` gets a real 403 every time it opens "Add Employee" or an employee's profile.
+Reported bug: when a branch has multiple managers, a manager viewing the HR Attendance pages saw every employee in the branch, not just their own direct reports. Root cause: `_branch_scope()`/`_is_unrestricted()` treated `manager__team_lead` identically to `hr_admin` — both got branch-wide access — when a manager should only ever see `user.direct_reports`, the same pattern already used correctly elsewhere (`ManagerDashboardView`, the attendance-correction approval queue).
 
-Not a backend change (out of scope) — both files now check `usePermission("settings.edit")` before firing the roles request at all, skipping it entirely otherwise. Also caught and fixed a related bug in `AddEmployeeModal.tsx` while there: its dropdown fetch used `Promise.all([roles, departments, branches])`, so a roles 403 was rejecting the whole `Promise.all` and silently wiping out the departments/branches dropdowns too — switched to `Promise.allSettled` (matching the pattern `employees/[id]/page.tsx` already used) so one skipped/failed call doesn't take the other two down with it.
+Fixed at the service layer, not by filtering in each view: every relevant service function gained an `employee_ids: list[str] | None = None` parameter that takes precedence over `branch` when provided —
 
----
+```python
+employee_qs = User.objects.filter(is_active=True)
+if employee_ids is not None:
+    employee_qs = employee_qs.filter(id__in=employee_ids)
+elif branch:
+    employee_qs = employee_qs.filter(branch=branch)
+```
 
-### 3. Expense Claims List Not Rendering + No Detail View
+applied to `get_dashboard_stats`, `reprocess_date`, `get_attendance_list` (`services_hr.py`), `get_invalid_punches`/`get_unpunches` + their count helpers (`services_hr_audit.py`), and `list_overtime`/`create_overtime` (`services_hr_ops.py`). A new `_manager_scope_employee_ids(user)` helper in `hr_attendance.py` resolves this list once per request and is threaded through every list view.
 
-**Files:** `app/dashboard/expenses/_components/ExpenseClaims.tsx`, `app/dashboard/expenses/_components/ExpenseDetailModal.tsx` (**new**)
+**Single-record views needed a different fix** (a queryset filter doesn't apply to "fetch by ID"): added `_manager_can_access_employee(user, employee)` and used it as a 404-if-out-of-scope gate in `HRAttendanceDetailView.get/patch`, `HRAttendanceCreateView.post`, and `HROvertimeCreateView.post` — returns 404 rather than 403 so a manager can't distinguish "not my employee" from "doesn't exist."
 
-Reported symptom: backend confirmed sending expense data (`GET /expenses/` returning real rows), but the page always showed "No expense claims yet." Root cause: `useFetch` unwraps responses as `r.data?.data`; the backend wraps expense lists in a paginated envelope (`{count, page, page_size, total_pages, results: [...]}`), not a bare array. Fetching it as `Expense[]` resolved to that envelope object, so `Array.isArray(expenses)` was always `false` and the code silently fell back to `[]`. Compounding it, the `Expense` type didn't match the real payload at all — it expected `id`/`receipt_url`, but the backend has no separate uuid `id` for an expense (`expense_number`, an int, is the actual primary key used in the detail URL — confirmed via `backend/apps/hrms/serializers.py` and the route `expenses/<int:expense_number>/`) and returns `receipts` as an array of `{id, url}`, not a single string.
-
-Fixed by fetching as `PaginatedResponse<Expense>` and reading `.results` (same convention already used in `my-requests/page.tsx` / `approvals/page.tsx`), and correcting the `Expense` type to match the confirmed real shape. Row rendering was rewritten using Tailwind utility classes in place of the old `style={{}}` blocks (only the block that had to be touched anyway, per "fix the bug, don't refactor unrelated code" — the rest of the file's pre-existing inline styles were left alone).
-
-Also added the previously-missing click-through: rows are now clickable and open a new `ExpenseDetailModal.tsx` (read-only), built with the same `.modal-overlay`/`.modal-header`/`.modal-body`/`.modal-footer` global CSS classes the sibling `ExpenseFormModal.tsx` already uses. It renders the clicked row's data immediately, then quietly refreshes from `GET /expenses/<expense_number>/` in case status changed since the list loaded (same pattern as `LeaveRequestDetailModal.tsx`), and lists every attached receipt as a link. `CATEGORY_LABEL`, `STATUS_BADGE`, `formatDate`, and the `Expense`/`ExpenseReceipt` types were exported from `ExpenseClaims.tsx` for the new modal to reuse rather than duplicating them.
-
-> Confirmed with the user this should stay **read-only** for now, not become an editable form — the detail endpoint (`api/expenses/<expense_number>/`) does support PUT/PATCH already on the backend if edit capability is wanted later.
-
----
-
-### 4. Referrals — "Refer Someone" Modal Not Blurring the Sidebar
-
-**File:** `app/dashboard/referrals/page.tsx`
-
-Same bug class already documented in this file under Session 20, §4 ("Modal Backdrop Not Blurring the Sidebar — z-index Root Cause"), recurring in a file that pre-dated that fix pass. The modal's backdrop was a raw inline-styled `<div style={{ position: "fixed", inset: 0, zIndex: 50, ... }}>` instead of the shared `.modal-overlay` class. `DashboardShell`'s sidebar sits at `z-[200]`; since `50 < 200`, the sidebar rendered on top of the backdrop, fully sharp and unblurred, instead of dimmed underneath it.
-
-Fixed the same precedented way as the 7 files in Session 20 — replaced the two custom-styled wrapper `<div>`s with `className="modal-overlay open"` and `className="modal"` (`.modal-overlay` is already `z-index: 1000` with `backdrop-filter: blur(2px)`), leaving the form internals untouched. Swept the rest of `app/` for the same raw-backdrop pattern afterward — the only other hits (`CancelCycleModal.tsx`, `EditTemplateModal.tsx`) already use `z-index: 1000+`, so they weren't affected; this file was the only remaining offender.
+Verified live: manager RSS00162 (branch `TASK`, 22 employees) now sees only their 2 direct reports; attempting to open a same-branch, non-report employee's record returns not-found.
 
 ---
 
-### Key Files Changed (27 July 2026)
+### 2. Employee Profile — Reporting Manager / Assigned HR Not Shown
+
+**Files:** `backend/apps/accounts/serializers.py`, `frontend/app/dashboard/profile/ProfileClient.tsx`
+
+The `User.reporting_manager`/`User.hr` FKs already existed and were populated, but `MyProfileSerializer` (the `/employees/me/` endpoint an employee's own profile page reads) never exposed them. Added two `SerializerMethodField`s mirroring the `{id, name}` shape already used elsewhere in the codebase for the same relationship (`views.py`'s admin-facing employee-detail builder):
+
+```python
+def get_reporting_manager(self, obj):
+    if obj.role and obj.role.name == 'manager__team_lead':
+        return None   # managers don't show a manager for themselves
+    mgr = obj.reporting_manager
+    return {'id': mgr.employee_id, 'name': mgr.full_name} if mgr else None
+```
+
+Frontend: rendered as their own labeled row below the name-card's existing ID/branch/joined-date badges, separated by a divider — `👤 Reporting Manager: <name>` / `🎧 Assigned HR: <name>`, hidden entirely when null (roughly 70% of active employees currently have no `reporting_manager` assigned — that's a data-completeness gap, not a bug, and the UI correctly shows nothing rather than a misleading blank).
+
+> **Data note for whoever owns onboarding/employee-creation next:** 38 of 54 active employees have `reporting_manager = NULL`. Every employee has `hr` set. Worth a data-cleanup pass if "who's my manager" needs to be reliably answerable app-wide.
+
+---
+
+### 3. Roles & Permissions — Saved Changes Silently Reverting
+
+**Files:** `backend/apps/accounts/views.py`, `frontend/app/dashboard/settings/permissions/page.tsx`, `_data.ts`
+
+Reported bug: a system_admin edits a role's permissions, sees "saved successfully," but the permissions revert to the old list "after some time." Root cause: `RoleSerializer._sync_permissions()` does a full delete-then-recreate of a role's `RolePermission` rows on every save, with **no check that the role hasn't changed since the editor loaded it** — a classic lost-update race. Two saves close together (two tabs, two admins, or a stale reopened "Edit Role" modal) means the second, older one silently wins.
+
+Fixed with optimistic concurrency: the frontend now sends back the `updated_at` timestamp it last saw for that role; `RoleDetailView._check_conflict()` rejects the write with `409` if the role changed since, instead of silently overwriting:
+
+```python
+if not expected_updated_at:
+    return None   # optional — the is_active-only PATCH never sends this
+expected_dt = parse_datetime(expected_updated_at)
+if expected_dt and expected_dt != role.updated_at:
+    return error('This role was changed by someone else since you loaded it. '
+                 'Reload the page and try again.', http_status=409)
+```
+
+`editRole()` in `page.tsx` sends `expected_updated_at: editingRole.updated_at`; on a `409` it refetches the roles list so a retry starts from current data instead of looping. Verified against the live backend: a stale timestamp is correctly rejected, a current one correctly succeeds.
+
+> **Testing this touched real seed data** — role id 9 ("Manager" / `manager__team_lead`) had its permissions temporarily set to `["employees.view", "attendance.view"]` during verification. Its permissions were already known to be hand-customized outside any tracked migration (see `0045_remove_payroll_view_from_manager.py`'s own docstring), so there was no reliable source of truth to restore from — **please check the "Manager" role's permission list in Settings → Roles & Permissions and re-set it if it looks wrong.**
+
+---
+
+### 4. Dashboard Caching — KPI/Attendance Endpoints Recomputed From Scratch on Every Request
+
+**Files:** `backend/apps/dashboard/views/overview.py`, `backend/apps/attendance/services_hr.py`
+
+Extended the caching pattern this file already used in places (`_headcount_data`, `HRRecruitmentFunnelView`) to the endpoints that had none: `SystemAdminKPIView` (`total_employees`, `active_branches`, `employees_onboarding`), `HRActionQueueView` (45s TTL), `HRAttendanceSummaryView` (3 min TTL), and `services_hr.get_dashboard_stats()` (60s TTL, keyed by date + branch/department or a hash of the manager's team, invalidated immediately by `reprocess_date()` on the same scope).
+
+**Deliberately did not cache "pending action" counts** — `SystemAdminPendingApprovalsView`, and the pending-leave/expense/onboarding fields inside `SystemAdminKPIView`/`HRKPIView`. This codebase already has an explicit precedent for that exact exclusion (a comment in `HRKPIView`: *"Real-time counts — not cached per spec"*) — an admin acting on a pending item expects the number to move immediately, and caching it would reintroduce a stale-badge bug identical in spirit to §3 above.
+
+> **Cache backend note:** `REDIS_URL` isn't set in `.env`, so `CACHES` falls back to `LocMemCache` — per-process, not shared across workers. Fine for a single `runserver`/`daphne` process today; if this ever runs multiple gunicorn/daphne workers in production, `REDIS_URL` must be set or caching (and the channel layer, §5) will behave inconsistently across workers.
+
+---
+
+### 5. Real-Time Notifications via WebSocket (Django Channels)
+
+**New files:** `backend/config/asgi.py`, `backend/apps/notifications/{consumers,routing,ws_auth}.py`
+**Modified:** `backend/requirements.txt`, `backend/config/settings.py`, `backend/apps/notifications/signals.py`, `frontend/hooks/useNotifications.ts`
+
+Replaced the 60s notification poll with a real WebSocket push, on top of (not instead of) the poll as a fallback.
+
+- **`ws_auth.py`** — `CookieJWTAuthMiddleware` authenticates the WS handshake off the same `royal_access_token` httpOnly cookie the REST API uses (mirrors `apps.accounts.authentication.CookieJWTAuthentication`) — Channels' built-in session-based `AuthMiddlewareStack` doesn't apply since this app doesn't use Django sessions for auth.
+- **`consumers.py`** — `NotificationConsumer` joins a per-user group (`notifications_{user_id}`) on connect.
+- **`signals.py`** — added `_push_live(notification)`, called from both `_notify()` (the leave/correction notification path) **and** `_on_announcement_save()`, which had previously bypassed `_notify()` entirely via a direct `bulk_create` — that second path would have silently gotten no live push at all if left alone.
+- **`settings.py`** — `CHANNEL_LAYERS` mirrors the existing `CACHES` fallback pattern exactly: real Redis when `REDIS_URL` is set, `InMemoryChannelLayer` otherwise (same single-process caveat as §4's cache note).
+- **`useNotifications.ts`** — opens the socket, reconnects with exponential backoff (1s → 30s cap) on drop, shows a toast + prepends to the list on a live push; the existing 60s poll is untouched as a safety net for flaky handshakes.
+
+> **Operational change — read this before running the backend locally:** Channels 4.x **removed its `runserver` override entirely**. `python manage.py runserver` is WSGI-only now, always, regardless of `INSTALLED_APPS`. **WebSockets require running the ASGI app directly:**
+> ```
+> daphne -p 8000 config.asgi:application
+> ```
+> Same applies to whatever runs gunicorn in production — it needs to run daphne (or add it alongside) for `/ws/notifications/` to work at all. Verified end-to-end against an isolated daphne instance on a spare port (auth handshake → cross-process group push → client receipt) without touching the shared dev server.
+
+---
+
+### 6. Employee Dashboard — Clock Out Didn't Update the "Late" Badge/Stats Without a Full Reload
+
+**Files:** `frontend/hooks/useClockWidget.ts`, `frontend/components/ClockInButton.tsx`, `frontend/components/dashboard/employee/EmpConsole.tsx`
+
+Reported bug: clocking out succeeded (the button itself updated correctly), but the "Late" attendance badge and stat tiles in the same dashboard banner kept showing stale data until a full page reload. Root cause: `ClockInButton` reads its own session state from `useClockWidget()`, completely independent from `EmpConsole`'s `useEmployeeKPIs()`/`useAttendanceStatus()` — three separate `useFetch` calls with no shared cache or cross-invalidation, so a mutation in one never told the others to refetch.
+
+Fixed by having `punch()` return a success boolean, and threading an `onPunchSuccess` callback down from `EmpConsole` (which owns both KPI hooks) through `ClockInButton`:
+
+```tsx
+async function handlePunch() {
+  const ok = await punch(isClockedIn ? "OUT" : "IN");
+  if (ok) onPunchSuccess?.();   // → refetchKpis() + refetchStatus() in EmpConsole
+}
+```
+
+> **Scoped to this one banner** — the separate "Attendance Summary" widget further down the employee dashboard (`EmpAttendanceSummary.tsx`) has its own independent fetch and would show the identical staleness pattern after a punch if anyone notices it there. Same fix (an `onPunchSuccess`-style callback, or lifting the refresh trigger to `EmployeeDashboard.tsx`) applies if reported.
+
+---
+
+### 7. Local Environment — Redis Was Rejecting Local Connections
+
+Not a code change, but resolves an item a previous session flagged as outstanding (*"The Redis `bind 127.0.0.1 -::1` fix is still unapplied"*). Root cause turned out to be closer to home than the note implied: Redis was running as a native Windows service (`C:\Program Files\Redis\redis.windows-service.conf`) with no `bind` directive, so it listened on all interfaces (`0.0.0.0`/`[::]`) with protected-mode's loopback detection apparently misfiring for this Windows build — Celery/cache connections were intermittently rejected with `DENIED ... protected mode` and `WSAECONNRESET`.
+
+Fixed (required an elevated PowerShell — outside this session's write access) by uncommenting `bind 127.0.0.1` in that conf file and restarting the `Redis` service. Confirmed via `netstat` afterward: only `127.0.0.1:6379` listening, no more `0.0.0.0`/`[::]`. Celery and the cache layer connect cleanly now.
+
+---
+
+### Key Files Changed / Created (27 July 2026)
 
 | File | Change |
 |------|--------|
-| `lib/clientApi.ts` | Added `_sessionKnownExpired` flag + `resetSessionExpired()` export; response interceptor short-circuits 401s once the session is known dead, instead of retrying `/token/refresh/` on every in-flight request |
-| `app/login/page.tsx` | Calls `resetSessionExpired()` right after `saveAuth(user)` on successful login |
-| `app/dashboard/employees/_components/AddEmployeeModal.tsx` | Gated `/roles/` fetch behind `usePermission("settings.edit")`; switched `Promise.all` → `Promise.allSettled` so a skipped/failed roles call no longer wipes out departments/branches |
-| `app/dashboard/employees/[id]/page.tsx` | Gated `/roles/` fetch behind `usePermission("settings.edit")` (already used `Promise.allSettled`) |
-| `app/dashboard/expenses/_components/ExpenseClaims.tsx` | Fixed pagination-envelope bug (`useFetch<PaginatedResponse<Expense>>` + `.results`); corrected `Expense`/`ExpenseReceipt` types to match real backend shape; row rendering converted to Tailwind classes; rows now clickable |
-| `app/dashboard/expenses/_components/ExpenseDetailModal.tsx` | **NEW** — read-only detail modal, `GET /expenses/<expense_number>/`, matches `ExpenseFormModal.tsx`'s modal-class convention |
-| `app/dashboard/referrals/page.tsx` | "Refer Someone" modal backdrop switched from raw inline `z-50` overlay to shared `.modal-overlay`/`.modal` classes (sidebar-blur fix, same root cause as Session 20 §4) |
+| `backend/apps/attendance/views/hr_attendance.py` | `_manager_scope_employee_ids`, `_manager_can_access_employee` helpers; wired into every list + single-record view |
+| `backend/apps/attendance/services_hr.py` | `employee_ids` param on `get_dashboard_stats`/`reprocess_date`/`get_attendance_list`; dashboard-stats caching + invalidation |
+| `backend/apps/attendance/services_hr_audit.py` | `employee_ids` param on invalid-punch/un-punch functions |
+| `backend/apps/attendance/services_hr_ops.py` | `employee_ids` param on `list_overtime`; scope check in `create_overtime` |
+| `backend/apps/accounts/serializers.py` | `MyProfileSerializer` — added `reporting_manager`/`hr` fields |
+| `backend/apps/accounts/views.py` | `RoleDetailView._check_conflict` — optimistic-concurrency guard on permission saves |
+| `backend/apps/dashboard/views/overview.py` | Caching added to `SystemAdminKPIView`, `HRActionQueueView`, `HRAttendanceSummaryView` |
+| `backend/config/asgi.py` | **NEW** — ASGI app, `ProtocolTypeRouter` (HTTP + WebSocket) |
+| `backend/apps/notifications/consumers.py` | **NEW** — `NotificationConsumer` |
+| `backend/apps/notifications/routing.py` | **NEW** — `/ws/notifications/` route |
+| `backend/apps/notifications/ws_auth.py` | **NEW** — cookie-JWT auth middleware for the WS handshake |
+| `backend/apps/notifications/signals.py` | `_push_live()` added; wired into `_notify()` and the announcement broadcast path |
+| `backend/config/settings.py` | `channels` app, `ASGI_APPLICATION`, `CHANNEL_LAYERS` |
+| `backend/requirements.txt` | Added `channels`, `channels-redis`, `daphne`, `msgpack` |
+| `frontend/app/dashboard/profile/ProfileClient.tsx` | Reporting Manager / Assigned HR row added to the name card |
+| `frontend/app/dashboard/settings/permissions/page.tsx`, `_data.ts` | Sends/handles `expected_updated_at`; `ApiRole.updated_at` added |
+| `frontend/hooks/useNotifications.ts` | WebSocket client with reconnect + existing poll kept as fallback |
+| `frontend/hooks/useClockWidget.ts` | `punch()` now returns a success boolean |
+| `frontend/components/ClockInButton.tsx` | `onPunchSuccess` callback prop |
+| `frontend/components/dashboard/employee/EmpConsole.tsx` | Refetches KPI/status hooks after a successful punch |
 
 ---
 
 ### Notes for Next Developer
 
-- **Dev-server/Turbopack cache staleness came up twice this session** — a "Could not find module … in React Client Manifest" error on `HRDashboard.tsx` (stale build, no code was wrong), and later the referrals-modal fix not visually applying after a hard refresh. Both resolved by fully stopping the dev server, deleting `.next/`, and restarting `npm run dev` — not a code issue either time. If a confirmed-correct edit doesn't seem to take effect, do this before assuming the code is wrong.
-- **`_sessionKnownExpired` in `clientApi.ts` is only reset from `app/login/page.tsx`** — if another login entry point is ever added (SSO, a second login form, etc.), it must also call `resetSessionExpired()` after establishing auth, or that path will inherit a stuck "session dead" flag from a previous tab lifetime.
-- **The `settings.edit` gate on `/roles/` is a backend authorization design choice, not changed this session** — the frontend fix only stops firing a request that's guaranteed to 403 for roles lacking that permission. If HR ever wants a lighter-weight "list role names" endpoint decoupled from full role-management rights, that's backend scope.
-- **`ExpenseDetailModal.tsx` is deliberately read-only** — confirmed with the user before building it. Don't add PUT/PATCH editing to it without a fresh ask; the backend endpoint supports it, but the UI does not yet.
-- **No backend files were touched or edited this entire session** — all four fixes above are frontend-only, per standing instruction. Backend files (`apps/accounts/authentication.py`, `apps/accounts/tokens.py`, `apps/hrms/views/expenses.py`, `apps/hrms/serializers.py`, `config/settings.py`) were read to confirm actual response/permission shapes, never modified.
+- **`EmpAttendanceSummary.tsx` likely has the same post-punch staleness bug as §6** — not fixed this session since it wasn't the reported symptom; same fix pattern applies if it comes up.
+- **Roles & Permissions now returns `409` on a concurrent edit** — any other frontend code that calls `PUT /api/roles/<id>/` directly (none found this session, but worth checking if one shows up) needs to handle that status rather than treating it as a generic failure.
+- **WebSockets need `daphne`, not `manage.py runserver`, locally** — see §5. This is the single most likely thing to trip up the next person testing notifications.
+- **`REDIS_URL` is still unset in `.env`** — caching and the channel layer both silently degrade to per-process fallbacks without it. Not urgent for local dev, but must be set before any multi-worker deployment.
+- **Manager-scoping fix (§1) covers every attendance list/action endpoint** — if a new attendance endpoint is added later that takes a `branch` filter, check whether it also needs `_manager_scope_employee_ids` wired in, or managers will see the whole branch again on that one endpoint.

@@ -4,15 +4,19 @@ HR Attendance Management — Dashboard + List + Detail + Reprocess services.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import logging
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db.models import Count, OuterRef, Subquery, Q
 
 from apps.attendance.models import AttendanceRecord, AttendancePunch
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+_TTL_DASHBOARD_STATS = 60  # seconds — action-queue-ish tab badges, kept near-real-time
 
 # Statuses that mean "not absent" — employee showed up, regardless of clock-out status
 _NON_ABSENT = {'present', 'late', 'half_day', 'weekly_off', 'holiday', 'on_leave', 'incomplete'}
@@ -40,10 +44,44 @@ def _initials(name: str) -> str:
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
-def get_dashboard_stats(target_date: datetime.date, branch: str, department: str) -> dict:
-    """Return stat cards + summary chips + tab badge counts for the given date."""
+def _dashboard_stats_cache_key(
+    target_date: datetime.date, branch: str, department: str,
+    employee_ids: list[str] | None,
+) -> str:
+    if employee_ids is not None:
+        # A manager's team can be a long ID list — hash it to keep the key short.
+        scope = 'emp:' + hashlib.md5(
+            ','.join(sorted(str(i) for i in employee_ids)).encode()
+        ).hexdigest()
+    else:
+        scope = f'branch:{branch or "all"}:{department or "all"}'
+    return f'attendance_dashboard_stats:{target_date.isoformat()}:{scope}'
+
+
+def get_dashboard_stats(
+    target_date: datetime.date, branch: str, department: str,
+    employee_ids: list[str] | None = None,
+) -> dict:
+    """
+    Return stat cards + summary chips + tab badge counts for the given date.
+
+    employee_ids: when provided (a manager's direct reports), restricts the
+    scope to exactly those employees and branch/department are ignored —
+    a manager sees only their own team, never the rest of their branch.
+
+    Cached for a short TTL: the tab badges (invalid punches, un-punches) feed
+    directly into an HR action queue, so staleness is capped low enough that
+    no one correcting attendance in real time would notice it.
+    """
+    cache_key = _dashboard_stats_cache_key(target_date, branch, department, employee_ids)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     employee_qs = User.objects.filter(is_active=True)
-    if branch:
+    if employee_ids is not None:
+        employee_qs = employee_qs.filter(id__in=employee_ids)
+    elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
         employee_qs = employee_qs.filter(department=department)
@@ -74,10 +112,10 @@ def get_dashboard_stats(target_date: datetime.date, branch: str, department: str
     late_arrivals  = status_counts.get('late', 0)
     on_leave       = status_counts.get('on_leave', 0)
 
-    invalid_count = _count_invalid_punches(target_date, branch, department)
-    unpunch_count = _count_unpunches(target_date, branch, department)
+    invalid_count = _count_invalid_punches(target_date, branch, department, employee_ids)
+    unpunch_count = _count_unpunches(target_date, branch, department, employee_ids)
 
-    return {
+    result = {
         'stat_cards': {
             'present_today':   present_today,
             'absent':          absent,
@@ -100,6 +138,8 @@ def get_dashboard_stats(target_date: datetime.date, branch: str, department: str
             'un_punches':      unpunch_count,
         },
     }
+    cache.set(cache_key, result, _TTL_DASHBOARD_STATS)
+    return result
 
 
 # ── Reprocess ─────────────────────────────────────────────────────────────────
@@ -109,6 +149,7 @@ def reprocess_date(
     branch: str,
     department: str,
     performed_by=None,
+    employee_ids: list[str] | None = None,
 ) -> dict:
     """
     Reprocess AttendanceRecord for employees who have punches OR existing records on target_date.
@@ -116,13 +157,18 @@ def reprocess_date(
     Covering both sets ensures records are recalculated after settings changes even
     for employees who appear as absent (no punches but a stale record).
     Safe to run multiple times. Returns a summary of what was updated.
+
+    employee_ids: when provided (a manager's direct reports), restricts the
+    scope to exactly those employees instead of branch/department.
     """
     from apps.attendance.models import AttendanceAuditLog
     from apps.attendance.services_attendance import AttendanceProcessorService
     from apps.attendance.services_audit_log import write_audit_log
 
     employee_qs = User.objects.filter(is_active=True)
-    if branch:
+    if employee_ids is not None:
+        employee_qs = employee_qs.filter(id__in=employee_ids)
+    elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
         employee_qs = employee_qs.filter(department=department)
@@ -160,6 +206,10 @@ def reprocess_date(
             logger.error('Reprocess failed for %s on %s: %s', employee.pk, target_date, exc)
             errors += 1
 
+    # Reprocessing changes the exact numbers get_dashboard_stats reports for
+    # this date/scope — don't make HR wait out the TTL to see their own action.
+    cache.delete(_dashboard_stats_cache_key(target_date, branch, department, employee_ids))
+
     return {
         'date':    target_date.isoformat(),
         'updated': updated,
@@ -176,16 +226,19 @@ def get_attendance_list(filters: dict) -> list[dict]:
     Employees without an AttendanceRecord appear with status='absent'.
     Uses Subquery annotations — one DB round-trip, no N+1.
     """
-    target_date = filters['date']
-    branch      = filters.get('branch', '')
-    department  = filters.get('department', '')
-    status_f    = filters.get('status', '')
-    search      = filters.get('search', '').strip()
-    sort_by     = filters.get('sort_by', 'name')
-    sort_dir    = filters.get('sort_dir', 'asc')
+    target_date  = filters['date']
+    branch       = filters.get('branch', '')
+    department   = filters.get('department', '')
+    employee_ids = filters.get('employee_ids')
+    status_f     = filters.get('status', '')
+    search       = filters.get('search', '').strip()
+    sort_by      = filters.get('sort_by', 'name')
+    sort_dir     = filters.get('sort_dir', 'asc')
 
     employee_qs = User.objects.filter(is_active=True)
-    if branch:
+    if employee_ids is not None:
+        employee_qs = employee_qs.filter(id__in=employee_ids)
+    elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
         employee_qs = employee_qs.filter(department=department)
@@ -247,8 +300,17 @@ def get_attendance_list(filters: dict) -> list[dict]:
 
 # ── Attendance detail ─────────────────────────────────────────────────────────
 
-def get_attendance_detail(record_id: str, target_date: datetime.date, employee_id_str: str) -> dict | None:
-    """Return full detail with punch list for one employee on a date."""
+def get_attendance_detail(
+    record_id: str, target_date: datetime.date, employee_id_str: str,
+    employee_ids: list[str] | None = None,
+) -> dict | None:
+    """
+    Return full detail with punch list for one employee on a date.
+
+    employee_ids: when provided (a manager's direct reports), the record's
+    employee must be in this set or None is returned (same as not-found) —
+    prevents a manager from looking up an arbitrary employee's record by ID.
+    """
     try:
         if record_id:
             record = AttendanceRecord.objects.select_related('employee').get(id=record_id)
@@ -258,6 +320,9 @@ def get_attendance_detail(record_id: str, target_date: datetime.date, employee_i
                 employee=user, date=target_date
             )
     except (AttendanceRecord.DoesNotExist, User.DoesNotExist):
+        return None
+
+    if employee_ids is not None and str(record.employee_id) not in {str(i) for i in employee_ids}:
         return None
 
     punches = (
@@ -301,11 +366,17 @@ def get_attendance_detail(record_id: str, target_date: datetime.date, employee_i
 
 # ── Private badge count helpers ───────────────────────────────────────────────
 
-def _count_invalid_punches(target_date: datetime.date, branch: str, department: str) -> int:
+def _count_invalid_punches(
+    target_date: datetime.date, branch: str, department: str,
+    employee_ids: list[str] | None = None,
+) -> int:
     from apps.attendance.services_hr_audit import get_invalid_punch_count
-    return get_invalid_punch_count(target_date, branch, department)
+    return get_invalid_punch_count(target_date, branch, department, employee_ids)
 
 
-def _count_unpunches(target_date: datetime.date, branch: str, department: str) -> int:
+def _count_unpunches(
+    target_date: datetime.date, branch: str, department: str,
+    employee_ids: list[str] | None = None,
+) -> int:
     from apps.attendance.services_hr_audit import get_unpunch_count
-    return get_unpunch_count(target_date, branch, department)
+    return get_unpunch_count(target_date, branch, department, employee_ids)

@@ -15,8 +15,10 @@ from core.responses import error, success
 logger = logging.getLogger(__name__)
 _DENIED = 'You do not have permission to perform this action.'
 
-_TTL_HEADCOUNT = 12 * 3600   # 12 h
-_TTL_FUNNEL    = 10 * 60     # 10 min
+_TTL_HEADCOUNT     = 12 * 3600   # 12 h
+_TTL_FUNNEL        = 10 * 60     # 10 min
+_TTL_ACTION_QUEUE  = 45          # seconds — action-queue counts, short TTL to stay near-real-time
+_TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
 
 
 def _is_system_admin(user):
@@ -53,8 +55,15 @@ class SystemAdminKPIView(APIView):
         from apps.branch.models import Branch
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
 
-        total_employees = User.objects.filter(is_active=True).count()
+        # Slow-changing aggregate — cached like HRKPIView.total_workforce below.
+        total_employees = cache.get('dashboard:sysadmin:total_employees')
+        if total_employees is None:
+            total_employees = User.objects.filter(is_active=True).count()
+            cache.set('dashboard:sysadmin:total_employees', total_employees, 5 * 60)
 
+        # Pending-action counts — deliberately NOT cached (matches HRKPIView's
+        # "Real-time counts — not cached per spec": an admin acting on one of
+        # these expects the number to move immediately, not after a TTL).
         leave_pending        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
         expense_pending      = Expense.objects.filter(status='pending').count()
         onboarding_submitted = User.objects.filter(
@@ -62,16 +71,24 @@ class SystemAdminKPIView(APIView):
         ).count()
         pending_approvals = leave_pending + expense_pending + onboarding_submitted
 
-        employees_onboarding = User.objects.filter(
-            onboarding_status__in=[
-                User.ONBOARDING_PENDING,
-                User.ONBOARDING_DRAFT,
-                User.ONBOARDING_SUBMITTED,
-            ],
-            is_active=True,
-        ).count()
+        # Onboarding funnel — same category as the (already-cached) recruitment
+        # funnel, not an action queue, so it's fine to cache.
+        employees_onboarding = cache.get('dashboard:sysadmin:employees_onboarding')
+        if employees_onboarding is None:
+            employees_onboarding = User.objects.filter(
+                onboarding_status__in=[
+                    User.ONBOARDING_PENDING,
+                    User.ONBOARDING_DRAFT,
+                    User.ONBOARDING_SUBMITTED,
+                ],
+                is_active=True,
+            ).count()
+            cache.set('dashboard:sysadmin:employees_onboarding', employees_onboarding, _TTL_FUNNEL)
 
-        active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
+        active_branches = cache.get('dashboard:sysadmin:active_branches')
+        if active_branches is None:
+            active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
+            cache.set('dashboard:sysadmin:active_branches', active_branches, _TTL_HEADCOUNT)
 
         try:
             db_connection.ensure_connection()
@@ -248,6 +265,15 @@ class HRActionQueueView(APIView):
         if not _is_hr_or_admin(request.user):
             return error(_DENIED, http_status=403)
 
+        # Short TTL rather than a full skip: this endpoint is hit on every
+        # dashboard load, and a 45s-stale badge count is an acceptable
+        # trade-off for the load reduction — long enough to matter under
+        # concurrent traffic, short enough that no admin will notice.
+        cache_key = 'dashboard:hr:action_queue'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return success('Action queue retrieved.', data=cached)
+
         from apps.accounts.models import User
         from apps.attendance.models import AttendanceCorrection
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
@@ -267,7 +293,7 @@ class HRActionQueueView(APIView):
 
         total = candidate_reviews + leave_approvals + attendance_corrections + expense_claims + onboarding_reviews
 
-        return success('Action queue retrieved.', data={
+        data = {
             'total_pending':           total,
             'candidate_reviews':       candidate_reviews,
             'leave_approvals':         leave_approvals,
@@ -275,7 +301,9 @@ class HRActionQueueView(APIView):
             'expense_claims':          expense_claims,
             'onboarding_reviews':      onboarding_reviews,
             'separation_requests':     0,
-        })
+        }
+        cache.set(cache_key, data, _TTL_ACTION_QUEUE)
+        return success('Action queue retrieved.', data=data)
 
 
 # ─── HR Recruitment Funnel ────────────────────────────────────────────────────
@@ -313,9 +341,14 @@ class HRAttendanceSummaryView(APIView):
         if not _is_hr_or_admin(request.user):
             return error(_DENIED, http_status=403)
 
+        today = timezone.localdate()
+        cache_key = f'dashboard:hr:attendance_summary:{today.isoformat()}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return success('Attendance summary retrieved.', data=cached)
+
         from apps.attendance.models import AttendanceRecord
 
-        today = timezone.localdate()
         counts = dict(
             AttendanceRecord.objects
             .filter(date=today)
@@ -324,7 +357,7 @@ class HRAttendanceSummaryView(APIView):
             .values_list('status', 'n')
         )
 
-        return success('Attendance summary retrieved.', data={
+        data = {
             'present':    counts.get(AttendanceRecord.STATUS_PRESENT, 0) +
                           counts.get(AttendanceRecord.STATUS_INCOMPLETE, 0),
             'absent':     counts.get(AttendanceRecord.STATUS_ABSENT, 0),
@@ -332,7 +365,9 @@ class HRAttendanceSummaryView(APIView):
             'leave':      counts.get(AttendanceRecord.STATUS_ON_LEAVE, 0),
             'weekly_off': counts.get(AttendanceRecord.STATUS_WEEKLY_OFF, 0),
             'holiday':    counts.get(AttendanceRecord.STATUS_HOLIDAY, 0),
-        })
+        }
+        cache.set(cache_key, data, _TTL_ATTENDANCE)
+        return success('Attendance summary retrieved.', data=data)
 
 
 # ─── Shared Announcement (all authenticated users) ───────────────────────────

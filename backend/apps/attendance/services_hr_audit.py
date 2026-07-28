@@ -33,14 +33,16 @@ def get_invalid_punch_count(
     target_date: datetime.date,
     branch: str,
     department: str,
+    employee_ids: list[str] | None = None,
 ) -> int:
-    return len(get_invalid_punches(target_date, branch, department))
+    return len(get_invalid_punches(target_date, branch, department, employee_ids))
 
 
 def get_invalid_punches(
     target_date: datetime.date,
     branch: str,
     department: str,
+    employee_ids: list[str] | None = None,
 ) -> list[dict]:
     """
     Return rows describing punches that have structural problems for target_date.
@@ -52,11 +54,16 @@ def get_invalid_punches(
 
     Uses employees who have an AttendanceRecord for target_date to avoid
     UTC vs IST date mismatch on punched_at__date lookups.
+
+    employee_ids: when provided (a manager's direct reports), restricts the
+    scope to exactly those employees instead of branch/department.
     """
     from apps.attendance.models import AttendanceRecord
 
     employee_qs = User.objects.filter(is_active=True)
-    if branch:
+    if employee_ids is not None:
+        employee_qs = employee_qs.filter(id__in=employee_ids)
+    elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
         employee_qs = employee_qs.filter(department=department)
@@ -140,12 +147,15 @@ def get_unpunch_count(
     target_date: datetime.date,
     branch: str,
     department: str,
+    employee_ids: list[str] | None = None,
 ) -> int:
     """Count employees whose AttendanceRecord is STATUS_INCOMPLETE for target_date."""
     from apps.attendance.models import AttendanceRecord
 
     employee_qs = User.objects.filter(is_active=True)
-    if branch:
+    if employee_ids is not None:
+        employee_qs = employee_qs.filter(id__in=employee_ids)
+    elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
         employee_qs = employee_qs.filter(department=department)
@@ -161,6 +171,7 @@ def get_unpunches(
     target_date: datetime.date,
     branch: str,
     department: str,
+    employee_ids: list[str] | None = None,
 ) -> list[dict]:
     """
     Return employees marked STATUS_INCOMPLETE for target_date.
@@ -176,12 +187,17 @@ def get_unpunches(
     Case 3 (past grace):   status=incomplete → returned here.
     Case 4 (clocked out):  processor resets status → removed automatically.
     Case 5 (approved):     processor resets status after approval → removed.
+
+    employee_ids: when provided (a manager's direct reports), restricts the
+    scope to exactly those employees instead of branch/department.
     """
     from apps.attendance.models import AttendanceCorrection, AttendanceRecord
     from apps.attendance.services_unpunch import _expected_out_display, _get_settings
 
     employee_qs = User.objects.filter(is_active=True)
-    if branch:
+    if employee_ids is not None:
+        employee_qs = employee_qs.filter(id__in=employee_ids)
+    elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
         employee_qs = employee_qs.filter(department=department)

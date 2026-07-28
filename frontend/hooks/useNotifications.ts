@@ -1,14 +1,26 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
+import { API_URL } from "@/lib/config";
 import type {
   Notification, NotificationListResponse, UnreadCountResponse,
 } from "@/types/notifications";
 
+// Poll stays on as a fallback (the socket carries live updates when
+// connected; the cookie-authenticated handshake can fail on flaky
+// networks/proxies where a plain XHR poll still works).
 const POLL_INTERVAL_MS = 60000;
+const WS_RECONNECT_BASE_MS = 1000;
+const WS_RECONNECT_MAX_MS  = 30000;
+
+function notificationsSocketUrl(): string | null {
+  if (!API_URL) return null;
+  const wsUrl = API_URL.replace(/^http/, "ws");
+  return `${wsUrl}/ws/notifications/`;
+}
 
 export function useNotifications() {
   const { showToast } = useToast();
@@ -72,6 +84,69 @@ export function useNotifications() {
     const interval = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
+
+  // ─── Live updates over WebSocket ───────────────────────────────────────────
+  // The socket is additive: on top of the poll above, it pushes new
+  // notifications the instant the backend creates them (see
+  // apps.notifications.signals._push_live). A dropped/failed connection just
+  // means the existing 60s poll is all that's left — never a hard failure.
+  const reconnectAttempt = useRef(0);
+  const reconnectTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socketRef        = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    const url = notificationsSocketUrl();
+    if (!url) return;
+
+    let stopped = false;
+
+    function connect() {
+      if (stopped) return;
+      const socket = new WebSocket(url as string);
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        reconnectAttempt.current = 0;
+      };
+
+      socket.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data as string);
+          if (payload?.type !== "notification" || !payload.notification) return;
+          const incoming = payload.notification as Notification;
+          setNotifications(prev =>
+            prev.some(n => n.id === incoming.id) ? prev : [incoming, ...prev]
+          );
+          setUnreadCount(prev => prev + 1);
+          showToast(incoming.title, "info");
+        } catch {
+          // malformed frame — ignore, next message (or the poll) will catch up
+        }
+      };
+
+      socket.onclose = () => {
+        if (stopped) return;
+        const delay = Math.min(
+          WS_RECONNECT_BASE_MS * 2 ** reconnectAttempt.current,
+          WS_RECONNECT_MAX_MS
+        );
+        reconnectAttempt.current += 1;
+        reconnectTimer.current = setTimeout(connect, delay);
+      };
+
+      socket.onerror = () => {
+        socket.close();
+      };
+    }
+
+    connect();
+
+    return () => {
+      stopped = true;
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      socketRef.current?.close();
+    };
+  }, [showToast]);
 
   return { notifications, unreadCount, isLoading, fetchNotifications, markRead, markAllRead };
 }

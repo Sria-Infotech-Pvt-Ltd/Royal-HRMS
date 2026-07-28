@@ -2,6 +2,7 @@
 
 import { useRecentRequests } from "@/hooks/useEmployeeDashboard";
 import type { RecentRequest } from "@/types/employeeDashboard";
+import AssessmentLockedNotice from "./AssessmentLockedNotice";
 
 const REQUEST_META: Record<RecentRequest["request_type"], { icon: string; color: string; bg: string; label: string }> = {
   leave:                { icon: "ti-beach",  color: "var(--success)", bg: "rgba(22,163,74,0.10)",  label: "Leave"       },
@@ -52,7 +53,7 @@ function detailLine(req: RecentRequest): string {
 }
 
 export default function EmpRecentRequests() {
-  const { data, loading } = useRecentRequests();
+  const { data, loading, status } = useRecentRequests();
 
   const requests = data?.requests ?? [];
   const pending  = requests.filter(r => r.status === "pending" || r.status === "l2_pending").length;
@@ -68,6 +69,8 @@ export default function EmpRecentRequests() {
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
         </div>
+      ) : status === 403 ? (
+        <AssessmentLockedNotice />
       ) : requests.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           No requests yet. <a href="/dashboard/leave" style={{ color: "var(--primary)" }}>Apply leave</a>

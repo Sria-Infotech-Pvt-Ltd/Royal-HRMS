@@ -1217,7 +1217,9 @@ class MyProfileSerializer(serializers.ModelSerializer):
     role_name       = serializers.CharField(source='role.name',         read_only=True, default='')
     role_display    = serializers.CharField(source='role.display_name', read_only=True, default='')
     profile         = EmployeeProfileSerializer(read_only=True)
-    assessment_status = serializers.SerializerMethodField()
+    assessment_status  = serializers.SerializerMethodField()
+    reporting_manager  = serializers.SerializerMethodField()
+    hr                 = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -1226,8 +1228,24 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'department', 'designation', 'branch',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
             'onboarding_status', 'assessment_status',
+            'reporting_manager', 'hr',
             'profile',
         ]
+
+    def get_reporting_manager(self, obj):
+        # Managers are the reporting manager for others — they have none of their own to show.
+        if obj.role and obj.role.name == 'manager__team_lead':
+            return None
+        mgr = obj.reporting_manager
+        if not mgr:
+            return None
+        return {'id': mgr.employee_id, 'name': mgr.full_name}
+
+    def get_hr(self, obj):
+        assigned_hr = obj.hr
+        if not assigned_hr:
+            return None
+        return {'id': assigned_hr.employee_id, 'name': assigned_hr.full_name}
 
     def get_assessment_status(self, obj):
         from apps.assessments.models import CandidateAssignment
