@@ -5,6 +5,7 @@ export interface ApiRole {
   name: string;           // slug, e.g. "hr_admin"
   display_name: string;   // human, e.g. "HR Admin"
   is_active: boolean;
+  can_manage_team: boolean;
   user_count: number;
   permissions: string[];  // codenames, e.g. ["employees.view", "employees.create"]
 }
@@ -23,6 +24,7 @@ export type PermissionsMap = Record<string, ApiPermission[]>;
 
 export interface RoleForm {
   display_name: string;
+  can_manage_team: boolean;
   permission_codenames: string[];
 }
 
@@ -30,6 +32,7 @@ export type RoleFormErrors = Partial<Record<keyof RoleForm, string>>;
 
 export const EMPTY_ROLE_FORM: RoleForm = {
   display_name: "",
+  can_manage_team: false,
   permission_codenames: [],
 };
 

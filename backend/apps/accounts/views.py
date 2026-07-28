@@ -417,6 +417,7 @@ class LoginView(APIView):
                 'onboarding_status':   user.onboarding_status,
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
+                'can_manage_team':     user.role.can_manage_team if user.role else False,
             },
         })
         resp.set_cookie(

@@ -6,56 +6,93 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error
-from apps.payroll.models import PayrollCycle
-from apps.payroll.serializers import PayrollCycleSerializer
+from apps.payroll.models import PayrollCycle, ManagerAttendanceApproval
+from apps.payroll.serializers import PayrollCycleSerializer, ManagerAttendanceApprovalSerializer
 
 logger = logging.getLogger(__name__)
 
-APPROVER_ROLES = frozenset(['system_admin', 'hr', 'manager__team_lead'])
-HR_ROLES       = frozenset(['system_admin', 'hr'])
+HR_PERMISSION = 'payroll.edit'
 
 
-def _role(user):
-    return user.role.name if user.role else ''
+def _has_perm(user, codename):
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
+def _is_manager(user):
+    """True for users whose role has can_manage_team=True."""
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return bool(user.role.can_manage_team)
+
+
+def _is_hr(user):
+    return _has_perm(user, HR_PERMISSION)
+
+
+def _can_view_approvals(user):
+    return _is_manager(user) or _is_hr(user)
 
 
 class AttendancePendingCyclesView(APIView):
-    """Cycles awaiting attendance approval for the current user."""
+    """Cycles awaiting attendance approval for the current user.
+
+    Managers see cycles where their own ManagerAttendanceApproval row is still
+    pending (approved_at=null). HR sees all attendance_pending cycles.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        role = _role(request.user)
-        if role not in APPROVER_ROLES:
+        if not _can_view_approvals(request.user):
             return error('Access denied.', http_status=403)
 
-        cycles = PayrollCycle.objects.filter(
-            status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
-        ).select_related(
-            'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
-        ).order_by('-cycle_start')
+        if _is_hr(request.user) and not _is_manager(request.user):
+            # Pure HR: show all pending cycles (they may need to do L2)
+            cycles = PayrollCycle.objects.filter(
+                status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
+            ).select_related(
+                'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
+            ).order_by('-cycle_start')
+        else:
+            # Manager: show cycles where this user's row is still pending
+            pending_cycle_ids = ManagerAttendanceApproval.objects.filter(
+                manager=request.user,
+                approved_at__isnull=True,
+            ).values_list('cycle_id', flat=True)
 
-        # Managers only see cycles where their L1 approval is still pending
-        if role == 'manager__team_lead':
-            cycles = cycles.filter(attendance_approved_by_l1__isnull=True)
+            cycles = PayrollCycle.objects.filter(
+                id__in=pending_cycle_ids,
+                status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
+            ).select_related(
+                'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
+            ).order_by('-cycle_start')
 
         serializer = PayrollCycleSerializer(cycles, many=True)
         return success('Pending attendance approval cycles.', serializer.data)
 
 
 class CycleAttendanceSummaryView(APIView):
-    """Team attendance breakdown for a payroll cycle period."""
+    """Team attendance breakdown for a payroll cycle period.
+
+    Managers see only their direct reportees.
+    HR sees everyone.
+    Also returns per-manager approval status for the cycle.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        role = _role(request.user)
-        if role not in APPROVER_ROLES:
+        if not _can_view_approvals(request.user):
             return error('Access denied.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
 
-        # Late import to avoid circular deps
         from apps.attendance.models import AttendanceRecord
 
         records = AttendanceRecord.objects.filter(
@@ -63,9 +100,12 @@ class CycleAttendanceSummaryView(APIView):
             employee__is_active=True,
         ).select_related('employee')
 
-        # Managers see only their direct reportees
-        if role == 'manager__team_lead':
-            records = records.filter(employee__reporting_manager=request.user)
+        if _is_manager(request.user) and not _is_hr(request.user):
+            # Only scope to direct reportees when the manager actually has some;
+            # fall back to all employees if reporting_manager hierarchy isn't set up.
+            has_reportees = request.user.direct_reports.filter(is_active=True).exists()
+            if has_reportees:
+                records = records.filter(employee__reporting_manager=request.user)
 
         summary = (
             records
@@ -90,33 +130,51 @@ class CycleAttendanceSummaryView(APIView):
             .order_by('employee__full_name')
         )
 
+        # Per-manager approval rows for this cycle
+        mgr_rows = ManagerAttendanceApproval.objects.filter(
+            cycle=cycle,
+        ).select_related('manager')
+        mgr_serializer = ManagerAttendanceApprovalSerializer(mgr_rows, many=True)
+        total_mgrs    = mgr_rows.count()
+        approved_mgrs = mgr_rows.filter(approved_at__isnull=False).count()
+        current_user_pending = mgr_rows.filter(
+            manager=request.user, approved_at__isnull=True,
+        ).exists()
+
         cycle_data = {
-            'id':                        str(cycle.id),
-            'cycle_start':               str(cycle.cycle_start),
-            'cycle_end':                 str(cycle.cycle_end),
-            'pay_date':                  str(cycle.pay_date),
-            'status':                    cycle.status,
-            'l1_approver':               cycle.attendance_approved_by_l1.full_name if cycle.attendance_approved_by_l1 else None,
-            'l2_approver':               cycle.attendance_approved_by_l2.full_name if cycle.attendance_approved_by_l2 else None,
-            'l1_approved_at':            str(cycle.attendance_l1_approved_at) if cycle.attendance_l1_approved_at else None,
-            'l2_approved_at':            str(cycle.attendance_l2_approved_at) if cycle.attendance_l2_approved_at else None,
+            'id':                  str(cycle.id),
+            'cycle_start':         str(cycle.cycle_start),
+            'cycle_end':           str(cycle.cycle_end),
+            'pay_date':            str(cycle.pay_date),
+            'status':              cycle.status,
+            # Legacy single-approver fields (set only when L1 is fully complete)
+            'l1_approver':         cycle.attendance_approved_by_l1.full_name if cycle.attendance_approved_by_l1 else None,
+            'l2_approver':         cycle.attendance_approved_by_l2.full_name if cycle.attendance_approved_by_l2 else None,
+            'l1_approved_at':      str(cycle.attendance_l1_approved_at) if cycle.attendance_l1_approved_at else None,
+            'l2_approved_at':      str(cycle.attendance_l2_approved_at) if cycle.attendance_l2_approved_at else None,
+            # Per-manager breakdown
+            'manager_approvals':       mgr_serializer.data,
+            'mgr_approved_count':      approved_mgrs,
+            'mgr_total_count':         total_mgrs,
+            'mgr_all_approved':        total_mgrs > 0 and approved_mgrs == total_mgrs,
+            'current_user_pending':    current_user_pending,
         }
 
         employees = [
             {
-                'employee_id':   row['employee__employee_id'],
-                'employee_uuid': str(row['employee__id']),
-                'full_name':     row['employee__full_name'],
-                'department':    row['employee__department'] or '—',
-                'designation':   row['employee__designation'] or '—',
-                'present_days':  row['present_days'],
-                'late_days':     row['late_days'],
-                'half_days':     row['half_days'],
-                'absent_days':   row['absent_days'],
+                'employee_id':     row['employee__employee_id'],
+                'employee_uuid':   str(row['employee__id']),
+                'full_name':       row['employee__full_name'],
+                'department':      row['employee__department'] or '—',
+                'designation':     row['employee__designation'] or '—',
+                'present_days':    row['present_days'],
+                'late_days':       row['late_days'],
+                'half_days':       row['half_days'],
+                'absent_days':     row['absent_days'],
                 'incomplete_days': row['incomplete_days'],
-                'on_leave_days': row['on_leave_days'],
-                'lop_days':      (row['absent_days'] or 0) + (row['incomplete_days'] or 0),
-                'working_hours': round((row['total_minutes'] or 0) / 60, 1),
+                'on_leave_days':   row['on_leave_days'],
+                'lop_days':        (row['absent_days'] or 0) + (row['incomplete_days'] or 0),
+                'working_hours':   round((row['total_minutes'] or 0) / 60, 1),
             }
             for row in summary
         ]
@@ -130,26 +188,28 @@ class CycleEmployeeDailyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk, employee_pk):
-        role = _role(request.user)
-        if role not in APPROVER_ROLES:
+        if not _can_view_approvals(request.user):
             return error('Access denied.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
 
         import uuid as _uuid_mod
         from django.contrib.auth import get_user_model
-        User = get_user_model()
+        UserModel = get_user_model()
         try:
             _uuid_mod.UUID(str(employee_pk))
-            employee = User.objects.filter(pk=employee_pk, is_active=True).first()
+            employee = UserModel.objects.filter(pk=employee_pk, is_active=True).first()
         except (ValueError, AttributeError):
-            employee = User.objects.filter(employee_id=employee_pk, is_active=True).first()
+            employee = UserModel.objects.filter(employee_id=employee_pk, is_active=True).first()
 
         if not employee:
             return error('Employee not found.', http_status=404)
 
-        if role == 'manager__team_lead' and employee.reporting_manager_id != request.user.pk:
-            return error('Access denied.', http_status=403)
+        # Managers can only drill into their own direct reportees (when hierarchy is configured)
+        if _is_manager(request.user) and not _is_hr(request.user):
+            has_reportees = request.user.direct_reports.filter(is_active=True).exists()
+            if has_reportees and employee.reporting_manager_id != request.user.pk:
+                return error('Access denied.', http_status=403)
 
         from apps.attendance.models import AttendanceRecord
         from datetime import timedelta

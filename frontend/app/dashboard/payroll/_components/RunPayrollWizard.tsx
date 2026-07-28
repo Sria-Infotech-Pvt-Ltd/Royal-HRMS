@@ -28,11 +28,13 @@ interface Props {
   onCancel: () => void;
   initialCycleId?: string;
   initialStatus?: string;
+  initialMonth?: string;
+  initialYear?: string;
 }
 
 interface StepDef { key: string; label: string; icon: string; }
 
-export default function RunPayrollWizard({ onCancel, initialCycleId, initialStatus }: Props) {
+export default function RunPayrollWizard({ onCancel, initialCycleId, initialStatus, initialMonth, initialYear }: Props) {
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
   const [step,    setStep]    = useState(0);
   const [cycleId, setCycleId] = useState<string | null>(initialCycleId ?? null);
@@ -127,7 +129,7 @@ export default function RunPayrollWizard({ onCancel, initialCycleId, initialStat
 
       {/* Step content */}
       {currentKey === "period" && (
-        <PayrollPeriodStep settings={settings} onNext={handleCycleCreated} onBack={onCancel} />
+        <PayrollPeriodStep settings={settings} onNext={handleCycleCreated} onBack={onCancel} initialMonth={initialMonth} initialYear={initialYear} />
       )}
       {currentKey === "approval" && cycleId && (
         <ApprovalStep cycleId={cycleId} settings={settings} onNext={next} onBack={back} />

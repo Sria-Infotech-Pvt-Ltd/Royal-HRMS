@@ -19,8 +19,14 @@ from apps.payroll.models import (
     SalaryComponent,
     BranchPayrollConfig,
     StatutoryConfig,
+    PayrollAdjustment,
+    ManagerAttendanceApproval,
 )
-from apps.payroll.serializers import PayrollCycleSerializer, EmployeePayslipSerializer
+from apps.payroll.serializers import (
+    PayrollCycleSerializer,
+    EmployeePayslipSerializer,
+    ManagerAttendanceApprovalSerializer,
+)
 from apps.accounts.models import User
 from apps.branch.models import Branch
 
@@ -35,15 +41,22 @@ def _has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
-# L1/L2 attendance sign-off is a workflow stage, not a payroll.* permission —
-# managers hold no payroll codenames at all but must still be able to L1-sign
-# off their own cycle's attendance, so this stays role-identity based.
 def _can_l1_approve(user):
-    return bool(user.role and user.role.name in ('system_admin', 'hr', 'manager__team_lead'))
+    """True for any user whose role has can_manage_team, plus HR/sysadmin as fallback."""
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return bool(user.role.can_manage_team) or _has_perm(user, 'payroll.edit')
 
 
 def _can_l2_approve(user):
-    return bool(user.role and user.role.name in ('system_admin', 'hr'))
+    """True for users with payroll.edit (HR/sysadmin)."""
+    if not user or not user.role:
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    return _has_perm(user, 'payroll.edit')
 
 
 class PayrollCycleListView(APIView):
@@ -92,13 +105,20 @@ class PayrollCycleListView(APIView):
         )
         logger.info('PayrollCycle %s created by %s', cycle.id, request.user.email)
 
-        # Notify all active managers to review and approve attendance
+        # Seed one approval row per active manager (role.can_manage_team=True)
+        # and notify each of them.
         try:
+            managers = list(User.objects.filter(
+                is_active=True, role__can_manage_team=True,
+            ).exclude(pk=request.user.pk).select_related('role'))
+
+            ManagerAttendanceApproval.objects.bulk_create([
+                ManagerAttendanceApproval(cycle=cycle, manager=m)
+                for m in managers
+            ])
+
             from apps.notifications.signals import _notify
             period = f'{cycle_start} – {cycle_end}'
-            managers = User.objects.filter(
-                is_active=True, role__name='manager__team_lead',
-            ).exclude(pk=request.user.pk)
             for manager in managers:
                 _notify(
                     manager,
@@ -110,7 +130,7 @@ class PayrollCycleListView(APIView):
                     request.user,
                 )
         except Exception:
-            logger.exception('Failed to send attendance approval notifications for cycle %s', cycle.id)
+            logger.exception('Failed to seed manager approvals or send notifications for cycle %s', cycle.id)
 
         return success('Payroll cycle created.', PayrollCycleSerializer(cycle).data, http_status=201)
 
@@ -137,9 +157,18 @@ class PayrollCycleDetailView(APIView):
 
 
 class AttendanceApprovalView(APIView):
-    """L1 (manager) or L2 (hr_admin) attendance approval for a payroll cycle.
+    """L1 (manager) or L2 (HR) attendance approval for a payroll cycle.
 
-    POST body: {"level": "L1"} or {"level": "L2"}
+    POST body: {"level": "L1", "comment": "optional note"}
+               {"level": "L2", "comment": "optional note"}
+
+    L1 logic:
+      - Each manager (role.can_manage_team=True) has a ManagerAttendanceApproval row.
+      - They must approve their own row.
+      - L1 is complete only when ALL rows for the cycle are approved.
+      - Fallback: if no manager rows exist, HR/sysadmin can approve L1 directly.
+
+    L2 logic: unchanged — requires payroll.edit permission, runs after L1 is done.
     """
 
     permission_classes = [IsAuthenticated]
@@ -152,26 +181,60 @@ class AttendanceApprovalView(APIView):
 
         settings_obj = PayrollSettings.objects.first()
         level = request.data.get('level', '').upper()
+        note = request.data.get('comment', '').strip()
 
         if level == 'L1':
-            if not _can_l1_approve(request.user):
-                return error('Manager or HR admin role required for L1 approval.', http_status=403)
-            if cycle.attendance_approved_by_l1_id:
-                return error('L1 approval already recorded.')
+            manager_row = ManagerAttendanceApproval.objects.filter(
+                cycle=cycle, manager=request.user,
+            ).first()
 
-            cycle.attendance_approved_by_l1 = request.user
-            cycle.attendance_l1_approved_at = timezone.now()
+            if manager_row:
+                if manager_row.approved_at:
+                    return error('You have already approved attendance for this cycle.')
+                manager_row.approved_at = timezone.now()
+                manager_row.note = note
+                manager_row.save(update_fields=['approved_at', 'note', 'updated_at'])
+                logger.info('Cycle %s: manager %s approved L1', pk, request.user.email)
+            else:
+                # Fallback path: HR/sysadmin can approve L1 when no manager rows exist
+                has_manager_rows = ManagerAttendanceApproval.objects.filter(cycle=cycle).exists()
+                if has_manager_rows:
+                    return error(
+                        'You are not assigned to approve attendance for this cycle.',
+                        http_status=403,
+                    )
+                if not _can_l2_approve(request.user):
+                    return error('Manager or HR role required for L1 approval.', http_status=403)
+                if cycle.attendance_approved_by_l1_id:
+                    return error('L1 approval already recorded.')
+                cycle.attendance_approved_by_l1 = request.user
+                cycle.attendance_l1_approved_at = timezone.now()
+                requires_l2 = settings_obj and settings_obj.approval_levels == PayrollSettings.APPROVAL_L1_L2
+                if not requires_l2:
+                    cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
+                cycle.save(update_fields=[
+                    'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
+                ])
+                logger.info('Cycle %s: HR direct L1 approval by %s (no managers configured)', pk, request.user.email)
+                return success('L1 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
-            # If settings require only L1, move to approved immediately
-            requires_l2 = settings_obj and settings_obj.approval_levels == PayrollSettings.APPROVAL_L1_L2
-            if not requires_l2:
-                cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
+            # Check if all manager rows are now approved → complete L1
+            pending_count = ManagerAttendanceApproval.objects.filter(
+                cycle=cycle, approved_at__isnull=True,
+            ).count()
 
-            cycle.save(update_fields=[
-                'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
-            ])
-            logger.info('Cycle %s L1 attendance approved by %s', pk, request.user.email)
-            return success('L1 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
+            if pending_count == 0:
+                cycle.attendance_approved_by_l1 = request.user
+                cycle.attendance_l1_approved_at = timezone.now()
+                requires_l2 = settings_obj and settings_obj.approval_levels == PayrollSettings.APPROVAL_L1_L2
+                if not requires_l2:
+                    cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
+                cycle.save(update_fields=[
+                    'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
+                ])
+                logger.info('Cycle %s: all managers approved — L1 complete', pk)
+
+            return success('Your attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
         elif level == 'L2':
             if not _can_l2_approve(request.user):
@@ -184,7 +247,6 @@ class AttendanceApprovalView(APIView):
             cycle.attendance_approved_by_l2 = request.user
             cycle.attendance_l2_approved_at = timezone.now()
             cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
-
             cycle.save(update_fields=[
                 'attendance_approved_by_l2', 'attendance_l2_approved_at', 'status', 'updated_at',
             ])
@@ -192,6 +254,58 @@ class AttendanceApprovalView(APIView):
             return success('L2 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
         return error('level must be "L1" or "L2".')
+
+
+class ManagerAttendanceApprovalListView(APIView):
+    """GET per-manager approval status for a cycle.
+
+    Returns each manager row plus a summary (approved_count, total_count,
+    all_approved, current_user_pending) so the frontend can render the
+    per-manager status list without client-side computation.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        cycle = get_object_or_404(PayrollCycle, pk=pk)
+        if not _has_perm(request.user, 'payroll.view') and not _can_l1_approve(request.user):
+            return error('Access denied.', http_status=403)
+
+        # Auto-seed rows for cycles created before this feature existed.
+        # Only runs when the cycle is still pending and no rows exist yet.
+        if (
+            cycle.status == PayrollCycle.STATUS_ATTENDANCE_PENDING
+            and not ManagerAttendanceApproval.objects.filter(cycle=cycle).exists()
+        ):
+            managers = list(User.objects.filter(
+                is_active=True, role__can_manage_team=True,
+            ).select_related('role'))
+            if managers:
+                ManagerAttendanceApproval.objects.bulk_create([
+                    ManagerAttendanceApproval(cycle=cycle, manager=m)
+                    for m in managers
+                ], ignore_conflicts=True)
+                logger.info(
+                    'Cycle %s: auto-seeded %d manager approval rows (legacy cycle)',
+                    pk, len(managers),
+                )
+
+        rows = ManagerAttendanceApproval.objects.filter(cycle=cycle).select_related('manager')
+        serializer = ManagerAttendanceApprovalSerializer(rows, many=True)
+
+        total    = rows.count()
+        approved = rows.filter(approved_at__isnull=False).count()
+        current_user_pending = rows.filter(
+            manager=request.user, approved_at__isnull=True,
+        ).exists()
+
+        return success('Manager approval status retrieved.', {
+            'approvals': serializer.data,
+            'approved_count': approved,
+            'total_count': total,
+            'all_approved': total > 0 and approved == total,
+            'current_user_pending': current_user_pending,
+        })
 
 
 class ProcessPayrollView(APIView):
@@ -326,10 +440,22 @@ class ProcessPayrollView(APIView):
                 lwf_employee = statutory.lwf_employee_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
                 lwf_employer = statutory.lwf_employer_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
 
-                total_deductions = (
-                    lop_deduction + pf_employee + esi_employee + pt + lwf_employee
+                # One-time adjustments (additions, deductions, arrears) for this employee+month
+                adj_month = cycle.cycle_start.replace(day=1)
+                adjs = PayrollAdjustment.objects.filter(employee=employee, month=adj_month)
+                adj_earning = sum(
+                    (a.amount for a in adjs if a.type in (PayrollAdjustment.ADDITION, PayrollAdjustment.ARREAR)),
+                    Decimal('0'),
                 )
-                net_pay = gross - total_deductions
+                adj_deduction = sum(
+                    (a.amount for a in adjs if a.type == PayrollAdjustment.DEDUCTION),
+                    Decimal('0'),
+                )
+
+                total_deductions = (
+                    lop_deduction + pf_employee + esi_employee + pt + lwf_employee + adj_deduction
+                )
+                net_pay = gross + adj_earning - total_deductions
 
                 reimbursements = Decimal('0')
                 bonus = Decimal('0')
@@ -361,6 +487,8 @@ class ProcessPayrollView(APIView):
                         'pt_deduction': pt,
                         'lwf_employee': lwf_employee,
                         'lwf_employer': lwf_employer,
+                        'adjustments_earning': adj_earning,
+                        'adjustments_deduction': adj_deduction,
                         'total_deductions': total_deductions,
                         'net_pay': net_pay,
                         'status': EmployeePayslip.STATUS_DRAFT,

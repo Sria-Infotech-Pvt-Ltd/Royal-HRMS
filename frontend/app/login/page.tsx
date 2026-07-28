@@ -22,6 +22,7 @@ interface LoginApiResponse {
       permissions: string[];
       onboarding_status: string;
       assessment_status: string;
+      can_manage_team: boolean;
     };
   };
 }
@@ -52,6 +53,7 @@ export default function LoginPage() {
         permissions: d.user.permissions ?? [],
         onboarding_status: d.user.onboarding_status ?? "complete",
         assessment_status: d.user.assessment_status ?? "complete",
+        can_manage_team:   d.user.can_manage_team ?? false,
       };
       saveAuth(user);
       let dest = "/dashboard";

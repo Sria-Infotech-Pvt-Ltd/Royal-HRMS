@@ -971,6 +971,7 @@ class LeaveApprovalView(APIView):
                 # No L2 configured — L1 approval is final.
                 leave_request.status = REQ_APPROVED
                 _deduct_balance_safe(leave_request)
+                _sync_leave_attendance(leave_request)
 
         elif leave_request.status == REQ_L2_PENDING:
             if not _can_approve_at_stage(request.user, leave_request, 'l2'):
@@ -986,6 +987,7 @@ class LeaveApprovalView(APIView):
             leave_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
             if action == 'approve':
                 _deduct_balance_safe(leave_request)
+                _sync_leave_attendance(leave_request)
 
         else:
             return error(f'Cannot act on a request with status "{leave_request.status}".')
@@ -1007,6 +1009,35 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
             leave_type=leave_request.leave_type,
             year=year,
         ).update(used_days=F('used_days') + earned_days)
+
+
+def _sync_leave_attendance(leave_request: LeaveRequest) -> None:
+    """Create or update AttendanceRecord rows to 'on_leave' for every day of an approved leave."""
+    import uuid as _uuid_mod
+    from apps.attendance.models import AttendanceRecord
+
+    current = leave_request.start_date
+    end = leave_request.end_date
+    employee = leave_request.employee
+
+    while current <= end:
+        AttendanceRecord.objects.update_or_create(
+            employee=employee,
+            date=current,
+            defaults={
+                'status': AttendanceRecord.STATUS_ON_LEAVE,
+                'first_punch_in': None,
+                'last_punch_out': None,
+                'total_working_minutes': 0,
+            },
+        )
+        current += timedelta(days=1)
+    logger.info(
+        'Synced %d on_leave attendance record(s) for employee %s (leave %s)',
+        (leave_request.end_date - leave_request.start_date).days + 1,
+        employee.email,
+        leave_request.id,
+    )
 
 
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────

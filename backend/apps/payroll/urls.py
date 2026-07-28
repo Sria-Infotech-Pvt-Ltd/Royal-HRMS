@@ -26,6 +26,7 @@ from apps.payroll.views.cycles import (
     PayrollCycleListView,
     PayrollCycleDetailView,
     AttendanceApprovalView,
+    ManagerAttendanceApprovalListView,
     ProcessPayrollView,
     MarkCyclePaidView,
     CancelPayrollCycleView,
@@ -46,6 +47,11 @@ from apps.payroll.views.payslips import (
     PayslipQueryResolveView,
     ExpenseSummaryForCycleView,
     ReferralBonusSummaryForCycleView,
+)
+from apps.payroll.views.adjustments import (
+    PayrollAdjustmentListCreateView,
+    PayrollAdjustmentDeleteView,
+    PayrollAdjustmentBulkImportView,
 )
 
 urlpatterns = [
@@ -82,6 +88,7 @@ urlpatterns = [
     path('cycles/', PayrollCycleListView.as_view(), name='payroll-cycle-list'),
     path('cycles/<uuid:pk>/', PayrollCycleDetailView.as_view(), name='payroll-cycle-detail'),
     path('cycles/<uuid:pk>/approve-attendance/', AttendanceApprovalView.as_view(), name='payroll-approve-attendance'),
+    path('cycles/<uuid:pk>/manager-approvals/', ManagerAttendanceApprovalListView.as_view(), name='payroll-manager-approvals'),
     path('cycles/<uuid:pk>/process/', ProcessPayrollView.as_view(), name='payroll-process'),
     path('cycles/<uuid:pk>/mark-paid/', MarkCyclePaidView.as_view(), name='payroll-mark-paid'),
     path('cycles/<uuid:pk>/cancel/', CancelPayrollCycleView.as_view(), name='payroll-cancel-cycle'),
@@ -101,4 +108,9 @@ urlpatterns = [
     # ── Payslip queries ──────────────────────────────────────────────────────
     path('queries/', PayslipQueryListView.as_view(), name='payslip-query-list'),
     path('queries/<uuid:pk>/resolve/', PayslipQueryResolveView.as_view(), name='payslip-query-resolve'),
+
+    # ── Payroll adjustments ──────────────────────────────────────────────────
+    path('adjustments/', PayrollAdjustmentListCreateView.as_view(), name='payroll-adjustment-list'),
+    path('adjustments/bulk-import/', PayrollAdjustmentBulkImportView.as_view(), name='payroll-adjustment-bulk-import'),
+    path('adjustments/<uuid:pk>/', PayrollAdjustmentDeleteView.as_view(), name='payroll-adjustment-delete'),
 ]

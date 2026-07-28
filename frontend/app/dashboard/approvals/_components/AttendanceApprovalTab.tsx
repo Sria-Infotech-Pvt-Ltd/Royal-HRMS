@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import type { ManagerApproval } from "@/types/payroll";
 import EmployeeAttendanceRow, { type EmployeeRow } from "./EmployeeAttendanceRow";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,6 +33,11 @@ interface CycleSummary {
     l2_approver: string | null;
     l1_approved_at: string | null;
     l2_approved_at: string | null;
+    manager_approvals: ManagerApproval[];
+    mgr_approved_count: number;
+    mgr_total_count: number;
+    mgr_all_approved: boolean;
+    current_user_pending: boolean;
   };
   employees: EmployeeRow[];
 }
@@ -43,6 +49,9 @@ const fmtDate = (d: string) =>
 
 const fmtMonth = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+const fmtDateTime = (d: string) =>
+  new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -61,12 +70,18 @@ export default function AttendanceApprovalTab() {
 
   const selected = cycles?.find(c => c.id === selectedId) ?? null;
 
-  // Determine which approval level the current user should act on
-  const l1Done = !!summary?.cycle.l1_approver;
-  const l2Done = !!summary?.cycle.l2_approver;
-  const needsL1 = !l1Done;
-  const needsL2 = l1Done && !l2Done;
-  const approvalLevel = needsL1 ? 1 : needsL2 ? 2 : null;
+  const l1Done            = !!summary?.cycle.l1_approver;
+  const l2Done            = !!summary?.cycle.l2_approver;
+  const currentUserPending = summary?.cycle.current_user_pending ?? false;
+  const mgrAllApproved    = summary?.cycle.mgr_all_approved ?? false;
+  const mgrApprovals      = summary?.cycle.manager_approvals ?? [];
+  const mgrApprovedCount  = summary?.cycle.mgr_approved_count ?? 0;
+  const mgrTotalCount     = summary?.cycle.mgr_total_count ?? 0;
+
+  // Determine what action the current user can take
+  const canDoL1 = currentUserPending && !l1Done;
+  const canDoL2 = l1Done && !l2Done;
+  const approvalLevel: 1 | 2 | null = canDoL1 ? 1 : canDoL2 ? 2 : null;
 
   async function approve() {
     if (!selectedId || !approvalLevel) return;
@@ -151,7 +166,7 @@ export default function AttendanceApprovalTab() {
         <div className="card">
 
           {/* Cycle header */}
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--outline-v)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>
                 Attendance — {selected ? fmtMonth(selected.cycle_start) : ""}
@@ -163,24 +178,78 @@ export default function AttendanceApprovalTab() {
               )}
             </div>
 
-            {/* L1 / L2 status pills */}
-            <div style={{ display: "flex", gap: 8 }}>
-              <span style={{
-                padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
-                background: summary?.cycle.l1_approver ? "rgba(34,197,94,0.12)" : "rgba(234,179,8,0.12)",
-                color:      summary?.cycle.l1_approver ? "#15803d"                : "#92400e",
-              }}>
-                L1 {summary?.cycle.l1_approver ? `✓ ${summary.cycle.l1_approver}` : "Pending"}
-              </span>
-              <span style={{
-                padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
-                background: summary?.cycle.l2_approver ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.10)",
-                color:      summary?.cycle.l2_approver ? "#15803d"                : "var(--on-variant)",
-              }}>
-                L2 {summary?.cycle.l2_approver ? `✓ ${summary.cycle.l2_approver}` : "Waiting"}
-              </span>
-            </div>
+            {/* Approval status pills */}
+            {!summaryLoading && summary && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* L1: per-manager count */}
+                <span style={{
+                  padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                  background: l1Done ? "rgba(34,197,94,0.12)" : mgrApprovedCount > 0 ? "rgba(234,179,8,0.12)" : "rgba(100,116,139,0.10)",
+                  color: l1Done ? "#15803d" : mgrApprovedCount > 0 ? "#92400e" : "var(--on-variant)",
+                }}>
+                  {mgrTotalCount > 0
+                    ? l1Done
+                      ? `L1 ✓ All managers (${mgrTotalCount})`
+                      : `L1 ${mgrApprovedCount}/${mgrTotalCount} managers`
+                    : l1Done
+                      ? "L1 ✓ Approved"
+                      : "L1 Pending"
+                  }
+                </span>
+                {/* L2 */}
+                <span style={{
+                  padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                  background: l2Done ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.10)",
+                  color: l2Done ? "#15803d" : "var(--on-variant)",
+                }}>
+                  {l2Done ? `L2 ✓ ${summary.cycle.l2_approver}` : "L2 Waiting"}
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* Per-manager approval breakdown — shown when there are manager rows */}
+          {!summaryLoading && mgrTotalCount > 0 && (
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--outline-v)", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                Manager Sign-offs ({mgrApprovedCount}/{mgrTotalCount} approved)
+              </div>
+              {/* Progress bar */}
+              <div style={{ height: 4, borderRadius: 99, background: "var(--bg-high)", overflow: "hidden", marginBottom: 4 }}>
+                <div style={{
+                  height: "100%", borderRadius: 99,
+                  width: mgrTotalCount > 0 ? `${(mgrApprovedCount / mgrTotalCount) * 100}%` : "0%",
+                  background: mgrAllApproved ? "var(--success)" : "var(--primary)",
+                  transition: "width 0.4s ease",
+                }} />
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {mgrApprovals.map(row => (
+                  <div
+                    key={row.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 7,
+                      padding: "5px 12px", borderRadius: 20,
+                      border: `1.5px solid ${row.approved_at ? "var(--success)" : "var(--outline-v)"}`,
+                      background: row.approved_at ? "rgba(34,197,94,0.07)" : "var(--bg-low)",
+                      fontSize: 12,
+                    }}
+                  >
+                    <i
+                      className={`ti ${row.approved_at ? "ti-circle-check" : "ti-clock"}`}
+                      style={{ color: row.approved_at ? "var(--success)" : "var(--on-variant)", fontSize: 13 }}
+                    />
+                    <span style={{ fontWeight: 600 }}>{row.manager_name}</span>
+                    {row.approved_at && (
+                      <span style={{ color: "var(--on-variant)", fontSize: 11 }}>
+                        {fmtDateTime(row.approved_at)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Attendance table */}
           {summaryLoading ? (
@@ -217,12 +286,14 @@ export default function AttendanceApprovalTab() {
             </div>
           )}
 
-          {/* Approval footer — only shown if action is still needed */}
+          {/* Approval footer */}
           {approvalLevel && !summaryLoading && (
-            <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border)", background: "var(--bg)", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", background: "var(--bg)", display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
                 <i className="ti ti-user-check" style={{ marginRight: 6, color: "var(--primary)" }} />
-                {approvalLevel === 1 ? "Manager (L1) — Review and approve attendance records" : "HR (L2) — Final sign-off on attendance"}
+                {approvalLevel === 1
+                  ? "Your sign-off is required — review your team's attendance and approve"
+                  : "HR (L2) — Final sign-off on attendance"}
               </div>
               <textarea
                 className="field-input"
@@ -239,7 +310,7 @@ export default function AttendanceApprovalTab() {
                   disabled={approving || summaryLoading}
                 >
                   {approving
-                    ? <><i className="ti ti-loader-2 spin" /> Approving…</>
+                    ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
                     : <><i className="ti ti-check" /> Approve L{approvalLevel} Attendance</>
                   }
                 </button>
@@ -247,15 +318,24 @@ export default function AttendanceApprovalTab() {
             </div>
           )}
 
-          {!approvalLevel && !summaryLoading && summary && (
-            <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", background: "rgba(34,197,94,0.06)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#15803d", fontWeight: 600 }}>
+          {/* Waiting for other managers */}
+          {!approvalLevel && !currentUserPending && !l1Done && !summaryLoading && summary && (
+            <div style={{ padding: "14px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
+              <i className="ti ti-clock" />
+              You have approved. Waiting for {mgrTotalCount - mgrApprovedCount} other manager(s) to sign off.
+            </div>
+          )}
+
+          {/* Fully approved */}
+          {!approvalLevel && (l1Done && l2Done) && !summaryLoading && summary && (
+            <div style={{ padding: "14px 20px", borderTop: "1px solid var(--outline-v)", background: "rgba(34,197,94,0.06)", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#15803d", fontWeight: 600 }}>
               <i className="ti ti-circle-check" style={{ fontSize: 16 }} />
               Attendance fully approved — L1 and L2 sign-off complete.
             </div>
           )}
+
         </div>
       )}
     </div>
   );
 }
-

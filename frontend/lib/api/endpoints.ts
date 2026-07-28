@@ -251,6 +251,7 @@ export const API = {
     cycles: "/payroll/cycles/",
     cycle: (id: string) => `/payroll/cycles/${id}/`,
     approveAttendance:   (id: string) => `/payroll/cycles/${id}/approve-attendance/`,
+    managerApprovals:    (id: string) => `/payroll/cycles/${id}/manager-approvals/`,
     pendingApprovalCycles: "/payroll/cycles/pending-approval/",
     attendanceSummary:   (id: string) => `/payroll/cycles/${id}/attendance-summary/`,
     employeeDailyAttendance: (cycleId: string, employeeId: string) => `/payroll/cycles/${cycleId}/attendance-daily/${employeeId}/`,
@@ -273,6 +274,11 @@ export const API = {
     // Queries
     queries: "/payroll/queries/",
     resolveQuery: (id: string) => `/payroll/queries/${id}/resolve/`,
+
+    // Adjustments
+    adjustments: "/payroll/adjustments/",
+    adjustmentDetail: (id: string) => `/payroll/adjustments/${id}/`,
+    adjustmentsBulkImport: "/payroll/adjustments/bulk-import/",
   },
 
   dashboard: {

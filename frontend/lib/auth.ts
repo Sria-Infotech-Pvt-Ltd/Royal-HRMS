@@ -14,6 +14,7 @@ export interface UserInfo {
   permissions:       string[];
   onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
   assessment_status: string;   // 'pending' | 'complete'
+  can_manage_team:   boolean;
 }
 
 export function saveAuth(user: UserInfo) {

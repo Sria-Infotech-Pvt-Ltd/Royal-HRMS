@@ -9,6 +9,8 @@ interface Props {
   settings: PayrollSettings | null;
   onNext: (cycleId: string) => void;
   onBack: () => void;
+  initialMonth?: string;
+  initialYear?: string;
 }
 
 const MONTHS = [
@@ -50,10 +52,10 @@ function computeDates(month: string, year: string, settings: PayrollSettings | n
   };
 }
 
-export default function PayrollPeriodStep({ settings, onNext, onBack }: Props) {
+export default function PayrollPeriodStep({ settings, onNext, onBack, initialMonth, initialYear }: Props) {
   const today = new Date();
-  const [month, setMonth]  = useState(MONTHS[today.getMonth()]);
-  const [year,  setYear]   = useState(String(today.getFullYear()));
+  const [month, setMonth]  = useState(initialMonth ?? MONTHS[today.getMonth()]);
+  const [year,  setYear]   = useState(initialYear  ?? String(today.getFullYear()));
   const [notes, setNotes]  = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

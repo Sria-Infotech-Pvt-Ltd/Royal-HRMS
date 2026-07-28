@@ -57,7 +57,7 @@ class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Role
         fields = (
-            'id', 'name', 'display_name', 'is_active',
+            'id', 'name', 'display_name', 'is_active', 'can_manage_team',
             'permissions', 'permission_codenames', 'user_count',
             'created_at', 'updated_at',
         )

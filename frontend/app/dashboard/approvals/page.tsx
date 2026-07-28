@@ -348,7 +348,8 @@ export default function ApprovalsPage() {
   const isHR = user?.role === "hr" || user?.role === "hr_admin";
   const canApprove         = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
   // Attendance sign-off moved to Leave Management for HR — keep it here for other roles (e.g. manager).
-  const canApproveAttendance = useAnyPermission("payroll.view", "payroll.approve") && !isHR;
+  const hasPayrollPerm       = useAnyPermission("payroll.view", "payroll.approve");
+  const canApproveAttendance = (user?.can_manage_team === true) || (hasPayrollPerm && !isHR);
 
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
     ...(canApprove           ? [{ key: "approvals"  as Section, label: "Team Approvals",       icon: "ti-checks"       }] : []),
