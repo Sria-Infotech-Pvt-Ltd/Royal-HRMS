@@ -3225,3 +3225,115 @@ Fixed (required an elevated PowerShell — outside this session's write access) 
 - **WebSockets need `daphne`, not `manage.py runserver`, locally** — see §5. This is the single most likely thing to trip up the next person testing notifications.
 - **`REDIS_URL` is still unset in `.env`** — caching and the channel layer both silently degrade to per-process fallbacks without it. Not urgent for local dev, but must be set before any multi-worker deployment.
 - **Manager-scoping fix (§1) covers every attendance list/action endpoint** — if a new attendance endpoint is added later that takes a `branch` filter, check whether it also needs `_manager_scope_employee_ids` wired in, or managers will see the whole branch again on that one endpoint.
+
+---
+
+## Session — G.Durga Prasad (29 July 2026)
+
+**Branch:** `Backend/bug-fix-29/07/2026`
+
+---
+
+### 1. Leave Requests Were Routing to HR, Never the Employee's Manager
+
+**Files:** `backend/apps/accounts/views.py` (`ApprovalWorkflowRuleView` — pre-existing, unchanged), no code fix needed
+
+Reported bug: an employee's leave request should be visible to their assigned manager first; instead it went straight to HR. Root cause was **configuration, not code** — the global "Leave Request" `ApprovalWorkflowRule` had `l1_approver_role = 'hr_manager'` instead of `'reporting_manager'`. Cross-checked all 5 workflow types — leave was the *only* one misconfigured this way (expense/resignation/loan/attendance_correction all correctly default to `reporting_manager`), and the model's own field default is `reporting_manager`, confirming this was a one-off manual change via Settings → Approval Rules, not the shipped default.
+
+Fixed by calling the real `PATCH /api/settings/approval-rules/` endpoint (not a raw DB edit) so cache invalidation and audit logging ran normally. **Live-verified**: submitted a real leave request before the fix (`l1_approver_name: "HR Hyderabad"`) and after (`l1_approver_name: "Finance Manager"`), then confirmed it appeared in that manager's `?scope=team` queue with `can_approve: true`.
+
+---
+
+### 2. Expense Requests Were Visible to Every Approver, Not Just the Employee's Manager
+
+**File:** `backend/apps/hrms/views/expenses.py`
+
+`ExpenseListCreateView.get()` returned **every expense company-wide** to any user holding `expenses.approve`, with zero scoping — the per-record helper `_can_access_expense()` already existed and correctly scoped by `reporting_manager_id` for managers, but was never applied to the *list* query. A manager saw not just their own team's expenses but every other manager's team's too.
+
+Fixed by mirroring `_can_access_expense()`'s exact logic in the queryset: `system_admin` unrestricted, `manager__team_lead` → `employee__reporting_manager_id=request.user.id`, everyone else branch-scoped. **Live-verified**: before the fix the Engineering Manager could see Pooja Sharma's expense (she reports to a different manager); after, she's gone from his list and what remains matches his actual direct reports exactly.
+
+---
+
+### 3. Bulk-Imported Employees Never Got Leave Balances
+
+**File:** `backend/apps/accounts/views.py` (`EmployeeBulkImportView.post()`)
+
+Reported bug: employees added via CSV/XLSX bulk import had no leave balances at all, while single-created employees did. Root cause: `EmployeeListCreateView.post()` (single creation) calls `_allocate_leaves_for_employee(user, user.date_of_joining)` from `apps/hrms/views/leave.py` right after creating the user — `EmployeeBulkImportView` re-implements employee creation independently in its per-row loop and had simply never included this call.
+
+Fixed by adding the identical call after the per-row `EmployeeProfile` creation. **Live-verified**: submitted a real 1-row bulk-import CSV (joining 2026-07-01) — the new employee came out with 4 correctly pro-rated leave balances. Does **not** retroactively backfill employees already bulk-imported before this fix — none were requested to be fixed this session, but the same `_allocate_leaves_for_employee` helper is safe to run again for anyone missing balances (idempotent via `get_or_create`).
+
+---
+
+### 4. Leave Balances/Requests Showed Empty for ~7 Months of Every Year (Fiscal Year vs Calendar Year)
+
+**Files:** `frontend/lib/fiscalYear.ts`, `components/dashboard/employee/EmpLeaveBalances.tsx`, `app/dashboard/leave/_components/{ApplyLeaveForm,LeaveAnalytics,LeaveDashboard}.tsx`, `app/dashboard/settings/leave-policy/_components/CreditTab.tsx`, `hooks/useEmployeeLeave.ts`
+
+Reported as "no leaves showing" for a specific employee (Pooja Kumar), but the bug is systemic across the entire Leave module. Five frontend files queried leave data using `useFiscalYearConfig().currentYear` — the company's fiscal-year label's start year (fiscal year starts **August** here) — while the backend stores `LeaveBalance`/`LeaveRequest.year` as the plain **calendar** year (`_allocate_leaves_for_employee` uses `joining_date.year`; the annual reset Celery task runs every **Jan 1**, not on the fiscal-year boundary — calendar-year signals throughout). For the ~7 months of the year before the fiscal year rolls over (Jan–Jul here), `currentYear` resolves one year behind where the real data lives, so every leave query returns empty.
+
+Fixed by adding `getLeaveYear()` (plain `new Date().getFullYear()`, with a comment explaining why leave is the one exception to the fiscal-year convention) to `lib/fiscalYear.ts`, and switching all 5 files to it. Also removed a now-dead year-sync `useEffect` and a mislabeled "Financial Year" input (it's a calendar year) in `CreditTab.tsx`. **Live-reproduced and confirmed**: `?year=2025` (what was being sent) → empty; `?year=2026` (real data) → 6 real balances; `getLeaveYear()` now returns 2026, matching the system clock.
+
+---
+
+### 5. Email Template Variables Not Auto-Filling (Root-Caused Across the Whole Notification System)
+
+**New:** `backend/core/template_context.py`, `backend/apps/hrms/migrations/0017_seed_expense_email_templates.py`
+**Modified:** `backend/apps/accounts/views.py`, `backend/apps/accounts/urls.py`, `backend/apps/hrms/views/expenses.py`, `frontend/lib/api/endpoints.ts`, `frontend/app/dashboard/approvals/{ApprovalModal.tsx,page.tsx}`, `frontend/app/dashboard/candidate-review/HRDecisionModal.tsx`, `frontend/app/dashboard/interview-list/MarkCandidateModal.tsx`
+
+Reported as "some variables in empty boxes don't auto-fill" — root cause was architectural: three separate "approve/reject/decide + send email" modals (`ApprovalModal`, `HRDecisionModal`, `MarkCandidateModal`) each hand-maintained their own small, inconsistently-cased "auto-fillable variables" list. `HRDecisionModal` additionally had a case-sensitivity bug (`AUTO_KEYS.has(v)`, all-caps only) that made every lowercase variable — what current templates actually use — permanently unfillable regardless of whether real data existed.
+
+**Fix — single source of truth.** New `ResolveTemplateVariablesView` (`POST /api/settings/email-templates/resolve-context/`) takes `{entity_type, entity_id}` (`candidate` / `leave_request` / `expense`) and returns every real variable the codebase knows for that record, in both lowercase snake_case and legacy UPPER_CASE, so any template — existing or created in the future — that references a variable matching a real field just resolves. Context builders (`candidate_context`, `leave_request_context`, `expense_context`, `universal_context`, `employee_identity_fields`) live in the new shared `core/template_context.py` rather than as private functions in one app's views, specifically so other apps (`hrms/views/expenses.py`) can reuse them without reaching into another app's internals.
+
+**Follow-on gaps found and fixed while checking "every template" per your instruction:**
+- **No expense-approval template existed at all** — every template selectable during an expense approval (Pay Slip, Leave Request Approved, birthday wishes, …) was genuinely unrelated; `MONTH`/`YEAR`/`leave_type` don't exist on an Expense record and never could. Seeded `expense_approved`/`expense_rejected` via migration `0017`, matching the existing `0014_seed_leave_email_templates.py` convention exactly.
+- **Template dropdowns showed every category regardless of context** — the actual reason mismatched templates were selectable at all. `ApprovalModal` now only lists `leave_*`/`expense_*`-named templates per its `kind`; `HRDecisionModal` now only lists `recruitment`/`onboarding` category templates. This is the guardrail that makes the fix hold for future templates too — a new template can only ever be picked in the context it's named for.
+- **`MONTH`/`YEAR`/`DATE` are calendar concepts, not entity fields** — added as universal variables (`universal_context()`) merged in regardless of entity type.
+- **Candidate context was missing onboarding-specific fields** (`employee_id`, `designation`, `department`, `date_of_joining`, `portal_url`, `has_assessments`, `assessment_count`, `hr_name`) that `HRDecisionModal`'s own preferred templates (`onboarding_approved`/`onboarding_rejected`) need — pulled from `candidate.portal_user` (the converted employee) where conversion has happened, blank otherwise.
+
+**Permission-architecture audit (explicitly requested) found a real gap:** `ResolveTemplateVariablesView` checked permission *type* only (e.g. "holds `leave.approve`") with no per-record authorization — a manager could pull any other manager's team's leave/expense details through this endpoint despite never being able to act on them. Fixed by reusing the exact same scoping already enforced on the real approve/reject actions — `_can_approve_at_stage()` for leave, `_can_access_expense()` for expense — rather than inventing new logic. **Live-verified**: a manager holding `leave.approve` but not assigned as approver on a specific request now gets a clean `403`.
+
+**Production-standards audit found the deepest gap:** `template_name`/`extra_context` — the entire point of the modal — were being **silently discarded** by both approval endpoints. Leave only appeared to work because `notifications/signals.py` sends its own hardcoded `leave_approved`/`leave_rejected` email regardless of what's manually selected; **expense sent nothing at all, ever**, no matter what was chosen. Fixed `ExpenseDetailView._handle_approval()` to actually call `send_template_email()` with the selected template, re-deriving context server-side (never trusting the client's copy, which is only a preview) so the sent email always matches the real record. **Live-verified**: created a real expense, approved it with `expense_approved` selected, confirmed the email actually sends.
+
+> **Flagged, not decided unilaterally:** leave approvals still ignore the modal's template selection entirely (the signal always wins). Whether to bring leave to the same "selection actually controls the send" behavior as expense, or leave the signal as the reliable default, is a product decision — not made this session.
+>
+> **Also flagged:** `attendance_correction` has zero email notification (in-app only) — the only one of the 5 approval workflow types with no email at all. Not fixed, because `CorrectionsTab.tsx` has no template-selection UI to wire up in the first place; would need new UI design, not just a wiring fix like leave/expense got.
+
+---
+
+### 6. Employees Page — Manager Department Scoping Added, Then Reverted
+
+**File:** `backend/apps/accounts/views.py` (`EmployeeListCreateView.get()`), `frontend/app/dashboard/employees/page.tsx`
+
+Mid-session, added department scoping for `manager__team_lead` (on top of existing branch scoping) so a manager would only see their own department's employees, plus a locked department-dropdown UI to match. **Explicitly reverted later the same session** — managers should see every department within their branch (matching `hr_admin`'s scoping), not just their own. Net effect: no behavioral change from before this session; branch-only scoping for managers stands. Documented here only so nobody re-discovers and re-reverts the same thing from git history alone without the context of why.
+
+---
+
+### Key Files Changed / Created (29 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/expenses.py` | Manager scoping added to `ExpenseListCreateView.get()`; `_handle_approval()` now actually sends the selected template email |
+| `backend/apps/accounts/views.py` | `ResolveTemplateVariablesView` (new); context builders moved out to `core/template_context.py` |
+| `backend/core/template_context.py` | **NEW** — shared, single-source-of-truth email-template context builders |
+| `backend/apps/hrms/migrations/0017_seed_expense_email_templates.py` | **NEW** — seeds `expense_approved`/`expense_rejected` |
+| `backend/apps/accounts/urls.py` | Added `settings/email-templates/resolve-context/` |
+| `frontend/lib/api/endpoints.ts` | Added `settings.resolveTemplateContext` |
+| `frontend/lib/fiscalYear.ts` | Added `getLeaveYear()` — calendar year, not fiscal year, for anything under `/leave/` |
+| `frontend/app/dashboard/approvals/ApprovalModal.tsx` | Calls resolve-context endpoint; template dropdown filtered by `kind` |
+| `frontend/app/dashboard/approvals/page.tsx` | Passes `entityId` into `ApprovalModal` |
+| `frontend/app/dashboard/candidate-review/HRDecisionModal.tsx` | Calls resolve-context endpoint; dropdown restricted to recruitment/onboarding categories; fixed case-sensitivity bug; now sends full resolved context, not just manual leftovers |
+| `frontend/app/dashboard/interview-list/MarkCandidateModal.tsx` | Calls resolve-context endpoint instead of a hardcoded var list |
+| `frontend/components/dashboard/employee/EmpLeaveBalances.tsx` | `getLeaveYear()` instead of fiscal year |
+| `frontend/app/dashboard/leave/_components/{ApplyLeaveForm,LeaveAnalytics,LeaveDashboard}.tsx` | `getLeaveYear()` instead of fiscal year |
+| `frontend/app/dashboard/settings/leave-policy/_components/CreditTab.tsx` | `getLeaveYear()`; removed dead sync effect; "Financial Year" label corrected to "Year" |
+| `frontend/hooks/useEmployeeLeave.ts` | `getLeaveYear()` instead of fiscal year |
+
+---
+
+### Notes for Next Developer
+
+- **The Leave Request approval rule is fixed in the DB now, but if anyone ever re-seeds `ApprovalWorkflowRule` from scratch, double-check `l1_approver_role` for `leave` comes out as `reporting_manager`** — the model default is correct; this was a one-off manual misconfiguration, not a seed bug, so it won't reappear from normal migrations.
+- **`getLeaveYear()` vs `useFiscalYearConfig()` — know which one to reach for.** Anything touching `/leave/` (balances, requests, stats, credit) is calendar-year. Payroll/Reports/Carry-Forward remain genuinely fiscal-year-based via `useFiscalYearConfig()` — don't "fix" those to calendar year too.
+- **Bulk import backfill**: employees bulk-imported *before* this session's fix have no leave balances and were not retroactively fixed. If that's reported, re-run `_allocate_leaves_for_employee(user, user.date_of_joining)` for each affected user — it's idempotent.
+- **`ResolveTemplateVariablesView` is the only place that should ever build "what variables does entity X resolve to."** If a new approve/decide modal is added later for a new entity type, add a `<entity>_context()` function to `core/template_context.py` and a branch in that view — don't hand-roll another local variable list in the new modal, that's exactly the bug this session fixed.
+- **New templates must be named `leave_*` / `expense_*`** to be selectable in `ApprovalModal` (name-prefix filtering) — a template for a new workflow type needs either a new prefix convention wired into that filter, or to go through a different modal entirely.
+- **Two explicitly unresolved decisions from §5** — leave-approval template-selection-vs-signal precedence, and attendance-correction email support — need a product decision before anyone builds on top of them.

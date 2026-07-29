@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import { getLeaveYear } from "@/lib/fiscalYear";
 import { LeaveStats, LEAVE_TYPE_CONFIG } from "../_data";
 
 
@@ -10,7 +10,7 @@ interface Props { role?: string }
 
 export default function LeaveAnalytics({ role = "employee" }: Props) {
   const isEmployee  = role === "employee";
-  const { currentYear } = useFiscalYearConfig();
+  const currentYear = getLeaveYear();
   // Employees see own stats+balances; approvers see team/branch/org stats (backend auto-scopes by role)
   const statsUrl = isEmployee
     ? API.leave.stats + `?year=${currentYear}&scope=own`

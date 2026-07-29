@@ -44,6 +44,7 @@ from apps.accounts.views import (
     EmailTemplateListCreateView,
     EmailTemplateDetailView,
     EmailTemplatePreviewView,
+    ResolveTemplateVariablesView,
 )
 
 urlpatterns = [
@@ -113,6 +114,7 @@ urlpatterns = [
     path('settings/email-templates/',              EmailTemplateListCreateView.as_view(), name='email-template-list'),
     path('settings/email-templates/<int:pk>/',     EmailTemplateDetailView.as_view(),     name='email-template-detail'),
     path('settings/email-templates/<int:pk>/preview/', EmailTemplatePreviewView.as_view(), name='email-template-preview'),
+    path('settings/email-templates/resolve-context/',   ResolveTemplateVariablesView.as_view(), name='email-template-resolve-context'),
 
     # Document Center (admin)
     path('documents/',           DocumentListCreateView.as_view(), name='document-list-create'),

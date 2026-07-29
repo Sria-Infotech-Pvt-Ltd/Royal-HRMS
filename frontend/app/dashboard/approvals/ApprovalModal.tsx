@@ -13,6 +13,10 @@ interface Props {
   employeeName:  string;
   employeeEmail?: string;
   kind?:         "leave" | "expense";
+  /** The LeaveRequest id / expense_number this modal is acting on — passed
+   *  through to the backend so it can resolve every real template variable
+   *  for this specific record (see lib/api/endpoints.ts settings.resolveTemplateContext). */
+  entityId?:     string | number;
   autoVars?:     Record<string, string>;
   onConfirm:     (remarks: string, templateName?: string, extraContext?: Record<string, string>) => void;
   onClose:       () => void;
@@ -20,7 +24,7 @@ interface Props {
 }
 
 export function ApprovalModal({
-  action, itemLabel, employeeName, employeeEmail, kind, autoVars, onConfirm, onClose, saving,
+  action, itemLabel, employeeName, employeeEmail, kind, entityId, autoVars, onConfirm, onClose, saving,
 }: Props) {
   const isApprove  = action === "approve";
   const currentUser = useCurrentUser();
@@ -32,8 +36,27 @@ export function ApprovalModal({
   const [extraVars,        setExtraVars]        = useState<Record<string, string>>({});
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
   const [templateErr,      setTemplateErr]      = useState("");
+  const [serverContext,    setServerContext]    = useState<Record<string, string>>({});
 
-  // Full context of all auto-derivable variables (both cases).
+  // Resolve every real variable the backend knows for this record (leave
+  // request / expense) — the single source of truth, so any template
+  // variable matching a real field auto-fills without needing this modal
+  // to know about it in advance.
+  useEffect(() => {
+    if (!isApprove || !entityId || !kind) return;
+    clientApi
+      .post<{ data: { context: Record<string, string> } }>(API.settings.resolveTemplateContext, {
+        entity_type: kind === "leave" ? "leave_request" : "expense",
+        entity_id:   entityId,
+      })
+      .then(res => setServerContext(res.data?.data?.context ?? {}))
+      .catch(() => setServerContext({}));
+  }, [isApprove, entityId, kind]);
+
+  // Full context of all auto-derivable variables (both cases). Server-resolved
+  // values win where they overlap — they're the source of truth; the
+  // hardcoded fallbacks below only cover things the server can't know
+  // (who's approving right now) or fill in before the request resolves.
   const autoContext = useMemo<Record<string, string>>(() => {
     const parts        = employeeName.trim().split(/\s+/);
     const fname        = parts[0] ?? employeeName;
@@ -64,8 +87,10 @@ export function ApprovalModal({
       ctx[k.toLowerCase()] = v;
     }
 
-    return ctx;
-  }, [employeeName, employeeEmail, company, currentUser, autoVars]);
+    // Server-resolved values take priority — they're computed from the
+    // actual record, not guessed client-side.
+    return { ...ctx, ...serverContext };
+  }, [employeeName, employeeEmail, company, currentUser, autoVars, serverContext]);
 
   useEffect(() => {
     if (!isApprove) return;
@@ -77,8 +102,15 @@ export function ApprovalModal({
     ])
       .then(([tplRes, coRes]) => {
         const grouped: Record<string, EmailTemplate[]> = tplRes.data?.data?.results ?? {} as Record<string, EmailTemplate[]>;
+        // Restrict to templates actually meant for this record type (naming
+        // convention: "leave_*" / "expense_*") — showing every template
+        // regardless of category let people pick e.g. "Pay Slip" or "Leave
+        // Request Approved" while approving an expense, whose variables
+        // (MONTH/YEAR, leave_type/start_date/...) can never resolve for an
+        // expense record no matter how much context this modal has.
+        const isRelevant = (t: EmailTemplate) => !kind || t.name.startsWith(`${kind}_`);
         const groups = Object.entries(grouped)
-          .map(([category, items]) => ({ category, templates: items.filter(t => t.is_active) }))
+          .map(([category, items]) => ({ category, templates: items.filter(t => t.is_active && isRelevant(t)) }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
         setSelectedTemplate(_pickDefaultTemplate(groups, kind, action));

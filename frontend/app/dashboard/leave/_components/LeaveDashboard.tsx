@@ -5,7 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
-import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
   LEAVE_TYPE_CONFIG,
@@ -40,7 +40,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
   // Branch filter changed — the current page no longer means the same thing.
   useEffect(() => { setPage(1); }, [branch]);
 
-  const { currentYear } = useFiscalYearConfig();
+  const currentYear = getLeaveYear();
 
   const { data: balances } = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`
