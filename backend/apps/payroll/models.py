@@ -420,6 +420,10 @@ class EmployeePayslip(models.Model):
     lwf_employee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     lwf_employer = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    # One-time adjustments (additions/deductions/arrears) applied before net pay
+    adjustments_earning   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    adjustments_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     total_deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     net_pay = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
@@ -480,3 +484,79 @@ class PayslipQuery(models.Model):
 
     def __str__(self):
         return f'Query on {self.payslip} by {self.raised_by.full_name} [{self.status}]'
+
+
+class ManagerAttendanceApproval(models.Model):
+    """Per-manager L1 attendance sign-off for a payroll cycle.
+
+    One row per active manager (role.can_manage_team=True) is created when
+    the cycle is created. L1 is considered complete only when every row has
+    approved_at set. HR/sysadmin can approve directly if no manager rows exist.
+    """
+
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cycle      = models.ForeignKey(
+        PayrollCycle,
+        on_delete=models.CASCADE,
+        related_name='manager_approvals',
+    )
+    manager    = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='payroll_attendance_approvals',
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    note        = models.TextField(blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payroll_manager_attendance_approvals'
+        unique_together = [('cycle', 'manager')]
+        ordering = ['manager__full_name']
+
+    def __str__(self):
+        status = 'approved' if self.approved_at else 'pending'
+        return f'{self.manager.full_name} – {self.cycle} [{status}]'
+
+
+class PayrollAdjustment(models.Model):
+    """One-time addition, deduction, or arrear for a specific employee in a payroll month.
+    Created by HR before the cycle is processed; picked up automatically during ProcessPayrollView.
+    """
+
+    ADDITION  = 'addition'
+    DEDUCTION = 'deduction'
+    ARREAR    = 'arrear'
+    TYPE_CHOICES = [
+        (ADDITION,  'Addition'),
+        (DEDUCTION, 'Deduction'),
+        (ARREAR,    'Arrear'),
+    ]
+
+    id       = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='payroll_adjustments',
+    )
+    # First day of the target payroll month (e.g. 2026-07-01 for July 2026)
+    month      = models.DateField()
+    type       = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    label      = models.CharField(max_length=200)
+    amount     = models.DecimalField(max_digits=10, decimal_places=2)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='created_payroll_adjustments',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payroll_adjustments'
+        ordering = ['month', 'employee__full_name', 'type']
+
+    def __str__(self):
+        return f'{self.get_type_display()} – {self.employee.full_name} – {self.month} – ₹{self.amount}'

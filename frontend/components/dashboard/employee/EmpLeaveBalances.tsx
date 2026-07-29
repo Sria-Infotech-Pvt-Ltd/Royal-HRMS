@@ -2,6 +2,7 @@
 
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
 import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import AssessmentLockedNotice from "./AssessmentLockedNotice";
 
 const LEAVE_TYPE_LABEL: Record<string, string> = {
   casual:    "Casual Leave",
@@ -23,7 +24,7 @@ const LEAVE_TYPE_COLOR: Record<string, string> = {
 
 export default function EmpLeaveBalances() {
   const { currentYear: year } = useFiscalYearConfig();
-  const { data, loading } = useLeaveBalances(year);
+  const { data, loading, status } = useLeaveBalances(year);
 
   const balances = data?.balances ?? [];
 
@@ -38,6 +39,8 @@ export default function EmpLeaveBalances() {
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
         </div>
+      ) : status === 403 ? (
+        <AssessmentLockedNotice />
       ) : balances.length === 0 ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>
           No leave balances found. Contact HR to credit your leave.

@@ -27,13 +27,37 @@ def _notify(user, title: str, message: str, notification_type: str,
         return
     try:
         from .models import Notification
-        Notification.objects.create(
+        notification = Notification.objects.create(
             user=user, title=title, message=message,
             notification_type=notification_type, module=module,
             reference_id=reference_id, created_by=created_by,
         )
+        _push_live(notification)
     except Exception:
         logger.exception('Failed to create notification for user %s', getattr(user, 'id', None))
+
+
+def _push_live(notification) -> None:
+    """
+    Push the just-created notification over WebSocket to any open tab for
+    this user (apps.notifications.consumers.NotificationConsumer). Best
+    effort only — the DB row above is the source of truth; a dead channel
+    layer or no open socket just means the 60s poll fallback picks it up.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        from .serializers import NotificationSerializer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f'notifications_{notification.user_id}',
+            {'type': 'notification.push', 'notification': NotificationSerializer(notification).data},
+        )
+    except Exception:
+        logger.warning('Live notification push failed for user %s', notification.user_id)
 
 
 def _company_name() -> str:
@@ -289,7 +313,10 @@ def _on_announcement_save(sender, instance, created, **kwargs):
     elif instance.visibility == 'department' and instance.target_department_id:
         users = users.filter(department=instance.target_department.name)
 
-    Notification.objects.bulk_create([
+    # Notification.id is a client-side uuid4 default, so each instance
+    # already has its real pk before bulk_create — safe to push_live below
+    # even though ignore_conflicts=True normally suppresses pk retrieval.
+    notifications = [
         Notification(
             user=user,
             title='New Announcement',
@@ -300,4 +327,7 @@ def _on_announcement_save(sender, instance, created, **kwargs):
             created_by=instance.posted_by,
         )
         for user in users
-    ], ignore_conflicts=True)
+    ]
+    Notification.objects.bulk_create(notifications, ignore_conflicts=True)
+    for notification in notifications:
+        _push_live(notification)

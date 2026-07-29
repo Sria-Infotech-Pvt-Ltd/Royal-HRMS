@@ -15,6 +15,16 @@ _REGISTRY_DIR = Path(__file__).resolve().parent / 'registry'
 DEFAULT_LANG = 'en'
 DEFAULT_CONFIDENCE_THRESHOLD = 80
 
+# Below DEFAULT_CONFIDENCE_THRESHOLD but at or above this, the closest phrase
+# is a plausible guess worth confirming ("did you mean: ...?") rather than an
+# outright no-match — see conversation.py's clarification flow. Chosen from
+# real logs/voice_commands.log near-misses: garbled speech-to-text renderings
+# of registered phrases ("raise a queryAbout my Paisley" for "...my payslip",
+# "raise a query about my attendance") scored 62.5-75.0, while genuinely
+# unrelated transcripts ("Status", "Think", "Water and", "A playlist") topped
+# out at 57.1 — a clean, empirically-observed gap to draw the line in.
+CLARIFICATION_CONFIDENCE_THRESHOLD = 60
+
 NO_MATCH_INTENT = 'no_match'
 
 
@@ -23,6 +33,12 @@ class MatchResult:
     intent: str
     confidence: float
     matched_phrase: Optional[str] = None
+    # Set only when confidence fell in [CLARIFICATION_CONFIDENCE_THRESHOLD,
+    # DEFAULT_CONFIDENCE_THRESHOLD) — the intent matched_phrase belongs to,
+    # for conversation.py to build a "did you mean" clarification from.
+    # None whenever intent is itself a confident match (nothing to clarify)
+    # or the score was too low even for a guess.
+    candidate_intent: Optional[str] = None
 
 
 def _registry_path_for(lang: str) -> Path:
@@ -89,11 +105,18 @@ def match_intent(
         return MatchResult(intent=NO_MATCH_INTENT, confidence=0.0)
 
     matched_phrase, score, _ = best
+    candidate_intent = phrase_index[matched_phrase]
+
     if score < threshold:
-        return MatchResult(intent=NO_MATCH_INTENT, confidence=score)
+        return MatchResult(
+            intent=NO_MATCH_INTENT,
+            confidence=score,
+            matched_phrase=matched_phrase,
+            candidate_intent=candidate_intent if score >= CLARIFICATION_CONFIDENCE_THRESHOLD else None,
+        )
 
     return MatchResult(
-        intent=phrase_index[matched_phrase],
+        intent=candidate_intent,
         confidence=score,
         matched_phrase=matched_phrase,
     )

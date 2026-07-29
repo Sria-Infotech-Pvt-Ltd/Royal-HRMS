@@ -80,6 +80,26 @@ export default function RoleFormFields({ form, errors, permissionsMap, onChange,
         {errors.display_name && <span className="field-error">{errors.display_name}</span>}
       </div>
 
+      {/* Can manage team */}
+      <div className="field-group mb-16">
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={form.can_manage_team}
+            style={{ accentColor: "var(--primary)", marginTop: 2, flexShrink: 0 }}
+            onChange={e => onChange({ can_manage_team: e.target.checked })}
+          />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-surface)" }}>
+              Can manage team
+            </div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+              Users with this role appear in manager dropdowns, can access the team dashboard, and bypass the employee onboarding gate.
+            </div>
+          </div>
+        </label>
+      </div>
+
       {/* Permissions section */}
       <div className="field-group">
 

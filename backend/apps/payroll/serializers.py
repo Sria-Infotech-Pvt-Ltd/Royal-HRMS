@@ -7,8 +7,10 @@ from .models import (
     BranchPayrollConfig,
     EmployeeSalaryConfig,
     PayrollCycle,
+    ManagerAttendanceApproval,
     EmployeePayslip,
     PayslipQuery,
+    PayrollAdjustment,
 )
 
 
@@ -215,6 +217,29 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
         return obj.payslips.count()
 
 
+class ManagerAttendanceApprovalSerializer(serializers.ModelSerializer):
+    manager_name = serializers.CharField(source='manager.full_name', read_only=True)
+    manager_email = serializers.CharField(source='manager.email', read_only=True)
+
+    class Meta:
+        model = ManagerAttendanceApproval
+        fields = [
+            'id',
+            'cycle',
+            'manager',
+            'manager_name',
+            'manager_email',
+            'approved_at',
+            'note',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'cycle', 'manager', 'manager_name', 'manager_email',
+            'created_at', 'updated_at',
+        ]
+
+
 class EmployeePayslipSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
     employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
@@ -258,6 +283,8 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'pt_deduction',
             'lwf_employee',
             'lwf_employer',
+            'adjustments_earning',
+            'adjustments_deduction',
             'total_deductions',
             'net_pay',
             'status',
@@ -279,6 +306,31 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
 
     def get_open_query_count(self, obj):
         return obj.queries.filter(status=PayslipQuery.STATUS_OPEN).count()
+
+
+class PayrollAdjustmentSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.full_name', read_only=True)
+
+    class Meta:
+        model = PayrollAdjustment
+        fields = (
+            'id', 'employee', 'employee_name', 'employee_code',
+            'month', 'type', 'label', 'amount',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+        )
+        read_only_fields = ('id', 'created_by', 'created_by_name', 'created_at', 'updated_at')
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Amount must be greater than zero.')
+        return value
+
+    def validate_month(self, value):
+        from datetime import date
+        # Normalise to first of the month
+        return value.replace(day=1)
 
 
 class PayslipQuerySerializer(serializers.ModelSerializer):

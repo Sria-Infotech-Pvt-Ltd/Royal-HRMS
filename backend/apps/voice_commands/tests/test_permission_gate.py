@@ -53,7 +53,7 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         self.assertIsNone(get_required_permission(INTENT_REQUEST_ATTENDANCE_CORRECTION))
         self.assertIsNone(get_required_permission(INTENT_APPLY_LEAVE))
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_in_reaches_dispatch_for_user_with_no_role(self, mock_record_punch):
         request = _fake_request()
         request.user.role = None  # no role, no permissions whatsoever
@@ -63,7 +63,7 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_record_punch.assert_called_once()
         self.assertTrue(result.success)
 
-    @patch('apps.voice_commands.executor.PunchService.record_punch')
+    @patch('apps.voice_commands.executor_attendance.PunchService.record_punch')
     def test_clock_out_reaches_dispatch_for_user_with_no_role(self, mock_record_punch):
         request = _fake_request()
         request.user.role = None
@@ -73,7 +73,7 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_record_punch.assert_called_once()
         self.assertTrue(result.success)
 
-    @patch('apps.voice_commands.executor.LeaveBalance.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveBalance.objects')
     def test_check_leave_balance_reaches_dispatch_for_user_with_no_role(self, mock_objects):
         mock_objects.filter.return_value.order_by.return_value = []
         request = _fake_request()
@@ -84,8 +84,8 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_objects.filter.assert_called_once()
         self.assertTrue(result.success)
 
-    @patch('apps.voice_commands.executor.LeaveRequestSerializer')
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestSerializer')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_check_leave_status_reaches_dispatch_for_user_with_no_role(self, mock_objects, mock_serializer_cls):
         mock_objects.filter.return_value.order_by.return_value.__getitem__.return_value = []
         mock_serializer_cls.return_value.data = []
@@ -97,7 +97,7 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_objects.filter.assert_called_once()
         self.assertTrue(result.success)
 
-    @patch('apps.voice_commands.executor.LeaveRequest.objects')
+    @patch('apps.voice_commands.executor_leave.LeaveRequest.objects')
     def test_cancel_leave_reaches_dispatch_for_user_with_no_role(self, mock_objects):
         mock_objects.filter.return_value.order_by.return_value = []
         request = _fake_request()
@@ -110,8 +110,8 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_objects.filter.assert_called_once()
         self.assertNotEqual(result.message, _PERMISSION_DENIED_MESSAGE)
 
-    @patch('apps.voice_commands.executor.StatsSerializer')
-    @patch('apps.voice_commands.executor.AttendanceDashboardService')
+    @patch('apps.voice_commands.executor_attendance.StatsSerializer')
+    @patch('apps.voice_commands.executor_attendance.AttendanceDashboardService')
     def test_check_attendance_stats_reaches_dispatch_for_user_with_no_role(self, mock_service, mock_serializer_cls):
         mock_serializer_cls.return_value.data = {
             'days_present': 0, 'late_arrivals': 0, 'lop_pending': 0,
@@ -125,8 +125,8 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_service.get_stats.assert_called_once()
         self.assertTrue(result.success)
 
-    @patch('apps.voice_commands.executor.MonthlySummarySerializer')
-    @patch('apps.voice_commands.executor.AttendanceDashboardService')
+    @patch('apps.voice_commands.executor_attendance.MonthlySummarySerializer')
+    @patch('apps.voice_commands.executor_attendance.AttendanceDashboardService')
     def test_check_attendance_summary_reaches_dispatch_for_user_with_no_role(self, mock_service, mock_serializer_cls):
         mock_serializer_cls.return_value.data = {
             'working_days': 0, 'days_present': 0, 'days_absent': 0,
@@ -142,7 +142,7 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
 
     def test_request_attendance_correction_reaches_dispatch_for_user_with_no_role(self):
         # No mocking needed — this intent never touches the database, it
-        # always defers to the dashboard (see executor._execute_request_attendance_correction).
+        # always defers to the dashboard (see executor_attendance.execute_request_attendance_correction).
         request = _fake_request()
         request.user.role = None
 
@@ -150,8 +150,8 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
 
         self.assertNotEqual(result.message, _PERMISSION_DENIED_MESSAGE)
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
-    @patch('apps.voice_commands.executor.force_authenticate')
+    @patch('apps.voice_commands.executor_leave.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_leave.force_authenticate')
     def test_apply_leave_reaches_dispatch_for_user_with_no_role(self, mock_force_authenticate, mock_view_cls):
         mock_response = MagicMock(status_code=201, data={'success': True, 'message': 'ok', 'data': {}})
         mock_view_cls.as_view.return_value.return_value = mock_response

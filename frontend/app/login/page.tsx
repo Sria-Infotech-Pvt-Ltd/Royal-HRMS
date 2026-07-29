@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import clientApi from "@/lib/clientApi";
+import clientApi, { resetSessionExpired } from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
 import type { UserInfo } from "@/lib/auth";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
@@ -22,6 +22,7 @@ interface LoginApiResponse {
       permissions: string[];
       onboarding_status: string;
       assessment_status: string;
+      can_manage_team: boolean;
     };
   };
 }
@@ -52,11 +53,13 @@ export default function LoginPage() {
         permissions: d.user.permissions ?? [],
         onboarding_status: d.user.onboarding_status ?? "complete",
         assessment_status: d.user.assessment_status ?? "complete",
+        can_manage_team:   d.user.can_manage_team ?? false,
       };
       saveAuth(user);
+      resetSessionExpired();
       let dest = "/dashboard";
-      if (user.onboarding_status !== "complete")      dest = "/onboarding";
-      else if (user.assessment_status === "pending")  dest = "/onboarding/assessments";
+      if (user.onboarding_status !== "complete") dest = "/onboarding";
+      else if (user.assessment_status === "pending") dest = "/onboarding/assessments";
       router.push(dest);
     } catch (err) {
       const { message } = err as { message: string };
@@ -172,7 +175,7 @@ export default function LoginPage() {
                       onClick={() => setShowPwd(v => !v)}
                       suppressHydrationWarning
                     >
-                      {showPwd ? "🙈" : "👁️"}
+                      {showPwd ? <i className="ti ti-eye-off" /> : <i className="ti ti-eye" />}
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
@@ -31,6 +32,14 @@ export default function VoiceCommandButton() {
     submitTranscript, conversation, closeConversation,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
+  // Lets a user type the very first command instead of speaking it — the
+  // typed-answer input for mid-conversation follow-ups already exists in
+  // VoiceConversationPanel; this is the same idea, just for before any
+  // conversation has started. Local UI-only state (not lifted into
+  // useVoiceCommand) since nothing outside this component's render needs it.
+  const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
+  const [typedValue, setTypedValue] = useState("");
+
   if (HIDDEN_ROUTES.includes(pathname)) return null;
 
   const isListening  = status === "listening";
@@ -39,6 +48,25 @@ export default function VoiceCommandButton() {
   const disabledReason = !isAuthenticated
     ? "Log in to use voice commands"
     : "Voice commands need a Chromium-based browser (Chrome, Edge) — the Web Speech API isn't available here.";
+
+  // Typing doesn't need the Web Speech API the mic button requires — only
+  // authentication does (the same server-side gate /api/voice/parse/
+  // enforces regardless). Gating on isAuthenticated alone, not isDisabled,
+  // means this also becomes the working fallback on non-Chromium browsers.
+  const canType = isAuthenticated;
+
+  function handleTypedSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = typedValue.trim();
+    if (!trimmed || isProcessing) return;
+    setTypedValue("");
+    setIsTypedInputOpen(false);
+    // Same submitTranscript() the recognized-speech path and the mid-
+    // conversation typed-answer input both call — one /api/voice/parse/
+    // flow and one response-handling path for every submission, spoken or
+    // typed, first turn or follow-up.
+    submitTranscript(trimmed);
+  }
 
   // Every voice response now opens this panel — the recognized transcript
   // while the request is in flight, then the result, whether the intent was
@@ -94,6 +122,49 @@ export default function VoiceCommandButton() {
         </div>
       )}
 
+      {/* Typed-first-command row — only reachable via the keyboard toggle
+          below, and hidden the moment listening starts so it never fights
+          the interim-transcript bubble above for the same space. */}
+      {isTypedInputOpen && !isListening && (
+        <form
+          onSubmit={handleTypedSubmit}
+          style={{ display: "flex", gap: 6, width: 260, maxWidth: "calc(100vw - 40px)" }}
+        >
+          <input
+            type="text"
+            autoFocus
+            value={typedValue}
+            onChange={(e) => setTypedValue(e.target.value)}
+            placeholder="Type a command…"
+            disabled={isProcessing}
+            data-testid="voice-fab-typed-input"
+            style={{
+              flex: 1, height: 38, borderRadius: 10, border: "1.5px solid var(--outline-v)",
+              background: "var(--surface)", color: "var(--on-bg)", fontSize: 13,
+              padding: "0 12px", outline: "none", minWidth: 0,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!typedValue.trim() || isProcessing}
+            aria-label="Send typed command"
+            title="Send"
+            data-testid="voice-fab-typed-send"
+            style={{
+              width: 38, height: 38, borderRadius: 10, border: "none",
+              background: "var(--primary)", color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: !typedValue.trim() || isProcessing ? "not-allowed" : "pointer",
+              opacity: !typedValue.trim() || isProcessing ? 0.7 : 1,
+              flexShrink: 0,
+            }}
+          >
+            <i className="ti ti-send" style={{ fontSize: 15 }} />
+          </button>
+        </form>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {!isDisabled && (
           <button
@@ -114,8 +185,29 @@ export default function VoiceCommandButton() {
           </button>
         )}
 
+        {canType && !isListening && (
+          <button
+            onClick={() => setIsTypedInputOpen((open) => !open)}
+            title={isTypedInputOpen ? "Hide typed command" : "Type a command instead"}
+            aria-label={isTypedInputOpen ? "Hide typed command input" : "Type a command instead"}
+            aria-pressed={isTypedInputOpen}
+            data-testid="voice-fab-type-toggle"
+            style={{
+              width: MUTE_TOGGLE_SIZE, height: MUTE_TOGGLE_SIZE, borderRadius: "50%", border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+              cursor: "pointer",
+              background: isTypedInputOpen ? "var(--primary)" : "var(--surface)",
+              color: isTypedInputOpen ? "#fff" : "var(--on-variant)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.16)", flexShrink: 0,
+              transition: "background 0.15s, color 0.15s",
+            }}
+          >
+            <i className="ti ti-keyboard" />
+          </button>
+        )}
+
         <button
-          onClick={isDisabled ? undefined : (isListening ? stopListening : startListening)}
+          onClick={isDisabled ? undefined : (isListening ? stopListening : () => { setIsTypedInputOpen(false); startListening(); })}
           disabled={isDisabled}
           title={isDisabled ? disabledReason : (isListening ? "Click to stop and send" : "Click to speak a voice command")}
           data-testid="voice-fab"

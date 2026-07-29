@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -174,6 +173,7 @@ function TeamApprovalsSection() {
     kind:          RequestType;
     employeeName:  string;
     employeeEmail: string;
+    autoVars?:     Record<string, string>;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [apiErr, setApiErr] = useState("");
@@ -259,8 +259,8 @@ function TeamApprovalsSection() {
           requestId={detailRequest.id}
           initialData={detailRequest}
           onClose={() => setDetailRequest(null)}
-          onApprove={() => setModal({ id: detailRequest.id, action: "approve", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "" })}
-          onReject={() => setModal({ id: detailRequest.id, action: "reject", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "" })}
+          onApprove={() => setModal({ id: detailRequest.id, action: "approve", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "", autoVars: _leaveAutoVars(detailRequest) })}
+          onReject={() => setModal({ id: detailRequest.id, action: "reject", label: `${detailRequest.employee_name}'s leave`, kind: "leave", employeeName: detailRequest.employee_name ?? "", employeeEmail: "", autoVars: _leaveAutoVars(detailRequest) })}
         />
       )}
 
@@ -329,6 +329,8 @@ function TeamApprovalsSection() {
           itemLabel={modal.label}
           employeeName={modal.employeeName}
           employeeEmail={modal.employeeEmail}
+          kind={modal.kind === "leave" || modal.kind === "expense" ? modal.kind : undefined}
+          autoVars={modal.autoVars}
           onConfirm={handleConfirm}
           onClose={() => setModal(null)}
           saving={saving}
@@ -341,13 +343,13 @@ function TeamApprovalsSection() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ApprovalsPage() {
-  const router = useRouter();
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
   const isHR = user?.role === "hr" || user?.role === "hr_admin";
   const canApprove         = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
   // Attendance sign-off moved to Leave Management for HR — keep it here for other roles (e.g. manager).
-  const canApproveAttendance = useAnyPermission("payroll.view", "payroll.approve") && !isHR;
+  const hasPayrollPerm       = useAnyPermission("payroll.view", "payroll.approve");
+  const canApproveAttendance = (user?.can_manage_team === true) || (hasPayrollPerm && !isHR);
 
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
     ...(canApprove           ? [{ key: "approvals"  as Section, label: "Team Approvals",       icon: "ti-checks"       }] : []),
@@ -359,12 +361,6 @@ export default function ApprovalsPage() {
       setSection(sections[0].key);
     }
   }, [section, sections]);
-
-  useEffect(() => {
-    if (isHR) router.replace("/dashboard/leave");
-  }, [isHR, router]);
-
-  if (isHR) return null;
 
   return (
     <div>
@@ -396,4 +392,20 @@ export default function ApprovalsPage() {
       </div>
     </div>
   );
+}
+
+function _leaveAutoVars(req: LeaveRequest): Record<string, string> {
+  const fmt = (d: string) => {
+    if (!d) return "";
+    return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  };
+  return {
+    LEAVE_TYPE:    req.leave_type_display ?? req.leave_type ?? "",
+    START_DATE:    fmt(req.start_date),
+    END_DATE:      fmt(req.end_date),
+    TOTAL_DAYS:    String(req.total_days ?? ""),
+    REASON:        req.reason ?? "",
+    EMPLOYEE_CODE: req.employee_code ?? "",
+    EMPLOYEE_ID:   req.employee_code ?? "",
+  };
 }

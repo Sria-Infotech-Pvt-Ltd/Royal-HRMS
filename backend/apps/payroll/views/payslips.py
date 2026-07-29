@@ -157,10 +157,12 @@ class UpdatePayslipReimbBonusView(APIView):
             payslip.basic + payslip.hra + payslip.special_allowance
             + other_earnings_total
             + payslip.reimbursements + payslip.bonus
+            + payslip.adjustments_earning
         )
         payslip.total_deductions = (
             payslip.lop_deduction + payslip.pf_employee
             + payslip.esi_employee + payslip.pt_deduction + payslip.lwf_employee
+            + payslip.adjustments_deduction
         )
         payslip.net_pay = payslip.gross_earnings - payslip.total_deductions
         updated_fields.extend(['gross_earnings', 'total_deductions', 'net_pay'])

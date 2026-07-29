@@ -50,9 +50,7 @@ def _has_hr_permission(user, codename: str) -> bool:
     if user.is_superuser:
         return True
     try:
-        # Employee role must never access HR attendance views — they use /my-attendance endpoints.
-        # Migration 0029 removed attendance.view from the employee role, but this guard
-        # defends against DB state divergence or accidental re-grants.
+      
         if user.role and user.role.name == 'employee':
             return False
         return user.role.role_permissions.filter(
@@ -63,12 +61,7 @@ def _has_hr_permission(user, codename: str) -> bool:
 
 
 def _is_unrestricted(user) -> bool:
-    """
-    Returns True for users who can see all branches.
-
-    system_admin role and Django superusers have no branch restriction.
-    hr_admin and all other roles are scoped to their own branch.
-    """
+    
     if user.is_superuser:
         return True
     try:
@@ -84,10 +77,48 @@ def _branch_scope(user, requested: str) -> str:
     Unrestricted users: honour whatever branch was requested (empty = all).
     Restricted users (hr_admin etc.): always use their own branch, ignoring
     the query parameter — they cannot see outside their branch.
+
+    Managers should be scoped by _manager_scope_employee_ids instead (their
+    own direct reports, not their whole branch) — callers must check that
+    first and only fall back to this branch value when it returns None.
     """
     if _is_unrestricted(user):
         return requested
     return getattr(user, 'branch', '') or ''
+
+
+def _manager_scope_employee_ids(user) -> list[str] | None:
+    """
+    Returns the employee IDs a manager is restricted to (their own direct
+    reports) — or None if this user isn't manager-scoped, meaning the caller
+    should fall back to _branch_scope instead (hr_admin/hr/system_admin).
+
+    A branch commonly has multiple managers, each responsible for a
+    different team — scoping a manager by branch (like HR is) would show
+    them every other manager's team too, not just their own.
+    """
+    try:
+        if user.role and user.role.name == 'manager__team_lead':
+            return list(
+                user.direct_reports.filter(is_active=True).values_list('id', flat=True)
+            )
+    except Exception:
+        pass
+    return None
+
+
+def _manager_can_access_employee(user, employee) -> bool:
+    """
+    Single-record gate for manager-scoped users: True when this user is not
+    manager-scoped (HR/system_admin, no restriction) or when `employee` is
+    one of their own direct reports. Used by views that act on one specific
+    employee/record rather than a filtered list, where a queryset filter
+    can't apply.
+    """
+    employee_ids = _manager_scope_employee_ids(user)
+    if employee_ids is None:
+        return True
+    return str(employee.pk) in {str(i) for i in employee_ids}
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -104,10 +135,12 @@ class HRAttendanceDashboardView(APIView):
             return error(first_error(ser.errors))
 
         data = ser.validated_data
+        employee_ids = _manager_scope_employee_ids(request.user)
         stats = get_dashboard_stats(
             target_date=data['date'],
             branch=_branch_scope(request.user, request.query_params.get('branch', '')),
             department=request.query_params.get('department', ''),
+            employee_ids=employee_ids,
         )
         return success('Dashboard stats loaded.', stats)
 
@@ -127,6 +160,7 @@ class HRAttendanceListView(APIView):
 
         filters = ser.validated_data
         filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
+        filters['employee_ids'] = _manager_scope_employee_ids(request.user)
         rows = get_attendance_list(filters)
         page_obj, paginator = paginate(rows, request)
         return success(
@@ -158,6 +192,7 @@ class HRAttendanceDetailView(APIView):
             record_id=str(pk),
             target_date=target_date,
             employee_id_str=employee_id_str,
+            employee_ids=_manager_scope_employee_ids(request.user),
         )
         if not detail:
             return error('Attendance record not found.', http_status=404)
@@ -180,6 +215,9 @@ class HRAttendanceDetailView(APIView):
         try:
             record = AttendanceRecord.objects.select_related('employee').get(pk=pk)
         except AttendanceRecord.DoesNotExist:
+            return error('Attendance record not found.', http_status=404)
+
+        if not _manager_can_access_employee(request.user, record.employee):
             return error('Attendance record not found.', http_status=404)
 
         locked = PayrollCycle.objects.filter(
@@ -272,6 +310,9 @@ class HRAttendanceCreateView(APIView):
         if not employee:
             return error('Employee not found.', http_status=404)
 
+        if not _manager_can_access_employee(request.user, employee):
+            return error('Employee not found.', http_status=404)
+
         target_date = data['date']
 
         locked = PayrollCycle.objects.filter(
@@ -352,6 +393,7 @@ class HROvertimeListView(APIView):
             date=date,
             branch=_branch_scope(request.user, request.query_params.get('branch', '')),
             department=request.query_params.get('department', ''),
+            employee_ids=_manager_scope_employee_ids(request.user),
         )
         page_obj, paginator = paginate(rows, request)
         return success(
@@ -374,7 +416,11 @@ class HROvertimeCreateView(APIView):
             return error(first_error(ser.errors))
 
         try:
-            ot = create_overtime(ser.validated_data, created_by=request.user)
+            ot = create_overtime(
+                ser.validated_data,
+                created_by=request.user,
+                employee_ids=_manager_scope_employee_ids(request.user),
+            )
         except ValueError as exc:
             return error(str(exc))
 
@@ -402,6 +448,7 @@ class HRInvalidPunchesView(APIView):
             target_date=target_date,
             branch=_branch_scope(request.user, request.query_params.get('branch', '')),
             department=request.query_params.get('department', ''),
+            employee_ids=_manager_scope_employee_ids(request.user),
         )
         page_obj, paginator = paginate(rows, request)
         return success(
@@ -431,6 +478,7 @@ class HRUnpunchesView(APIView):
             target_date=target_date,
             branch=_branch_scope(request.user, request.query_params.get('branch', '')),
             department=request.query_params.get('department', ''),
+            employee_ids=_manager_scope_employee_ids(request.user),
         )
         page_obj, paginator = paginate(rows, request)
         return success(
@@ -606,6 +654,7 @@ class HRAttendanceReprocessView(APIView):
             branch=_branch_scope(request.user, request.data.get('branch', '')),
             department=request.data.get('department', ''),
             performed_by=request.user,
+            employee_ids=_manager_scope_employee_ids(request.user),
         )
         return success(
             f'Reprocessed {result["updated"]} record(s) for {result["date"]}.',
@@ -707,6 +756,7 @@ class HRAttendanceExportView(APIView):
 
         filters = ser.validated_data
         filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
+        filters['employee_ids'] = _manager_scope_employee_ids(request.user)
         csv_content = export_attendance_csv(filters)
         date_str = ser.validated_data['date'].strftime('%Y-%m-%d')
         filename = f'attendance_{date_str}.csv'

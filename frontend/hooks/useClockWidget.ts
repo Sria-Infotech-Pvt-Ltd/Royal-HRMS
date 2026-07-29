@@ -58,7 +58,7 @@ export function useClockWidget() {
   }, [isClockedIn]);
 
   const punch = useCallback(
-    async (punchType: "IN" | "OUT", attendanceMode: AttendanceMode = "office") => {
+    async (punchType: "IN" | "OUT", attendanceMode: AttendanceMode = "office"): Promise<boolean> => {
       setIsPunching(true);
       let latitude: number | null = null;
       let longitude: number | null = null;
@@ -68,7 +68,7 @@ export function useClockWidget() {
         if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
           showToast("Your browser does not support location access.", "error");
           setIsPunching(false);
-          return;
+          return false;
         }
 
         setIsLocating(true);
@@ -89,7 +89,7 @@ export function useClockWidget() {
           );
           setIsLocating(false);
           setIsPunching(false);
-          return;
+          return false;
         }
         setIsLocating(false);
       }
@@ -112,9 +112,11 @@ export function useClockWidget() {
           envelope.message ?? (punchType === "IN" ? "Clocked in successfully." : "Clocked out successfully."),
           "success"
         );
+        return true;
       } catch (err: unknown) {
         const e = err as NormalisedError;
         showToast(e?.message ?? "Punch failed. Please try again.", "error");
+        return false;
       } finally {
         setIsPunching(false);
       }

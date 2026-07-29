@@ -18,6 +18,7 @@ interface Props {
 export default function EditRoleModal({ role, permissionsMap, saving, onClose, onEdit }: Props) {
   const [form, setForm]     = useState<RoleForm>({
     display_name:        role.display_name,
+    can_manage_team:     role.can_manage_team,
     permission_codenames: role.permissions,
   });
   const [errors, setErrors] = useState<RoleFormErrors>({});

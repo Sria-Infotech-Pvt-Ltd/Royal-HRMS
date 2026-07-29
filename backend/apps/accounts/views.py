@@ -417,6 +417,7 @@ class LoginView(APIView):
                 'onboarding_status':   user.onboarding_status,
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
+                'can_manage_team':     user.role.can_manage_team if user.role else False,
             },
         })
         resp.set_cookie(
@@ -728,10 +729,40 @@ class RoleDetailView(APIView):
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Role retrieved successfully.', data=RoleSerializer(role).data)
 
+    @staticmethod
+    def _check_conflict(role: Role, expected_updated_at: str | None):
+        """
+        Optimistic-concurrency guard for permission edits.
+
+        Permission saves do a full delete-then-recreate of the role's
+        permission set (see RoleSerializer._sync_permissions) — with no
+        version check, a second save based on stale data silently wins and
+        reverts an earlier save (e.g. two admins/tabs editing the same role
+        around the same time). When the client sends back the updated_at it
+        loaded the role at, reject the write if the role has changed since.
+        Optional — a request without expected_updated_at skips the check
+        (used by the is_active-only PATCH, which never touches permissions).
+        """
+        if not expected_updated_at:
+            return None
+        from django.utils.dateparse import parse_datetime
+        expected_dt = parse_datetime(expected_updated_at)
+        if expected_dt and expected_dt != role.updated_at:
+            return error(
+                'This role was changed by someone else since you loaded it. '
+                'Reload the page and try again.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        return None
+
     def put(self, request, pk):
         role = self._get_role(pk)
         if not role:
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        conflict = self._check_conflict(role, request.data.get('expected_updated_at'))
+        if conflict:
+            return conflict
 
         serializer = RoleSerializer(role, data=request.data)
         if not serializer.is_valid():
@@ -2255,7 +2286,8 @@ class CompanyRetrieveUpdateView(APIView):
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
-        company = Company.objects.first()
+        from core.cache_service import CompanyCacheService
+        company = CompanyCacheService.get()
         if not company:
             return success('No company info found.', data={})
         serializer = CompanySerializer(company, context={'request': request})
@@ -4184,16 +4216,14 @@ class ManagerListView(APIView):
         branch = (request.query_params.get('branch') or '').strip()
         if not branch:
             return error('branch query parameter is required.')
-        # Filter by permission so any role named manager/team_lead/etc. is included
         managers = (
             User.objects
             .filter(
-                role__role_permissions__permission__codename='leave.approve',
+                role__can_manage_team=True,
                 is_active=True,
                 branch__iexact=branch,
             )
             .select_related('role')
-            .distinct()
             .order_by('full_name')
         )
         data = [
@@ -4290,8 +4320,12 @@ class ApprovalWorkflowRuleView(APIView):
 
     def get(self, request):
         _ensure_default_rules()
-        rules = {r.workflow_type: r for r in ApprovalWorkflowRule.objects.all()}
-        data  = [_serialize_rule(rules[wf]) for wf in _WORKFLOW_ORDER if wf in rules]
+        from core.cache_service import ApprovalWorkflowCacheService
+        data = [
+            _serialize_rule(rule)
+            for wf in _WORKFLOW_ORDER
+            if (rule := ApprovalWorkflowCacheService.get_rule(wf)) is not None
+        ]
         return success('Approval rules retrieved.', data=data)
 
     def patch(self, request):

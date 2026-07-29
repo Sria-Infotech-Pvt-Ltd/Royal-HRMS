@@ -50,8 +50,16 @@ _OT_MULTIPLIERS = {
 
 # ── OT Entry ──────────────────────────────────────────────────────────────────
 
-def list_overtime(date: datetime.date | None, branch: str, department: str) -> list[dict]:
-    """Return OT rows filtered by optional date/branch/department."""
+def list_overtime(
+    date: datetime.date | None, branch: str, department: str,
+    employee_ids: list[str] | None = None,
+) -> list[dict]:
+    """
+    Return OT rows filtered by optional date/branch/department.
+
+    employee_ids: when provided (a manager's direct reports), restricts the
+    scope to exactly those employees instead of branch.
+    """
     qs = (
         AttendanceOvertime.objects
         .select_related('employee', 'approved_by')
@@ -59,7 +67,9 @@ def list_overtime(date: datetime.date | None, branch: str, department: str) -> l
     )
     if date:
         qs = qs.filter(date=date)
-    if branch:
+    if employee_ids is not None:
+        qs = qs.filter(employee_id__in=employee_ids)
+    elif branch:
         qs = qs.filter(employee__branch=branch)
     if department:
         qs = qs.filter(employee__department=department)
@@ -82,11 +92,20 @@ def list_overtime(date: datetime.date | None, branch: str, department: str) -> l
     return rows
 
 
-def create_overtime(data: dict, created_by) -> AttendanceOvertime:
-    """Create an OT entry from validated OvertimeWriteSerializer data."""
+def create_overtime(data: dict, created_by, employee_ids: list[str] | None = None) -> AttendanceOvertime:
+    """
+    Create an OT entry from validated OvertimeWriteSerializer data.
+
+    employee_ids: when provided (a manager's direct reports), the target
+    employee must be in this set — reported as "not found" rather than
+    "forbidden" so a manager can't probe for employees outside their team.
+    """
     try:
         employee = User.objects.get(employee_id=data['employee_id'])
     except User.DoesNotExist:
+        raise ValueError(f"Employee '{data['employee_id']}' not found.")
+
+    if employee_ids is not None and str(employee.pk) not in {str(i) for i in employee_ids}:
         raise ValueError(f"Employee '{data['employee_id']}' not found.")
 
     approved_by = None
@@ -289,6 +308,23 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
         ):
             existing_records[(rec.employee_id, rec.date)] = rec
 
+    # ── Phase 5b: Approved leave dates — skip creating absent records for these ──
+    approved_leave_dates: set[tuple] = set()
+    if deduped:
+        from apps.hrms.models import LeaveRequest, REQ_APPROVED as _REQ_APPROVED
+        min_date = min(k[1] for k in deduped)
+        max_date = max(k[1] for k in deduped)
+        for lr in LeaveRequest.objects.filter(
+            employee_id__in=emp_pks,
+            status=_REQ_APPROVED,
+            start_date__lte=max_date,
+            end_date__gte=min_date,
+        ):
+            cur = lr.start_date
+            while cur <= lr.end_date:
+                approved_leave_dates.add((lr.employee_id, cur))
+                cur += datetime.timedelta(days=1)
+
     # ── Phase 6: Build create / update lists in memory ─────────────────────────
     now_ts = timezone.now()
     records_to_create: list[tuple] = []   # (AttendanceRecord, emp_obj, pi, po, date)
@@ -310,12 +346,29 @@ def _run_import_bulk(import_log, rows: list, imported_by, start_ts=None) -> dict
 
         if key in existing_records:
             rec = existing_records[key]
+            # Never overwrite a manually-set or leave-synced on_leave status with punch data.
+            if rec.status == AttendanceRecord.STATUS_ON_LEAVE:
+                skipped_count += 1
+                continue
             rec.status                = rec_status
             rec.first_punch_in        = punch_in
             rec.last_punch_out        = punch_out
             rec.total_working_minutes = minutes
             rec.updated_at            = now_ts
             records_to_update.append((rec, emp_obj, punch_in, punch_out, date))
+        elif key in approved_leave_dates:
+            # Employee was on approved leave this day — create on_leave record instead.
+            rec_status = AttendanceRecord.STATUS_ON_LEAVE
+            rec = AttendanceRecord(
+                id=_uuid_mod.uuid4(),
+                employee_id=emp_pk,
+                date=date,
+                status=rec_status,
+                first_punch_in=None,
+                last_punch_out=None,
+                total_working_minutes=0,
+            )
+            records_to_create.append((rec, emp_obj, None, None, date))
         else:
             rec = AttendanceRecord(
                 id=_uuid_mod.uuid4(),

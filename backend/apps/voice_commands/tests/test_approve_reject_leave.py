@@ -80,7 +80,7 @@ class PermissionDeniedTests(SimpleTestCase):
     never called, not just that the message came back wrong.
     """
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_approve_leave_denied_without_leave_approve(self, mock_view_cls):
         request = _fake_request(has_leave_approve=False)
 
@@ -90,7 +90,7 @@ class PermissionDeniedTests(SimpleTestCase):
         self.assertEqual(result.message, _PERMISSION_DENIED_MESSAGE)
         mock_view_cls.as_view.assert_not_called()
 
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_reject_leave_denied_without_leave_approve(self, mock_view_cls):
         request = _fake_request(has_leave_approve=False)
 
@@ -100,8 +100,8 @@ class PermissionDeniedTests(SimpleTestCase):
         self.assertEqual(result.message, _PERMISSION_DENIED_MESSAGE)
         mock_view_cls.as_view.assert_not_called()
 
-    @patch('apps.voice_commands.executor.LeaveApprovalView')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_conversation_flow_never_reaches_either_view_without_permission(self, mock_list_view, mock_approval_view):
         request = _fake_request(has_leave_approve=False)
 
@@ -123,8 +123,8 @@ class ZeroMatchTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_zero_match_ends_the_flow_with_a_clear_message(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-1', 'Sarah Khan')],
@@ -148,8 +148,8 @@ class NoNameGivenThenDisambiguationTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_no_name_asks_who_then_resolves_on_the_next_turn(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-1', 'Sarah Khan')],
@@ -175,8 +175,8 @@ class MultipleMatchDisambiguationTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_ambiguous_name_asks_to_be_more_specific_without_storing_a_request_id(
         self, mock_view_cls, mock_force_authenticate,
     ):
@@ -194,8 +194,8 @@ class MultipleMatchDisambiguationTests(SimpleTestCase):
         self.assertIsNotNone(pending)
         self.assertNotIn('request_id', pending['slots'])
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_being_more_specific_on_the_next_turn_resolves_to_a_single_match(
         self, mock_view_cls, mock_force_authenticate,
     ):
@@ -222,9 +222,9 @@ class SingleMatchThenYesFullFlowTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveApprovalView')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_yes_triggers_the_real_approval_call(self, mock_list_view, mock_approval_view, mock_force_authenticate):
         mock_list_view.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-1', 'Sarah Khan', leave_type_display='Sick Leave')],
@@ -253,9 +253,9 @@ class SingleMatchThenYesFullFlowTests(SimpleTestCase):
         sent_body = json.loads(call_args.args[0].body)
         self.assertEqual(sent_body['action'], 'approve')
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveApprovalView')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_reject_leave_sends_action_reject(self, mock_list_view, mock_approval_view, mock_force_authenticate):
         mock_list_view.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-9', 'Sarah Khan')],
@@ -286,9 +286,9 @@ class SingleMatchThenNoTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    @patch('apps.voice_commands.executor.LeaveApprovalView')
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_no_cancels_without_calling_the_approval_view(self, mock_list_view, mock_force_authenticate, mock_approval_view):
         mock_list_view.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-1', 'Sarah Khan')],
@@ -314,9 +314,9 @@ class AmbiguousConfirmationAnswerTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    @patch('apps.voice_commands.executor.LeaveApprovalView')
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveRequestListCreateView')
+    @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_unclear_answer_reasks_and_keeps_the_pending_request_id(
         self, mock_list_view, mock_force_authenticate, mock_approval_view,
     ):
@@ -353,8 +353,8 @@ class SelfApprovalStillBlockedTests(SimpleTestCase):
     re-implements or bypasses the check.
     """
 
-    @patch('apps.voice_commands.executor.force_authenticate')
-    @patch('apps.voice_commands.executor.LeaveApprovalView')
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
     def test_confirm_stage_surfaces_the_views_self_approval_block(self, mock_approval_view, mock_force_authenticate):
         mock_approval_view.as_view.return_value.return_value = MagicMock(
             status_code=403,

@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PaginatedResponse } from "@/types/attendance";
 import ExpenseFormModal from "./ExpenseFormModal";
+import ExpenseDetailModal from "./ExpenseDetailModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,18 +13,27 @@ type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
 type ExpenseStatus   = "pending" | "approved" | "rejected";
 type FilterTab       = "all" | ExpenseCategory;
 
-interface Expense {
+export interface ExpenseReceipt {
+  id:  string;
+  url: string | null;
+}
+
+// The backend has no separate uuid `id` for an expense — expense_number (int)
+// is the primary key used in the detail URL; expense_ref ("EXP002") is just
+// its display form. See ExpenseSerializer / ExpenseDetailView on the backend.
+export interface Expense {
   expense_number: number;
-  title:         string;
-  category:      ExpenseCategory;
-  amount:        number | string;
-  expense_date:  string;
-  description:   string;
-  status:        ExpenseStatus;
-  receipt_url:   string | null;
-  employee_name: string;
-  branch_name:   string;
-  created_at:    string;
+  expense_ref:    string;
+  title:          string;
+  category:       ExpenseCategory;
+  amount:         number | string;
+  expense_date:   string;
+  description:    string;
+  status:         ExpenseStatus;
+  receipts:       ExpenseReceipt[];
+  employee_name:  string;
+  branch_name:    string;
+  created_at:     string;
 }
 
 interface ExpenseStats {
@@ -46,7 +56,7 @@ const FILTER_TABS: { value: FilterTab; label: string; icon: string }[] = [
   { value: "other",     label: "Other",      icon: "ti-dots-circle-horizontal" },
 ];
 
-const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+export const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
   travel:    "Travel",
   meals:     "Meals",
   equipment: "Equipment",
@@ -67,7 +77,7 @@ const CATEGORY_STYLE: Record<ExpenseCategory, { bg: string; color: string }> = {
   other:     { bg: "var(--bg-high)",         color: "var(--on-variant)" },
 };
 
-const STATUS_BADGE: Record<ExpenseStatus, { cls: string; label: string }> = {
+export const STATUS_BADGE: Record<ExpenseStatus, { cls: string; label: string }> = {
   approved: { cls: "badge-success", label: "approved" },
   pending:  { cls: "badge-warn",    label: "pending"  },
   rejected: { cls: "badge-error",   label: "rejected" },
@@ -80,7 +90,7 @@ function formatAmount(amount: number | string): string {
   return `₹${n.toLocaleString("en-IN")}`;
 }
 
-function formatDate(iso: string): string {
+export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
   });
@@ -89,18 +99,22 @@ function formatDate(iso: string): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ExpenseClaims() {
-  const [activeFilter,   setActiveFilter]   = useState<FilterTab>("all");
-  const [showNewExpense, setShowNewExpense] = useState(false);
+  const [activeFilter,    setActiveFilter]    = useState<FilterTab>("all");
+  const [showNewExpense,  setShowNewExpense]  = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   const listUrl = useMemo(() => {
     if (activeFilter === "all") return API.expenses.list;
     return `${API.expenses.list}?category=${activeFilter}`;
   }, [activeFilter]);
 
-  const { data: expenses, loading, error, refetch }      = useFetch<PaginatedResponse<Expense>>(listUrl);
-  const { data: stats,    refetch: refetchStats }        = useFetch<ExpenseStats>(API.expenses.stats);
+  // /expenses/ returns a paginated envelope ({ results, count, ... }), not a
+  // bare array — fetching it as Expense[] made Array.isArray() always false,
+  // which silently rendered the empty state no matter how many claims existed.
+  const { data: expensesPage, loading, error, refetch } = useFetch<PaginatedResponse<Expense>>(listUrl);
+  const { data: stats,        refetch: refetchStats }   = useFetch<ExpenseStats>(API.expenses.stats);
 
-  const expenseList = expenses?.results ?? [];
+  const expenseList = expensesPage?.results ?? [];
 
   function handleSaved() {
     setShowNewExpense(false);
@@ -193,67 +207,56 @@ export default function ExpenseClaims() {
             const catIcon      = CATEGORY_ICON[expense.category]  ?? "ti-dots-circle-horizontal";
             const catLabel     = CATEGORY_LABEL[expense.category] ?? expense.category;
             const { cls, label } = STATUS_BADGE[expense.status]   ?? STATUS_BADGE.pending;
+            const receiptCount = expense.receipts?.length ?? 0;
 
             return (
               <div
                 key={expense.expense_number}
-                style={{
-                  display:     "flex",
-                  alignItems:  "center",
-                  gap:         14,
-                  padding:     "16px 20px",
-                  borderBottom: idx < expenseList.length - 1 ? "1px solid var(--outline-v)" : "none",
-                  flexWrap:    "wrap",
-                }}
+                onClick={() => setSelectedExpense(expense)}
+                className={`flex items-center gap-3.5 px-5 py-4 flex-wrap cursor-pointer hover:bg-[var(--bg-low)] transition-colors ${idx < expenseList.length - 1 ? "border-b border-[var(--outline-v)]" : ""}`}
               >
                 {/* Category icon */}
-                <div style={{
-                  width: 44, height: 44, borderRadius: 10,
-                  background: catStyle.bg, color: catStyle.color,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 20, flexShrink: 0,
-                }}>
+                <div
+                  className="w-11 h-11 rounded-[10px] flex items-center justify-center text-xl flex-shrink-0"
+                  style={{ background: catStyle.bg, color: catStyle.color }}
+                >
                   <i className={`ti ${catIcon}`} />
                 </div>
 
                 {/* Details */}
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: "var(--on-bg)", marginBottom: 5 }}>
+                <div className="flex-1 min-w-[160px]">
+                  <div className="font-semibold text-sm text-[var(--on-bg)] mb-1">
                     {expense.title}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, color: "var(--on-variant)" }}>
+                  <div className="flex items-center gap-2.5 flex-wrap text-xs text-[var(--on-variant)]">
+                    <span className="text-[var(--outline)]">{expense.expense_ref}</span>
                     {expense.employee_name && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <i className="ti ti-user" style={{ fontSize: 13 }} /> {expense.employee_name}
+                      <span className="flex items-center gap-1">
+                        <i className="ti ti-user text-[13px]" /> {expense.employee_name}
                       </span>
                     )}
                     {expense.branch_name && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <i className="ti ti-building" style={{ fontSize: 13 }} /> {expense.branch_name}
+                      <span className="flex items-center gap-1">
+                        <i className="ti ti-building text-[13px]" /> {expense.branch_name}
                       </span>
                     )}
-                    <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                      <i className="ti ti-calendar" style={{ fontSize: 13 }} /> {formatDate(expense.expense_date)}
+                    <span className="flex items-center gap-1">
+                      <i className="ti ti-calendar text-[13px]" /> {formatDate(expense.expense_date)}
                     </span>
-                    {expense.receipt_url && (
-                      <a
-                        href={expense.receipt_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--primary)", textDecoration: "none" }}
-                      >
-                        <i className="ti ti-paperclip" style={{ fontSize: 13 }} /> Receipt
-                      </a>
+                    {receiptCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <i className="ti ti-paperclip text-[13px]" /> {receiptCount} receipt{receiptCount !== 1 ? "s" : ""}
+                      </span>
                     )}
-                    <span className="badge badge-neutral" style={{ fontSize: 10 }}>
+                    <span className="badge badge-neutral text-[10px]">
                       {catLabel}
                     </span>
                   </div>
                 </div>
 
                 {/* Amount + status */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: "var(--on-bg)" }}>
+                <div className="flex items-center gap-2.5 flex-shrink-0">
+                  <span className="text-base font-bold text-[var(--on-bg)]">
                     ₹{parseFloat(String(expense.amount)).toLocaleString("en-IN")}
                   </span>
                   <span className={`badge ${cls}`}>{label}</span>
@@ -269,6 +272,14 @@ export default function ExpenseClaims() {
         <ExpenseFormModal
           onClose={() => setShowNewExpense(false)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* Expense detail modal */}
+      {selectedExpense && (
+        <ExpenseDetailModal
+          initialData={selectedExpense}
+          onClose={() => setSelectedExpense(null)}
         />
       )}
     </>

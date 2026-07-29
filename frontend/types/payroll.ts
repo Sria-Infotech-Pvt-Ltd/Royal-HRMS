@@ -123,6 +123,26 @@ export interface PayrollCycle {
   updated_at: string;
 }
 
+export interface ManagerApproval {
+  id: string;
+  cycle: string;
+  manager: string;
+  manager_name: string;
+  manager_email: string;
+  approved_at: string | null;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManagerApprovalStatus {
+  approvals: ManagerApproval[];
+  approved_count: number;
+  total_count: number;
+  all_approved: boolean;
+  current_user_pending: boolean;
+}
+
 export interface EmployeePayslip {
   id: string;
   cycle: string;

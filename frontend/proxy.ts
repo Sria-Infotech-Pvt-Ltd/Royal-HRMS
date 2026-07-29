@@ -4,7 +4,7 @@ const AUTH_COOKIE = "royal_hrms_auth";
 const ACCESS_COOKIE = "royal_access_token";
 const USER_COOKIE = "royal_hrms_user";
 
-const ROUTE_PERMISSIONS: Record<string, string> = {
+const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/announcements": "announcements.view",
   "/dashboard/interview-list": "recruitment.view",
   "/dashboard/candidate-review": "recruitment.view",
@@ -22,7 +22,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   // permission) would redirect away anyone who's never been granted it.
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",
-  "/dashboard/approvals": "leave.view",
+  "/dashboard/approvals": ["leave.approve", "expenses.approve"],
   "/dashboard/separation": "employees.view",
   "/dashboard/documents": "documents.view",
   "/dashboard/reports": "reports.view",
@@ -163,7 +163,10 @@ export function proxy(request: NextRequest) {
     if (matchedRoute) {
       const needed = ROUTE_PERMISSIONS[matchedRoute];
       const permissions = getPermissions(request);
-      if (!permissions.includes(needed)) {
+      const hasPermission = Array.isArray(needed)
+        ? needed.some(p => permissions.includes(p))
+        : permissions.includes(needed);
+      if (!hasPermission) {
         return NextResponse.redirect(new URL("/dashboard", request.url));
       }
     }

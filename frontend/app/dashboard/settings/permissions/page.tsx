@@ -66,6 +66,7 @@ export default function RolesPermissionsPage() {
         name:                slugifyName(form.display_name),
         display_name:        form.display_name,
         is_active:           true,
+        can_manage_team:     form.can_manage_team,
         permission_codenames: form.permission_codenames,
       });
       const res = await clientApi.get(API.roles.list);
@@ -89,13 +90,23 @@ export default function RolesPermissionsPage() {
         name:                editingRole.name,       // slug is immutable
         display_name:        form.display_name,
         is_active:           editingRole.is_active,  // toggle handles this separately
+        can_manage_team:     form.can_manage_team,
         permission_codenames: form.permission_codenames,
+        expected_updated_at: editingRole.updated_at,
       });
       const res = await clientApi.get(API.roles.list);
       setRoles(res.data.data?.results ?? []);
       setEditingRole(null);
       setSaveMsg("Permissions saved. Users in this role must log out and back in for changes to take effect.");
     } catch (err: unknown) {
+      const e = err as { response?: { status?: number } };
+      if (e.response?.status === 409) {
+        // Someone else changed this role since the modal opened — refresh
+        // so a retry starts from the current data instead of looping.
+        const res = await clientApi.get(API.roles.list);
+        setRoles(res.data.data?.results ?? []);
+        setEditingRole(null);
+      }
       alert(apiErr(err));
     } finally {
       setSaving(false);

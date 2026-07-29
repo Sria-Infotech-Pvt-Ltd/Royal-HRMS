@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAttendanceSummary } from "@/hooks/useEmployeeDashboard";
+import AssessmentLockedNotice from "./AssessmentLockedNotice";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -10,7 +11,7 @@ export default function EmpAttendanceSummary() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year]            = useState(now.getFullYear());
 
-  const { data, loading } = useAttendanceSummary(month, year);
+  const { data, loading, status: httpStatus } = useAttendanceSummary(month, year);
 
   const stats = data ? [
     { icon: "ti-checks",        label: "Present",       val: String(data.present_days),                                color: "var(--success)"   },
@@ -43,6 +44,8 @@ export default function EmpAttendanceSummary() {
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 spin" style={{ color: "var(--primary)" }} /> Loading…
         </div>
+      ) : httpStatus === 403 ? (
+        <AssessmentLockedNotice />
       ) : !data ? (
         <div style={{ padding: "24px 20px", textAlign: "center", fontSize: 13, color: "var(--on-variant)" }}>No data for this period</div>
       ) : (

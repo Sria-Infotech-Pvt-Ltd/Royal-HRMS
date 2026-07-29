@@ -163,7 +163,7 @@ class ImmediateActionIntentSignalingTests(SimpleTestCase):
     def test_geofencing_rejected_clock_in_reports_success_false(self, mock_get_pending, mock_execute):
         # This is the exact signal VoiceCommandButton's retry flow keys off:
         # a real ExecutionResult failure (e.g. GeofencingService's "GPS is
-        # mandatory" PermissionError, caught in executor._execute_punch) must
+        # mandatory" PermissionError, caught in executor_attendance._execute_punch) must
         # surface as success: false in the payload, not just a message string.
         mock_execute.return_value = ExecutionResult(
             success=False,

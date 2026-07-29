@@ -70,13 +70,6 @@ export default function ClockWidget() {
         </div>
       </div>
 
-      <div className="field-group mb-12">
-        <label className="field-label">Attendance Mode</label>
-        <div className="field-input" style={{ display: "flex", alignItems: "center", color: "var(--on-bg)" }}>
-          Office
-        </div>
-      </div>
-
       <button
         onClick={() => punch(isClockedIn ? "OUT" : "IN", MODE)}
         disabled={isPunching}

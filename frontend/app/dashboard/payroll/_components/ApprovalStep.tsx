@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { PayrollCycle, PayrollSettings } from "@/types/payroll";
+import { getStoredUser } from "@/lib/auth";
+import type { PayrollCycle, PayrollSettings, ManagerApprovalStatus } from "@/types/payroll";
 
 interface Props {
   cycleId: string;
@@ -13,23 +14,43 @@ interface Props {
   onBack: () => void;
 }
 
+function fmt(dateStr: string | null | undefined) {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
 export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Props) {
-  const { data: cycle, loading, refetch } = useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
-  const [busy, setBusy] = useState(false);
+  const { data: cycle, loading: cycleLoading, refetch: refetchCycle } =
+    useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
+
+  const { data: mgrs, loading: mgrsLoading, refetch: refetchMgrs } =
+    useFetch<ManagerApprovalStatus>(API.payroll.managerApprovals(cycleId));
+
+  const [busy, setBusy]       = useState(false);
   const [comment, setComment] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const [showReject, setShowReject] = useState(false);
-  const [rejectNote, setRejectNote] = useState("");
+  const [err, setErr]         = useState<string | null>(null);
+
+  const currentUser = getStoredUser();
 
   const approvalLevels = settings?.approval_levels ?? "L1";
-  const isL1L2 = approvalLevels === "L1_L2";
+  const isL1L2         = approvalLevels === "L1_L2";
 
-  const isL1Done = !!cycle?.attendance_l1_approved_at;
-  const isL2Done = !!cycle?.attendance_l2_approved_at;
+  const isL1Done   = !!cycle?.attendance_l1_approved_at;
+  const isL2Done   = !!cycle?.attendance_l2_approved_at;
   const isApproved = cycle?.status === "attendance_approved";
 
-  const canApproveL1 = !isL1Done && (cycle?.status === "draft" || cycle?.status === "attendance_pending");
-  const canApproveL2 = isL1Done && !isL2Done && isL1L2 && cycle?.status === "attendance_pending";
+  const approvedCount     = mgrs?.approved_count ?? 0;
+  const totalCount        = mgrs?.total_count ?? 0;
+  const allMgrsApproved   = mgrs?.all_approved ?? false;
+  const myRowPending      = mgrs?.current_user_pending ?? false;
+  const noManagersSeeded  = totalCount === 0;
+
+  const canApproveL2 = isL1Done && !isL2Done && isL1L2;
+
+  function refetchAll() { refetchCycle(); refetchMgrs(); }
 
   async function approve(level: "L1" | "L2") {
     setBusy(true);
@@ -37,7 +58,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
     try {
       await clientApi.post(API.payroll.approveAttendance(cycleId), { level, comment });
       setComment("");
-      refetch();
+      refetchAll();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
         ?? "Failed to approve. Check your permissions.";
@@ -47,15 +68,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
     }
   }
 
-  function fmt(dateStr: string | null | undefined) {
-    if (!dateStr) return null;
-    return new Date(dateStr).toLocaleString("en-IN", {
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  }
-
-  if (loading) {
+  if (cycleLoading || mgrsLoading) {
     return (
       <div className="card" style={{ padding: "40px", textAlign: "center", color: "var(--on-variant)" }}>
         <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 28 }} />
@@ -69,68 +82,276 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
       <div className="card-header">
         <div className="card-title"><i className="ti ti-user-check" /> Attendance Approval Gate</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {isApproved && <span className="badge badge-success"><i className="ti ti-check" /> Approved</span>}
-          {!isApproved && <span className="badge badge-warn"><i className="ti ti-clock" /> Pending</span>}
+          {isApproved
+            ? <span className="badge badge-success"><i className="ti ti-check" /> Approved</span>
+            : <span className="badge badge-warn"><i className="ti ti-clock" /> Pending</span>}
           <span className="badge badge-info">{isL1L2 ? "L1 + L2 required" : "L1 only"}</span>
+          <button className="btn btn-ghost btn-sm" onClick={refetchAll} title="Refresh status">
+            <i className="ti ti-refresh" />
+          </button>
         </div>
       </div>
-      <div className="card-body">
 
-        <div className="alert alert-info" style={{ marginBottom: 20 }}>
-          <i className="ti ti-info-circle" />
-          <span>Attendance data must be approved before payroll can be processed. This ensures salary calculations are based on verified attendance.</span>
-        </div>
+      <div className="card-body">
 
         {err && (
           <div className="alert alert-error" style={{ marginBottom: 16 }}>
-            <i className="ti ti-alert-circle" />
-            <span>{err}</span>
+            <i className="ti ti-alert-circle" /><span>{err}</span>
           </div>
         )}
 
         {isApproved && (
           <div className="alert alert-success" style={{ marginBottom: 20 }}>
             <i className="ti ti-circle-check" />
-            <span>Attendance approved. You can now proceed to compute payroll.</span>
+            <span>All approvals complete. You can now proceed to compute payroll.</span>
           </div>
         )}
 
-        {/* Workflow */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 24 }}>
+        {/* ── L1 section ─────────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: isL1Done ? "var(--success)" : "var(--warn)",
+                color: "#fff", fontSize: 14,
+              }}>
+                {isL1Done
+                  ? <i className="ti ti-check" />
+                  : <span style={{ fontWeight: 700 }}>1</span>}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>Manager Approval (L1)</div>
+                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                  Each manager must sign off on their team's attendance
+                </div>
+              </div>
+            </div>
+            {!noManagersSeeded && (
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                <span style={{ color: isL1Done ? "var(--success)" : approvedCount > 0 ? "var(--warn)" : "var(--on-variant)" }}>
+                  {approvedCount}
+                </span>
+                <span style={{ color: "var(--on-variant)" }}> / {totalCount} approved</span>
+              </div>
+            )}
+          </div>
 
-          {/* L1 approval */}
-          <ApprovalCard
-            level="L1"
-            title="Manager Approval (L1)"
-            subtitle="Direct manager verifies attendance records"
-            isDone={isL1Done}
-            isCurrent={canApproveL1}
-            approverName={cycle?.l1_approver_name}
-            doneAt={fmt(cycle?.attendance_l1_approved_at)}
-            isLast={!isL1L2}
-            comment={comment}
-            onCommentChange={setComment}
-            onApprove={() => approve("L1")}
-            busy={busy}
-          />
+          {/* Progress bar */}
+          {!noManagersSeeded && totalCount > 0 && (
+            <div style={{ height: 6, borderRadius: 99, background: "var(--bg-high)", marginBottom: 14, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 99,
+                width: `${(approvedCount / totalCount) * 100}%`,
+                background: isL1Done ? "var(--success)" : "var(--primary)",
+                transition: "width 0.4s ease",
+              }} />
+            </div>
+          )}
 
-          {isL1L2 && (
-            <ApprovalCard
-              level="L2"
-              title="HR Approval (L2)"
-              subtitle="HR verifies and signs off on attendance"
-              isDone={isL2Done}
-              isCurrent={canApproveL2}
-              approverName={cycle?.l2_approver_name}
-              doneAt={fmt(cycle?.attendance_l2_approved_at)}
-              isLast
-              comment={comment}
-              onCommentChange={setComment}
-              onApprove={() => approve("L2")}
-              busy={busy}
-            />
+          {/* Per-manager rows */}
+          {noManagersSeeded ? (
+            /* No managers with can_manage_team — HR direct approval */
+            <div style={{
+              border: `1.5px solid ${isL1Done ? "var(--success)" : "var(--warn)"}`,
+              borderRadius: "var(--radius)", padding: "14px 16px",
+              background: isL1Done ? "transparent" : "rgba(234,179,8,0.06)",
+            }}>
+              <div style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 10 }}>
+                <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
+                No managers with team management rights are configured — HR can approve directly.
+              </div>
+              {isL1Done ? (
+                <div style={{ fontSize: 12, color: "var(--success)" }}>
+                  <i className="ti ti-circle-check" style={{ marginRight: 6 }} />
+                  Approved by <strong>{cycle?.l1_approver_name}</strong> on {fmt(cycle?.attendance_l1_approved_at)}
+                </div>
+              ) : (
+                <>
+                  {currentUser && (
+                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
+                      Approving as: <strong>{currentUser.name}</strong>
+                    </div>
+                  )}
+                  <textarea
+                    className="field-input"
+                    placeholder="Add note (optional)…"
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    style={{ resize: "none", height: 60, fontSize: 13, marginBottom: 10 }}
+                  />
+                  <button className="btn btn-success btn-sm" onClick={() => approve("L1")} disabled={busy}>
+                    {busy
+                      ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
+                      : <><i className="ti ti-check" /> Approve Attendance (L1)</>}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(mgrs?.approvals ?? []).map(row => {
+                const isApprovedRow = !!row.approved_at;
+                return (
+                  <div
+                    key={row.id}
+                    style={{
+                      display: "flex", alignItems: "flex-start", gap: 12,
+                      padding: "10px 14px", borderRadius: "var(--radius)",
+                      border: `1.5px solid ${isApprovedRow ? "var(--success)" : "var(--outline-v)"}`,
+                      background: isApprovedRow ? "transparent" : "var(--bg-low)",
+                    }}
+                  >
+                    <div style={{
+                      width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: isApprovedRow ? "var(--success)" : "var(--bg-high)",
+                      color: isApprovedRow ? "#fff" : "var(--on-variant)",
+                      fontSize: 13,
+                    }}>
+                      {isApprovedRow
+                        ? <i className="ti ti-check" />
+                        : <i className="ti ti-clock" />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{row.manager_name}</span>
+                        <span className={isApprovedRow ? "badge badge-success" : "badge badge-neutral"}>
+                          {isApprovedRow ? "Approved" : "Pending"}
+                        </span>
+                      </div>
+                      {isApprovedRow && (
+                        <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
+                          {fmt(row.approved_at)}
+                          {row.note && <span style={{ marginLeft: 8, fontStyle: "italic" }}>"{row.note}"</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Current user's approve button if their row is still pending */}
+              {myRowPending && !isL1Done && (
+                <div style={{
+                  padding: "14px 16px", borderRadius: "var(--radius)",
+                  border: "1.5px solid var(--primary)", background: "rgba(30,78,140,0.06)",
+                  marginTop: 4,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                    <i className="ti ti-user-check" style={{ marginRight: 6 }} />
+                    Your approval is required
+                  </div>
+                  <textarea
+                    className="field-input"
+                    placeholder="Add note (optional)…"
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    style={{ resize: "none", height: 60, fontSize: 13, marginBottom: 10 }}
+                  />
+                  <button className="btn btn-success btn-sm" onClick={() => approve("L1")} disabled={busy}>
+                    {busy
+                      ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
+                      : <><i className="ti ti-check" /> Approve Attendance (L1)</>}
+                  </button>
+                </div>
+              )}
+
+              {!myRowPending && !isL1Done && !allMgrsApproved && (
+                <div className="alert alert-info" style={{ marginTop: 4 }}>
+                  <i className="ti ti-info-circle" />
+                  <span>Waiting for other managers to approve. Refresh to check latest status.</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
+
+        {/* Connector between L1 and L2 */}
+        {isL1L2 && (
+          <div style={{ width: 2, height: 20, background: isL1Done ? "var(--success)" : "var(--outline-v)", margin: "0 0 24px 16px" }} />
+        )}
+
+        {/* ── L2 section ─────────────────────────────────────────────────── */}
+        {isL1L2 && (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: isL2Done ? "var(--success)" : isL1Done ? "var(--warn)" : "var(--bg-high)",
+                color: isL2Done || isL1Done ? "#fff" : "var(--on-variant)", fontSize: 14,
+              }}>
+                {isL2Done
+                  ? <i className="ti ti-check" />
+                  : <span style={{ fontWeight: 700 }}>2</span>}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: isL1Done ? "var(--on-bg)" : "var(--on-variant)" }}>
+                  HR Approval (L2)
+                </div>
+                <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                  HR verifies and signs off — unlocks payroll processing
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              padding: "14px 16px", borderRadius: "var(--radius)",
+              border: `1.5px solid ${isL2Done ? "var(--success)" : isL1Done ? "var(--warn)" : "var(--outline-v)"}`,
+              background: !isL1Done ? "var(--bg-low)" : isL1Done && !isL2Done ? "rgba(234,179,8,0.06)" : "transparent",
+              opacity: isL1Done ? 1 : 0.6,
+            }}>
+              {isL2Done ? (
+                <div style={{ fontSize: 12, color: "var(--success)" }}>
+                  <i className="ti ti-circle-check" style={{ marginRight: 6 }} />
+                  Approved by <strong>{cycle?.l2_approver_name}</strong> on {fmt(cycle?.attendance_l2_approved_at)}
+                </div>
+              ) : !isL1Done ? (
+                <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                  <i className="ti ti-lock" style={{ marginRight: 6 }} />
+                  Waiting for all managers (L1) to approve first
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, marginBottom: 12 }}>
+                    All {totalCount > 0 ? totalCount : ""} manager(s) have approved.
+                    HR sign-off is the final step before payroll can be processed.
+                  </div>
+                  {canApproveL2 && currentUser && (
+                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
+                      Approving as: <strong>{currentUser.name}</strong>
+                    </div>
+                  )}
+                  {canApproveL2 && (
+                    <>
+                      <textarea
+                        className="field-input"
+                        placeholder="Add note (optional)…"
+                        value={comment}
+                        onChange={e => setComment(e.target.value)}
+                        style={{ resize: "none", height: 60, fontSize: 13, marginBottom: 10 }}
+                      />
+                      <button className="btn btn-success btn-sm" onClick={() => approve("L2")} disabled={busy}>
+                        {busy
+                          ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
+                          : <><i className="ti ti-check" /> Approve Attendance (L2)</>}
+                      </button>
+                    </>
+                  )}
+                  {!canApproveL2 && (
+                    <div className="alert alert-info" style={{ marginTop: 0 }}>
+                      <i className="ti ti-info-circle" />
+                      <span>Waiting for HR to complete L2 approval.</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -152,121 +373,6 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
             Continue <i className="ti ti-arrow-right" />
           </button>
         </div>
-      </div>
-
-      {showReject && (
-        <div className="modal-overlay open" onClick={() => setShowReject(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title" style={{ color: "var(--error)" }}><i className="ti ti-alert-circle" /> Reject</div>
-              <button className="modal-close" onClick={() => setShowReject(false)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              <div className="field-group">
-                <label className="field-label">Rejection Reason *</label>
-                <textarea className="field-input" placeholder="State the reason…" value={rejectNote} onChange={e => setRejectNote(e.target.value)} style={{ height: 100 }} />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setShowReject(false)}>Cancel</button>
-              <button className="btn btn-danger" disabled={!rejectNote.trim()}>Confirm Reject</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Sub-component ──────────────────────────────────────────────────────────────
-
-interface ApprovalCardProps {
-  level: "L1" | "L2";
-  title: string;
-  subtitle: string;
-  isDone: boolean;
-  isCurrent: boolean;
-  approverName: string | null | undefined;
-  doneAt: string | null;
-  isLast: boolean;
-  comment: string;
-  onCommentChange: (v: string) => void;
-  onApprove: () => void;
-  busy: boolean;
-}
-
-function ApprovalCard({
-  level, title, subtitle, isDone, isCurrent,
-  approverName, doneAt, isLast,
-  comment, onCommentChange, onApprove, busy,
-}: ApprovalCardProps) {
-  const dotColor = isDone ? "var(--success)" : isCurrent ? "var(--warn)" : "var(--outline)";
-  const icon     = isDone ? "ti-circle-check" : isCurrent ? "ti-clock" : "ti-circle-dashed";
-
-  return (
-    <div style={{ display: "flex", gap: 0 }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 40, flexShrink: 0 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: "50%", background: dotColor,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#fff", flexShrink: 0,
-          boxShadow: isCurrent ? "0 0 0 4px var(--warn-c)" : "none",
-        }}>
-          <i className={`ti ${icon}`} style={{ fontSize: 16 }} />
-        </div>
-        {!isLast && (
-          <div style={{ width: 2, flex: 1, minHeight: 20, background: isDone ? "var(--success)" : "var(--outline-v)", margin: "4px 0" }} />
-        )}
-      </div>
-
-      <div style={{
-        flex: 1, marginLeft: 14, marginBottom: 20,
-        padding: "14px 16px",
-        border: `1.5px solid ${isCurrent ? "var(--warn)" : isDone ? "var(--success)" : "var(--outline-v)"}`,
-        borderRadius: "var(--radius)",
-        background: isCurrent ? "var(--warn-c)" : "transparent",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)" }}>{subtitle}</div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {doneAt && <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{doneAt}</span>}
-            <span className={isDone ? "badge badge-success" : isCurrent ? "badge badge-warn" : "badge badge-neutral"}>
-              {isDone ? "Approved" : isCurrent ? "Pending" : "Waiting"}
-            </span>
-          </div>
-        </div>
-
-        {approverName && (
-          <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-            Approved by: <strong>{approverName}</strong>
-          </div>
-        )}
-
-        {isCurrent && (
-          <div style={{ marginTop: 12 }}>
-            <textarea
-              className="field-input"
-              placeholder="Add approval note (optional)…"
-              value={comment}
-              onChange={e => onCommentChange(e.target.value)}
-              style={{ resize: "none", height: 65, marginBottom: 10, fontSize: 13 }}
-            />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="btn btn-success btn-sm"
-                onClick={onApprove}
-                disabled={busy}
-              >
-                {busy
-                  ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
-                  : <><i className="ti ti-check" /> Approve {level}</>}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

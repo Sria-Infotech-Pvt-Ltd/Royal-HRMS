@@ -6,45 +6,64 @@ import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, PayrollSettings, EmployeeSalaryConfig } from "@/types/payroll";
 import CancelCycleModal from "./CancelCycleModal";
 
+const MONTHS_LONG = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
 interface Props {
-  onRunPayroll: () => void;
+  onRunPayroll: (month?: string, year?: string) => void;
   onResumeCycle: (id: string, status: string) => void;
   canResume: boolean;
 }
 interface PagedResponse<T> { results: T[]; count: number; }
 
 const STATUS_BADGE: Record<string, string> = {
-  paid:                 "badge badge-success",
-  closed:               "badge badge-success",
-  cancelled:            "badge badge-error",
-  draft:                "badge badge-neutral",
-  attendance_pending:   "badge badge-warn",
-  attendance_approved:  "badge badge-info",
-  processing:           "badge badge-info",
-  payslips_generated:   "badge badge-primary",
-  query_window_open:    "badge badge-info",
+  paid:                "badge badge-success",
+  closed:              "badge badge-success",
+  cancelled:           "badge badge-error",
+  draft:               "badge badge-neutral",
+  attendance_pending:  "badge badge-warn",
+  attendance_approved: "badge badge-info",
+  processing:          "badge badge-info",
+  payslips_generated:  "badge badge-primary",
+  query_window_open:   "badge badge-info",
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  paid:                 "Paid",
-  closed:               "Closed",
-  cancelled:            "Cancelled",
-  draft:                "Draft",
-  attendance_pending:   "Awaiting Approval",
-  attendance_approved:  "Approved",
-  processing:           "Processing",
-  payslips_generated:   "Payslips Ready",
-  query_window_open:    "Query Window",
+  paid:                "Paid",
+  closed:              "Closed",
+  cancelled:           "Cancelled",
+  draft:               "Draft",
+  attendance_pending:  "Awaiting Approval",
+  attendance_approved: "Approved",
+  processing:          "Processing",
+  payslips_generated:  "Payslips Ready",
+  query_window_open:   "Query Window",
 };
 
 const UNCANCELLABLE = ["paid", "closed", "cancelled"];
-
-const DAYS_LABEL = ["S", "M", "T", "W", "T", "F", "S"];
+const DAYS_LABEL    = ["S","M","T","W","T","F","S"];
 
 function getCalendarDates(year: number, month: number) {
-  const firstDay = new Date(year, month, 1).getDay();
-  const days     = new Date(year, month + 1, 0).getDate();
-  return { firstDay, days };
+  return {
+    firstDay: new Date(year, month, 1).getDay(),
+    days:     new Date(year, month + 1, 0).getDate(),
+  };
+}
+
+/** Returns the cycle (non-cancelled) whose period covers the given month/year, or null. */
+function cycleForMonth(cycles: PayrollCycle[], calYear: number, calMonth: number): PayrollCycle | null {
+  return cycles.find(c => {
+    if (c.status === "cancelled") return false;
+    const start = new Date(c.cycle_start);
+    const end   = new Date(c.cycle_end);
+    // Cycle covers calMonth if its date range overlaps with [first, last] of calMonth
+    const first = new Date(calYear, calMonth, 1);
+    const last  = new Date(calYear, calMonth + 1, 0);
+    return start <= last && end >= first;
+  }) ?? null;
 }
 
 export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume }: Props) {
@@ -58,56 +77,61 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
 
   const cycles   = cyclesPage?.results ?? [];
   const empCount = salaryPage?.count ?? 0;
-
-  const pending = cycles.filter(c => !["paid", "closed", "cancelled"].includes(c.status));
-  const paid    = cycles.filter(c =>  ["paid", "closed"].includes(c.status));
+  const pending  = cycles.filter(c => !["paid","closed","cancelled"].includes(c.status));
+  const paid     = cycles.filter(c =>  ["paid","closed"].includes(c.status));
 
   const now      = new Date();
-  const year     = now.getFullYear();
-  const month    = now.getMonth();
+  const nowYear  = now.getFullYear();
+  const nowMonth = now.getMonth();
   const today    = now.getDate();
   const payDay   = settings?.pay_day ?? 30;
-  const monthName = now.toLocaleString("en-IN", { month: "long" });
 
-  const { firstDay, days } = getCalendarDates(year, month);
+  // Calendar navigation state — defaults to current month
+  const [calMonth, setCalMonth] = useState(nowMonth);
+  const [calYear,  setCalYear]  = useState(nowYear);
+
+  function prevMonth() {
+    if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
+    else                { setCalMonth(m => m - 1); }
+  }
+  function nextMonth() {
+    if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
+    else                 { setCalMonth(m => m + 1); }
+  }
+
+  // Missed months: only after first run, only past months (before current month)
+  const missedMonths: { month: number; year: number }[] = (() => {
+    if (cycles.length === 0) return [];
+    const result: { month: number; year: number }[] = [];
+    for (let m = 0; m < nowMonth; m++) {
+      const exists = cycles.some(c => {
+        if (c.status === "cancelled") return false;
+        const start = new Date(c.cycle_start);
+        const end   = new Date(c.cycle_end);
+        const first = new Date(nowYear, m, 1);
+        const last  = new Date(nowYear, m + 1, 0);
+        return start <= last && end >= first;
+      });
+      if (!exists) result.push({ month: m, year: nowYear });
+    }
+    return result.reverse(); // most recent first
+  })();
+
+  const calMonthName  = MONTHS_LONG[calMonth];
+  const calIsToday    = calMonth === nowMonth && calYear === nowYear;
+  const calIsPast     = new Date(calYear, calMonth, 1) < new Date(nowYear, nowMonth, 1);
+  const calIsFuture   = new Date(calYear, calMonth, 1) > new Date(nowYear, nowMonth, 1);
+  const selectedCycle = cycleForMonth(cycles, calYear, calMonth);
+
+  const { firstDay, days } = getCalendarDates(calYear, calMonth);
   const calDates = Array.from({ length: days }, (_, i) => i + 1);
 
   const STATS = [
-    {
-      label: "Employees w/ Salary",
-      value: empCount > 0 ? String(empCount) : "—",
-      sub: "CTC configured",
-      icon: "ti-users",
-      cls: "si-primary",
-    },
-    {
-      label: "Pending Cycles",
-      value: String(pending.length),
-      sub: pending.length > 0 ? `${pending.length} need action` : "All up to date",
-      icon: "ti-clock",
-      cls: pending.length > 0 ? "si-warn" : "si-success",
-    },
-    {
-      label: "Paid This Year",
-      value: String(paid.length),
-      sub: "Completed payroll runs",
-      icon: "ti-circle-check",
-      cls: "si-success",
-    },
-    {
-      label: "Next Pay Day",
-      value: payDay ? `${payDay} ${monthName}` : "—",
-      sub: settings ? `Cycle ${settings.cycle_start_day}–${settings.cycle_end_day}` : "Not configured",
-      icon: "ti-calendar-event",
-      cls: "si-info",
-    },
-    {
-      label: "Total Payroll Runs",
-      value: String(cycles.length),
-      sub: "All time",
-      icon: "ti-history",
-      cls: "si-primary",
-    },
+    { label: "Employees w/ Salary", value: empCount > 0 ? String(empCount) : "—", sub: "CTC configured",          icon: "ti-users",         cls: "si-primary" },
+    { label: "Pending Cycles",       value: String(pending.length),                sub: pending.length > 0 ? `${pending.length} need action` : "All up to date", icon: "ti-clock", cls: pending.length > 0 ? "si-warn" : "si-success" },
+    { label: "Paid This Year",       value: String(paid.length),                   sub: "Completed payroll runs",  icon: "ti-circle-check",  cls: "si-success"  },
+    { label: "Next Pay Day",         value: payDay ? `${payDay} ${MONTHS_LONG[nowMonth]}` : "—", sub: settings ? `Cycle ${settings.cycle_start_day}–${settings.cycle_end_day}` : "Not configured", icon: "ti-calendar-event", cls: "si-info" },
+    { label: "Total Payroll Runs",   value: String(cycles.length),                 sub: "All time",                icon: "ti-history",       cls: "si-primary"  },
   ];
 
   return (
@@ -136,11 +160,58 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
 
         {/* Payroll Calendar */}
         <div className="card">
-          <div className="card-header">
-            <div className="card-title"><i className="ti ti-calendar-event" /> Payroll Calendar</div>
-            <span className="badge badge-primary">{monthName} {year}</span>
+
+          {/* Header with prev/next navigation */}
+          <div className="card-header" style={{ paddingBottom: 8 }}>
+            <div className="card-title" style={{ fontSize: 13 }}>
+              <i className="ti ti-calendar-event" /> Payroll Calendar
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={prevMonth}>
+                <i className="ti ti-chevron-left" />
+              </button>
+              <span style={{ fontSize: 12, fontWeight: 600, minWidth: 100, textAlign: "center" }}>
+                {calMonthName} {calYear}
+              </span>
+              <button className="btn btn-ghost btn-sm" style={{ padding: "2px 6px" }} onClick={nextMonth}>
+                <i className="ti ti-chevron-right" />
+              </button>
+            </div>
           </div>
-          <div className="card-body" style={{ padding: 16 }}>
+
+          <div className="card-body" style={{ padding: "8px 16px 16px" }}>
+
+            {/* Missed month filter chips — shown only when cycles exist */}
+            {missedMonths.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--warn)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                  Missing payroll
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {missedMonths.map(({ month: m, year: y }) => {
+                    const isSelected = calMonth === m && calYear === y;
+                    return (
+                      <button
+                        key={`${y}-${m}`}
+                        onClick={() => { setCalMonth(m); setCalYear(y); }}
+                        style={{
+                          fontSize: 11, fontWeight: 600,
+                          padding: "2px 8px", borderRadius: 20,
+                          border: isSelected ? "1.5px solid var(--warn)" : "1.5px solid var(--outline-v)",
+                          background: isSelected ? "rgba(var(--warn-rgb, 234,179,8), 0.12)" : "transparent",
+                          color: isSelected ? "var(--warn)" : "var(--on-variant)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {MONTHS_SHORT[m]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Calendar grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 8 }}>
               {DAYS_LABEL.map((d, i) => (
                 <div key={i} style={{ textAlign: "center", fontSize: 10, fontWeight: 600, color: "var(--on-variant)", padding: "4px 0" }}>{d}</div>
@@ -148,16 +219,17 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
               {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
               {calDates.map(d => {
                 const isPayDay = d === payDay;
-                const isToday  = d === today;
+                const isToday  = calIsToday && d === today;
                 return (
                   <div
                     key={d}
                     style={{
-                      textAlign: "center", fontSize: 12, padding: "5px 2px",
+                      textAlign: "center", fontSize: 11, padding: "4px 2px",
                       borderRadius: 6, fontWeight: isToday ? 700 : 400,
                       background: isPayDay ? "var(--primary)" : "transparent",
-                      color: isPayDay ? "#fff" : "var(--on-bg)",
-                      border: isToday && !isPayDay ? "1.5px solid var(--primary)" : "none",
+                      color:      isPayDay ? "#fff" : "var(--on-bg)",
+                      border:     isToday && !isPayDay ? "1.5px solid var(--primary)" : "none",
+                      opacity:    calIsPast || calIsFuture ? 0.7 : 1,
                     }}
                   >
                     {d}
@@ -165,19 +237,64 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                 );
               })}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12, borderTop: "1px solid var(--outline-v)", paddingTop: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                <div style={{ width: 12, height: 12, borderRadius: 3, background: "var(--primary)" }} />
-                <span>Salary Date — {payDay} {monthName}</span>
+
+            {/* Legend */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 5, borderTop: "1px solid var(--outline-v)", paddingTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--primary)" }} />
+                <span>Pay Day — {payDay} {calMonthName}</span>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                <div style={{ width: 12, height: 12, borderRadius: 3, border: "2px solid var(--primary)" }} />
-                <span>Today — {today} {monthName}</span>
-              </div>
+              {calIsToday && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, border: "2px solid var(--primary)" }} />
+                  <span>Today — {today} {calMonthName}</span>
+                </div>
+              )}
             </div>
-            <button className="btn btn-filled btn-sm" style={{ width: "100%", marginTop: 14, justifyContent: "center" }} onClick={onRunPayroll}>
-              <i className="ti ti-player-play" /> Run {monthName} Payroll
-            </button>
+
+            {/* Payroll status for selected month */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--outline-v)" }}>
+              {selectedCycle ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Payroll status</span>
+                    <span className={STATUS_BADGE[selectedCycle.status] ?? "badge badge-neutral"}>
+                      {STATUS_LABEL[selectedCycle.status] ?? selectedCycle.status}
+                    </span>
+                  </div>
+                  {canResume && !["paid","closed"].includes(selectedCycle.status) && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ width: "100%", justifyContent: "center" }}
+                      onClick={() => onResumeCycle(selectedCycle.id, selectedCycle.status)}
+                    >
+                      <i className="ti ti-arrow-right" /> Resume {calMonthName}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ fontSize: 12, color: calIsPast ? "var(--warn)" : "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
+                    {calIsPast
+                      ? <><i className="ti ti-alert-triangle" style={{ color: "var(--warn)" }} /> No payroll run</>
+                      : calIsFuture
+                      ? <><i className="ti ti-clock" /> Future month</>
+                      : <><i className="ti ti-player-play" /> Ready to run</>
+                    }
+                  </div>
+                  {canResume && !calIsFuture && (
+                    <button
+                      className="btn btn-filled btn-sm"
+                      style={{ width: "100%", justifyContent: "center" }}
+                      onClick={() => onRunPayroll(calMonthName, String(calYear))}
+                    >
+                      <i className="ti ti-player-play" /> Run {calMonthName} Payroll
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
 
@@ -197,7 +314,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
               <i className="ti ti-calendar-off" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
               <div style={{ fontWeight: 600, marginBottom: 4 }}>No payroll runs yet</div>
               <div style={{ fontSize: 13, marginBottom: 16 }}>Click "Run Payroll" to start your first payroll cycle.</div>
-              <button className="btn btn-filled btn-sm" onClick={onRunPayroll}>
+              <button className="btn btn-filled btn-sm" onClick={() => onRunPayroll()}>
                 <i className="ti ti-player-play" /> Run First Payroll
               </button>
             </div>
@@ -241,22 +358,21 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
         </div>
       </div>
 
-      {/* Quick actions if there are pending cycles */}
+      {/* Pending cycles — action required */}
       {pending.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <div className="card-title"><i className="ti ti-alert-circle" style={{ color: "var(--warn)" }} /> Action Required — {pending.length} Pending Cycle{pending.length !== 1 ? "s" : ""}</div>
+            <div className="card-title">
+              <i className="ti ti-alert-circle" style={{ color: "var(--warn)" }} />
+              {" "}Action Required — {pending.length} Pending Cycle{pending.length !== 1 ? "s" : ""}
+            </div>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Period</th>
-                  <th>Pay Date</th>
-                  <th>Status</th>
-                  <th>L1 Approver</th>
-                  <th>Payslips</th>
-                  <th />
+                  <th>Period</th><th>Pay Date</th><th>Status</th>
+                  <th>L1 Approver</th><th>Payslips</th><th />
                 </tr>
               </thead>
               <tbody>
@@ -266,21 +382,12 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                       {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
                     </td>
                     <td>{c.pay_date}</td>
-                    <td>
-                      <span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>
-                        {STATUS_LABEL[c.status] ?? c.status}
-                      </span>
-                    </td>
+                    <td><span className={STATUS_BADGE[c.status] ?? "badge badge-neutral"}>{STATUS_LABEL[c.status] ?? c.status}</span></td>
                     <td style={{ fontSize: 13, color: "var(--on-variant)" }}>{c.l1_approver_name ?? "—"}</td>
                     <td>{c.payslip_count}</td>
                     <td onClick={e => e.stopPropagation()}>
                       {!UNCANCELLABLE.includes(c.status) && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: "var(--error)", fontSize: 12 }}
-                          onClick={() => setCancelTarget(c)}
-                          title="Cancel this cycle"
-                        >
+                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)", fontSize: 12 }} onClick={() => setCancelTarget(c)} title="Cancel this cycle">
                           <i className="ti ti-ban" /> Cancel
                         </button>
                       )}
@@ -293,7 +400,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
         </div>
       )}
 
-      {/* Cancelled cycles (collapsed, audit trail) */}
+      {/* Cancelled cycles — audit trail */}
       {cycles.some(c => c.status === "cancelled") && (
         <details className="card" style={{ padding: 0 }}>
           <summary style={{ padding: "12px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13, listStyle: "none", display: "flex", alignItems: "center", gap: 8 }}>
@@ -302,14 +409,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
           </summary>
           <div className="table-wrap">
             <table>
-              <thead>
-                <tr>
-                  <th>Period</th>
-                  <th>Cancelled By</th>
-                  <th>Cancelled At</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Period</th><th>Cancelled By</th><th>Cancelled At</th><th>Reason</th></tr></thead>
               <tbody>
                 {cycles.filter(c => c.status === "cancelled").map(c => (
                   <tr key={c.id}>

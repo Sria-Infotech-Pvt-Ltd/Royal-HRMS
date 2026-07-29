@@ -21,6 +21,7 @@ from core.responses import error, first_error, get_client_ip, success
 from ..models import (
     APPROVAL_APPROVED, APPROVAL_REJECTED,
     CARRY_FORWARD_UNLIMITED, CARRY_FORWARD_MANUAL,
+    DURATION_FULL,
     LEAVE_LWP, LEAVE_TYPE_CHOICES,
     REQ_APPROVED, REQ_CANCELLED, REQ_L2_PENDING, REQ_PENDING, REQ_REJECTED,
     CarryForwardLog, LeaveBalance, LeavePolicy, LeaveRequest,
@@ -139,7 +140,9 @@ def _approval_scope_filter(user) -> 'Q':
     """
     Scope filter for the approval queue — enforces both role and status visibility.
     manager__team_lead → REQ_PENDING requests where they are the designated L1 approver.
-    hr / hr_admin      → REQ_L2_PENDING requests in their branch.
+    hr / hr_admin      → REQ_L2_PENDING requests in their branch (case-insensitive).
+                         If no branch is set on the HR user they see all REQ_L2_PENDING
+                         requests org-wide (company-wide HR role).
     system_admin       → all statuses, all employees except own.
     """
     role = _role_name(user)
@@ -148,8 +151,10 @@ def _approval_scope_filter(user) -> 'Q':
     if _is_hr_role(role):
         branch = _user_branch(user)
         if branch:
-            return Q(employee__branch=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
-        return Q(employee__hr=user, status=REQ_L2_PENDING) & ~Q(employee=user)
+            # iexact prevents mismatches from casing differences in branch names.
+            return Q(employee__branch__iexact=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
+        # No branch set → treat as company-wide HR; see all L2-pending requests.
+        return Q(status=REQ_L2_PENDING) & ~Q(employee=user)
     if role == 'manager__team_lead':
         # Show only requests where this manager is the designated L1 approver.
         # Scoping by l1_approver (not reporting_manager) is precise — it respects
@@ -170,7 +175,7 @@ def _calendar_scope_filter(user) -> 'Q':
     if role == 'system_admin':
         return Q()
     if _is_hr_role(role):
-        return Q(employee__branch=user.branch) if user.branch else Q()
+        return Q(employee__branch__iexact=user.branch) if user.branch else Q()
     if role == 'manager__team_lead':
         return Q(employee__reporting_manager=user) | Q(employee=user)
     return Q()  # employee: see all approved leaves to plan around absences
@@ -419,7 +424,8 @@ class LeavePolicyView(APIView):
 
     def get(self, request):
         self._ensure_policies()
-        policies = LeavePolicy.objects.all().order_by('leave_type')
+        from core.cache_service import LeavePolicyCacheService
+        policies = LeavePolicyCacheService.get_all()
         return success('Leave policies retrieved.', LeavePolicySerializer(policies, many=True).data)
 
     def put(self, request, leave_type: str):
@@ -966,6 +972,7 @@ class LeaveApprovalView(APIView):
                 # No L2 configured — L1 approval is final.
                 leave_request.status = REQ_APPROVED
                 _deduct_balance_safe(leave_request)
+                _sync_leave_attendance(leave_request)
 
         elif leave_request.status == REQ_L2_PENDING:
             if not _can_approve_at_stage(request.user, leave_request, 'l2'):
@@ -981,6 +988,7 @@ class LeaveApprovalView(APIView):
             leave_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
             if action == 'approve':
                 _deduct_balance_safe(leave_request)
+                _sync_leave_attendance(leave_request)
 
         else:
             return error(f'Cannot act on a request with status "{leave_request.status}".')
@@ -1002,6 +1010,35 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
             leave_type=leave_request.leave_type,
             year=year,
         ).update(used_days=F('used_days') + earned_days)
+
+
+def _sync_leave_attendance(leave_request: LeaveRequest) -> None:
+    """Create or update AttendanceRecord rows to 'on_leave' for every day of an approved leave."""
+    import uuid as _uuid_mod
+    from apps.attendance.models import AttendanceRecord
+
+    current = leave_request.start_date
+    end = leave_request.end_date
+    employee = leave_request.employee
+
+    while current <= end:
+        AttendanceRecord.objects.update_or_create(
+            employee=employee,
+            date=current,
+            defaults={
+                'status': AttendanceRecord.STATUS_ON_LEAVE,
+                'first_punch_in': None,
+                'last_punch_out': None,
+                'total_working_minutes': 0,
+            },
+        )
+        current += timedelta(days=1)
+    logger.info(
+        'Synced %d on_leave attendance record(s) for employee %s (leave %s)',
+        (leave_request.end_date - leave_request.start_date).days + 1,
+        employee.email,
+        leave_request.id,
+    )
 
 
 # ─── Stats & Calendar ──────────────────────────────────────────────────────────
