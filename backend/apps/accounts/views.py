@@ -14,7 +14,19 @@ from datetime import datetime
 import cloudinary.utils
 import requests as http_req
 
-PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+PHONE_RE = re.compile(r'^(?:\+?91)?\d{10}$')
+_PHONE_FORMAT_CHARS_RE = re.compile(r'[\s\-()./]')
+NAME_RE = re.compile(r"^[A-Za-z0-9]+(?:[ '\-][A-Za-z0-9]+)*$")
+EMAIL_RE = re.compile(
+    r'^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?'
+    r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$'
+)
+
+
+def _is_valid_phone(raw: str) -> bool:
+    """True if raw is a 10-digit number, with formatting (spaces/-/()/. /) and
+    an optional +91/91 prefix stripped out first."""
+    return bool(PHONE_RE.match(_PHONE_FORMAT_CHARS_RE.sub('', raw)))
 
 from django.conf import settings
 from django.core import signing
@@ -2446,8 +2458,10 @@ class EmployeeListCreateView(APIView):
         if role_name != 'system_admin' and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
 
-        search = request.query_params.get('search', '').strip()
-        dept   = request.query_params.get('department', '').strip()
+        search       = request.query_params.get('search', '').strip()
+        dept         = request.query_params.get('department', '').strip()
+        branch_param = request.query_params.get('branch', '').strip()
+        status_param = request.query_params.get('status', '').strip()
         if search:
             qs = qs.filter(
                 Q(full_name__icontains=search) |
@@ -2456,6 +2470,17 @@ class EmployeeListCreateView(APIView):
             )
         if dept:
             qs = qs.filter(department=dept)
+        if branch_param:
+            qs = qs.filter(branch=branch_param)
+        if status_param:
+            if status_param == 'inactive':
+                qs = qs.filter(is_active=False)
+            elif status_param == 'active':
+                qs = qs.filter(is_active=True, must_change_password=False)
+            elif status_param == 'onboarding':
+                qs = qs.filter(is_active=True, must_change_password=True)
+            else:
+                return error('status must be one of: active, onboarding, inactive.')
 
         try:
             page_num  = max(1, int(request.query_params.get('page', 1)))
@@ -2472,6 +2497,51 @@ class EmployeeListCreateView(APIView):
             'page_size':   page_size,
             'total_pages': paginator.num_pages,
             'results':     [_employee_dict(u) for u in page_obj.object_list],
+        })
+
+
+class EmployeeStatsView(APIView):
+    """
+    Dashboard counts for the Employees page header cards.
+
+    Computed directly from the full queryset (not a single page) — the
+    frontend used to derive these from the currently loaded page of results,
+    which under-counted everything once there was more than one page.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'employees.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+
+        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
+
+        role_name = request.user.role.name if request.user.role else ''
+        if role_name != 'system_admin' and request.user.branch:
+            base_qs = base_qs.filter(branch=request.user.branch)
+
+        # branch_names/department_names always come from base_qs (ignores the
+        # branch filter below) so the branch dropdown never shrinks to just
+        # the currently-selected branch once one is picked.
+        branch_names = list(
+            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
+        )
+        department_names = list(
+            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
+        )
+
+        qs = base_qs
+        branch_filter = request.query_params.get('branch', '').strip()
+        if branch_filter and branch_filter != 'all':
+            qs = qs.filter(branch=branch_filter)
+
+        return success('Employee statistics retrieved.', data={
+            'total':             qs.count(),
+            'active':            qs.filter(is_active=True, must_change_password=False).count(),
+            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
+            'departments':       qs.exclude(department='').values('department').distinct().count(),
+            'branch_names':      branch_names,
+            'department_names':  department_names,
         })
 
     def post(self, request):
@@ -2504,10 +2574,19 @@ class EmployeeListCreateView(APIView):
         if last_name   and len(last_name)   > 150: errs['last_name']   = 'Last name must be 150 characters or fewer.'
         if email       and len(email)       > 254: errs['email']       = 'Email must be 254 characters or fewer.'
         if phone       and len(phone)       > 20:  errs['phone']       = 'Phone must be 20 characters or fewer.'
-        if phone       and 'phone' not in errs and not PHONE_RE.match(phone): errs['phone'] = 'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
         if branch      and len(branch)      > 100: errs['branch']      = 'Branch must be 100 characters or fewer.'
         if department  and len(department)  > 100: errs['department']  = 'Department must be 100 characters or fewer.'
         if designation and len(designation) > 100: errs['designation'] = 'Designation must be 100 characters or fewer.'
+
+        # Name format check — letters with single space/hyphen/apostrophe separators only
+        if first_name and 'first_name' not in errs and not NAME_RE.match(first_name):
+            errs['first_name'] = 'First name may only contain letters, numbers, spaces, hyphens and apostrophes.'
+        if last_name  and 'last_name'  not in errs and not NAME_RE.match(last_name):
+            errs['last_name']  = 'Last name may only contain letters, numbers, spaces, hyphens and apostrophes.'
+
+        # Phone format check — exactly 10 digits, optional +91/91 prefix
+        if phone and 'phone' not in errs and not _is_valid_phone(phone):
+            errs['phone'] = 'Enter a valid 10-digit phone number (optionally prefixed with +91).'
 
         # Date format check
         if date_of_joining and 'date_of_joining' not in errs:
@@ -2516,8 +2595,8 @@ class EmployeeListCreateView(APIView):
             except ValueError:
                 errs['date_of_joining'] = 'Date of joining must be in YYYY-MM-DD format.'
 
-        # Basic email format check
-        if email and 'email' not in errs and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        # Email format check
+        if email and 'email' not in errs and not EMAIL_RE.match(email):
             errs['email'] = 'Enter a valid email address.'
 
         if errs:

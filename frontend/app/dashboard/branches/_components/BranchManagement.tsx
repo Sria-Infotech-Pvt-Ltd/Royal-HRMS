@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
@@ -81,6 +81,10 @@ interface BranchDistribution {
 type Envelope<T> = { status: string; message: string; data: T };
 type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
+const OTHER_CITY = "__other__";
+const BRANCH_NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9 &\-.]*[A-Za-z0-9])?$/;
+const CITY_NAME_RE   = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+
 export default function BranchManagement() {
   const user      = useCurrentUser();
   const isHrAdmin = user?.role === "hr";
@@ -93,6 +97,8 @@ export default function BranchManagement() {
   
   const [states, setStates] = useState<StateObj[]>([]);
   const [cities, setCities] = useState<CityObj[]>([]);
+  const [newCityName, setNewCityName] = useState("");
+  const newCityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isLoading,     setIsLoading]     = useState(true);
   const [error,         setError]         = useState<string | null>(null);
@@ -160,7 +166,7 @@ export default function BranchManagement() {
   }, [editForm.state]);
 
   useEffect(() => {
-    if (modalMode === "add" && editForm.city) {
+    if (modalMode === "add" && editForm.city && editForm.city !== OTHER_CITY) {
       setCodeLoading(true);
       setEditForm(prev => ({ ...prev, branch_code: "" }));
       clientApi.get(API.branches.previewCode, { params: { city_id: editForm.city } })
@@ -173,6 +179,28 @@ export default function BranchManagement() {
     }
   }, [editForm.city, modalMode]);
 
+  // Preview the branch code for a not-yet-created city (debounced on the typed name).
+  useEffect(() => {
+    if (modalMode !== "add" || editForm.city !== OTHER_CITY) return;
+    if (newCityRef.current) clearTimeout(newCityRef.current);
+    const name = newCityName.trim();
+    if (!CITY_NAME_RE.test(name)) {
+      setCodeLoading(false);
+      setEditForm(prev => ({ ...prev, branch_code: "" }));
+      return;
+    }
+    setCodeLoading(true);
+    newCityRef.current = setTimeout(() => {
+      clientApi.get(API.branches.previewCode, { params: { city_name: name } })
+        .then(res => {
+          const d = res.data?.data ?? res.data;
+          setEditForm(prev => ({ ...prev, branch_code: d?.branch_code ?? "" }));
+        })
+        .catch(() => {})
+        .finally(() => setCodeLoading(false));
+    }, 400);
+  }, [editForm.city, newCityName, modalMode]);
+
   const validate = () => {
     const errs: Record<string, string> = {};
     const name = editForm.branch_name.trim();
@@ -180,8 +208,15 @@ export default function BranchManagement() {
 
     if (!editForm.state)       errs.state       = "Please select a state.";
     if (!editForm.city)        errs.city        = "Please select a city.";
+    else if (editForm.city === OTHER_CITY) {
+      const cityName = newCityName.trim();
+      if (!cityName)                       errs.new_city_name = "Please enter a city name.";
+      else if (!CITY_NAME_RE.test(cityName)) errs.new_city_name = "City name may only contain letters, spaces, hyphens and apostrophes.";
+    }
     if (!name)                 errs.branch_name = "Branch name is required.";
     else if (name.length > 200) errs.branch_name = "Branch name must be under 200 characters.";
+    else if (!BRANCH_NAME_RE.test(name))
+                                errs.branch_name = "Branch name may only contain letters, numbers, spaces, & - and . characters.";
     if (!addr)                 errs.address     = "Address is required.";
     if (codeLoading)           errs.branch_code = "Branch code is still generating, please wait.";
     if (modalMode === "add" && !editForm.branch_code && !codeLoading)
@@ -213,11 +248,10 @@ export default function BranchManagement() {
   const doSave = async () => {
     setSaveError(null);
     setHqConfirm(false);
-    const payload = {
+    const payload: Record<string, unknown> = {
       branch_name:    editForm.branch_name.trim(),
       address:        editForm.address.trim(),
       state:          editForm.state,
-      city:           editForm.city,
       status:         editForm.status,
       is_headquarter: editForm.is_headquarter,
       geofencing_enabled:    editForm.geofencing_enabled,
@@ -225,6 +259,11 @@ export default function BranchManagement() {
       longitude:             editForm.geofencing_enabled ? Number(editForm.longitude) : null,
       allowed_radius_meters: editForm.geofencing_enabled ? Number(editForm.allowed_radius_meters) : null,
     };
+    if (editForm.city === OTHER_CITY) {
+      payload.new_city_name = newCityName.trim();
+    } else {
+      payload.city = editForm.city;
+    }
     setSaving(true);
     try {
       if (modalMode === "edit") {
@@ -293,6 +332,7 @@ export default function BranchManagement() {
               setSaveError(null);
               setModalMode("add");
               setFieldErrors({});
+              setNewCityName("");
               setEditForm({
                 id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false,
                 geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
@@ -399,6 +439,7 @@ export default function BranchManagement() {
                         setSaveError(null);
                         setFieldErrors({});
                         setModalMode("edit");
+                        setNewCityName("");
                         setEditForm({
                           id:             branch.id,
                           branch_code:    branch.branch_code,
@@ -509,7 +550,8 @@ export default function BranchManagement() {
                     className={`field-input${fieldErrors.state ? " field-error" : ""}`}
                     value={editForm.state}
                     onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; return n; });
+                      setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; delete n.new_city_name; return n; });
+                      setNewCityName("");
                       setEditForm({ ...editForm, state: e.target.value, city: "" });
                     }}
                   >
@@ -526,7 +568,8 @@ export default function BranchManagement() {
                     className={`field-input${fieldErrors.city ? " field-error" : ""}`}
                     value={editForm.city}
                     onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.city; delete n.branch_code; return n; });
+                      setFieldErrors(prev => { const n = {...prev}; delete n.city; delete n.branch_code; delete n.new_city_name; return n; });
+                      if (e.target.value !== OTHER_CITY) setNewCityName("");
                       setEditForm({ ...editForm, city: e.target.value });
                     }}
                     disabled={!editForm.state || citiesLoading}
@@ -537,8 +580,25 @@ export default function BranchManagement() {
                     {cities.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
+                    {editForm.state && <option value={OTHER_CITY}>Other (type city name)</option>}
                   </select>
                   {fieldErrors.city && <p className="field-error-msg">{fieldErrors.city}</p>}
+                  {editForm.city === OTHER_CITY && (
+                    <div style={{ marginTop: "8px" }}>
+                      <input
+                        type="text"
+                        className={`field-input${fieldErrors.new_city_name ? " field-error" : ""}`}
+                        value={newCityName}
+                        onChange={e => {
+                          setFieldErrors(prev => { const n = {...prev}; delete n.new_city_name; delete n.branch_code; return n; });
+                          setNewCityName(e.target.value.replace(/[^A-Za-z '-]/g, ""));
+                        }}
+                        placeholder="Enter new city name"
+                        maxLength={100}
+                      />
+                      {fieldErrors.new_city_name && <p className="field-error-msg">{fieldErrors.new_city_name}</p>}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="form-row cols-2">
@@ -575,7 +635,7 @@ export default function BranchManagement() {
                     value={editForm.branch_name}
                     onChange={e => {
                       setFieldErrors(prev => { const n = {...prev}; delete n.branch_name; return n; });
-                      setEditForm({ ...editForm, branch_name: e.target.value });
+                      setEditForm({ ...editForm, branch_name: e.target.value.replace(/[^A-Za-z0-9 &.-]/g, "") });
                     }}
                     placeholder="e.g. Bengaluru HQ"
                     maxLength={200}

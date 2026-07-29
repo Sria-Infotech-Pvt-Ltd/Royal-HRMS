@@ -22,6 +22,22 @@ type Errs = Partial<Record<keyof Form, string>>;
 
 const EMP_TYPES = ["Permanent", "Contract", "Intern", "Probation"];
 
+const NAME_RE  = /^[A-Za-z0-9]+(?:[ '-][A-Za-z0-9]+)*$/;
+const PHONE_RE = /^(?:\+?91)?\d{10}$/;
+const EMAIL_RE = /^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
+// Strip disallowed characters as the user types, instead of only flagging them on submit.
+function sanitizeName(v: string): string {
+  return v.replace(/[^A-Za-z0-9 '-]/g, "");
+}
+function sanitizePhone(v: string): string {
+  const plus = v.trim().startsWith("+") ? "+" : "";
+  return (plus + v.replace(/[^\d]/g, "")).slice(0, plus ? 13 : 12);
+}
+function sanitizeEmail(v: string): string {
+  return v.replace(/[^A-Za-z0-9._%+@-]/g, "");
+}
+
 const EMPTY: Form = {
   first_name: "", last_name: "", email: "", phone: "",
   role: "", department: "", designation: "", branch: "",
@@ -166,9 +182,13 @@ export default function AddEmployeeModal({
   function validate(): boolean {
     const e: Errs = {};
     if (!form.first_name.trim())    e.first_name    = "Required";
+    else if (!NAME_RE.test(form.first_name.trim())) e.first_name = "Letters, numbers, spaces, hyphens and apostrophes only";
     if (!form.last_name.trim())     e.last_name     = "Required";
+    else if (!NAME_RE.test(form.last_name.trim())) e.last_name = "Letters, numbers, spaces, hyphens and apostrophes only";
     if (!form.email.trim())         e.email         = "Required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Enter a valid email";
+    else if (!EMAIL_RE.test(form.email.trim())) e.email = "Enter a valid email";
+    if (form.phone.trim() && !PHONE_RE.test(form.phone.trim().replace(/[\s\-()./]/g, "")))
+                                     e.phone         = "Enter a valid 10-digit phone number (optionally prefixed with +91)";
     if (!form.role)                 e.role          = "Required";
     if (!form.department)           e.department    = "Required";
     if (!form.designation.trim())   e.designation   = "Required";
@@ -259,16 +279,16 @@ export default function AddEmployeeModal({
                   <SectionHead icon="ti-user" title="Personal Information" />
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="First Name" required error={errs.first_name}>
-                      <Inp v={form.first_name} set={v => set("first_name", v)} ph="e.g. Anjali" err={!!errs.first_name} />
+                      <Inp v={form.first_name} set={v => set("first_name", sanitizeName(v))} ph="e.g. Anjali" err={!!errs.first_name} />
                     </Field>
                     <Field label="Last Name" required error={errs.last_name}>
-                      <Inp v={form.last_name} set={v => set("last_name", v)} ph="e.g. Sharma" err={!!errs.last_name} />
+                      <Inp v={form.last_name} set={v => set("last_name", sanitizeName(v))} ph="e.g. Sharma" err={!!errs.last_name} />
                     </Field>
                     <Field label="Work Email" required error={errs.email}>
-                      <Inp v={form.email} set={v => set("email", v)} ph="anjali@royal.com" type="email" err={!!errs.email} />
+                      <Inp v={form.email} set={v => set("email", sanitizeEmail(v))} ph="anjali@royal.com" type="email" err={!!errs.email} />
                     </Field>
-                    <Field label="Phone">
-                      <Inp v={form.phone} set={v => set("phone", v)} ph="+91 98765 43210" type="tel" />
+                    <Field label="Phone" error={errs.phone}>
+                      <Inp v={form.phone} set={v => set("phone", sanitizePhone(v))} ph="+91 98765 43210" type="tel" err={!!errs.phone} />
                     </Field>
                   </div>
 
