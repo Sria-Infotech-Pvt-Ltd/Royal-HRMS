@@ -128,10 +128,14 @@ function captureLocationOrErrorMessage(): Promise<LocationResult> {
 // a no-op-fast-path otherwise.
 const TTS_CANCEL_SETTLE_MS = 200;
 
-// "transcript": the panel just opened, showing what was recognized while the
-// request is in flight. "result": a response has come back — either the next
-// turn of a conversational dialogue, or the final answer to a one-shot intent.
-export type VoicePanelPhase = "transcript" | "result";
+// "greeting": the panel opened via the keyboard toggle, before any command
+// has been typed yet — never produced by this hook itself (see
+// VoiceCommandButton, which renders the panel in this phase directly, ahead
+// of `conversation` ever being set here). "transcript": the panel just
+// opened, showing what was recognized while the request is in flight.
+// "result": a response has come back — either the next turn of a
+// conversational dialogue, or the final answer to a one-shot intent.
+export type VoicePanelPhase = "greeting" | "transcript" | "result";
 export type VoiceResultStatus = "success" | "error";
 
 export interface VoiceConversationState {

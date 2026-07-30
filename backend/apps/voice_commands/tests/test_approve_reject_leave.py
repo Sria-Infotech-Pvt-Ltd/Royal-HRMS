@@ -59,6 +59,13 @@ def _patch_pending_store(store):
         patch('apps.voice_commands.conversation.get_pending', side_effect=store.get),
         patch('apps.voice_commands.conversation.set_pending', side_effect=store.set),
         patch('apps.voice_commands.conversation.clear_pending', side_effect=store.clear),
+        # approve_leave/reject_leave's own turn-taking now lives in
+        # conversation_leave_approval.py (split out of conversation.py to
+        # stay under this project's 300-line file convention), which binds
+        # its own set_pending/clear_pending imports — both module bindings
+        # need patching so every call in the flow hits the same fake store.
+        patch('apps.voice_commands.conversation_leave_approval.set_pending', side_effect=store.set),
+        patch('apps.voice_commands.conversation_leave_approval.clear_pending', side_effect=store.clear),
     )
 
 

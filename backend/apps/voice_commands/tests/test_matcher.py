@@ -34,6 +34,41 @@ class MatchIntentTests(SimpleTestCase):
         self.assertEqual(result.intent, 'clock_out')
         self.assertGreaterEqual(result.confidence, 80)
 
+    def test_matches_i_need_to_clockin_myself_as_clock_in(self):
+        """
+        Regression guard for a reported bug: "I need to clockin myself"
+        (concatenated, no space — a real STT/typo variant) returned "Did you
+        mean: 'i need to fix my punch'?" (request_attendance_correction)
+        instead of clock_in. Confirmed via direct rapidfuzz scoring: clock_in's
+        OLD phrase list topped out at 57.14 ('clock me in') against this
+        transcript, while request_attendance_correction's 'i need to fix my
+        punch' scored 60.87 — a phrase-coverage gap (clock_in had no "i need
+        to ___" framing at all), not a matcher bug. Now registered directly
+        as 'i need to clock in' / 'i need to clockin'."""
+        result = match_intent(normalize_transcript('I need to clockin myself'))
+        self.assertEqual(result.intent, 'clock_in')
+        self.assertNotEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_i_need_to_clockout_myself_as_clock_out(self):
+        """Symmetric case: 'i need to clockout myself' scored 60.71 against
+        request_attendance_correction's 'i need to correct my punch time' vs
+        clock_out's OLD best of 54.05 ('clock me out')."""
+        result = match_intent(normalize_transcript('I need to clockout myself'))
+        self.assertEqual(result.intent, 'clock_out')
+        self.assertNotEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_i_need_to_clockin_myself_not_confused_with_clock_out(self):
+        """'clockin' (in) must route to clock_in, not its clock_out sibling —
+        the phrases added to fix the collision above must stay directional."""
+        result = match_intent(normalize_transcript('I need to clockin myself'))
+        self.assertNotEqual(result.intent, 'clock_out')
+
+    def test_i_need_to_clockout_myself_not_confused_with_clock_in(self):
+        result = match_intent(normalize_transcript('I need to clockout myself'))
+        self.assertNotEqual(result.intent, 'clock_in')
+
     def test_matches_check_leave_balance_exact_phrase(self):
         result = match_intent(normalize_transcript('how many leaves do i have'))
         self.assertEqual(result.intent, 'check_leave_balance')
@@ -135,6 +170,36 @@ class MatchIntentTests(SimpleTestCase):
     def test_matches_request_attendance_correction_with_filler_words_stripped(self):
         result = match_intent(normalize_transcript('can you please correct my attendance'))
         self.assertEqual(result.intent, 'request_attendance_correction')
+
+    def test_matches_raise_a_query_about_my_attendance_as_request_attendance_correction(self):
+        """Regression guard: this phrase used to have no home in this
+        intent's phrase list at all (best score against the old list was
+        56.72) and drifted to raise_payslip_query's near-identical 'raise a
+        query about my payslip' (69.84) instead — a phrase-coverage gap, not
+        a matcher bug. Now registered directly here."""
+        result = match_intent(normalize_transcript('raise a query about my attendance'))
+        self.assertEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_raise_a_concern_about_my_attendance_as_request_attendance_correction(self):
+        result = match_intent(normalize_transcript('raise a concern about my attendance'))
+        self.assertEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_i_have_an_issue_with_my_attendance_as_request_attendance_correction(self):
+        result = match_intent(normalize_transcript('i have an issue with my attendance'))
+        self.assertEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_raise_a_query_about_my_attendance_not_confused_with_raise_payslip_query(self):
+        result = match_intent(normalize_transcript('raise a query about my attendance'))
+        self.assertNotEqual(result.intent, 'raise_payslip_query')
+
+    def test_raise_a_query_about_my_payslip_not_confused_with_request_attendance_correction(self):
+        """Same 'raise a query about my X' shape, different domain word —
+        must not cross-match in the other direction either."""
+        result = match_intent(normalize_transcript('raise a query about my payslip'))
+        self.assertNotEqual(result.intent, 'request_attendance_correction')
 
     # ── Fuzzy-match collision checks ────────────────────────────────────────
     # The new attendance intents share the "check my <noun>" phrasing pattern
@@ -431,6 +496,190 @@ class MatchIntentTests(SimpleTestCase):
     def test_approve_leave_not_confused_with_check_employee_payslip(self):
         result = match_intent(normalize_transcript('approve her leave'))
         self.assertEqual(result.intent, 'approve_leave')
+
+    # ── Greeting ──────────────────────────────────────────────────────────────
+
+    def test_matches_greeting_exact_phrase_hi(self):
+        result = match_intent(normalize_transcript('hi'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_exact_phrase_hello(self):
+        result = match_intent(normalize_transcript('hello'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_exact_phrase_hey(self):
+        result = match_intent(normalize_transcript('hey'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_good_morning(self):
+        result = match_intent(normalize_transcript('good morning'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_good_afternoon(self):
+        result = match_intent(normalize_transcript('good afternoon'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_good_evening(self):
+        result = match_intent(normalize_transcript('good evening'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_greetings(self):
+        result = match_intent(normalize_transcript('greetings'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_with_typo_helo(self):
+        result = match_intent(normalize_transcript('helo'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_with_typo_hii(self):
+        """Confirmed via direct rapidfuzz scoring: 'hii' vs registered 'hi'
+        scores exactly 80.00 — right at DEFAULT_CONFIDENCE_THRESHOLD, not
+        comfortably above it, so this pins the boundary itself."""
+        result = match_intent(normalize_transcript('hii'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_with_typo_gud_morning(self):
+        result = match_intent(normalize_transcript('gud morning'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_with_typo_good_evning(self):
+        result = match_intent(normalize_transcript('good evning'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_with_typo_hy_there(self):
+        result = match_intent(normalize_transcript('hy there'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_greeting_with_filler_words_stripped(self):
+        result = match_intent(normalize_transcript('um hello there please'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertGreaterEqual(result.confidence, 95)
+
+    # ── Greeting collision checks ───────────────────────────────────────────
+    # Greeting words are short and generic, so every OTHER intent's phrasing
+    # is checked here too, not just the closest lookalikes. Confirmed via
+    # direct rapidfuzz token_sort_ratio scoring against the real registry
+    # (as of this addition, the single closest cross-intent pair anywhere —
+    # greeting's 'hey there' vs reject_leave's 'deny leave' — tops out at
+    # 52.63, comfortably under CLARIFICATION_CONFIDENCE_THRESHOLD (60), let
+    # alone DEFAULT_CONFIDENCE_THRESHOLD (80).
+
+    def test_clock_in_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('clock in'))
+        self.assertEqual(result.intent, 'clock_in')
+
+    def test_clock_out_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('clock out'))
+        self.assertEqual(result.intent, 'clock_out')
+
+    def test_check_leave_balance_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('check my leave balance'))
+        self.assertEqual(result.intent, 'check_leave_balance')
+
+    def test_check_leave_status_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('check my leave status'))
+        self.assertEqual(result.intent, 'check_leave_status')
+
+    def test_cancel_leave_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('cancel my leave'))
+        self.assertEqual(result.intent, 'cancel_leave')
+
+    def test_check_attendance_stats_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('check my attendance'))
+        self.assertEqual(result.intent, 'check_attendance_stats')
+
+    def test_check_attendance_summary_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('show my attendance summary'))
+        self.assertEqual(result.intent, 'check_attendance_summary')
+
+    def test_apply_leave_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('apply for leave'))
+        self.assertEqual(result.intent, 'apply_leave')
+
+    def test_check_team_leave_queue_not_confused_with_greeting(self):
+        """'show pending leave requests' vs greeting's 'good evening' is the
+        closest this intent gets (46.15) — still nowhere near the
+        clarification floor."""
+        result = match_intent(normalize_transcript('show pending leave requests'))
+        self.assertEqual(result.intent, 'check_team_leave_queue')
+
+    def test_check_team_attendance_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('check team attendance'))
+        self.assertEqual(result.intent, 'check_team_attendance')
+
+    def test_approve_leave_not_confused_with_greeting(self):
+        """'approve her leave' vs greeting's 'hey there' (46.15) — closest
+        pairing for this intent, still well clear of any threshold."""
+        result = match_intent(normalize_transcript('approve her leave'))
+        self.assertEqual(result.intent, 'approve_leave')
+
+    def test_reject_leave_not_confused_with_greeting(self):
+        """'deny leave' vs greeting's 'hey there' (52.63) is the single
+        closest cross-intent pairing found anywhere in the registry — still
+        under CLARIFICATION_CONFIDENCE_THRESHOLD (60)."""
+        result = match_intent(normalize_transcript('deny leave'))
+        self.assertEqual(result.intent, 'reject_leave')
+
+    def test_check_my_payslip_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('check my payslip'))
+        self.assertEqual(result.intent, 'check_my_payslip')
+
+    def test_acknowledge_payslip_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('acknowledge my payslip'))
+        self.assertEqual(result.intent, 'acknowledge_payslip')
+
+    def test_raise_payslip_query_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('raise a payslip query'))
+        self.assertEqual(result.intent, 'raise_payslip_query')
+
+    def test_check_employee_payslip_not_confused_with_greeting(self):
+        """'check her payslip' vs greeting's 'hey there' (46.15) — closest
+        pairing for this intent."""
+        result = match_intent(normalize_transcript('check her payslip'))
+        self.assertEqual(result.intent, 'check_employee_payslip')
+
+    def test_request_attendance_correction_not_confused_with_greeting(self):
+        result = match_intent(normalize_transcript('request attendance correction'))
+        self.assertEqual(result.intent, 'request_attendance_correction')
+
+    def test_greeting_hi_not_confused_with_clock_in(self):
+        """'hi' vs clock_in's "i'm here" (40.00) — greeting's own closest
+        lookalike among the pre-existing intents."""
+        result = match_intent(normalize_transcript('hi'))
+        self.assertNotEqual(result.intent, 'clock_in')
+
+    def test_greeting_hi_there_not_confused_with_clock_in(self):
+        """'hi there' vs clock_in's "i'm here" (50.00) — the single closest
+        greeting-phrase-vs-other-intent pairing in the whole registry."""
+        result = match_intent(normalize_transcript('hi there'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertNotEqual(result.intent, 'clock_in')
+
+    def test_greeting_howdy_not_confused_with_clock_in(self):
+        """'howdy' vs clock_in's 'i showed up' (50.00)."""
+        result = match_intent(normalize_transcript('howdy'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertNotEqual(result.intent, 'clock_in')
+
+    def test_greeting_hey_there_not_confused_with_reject_leave(self):
+        """'hey there' vs reject_leave's 'deny leave' (52.63) — see
+        test_reject_leave_not_confused_with_greeting above for the reverse
+        direction."""
+        result = match_intent(normalize_transcript('hey there'))
+        self.assertEqual(result.intent, 'greeting')
+        self.assertNotEqual(result.intent, 'reject_leave')
 
 
 class CandidateIntentClarificationBandTests(SimpleTestCase):

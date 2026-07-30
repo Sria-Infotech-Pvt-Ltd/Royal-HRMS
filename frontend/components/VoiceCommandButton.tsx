@@ -44,13 +44,12 @@ export default function VoiceCommandButton() {
     submitTranscript, conversation, closeConversation,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
-  // Lets a user type the very first command instead of speaking it — the
-  // typed-answer input for mid-conversation follow-ups already exists in
-  // VoiceConversationPanel; this is the same idea, just for before any
-  // conversation has started. Local UI-only state (not lifted into
+  // Lets a user open a chat-style box to type the very first command instead
+  // of speaking it — opens the same VoiceConversationPanel used for the rest
+  // of the exchange (see the "greeting" phase branch below), just ahead of
+  // any real conversation existing yet. Local UI-only state (not lifted into
   // useVoiceCommand) since nothing outside this component's render needs it.
   const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
-  const [typedValue, setTypedValue] = useState("");
 
   if (HIDDEN_ROUTES.includes(pathname)) return null;
 
@@ -166,19 +165,6 @@ export default function VoiceCommandButton() {
   // means this also becomes the working fallback on non-Chromium browsers.
   const canType = isAuthenticated;
 
-  function handleTypedSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = typedValue.trim();
-    if (!trimmed || isProcessing) return;
-    setTypedValue("");
-    setIsTypedInputOpen(false);
-    // Same submitTranscript() the recognized-speech path and the mid-
-    // conversation typed-answer input both call — one /api/voice/parse/
-    // flow and one response-handling path for every submission, spoken or
-    // typed, first turn or follow-up.
-    submitTranscript(trimmed);
-  }
-
   // Every voice response now opens this panel — the recognized transcript
   // while the request is in flight, then the result, whether the intent was
   // conversational or a one-shot. The panel replaces the plain button in
@@ -203,6 +189,42 @@ export default function VoiceCommandButton() {
         onStopListening={stopListening}
         onSubmitText={submitTranscript}
         onClose={() => { setIsHovered(false); closeConversation(); }}
+        isMuted={isMuted}
+        onToggleMute={toggleMuted}
+      />
+    );
+  }
+
+  // Keyboard toggle opens the same panel component in its "greeting" phase —
+  // a chat box with a static hello and the typed/mic input controls, open
+  // before any real command exists. Submitting from here calls submitTranscript
+  // the same as every other entry point, which sets `conversation` and hands
+  // rendering back to the branch above for the rest of the exchange.
+  //
+  // Gated on canType, not isDisabled — same reasoning as canType's own
+  // definition above: typing needs only authentication, not Web Speech API
+  // support, so this chat box must still open on non-Chromium browsers (the
+  // one place typed commands work at all there). On such a browser,
+  // submitTranscript's own isDisabled check still routes the *result* to a
+  // toast instead of setting `conversation` (see its docstring) — this panel
+  // simply stays open afterwards, ready for the next typed command, rather
+  // than transitioning to a transcript/result view it can't show there.
+  if (isTypedInputOpen && canType) {
+    return (
+      <VoiceConversationPanel
+        transcript=""
+        message=""
+        phase="greeting"
+        conversational={false}
+        awaitingInput={false}
+        resultStatus={null}
+        isListening={isListening}
+        isProcessing={isProcessing}
+        interimTranscript={interimTranscript}
+        onStartListening={startListening}
+        onStopListening={stopListening}
+        onSubmitText={submitTranscript}
+        onClose={() => setIsTypedInputOpen(false)}
         isMuted={isMuted}
         onToggleMute={toggleMuted}
       />
