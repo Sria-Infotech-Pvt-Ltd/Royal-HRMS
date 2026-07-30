@@ -101,8 +101,8 @@ export function useNotifications() {
     let stopped = false;
 
     function connect() {
-      if (stopped) return;
-      const socket = new WebSocket(url as string);
+      if (stopped || !url) return;
+      const socket = new WebSocket(url);
       socketRef.current = socket;
 
       socket.onopen = () => {

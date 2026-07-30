@@ -14,7 +14,8 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 INSTALLED_APPS = [
-    'channels',                    # first: replaces runserver with an ASGI-aware one
+    'daphne',                      # first: replaces runserver with an ASGI-aware one
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
