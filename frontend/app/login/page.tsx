@@ -23,6 +23,7 @@ interface LoginApiResponse {
       onboarding_status: string;
       assessment_status: string;
       can_manage_team: boolean;
+      is_superuser: boolean;
     };
   };
 }
@@ -54,6 +55,7 @@ export default function LoginPage() {
         onboarding_status: d.user.onboarding_status ?? "complete",
         assessment_status: d.user.assessment_status ?? "complete",
         can_manage_team:   d.user.can_manage_team ?? false,
+        is_superuser:      d.user.is_superuser ?? false,
       };
       saveAuth(user);
       resetSessionExpired();

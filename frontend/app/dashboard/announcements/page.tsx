@@ -144,10 +144,8 @@ export default function AnnouncementsPage() {
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
   useEffect(() => { setCurrentUser(getStoredUser()); }, []);
 
-  const canPost  = currentUser?.permissions.includes("announcements.create") || currentUser?.role === "system_admin" || false;
-  const canEdit  = currentUser?.permissions.includes("announcements.edit")   || currentUser?.role === "system_admin" || false;
-  const isAdmin  = currentUser?.role === "system_admin";
-  const isHR     = currentUser?.role === "hr";
+  const canPost  = (currentUser?.permissions.includes("announcements.create") ?? false) || (currentUser?.is_superuser === true);
+  const canEdit  = (currentUser?.permissions.includes("announcements.edit")   ?? false) || (currentUser?.is_superuser === true);
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [meta,    setMeta]    = useState<PageMeta | null>(null);
@@ -225,7 +223,7 @@ export default function AnnouncementsPage() {
 
   function openCreate() {
     setEditTarget(null);
-    setForm({ ...EMPTY_FORM, send_email: isAdmin || isHR });
+    setForm({ ...EMPTY_FORM, send_email: canPost });
     setFormErrors({});
     setSaveErr(null);
     setShowModal(true);

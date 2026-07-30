@@ -148,7 +148,7 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     const user = getStoredUser();
-    setIsAdmin(user?.role === "system_admin");
+    setIsAdmin(user?.is_superuser === true);
     setUserBranch(user?.branch ?? "");
   }, []);
 

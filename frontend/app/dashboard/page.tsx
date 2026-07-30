@@ -4,21 +4,25 @@ import AdminDashboard    from "./_components/AdminDashboard";
 import ManagerDashboard  from "./_components/ManagerDashboard";
 import EmployeeDashboard from "./_components/EmployeeDashboard";
 
-function resolveRole(raw: string) {
-  const r = raw.toLowerCase().replace(/[\s_-]+/g, "");
-  if (r.includes("hradmin") || r === "hr") return "hr";
-  if (r.includes("admin"))                  return "admin";
-  if (r.includes("manager"))                return "manager";
+function resolveDashboard(session: {
+  is_superuser?:   boolean;
+  can_manage_team?: boolean;
+  permissions?:    string[];
+}) {
+  if (session?.is_superuser)     return "admin";
+  if (session?.can_manage_team)  return "manager";
+  const perms = new Set(session?.permissions ?? []);
+  if (perms.has("employees.view")) return "hr";
   return "employee";
 }
 
 export default async function DashboardPage() {
   const session = await getSession();
-  const roleKey = resolveRole(session?.role ?? "");
+  const key     = resolveDashboard(session ?? {});
   const sess    = session!;
 
-  if (roleKey === "hr")      return <HRDashboard      session={sess} />;
-  if (roleKey === "admin")   return <AdminDashboard   session={sess} />;
-  if (roleKey === "manager") return <ManagerDashboard session={sess} />;
+  if (key === "admin")   return <AdminDashboard   session={sess} />;
+  if (key === "hr")      return <HRDashboard      session={sess} />;
+  if (key === "manager") return <ManagerDashboard session={sess} />;
   return <EmployeeDashboard session={sess} />;
 }

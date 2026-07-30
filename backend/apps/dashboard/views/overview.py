@@ -21,12 +21,20 @@ _TTL_ACTION_QUEUE  = 45          # seconds — action-queue counts, short TTL to
 _TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
 
 
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
 def _is_system_admin(user):
-    return bool(user and user.role and user.role.name == 'system_admin')
+    return _has_perm(user, 'settings.edit')
 
 
 def _is_hr_or_admin(user):
-    return bool(user and user.role and user.role.name in ('hr', 'system_admin'))
+    return _has_perm(user, 'employees.view')
 
 
 def _headcount_data():

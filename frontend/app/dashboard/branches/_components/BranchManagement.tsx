@@ -82,10 +82,8 @@ type Envelope<T> = { status: string; message: string; data: T };
 type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
 
 export default function BranchManagement() {
-  const user      = useCurrentUser();
-  const isHrAdmin = user?.role === "hr";
-  // hr must never edit branches regardless of DB permissions — business rule
-  const canEdit   = usePermission("settings.edit") && !isHrAdmin;
+  const user    = useCurrentUser();
+  const canEdit = usePermission("settings.edit");
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [stats, setStats] = useState<BranchStats>({ total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
@@ -271,8 +269,8 @@ export default function BranchManagement() {
     }
   };
 
-  // HR admins see only their own branch; system_admin / others see all.
-  const visibleBranches = isHrAdmin && user?.branch
+  // Non-superusers are scoped to their assigned branch; system_admin sees all.
+  const visibleBranches = !user?.is_superuser && user?.branch
     ? branches.filter(b => b.branch_name === user.branch)
     : branches;
 

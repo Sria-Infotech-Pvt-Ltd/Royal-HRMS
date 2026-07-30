@@ -2019,9 +2019,6 @@ class CandidateBulkImportView(APIView):
 
 # ─── Candidate Bulk Import — Sample Template ──────────────────────────────────
 
-_ALLOWED_IMPORT_ROLES = frozenset({'system_admin', 'hr_admin', 'hr'})
-
-
 class CandidateBulkImportSampleView(APIView):
     """
     GET /api/recruitment/candidates/bulk-import/sample/?format=csv
@@ -2055,13 +2052,9 @@ class CandidateBulkImportSampleView(APIView):
     ]
 
     def get(self, request):
-        role_name = (request.user.role.name if request.user.role else '')
-        if (
-            role_name not in _ALLOWED_IMPORT_ROLES
-            and not getattr(request.user, 'is_superuser', False)
-        ):
+        if not _has_perm(request.user, 'recruitment.view'):
             return error(
-                'Only HR and System Admin users can download the candidate import template.',
+                'You do not have permission to download the candidate import template.',
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 

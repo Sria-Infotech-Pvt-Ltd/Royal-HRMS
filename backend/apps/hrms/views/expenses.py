@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
@@ -48,11 +50,13 @@ def _can_access_expense(user, expense) -> bool:
         return True
     if not _has_perm(user, 'expenses.approve'):
         return False
-    role = user.role.name if user.role else ''
-    if role == 'system_admin':
+    # system_admin (and superusers) — all-org access
+    if _has_perm(user, 'settings.edit'):
         return True
-    if role == 'manager__team_lead':
+    # team leads / managers — scoped to their direct reports
+    if user.role and getattr(user.role, 'can_manage_team', False):
         return expense.employee.reporting_manager_id == user.id
+    # HR / branch-scoped roles — same branch as the submitter
     branch = getattr(user, 'branch', '') or ''
     return not branch or (getattr(expense.employee, 'branch', '') or '') == branch
 

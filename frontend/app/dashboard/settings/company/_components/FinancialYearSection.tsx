@@ -16,7 +16,7 @@ export default function FinancialYearSection() {
   const user = useCurrentUser();
   // The API enforces this server-side too (403 on PUT for anyone else) —
   // this only controls whether the edit form renders at all.
-  const isSystemAdmin = user?.role === "system_admin";
+  const isSystemAdmin = user?.is_superuser === true;
 
   const { data, loading, error: loadError, refetch } = useFetch<FinancialYearConfig>(API.settings.financialYear);
 

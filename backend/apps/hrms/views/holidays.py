@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
@@ -22,15 +24,11 @@ def _is_unrestricted(user) -> bool:
     """
     Returns True for users who can see holidays across every branch.
 
-    system_admin role and Django superusers have no branch restriction —
-    mirrors _is_unrestricted() in apps/attendance/views/hr_attendance.py.
+    Delegates to _has_perm('settings.edit') which already grants access to
+    system_admin roles and Django superusers — mirrors _is_unrestricted() in
+    apps/attendance/views/hr_attendance.py.
     """
-    if getattr(user, 'is_superuser', False):
-        return True
-    try:
-        return user.role.name == 'system_admin'
-    except Exception:
-        return False
+    return _has_perm(user, 'settings.edit')
 
 
 class HolidayListCreateView(APIView):

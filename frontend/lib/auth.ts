@@ -15,6 +15,7 @@ export interface UserInfo {
   onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
   assessment_status: string;   // 'pending' | 'complete'
   can_manage_team:   boolean;
+  is_superuser:      boolean;
 }
 
 export function saveAuth(user: UserInfo) {
@@ -58,7 +59,7 @@ export function getStoredUser(): UserInfo | null {
 // These helpers exist so the UI stays consistent with what the API actually
 // returns, rather than showing an "All Branches" option that silently no-ops.
 export function isUnrestrictedUser(user: UserInfo | null): boolean {
-  return user?.role === "system_admin";
+  return user?.is_superuser === true;
 }
 
 export function getEffectiveBranch(user: UserInfo | null): string {

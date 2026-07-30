@@ -5,16 +5,17 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
-import { getStoredUser } from "@/lib/auth";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fmtDate, initials } from "../interview-list/_data";
 import OnboardingDrawer, { ApprovalUser } from "./_components/OnboardingDrawer";
 
 export default function CandidateReviewPage() {
   const router       = useRouter();
+  const currentUser  = useCurrentUser();
   const canApproveEmployees  = usePermission("employees.approve");
   const canApproveOnboarding = usePermission("onboarding.approve");
   const canApprove           = canApproveEmployees || canApproveOnboarding;
-  const isSystemAdmin        = getStoredUser()?.role === "system_admin";
+  const isSystemAdmin        = currentUser?.is_superuser === true;
 
   const [rows,    setRows]    = useState<ApprovalUser[]>([]);
   const [loading, setLoading] = useState(true);

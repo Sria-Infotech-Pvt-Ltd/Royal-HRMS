@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import { Branch, Candidate, CandidateStatus, fmtDate, initials } from "@/app/dashboard/interview-list/_data";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -162,7 +164,8 @@ function ReferralTable({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ReferralsPage() {
-  const [isAdmin,        setIsAdmin]        = useState(false);
+  const currentUser      = useCurrentUser();
+  const isAdmin          = usePermission("recruitment.view");
   const [myBranch,       setMyBranch]       = useState("");
   const [tab,            setTab]            = useState<"mine" | "all" | "rules">("mine");
   const [showModal,      setShowModal]      = useState(false);
@@ -173,19 +176,14 @@ export default function ReferralsPage() {
   const [mySearch,       setMySearch]       = useState("");
   const [allSearch,      setAllSearch]      = useState("");
 
-  // Read user cookie: detect admin/HR and capture the employee's own branch (UI only — backend enforces security)
+  // Pre-fill the form's branch from the user's assigned branch (UI only — backend enforces scoping)
   useEffect(() => {
-    try {
-      const pair = document.cookie.split(";").find(c => c.trim().startsWith("royal_hrms_user="));
-      if (!pair) return;
-      const raw = pair.trim().substring("royal_hrms_user=".length);
-      const user = JSON.parse(decodeURIComponent(raw)) as { permissions?: string[]; branch?: string };
-      setIsAdmin(user.permissions?.includes("recruitment.view") ?? false);
-      const branch = user.branch ?? "";
+    const branch = currentUser?.branch ?? "";
+    if (branch) {
       setMyBranch(branch);
-      if (branch) setForm(prev => ({ ...prev, branch }));
-    } catch { /* */ }
-  }, []);
+      setForm(prev => ({ ...prev, branch }));
+    }
+  }, [currentUser?.branch]);
 
   const { data: myData,  loading: myLoading,  error: myError,  refetch: myRefetch  } =
     useFetch<ReferralListResponse>(API.referrals.list);

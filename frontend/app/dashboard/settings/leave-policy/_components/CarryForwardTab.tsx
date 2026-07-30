@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
 import type {
   CarryForwardYearsResponse,
@@ -16,7 +17,6 @@ import CarryForwardPreviewTable from "./CarryForwardPreviewTable";
 import CarryForwardHistoryTable from "./CarryForwardHistoryTable";
 import CarryForwardRunModal from "./CarryForwardRunModal";
 
-const ALLOWED_ROLES = ["system_admin", "hr_admin", "hr"];
 const HISTORY_PAGE_SIZE = 20;
 
 function Spin() {
@@ -25,6 +25,7 @@ function Spin() {
 
 export default function CarryForwardTab() {
   const user = useCurrentUser();
+  const canManageLeave = usePermission("leave.edit");
   const { showToast } = useToast();
 
   const { data: years, loading: yearsLoading, error: yearsError } = useFetch<CarryForwardYearsResponse>(API.leave.carryForward.years);
@@ -63,7 +64,7 @@ export default function CarryForwardTab() {
   }, [fromYear, toYear]);
 
   if (!user) return null;
-  if (!ALLOWED_ROLES.includes(user.role)) {
+  if (!canManageLeave) {
     return (
       <div className="empty-state">
         <i className="ti ti-lock" />

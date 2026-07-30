@@ -34,10 +34,6 @@ _IST = ZoneInfo('Asia/Kolkata')
 
 # ── Approval chain resolution (mirrors apps/hrms/views/leave.py) ──────────────
 
-def _role_name(user) -> str:
-    return user.role.name if user.role else 'employee'
-
-
 def _user_branch(user) -> str:
     return (getattr(user, 'branch', '') or '').strip()
 
@@ -76,8 +72,12 @@ def _resolve_approval_chain(employee):
     return l1, l2
 
 
-def _is_hr_role(role: str) -> bool:
-    return role in ('hr', 'hr_admin')
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _can_hr_access_request(hr_user, correction: AttendanceCorrection) -> bool:
@@ -91,11 +91,10 @@ def _can_hr_access_request(hr_user, correction: AttendanceCorrection) -> bool:
 def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) -> bool:
     """
     Mirrors leave.py's _can_approve_at_stage — enforces that only the
-    designated approver for the current stage may act, so anyone holding
-    attendance.create can't jump the queue or act at the wrong stage.
+    designated approver for the current stage may act, so permission alone
+    cannot let someone jump the queue or act at the wrong stage.
     """
-    role = _role_name(user)
-    if role == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return True
 
     if stage == 'l1':
@@ -106,7 +105,7 @@ def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) ->
     if stage == 'l2':
         if correction.l2_approver_id:
             return correction.l2_approver_id == user.id
-        return role in ('hr_admin', 'hr') and _can_hr_access_request(user, correction)
+        return _has_perm(user, 'attendance.create') and _can_hr_access_request(user, correction)
 
     return False
 
@@ -114,17 +113,16 @@ def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) ->
 def _approval_scope_filter(user) -> Q:
     """
     Scope filter for who may see which correction requests in the review queue.
-    manager__team_lead → requests where they are the designated L1 approver.
-    hr / hr_admin       → all requests in their branch (existing browse behaviour).
-    system_admin        → all requests.
+    can_manage_team   → requests where they are the designated L1 approver.
+    attendance.create → all requests in their branch (HR-level browse).
+    settings.edit     → all requests (admin override).
     """
-    role = _role_name(user)
-    if role == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return Q()
-    if _is_hr_role(role):
+    if _has_perm(user, 'attendance.create'):
         branch = _user_branch(user)
         return Q(employee__branch=branch) if branch else Q()
-    if role == 'manager__team_lead':
+    if user.role and user.role.can_manage_team:
         return Q(l1_approver=user)
     return Q(pk=None)  # no other role gets a review queue
 
@@ -150,8 +148,7 @@ def submit_correction(
     """
     l1, l2 = _resolve_approval_chain(employee)
 
-    role = _role_name(employee)
-    if role == 'manager__team_lead' or l1 is None:
+    if (employee.role and employee.role.can_manage_team) or l1 is None:
         initial_status = AttendanceCorrection.STATUS_L2_PENDING
         l1_approver    = None
         l2_approver    = l2

@@ -134,7 +134,7 @@ def _auto_assign_managers(employee: 'User') -> list:
             changed.append('hr')
 
     # Managers are the reporting manager for others — they have none themselves.
-    if role_name == 'manager__team_lead':
+    if employee.role and employee.role.can_manage_team:
         return changed
 
     # Need at least a branch to find a manager.
@@ -167,7 +167,7 @@ def _auto_assign_managers(employee: 'User') -> list:
     if assigned is None:
         assigned = (
             User.objects
-            .filter(role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True)
+            .filter(role__can_manage_team=True, branch__iexact=emp_branch, is_active=True)
             .exclude(pk=employee.pk)
             .order_by('id')
             .first()
@@ -291,7 +291,7 @@ def _employee_dict(user: User) -> dict:
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if role_name != 'manager__team_lead':
+    if not (user.role and user.role.can_manage_team):
         result['reporting_manager'] = {
             'id':   mgr.employee_id if mgr else None,
             'name': mgr.full_name   if mgr else None,
@@ -418,6 +418,7 @@ class LoginView(APIView):
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
                 'can_manage_team':     user.role.can_manage_team if user.role else False,
+                'is_superuser':        user.is_superuser or (user.role and user.role.name == 'system_admin'),
             },
         })
         resp.set_cookie(
@@ -2363,7 +2364,7 @@ class CompanyFinancialYearView(APIView):
         return success('Financial year configuration retrieved.', data)
 
     def put(self, request):
-        if not (request.user.role and request.user.role.name == 'system_admin'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error(
                 'Only system administrators can update the financial year configuration.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -2442,8 +2443,7 @@ class EmployeeListCreateView(APIView):
         )
 
         # Non-system-admin users are always scoped to their own branch — cannot be overridden by query params
-        role_name = request.user.role.name if request.user.role else ''
-        if role_name != 'system_admin' and request.user.branch:
+        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
 
         search = request.query_params.get('search', '').strip()
@@ -2671,9 +2671,8 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     scoping already applied to EmployeeListCreateView.get(). Returns True when
     the employee should be treated as not found for this requester.
     """
-    role_name = requesting_user.role.name if requesting_user.role else ''
     return (
-        role_name != 'system_admin'
+        not _has_perm(requesting_user, 'settings.edit')
         and bool(requesting_user.branch)
         and employee.branch != requesting_user.branch
     )
@@ -2790,8 +2789,7 @@ class EmployeeDetailView(APIView):
 
         # Manual reporting manager assignment (overrides auto-assign; blocked for managers)
         if 'reporting_manager_id' in data:
-            current_role = (employee.role.name if employee.role else '').lower()
-            if current_role == 'manager__team_lead':
+            if employee.role and employee.role.can_manage_team:
                 return error('Managers do not have a reporting manager.')
             rm_val = data.get('reporting_manager_id')
             if rm_val:
@@ -3752,9 +3750,7 @@ class OnboardingApprovalView(APIView):
         if target.onboarding_status != User.ONBOARDING_SUBMITTED:
             return error('This user has not submitted their onboarding form.')
 
-        role_name        = request.user.role.name if request.user.role else ''
-        target_role_name = target.role.name if target.role else ''
-        if role_name != 'system_admin' and target_role_name in ('hr', 'system_admin'):
+        if not _has_perm(request.user, 'settings.edit') and _has_perm(target, 'employees.view'):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
@@ -4022,8 +4018,8 @@ class OnboardingApprovalView(APIView):
             .distinct()
             .order_by('-date_joined')
         )
-        if role_name != 'system_admin':
-            base_qs = base_qs.exclude(role__name__in=['hr', 'system_admin'])
+        if not _has_perm(request.user, 'settings.edit'):
+            base_qs = base_qs.exclude(role__name__in=['system_admin'])
 
         stats = {
             'pending':   base_qs.filter(onboarding_status=User.ONBOARDING_PENDING).count(),
@@ -4066,8 +4062,8 @@ class OnboardingApprovalView(APIView):
             .prefetch_related('employee_documents')
             .order_by('date_joined')
         )
-        if role_name != 'system_admin':
-            qs = qs.exclude(role__name__in=['hr', 'system_admin'])
+        if not _has_perm(request.user, 'settings.edit'):
+            qs = qs.exclude(role__name__in=['system_admin'])
 
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         user_ids = [u.pk for u in page_obj.object_list]
@@ -4248,7 +4244,7 @@ class EmployeeReportingManagerView(APIView):
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        if employee.role and employee.role.name.lower() == 'manager__team_lead':
+        if employee.role and employee.role.can_manage_team:
             return error('Managers do not have a reporting manager.')
 
         manager_id = request.data.get('reporting_manager_id')
@@ -4349,11 +4345,22 @@ class ApprovalWorkflowRuleView(APIView):
 # ─── Employee Approval Matrix ─────────────────────────────────────────────────
 
 def _resolve_rule_approver(role_str: str, employee):
-    """Resolve a role string to the actual User for a given employee."""
+    """Resolve a role string to the actual User for a given employee.
+
+    Uses PBAC capability checks to validate the resolved approver still holds
+    the expected capability — a user whose role changed after assignment will
+    no longer resolve, preventing stale approver chains.
+    """
     if role_str in ('reporting_manager', 'rm', 'manager'):
-        return getattr(employee, 'reporting_manager', None)
+        rm = getattr(employee, 'reporting_manager', None)
+        if rm and rm.role and rm.role.can_manage_team:
+            return rm
+        return None
     if role_str in ('hr', 'hr_manager', 'hr_admin'):
-        return getattr(employee, 'hr', None)
+        hr_user = getattr(employee, 'hr', None)
+        if hr_user and _has_perm(hr_user, 'leave.approve'):
+            return hr_user
+        return None
     return None
 
 
@@ -4884,7 +4891,7 @@ class EmployeeBulkImportView(APIView):
 
 # ─── Employee Bulk Import — Sample Template ───────────────────────────────────
 
-_EMP_ALLOWED_ROLES = frozenset({'system_admin', 'hr_admin'})
+# Replaced by _has_perm check below — 'employees.create' covers both system_admin and HR.
 
 
 class EmployeeBulkImportSampleView(APIView):
@@ -4924,10 +4931,9 @@ class EmployeeBulkImportSampleView(APIView):
     ]
 
     def get(self, request):
-        role_name = (request.user.role.name if request.user.role else '')
-        if role_name not in _EMP_ALLOWED_ROLES:
+        if not _has_perm(request.user, 'employees.create'):
             return error(
-                'Only System Admin and HR Admin can download the employee import template.',
+                'You do not have permission to download the employee import template.',
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 
