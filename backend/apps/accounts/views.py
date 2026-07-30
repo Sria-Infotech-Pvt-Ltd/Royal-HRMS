@@ -30,6 +30,7 @@ def _is_valid_phone(raw: str) -> bool:
 
 from django.conf import settings
 from django.core import signing
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, StreamingHttpResponse
@@ -44,6 +45,12 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission
 from core.responses import error, first_error, get_client_ip, success
+from core.template_context import (
+    candidate_context as _candidate_template_context,
+    expense_context as _expense_template_context,
+    leave_request_context as _leave_request_template_context,
+    universal_context as _universal_template_context,
+)
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -1976,6 +1983,90 @@ class EmailTemplatePreviewView(APIView):
         )
         logger.info('Email template "%s" deleted by %s', name, request.user.email)
         return success(f'Email template "{name}" deleted successfully.')
+
+
+# ─── Template variable resolution (single source of truth for auto-fill) ─────
+#
+# Every "approve/reject/decide + send email" modal in the frontend used to
+# hand-build its own small, inconsistently-cased list of "variables I can
+# auto-fill" — anything outside that list showed as an empty box the human
+# had to type in by hand, even when the real value was already known
+# server-side. This endpoint is the fix: given an entity, it returns every
+# variable this codebase knows how to resolve for it, under BOTH the
+# lowercase snake_case names newer templates use AND the legacy UPPER_CASE
+# names older ones use — so any template, existing or future, that
+# references a variable matching a real field on the entity gets it for
+# free. Only genuinely custom, non-derivable variables should ever need
+# manual entry after this.
+
+
+class ResolveTemplateVariablesView(APIView):
+    """
+    POST /api/settings/email-templates/resolve-context/
+    Body: { "entity_type": "candidate" | "leave_request" | "expense", "entity_id": "..." }
+
+    Returns every known variable this codebase can resolve for the entity —
+    used by the approve/reject/decide send-email modals to auto-fill
+    template variables instead of leaving them as manual empty boxes.
+    """
+    permission_classes = [IsAuthenticated]
+    _DENIED = 'You do not have permission to perform this action.'
+
+    def post(self, request):
+        entity_type = request.data.get('entity_type', '')
+        entity_id   = request.data.get('entity_id', '')
+        if not entity_type or not entity_id:
+            return error('entity_type and entity_id are required.')
+
+        if entity_type == 'candidate':
+            if not (_has_perm(request.user, 'recruitment.approve') or _has_perm(request.user, 'recruitment.edit')):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            from apps.recruitment.models import Candidate
+            try:
+                candidate = Candidate.objects.select_related('branch').get(pk=entity_id)
+            except (Candidate.DoesNotExist, ValueError, ValidationError):
+                return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+            context = _candidate_template_context(candidate, actor=request.user)
+
+        elif entity_type == 'leave_request':
+            if not _has_perm(request.user, 'leave.approve'):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            from apps.hrms.models import LeaveRequest, REQ_PENDING
+            from apps.hrms.views.leave import _can_approve_at_stage
+            try:
+                leave_request = LeaveRequest.objects.select_related('employee').get(pk=entity_id)
+            except (LeaveRequest.DoesNotExist, ValueError, ValidationError):
+                return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
+            # Holding leave.approve isn't enough on its own — same as the real
+            # approve/reject endpoint, only the request's designated approver
+            # at its current stage (or system_admin) may see its details.
+            stage = 'l1' if leave_request.status == REQ_PENDING else 'l2'
+            if not _can_approve_at_stage(request.user, leave_request, stage):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            context = _leave_request_template_context(leave_request)
+
+        elif entity_type == 'expense':
+            if not _has_perm(request.user, 'expenses.approve'):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            from apps.hrms.models import Expense
+            from apps.hrms.views.expenses import _can_access_expense
+            lookup = {'expense_number': entity_id} if str(entity_id).isdigit() else {'pk': entity_id}
+            try:
+                expense = Expense.objects.select_related('employee').get(**lookup)
+            except (Expense.DoesNotExist, ValueError, ValidationError):
+                return error('Expense not found.', http_status=status.HTTP_404_NOT_FOUND)
+            # Same per-record scoping the real approve/reject endpoint uses —
+            # holding expenses.approve alone would let any approver pull any
+            # other manager's team's expense details.
+            if not _can_access_expense(request.user, expense):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            context = _expense_template_context(expense)
+
+        else:
+            return error(f'Unknown entity_type "{entity_type}".')
+
+        return success('Template variables resolved.', data={'context': {**_universal_template_context(), **context}})
+
 
 # ─── Document Center ───────────────────────────────────────────────────────────
 
@@ -4914,6 +5005,13 @@ class EmployeeBulkImportView(APIView):
                             'current_address': address,
                         },
                     )
+
+                # Auto-allocate leave balances based on active leave policies —
+                # same step EmployeeListCreateView.post() does for a single
+                # employee; this bulk path re-implements creation separately
+                # and had been missing it entirely.
+                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                _allocate_leaves_for_employee(user, user.date_of_joining)
 
                 seen_emails.add(email)
                 created_ids.append(employee_id)

@@ -6,8 +6,6 @@ import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailP
 import { Candidate, EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
 
-const AUTO_KEYS = new Set(["FULL_NAME", "FNAME", "LNAME", "EMAIL", "POSITION", "COMPANY"]);
-
 interface Props {
   candidate: Candidate;
   decision:  "approve" | "reject";
@@ -26,6 +24,7 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [extraVars,        setExtraVars]        = useState<Record<string, string>>({});
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
+  const [serverContext,    setServerContext]    = useState<Record<string, string>>({});
 
   // Load templates + company info for both approve and reject
   useEffect(() => {
@@ -36,7 +35,12 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
     ])
       .then(([tplRes, coRes]) => {
         const grouped: Record<string, EmailTemplate[]> = tplRes.data?.data?.results ?? {} as Record<string, EmailTemplate[]>;
+        // Restrict to categories actually meant for a candidate decision —
+        // showing every category let people pick e.g. "Pay Slip" or a leave
+        // template here, whose variables can never resolve for a candidate.
+        const RELEVANT_CATEGORIES = new Set(["recruitment", "onboarding"]);
         const groups = Object.entries(grouped)
+          .filter(([category]) => RELEVANT_CATEGORIES.has(category))
           .map(([category, items]) => ({ category, templates: items.filter(t => t.is_active) }))
           .filter(g => g.templates.length > 0);
         setTemplateGroups(groups);
@@ -56,25 +60,42 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
       .finally(() => setLoadingTemplates(false));
   }, [isApprove]);
 
-  // Reset manual variable inputs when template changes
+  // Resolve every real variable the backend knows for this candidate — the
+  // source of truth, so any template variable matching a real field
+  // auto-fills instead of needing this modal to know about it in advance.
+  useEffect(() => {
+    clientApi
+      .post<{ data: { context: Record<string, string> } }>(API.settings.resolveTemplateContext, {
+        entity_type: "candidate",
+        entity_id:   candidate.id,
+      })
+      .then(res => setServerContext(res.data?.data?.context ?? {}))
+      .catch(() => setServerContext({}));
+  }, [candidate.id]);
+
+  // Reset manual variable inputs when template changes — only variables NOT
+  // resolvable from serverContext (case-insensitively) become manual fields.
   useEffect(() => {
     if (!selectedTemplate) { setExtraVars({}); return; }
     const manual: Record<string, string> = {};
     for (const v of (selectedTemplate.available_variables ?? [])) {
-      if (!AUTO_KEYS.has(v)) manual[v] = "";
+      const resolved = serverContext[v] ?? serverContext[v.toUpperCase()] ?? serverContext[v.toLowerCase()];
+      if (resolved === undefined) manual[v] = "";
     }
     setExtraVars(manual);
-  }, [selectedTemplate]);
+  }, [selectedTemplate, serverContext]);
 
   function previewVars(): Record<string, string> {
     const parts = candidate.name.trim().split(/\s+/);
     return {
+      // Client-side fallback while serverContext is still loading.
       FULL_NAME: candidate.name,
       FNAME:     parts[0] ?? candidate.name,
       LNAME:     parts.length > 1 ? parts[parts.length - 1] : "",
       EMAIL:     candidate.email,
       POSITION:  candidate.position_applied,
       COMPANY:   company?.company_name ?? "[Company]",
+      ...serverContext,
       ...extraVars,
     };
   }
@@ -98,7 +119,11 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
 
       if (selectedTemplate) {
         body.template_name = selectedTemplate.name;
-        body.extra_context = extraVars;
+        // Send the full resolved context, not just the manually-typed
+        // leftovers — otherwise the preview looks right but the actual
+        // email (built server-side from a much smaller base context) would
+        // still be missing everything auto-filled from serverContext.
+        body.extra_context = { ...serverContext, ...extraVars };
       }
 
       const res = await RECRUITMENT_API.hrDecision(candidate.id, body);

@@ -103,12 +103,17 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
     Return True if `user` is authorised to act at the given approval stage.
 
     - settings.edit (admin): always authorised — override for any stuck request.
-    - l1 stage: must be the designated l1_approver on the request.
+    - l1 stage: must be the designated l1_approver on the request — L1 is a
+                per-manager assignment, not a shared queue.
     - l2 stage: must be the designated l2_approver, or a leave.approve holder
                 in the same branch when no l2 was stamped at creation time.
+                L2 is a shared branch-wide HR queue (see _approval_scope_filter,
+                which already lists l2_pending requests to every branch HR).
 
-    Enforcing the designated approver prevents any user with leave.approve from
-    jumping the queue or acting at the wrong stage.
+    Enforcing the designated approver at L1 prevents any user with leave.approve
+    from jumping the queue or acting at the wrong stage. L2 must stay in sync
+    with _approval_scope_filter's branch-wide visibility, or HR users who can
+    see a request in their queue get a 403 when they try to act on it.
     """
     if _has_perm(user, 'settings.edit'):
         return True

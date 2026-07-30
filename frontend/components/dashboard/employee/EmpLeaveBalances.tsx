@@ -1,7 +1,7 @@
 "use client";
 
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
-import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import { getLeaveYear } from "@/lib/fiscalYear";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
 
 const LEAVE_TYPE_LABEL: Record<string, string> = {
@@ -23,7 +23,7 @@ const LEAVE_TYPE_COLOR: Record<string, string> = {
 };
 
 export default function EmpLeaveBalances() {
-  const { currentYear: year } = useFiscalYearConfig();
+  const year = getLeaveYear();
   const { data, loading, status } = useLeaveBalances(year);
 
   const balances = data?.balances ?? [];

@@ -20,7 +20,8 @@ import Avatar from "./_components/Avatar";
 import StatusBadge from "./_components/StatusBadge";
 import AddEmployeeModal  from "./_components/AddEmployeeModal";
 import BulkImportModal  from "./_components/BulkImportModal";
-import EditEmployeeModal from "./_components/EditEmployeeModal";
+import EditEmployeeModal  from "./_components/EditEmployeeModal";
+import BranchFilterSelect from "@/components/BranchFilterSelect";
 
 /* ── API response shape ─────────────────────────────────────── */
 export interface ApiEmployee {
@@ -284,17 +285,16 @@ export default function EmployeesPage() {
 
       {/* ── Filters ── */}
       <div className="flex items-center gap-3 flex-wrap mb-4">
-        {/* Branch */}
-        <select
-          value={branch}
-          onChange={e => { setBranch(e.target.value); setDept("all"); }}
-          suppressHydrationWarning
-          className={SEL_CLS}
-          style={SEL_STYLE}
-        >
-          <option value="all">All Branches</option>
-          {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
+        {/* Branch — locked to the user's own branch for anyone but system_admin;
+            the backend already enforces this, this just keeps the UI honest about it. */}
+        <BranchFilterSelect
+          branches={branchOptions.map((b, i) => ({ id: i, branch_name: b }))}
+          value={branch === "all" ? "" : branch}
+          onChange={v => { setBranch(v || "all"); setDept("all"); }}
+          locked={!isAdmin}
+          lockedBranchName={userBranch}
+          width={180}
+        />
 
         {/* Department */}
         <select

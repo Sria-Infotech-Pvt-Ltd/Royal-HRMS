@@ -44,7 +44,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
   // Branch filter changed — the current page no longer means the same thing.
   useEffect(() => { setPage(1); }, [branch]);
 
-  const { currentYear } = useFiscalYearConfig();
+  const currentYear = getLeaveYear();
 
   const { data: balances } = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`

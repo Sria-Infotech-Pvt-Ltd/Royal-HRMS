@@ -66,6 +66,7 @@ export const API = {
     financialYear: "/settings/company/financial-year/",
     employeeCode: "/settings/employee-code/",
     emailTemplates: "/settings/email-templates/",
+    resolveTemplateContext: "/settings/email-templates/resolve-context/",
     approvalRules: "/settings/approval-rules/",
     assessmentConfig: "/assessments/settings/",
   },

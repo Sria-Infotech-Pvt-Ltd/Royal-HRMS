@@ -330,6 +330,7 @@ function TeamApprovalsSection() {
           employeeName={modal.employeeName}
           employeeEmail={modal.employeeEmail}
           kind={modal.kind === "leave" || modal.kind === "expense" ? modal.kind : undefined}
+          entityId={modal.id}
           autoVars={modal.autoVars}
           onConfirm={handleConfirm}
           onClose={() => setModal(null)}
