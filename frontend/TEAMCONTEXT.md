@@ -3337,3 +3337,40 @@ Mid-session, added department scoping for `manager__team_lead` (on top of existi
 - **`ResolveTemplateVariablesView` is the only place that should ever build "what variables does entity X resolve to."** If a new approve/decide modal is added later for a new entity type, add a `<entity>_context()` function to `core/template_context.py` and a branch in that view — don't hand-roll another local variable list in the new modal, that's exactly the bug this session fixed.
 - **New templates must be named `leave_*` / `expense_*`** to be selectable in `ApprovalModal` (name-prefix filtering) — a template for a new workflow type needs either a new prefix convention wired into that filter, or to go through a different modal entirely.
 - **Two explicitly unresolved decisions from §5** — leave-approval template-selection-vs-signal precedence, and attendance-correction email support — need a product decision before anyone builds on top of them.
+
+---
+
+## Session — G.Durga Prasad (30 July 2026)
+
+**Branch:** `Backend/bug-fix-29/07/2026`
+
+---
+
+### 1. HR (L2) Leave Approval Silently Failed to Send the `leave_approved` Email
+
+**File:** `backend/apps/hrms/views/leave.py` (`_can_approve_at_stage`)
+
+Reported bug: "manager approval sends the template email, HR approval doesn't." The email itself was never the problem — `notifications/signals.py` fires the exact same `leave_approved` template on both the L1→approved and L2→approved transitions. The bug was that the L2 transition often never happened at all.
+
+Root cause: **`_approval_scope_filter` and `_can_approve_at_stage` disagreed about what "HR approval" means.** The queue (`_approval_scope_filter`, unchanged) treats L2 as a shared branch-wide HR queue — every HR user in the branch sees every `l2_pending` request. But `_can_approve_at_stage` treated L2 as a single-person assignment — only the one HR user auto-stamped as `l2_approver` (whoever `_auto_assign_managers` in `accounts/views.py` picked as `employee.hr` at request-creation time, e.g. `Branch.hr`) was allowed to actually approve; every other HR user got a `403`. L1 never showed this symptom because L1 genuinely is single-approver in both places (the queue and the check agree). Any HR user other than the one stamped approver would open the request, click Approve, get rejected, and the status never flipped to `approved` — so the signal that sends the email never fired. No code path here discards the email or the template; the approval itself just didn't go through for most HR users.
+
+**Fix:** `_can_approve_at_stage`'s `l2` branch now allows the designated `l2_approver` **or** any `hr` / `hr_admin` user with branch access (via the existing `_can_hr_access_request` helper) — matching what the queue already shows them. Not live-verified this session (no second HR test account with a different `employee.hr` stamp readily available) — reasoned from the code: the queue query and the authorization check are the same shape now, so anyone who can see the request in `?scope=team` can act on it.
+
+**Flagged, not decided unilaterally:** this makes L2 HR approval a genuine "first HR to click it wins" shared queue, same as `expense.approve` already behaves for branch HR elsewhere in the codebase. If the product intent is actually "leave must be approved by one specific HR person, no one else," the real fix is different — restrict `_approval_scope_filter`'s L2 branch to `Q(l2_approver=user) | Q(l2_approver__isnull=True, employee__branch__iexact=branch)` instead, so the queue stops showing it to HR users who can't act on it. Went with "shared queue" because that's what the queue already implied to every HR user before this fix.
+
+**Also flagged, not fixed (frontend, out of scope this session):** `frontend/app/dashboard/leave/_components/LeaveApprovals.tsx`'s `act()` has no `catch` on the approve/reject `clientApi.post` call — a `403` (this bug, or any future authorization rejection) fails completely silently in the UI. This is why the symptom looked like "nothing happens, no email" instead of a visible permission error. Not touched per standing instruction to leave the frontend alone unless explicitly asked.
+
+---
+
+### Key Files Changed (30 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/leave.py` | `_can_approve_at_stage` L2 branch now allows the designated `l2_approver` **or** any branch-scoped HR user, not only the one stamped approver |
+
+---
+
+### Notes for Next Developer
+
+- **If the product decision comes back as "one specific HR person only," don't just revert this fix** — `_approval_scope_filter`'s L2 branch needs to change too (see flagged note above), or the queue will keep showing requests to HR users who then get blocked on approve, right back to this same bug.
+- **`LeaveApprovals.tsx`'s `act()` swallowing errors silently is still unfixed** — any future authorization or validation rejection on leave approve/reject will look like "nothing happened" in the UI with no diagnostic. Worth a small frontend fix (add a `catch` + error surface) next time frontend changes are in scope.

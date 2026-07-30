@@ -105,12 +105,17 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
     Return True if `user` is authorised to act at the given approval stage.
 
     - system_admin: always authorised (admin override for any stuck request).
-    - l1 stage: must be the designated l1_approver on the request.
-    - l2 stage: must be the designated l2_approver, or an hr_admin / hr in
-                the same branch when no l2 was stamped at creation time.
+    - l1 stage: must be the designated l1_approver on the request — L1 is a
+                per-manager assignment, not a shared queue.
+    - l2 stage: the designated l2_approver, or any hr_admin / hr with branch
+                access — L2 is a shared branch-wide HR queue (see
+                _approval_scope_filter, which already lists l2_pending
+                requests to every branch HR, not just the stamped approver).
 
-    Enforcing the designated approver prevents any user with leave.approve from
-    jumping the queue or acting at the wrong stage.
+    Enforcing the designated approver at L1 prevents any user with leave.approve
+    from jumping the queue or acting at the wrong stage. L2 must stay in sync
+    with _approval_scope_filter's branch-wide visibility, or HR users who can
+    see a request in their queue get a 403 when they try to act on it.
     """
     role = _role_name(user)
     if role == 'system_admin':
@@ -123,9 +128,8 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
         return False
 
     if stage == 'l2':
-        if leave_request.l2_approver_id:
-            return leave_request.l2_approver_id == user.id
-        # No designated L2 — HR admin with branch access may step in.
+        if leave_request.l2_approver_id == user.id:
+            return True
         return role in ('hr_admin', 'hr') and _can_hr_access_request(user, leave_request)
 
     return False
