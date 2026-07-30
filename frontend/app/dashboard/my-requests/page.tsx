@@ -21,7 +21,7 @@ interface ExpenseRequest {
   remarks?:     string;
 }
 
-type Tab = "leave" | "expense";
+type Tab = "leave" | "expense" | "correction";
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -366,8 +366,8 @@ function ExpenseTab() {
     ? API.expenses.list
     : `${API.expenses.list}?status=${filter}`;
 
-  const { data: raw, loading, error, refetch } = useFetch<ExpenseRequest[]>(endpoint);
-  const requests = raw ?? [];
+  const { data: raw, loading, error, refetch } = useFetch<PaginatedResponse<ExpenseRequest>>(endpoint);
+  const requests = raw?.results ?? [];
 
   if (loading) return <LoadingRow text="Loading expense claims…" />;
   if (error)   return <ErrorRow text={error} />;
@@ -421,6 +421,166 @@ function ExpenseTab() {
       )}
 
       {showNew && <NewExpenseModal onClose={() => setShowNew(false)} onSubmitted={refetch} />}
+    </>
+  );
+}
+
+// ─── Correction Requests Tab ─────────────────────────────────────────────────
+
+interface CorrectionRequest {
+  id:               string;
+  date:             string;
+  punch_type:       "IN" | "OUT" | "BOTH";
+  original_in:      string | null;
+  original_out:     string | null;
+  requested_in:     string | null;
+  requested_out:    string | null;
+  reason:           string;
+  notes:            string;
+  status:           string;
+  l1_approver_name: string | null;
+  l1_status:        string | null;
+  l1_remarks:       string;
+  l2_approver_name: string | null;
+  l2_status:        string | null;
+  l2_remarks:       string;
+  reviewed_by:      string | null;
+  reviewed_at:      string | null;
+  created_at:       string;
+}
+
+const REASON_LABEL: Record<string, string> = {
+  biometric_error:  "Biometric Error",
+  forgot_to_punch:  "Forgot to Punch",
+  field_work:       "Field Work",
+  system_downtime:  "System Downtime",
+  other:            "Other",
+};
+
+const CORRECTION_STATUS_CLASS: Record<string, string> = {
+  pending:    "badge badge-warn",
+  l2_pending: "badge badge-info",
+  approved:   "badge badge-success",
+  rejected:   "badge badge-error",
+};
+
+const CORRECTION_STATUS_LABEL: Record<string, string> = {
+  pending:    "Pending",
+  l2_pending: "L2 Pending",
+  approved:   "Approved",
+  rejected:   "Rejected",
+};
+
+const PUNCH_TYPE_CLASS: Record<string, string> = {
+  IN:   "badge badge-success",
+  OUT:  "badge badge-primary",
+  BOTH: "badge badge-info",
+};
+
+function CorrectionTab() {
+  const [filter, setFilter] = useState("all");
+
+  const endpoint = filter === "all"
+    ? API.attendance.myCorrections
+    : `${API.attendance.myCorrections}?status=${filter}`;
+
+  const { data: raw, loading, error } = useFetch<PaginatedResponse<CorrectionRequest>>(endpoint);
+  const requests = raw?.results ?? [];
+
+  if (loading) return <LoadingRow text="Loading correction requests…" />;
+  if (error)   return <ErrorRow text={error} />;
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2.5">
+        <div className="flex gap-1">
+          {[
+            { value: "all",        label: "All"        },
+            { value: "pending",    label: "Pending"    },
+            { value: "l2_pending", label: "L2 Pending" },
+            { value: "approved",   label: "Approved"   },
+            { value: "rejected",   label: "Rejected"   },
+          ].map(o => (
+            <button
+              key={o.value}
+              onClick={() => setFilter(o.value)}
+              suppressHydrationWarning
+              className={`px-3 py-[5px] rounded-full text-xs font-medium border-[1.5px] cursor-pointer transition-all duration-150 ${
+                filter === o.value
+                  ? "border-[var(--primary)] bg-[rgba(30,78,140,0.08)] text-[var(--primary)]"
+                  : "border-[var(--outline-v)] bg-transparent text-[var(--on-variant)]"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {requests.length === 0 ? (
+        <EmptyRow icon="ti-clock-edit" text="No correction requests found" />
+      ) : (
+        <div className="table-wrap">
+          <table className="text-[13px]">
+            <thead>
+              <tr className="border-b-2 border-[var(--outline-v)]">
+                <Th>Date</Th>
+                <Th>Type</Th>
+                <Th>Original</Th>
+                <Th>Requested</Th>
+                <Th>Reason</Th>
+                <Th>Approvers</Th>
+                <Th>Submitted On</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map(r => {
+                const remarks = r.l2_remarks || r.l1_remarks || "";
+                return (
+                  <tr key={r.id}>
+                    <td className="whitespace-nowrap font-medium">{formatDate(r.date)}</td>
+                    <td>
+                      <span className={PUNCH_TYPE_CLASS[r.punch_type] ?? "badge badge-neutral"}>
+                        {r.punch_type}
+                      </span>
+                    </td>
+                    <td className="font-mono text-xs text-[var(--on-variant)] whitespace-nowrap">
+                      {r.original_in ?? "—"} / {r.original_out ?? "—"}
+                    </td>
+                    <td className="font-mono text-xs whitespace-nowrap">
+                      {r.requested_in ?? "—"} / {r.requested_out ?? "—"}
+                    </td>
+                    <td className="whitespace-nowrap">{REASON_LABEL[r.reason] ?? r.reason}</td>
+                    <td>
+                      <div className="flex flex-col gap-0.5 text-xs text-[var(--on-variant)]">
+                        {r.l1_approver_name && (
+                          <span>L1: {r.l1_approver_name}{r.l1_status ? ` · ${r.l1_status}` : ""}</span>
+                        )}
+                        {r.l2_approver_name && (
+                          <span>L2: {r.l2_approver_name}{r.l2_status ? ` · ${r.l2_status}` : ""}</span>
+                        )}
+                        {!r.l1_approver_name && !r.l2_approver_name && <span>—</span>}
+                        {remarks && (
+                          <span className="text-[var(--error)] truncate max-w-[160px]" title={remarks}>
+                            {remarks}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap">{r.created_at}</td>
+                    <td>
+                      <span className={CORRECTION_STATUS_CLASS[r.status] ?? "badge badge-neutral"}>
+                        {CORRECTION_STATUS_LABEL[r.status] ?? r.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }
@@ -508,8 +668,9 @@ export default function MyRequestsPage() {
   const [tab, setTab] = useState<Tab>("leave");
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: "leave",   label: "Leave Requests", icon: "ti-beach"  },
-    { key: "expense", label: "Expense Claims",  icon: "ti-wallet" },
+    { key: "leave",      label: "Leave Requests",        icon: "ti-beach"      },
+    { key: "expense",    label: "Expense Claims",         icon: "ti-wallet"     },
+    { key: "correction", label: "Attendance Corrections", icon: "ti-clock-edit" },
   ];
 
   return (
@@ -529,8 +690,9 @@ export default function MyRequestsPage() {
       </div>
 
       <div className="settings-card">
-        {tab === "leave"   && <LeaveTab />}
-        {tab === "expense" && <ExpenseTab />}
+        {tab === "leave"      && <LeaveTab />}
+        {tab === "expense"    && <ExpenseTab />}
+        {tab === "correction" && <CorrectionTab />}
       </div>
     </div>
   );

@@ -45,6 +45,7 @@ const ALL_NAV: NavEntry[] = [
 
   { section: "My" },
   { id: "my-attendance", icon: "ti-clock-check", label: "My Attendance", path: "/dashboard/my-attendance", permission: null },
+  { id: "my-requests", icon: "ti-list-check", label: "My Requests", path: "/dashboard/my-requests", permission: null },
   // permission: null, matching my-attendance above — the backend's MyPayslipsView
   // is IsAuthenticated-only today. Switch this to "payroll.view_own" once the
   // backend actually adds that codename (see the payroll-permissions request
