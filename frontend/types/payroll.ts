@@ -105,6 +105,8 @@ export interface PayrollCycle {
   cycle_end: string;
   pay_date: string;
   status: string;
+  branch: string | null;
+  branch_name: string | null;
   created_by: string;
   created_by_name: string;
   l1_approver_name: string | null;

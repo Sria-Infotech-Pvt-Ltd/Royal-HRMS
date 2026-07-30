@@ -51,8 +51,6 @@ export default function VoiceCommandButton() {
   // useVoiceCommand) since nothing outside this component's render needs it.
   const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
 
-  if (HIDDEN_ROUTES.includes(pathname)) return null;
-
   const isListening  = status === "listening";
   const isProcessing = status === "processing";
 
@@ -259,49 +257,6 @@ export default function VoiceCommandButton() {
         >
           {interimTranscript || "Listening…"}
         </div>
-      )}
-
-      {/* Typed-first-command row — only reachable via the keyboard toggle
-          below, and hidden the moment listening starts so it never fights
-          the interim-transcript bubble above for the same space. */}
-      {isTypedInputOpen && !isListening && (
-        <form
-          onSubmit={handleTypedSubmit}
-          style={{ display: "flex", gap: 6, width: 260, maxWidth: "calc(100vw - 40px)" }}
-        >
-          <input
-            type="text"
-            autoFocus
-            value={typedValue}
-            onChange={(e) => setTypedValue(e.target.value)}
-            placeholder="Type a command…"
-            disabled={isProcessing}
-            data-testid="voice-fab-typed-input"
-            style={{
-              flex: 1, height: 38, borderRadius: 10, border: "1.5px solid var(--outline-v)",
-              background: "var(--surface)", color: "var(--on-bg)", fontSize: 13,
-              padding: "0 12px", outline: "none", minWidth: 0,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!typedValue.trim() || isProcessing}
-            aria-label="Send typed command"
-            title="Send"
-            data-testid="voice-fab-typed-send"
-            style={{
-              width: 38, height: 38, borderRadius: 10, border: "none",
-              background: "var(--primary)", color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: !typedValue.trim() || isProcessing ? "not-allowed" : "pointer",
-              opacity: !typedValue.trim() || isProcessing ? 0.7 : 1,
-              flexShrink: 0,
-            }}
-          >
-            <i className="ti ti-send" style={{ fontSize: 15 }} />
-          </button>
-        </form>
       )}
 
       {!showExpanded ? (

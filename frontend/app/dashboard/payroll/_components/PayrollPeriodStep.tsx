@@ -3,7 +3,19 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useFetch } from "@/hooks/useFetch";
 import type { PayrollSettings, PayrollCycle } from "@/types/payroll";
+
+interface BranchOption {
+  id: string;
+  branch_name: string;
+  branch_code: string;
+}
+
+interface LockedBranch {
+  id: string;
+  name: string;
+}
 
 interface Props {
   settings: PayrollSettings | null;
@@ -11,7 +23,15 @@ interface Props {
   onBack: () => void;
   initialMonth?: string;
   initialYear?: string;
+  /** When set, branch is pre-filled and locked (HR user). */
+  lockedBranch?: LockedBranch;
+  /** When true, admin can pick any branch from a dropdown. */
+  isAdmin?: boolean;
+  /** Pre-selected branch for admin (e.g. when opening from branch overview). */
+  initialBranchId?: string;
 }
+
+interface PagedBranches { results: BranchOption[]; count: number; }
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -30,9 +50,6 @@ function computeDates(month: string, year: string, settings: PayrollSettings | n
   const endDay       = Math.min(settings?.cycle_end_day ?? endMaxDay, endMaxDay);
   const payDay       = Math.min(settings?.pay_day       ?? 30, endMaxDay);
 
-  // When the configured start day falls after the end day (e.g. 25 -> 24),
-  // the cycle spans two calendar months: start in the month before the one
-  // selected, end in the selected month.
   let startMonth = m;
   let startYear  = y;
   if (startDayCfg > endDay) {
@@ -52,35 +69,67 @@ function computeDates(month: string, year: string, settings: PayrollSettings | n
   };
 }
 
-export default function PayrollPeriodStep({ settings, onNext, onBack, initialMonth, initialYear }: Props) {
+export default function PayrollPeriodStep({
+  settings,
+  onNext,
+  onBack,
+  initialMonth,
+  initialYear,
+  lockedBranch,
+  isAdmin,
+  initialBranchId,
+}: Props) {
   const today = new Date();
-  const [month, setMonth]  = useState(initialMonth ?? MONTHS[today.getMonth()]);
-  const [year,  setYear]   = useState(initialYear  ?? String(today.getFullYear()));
-  const [notes, setNotes]  = useState("");
+  const [month, setMonth]   = useState(initialMonth ?? MONTHS[today.getMonth()]);
+  const [year,  setYear]    = useState(initialYear  ?? String(today.getFullYear()));
+  const [notes, setNotes]   = useState("");
+  const [branchId, setBranchId] = useState(initialBranchId ?? "");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError]   = useState<string | null>(null);
+
+  const { data: branchesPage } = useFetch<PagedBranches>(
+    isAdmin ? `${API.branches.list}?page_size=100` : null,
+  );
+  const branches = branchesPage?.results ?? [];
 
   const { cycle_start, cycle_end, pay_date } = computeDates(month, year, settings);
 
   async function createCycle() {
+    if (isAdmin && !lockedBranch && !branchId) {
+      setFormError("Please select a branch for this payroll run.");
+      return;
+    }
+
     setSubmitting(true);
-    setError(null);
+    setFormError(null);
     try {
-      const res = await clientApi.post<{ data: PayrollCycle }>(API.payroll.cycles, {
+      const payload: Record<string, string | undefined> = {
         cycle_start,
         cycle_end,
         pay_date,
         notes: notes.trim() || undefined,
-      });
+      };
+
+      if (lockedBranch?.id) {
+        payload.branch_id = lockedBranch.id;
+      } else if (isAdmin && branchId) {
+        payload.branch_id = branchId;
+      }
+
+      const res = await clientApi.post<{ data: PayrollCycle }>(API.payroll.cycles, payload);
       onNext(res.data.data.id);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         ?? "Failed to create payroll cycle. It may already exist for this period.";
-      setError(msg);
+      setFormError(msg);
     } finally {
       setSubmitting(false);
     }
   }
+
+  const selectedBranchName = lockedBranch?.name
+    ?? branches.find(b => b.id === branchId)?.branch_name
+    ?? "";
 
   return (
     <div className="card">
@@ -95,12 +144,48 @@ export default function PayrollPeriodStep({ settings, onNext, onBack, initialMon
           <span>Dates are auto-filled from your Payroll Run Settings. Adjust month/year to change them.</span>
         </div>
 
-        {error && (
+        {formError && (
           <div className="alert alert-error" style={{ marginBottom: 16 }}>
             <i className="ti ti-alert-circle" />
-            <span>{error}</span>
+            <span>{formError}</span>
           </div>
         )}
+
+        {/* Branch — locked for HR, selectable for admin */}
+        {lockedBranch ? (
+          <div className="field-group" style={{ marginBottom: 20 }}>
+            <label className="field-label">Branch</label>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 14px",
+              background: "var(--bg-low)",
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--outline-v)",
+              fontWeight: 600,
+              color: "var(--on-bg)",
+            }}>
+              <i className="ti ti-building" style={{ color: "var(--primary)", fontSize: 16 }} />
+              {lockedBranch.name}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--on-variant)", fontWeight: 400 }}>
+                Your assigned branch
+              </span>
+            </div>
+          </div>
+        ) : isAdmin ? (
+          <div className="field-group" style={{ marginBottom: 20 }}>
+            <label className="field-label">Branch *</label>
+            <select
+              className="field-input"
+              value={branchId}
+              onChange={e => setBranchId(e.target.value)}
+            >
+              <option value="">Select a branch…</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.branch_name}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         <div className="form-row cols-2">
           <div className="field-group">
@@ -118,14 +203,22 @@ export default function PayrollPeriodStep({ settings, onNext, onBack, initialMon
         </div>
 
         {/* Computed dates — read-only preview */}
-        <div style={{ background: "var(--bg-low)", borderRadius: "var(--radius)", padding: "16px 20px", marginBottom: 20, border: "1px solid var(--outline-v)" }}>
+        <div style={{
+          background: "var(--bg-low)", borderRadius: "var(--radius)",
+          padding: "16px 20px", marginBottom: 20, border: "1px solid var(--outline-v)",
+        }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>
             Computed Period Dates
+            {selectedBranchName && (
+              <span style={{ marginLeft: 8, color: "var(--primary)", textTransform: "none", fontWeight: 600 }}>
+                — {selectedBranchName}
+              </span>
+            )}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
             {[
-              { label: "Cycle Start", value: cycle_start, icon: "ti-calendar-event", color: "var(--info)" },
-              { label: "Cycle End",   value: cycle_end,   icon: "ti-calendar-event", color: "var(--warn)" },
+              { label: "Cycle Start", value: cycle_start, icon: "ti-calendar-event", color: "var(--info)"    },
+              { label: "Cycle End",   value: cycle_end,   icon: "ti-calendar-event", color: "var(--warn)"    },
               { label: "Pay Date",    value: pay_date,    icon: "ti-credit-card",     color: "var(--success)" },
             ].map(f => (
               <div key={f.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -140,7 +233,8 @@ export default function PayrollPeriodStep({ settings, onNext, onBack, initialMon
           {!settings && (
             <div style={{ marginTop: 10, fontSize: 11, color: "var(--warn)" }}>
               <i className="ti ti-alert-triangle" style={{ marginRight: 4 }} />
-              Payroll settings not configured — dates default to month boundaries. Go to Settings → Payroll Configuration to set custom days.
+              Payroll settings not configured — dates default to month boundaries.
+              Go to Settings → Payroll Configuration to set custom days.
             </div>
           )}
         </div>

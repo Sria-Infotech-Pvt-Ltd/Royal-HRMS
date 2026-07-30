@@ -175,6 +175,7 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
     )
     cancelled_by_name = serializers.CharField(source='cancelled_by.full_name', read_only=True)
     payslip_count = serializers.SerializerMethodField()
+    branch_name = serializers.CharField(source='branch.branch_name', read_only=True)
 
     class Meta:
         model = PayrollCycle
@@ -184,6 +185,8 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
             'cycle_end',
             'pay_date',
             'status',
+            'branch',
+            'branch_name',
             'created_by',
             'created_by_name',
             'attendance_approved_by_l1',
@@ -204,7 +207,8 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = [
-            'id', 'status', 'created_by', 'created_by_name',
+            'id', 'status', 'branch_name',
+            'created_by', 'created_by_name',
             'attendance_approved_by_l1', 'l1_approver_name',
             'attendance_approved_by_l2', 'l2_approver_name',
             'attendance_l1_approved_at', 'attendance_l2_approved_at',

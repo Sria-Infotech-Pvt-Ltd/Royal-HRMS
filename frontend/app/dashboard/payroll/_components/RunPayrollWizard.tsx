@@ -24,17 +24,34 @@ const STATUS_STEP_KEY: Record<string, string> = {
   paid:                "paid",
 };
 
+interface LockedBranch { id: string; name: string; }
+
 interface Props {
   onCancel: () => void;
   initialCycleId?: string;
   initialStatus?: string;
   initialMonth?: string;
   initialYear?: string;
+  /** Set when HR user opens wizard — pre-fills and locks the branch field. */
+  lockedBranch?: LockedBranch;
+  /** Set when admin opens wizard for a specific branch. */
+  initialBranchId?: string;
+  /** True when the opening user is a system admin. */
+  isAdmin?: boolean;
 }
 
 interface StepDef { key: string; label: string; icon: string; }
 
-export default function RunPayrollWizard({ onCancel, initialCycleId, initialStatus, initialMonth, initialYear }: Props) {
+export default function RunPayrollWizard({
+  onCancel,
+  initialCycleId,
+  initialStatus,
+  initialMonth,
+  initialYear,
+  lockedBranch,
+  initialBranchId,
+  isAdmin,
+}: Props) {
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
   const [step,    setStep]    = useState(0);
   const [cycleId, setCycleId] = useState<string | null>(initialCycleId ?? null);
@@ -129,7 +146,16 @@ export default function RunPayrollWizard({ onCancel, initialCycleId, initialStat
 
       {/* Step content */}
       {currentKey === "period" && (
-        <PayrollPeriodStep settings={settings} onNext={handleCycleCreated} onBack={onCancel} initialMonth={initialMonth} initialYear={initialYear} />
+        <PayrollPeriodStep
+          settings={settings}
+          onNext={handleCycleCreated}
+          onBack={onCancel}
+          initialMonth={initialMonth}
+          initialYear={initialYear}
+          lockedBranch={lockedBranch}
+          initialBranchId={initialBranchId}
+          isAdmin={isAdmin}
+        />
       )}
       {currentKey === "approval" && cycleId && (
         <ApprovalStep cycleId={cycleId} settings={settings} onNext={next} onBack={back} />

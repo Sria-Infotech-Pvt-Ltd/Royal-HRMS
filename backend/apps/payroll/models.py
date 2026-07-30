@@ -333,6 +333,14 @@ class PayrollCycle(models.Model):
         related_name='payroll_cycles_marked_paid',
     )
 
+    branch = models.ForeignKey(
+        'branch.Branch',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='payroll_cycles',
+        help_text='Branch this cycle is scoped to. Null = company-wide (legacy).',
+    )
+
     notes = models.TextField(blank=True)
 
     cancelled_at = models.DateTimeField(null=True, blank=True)

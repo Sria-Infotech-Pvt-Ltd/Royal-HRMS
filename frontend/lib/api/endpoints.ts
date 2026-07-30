@@ -282,6 +282,9 @@ export const API = {
     adjustments: "/payroll/adjustments/",
     adjustmentDetail: (id: string) => `/payroll/adjustments/${id}/`,
     adjustmentsBulkImport: "/payroll/adjustments/bulk-import/",
+
+    // Branch payroll status overview (admin only)
+    branchStatus: "/payroll/branch-status/",
   },
 
   dashboard: {

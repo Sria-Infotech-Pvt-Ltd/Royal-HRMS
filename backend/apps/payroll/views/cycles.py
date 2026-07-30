@@ -59,6 +59,18 @@ def _can_l2_approve(user):
     return _has_perm(user, 'payroll.edit')
 
 
+def _is_admin(user) -> bool:
+    """Settings-level admin: unrestricted access across all branches."""
+    return getattr(user, 'is_superuser', False) or _has_perm(user, 'settings.edit')
+
+
+def _resolve_user_branch(user):
+    """Return the Branch object for an HR user's assigned branch, or None."""
+    if not user.branch:
+        return None
+    return Branch.objects.filter(branch_name=user.branch, status=Branch.STATUS_ACTIVE).first()
+
+
 class PayrollCycleListView(APIView):
     """List all payroll cycles / create a new one."""
 
@@ -68,7 +80,19 @@ class PayrollCycleListView(APIView):
         if not _has_perm(request.user, 'payroll.view'):
             return error('Only HR admin can view payroll cycles.', http_status=403)
 
-        cycles = PayrollCycle.objects.select_related('created_by').order_by('-cycle_start')
+        cycles = PayrollCycle.objects.select_related(
+            'created_by', 'branch',
+        ).order_by('-cycle_start')
+
+        if not _is_admin(request.user):
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None:
+                return error(
+                    'Your account is not assigned to a branch. Contact an administrator.',
+                    http_status=400,
+                )
+            cycles = cycles.filter(branch=branch_obj)
+
         page_obj, paginator = paginate(cycles, request)
         serializer = PayrollCycleSerializer(page_obj.object_list, many=True)
         return success(
@@ -81,36 +105,72 @@ class PayrollCycleListView(APIView):
             return error('Only HR admin can create payroll cycles.', http_status=403)
 
         cycle_start = request.data.get('cycle_start')
-        cycle_end = request.data.get('cycle_end')
-        pay_date = request.data.get('pay_date')
+        cycle_end   = request.data.get('cycle_end')
+        pay_date    = request.data.get('pay_date')
 
         if not all([cycle_start, cycle_end, pay_date]):
             return error('cycle_start, cycle_end, and pay_date are required.')
 
-        # Prevent overlapping cycles — any non-cancelled cycle whose date range
-        # overlaps the requested period blocks creation.
-        if PayrollCycle.objects.filter(
+        # Resolve branch: admin may pass branch_id, HR uses their own branch
+        if _is_admin(request.user):
+            branch_id = request.data.get('branch_id')
+            if branch_id:
+                branch_obj = Branch.objects.filter(pk=branch_id, status=Branch.STATUS_ACTIVE).first()
+                if not branch_obj:
+                    return error('Selected branch not found or inactive.')
+            else:
+                branch_obj = None  # admin global cycle (legacy path, no branch restriction)
+        else:
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None:
+                return error(
+                    'Your account is not assigned to a branch. Contact an administrator.',
+                    http_status=400,
+                )
+
+        # Prevent overlapping cycles within the same branch (branch-scoped uniqueness)
+        overlap_qs = PayrollCycle.objects.filter(
             cycle_start__lte=cycle_end,
             cycle_end__gte=cycle_start,
-        ).exclude(status=PayrollCycle.STATUS_CANCELLED).exists():
-            return error('A payroll cycle already exists for this period. Cancel the existing cycle first.')
+        ).exclude(status=PayrollCycle.STATUS_CANCELLED)
+
+        if branch_obj is not None:
+            overlap_qs = overlap_qs.filter(branch=branch_obj)
+        else:
+            overlap_qs = overlap_qs.filter(branch__isnull=True)
+
+        if overlap_qs.exists():
+            branch_label = f' in {branch_obj.branch_name}' if branch_obj else ''
+            return error(
+                f'A payroll cycle already exists for this period{branch_label}.'
+                ' Cancel the existing cycle first.',
+            )
 
         cycle = PayrollCycle.objects.create(
             cycle_start=cycle_start,
             cycle_end=cycle_end,
             pay_date=pay_date,
+            branch=branch_obj,
             status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
             created_by=request.user,
             notes=request.data.get('notes', ''),
         )
-        logger.info('PayrollCycle %s created by %s', cycle.id, request.user.email)
+        logger.info(
+            'PayrollCycle %s created by %s (branch: %s)',
+            cycle.id, request.user.email,
+            branch_obj.branch_name if branch_obj else 'global',
+        )
 
-        # Seed one approval row per active manager (role.can_manage_team=True)
-        # and notify each of them.
+        # Seed one approval row per active manager in this branch (or all if global)
         try:
-            managers = list(User.objects.filter(
+            manager_qs = User.objects.filter(
                 is_active=True, role__can_manage_team=True,
-            ).exclude(pk=request.user.pk).select_related('role'))
+            ).exclude(pk=request.user.pk).select_related('role')
+
+            if branch_obj is not None:
+                manager_qs = manager_qs.filter(branch=branch_obj.branch_name)
+
+            managers = list(manager_qs)
 
             ManagerAttendanceApproval.objects.bulk_create([
                 ManagerAttendanceApproval(cycle=cycle, manager=m)
@@ -130,7 +190,9 @@ class PayrollCycleListView(APIView):
                     request.user,
                 )
         except Exception:
-            logger.exception('Failed to seed manager approvals or send notifications for cycle %s', cycle.id)
+            logger.exception(
+                'Failed to seed manager approvals or send notifications for cycle %s', cycle.id,
+            )
 
         return success('Payroll cycle created.', PayrollCycleSerializer(cycle).data, http_status=201)
 
@@ -147,13 +209,57 @@ class PayrollCycleDetailView(APIView):
         cycle = get_object_or_404(
             PayrollCycle.objects.select_related(
                 'created_by',
+                'branch',
                 'attendance_approved_by_l1',
                 'attendance_approved_by_l2',
                 'marked_paid_by',
             ),
             pk=pk,
         )
+
+        # HR can only access cycles for their own branch
+        if not _is_admin(request.user) and cycle.branch:
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or cycle.branch_id != branch_obj.pk:
+                return error('Access denied.', http_status=403)
+
         return success('Payroll cycle retrieved.', PayrollCycleSerializer(cycle).data)
+
+
+class BranchPayrollStatusView(APIView):
+    """Admin overview: every active branch with its latest non-cancelled cycle status."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Access denied.', http_status=403)
+
+        if not _is_admin(request.user):
+            return error('Admin access required for branch payroll overview.', http_status=403)
+
+        branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).order_by('branch_name')
+        result = []
+        for branch in branches:
+            latest = (
+                PayrollCycle.objects
+                .filter(branch=branch)
+                .exclude(status=PayrollCycle.STATUS_CANCELLED)
+                .order_by('-cycle_start')
+                .first()
+            )
+            result.append({
+                'branch_id':   str(branch.id),
+                'branch_name': branch.branch_name,
+                'branch_code': getattr(branch, 'branch_code', ''),
+                'status':      latest.status if latest else None,
+                'cycle_id':    str(latest.id) if latest else None,
+                'cycle_start': str(latest.cycle_start) if latest else None,
+                'cycle_end':   str(latest.cycle_end) if latest else None,
+                'paid_at':     latest.paid_at.isoformat() if latest and latest.paid_at else None,
+            })
+
+        return success('Branch payroll status retrieved.', result)
 
 
 class AttendanceApprovalView(APIView):
@@ -215,7 +321,10 @@ class AttendanceApprovalView(APIView):
                 cycle.save(update_fields=[
                     'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
                 ])
-                logger.info('Cycle %s: HR direct L1 approval by %s (no managers configured)', pk, request.user.email)
+                logger.info(
+                    'Cycle %s: HR direct L1 approval by %s (no managers configured)',
+                    pk, request.user.email,
+                )
                 return success('L1 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
             # Check if all manager rows are now approved → complete L1
@@ -277,9 +386,14 @@ class ManagerAttendanceApprovalListView(APIView):
             cycle.status == PayrollCycle.STATUS_ATTENDANCE_PENDING
             and not ManagerAttendanceApproval.objects.filter(cycle=cycle).exists()
         ):
-            managers = list(User.objects.filter(
+            manager_qs = User.objects.filter(
                 is_active=True, role__can_manage_team=True,
-            ).select_related('role'))
+            ).select_related('role')
+
+            if cycle.branch:
+                manager_qs = manager_qs.filter(branch=cycle.branch.branch_name)
+
+            managers = list(manager_qs)
             if managers:
                 ManagerAttendanceApproval.objects.bulk_create([
                     ManagerAttendanceApproval(cycle=cycle, manager=m)
@@ -327,6 +441,13 @@ class ProcessPayrollView(APIView):
             return error('Only HR admin can process payroll.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
+
+        # HR can only process cycles for their own branch
+        if not _is_admin(request.user) and cycle.branch:
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or cycle.branch_id != branch_obj.pk:
+                return error('You can only process payroll for your own branch.', http_status=403)
+
         if cycle.status != PayrollCycle.STATUS_ATTENDANCE_APPROVED:
             return error('Attendance must be approved before processing payroll.')
 
@@ -338,6 +459,10 @@ class ProcessPayrollView(APIView):
         ).exclude(
             role__name__in=['system_admin'],
         ).select_related('role')
+
+        # Scope employees to the cycle's branch when set
+        if cycle.branch:
+            employees = employees.filter(branch=cycle.branch.branch_name)
 
         created_count = 0
         skipped = []
@@ -366,7 +491,7 @@ class ProcessPayrollView(APIView):
                 ).select_related('state', 'payroll_config__salary_structure').first()
                 branch_config = getattr(branch_obj, 'payroll_config', None) if branch_obj else None
 
-                # Resolve structure: employee override → branch → default
+                # Resolve structure: employee override -> branch -> default
                 structure = salary_config.salary_structure
                 if structure is None and branch_config and branch_config.salary_structure:
                     structure = branch_config.salary_structure
@@ -411,19 +536,19 @@ class ProcessPayrollView(APIView):
                 total_working_days = 26
                 lop_deduction = (gross / total_working_days) * lop_days
 
-                # PF: use branch config if present, else statutory defaults (12%/12%, ₹15,000 ceiling)
+                # PF: use branch config if present, else statutory defaults (12%/12%, Rs.15,000 ceiling)
                 pf_applicable = branch_config.pf_applicable if branch_config is not None else True
                 pf_employee = Decimal('0')
                 pf_employer = Decimal('0')
                 if pf_applicable:
-                    pf_ceiling = branch_config.pf_wage_ceiling if branch_config else PF_DEFAULT_CEILING
-                    pf_emp_rate = branch_config.pf_employee_rate if branch_config else PF_DEFAULT_RATE
-                    pf_er_rate = branch_config.pf_employer_rate if branch_config else PF_DEFAULT_RATE
-                    pf_base = min(basic, pf_ceiling)
+                    pf_ceiling  = branch_config.pf_wage_ceiling   if branch_config else PF_DEFAULT_CEILING
+                    pf_emp_rate = branch_config.pf_employee_rate   if branch_config else PF_DEFAULT_RATE
+                    pf_er_rate  = branch_config.pf_employer_rate   if branch_config else PF_DEFAULT_RATE
+                    pf_base     = min(basic, pf_ceiling)
                     pf_employee = pf_base * pf_emp_rate / 100
-                    pf_employer = pf_base * pf_er_rate / 100
+                    pf_employer = pf_base * pf_er_rate  / 100
 
-                # ESI, PT, LWF: from the branch's state statutory config — no branch config record needed
+                # ESI, PT, LWF: from the branch's state statutory config
                 esi_employee = Decimal('0')
                 esi_employer = Decimal('0')
                 statutory = StatutoryConfig.objects.filter(
@@ -436,7 +561,7 @@ class ProcessPayrollView(APIView):
                 # PT
                 pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
 
-                # LWF (only on applicable months — simplified: always deduct if applicable)
+                # LWF
                 lwf_employee = statutory.lwf_employee_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
                 lwf_employer = statutory.lwf_employer_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
 
@@ -468,30 +593,30 @@ class ProcessPayrollView(APIView):
                     cycle=cycle,
                     employee=employee,
                     defaults={
-                        'annual_ctc': salary_config.annual_ctc,
-                        'monthly_ctc': monthly_ctc,
-                        'basic': basic,
-                        'hra': hra,
-                        'special_allowance': special_allowance,
-                        'other_earnings': other_earnings,
-                        'reimbursements': reimbursements,
-                        'bonus': bonus,
-                        'gross_earnings': gross,
-                        'total_working_days': total_working_days,
-                        'lop_days': lop_days,
-                        'lop_deduction': lop_deduction,
-                        'pf_employee': pf_employee,
-                        'pf_employer': pf_employer,
-                        'esi_employee': esi_employee,
-                        'esi_employer': esi_employer,
-                        'pt_deduction': pt,
-                        'lwf_employee': lwf_employee,
-                        'lwf_employer': lwf_employer,
-                        'adjustments_earning': adj_earning,
+                        'annual_ctc':           salary_config.annual_ctc,
+                        'monthly_ctc':          monthly_ctc,
+                        'basic':                basic,
+                        'hra':                  hra,
+                        'special_allowance':    special_allowance,
+                        'other_earnings':       other_earnings,
+                        'reimbursements':       reimbursements,
+                        'bonus':                bonus,
+                        'gross_earnings':       gross,
+                        'total_working_days':   total_working_days,
+                        'lop_days':             lop_days,
+                        'lop_deduction':        lop_deduction,
+                        'pf_employee':          pf_employee,
+                        'pf_employer':          pf_employer,
+                        'esi_employee':         esi_employee,
+                        'esi_employer':         esi_employer,
+                        'pt_deduction':         pt,
+                        'lwf_employee':         lwf_employee,
+                        'lwf_employer':         lwf_employer,
+                        'adjustments_earning':  adj_earning,
                         'adjustments_deduction': adj_deduction,
-                        'total_deductions': total_deductions,
-                        'net_pay': net_pay,
-                        'status': EmployeePayslip.STATUS_DRAFT,
+                        'total_deductions':     total_deductions,
+                        'net_pay':              net_pay,
+                        'status':               EmployeePayslip.STATUS_DRAFT,
                     },
                 )
                 created_count += 1
@@ -519,6 +644,12 @@ class MarkCyclePaidView(APIView):
             return error('Only HR admin can mark payroll as paid.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
+
+        if not _is_admin(request.user) and cycle.branch:
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or cycle.branch_id != branch_obj.pk:
+                return error('You can only update payroll for your own branch.', http_status=403)
+
         if cycle.status not in [
             PayrollCycle.STATUS_QUERY_WINDOW_OPEN,
             PayrollCycle.STATUS_PAYSLIPS_GENERATED,
@@ -526,8 +657,8 @@ class MarkCyclePaidView(APIView):
             return error('Cycle must have payslips generated before marking as paid.')
 
         now = timezone.now()
-        cycle.status = PayrollCycle.STATUS_PAID
-        cycle.paid_at = now
+        cycle.status      = PayrollCycle.STATUS_PAID
+        cycle.paid_at     = now
         cycle.marked_paid_by = request.user
         cycle.save(update_fields=['status', 'paid_at', 'marked_paid_by', 'updated_at'])
 
@@ -561,6 +692,11 @@ class CancelPayrollCycleView(APIView):
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
 
+        if not _is_admin(request.user) and cycle.branch:
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or cycle.branch_id != branch_obj.pk:
+                return error('You can only cancel payroll for your own branch.', http_status=403)
+
         if cycle.status == PayrollCycle.STATUS_CANCELLED:
             return error('This cycle is already cancelled.')
 
@@ -583,9 +719,9 @@ class CancelPayrollCycleView(APIView):
                     len(payslip_ids), pk,
                 )
 
-            cycle.status = PayrollCycle.STATUS_CANCELLED
-            cycle.cancelled_at = timezone.now()
-            cycle.cancelled_by = request.user
+            cycle.status              = PayrollCycle.STATUS_CANCELLED
+            cycle.cancelled_at        = timezone.now()
+            cycle.cancelled_by        = request.user
             cycle.cancellation_reason = reason
             cycle.save(update_fields=[
                 'status', 'cancelled_at', 'cancelled_by', 'cancellation_reason', 'updated_at',
