@@ -46,11 +46,18 @@ class ConversationalRegistryTests(SimpleTestCase):
     def test_apply_leave_is_conversational(self):
         self.assertTrue(get_conversational(INTENT_APPLY_LEAVE))
 
+    def test_request_attendance_correction_is_conversational(self):
+        """Slot-filling infrastructure now exists for this intent (date,
+        punch_type, correct_in_time/correct_out_time, reason — see
+        correction_slot_extractor.py/conversation_attendance_correction.py),
+        same multi-turn shape as apply_leave."""
+        self.assertTrue(get_conversational('request_attendance_correction'))
+
     def test_every_other_real_intent_is_not_conversational(self):
         non_conversational_intents = [
             'clock_in', 'clock_out', 'check_leave_balance', 'check_leave_status',
             'cancel_leave', 'check_attendance_stats', 'check_attendance_summary',
-            'check_team_leave_queue', 'check_team_attendance', 'request_attendance_correction',
+            'check_team_leave_queue', 'check_team_attendance',
         ]
         for intent in non_conversational_intents:
             with self.subTest(intent=intent):

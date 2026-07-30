@@ -32,13 +32,12 @@ export default function VoiceCommandButton() {
     submitTranscript, conversation, closeConversation,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
-  // Lets a user type the very first command instead of speaking it — the
-  // typed-answer input for mid-conversation follow-ups already exists in
-  // VoiceConversationPanel; this is the same idea, just for before any
-  // conversation has started. Local UI-only state (not lifted into
+  // Lets a user open a chat-style box to type the very first command instead
+  // of speaking it — opens the same VoiceConversationPanel used for the rest
+  // of the exchange (see the "greeting" phase branch below), just ahead of
+  // any real conversation existing yet. Local UI-only state (not lifted into
   // useVoiceCommand) since nothing outside this component's render needs it.
   const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
-  const [typedValue, setTypedValue] = useState("");
 
   if (HIDDEN_ROUTES.includes(pathname)) return null;
 
@@ -54,19 +53,6 @@ export default function VoiceCommandButton() {
   // enforces regardless). Gating on isAuthenticated alone, not isDisabled,
   // means this also becomes the working fallback on non-Chromium browsers.
   const canType = isAuthenticated;
-
-  function handleTypedSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = typedValue.trim();
-    if (!trimmed || isProcessing) return;
-    setTypedValue("");
-    setIsTypedInputOpen(false);
-    // Same submitTranscript() the recognized-speech path and the mid-
-    // conversation typed-answer input both call — one /api/voice/parse/
-    // flow and one response-handling path for every submission, spoken or
-    // typed, first turn or follow-up.
-    submitTranscript(trimmed);
-  }
 
   // Every voice response now opens this panel — the recognized transcript
   // while the request is in flight, then the result, whether the intent was
@@ -98,6 +84,42 @@ export default function VoiceCommandButton() {
     );
   }
 
+  // Keyboard toggle opens the same panel component in its "greeting" phase —
+  // a chat box with a static hello and the typed/mic input controls, open
+  // before any real command exists. Submitting from here calls submitTranscript
+  // the same as every other entry point, which sets `conversation` and hands
+  // rendering back to the branch above for the rest of the exchange.
+  //
+  // Gated on canType, not isDisabled — same reasoning as canType's own
+  // definition above: typing needs only authentication, not Web Speech API
+  // support, so this chat box must still open on non-Chromium browsers (the
+  // one place typed commands work at all there). On such a browser,
+  // submitTranscript's own isDisabled check still routes the *result* to a
+  // toast instead of setting `conversation` (see its docstring) — this panel
+  // simply stays open afterwards, ready for the next typed command, rather
+  // than transitioning to a transcript/result view it can't show there.
+  if (isTypedInputOpen && canType) {
+    return (
+      <VoiceConversationPanel
+        transcript=""
+        message=""
+        phase="greeting"
+        conversational={false}
+        awaitingInput={false}
+        resultStatus={null}
+        isListening={isListening}
+        isProcessing={isProcessing}
+        interimTranscript={interimTranscript}
+        onStartListening={startListening}
+        onStopListening={stopListening}
+        onSubmitText={submitTranscript}
+        onClose={() => setIsTypedInputOpen(false)}
+        isMuted={isMuted}
+        onToggleMute={toggleMuted}
+      />
+    );
+  }
+
   return (
     <div
       style={{
@@ -120,49 +142,6 @@ export default function VoiceCommandButton() {
         >
           {interimTranscript || "Listening…"}
         </div>
-      )}
-
-      {/* Typed-first-command row — only reachable via the keyboard toggle
-          below, and hidden the moment listening starts so it never fights
-          the interim-transcript bubble above for the same space. */}
-      {isTypedInputOpen && !isListening && (
-        <form
-          onSubmit={handleTypedSubmit}
-          style={{ display: "flex", gap: 6, width: 260, maxWidth: "calc(100vw - 40px)" }}
-        >
-          <input
-            type="text"
-            autoFocus
-            value={typedValue}
-            onChange={(e) => setTypedValue(e.target.value)}
-            placeholder="Type a command…"
-            disabled={isProcessing}
-            data-testid="voice-fab-typed-input"
-            style={{
-              flex: 1, height: 38, borderRadius: 10, border: "1.5px solid var(--outline-v)",
-              background: "var(--surface)", color: "var(--on-bg)", fontSize: 13,
-              padding: "0 12px", outline: "none", minWidth: 0,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!typedValue.trim() || isProcessing}
-            aria-label="Send typed command"
-            title="Send"
-            data-testid="voice-fab-typed-send"
-            style={{
-              width: 38, height: 38, borderRadius: 10, border: "none",
-              background: "var(--primary)", color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: !typedValue.trim() || isProcessing ? "not-allowed" : "pointer",
-              opacity: !typedValue.trim() || isProcessing ? 0.7 : 1,
-              flexShrink: 0,
-            }}
-          >
-            <i className="ti ti-send" style={{ fontSize: 15 }} />
-          </button>
-        </form>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -207,7 +186,7 @@ export default function VoiceCommandButton() {
         )}
 
         <button
-          onClick={isDisabled ? undefined : (isListening ? stopListening : () => { setIsTypedInputOpen(false); startListening(); })}
+          onClick={isDisabled ? undefined : (isListening ? stopListening : startListening)}
           disabled={isDisabled}
           title={isDisabled ? disabledReason : (isListening ? "Click to stop and send" : "Click to speak a voice command")}
           data-testid="voice-fab"

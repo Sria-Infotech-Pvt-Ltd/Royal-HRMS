@@ -84,6 +84,34 @@ class CheckTeamAttendanceExecutorTests(SimpleTestCase):
 
     @patch('apps.voice_commands.executor_approval.force_authenticate')
     @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
+    def test_half_day_employees_are_named_in_the_summary(self, mock_view_cls, mock_force_authenticate):
+        """
+        stat_cards alone has no half-day tile (a half-day employee is correctly
+        excluded from `absent` but never counted in `present_today` either —
+        services_hr.py get_dashboard_stats), so present_today + absent can add
+        up to fewer than total_employees. summary_chips.half_day is where the
+        raw endpoint actually carries that count; the summary must surface it
+        instead of silently leaving that person unaccounted for.
+        """
+        mock_view_cls.as_view.return_value.return_value = MagicMock(
+            status_code=200,
+            data={'success': True, 'message': 'Dashboard stats loaded.', 'data': {
+                'stat_cards': _stat_cards(present_today=9, absent=0, late_arrivals=0, on_leave=0, total_employees=10),
+                'summary_chips': {'half_day': 1},
+                'tab_badges': {},
+            }},
+        )
+        request = _fake_request(has_attendance_view=True)
+
+        result = execute_intent(INTENT_CHECK_TEAM_ATTENDANCE, request)
+
+        self.assertTrue(result.success)
+        self.assertIn('9', result.message)
+        self.assertIn('10', result.message)
+        self.assertIn('1 on half-day', result.message)
+
+    @patch('apps.voice_commands.executor_approval.force_authenticate')
+    @patch('apps.voice_commands.executor_approval.HRAttendanceDashboardView')
     def test_authenticates_the_synthetic_request_as_the_calling_user(self, mock_view_cls, mock_force_authenticate):
         mock_view_cls.as_view.return_value.return_value = MagicMock(
             status_code=200, data={'data': {'stat_cards': _stat_cards()}},
