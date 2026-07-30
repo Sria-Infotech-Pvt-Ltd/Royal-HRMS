@@ -1,8 +1,13 @@
+import re
+
 from django.db import transaction
 from rest_framework import serializers
 
 from apps.branch.models import Branch, City, EmployeeBranchAccess, State
 from apps.branch.utils import generate_branch_code
+
+_BRANCH_NAME_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9 &\-.]*[A-Za-z0-9])?$')
+_CITY_NAME_RE   = re.compile(r"^[A-Za-z]+(?:[ '\-][A-Za-z]+)*$")
 
 
 class StateSerializer(serializers.ModelSerializer):
@@ -26,6 +31,11 @@ class BranchSerializer(serializers.ModelSerializer):
     employees_count = serializers.SerializerMethodField()
     has_coordinates = serializers.BooleanField(read_only=True)
 
+    city = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=False)
+    # Fallback for a city that isn't in the City dropdown yet — get-or-created under
+    # the selected state instead of requiring `city` to already exist.
+    new_city_name = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=100)
+
     def get_employees_count(self, obj):
         branch_counts = self.context.get('branch_counts')
         if branch_counts is not None:
@@ -37,7 +47,7 @@ class BranchSerializer(serializers.ModelSerializer):
         model = Branch
         fields = [
             'id', 'branch_code', 'branch_name', 'address',
-            'state', 'state_name', 'city', 'city_name',
+            'state', 'state_name', 'city', 'city_name', 'new_city_name',
             'hr', 'hr_name',
             'employees_count', 'status', 'is_headquarter',
             'latitude', 'longitude', 'allowed_radius_meters', 'geofencing_enabled',
@@ -69,12 +79,32 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Branch name must not be blank.')
         if len(value) > 200:
             raise serializers.ValidationError('Branch name must be under 200 characters.')
+        if not _BRANCH_NAME_RE.match(value):
+            raise serializers.ValidationError(
+                'Branch name may only contain letters, numbers, spaces, & - and . characters.'
+            )
         return value
 
     def validate(self, data):
-        city  = data.get('city')  or (self.instance.city  if self.instance else None)
         state = data.get('state') or (self.instance.state if self.instance else None)
-        if city and state and city.state_id != state.pk:
+        new_city_name = data.pop('new_city_name', '').strip()
+
+        if not data.get('city') and new_city_name:
+            if not _CITY_NAME_RE.match(new_city_name):
+                raise serializers.ValidationError(
+                    {'new_city_name': 'City name may only contain letters, spaces, hyphens and apostrophes.'}
+                )
+            if not state:
+                raise serializers.ValidationError({'city': 'Select a state before entering a new city.'})
+            city, _ = City.objects.get_or_create(
+                name=new_city_name, state=state, defaults={'is_active': True},
+            )
+            data['city'] = city
+
+        city = data.get('city') or (self.instance.city if self.instance else None)
+        if not city:
+            raise serializers.ValidationError({'city': 'City is required.'})
+        if state and city.state_id != state.pk:
             raise serializers.ValidationError(
                 {'city': 'Selected city does not belong to the selected state.'}
             )

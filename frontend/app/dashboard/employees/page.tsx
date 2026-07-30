@@ -113,6 +113,10 @@ export default function EmployeesPage() {
   const [page,        setPage]        = useState(1);
   const [totalPages,  setTotalPages]  = useState(1);
   const [totalCount,  setTotalCount]  = useState(0);
+  const [empStats,    setEmpStats]    = useState({
+    total: 0, active: 0, onboarding: 0, departments: 0,
+    branch_names: [] as string[], department_names: [] as string[],
+  });
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -121,7 +125,10 @@ export default function EmployeesPage() {
     setFetchError("");
     try {
       const params: Record<string, string | number> = { page: p };
-      if (q) params.search = q;
+      if (q)              params.search     = q;
+      if (branch !== "all") params.branch     = branch;
+      if (dept   !== "all") params.department = dept;
+      if (status !== "all") params.status     = status;
       const { data } = await clientApi.get<{
         data: { results: ApiEmployee[]; count: number; page: number; total_pages: number };
       }>(API.employees.list, { params });
@@ -134,9 +141,27 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
+  }, [branch, dept, status]);
+
+  // Runs on mount, and again whenever a filter changes (fetchEmployees' identity
+  // changes with branch/dept/status) — always resets to page 1, keeps the current search term.
+  useEffect(() => { fetchEmployees(search, 1); }, [fetchEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchStats = useCallback(async (br: string) => {
+    try {
+      const { data } = await clientApi.get<{
+        data: {
+          total: number; active: number; onboarding: number; departments: number;
+          branch_names: string[]; department_names: string[];
+        };
+      }>(API.employees.stats, { params: br === "all" ? {} : { branch: br } });
+      if (data.data) setEmpStats(data.data);
+    } catch {
+      // keep previous stats on failure rather than zeroing the cards out
+    }
   }, []);
 
-  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => { fetchStats(branch); }, [branch, fetchStats]);
 
   function handleSearch(val: string) {
     setSearch(val);
@@ -154,37 +179,16 @@ export default function EmployeesPage() {
     setUserBranch(user?.branch ?? "");
   }, []);
 
-  /* derive unique branches + departments from loaded data */
-  const branchOptions = useMemo(
-    () => [...new Set(employees.map(e => e.location).filter(Boolean))].sort(),
-    [employees],
-  );
-  const deptOptions = useMemo(
-    () => [...new Set(employees.map(e => e.department).filter(Boolean))].sort(),
-    [employees],
-  );
+  // Sourced from the stats endpoint (scoped over ALL employees), not just the loaded page.
+  const branchOptions = empStats.branch_names;
+  const deptOptions    = empStats.department_names;
 
-  const filtered = useMemo(() => {
-    return employees.filter(e => {
-      const matchesBranch = branch === "all" || e.location === branch;
-      const matchesDept   = dept   === "all" || e.department === dept;
-      const matchesStatus = status === "all" || e.status === status;
-      return matchesBranch && matchesDept && matchesStatus;
-    });
-  }, [employees, branch, dept, status]);
-
-  const stats = useMemo(() => {
-    const source     = branch === "all" ? employees : employees.filter(e => e.location === branch);
-    const active     = source.filter(e => e.status === "active").length;
-    const onboarding = source.filter(e => e.status === "onboarding").length;
-    const depts      = new Set(source.map(e => e.department)).size;
-    return [
-      { label: "Total Employees", value: totalCount,    icon: "ti-users",      tint: "primary" as const },
-      { label: "Active",          value: active,        icon: "ti-user-check", tint: "success" as const },
-      { label: "Onboarding",      value: onboarding,    icon: "ti-user-plus",  tint: "warn"    as const },
-      { label: "Departments",     value: depts,         icon: "ti-building",   tint: "info"    as const },
-    ];
-  }, [employees, branch, totalCount]);
+  const stats = useMemo(() => [
+    { label: "Total Employees", value: empStats.total,       icon: "ti-users",      tint: "primary" as const },
+    { label: "Active",          value: empStats.active,      icon: "ti-user-check", tint: "success" as const },
+    { label: "Onboarding",      value: empStats.onboarding,  icon: "ti-user-plus",  tint: "warn"    as const },
+    { label: "Departments",     value: empStats.departments, icon: "ti-building",   tint: "info"    as const },
+  ], [empStats]);
 
   function open(id: string) {
     router.push(`/dashboard/employees/${id}`);
@@ -339,7 +343,7 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {employees.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-14 text-center">
                       <i className="ti ti-users-group text-4xl text-[var(--outline)] block mb-3" />
@@ -347,7 +351,7 @@ export default function EmployeesPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(e => (
+                  employees.map(e => (
                     <tr key={e.id} onClick={() => open(e.id)}
                       className="border-b border-[var(--outline-v)] last:border-0 hover:bg-[var(--bg-low)] transition-colors cursor-pointer">
                       <td className="px-5 py-3.5">

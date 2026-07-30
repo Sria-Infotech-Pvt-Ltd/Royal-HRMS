@@ -24,6 +24,7 @@ from apps.accounts.views import (
     DocumentListCreateView,
     DocumentStatsView,
     EmployeeListCreateView,
+    EmployeeStatsView,
     LoginView,
     LogoutView,
     TokenRefreshAPIView,
@@ -58,6 +59,7 @@ urlpatterns = [
 
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
+    path('employees/stats/',                                     EmployeeStatsView.as_view(),             name='employee-stats'),
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),

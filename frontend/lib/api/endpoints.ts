@@ -37,6 +37,7 @@ export const API = {
 
   employees: {
     list: "/employees/",
+    stats: "/employees/stats/",
     hrList: "/employees/hrs/",
     managerList: "/employees/managers/",
     me: "/employees/me/",

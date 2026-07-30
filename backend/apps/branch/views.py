@@ -59,23 +59,36 @@ class BranchPreviewCodeView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'branches.create'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
-        city_id = request.query_params.get('city_id')
-        if not city_id:
-            return error('city_id query parameter is required.')
-        try:
-            city_id = int(city_id)
-        except (TypeError, ValueError):
-            return error('city_id must be a valid integer.')
-        try:
-            city = City.objects.select_related('state').get(pk=city_id, is_active=True)
-        except City.DoesNotExist:
-            return error('City not found.', http_status=status.HTTP_404_NOT_FOUND)
-        with transaction.atomic():
-            code = generate_branch_code(city.name)
-        return success(
-            'Branch code preview generated.',
-            data={'branch_code': code, 'city': city.name, 'state': city.state.name},
-        )
+        city_id   = request.query_params.get('city_id')
+        city_name = (request.query_params.get('city_name') or '').strip()
+
+        if city_id:
+            try:
+                city_id = int(city_id)
+            except (TypeError, ValueError):
+                return error('city_id must be a valid integer.')
+            try:
+                city = City.objects.select_related('state').get(pk=city_id, is_active=True)
+            except City.DoesNotExist:
+                return error('City not found.', http_status=status.HTTP_404_NOT_FOUND)
+            with transaction.atomic():
+                code = generate_branch_code(city.name)
+            return success(
+                'Branch code preview generated.',
+                data={'branch_code': code, 'city': city.name, 'state': city.state.name},
+            )
+
+        if city_name:
+            # City not created yet (user is typing a new one) — the code only
+            # depends on the name string, so preview it without a City row.
+            with transaction.atomic():
+                code = generate_branch_code(city_name)
+            return success(
+                'Branch code preview generated.',
+                data={'branch_code': code, 'city': city_name, 'state': None},
+            )
+
+        return error('city_id or city_name query parameter is required.')
 
 
 # ─── Branch CRUD ──────────────────────────────────────────────────────────────
