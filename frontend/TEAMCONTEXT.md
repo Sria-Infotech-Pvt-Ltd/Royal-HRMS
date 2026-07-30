@@ -3225,3 +3225,81 @@ Fixed (required an elevated PowerShell — outside this session's write access) 
 - **WebSockets need `daphne`, not `manage.py runserver`, locally** — see §5. This is the single most likely thing to trip up the next person testing notifications.
 - **`REDIS_URL` is still unset in `.env`** — caching and the channel layer both silently degrade to per-process fallbacks without it. Not urgent for local dev, but must be set before any multi-worker deployment.
 - **Manager-scoping fix (§1) covers every attendance list/action endpoint** — if a new attendance endpoint is added later that takes a `branch` filter, check whether it also needs `_manager_scope_employee_ids` wired in, or managers will see the whole branch again on that one endpoint.
+
+---
+
+## Session — Rithwika (28 July 2026)
+
+**Branch:** `Frontend/28-07`
+
+---
+
+> **Flag — a prior session's log entry appears to have been lost.** A "Session — Rithwika (27 July 2026)" entry (auth retry-storm fix, employee-modal 403 fixes, expense claims list fix, referrals modal blur fix) was committed on `frontend/27-07` at `9d26413`, but is no longer present in this file — it isn't between the 23 July and 27 July (G.Durga Prasad) entries above, most likely dropped during the `feature/voice-commands` / `Backend/Bug-Fixes` / `cache/27-07` → `demo` merge. The actual code changes from that commit are still live (confirmed still in place while working today); only this file's record of them was lost. Not restored here — flagging for the team to decide whether to re-add it, since re-inserting it out of order could itself cause a future merge conflict.
+
+---
+
+### 1. Voice Assistant FAB — Idle Collapse + Drag-to-Reposition
+
+**Files:** `components/VoiceCommandButton.tsx`, `app/globals.css`
+
+Reported symptom (via screenshot): the always-visible mic/mute/keyboard row, fixed at the bottom-right corner, visually collided with page content that also lives in that corner — table pagination controls, wizard footers, dashboard cards.
+
+- **Idle collapse.** Rests as a single 46px orb (down from the ~150px-wide 3-button row) with a soft pulsing ring (new `voiceIdlePulse` keyframe in `globals.css`, `prefers-reduced-motion` respected). Expands to the full mic/mute/keyboard row on hover (desktop) or tap (touch); auto-expands and *stays* expanded whenever actually in use (listening, processing, typed input open, showing an interim transcript) so it can never collapse mid-interaction.
+- **Draggable.** Press-and-drag either the idle orb or the expanded mic button to reposition anywhere on screen (Pointer Events, unified mouse+touch, `touch-action: none`). A movement threshold (raised 4px → 10px after the 4px value misfired on ordinary clicks — see below) distinguishes a genuine drag from a click; the click that follows a drag is suppressed via a ref flag so it doesn't also trigger listening/expand. Position is clamped with extra margin reserved for the wider expanded row (`SAFE_W`/`SAFE_H`), so a corner drop never leaves the expanded row spilling off-screen.
+- **Persistence — added, then explicitly reverted.** First built with `localStorage` persistence across reloads (an explicit ask at the time). Two real bugs then surfaced from a live screenshot: (a) the 4px drag threshold was low enough that an ordinary click's natural pointer jitter got misread as a drag, saving a stray position — the mic rendered mid-page after reload; (b) hovering the idle orb immediately swapped it for the expanded row *before* a press-drag could start on the orb itself, so the button being dragged (the expanded FAB) had no drag handlers attached at all — dragging silently did nothing. Fixed the threshold and added the same drag handlers to the expanded FAB. Immediately after, the requirement itself changed: drag should persist during the session but reset on an actual page reload, not survive reloads at all. Removed the `localStorage` read/write entirely — `useState` alone already gives exactly that behavior for free, since this component lives in the root layout, which Next.js keeps mounted across client-side navigation but fully remounts on a real reload.
+- **Corner position tightened.** Default resting position moved from `right:24,bottom:24` → `right:4,bottom:4` (flush against the actual corner), per explicit feedback that it should sit in the "complete right corner," not just nearby.
+
+---
+
+### 2. Employees List — Edit Action
+
+**Files:** `app/dashboard/employees/page.tsx`, `app/dashboard/employees/_components/EditEmployeeModal.tsx` (**new**)
+
+Added an Edit action (pencil icon) to the employee list's row actions, between the existing View and Deactivate — gated by the same `usePermission("employees.edit")` already guarding Deactivate.
+
+- `EditEmployeeModal.tsx` prefills from the row's already-loaded data (no extra fetch on open) and edits Full Name, Phone, Branch, Department, Designation, Date of Joining, and Status.
+- Branch/Department `<select>` options are the list page's own already-computed `branchOptions`/`deptOptions` (derived client-side from `GET /api/employees/`, passed down as props) — per explicit instruction, no separate branches/departments fetch for this modal. The employee's own current value is folded into each option list so it's never shown blank if they're the only person in that branch/department on the currently-loaded page.
+- Status is Active/Inactive only, deliberately not "Onboarding" — onboarding is a derived backend state (`is_active && must_change_password`), not something the API can set directly; offering it as a selectable option would be dishonest UI. An onboarding employee shows as "Active" with a short explanatory note instead.
+- Save flow: `PUT api/employees/<employee_id>/` with the profile fields, then a separate `PATCH` of the same endpoint with `is_active` only if status actually changed — mirrors the existing `toggleStatus` function already in this file rather than inventing a new pattern.
+- `ApiEmployee` (previously module-private in `page.tsx`) is now exported so the new modal can type the already-loaded row data consistently instead of redefining an overlapping interface.
+
+---
+
+### 3. Static Audit — 11 Additional Bugs Found (Not Fixed)
+
+At the user's request, ran a full static code-reading pass (5 parallel investigations, no live browser) against every checklist item in the flow-based manual test guide published the previous session. 46 items checked; 35 confirmed correct via direct code evidence, 11 confirmed broken. None of the 11 were fixed this session — logged here as a punch list, not yet actioned:
+
+| # | Bug | Where |
+|---|---|---|
+| 1 | Candidate status changes to screening/scheduled/interview-done never log or send an email (only selected/rejected do); Email Logs page is itself a dead "coming soon" stub that never calls the real, working log endpoint | `apps/recruitment/views.py:519-592`, `frontend/.../email-logs/page.tsx` |
+| 2 | `proxy.ts` reads onboarding/assessment status from the unsigned, client-writable cookie instead of the signed JWT — spoofable in DevTools | `frontend/proxy.ts:65-85` |
+| 3 | Department/designation never carried over from onboarding to the new employee record — HR must manually re-pick both every time | `apps/accounts/views.py` (`OnboardingApprovalView`) |
+| 4 | `UnpunchesTab` renders `CorrectionsTab`'s data instead of the actual un-punches endpoint that exists for it | `frontend/.../UnpunchesTab.tsx` |
+| 5 | Expense stat cards always total *all* categories while the list below is category-filtered — can visibly disagree | `apps/hrms/views/expenses.py:311-340` |
+| 6 | Expense rejection reason is collected in the UI, sent to the backend, and silently discarded — the `Expense` model has no field for it | `apps/hrms/models.py`, `views/expenses.py:172-188` |
+| 7 | Approvals hub's request-type dropdown always shows Leave/Expense/Attendance regardless of which specific permission the manager holds | `frontend/.../approvals/page.tsx:143-156` |
+| 8 | Org chart is 100% hardcoded fake data — no fetch at all, never reflects a real reporting-manager change | `frontend/.../OrgChartClient.tsx` |
+| 9 | Email Logs page only reflects recruitment emails — SMTP test sends and most other email sends are invisible there | `apps/accounts/utils.py`, `views.py:1500-1520` |
+| 10 | Audit log doesn't cover leave/expense approvals at all, despite login and settings changes being logged | `apps/hrms/views/leave.py:933-998`, `views/expenses.py` |
+| 11 | Reports page is a pure "Coming Soon" placeholder — no data, mock or real | `frontend/.../reports/page.tsx` |
+
+---
+
+### Key Files Changed (28 July 2026)
+
+| File | Change |
+|------|--------|
+| `components/VoiceCommandButton.tsx` | Idle-orb collapse/expand, drag-to-reposition (mouse+touch), session-only position (no `localStorage`), default corner tightened to `right:4,bottom:4` |
+| `app/globals.css` | Added `voiceIdlePulse` keyframe + `.voice-fab-idle-pulse` (respects `prefers-reduced-motion`) |
+| `app/dashboard/employees/page.tsx` | Added Edit action to row actions; exported `ApiEmployee` interface; wires `EditEmployeeModal` |
+| `app/dashboard/employees/_components/EditEmployeeModal.tsx` | **NEW** — edit Full Name/Phone/Branch/Department/Designation/DOJ/Status, `PUT`+conditional `PATCH` to `api/employees/<employee_id>/` |
+
+---
+
+### Notes for Next Developer
+
+- **The 11 bugs in §3 are confirmed via direct code reading, not live-tested** — each has a file:line citation in the finding, but none have been fixed or manually clicked through yet. Treat as a prioritized backlog, not a changelog.
+- **Voice FAB drag position is intentionally NOT persisted** — this was a deliberate reversal mid-session (see §1). Don't re-add `localStorage` for it without re-confirming the requirement; the last explicit instruction was session-only, reset-on-reload.
+- **A stray `royal_hrms_voice_fab_pos` key may still exist in some team members' browser `localStorage`** from the brief window this session where persistence was implemented — it's harmless now (nothing reads it), no cleanup needed.
+- **`EditEmployeeModal`'s Branch/Department options are only as complete as the current page/search result of `GET /api/employees/`** — same known limitation as the list's own filter dropdowns (see the 27 July, now-missing-from-this-file session's audit, or `9d26461`-era commit). Not fixed here; if a canonical "all branches/departments" endpoint is ever wired up for the filters, this modal should switch to it too.
+- **See the flag at the top of this session** — a previous log entry for 27 July (Rithwika) is missing from this file; the code changes are still in git (`9d26413`) even though the doc entry isn't here.

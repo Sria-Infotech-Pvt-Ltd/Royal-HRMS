@@ -961,6 +961,19 @@ textarea.field-input {
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* Voice assistant FAB — idle resting orb, a soft ring so it still reads as
+   interactive/alive without the full-size button sitting on the page. */
+@keyframes voiceIdlePulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 9px color-mix(in srgb, var(--primary) 0%, transparent); }
+}
+.voice-fab-idle-pulse {
+  animation: voiceIdlePulse 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-fab-idle-pulse { animation: none; }
+}
+
 /* Upload zone */
 .upload-zone {
   border: 2px dashed var(--outline-v);

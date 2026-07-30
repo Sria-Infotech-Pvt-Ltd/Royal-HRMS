@@ -19,9 +19,10 @@ import Avatar from "./_components/Avatar";
 import StatusBadge from "./_components/StatusBadge";
 import AddEmployeeModal  from "./_components/AddEmployeeModal";
 import BulkImportModal  from "./_components/BulkImportModal";
+import EditEmployeeModal from "./_components/EditEmployeeModal";
 
 /* ── API response shape ─────────────────────────────────────── */
-interface ApiEmployee {
+export interface ApiEmployee {
   id: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
@@ -107,6 +108,7 @@ export default function EmployeesPage() {
   const [status,      setStatus]      = useState<"all" | EmployeeStatus>("all");
   const [showModal,   setShowModal]   = useState(false);
   const [showImport,  setShowImport]  = useState(false);
+  const [editing,     setEditing]     = useState<Employee | null>(null);
   const [toggling,    setToggling]    = useState<string | null>(null);
   const [page,        setPage]        = useState(1);
   const [totalPages,  setTotalPages]  = useState(1);
@@ -382,6 +384,12 @@ export default function EmployeesPage() {
                             <i className="ti ti-eye text-[15px]" />
                           </button>
                           {canEdit && (
+                            <button onClick={() => setEditing(e)} suppressHydrationWarning title="Edit"
+                              className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
+                              <i className="ti ti-edit text-[15px]" />
+                            </button>
+                          )}
+                          {canEdit && (
                             <button
                               onClick={() => toggleStatus(e)}
                               disabled={toggling === e.id}
@@ -467,6 +475,20 @@ export default function EmployeesPage() {
         <BulkImportModal
           onClose={() => setShowImport(false)}
           onSuccess={() => fetchEmployees(search, 1)}
+        />
+      )}
+
+      {/* ── Edit Employee Modal ── */}
+      {editing && (
+        <EditEmployeeModal
+          employee={editing}
+          branchOptions={branchOptions}
+          deptOptions={deptOptions}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            fetchEmployees(search, page);
+          }}
         />
       )}
     </div>
