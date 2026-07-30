@@ -1,16 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
 import type { AttendanceMode } from "@/types/attendance";
 
-const MODE_OPTIONS: { value: AttendanceMode; label: string }[] = [
-  { value: "office",          label: "Office"          },
-  { value: "wfh",             label: "Work from Home"  },
-  { value: "field",           label: "Field Work"      },
-  { value: "client_location", label: "Client Location" },
-  { value: "remote_office",   label: "Remote Office"   },
-];
+const MODE: AttendanceMode = "office";
 
 function fmtTimer(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -33,7 +26,6 @@ function geofenceDot(isInside: boolean | null) {
 
 export default function ClockWidget() {
   const { session, isLoading, isPunching, isLocating, punch } = useClockWidget();
-  const [mode, setMode] = useState<AttendanceMode>("office");
 
   const isClockedIn = session?.is_clocked_in ?? false;
 
@@ -78,15 +70,8 @@ export default function ClockWidget() {
         </div>
       </div>
 
-      <div className="field-group mb-12">
-        <label className="field-label">Attendance Mode</label>
-        <select className="field-input" value={mode} onChange={e => setMode(e.target.value as AttendanceMode)} disabled={isPunching}>
-          {MODE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
-      </div>
-
       <button
-        onClick={() => punch(isClockedIn ? "OUT" : "IN", mode)}
+        onClick={() => punch(isClockedIn ? "OUT" : "IN", MODE)}
         disabled={isPunching}
         style={{
           width: "100%", height: 44, borderRadius: 8, border: "none", cursor: isPunching ? "not-allowed" : "pointer",

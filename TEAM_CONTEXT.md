@@ -2818,6 +2818,68 @@ Checked every branch on `origin` for those two files — not pushed anywhere, so
 
 ---
 
+## Session Log — 2026-07-20
+**Author: SandalaNithin**
+
+### Bug Fixes Shipped
+
+**1. `_auto_assign_managers()` — wrong HR role name in branch fallback lookup**
+- Root cause: when a branch has no `hr` FK set, the fallback query looked up `role__name='hr'` — but the actual role name in this codebase is `hr_admin`, so the fallback silently matched nobody
+- Fix: `role__name='hr_admin'`
+- File: `backend/apps/accounts/views.py` (`_auto_assign_managers`)
+
+### Features Shipped
+
+**2. Onboarding approval — HR can assign a specific assessment, not just defaults**
+- `OnboardingApprovalView.post()` now reads `assessment_id` from the approval request body
+- If that assessment isn't already in the default/active list, it's fetched and appended so HR can hand-pick a non-default assessment at approval time instead of only the global defaults
+- File: `backend/apps/accounts/views.py`
+
+**3. Assessment emails now deep-link to the assessment page**
+- `assessments_portal_url = f'{portal_url}/onboarding/assessments'` computed once and substituted for the plain `portal_url` in both the onboarding-approved email and the assessment-assigned email whenever the candidate has pending assessments
+- Previously both emails linked to the bare portal root, leaving the candidate to find the assessments page themselves after logging in
+- File: `backend/apps/accounts/views.py`
+
+---
+
+## Session Log — 2026-07-22
+**Author: SandalaNithin**
+
+### Features Shipped
+
+**1. Move HR attendance approval into Leave Management**
+
+For the `hr` / `hr_admin` role only: attendance sign-off moves out of the standalone Approvals page and into a new "Attendance Approvals" tab inside Leave Management. Manager and `system_admin` are unaffected — they keep attendance approval on the existing Approvals page.
+
+- `frontend/app/dashboard/approvals/page.tsx`
+  - `canApproveAttendance` now excludes HR (`&& !isHR`) so that tab no longer renders there for this role
+  - HR visiting `/dashboard/approvals` directly is redirected to `/dashboard/leave` (`useEffect` + `router.replace`; page renders `null` for HR)
+- `frontend/app/dashboard/leave/_client.tsx`
+  - New `"attendance"` tab added to `TabId`, gated on `isHR && useAnyPermission("payroll.view", "payroll.approve")`
+  - Reuses the existing `AttendanceApprovalTab` component from `../approvals/_components/`
+- `frontend/lib/navConfig.ts`
+  - Approvals nav entry gets `excludeRoles: ["hr", "hr_admin"]` so it disappears from the sidebar for this role
+
+---
+
+## Session Log — 2026-07-27
+**Author: SandalaNithin**
+
+### Changes Shipped
+
+**1. Frontend dependency additions — `zod`**
+- `zod ^4.4.3` added to `frontend/package.json` dependencies; `caniuse-lite ^1.0.30001806` pinned as an explicit (previously transitive) dependency; `package-lock.json` regenerated to match
+- No file in the repo imports `zod` yet — this is a dependency-only change, ahead of upcoming validation work
+- Note: the commit was titled "ui changes" but the diff only touches `package.json` / `package-lock.json` — no UI code changed in this commit
+
+### Pending
+
+- Wire up `zod` schemas — not started, dependency only
+- Everything listed as Pending in earlier session-log entries above is still outstanding
+
+---
+
+
 ## Session Log — 2026-07-27
 **Author: Teerdaveni**
 

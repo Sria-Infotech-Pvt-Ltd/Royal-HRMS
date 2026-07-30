@@ -345,6 +345,14 @@ LOGGING = {
             'level': 'WARNING',
             'propagate': False,
         },
+        # Keyed 'apps.voice_commands' (not a bare 'voice_commands' string) —
+        # every module in this app logs via logging.getLogger(__name__), which
+        # resolves to 'apps.voice_commands.<module>' (e.g.
+        # 'apps.voice_commands.conversation'). Python's logging hierarchy walks
+        # up dotted parents, so a logger registered here as 'apps.voice_commands'
+        # catches every submodule's calls via propagation. A bare 'voice_commands'
+        # key (mirroring the 'accounts' entry above literally) would NOT match
+        # that hierarchy and would silently catch nothing.
         'apps.voice_commands': {
             'handlers': ['voice_commands_file', 'console'],
             'level': 'INFO',

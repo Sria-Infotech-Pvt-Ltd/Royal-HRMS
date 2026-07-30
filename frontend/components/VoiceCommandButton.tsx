@@ -52,6 +52,8 @@ export default function VoiceCommandButton() {
   const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
   const [typedValue, setTypedValue] = useState("");
 
+  if (HIDDEN_ROUTES.includes(pathname)) return null;
+
   const isListening  = status === "listening";
   const isProcessing = status === "processing";
 

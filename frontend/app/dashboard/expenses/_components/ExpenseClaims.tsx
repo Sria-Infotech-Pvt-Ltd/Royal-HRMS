@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import type { PaginatedResponse } from "@/types/attendance";
 import ExpenseFormModal from "./ExpenseFormModal";
 import ExpenseDetailModal from "./ExpenseDetailModal";
 
@@ -33,14 +34,6 @@ export interface Expense {
   employee_name:  string;
   branch_name:    string;
   created_at:     string;
-}
-
-interface PaginatedResponse<T> {
-  count:       number;
-  page:        number;
-  page_size:   number;
-  total_pages: number;
-  results:     T[];
 }
 
 interface ExpenseStats {

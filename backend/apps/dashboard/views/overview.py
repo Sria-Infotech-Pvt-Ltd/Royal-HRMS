@@ -21,6 +21,7 @@ _TTL_ACTION_QUEUE  = 45          # seconds — action-queue counts, short TTL to
 _TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
 
 
+
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False

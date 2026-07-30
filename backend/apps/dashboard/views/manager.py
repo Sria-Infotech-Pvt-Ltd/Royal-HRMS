@@ -26,6 +26,7 @@ def _has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _is_manager_or_lead(user) -> bool:
