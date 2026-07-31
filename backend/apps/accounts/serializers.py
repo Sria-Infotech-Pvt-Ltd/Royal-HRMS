@@ -847,6 +847,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
             'account_holder_name', 'account_type',
             'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
+            'uan_number', 'name_as_per_aadhar',
             'updated_at',
         ]
         read_only_fields = ('updated_at',)
@@ -1367,9 +1368,14 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
                           required=False, allow_null=True, default=None,
                           input_formats=_EMP_IMPORT_DATE_FMTS,
                       )
-    blood_group     = serializers.CharField(max_length=5, required=False,
-                                             allow_blank=True, default='')
-    address         = serializers.CharField(required=False, allow_blank=True, default='')
+    blood_group          = serializers.CharField(max_length=5, required=False,
+                                                  allow_blank=True, default='')
+    address              = serializers.CharField(required=False, allow_blank=True, default='')
+    uan_number           = serializers.CharField(max_length=12, required=False,
+                                                  allow_blank=True, default='')
+    name_as_per_aadhar   = serializers.CharField(max_length=150, required=False,
+                                                  allow_blank=True, default='')
+    annual_ctc           = serializers.CharField(required=False, allow_blank=True, default='')
 
     def validate_first_name(self, value: str) -> str:
         value = value.strip()
@@ -1404,6 +1410,12 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
         value = value.strip()
         if not value:
             raise serializers.ValidationError('Department is required.')
+        return value
+
+    def validate_uan_number(self, value: str) -> str:
+        value = value.strip()
+        if value and (len(value) != 12 or not value.isdigit()):
+            raise serializers.ValidationError('UAN must be exactly 12 digits.')
         return value
 
     def validate_designation(self, value: str) -> str:

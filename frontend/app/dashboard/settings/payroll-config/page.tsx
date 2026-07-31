@@ -194,6 +194,56 @@ export default function PayrollConfigPage() {
                 </div>
               </div>
 
+              {/* EPF / Statutory Rates */}
+              <div className="px-5 py-5 border-b border-gray-100">
+                <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wider mb-1">EPF / EDLI Statutory Rates</div>
+                <div className="text-[11px] text-gray-400 mb-3">
+                  EPFO-mandated rates. Update here when the law changes — no code change required.
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">EPS Rate (%)</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Employer Pension Scheme contribution</div>
+                    <input
+                      type="number" step="0.01" min={0} max={100}
+                      value={draft.eps_rate ?? ""}
+                      onChange={e => set("eps_rate", e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">EDLI Rate (%)</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Employees Deposit Linked Insurance</div>
+                    <input
+                      type="number" step="0.01" min={0} max={100}
+                      value={draft.edli_rate ?? ""}
+                      onChange={e => set("edli_rate", e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">EDLI Wage Ceiling (₹)</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Monthly wage cap for EDLI computation</div>
+                    <input
+                      type="number" step="1" min={0}
+                      value={draft.edli_wage_ceiling ?? ""}
+                      onChange={e => set("edli_wage_ceiling", e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-gray-700 mb-1">EPF Admin Rate (%)</label>
+                    <div className="text-[11px] text-gray-400 mb-2">Administrative / inspection charges</div>
+                    <input
+                      type="number" step="0.01" min={0} max={100}
+                      value={draft.epf_admin_rate ?? ""}
+                      onChange={e => set("epf_admin_rate", e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 text-sm px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Optional components */}
               <div className="px-5 py-5">
                 <div className="text-[12px] font-bold text-gray-500 uppercase tracking-wider mb-3">Optional Payroll Components</div>

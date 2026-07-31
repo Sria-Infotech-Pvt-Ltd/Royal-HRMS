@@ -3931,6 +3931,8 @@ class OnboardingApprovalView(APIView):
         req_assessment_id = request.data.get('assessment_id')       or None
         req_manager_id    = request.data.get('reporting_manager_id')
         annual_ctc_raw    = (request.data.get('annual_ctc')         or '').strip()
+        req_uan_number        = (request.data.get('uan_number')         or '').strip()
+        req_name_as_per_aadhar = (request.data.get('name_as_per_aadhar') or '').strip()
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
         if decision == 'approve':
@@ -4000,6 +4002,21 @@ class OnboardingApprovalView(APIView):
                 'reporting_manager', 'hr',
                 *auto_fields,
             ])))
+
+            # Save UAN / Aadhar name provided by HR at approval time.
+            if req_uan_number or req_name_as_per_aadhar:
+                from apps.accounts.models import EmployeeProfile as _Profile
+                profile, _ = _Profile.objects.get_or_create(user=target)
+                profile_fields = []
+                if req_uan_number:
+                    profile.uan_number = req_uan_number
+                    profile_fields.append('uan_number')
+                if req_name_as_per_aadhar:
+                    profile.name_as_per_aadhar = req_name_as_per_aadhar
+                    profile_fields.append('name_as_per_aadhar')
+                if profile_fields:
+                    profile_fields.append('updated_at')
+                    profile.save(update_fields=profile_fields)
 
             if needs_conversion:
                 # Auto-allocate leave balances after candidate→employee conversion
@@ -4721,6 +4738,12 @@ _EMP_IMPORT_COL_MAP = {
     'birthdate': 'date_of_birth',
     'blood group': 'blood_group', 'blood_group': 'blood_group', 'blood': 'blood_group',
     'address': 'address', 'current address': 'address', 'current_address': 'address',
+    'uan': 'uan_number', 'uan number': 'uan_number', 'uan_number': 'uan_number',
+    'pf uan': 'uan_number', 'epf uan': 'uan_number',
+    'name as per aadhar': 'name_as_per_aadhar', 'name_as_per_aadhar': 'name_as_per_aadhar',
+    'aadhar name': 'name_as_per_aadhar', 'aadhaar name': 'name_as_per_aadhar',
+    'basic salary': 'basic_salary', 'basic_salary': 'basic_salary', 'basic': 'basic_salary',
+    'annual ctc': 'annual_ctc', 'annual_ctc': 'annual_ctc', 'ctc': 'annual_ctc',
 }
 
 _EMP_MAX_IMPORT_ROWS  = 1000
@@ -4990,21 +5013,51 @@ class EmployeeBulkImportView(APIView):
                 if auto_fields:
                     user.save(update_fields=[*auto_fields, 'updated_at'])
 
-                # Create EmployeeProfile if optional personal fields are present.
-                gender  = vd.get('gender') or ''
-                dob     = vd.get('date_of_birth')
-                blood   = vd.get('blood_group') or ''
-                address = vd.get('address') or ''
-                if any([gender, dob, blood, address]):
+                # Create EmployeeProfile with any optional fields present in the import sheet.
+                gender          = vd.get('gender') or ''
+                dob             = vd.get('date_of_birth')
+                blood           = vd.get('blood_group') or ''
+                address         = vd.get('address') or ''
+                uan_number      = vd.get('uan_number') or ''
+                aadhar_name     = vd.get('name_as_per_aadhar') or ''
+                if any([gender, dob, blood, address, uan_number, aadhar_name]):
                     EmployeeProfile.objects.get_or_create(
                         user=user,
                         defaults={
-                            'gender':          gender,
-                            'date_of_birth':   dob,
-                            'blood_group':     blood,
-                            'current_address': address,
+                            'gender':              gender,
+                            'date_of_birth':       dob,
+                            'blood_group':         blood,
+                            'current_address':     address,
+                            'uan_number':          uan_number,
+                            'name_as_per_aadhar':  aadhar_name,
                         },
                     )
+
+                # Create salary config if annual_ctc was provided in the import sheet.
+                annual_ctc_import = vd.get('annual_ctc') or ''
+                if annual_ctc_import:
+                    from decimal import Decimal as _Decimal, InvalidOperation
+                    from apps.payroll.models import EmployeeSalaryConfig as _SC
+                    try:
+                        ctc_value = _Decimal(str(annual_ctc_import).replace(',', ''))
+                        _SC.objects.create(
+                            employee=user,
+                            annual_ctc=ctc_value,
+                            effective_from=user.date_of_joining or user.date_joined.date(),
+                            is_active=True,
+                        )
+                    except InvalidOperation:
+                        logger.warning(
+                            'Invalid annual_ctc value "%s" for %s — skipping salary config',
+                            annual_ctc_import, email,
+                        )
+                        row_errors.append({
+                            'row':     idx,
+                            'field':   'annual_ctc',
+                            'message': f'"{annual_ctc_import}" is not a valid number — salary config was not created for this employee.',
+                        })
+                    except Exception:
+                        logger.warning('Could not create salary config for %s from import', email)
 
                 # Auto-allocate leave balances based on active leave policies —
                 # same step EmployeeListCreateView.post() does for a single

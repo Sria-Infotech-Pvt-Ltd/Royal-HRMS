@@ -43,7 +43,7 @@ export default function CandidateReviewPage() {
   async function handleOnboardingAction(
     userId: string,
     decision: "approve" | "reject",
-    extras?: { department: string; designation: string; assessmentId?: string },
+    extras?: { department: string; designation: string; assessmentId?: string; uanNumber?: string; aadharName?: string },
   ) {
     setActing(true); setActionErr(null);
     try {
@@ -54,9 +54,11 @@ export default function CandidateReviewPage() {
       await clientApi.post(API.onboarding.approve(userId), {
         decision,
         remarks,
-        department:    extras?.department,
-        designation:   extras?.designation,
-        assessment_id: extras?.assessmentId,
+        department:         extras?.department,
+        designation:        extras?.designation,
+        assessment_id:      extras?.assessmentId,
+        uan_number:         extras?.uanNumber    || undefined,
+        name_as_per_aadhar: extras?.aadharName   || undefined,
       });
       setDrawer(null); setRemarks("");
       if (decision === "approve") {

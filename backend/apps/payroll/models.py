@@ -37,6 +37,25 @@ class PayrollSettings(models.Model):
     )
     enable_reimbursements = models.BooleanField(default=True)
     enable_bonuses = models.BooleanField(default=True)
+
+    # EPF / EDLI statutory rates — configurable so law changes don't require code changes
+    eps_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=8.33,
+        help_text='Employer EPS contribution % (EPFO-mandated; update when law changes)',
+    )
+    edli_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.50,
+        help_text='EDLI contribution % on wages up to edli_wage_ceiling',
+    )
+    edli_wage_ceiling = models.DecimalField(
+        max_digits=10, decimal_places=2, default=15000.00,
+        help_text='Monthly wage ceiling for EDLI computation',
+    )
+    epf_admin_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.50,
+        help_text='EPF administrative / inspection charges %',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

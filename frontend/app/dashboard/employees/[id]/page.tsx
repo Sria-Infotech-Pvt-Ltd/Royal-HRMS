@@ -39,6 +39,7 @@ interface ApiProfile {
   bank_branch_name?: string; account_holder_name?: string; account_type?: string;
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
+  uan_number?: string; name_as_per_aadhar?: string;
 }
 
 interface ApiDocument {
@@ -161,6 +162,9 @@ function apiToEmployee(u: ApiEmployee): Employee {
       emergencyRelationship: p.emergency_relationship || "",
       emergencyPhone:        p.emergency_phone || "",
       emergencyEmail:        p.emergency_email || "",
+      // EPF / Statutory
+      uanNumber:       p.uan_number          || "",
+      nameAsPerAadhar: p.name_as_per_aadhar  || "",
     },
     tables: {},
     documents: buildDocEntries(u.documents ?? []),
@@ -363,6 +367,9 @@ export default function EmployeeProfilePage({
         emergency_relationship: values.emergencyRelationship || null,
         emergency_phone:        values.emergencyPhone       || null,
         emergency_email:        values.emergencyEmail       || null,
+        // EPF / Statutory
+        uan_number:          values.uanNumber       || null,
+        name_as_per_aadhar:  values.nameAsPerAadhar || null,
       };
 
       await clientApi.put(API.employees.detail(id), employeePayload);

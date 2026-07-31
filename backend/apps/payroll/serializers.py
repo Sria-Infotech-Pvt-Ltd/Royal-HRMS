@@ -26,10 +26,34 @@ class PayrollSettingsSerializer(serializers.ModelSerializer):
             'employee_query_window_hours',
             'enable_reimbursements',
             'enable_bonuses',
+            'eps_rate',
+            'edli_rate',
+            'edli_wage_ceiling',
+            'epf_admin_rate',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_eps_rate(self, value):
+        if value is not None and not (0 < value <= 100):
+            raise serializers.ValidationError('EPS rate must be between 0.01 and 100.')
+        return value
+
+    def validate_edli_rate(self, value):
+        if value is not None and not (0 < value <= 100):
+            raise serializers.ValidationError('EDLI rate must be between 0.01 and 100.')
+        return value
+
+    def validate_epf_admin_rate(self, value):
+        if value is not None and not (0 <= value <= 100):
+            raise serializers.ValidationError('EPF admin rate must be between 0 and 100.')
+        return value
+
+    def validate_edli_wage_ceiling(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('EDLI wage ceiling must be greater than 0.')
+        return value
 
     def validate(self, data):
         start = data.get('cycle_start_day', getattr(self.instance, 'cycle_start_day', None))

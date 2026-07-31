@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, PayrollSettings, EmployeeSalaryConfig } from "@/types/payroll";
@@ -66,7 +67,11 @@ function cycleForMonth(cycles: PayrollCycle[], calYear: number, calMonth: number
   }) ?? null;
 }
 
+const DETAIL_STATUSES   = new Set(["paid", "closed"]);
+const TERMINAL_STATUSES = new Set(["paid", "closed", "cancelled"]);
+
 export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume }: Props) {
+  const router = useRouter();
   const { data: cyclesPage, loading: cyclesLoading, refetch } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
   const { data: settings } = useFetch<PayrollSettings>(API.payroll.settings);
@@ -332,8 +337,14 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                   </tr>
                 </thead>
                 <tbody>
-                  {cycles.map(c => (
-                    <tr key={c.id} style={{ cursor: canResume ? "pointer" : "default" }} onClick={canResume ? () => onResumeCycle(c.id, c.status) : undefined}>
+                  {cycles.map(c => {
+                    const isDetail   = DETAIL_STATUSES.has(c.status);
+                    const isTerminal = TERMINAL_STATUSES.has(c.status);
+                    const handleClick = isDetail
+                      ? () => router.push(`/dashboard/payroll/runs/${c.id}`)
+                      : !isTerminal && canResume ? () => onResumeCycle(c.id, c.status) : undefined;
+                    return (
+                    <tr key={c.id} style={{ cursor: handleClick ? "pointer" : "default" }} onClick={handleClick}>
                       <td style={{ fontWeight: 600, fontSize: 13 }}>
                         {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
                       </td>
@@ -350,7 +361,8 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                         </span>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
