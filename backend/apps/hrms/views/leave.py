@@ -983,6 +983,10 @@ class LeaveApprovalView(APIView):
 
         leave_request.save()
         logger.info('Leave request %s %sd by %s', leave_request.id, action, request.user.email)
+
+        from apps.dashboard.views.overview import push_leave_update
+        push_leave_update(request.user.id)
+
         return success(f'Request {action}d.', LeaveRequestSerializer(leave_request, context={'request': request}).data)
 
 

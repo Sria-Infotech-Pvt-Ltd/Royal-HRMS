@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import ClockInButton from "@/components/ClockInButton";
 import { useEmployeeKPIs, useAttendanceStatus } from "@/hooks/useEmployeeDashboard";
 
@@ -38,6 +39,13 @@ export default function EmpConsole({ firstName }: Props) {
     refetchKpis();
     refetchStatus();
   }
+
+  // Voice commands bypass the onPunchSuccess callback — listen to the WS event instead.
+  useEffect(() => {
+    window.addEventListener("attendance:updated", handlePunchSuccess);
+    return () => window.removeEventListener("attendance:updated", handlePunchSuccess);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchKpis, refetchStatus]);
 
   const loading = kpiLoading || statusLoading;
   // Both endpoints are gated behind the same onboarding/assessment check —

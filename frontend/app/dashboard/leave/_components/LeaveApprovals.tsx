@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -59,6 +59,12 @@ export default function LeaveApprovals({ role }: Props) {
     `${API.leave.requests}?${params.toString()}`
   );
   const rows = data?.results ?? [];
+
+  useEffect(() => {
+    function handleLeaveUpdate() { refetch(); }
+    window.addEventListener("leave:updated", handleLeaveUpdate);
+    return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
+  }, [refetch]);
 
   async function act(id: string, action: "approve" | "reject", rejectRemarks = "") {
     setActioning(id);

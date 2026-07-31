@@ -28,3 +28,15 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
     # Called by channel_layer.group_send(..., {'type': 'notification.push', ...})
     async def notification_push(self, event):
         await self.send_json({'type': 'notification', 'notification': event['notification']})
+
+    # Called by channel_layer.group_send(..., {'type': 'attendance.update'})
+    async def attendance_update(self, event):
+        await self.send_json({'type': 'attendance_update'})
+
+    # Called by channel_layer.group_send(..., {'type': 'leave.update', 'action_queue': {...}, 'pending_actions': N})
+    async def leave_update(self, event):
+        await self.send_json({
+            'type':            'leave_update',
+            'action_queue':    event.get('action_queue'),
+            'pending_actions': event.get('pending_actions'),
+        })

@@ -172,6 +172,10 @@ def execute_confirm_leave_approval(request, action: str, request_id: Optional[st
     verb = 'approved' if action == 'approve' else 'rejected'
     subject = f"{employee_name}'s" if employee_name else 'The'
     message = f'{subject} leave request has been {verb}.'
+
+    from apps.dashboard.views.overview import push_leave_update
+    push_leave_update(request.user.id)
+
     return ExecutionResult(success=True, message=message, data=data)
 
 

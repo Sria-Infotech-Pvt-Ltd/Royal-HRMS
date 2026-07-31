@@ -166,6 +166,12 @@ function TeamApprovalsSection() {
   const leaveItems:   LeaveRequest[]   = leaveRaw?.results   ?? [];
   const expenseItems: ExpenseRequest[] = expenseRaw?.results ?? [];
 
+  useEffect(() => {
+    function handleLeaveUpdate() { refetchLeave(); }
+    window.addEventListener("leave:updated", handleLeaveUpdate);
+    return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
+  }, [refetchLeave]);
+
   const [modal, setModal] = useState<{
     id:            string;
     action:        "approve" | "reject";

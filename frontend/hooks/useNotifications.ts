@@ -8,6 +8,7 @@ import { API_URL } from "@/lib/config";
 import type {
   Notification, NotificationListResponse, UnreadCountResponse,
 } from "@/types/notifications";
+import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 
 // Poll stays on as a fallback (the socket carries live updates when
 // connected; the cookie-authenticated handshake can fail on flaky
@@ -112,6 +113,21 @@ export function useNotifications() {
       socket.onmessage = event => {
         try {
           const payload = JSON.parse(event.data as string);
+          if (payload?.type === "attendance_update") {
+            window.dispatchEvent(new CustomEvent("attendance:updated"));
+            return;
+          }
+          if (payload?.type === "leave_update") {
+            // payload is JSON.parse output (any). Narrow to the shape push_leave_update
+            // (backend/apps/dashboard/views/overview.py) always sends.
+            const frame = payload as { action_queue?: HRActionQueue; pending_actions?: number };
+            const detail: LeaveUpdatePayload = {
+              action_queue:    frame.action_queue    ?? null,
+              pending_actions: typeof frame.pending_actions === "number" ? frame.pending_actions : null,
+            };
+            window.dispatchEvent(new CustomEvent<LeaveUpdatePayload>("leave:updated", { detail }));
+            return;
+          }
           if (payload?.type !== "notification" || !payload.notification) return;
           const incoming = payload.notification as Notification;
           setNotifications(prev =>
@@ -134,8 +150,10 @@ export function useNotifications() {
         reconnectTimer.current = setTimeout(connect, delay);
       };
 
+      // Guard with stopped: if cleanup already ran, don't initiate another close
+      // (which would re-enter onclose and schedule a reconnect on a dead instance).
       socket.onerror = () => {
-        socket.close();
+        if (!stopped) socket.close();
       };
     }
 
@@ -144,7 +162,18 @@ export function useNotifications() {
     return () => {
       stopped = true;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      socketRef.current?.close();
+      // Null out handlers before closing so the browser's close event on a
+      // CONNECTING socket doesn't re-enter onclose/onerror and schedule a
+      // reconnect or log a spurious error (React StrictMode double-invoke).
+      const sock = socketRef.current;
+      if (sock) {
+        sock.onopen    = null;
+        sock.onmessage = null;
+        sock.onerror   = null;
+        sock.onclose   = null;
+        sock.close();
+        socketRef.current = null;
+      }
     };
   }, [showToast]);
 

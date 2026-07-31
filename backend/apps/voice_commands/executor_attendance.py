@@ -116,6 +116,18 @@ def _execute_punch(
     except PermissionError as exc:
         return ExecutionResult(success=False, message=str(exc))
 
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        layer = get_channel_layer()
+        if layer:
+            async_to_sync(layer.group_send)(
+                f'notifications_{request.user.id}',
+                {'type': 'attendance.update'},
+            )
+    except Exception:
+        pass
+
     return ExecutionResult(success=True, message=success_message)
 
 

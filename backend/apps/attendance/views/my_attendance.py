@@ -139,6 +139,19 @@ class AttendancePunchView(APIView):
 
         punch_type = punch_data['punch_type']
         session    = PunchService.get_today_session(request.user)
+
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+            layer = get_channel_layer()
+            if layer:
+                async_to_sync(layer.group_send)(
+                    f'notifications_{request.user.id}',
+                    {'type': 'attendance.update'},
+                )
+        except Exception:
+            pass
+
         return success(
             f'Clocked {"in" if punch_type == "IN" else "out"} successfully.',
             TodayAttendanceSerializer(session).data,

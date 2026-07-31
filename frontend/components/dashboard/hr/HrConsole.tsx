@@ -1,14 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import ClockInButton from "@/components/ClockInButton";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import type { HRKPIs } from "@/types/dashboard";
+import type { HRKPIs, LeaveUpdatePayload } from "@/types/dashboard";
 
 interface Props { firstName: string }
 
 export default function HrConsole({ firstName }: Props) {
-  const { data: kpis, loading } = useFetch<HRKPIs>(API.dashboard.hrKpis);
+  const { data: kpis, loading, refetch } = useFetch<HRKPIs>(API.dashboard.hrKpis);
+  // Live pending_actions count pushed by the backend over WebSocket.
+  const [livePendingActions, setLivePendingActions] = useState<number | null>(null);
+
+  useEffect(() => {
+    function handleAttendanceUpdate() { refetch(); }
+    window.addEventListener("attendance:updated", handleAttendanceUpdate);
+    return () => window.removeEventListener("attendance:updated", handleAttendanceUpdate);
+  }, [refetch]);
+
+  useEffect(() => {
+    function handleLeaveUpdate(event: Event) {
+      const { detail } = event as CustomEvent<LeaveUpdatePayload>;
+      if (detail?.pending_actions !== null && detail?.pending_actions !== undefined) {
+        setLivePendingActions(detail.pending_actions);
+      }
+    }
+    window.addEventListener("leave:updated", handleLeaveUpdate);
+    return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
+  }, []);
 
   const today = new Date().toLocaleDateString("en-IN", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -16,7 +36,7 @@ export default function HrConsole({ firstName }: Props) {
 
   const stats = [
     { icon: "ti-users",      val: loading ? "—" : String(kpis?.total_workforce               ?? 0), lbl: "Total Workforce",     sub: "Active employees"   },
-    { icon: "ti-checks",     val: loading ? "—" : String(kpis?.pending_actions                ?? 0), lbl: "Pending Actions",     sub: "Awaiting review"    },
+    { icon: "ti-checks",     val: loading ? "—" : String(livePendingActions ?? kpis?.pending_actions ?? 0), lbl: "Pending Actions",     sub: "Awaiting review"    },
     { icon: "ti-video",      val: loading ? "—" : String(kpis?.active_interviews              ?? 0), lbl: "Active Interviews",   sub: "In pipeline"        },
     { icon: "ti-calendar-x", val: loading ? "—" : String(kpis?.attendance_correction_pending ?? 0), lbl: "Corrections Pending", sub: "Needs attention"    },
   ];
@@ -62,7 +82,7 @@ export default function HrConsole({ firstName }: Props) {
               {isClockedIn ? "Clocked In" : "Not Clocked In"}
             </span>
           )}
-          <ClockInButton />
+          <ClockInButton onPunchSuccess={refetch} />
         </div>
       </div>
 
