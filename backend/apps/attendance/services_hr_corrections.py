@@ -81,7 +81,15 @@ def _has_perm(user, codename: str) -> bool:
 
 
 def _can_hr_access_request(hr_user, correction: AttendanceCorrection) -> bool:
-    """Branch guard for HR: True when no branch set (no restriction) or branches match."""
+    """
+    True when hr_user is the request's specifically assigned HR (l2_approver), or —
+    for requests with no HR assigned at all — hr_user shares the employee's branch
+    (or has no branch restriction). Mirrors leave.py's _can_hr_access_request: a
+    branch can have several HR users, but each should only reach requests for
+    their own assigned employees.
+    """
+    if correction.l2_approver_id:
+        return correction.l2_approver_id == hr_user.id
     branch = _user_branch(hr_user)
     if not branch:
         return True
@@ -114,17 +122,41 @@ def _approval_scope_filter(user) -> Q:
     """
     Scope filter for who may see which correction requests in the review queue.
     can_manage_team   → requests where they are the designated L1 approver.
-    attendance.create → all requests in their branch (HR-level browse).
+    attendance.create → requests where they are the designated l2_approver (the
+                        employee's specifically assigned HR), plus — for
+                        non-manager approvers only — orphaned requests (no HR
+                        assigned) in their branch as a fallback. A branch can
+                        have several HR users — each only reaches the
+                        employees actually assigned to them.
     settings.edit     → all requests (admin override).
+
+    can_manage_team and attendance.create are NOT mutually exclusive: the
+    manager role also holds attendance.create (required to pass the
+    approve-action's permission gate at L1). Checking attendance.create first
+    would always route a manager into the L2/HR branch, hiding their L1 queue
+    entirely — mirrors the identical fix in hrms/views/leave.py's
+    _approval_scope_filter. Both scopes are combined via OR instead of
+    short-circuited; the branch-wide orphan fallback is withheld from
+    managers so attendance.create alone doesn't turn them into a shadow
+    branch-wide HR queue.
     """
     if _has_perm(user, 'settings.edit'):
         return Q()
+
+    is_manager = bool(user.role and user.role.can_manage_team)
+    scope = Q(l1_approver=user) if is_manager else None
+
     if _has_perm(user, 'attendance.create'):
-        branch = _user_branch(user)
-        return Q(employee__branch=branch) if branch else Q()
-    if user.role and user.role.can_manage_team:
-        return Q(l1_approver=user)
-    return Q(pk=None)  # no other role gets a review queue
+        l2_scope = Q(l2_approver=user)
+        if not is_manager:
+            branch = _user_branch(user)
+            orphaned = Q(l2_approver__isnull=True)
+            if branch:
+                orphaned &= Q(employee__branch=branch)
+            l2_scope |= orphaned
+        scope = (scope | l2_scope) if scope is not None else l2_scope
+
+    return scope if scope is not None else Q(pk=None)  # no other role gets a review queue
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
