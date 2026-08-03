@@ -200,6 +200,16 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     ],
   },
   {
+    id: "epf",
+    label: "EPF / Statutory",
+    icon: "ti-building-community",
+    kind: "grid",
+    fields: [
+      { key: "uanNumber",       label: "UAN Number",           type: "text", placeholder: "12-digit Universal Account Number" },
+      { key: "nameAsPerAadhar", label: "Name as per Aadhar",   type: "text", placeholder: "Exactly as printed on Aadhaar card" },
+    ],
+  },
+  {
     id: "documents",
     label: "Documents",
     icon: "ti-files",

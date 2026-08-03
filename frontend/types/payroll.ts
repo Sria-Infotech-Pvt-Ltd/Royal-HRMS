@@ -7,6 +7,10 @@ export interface PayrollSettings {
   employee_query_window_hours: number;
   enable_reimbursements: boolean;
   enable_bonuses: boolean;
+  eps_rate: string;
+  edli_rate: string;
+  edli_wage_ceiling: string;
+  epf_admin_rate: string;
   created_at: string;
   updated_at: string;
 }

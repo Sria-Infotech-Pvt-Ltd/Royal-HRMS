@@ -19,6 +19,7 @@ interface ProfileData {
   bank_branch_name?: string; account_holder_name?: string; account_type?: string;
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
+  uan_number?: string; name_as_per_aadhar?: string;
 }
 
 export interface ApprovalUser {
@@ -41,7 +42,7 @@ interface Props {
   acting:          boolean;
   actionErr:       string | null;
   onRemarksChange: (v: string) => void;
-  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; assessmentId?: string }) => void;
+  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; assessmentId?: string; uanNumber?: string; aadharName?: string }) => void;
   onClose:         () => void;
 }
 
@@ -79,6 +80,8 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [assessments,    setAssessments]    = useState<AssessmentOption[]>([]);
   const [loadAssess,     setLoadAssess]     = useState(false);
   const [selAssessment,  setSelAssessment]  = useState("");
+  const [uanNumber,      setUanNumber]      = useState(user.profile?.uan_number      ?? "");
+  const [aadharName,     setAadharName]     = useState(user.profile?.name_as_per_aadhar ?? "");
 
   // Fetch departments the first time the assign section appears
   useEffect(() => {
@@ -139,19 +142,29 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setAssignErr("Please select both Department and Designation before confirming.");
       return;
     }
+    if (uanNumber && uanNumber.length !== 12) {
+      setAssignErr("UAN must be exactly 12 digits, or leave it blank.");
+      return;
+    }
     setAssignErr("");
     if (user.candidate_id) {
       setShowAssessment(true);
       return;
     }
-    onAction(user.id, "approve", { department: selDept, designation: selDesig });
+    onAction(user.id, "approve", { department: selDept, designation: selDesig, uanNumber: uanNumber || undefined, aadharName: aadharName || undefined });
   }
 
   function handleAssessmentConfirm() {
+    if (uanNumber && uanNumber.length !== 12) {
+      setAssignErr("UAN must be exactly 12 digits, or leave it blank.");
+      return;
+    }
     onAction(user.id, "approve", {
       department:   selDept,
       designation:  selDesig,
       assessmentId: selAssessment || undefined,
+      uanNumber:    uanNumber    || undefined,
+      aadharName:   aadharName   || undefined,
     });
   }
 
@@ -300,6 +313,38 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 {selDept && desigs.length === 0 && !loadDepts && (
                   <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>No designations found for this department.</div>
                 )}
+              </div>
+
+              <div style={{ marginTop: ".75rem", padding: ".75rem", borderRadius: 6, background: "var(--bg)", border: "1px solid var(--outline-v)" }}>
+                <div style={{ fontSize: ".78rem", fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: ".5rem" }}>
+                  EPF Details <span style={{ fontWeight: 400, textTransform: "none", fontSize: ".75rem" }}>(optional — can be filled later from employee profile)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: ".5rem" }}>
+                  <div className="field-group" style={{ marginBottom: 0 }}>
+                    <label className="field-label">UAN Number</label>
+                    <input
+                      className="field-input"
+                      maxLength={12}
+                      value={uanNumber}
+                      onChange={e => setUanNumber(e.target.value.replace(/\D/g, ""))}
+                      placeholder="12-digit UAN"
+                    />
+                    {uanNumber.length > 0 && uanNumber.length !== 12 && (
+                      <div style={{ fontSize: ".72rem", color: "var(--warn)", marginTop: 3 }}>
+                        {uanNumber.length}/12 digits
+                      </div>
+                    )}
+                  </div>
+                  <div className="field-group" style={{ marginBottom: 0 }}>
+                    <label className="field-label">Name as per Aadhar</label>
+                    <input
+                      className="field-input"
+                      value={aadharName}
+                      onChange={e => setAadharName(e.target.value)}
+                      placeholder="Exactly as on Aadhar card"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

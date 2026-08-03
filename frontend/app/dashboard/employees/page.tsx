@@ -328,6 +328,18 @@ export default function EmployeesPage() {
           </>
         )}
 
+        {/* Role */}
+        <select
+          value={role}
+          onChange={e => setRole(e.target.value)}
+          suppressHydrationWarning
+          className={SEL_CLS}
+          style={SEL_STYLE}
+        >
+          <option value="all">All Roles</option>
+          {roleOptions.map(r => <option key={r.id} value={r.display_name}>{r.display_name}</option>)}
+        </select>
+
         {/* Status */}
         <select
           value={status}

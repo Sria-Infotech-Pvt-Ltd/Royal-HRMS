@@ -261,6 +261,7 @@ export const API = {
     processCycle: (id: string) => `/payroll/cycles/${id}/process/`,
     markPaid: (id: string) => `/payroll/cycles/${id}/mark-paid/`,
     cancelCycle: (id: string) => `/payroll/cycles/${id}/cancel/`,
+    cycleEcr:    (id: string) => `/payroll/cycles/${id}/ecr/`,
 
     // Payslips (HR)
     cyclePayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/`,

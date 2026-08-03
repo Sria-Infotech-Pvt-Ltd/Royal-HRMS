@@ -1,6 +1,9 @@
 "use client";
 
 import { useClockWidget } from "@/hooks/useClockWidget";
+import type { AttendanceMode } from "@/types/attendance";
+
+const MODE: AttendanceMode = "office";
 
 function fmtTimer(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -68,7 +71,7 @@ export default function ClockWidget() {
       </div>
 
       <button
-        onClick={() => punch(isClockedIn ? "OUT" : "IN")}
+        onClick={() => punch(isClockedIn ? "OUT" : "IN", MODE)}
         disabled={isPunching}
         style={{
           width: "100%", height: 44, borderRadius: 8, border: "none", cursor: isPunching ? "not-allowed" : "pointer",

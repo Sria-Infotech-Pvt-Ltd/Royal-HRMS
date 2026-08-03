@@ -743,6 +743,10 @@ class EmployeeProfile(models.Model):
     emergency_phone        = models.CharField(max_length=20, blank=True)
     emergency_email        = models.EmailField(blank=True)
 
+    # Statutory / EPF
+    uan_number          = models.CharField(max_length=12, blank=True, help_text='12-digit Universal Account Number issued by EPFO')
+    name_as_per_aadhar  = models.CharField(max_length=150, blank=True, help_text='Name exactly as printed on the Aadhaar card')
+
     # Birthday wish tracking
     birthday_wish_sent_year = models.PositiveSmallIntegerField(
         null=True, blank=True,
