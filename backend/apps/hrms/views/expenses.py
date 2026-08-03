@@ -50,6 +50,9 @@ def _can_access_expense(user, expense) -> bool:
     assigned — mirroring the scoping conventions used for leave requests. A
     branch can have several HR users; each should only reach the employees
     actually assigned to them, not every employee in the branch.
+
+    Branch Admin (can_manage_branch) bypasses the assignment check entirely —
+    unconditional access to every expense in their own branch.
     """
     if expense.employee_id == user.id:
         return True
@@ -58,6 +61,10 @@ def _can_access_expense(user, expense) -> bool:
     # system_admin (and superusers) — all-org access
     if _has_perm(user, 'settings.edit'):
         return True
+    # Branch Admin — unconditional access within their own branch
+    if user.role and getattr(user.role, 'can_manage_branch', False):
+        branch = getattr(user, 'branch', '') or ''
+        return not branch or (getattr(expense.employee, 'branch', '') or '') == branch
     # team leads / managers — scoped to their direct reports
     if user.role and getattr(user.role, 'can_manage_team', False):
         return expense.employee.reporting_manager_id == user.id
@@ -88,6 +95,10 @@ class ExpenseListCreateView(APIView):
             # company-wide instead of just the employees they're allowed to act on.
             if _has_perm(request.user, 'settings.edit'):
                 pass
+            elif request.user.role and getattr(request.user.role, 'can_manage_branch', False):
+                user_branch = getattr(request.user, 'branch', '') or ''
+                if user_branch:
+                    queryset = queryset.filter(employee__branch=user_branch)
             elif request.user.role and getattr(request.user.role, 'can_manage_team', False):
                 queryset = queryset.filter(employee__reporting_manager_id=request.user.id)
             else:

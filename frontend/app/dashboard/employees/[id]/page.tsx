@@ -74,7 +74,7 @@ function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
   const base: DocEntry[] = docsSection?.kind === "docs" ? [...docsSection.documents] : [];
 
   return base.map(expected => {
-    const uploaded = apiDocs.find(d => d.document_type_display === expected.name);
+    const uploaded = apiDocs.find(d => d.document_type === expected.documentType);
     if (!uploaded) return expected;
     const dt = new Date(uploaded.uploaded_at);
     return {
@@ -174,9 +174,6 @@ export default function EmployeeProfilePage({
 }) {
   const { id } = use(params);
   const canEdit = usePermission("employees.edit");
-  // /roles/ is gated server-side to settings.edit holders — skip the call
-  // entirely for everyone else instead of firing a request that always 403s.
-  const canViewRoles = usePermission("settings.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
 
@@ -195,21 +192,24 @@ export default function EmployeeProfilePage({
   const [saveError,  setSaveError]  = useState(false);
   const [isEditing,  setIsEditing]  = useState(false);
 
+  const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
+  const [docUploadError,   setDocUploadError]   = useState<string>("");
+
   const [deptOptions,     setDeptOptions]     = useState<FieldOption[]>([]);
   const [allDesigs,       setAllDesigs]       = useState<{ name: string; department_name: string }[]>([]);
   const [desigOptions,    setDesigOptions]    = useState<FieldOption[]>([]);
   const [roleOptions,     setRoleOptions]     = useState<FieldOption[]>([]);
   const [branchOptions,   setBranchOptions]   = useState<FieldOption[]>([]);
 
-  // fetch dropdown lists once on mount — use allSettled so one 403 (e.g. roles for
-  // non-admin users) does not block departments/designations/branches from loading
+  // fetch dropdown lists once on mount — use allSettled so one failure does
+  // not block the others from loading. GET /roles/ is intentionally open to
+  // any authenticated user (needed for role-selector dropdowns like this
+  // one) — see RoleListCreateView.get().
   useEffect(() => {
     Promise.allSettled([
       clientApi.get<{ data: { results: { id: number; name: string }[] } }>(API.departments.list),
       clientApi.get<{ data: unknown }>(API.designations.list),
-      canViewRoles
-        ? clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`)
-        : Promise.resolve(null),
+      clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
     ]).then(([depts, desigs, roles, branches]) => {
       if (depts.status === "fulfilled")
@@ -218,7 +218,7 @@ export default function EmployeeProfilePage({
         const desigData = desigs.value.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
         setAllDesigs(Array.isArray(desigData) ? desigData : (desigData.results ?? []));
       }
-      if (roles.status === "fulfilled" && roles.value)
+      if (roles.status === "fulfilled")
         setRoleOptions(
           roles.value.data.data.results
             .filter(r => r.name !== "system_admin")
@@ -227,7 +227,7 @@ export default function EmployeeProfilePage({
       if (branches.status === "fulfilled")
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
     });
-  }, [canViewRoles]);
+  }, []);
 
   // filter designations whenever the selected department changes
   useEffect(() => {
@@ -377,6 +377,29 @@ export default function EmployeeProfilePage({
       setSaving(false);
     }
   }
+  async function onUploadDocument(documentType: string, file: File) {
+    setDocUploadError("");
+    setUploadingDocType(documentType);
+    try {
+      const formData = new FormData();
+      formData.append("document_type", documentType);
+      formData.append("file", file);
+      await clientApi.post(API.employees.documents(id), formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // Re-fetch so the card picks up the real uploaded_at/file_size/file_url
+      // from the server rather than guessing them client-side.
+      const { data } = await clientApi.get<{ data: ApiEmployee }>(API.employees.detail(id));
+      const freshDocs = buildDocEntries(data.data.documents ?? []);
+      setEmployee(prev => (prev ? { ...prev, documents: freshDocs } : prev));
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDocUploadError(msg || "Failed to upload document. Please try again.");
+    } finally {
+      setUploadingDocType(null);
+    }
+  }
   function onCancel() {
     setValues(baseValues);
     setTables(baseTables);
@@ -442,6 +465,9 @@ export default function EmployeeProfilePage({
               dirty={dirty}
               saving={saving}
               liveDocuments={sectionId === "documents" ? employee.documents : undefined}
+              onUploadDocument={onUploadDocument}
+              uploadingDocType={uploadingDocType}
+              docUploadError={docUploadError}
               fieldOptions={{
                 department: [
                   { value: "", label: "Select department" },

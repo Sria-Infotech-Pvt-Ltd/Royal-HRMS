@@ -7,6 +7,7 @@ from apps.accounts.views import (
     EmployeeCodeSettingsView,
     EmployeeDetailView,
     EmployeeDocumentView,
+    EmployeeProfileDocumentView,
     EmployeeReportingManagerView,
     HRListView,
     ManagerListView,
@@ -69,6 +70,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
+    path('employees/<str:employee_id>/documents/',                EmployeeProfileDocumentView.as_view(), name='employee-profile-documents'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
     # Onboarding (self-service wizard — unified view)

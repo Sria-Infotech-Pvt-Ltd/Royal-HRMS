@@ -46,6 +46,7 @@ export const API = {
     reportingManager: (id: string) => `/employees/${id}/reporting-manager/`,
     hr: (id: string) => `/employees/${id}/hr/`,
     approvalMatrix: (id: string) => `/employees/${id}/approval-matrix/`,
+    documents: (id: string) => `/employees/${id}/documents/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",

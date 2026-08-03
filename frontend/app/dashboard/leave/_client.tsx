@@ -88,7 +88,7 @@ export default function LeavePageClient({ role }: Props) {
         {active === "attendance" && canApproveAttendance && <AttendanceApprovalTab />}
         {active === "corrections" && canApproveCorrections && <CorrectionsTab />}
         {active === "calendar"   && <TeamCalendar />}
-        {active === "analytics" && <LeaveAnalytics role={role} />}
+        {active === "analytics" && <LeaveAnalytics />}
       </div>
     </div>
   );

@@ -33,6 +33,9 @@ export default function ProfileForm({
   onSave,
   onCancel,
   onEdit,
+  onUploadDocument,
+  uploadingDocType,
+  docUploadError,
 }: {
   section: ProfileSection;
   values: DetailValues;
@@ -48,6 +51,9 @@ export default function ProfileForm({
   onSave: () => void;
   onCancel: () => void;
   onEdit?: () => void;
+  onUploadDocument?: (documentType: string, file: File) => void;
+  uploadingDocType?: string | null;
+  docUploadError?: string;
 }) {
   return (
     <div
@@ -112,7 +118,14 @@ export default function ProfileForm({
         {section.kind === "docs" && (
           section.variant === "table"
             ? <DocsTable documents={liveDocuments ?? section.documents} />
-            : <DocsCards documents={liveDocuments ?? section.documents} />
+            : (
+              <DocsCards
+                documents={liveDocuments ?? section.documents}
+                onUpload={onUploadDocument}
+                uploadingDocType={uploadingDocType}
+                uploadError={docUploadError}
+              />
+            )
         )}
       </div>
 
@@ -407,9 +420,27 @@ function fmtBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const DOC_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+
 /* ── Employee Documents — 4-col card grid ───────────────────── */
-function DocsCards({ documents }: { documents: DocEntry[] }) {
+function DocsCards({
+  documents,
+  onUpload,
+  uploadingDocType,
+  uploadError,
+}: {
+  documents: DocEntry[];
+  onUpload?: (documentType: string, file: File) => void;
+  uploadingDocType?: string | null;
+  uploadError?: string;
+}) {
   const [preview, setPreview] = useState<DocEntry | null>(null);
+
+  function handleFileChange(documentType: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file to re-trigger onChange
+    if (file && onUpload) onUpload(documentType, file);
+  }
 
   return (
     <>
@@ -424,24 +455,22 @@ function DocsCards({ documents }: { documents: DocEntry[] }) {
       )}
 
       <div>
-        <div className="flex items-center justify-between mb-5">
+        <div className="mb-5">
           <p className="text-[13px]" style={{ color: "var(--on-variant)" }}>
             All documents uploaded by the employee or{" "}
             <span className="font-semibold" style={{ color: "var(--primary)" }}>HR</span>
           </p>
-          <label
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-colors hover:bg-[var(--bg-mid)]"
-            style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "#fff" }}
-          >
-            <i className="ti ti-upload text-[14px]" />
-            Upload Document
-            <input type="file" className="hidden" />
-          </label>
+          {uploadError && (
+            <p className="text-[12.5px] font-medium mt-2" style={{ color: "var(--error)" }}>
+              {uploadError}
+            </p>
+          )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "1rem" }}>
           {documents.map((doc) => {
-            const uploaded = !!doc.fileUrl;
+            const uploaded   = !!doc.fileUrl;
+            const uploading  = uploadingDocType === doc.documentType;
             return (
               <div
                 key={doc.name}
@@ -453,7 +482,7 @@ function DocsCards({ documents }: { documents: DocEntry[] }) {
                   style={{ background: uploaded ? "rgba(27,138,107,0.10)" : "var(--bg-mid)" }}
                 >
                   <i
-                    className={`ti ${uploaded ? "ti-file-check" : "ti-file-off"} text-[18px]`}
+                    className={`ti ${uploading ? "ti-loader-2 animate-spin" : uploaded ? "ti-file-check" : "ti-file-off"} text-[18px]`}
                     style={{ color: uploaded ? "#1b8a6b" : "var(--on-variant)" }}
                   />
                 </div>
@@ -462,22 +491,28 @@ function DocsCards({ documents }: { documents: DocEntry[] }) {
                     {doc.name}
                   </p>
                   <p className="text-[11.5px] leading-snug" style={{ color: "var(--on-variant)" }}>
-                    {uploaded
-                      ? `${doc.uploadedOn}${doc.fileSize ? ` · ${fmtBytes(doc.fileSize)}` : ""}`
-                      : "Not uploaded"}
+                    {uploading
+                      ? "Uploading…"
+                      : uploaded
+                        ? `${doc.uploadedOn}${doc.fileSize ? ` · ${fmtBytes(doc.fileSize)}` : ""}`
+                        : "Not uploaded"}
                   </p>
                 </div>
-                {uploaded && (
-                  <label
-                    title="Replace document"
-                    suppressHydrationWarning
-                    className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 cursor-pointer transition-colors"
-                    style={{ color: "var(--on-variant)" }}
-                  >
-                    <i className="ti ti-refresh text-[15px]" />
-                    <input type="file" className="hidden" />
-                  </label>
-                )}
+                <label
+                  title={uploaded ? "Replace document" : "Upload document"}
+                  suppressHydrationWarning
+                  className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 transition-colors ${uploading ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                  style={{ color: "var(--on-variant)" }}
+                >
+                  <i className={`ti ${uploaded ? "ti-refresh" : "ti-upload"} text-[15px]`} />
+                  <input
+                    type="file"
+                    accept={DOC_ACCEPT}
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => handleFileChange(doc.documentType, e)}
+                  />
+                </label>
                 <button
                   title={uploaded ? "Preview document" : "Not uploaded"}
                   disabled={!uploaded}

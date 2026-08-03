@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
+import { PROFILE_SECTIONS, type DocEntry } from "@/app/dashboard/employees/_data";
 import ChangePasswordForm from "./ChangePasswordForm";
 
 interface ProfileSub {
@@ -60,8 +61,36 @@ interface ProfileData {
 
 interface DocumentItem {
   id:                    number;
+  document_type:         string;
   document_type_display: string;
-  file:                  string;
+  file_url:              string;
+  file_name:             string;
+  file_size:             number;
+  uploaded_at:           string;
+}
+
+const DOC_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+
+function buildDocEntries(apiDocs: DocumentItem[]): (DocEntry & { docId?: number })[] {
+  const docsSection = PROFILE_SECTIONS.find(s => s.id === "documents");
+  const base = docsSection?.kind === "docs" ? docsSection.documents : [];
+  return base.map(expected => {
+    const uploaded = apiDocs.find(d => d.document_type === expected.documentType);
+    if (!uploaded) return expected;
+    return {
+      ...expected,
+      fileUrl:  uploaded.file_url,
+      fileName: uploaded.file_name,
+      fileSize: uploaded.file_size,
+      docId:    uploaded.id,
+    };
+  });
+}
+
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 interface EditableFields {
@@ -106,11 +135,34 @@ function ReadField({ label, value }: { label: string; value: string | number | n
 
 export default function ProfileClient({ session }: { session: SessionPayload }) {
   const { data: profile, loading } = useFetch<ProfileData>(API.employees.me);
-  const { data: docs }             = useFetch<DocumentItem[]>(API.onboarding.documents);
+  const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
 
   const [form,   setForm]   = useState<EditableFields>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [toast,  setToast]  = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
+  const docEntries = buildDocEntries(docs ?? []);
+
+  async function handleUploadDocument(documentType: string, file: File) {
+    if (!profile?.employee_id) return;
+    setUploadingDocType(documentType);
+    try {
+      const formData = new FormData();
+      formData.append("document_type", documentType);
+      formData.append("file", file);
+      await clientApi.post(API.employees.documents(profile.employee_id), formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      refetchDocs();
+      showToast("Document uploaded successfully.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast(msg || "Failed to upload document.", false);
+    } finally {
+      setUploadingDocType(null);
+    }
+  }
 
   useEffect(() => {
     if (!profile) return;
@@ -445,23 +497,62 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               <span className="card-title"><i className="ti ti-file-description" />Documents</span>
             </div>
             <div className="card-body" style={{ padding: 0 }}>
-              {(!docs || docs.length === 0) ? (
-                <div style={{ padding: "16px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                  No documents uploaded yet.
-                </div>
-              ) : docs.map((doc, i) => (
-                <div key={doc.id} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "10px 16px",
-                  borderBottom: i < docs.length - 1 ? "1px solid var(--bg-high)" : "none",
-                }}>
-                  <i className="ti ti-file-check" style={{ color: "var(--success)" }} />
-                  <span style={{ flex: 1, fontSize: 13, color: "var(--on-bg)" }}>{doc.document_type_display}</span>
-                  <a href={doc.file} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
-                    <i className="ti ti-eye" />
-                  </a>
-                </div>
-              ))}
+              {docEntries.map((doc, i) => {
+                const uploaded  = !!doc.fileUrl;
+                const uploading = uploadingDocType === doc.documentType;
+                return (
+                  <div key={doc.documentType} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "10px 16px",
+                    borderBottom: i < docEntries.length - 1 ? "1px solid var(--bg-high)" : "none",
+                  }}>
+                    <i
+                      className={`ti ${uploading ? "ti-loader-2 spin" : uploaded ? "ti-file-check" : "ti-file-off"}`}
+                      style={{ color: uploaded ? "var(--success)" : "var(--on-variant)" }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "var(--on-bg)" }}>{doc.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                        {uploading ? "Uploading…" : uploaded ? fmtBytes(doc.fileSize ?? 0) : "Not uploaded"}
+                      </div>
+                    </div>
+                    {uploaded ? (
+                      <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" title="Preview document">
+                        <i className="ti ti-eye" />
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="btn btn-ghost btn-sm"
+                        title="Not uploaded"
+                        style={{ opacity: 0.3, cursor: "not-allowed" }}
+                      >
+                        <i className="ti ti-eye" />
+                      </button>
+                    )}
+                    <label
+                      className="btn btn-ghost btn-sm"
+                      title={uploaded ? "Replace document" : "Upload document"}
+                      style={{ cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.5 : 1 }}
+                      suppressHydrationWarning
+                    >
+                      <i className={`ti ${uploaded ? "ti-refresh" : "ti-upload"}`} />
+                      <input
+                        type="file"
+                        accept={DOC_ACCEPT}
+                        className="hidden"
+                        disabled={uploading}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) handleUploadDocument(doc.documentType, file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

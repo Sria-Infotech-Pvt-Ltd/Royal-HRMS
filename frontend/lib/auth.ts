@@ -15,6 +15,7 @@ export interface UserInfo {
   onboarding_status: string;   // 'pending' | 'submitted' | 'complete'
   assessment_status: string;   // 'pending' | 'complete'
   can_manage_team:   boolean;
+  can_manage_branch: boolean;
   is_superuser:      boolean;
 }
 

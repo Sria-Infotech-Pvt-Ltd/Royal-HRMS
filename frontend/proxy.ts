@@ -45,21 +45,15 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 function getPermissions(request: NextRequest): string[] {
+  // Signed JWT only — royal_hrms_user is client-writable, so falling back to
+  // it here would let a user edit their own permissions in DevTools to
+  // unlock route access. RoleBasedRefreshToken always sets a `permissions`
+  // claim (an empty array when the user has no role), so failing closed on
+  // a missing/undecodable token never legitimately blocks a real session.
   const token = request.cookies.get(ACCESS_COOKIE)?.value;
-  if (token) {
-    const payload = decodeJwtPayload(token);
-    if (Array.isArray(payload.permissions)) {
-      return payload.permissions as string[];
-    }
-  }
-  const raw = request.cookies.get(USER_COOKIE)?.value;
-  if (!raw) return [];
-  try {
-    const user = JSON.parse(decodeURIComponent(raw)) as { permissions?: unknown };
-    return Array.isArray(user.permissions) ? (user.permissions as string[]) : [];
-  } catch {
-    return [];
-  }
+  if (!token) return [];
+  const payload = decodeJwtPayload(token);
+  return Array.isArray(payload.permissions) ? (payload.permissions as string[]) : [];
 }
 
 function getOnboardingStatus(request: NextRequest): string {

@@ -87,6 +87,7 @@ export interface TableSection {
 export type DocStatus = "verified" | "pending" | "not-uploaded";
 export interface DocEntry {
   name: string;
+  documentType: string;
   required: boolean;
   status?: DocStatus;
   uploadedOn?: string;
@@ -205,12 +206,12 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     icon: "ti-files",
     kind: "docs",
     documents: [
-      { name: "PAN Card",                  required: true  },
-      { name: "Aadhaar Card",              required: true  },
-      { name: "Degree Certificate",        required: false },
-      { name: "Experience Letter",         required: false },
-      { name: "Passport Photo",            required: true  },
-      { name: "Cancelled Cheque",          required: true  },
+      { name: "PAN Card",                  documentType: "pan_card",           required: true  },
+      { name: "Aadhaar Card",              documentType: "aadhaar_card",       required: true  },
+      { name: "Degree Certificate",        documentType: "degree_certificate", required: false },
+      { name: "Experience Letter",         documentType: "experience_letter",  required: false },
+      { name: "Passport Photo",            documentType: "passport_photo",     required: true  },
+      { name: "Cancelled Cheque",          documentType: "cancelled_cheque",   required: true  },
     ],
   },
 

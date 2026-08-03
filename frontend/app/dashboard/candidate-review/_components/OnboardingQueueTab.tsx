@@ -76,8 +76,8 @@ export default function OnboardingQueueTab() {
 
   // Approval popup modal state
   const [showApprovalModal,    setShowApprovalModal]    = useState(false);
-  const [selectedTemplateId,   setSelectedTemplateId]   = useState<number | "">("");
-  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>("");
+  const [selectedTemplateId,    setSelectedTemplateId]    = useState<number | "">("");
+  const [selectedAssessmentIds, setSelectedAssessmentIds] = useState<string[]>([]);
   const [approvalDept,         setApprovalDept]         = useState("");
   const [approvalDesig,        setApprovalDesig]        = useState("");
   const [approvalManagerId,    setApprovalManagerId]    = useState("");
@@ -99,8 +99,7 @@ export default function OnboardingQueueTab() {
   const allManagers:    ApiManager[]       = managerRaw?.results ?? [];
 
   function openApprovalModal() {
-    const defaultAssessment = allAssessments.find(a => a.is_default);
-    setSelectedAssessmentId(defaultAssessment?.id ?? allAssessments[0]?.id ?? "");
+    setSelectedAssessmentIds(allAssessments.filter(a => a.is_default).map(a => a.id));
     setSelectedTemplateId("");
     setApprovalDept(selected?.department ?? "");
     setApprovalDesig(selected?.designation ?? "");
@@ -137,9 +136,9 @@ export default function OnboardingQueueTab() {
         payload.department           = approvalDept;
         payload.designation          = approvalDesig;
         payload.reporting_manager_id = approvalManagerId;
-        if (approvalCtc)          payload.annual_ctc        = approvalCtc;
-        if (selectedTemplateId)   payload.email_template_id = selectedTemplateId;
-        if (selectedAssessmentId) payload.assessment_id     = selectedAssessmentId;
+        if (approvalCtc)                     payload.annual_ctc        = approvalCtc;
+        if (selectedTemplateId)              payload.email_template_id = selectedTemplateId;
+        if (selectedAssessmentIds.length > 0) payload.assessment_ids    = selectedAssessmentIds;
       }
       const r = await clientApi.post(API.onboarding.approve(userId), payload);
       setActionMsg(r.data?.message ?? "Done.");
@@ -155,7 +154,7 @@ export default function OnboardingQueueTab() {
       setActing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remarks, selectedTemplateId, selectedAssessmentId, approvalDept, approvalDesig, approvalManagerId, approvalCtc, refetch]);
+  }, [remarks, selectedTemplateId, selectedAssessmentIds, approvalDept, approvalDesig, approvalManagerId, approvalCtc, refetch]);
 
   const results = data?.results ?? [];
 
@@ -475,23 +474,29 @@ export default function OnboardingQueueTab() {
 
                   <div className="field-group">
                     <label className="field-label">
-                      <i className="ti ti-clipboard-check mr-4" />Assessment
+                      <i className="ti ti-clipboard-check mr-4" />
+                      Assessments{selectedAssessmentIds.length > 0 ? ` (${selectedAssessmentIds.length} selected)` : ""}
                     </label>
                     {allAssessments.length === 0 ? (
                       <p style={{ fontSize: ".83rem", color: "var(--text-muted)" }}>No active assessments.</p>
                     ) : (
-                      <select
-                        className="field-input field-select"
-                        value={selectedAssessmentId}
-                        onChange={e => setSelectedAssessmentId(e.target.value)}
-                      >
-                        <option value="">— No assessment —</option>
-                        {allAssessments.map(a => (
-                          <option key={a.id} value={a.id}>
-                            {a.title}{a.is_default ? " (Default)" : ""}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflowY: "auto", border: "1px solid var(--outline-v)", borderRadius: 8, padding: 8 }}>
+                        {allAssessments.map(a => {
+                          const checked = selectedAssessmentIds.includes(a.id);
+                          return (
+                            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: ".85rem", cursor: "pointer" }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => setSelectedAssessmentIds(prev =>
+                                  checked ? prev.filter(id => id !== a.id) : [...prev, a.id]
+                                )}
+                              />
+                              {a.title}{a.is_default ? " (Default)" : ""}
+                            </label>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>

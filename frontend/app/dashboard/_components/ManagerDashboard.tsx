@@ -1,6 +1,7 @@
 "use client";
 
 import ClockInButton from "@/components/ClockInButton";
+import AnnouncementCard from "@/components/dashboard/AnnouncementCard";
 import { TeamProvider, useTeam } from "@/lib/teamContext";
 import type { SessionPayload } from "@/lib/session";
 
@@ -143,6 +144,9 @@ function ManagerDashboardInner({ session }: Props) {
           ))}
         </div>
       </div>
+
+      {/* Announcement */}
+      <AnnouncementCard />
 
       {/* Quick actions */}
       {actions.length > 0 && (
