@@ -202,6 +202,15 @@ export const API = {
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
     myCorrections: "/attendance/corrections/my/",
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
+
+    // Weekly Off Patterns (Settings) — existing backend CRUD, newly exposed to the frontend
+    weeklyDayPolicies: "/attendance/weekly-days/",
+    weeklyDayPolicy: (id: string) => `/attendance/weekly-days/${id}/`,
+
+    // Weekly Off Assignment (Attendance & Time tab)
+    weeklyOffAssignments: "/attendance/weekly-off-assignments/",
+    weeklyOffAssignmentsBulk: "/attendance/weekly-off-assignments/bulk/",
+    weeklyOffAssignmentHistory: (employeeId: string) => `/attendance/weekly-off-assignments/${employeeId}/history/`,
   },
 
   voice: {
@@ -223,6 +232,7 @@ export const API = {
     attendanceSummary: "/dashboard/employee/attendance-summary/",
     attendanceStatus:  "/dashboard/employee/attendance-status/",
     announcement:      "/dashboard/announcement/",
+    birthdaysToday:    "/dashboard/employee/birthdays/today/",
   },
 
   payroll: {

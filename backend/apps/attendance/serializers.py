@@ -361,6 +361,11 @@ class WeeklyDayPolicyListSerializer(serializers.ModelSerializer):
     """Minimal read-only representation used in paginated list responses."""
 
     working_days_count = serializers.IntegerField(read_only=True)
+    # Annotated by the view (Count() over employee_assignments, currently-open
+    # rows only) — one aggregation query for the whole page, not one query per
+    # policy, so this is safe at 2,000+ employees. Defaults to 0 if the view
+    # ever calls this serializer without the annotation present.
+    assigned_employee_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = WeeklyDayPolicy
@@ -370,6 +375,7 @@ class WeeklyDayPolicyListSerializer(serializers.ModelSerializer):
             'policy_code',
             *_DAY_FIELDS,
             'working_days_count',
+            'assigned_employee_count',
             'is_default',
             'is_active',
             'created_at',
@@ -388,6 +394,7 @@ class WeeklyDayPolicyRetrieveSerializer(serializers.ModelSerializer):
     working_days_count = serializers.IntegerField(read_only=True)
     created_by_name   = serializers.SerializerMethodField()
     updated_by_name   = serializers.SerializerMethodField()
+    assigned_employee_count = serializers.SerializerMethodField()
 
     class Meta:
         model = WeeklyDayPolicy
@@ -401,6 +408,7 @@ class WeeklyDayPolicyRetrieveSerializer(serializers.ModelSerializer):
             'weekly_off_days',
             'half_day_off_days',
             'working_days_count',
+            'assigned_employee_count',
             'is_default',
             'is_active',
             'created_by',
@@ -411,6 +419,11 @@ class WeeklyDayPolicyRetrieveSerializer(serializers.ModelSerializer):
             'updated_at',
         )
         read_only_fields = fields
+
+    def get_assigned_employee_count(self, obj: WeeklyDayPolicy) -> int:
+        """Employees currently assigned this pattern (open assignment row) — a single-object
+        detail view, so one extra query here is fine (not called in a list loop)."""
+        return obj.employee_assignments.filter(effective_to__isnull=True).count()
 
     def get_created_by_name(self, obj: WeeklyDayPolicy) -> str | None:
         return obj.created_by.full_name if obj.created_by else None

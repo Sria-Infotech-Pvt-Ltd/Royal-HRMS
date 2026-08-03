@@ -358,6 +358,16 @@ class PayrollCycle(models.Model):
     class Meta:
         db_table = 'payroll_cycles'
         ordering = ['-cycle_start']
+        indexes = [
+            # Phase 4: `status` has no index at all today, despite being
+            # filtered standalone (attendance-approval queue) in addition to
+            # the PK-scoped atomic claim/revert updates in ProcessPayrollView.
+            models.Index(fields=['status'], name='cycle_status_idx'),
+            # Phase 4: the overlapping-cycle guard (on create) and the
+            # cycle-covering-a-date lookups both filter by this exact range
+            # pair, with no supporting index today.
+            models.Index(fields=['cycle_start', 'cycle_end'], name='cycle_start_end_idx'),
+        ]
 
     def __str__(self):
         return f'PayrollCycle {self.cycle_start} → {self.cycle_end} [{self.status}]'

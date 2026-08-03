@@ -38,6 +38,9 @@ from apps.attendance.views import (
     HRCorrectionReviewView,
     HREmployeeMonthView,
     HRAttendanceCreateView,
+    WeeklyOffAssignmentListView,
+    WeeklyOffAssignmentBulkView,
+    WeeklyOffAssignmentHistoryView,
     # Audit + Invalid Punch Actions
     HRAttendanceAuditView,
     HRInvalidPunchAssignView,
@@ -99,6 +102,9 @@ urlpatterns = [
     path('corrections/',                  HRCorrectionListView.as_view(),      name='hr-corrections-list'),
     path('corrections/<uuid:pk>/review/', HRCorrectionReviewView.as_view(),    name='hr-correction-review'),
     path('employee-calendar/',            HREmployeeMonthView.as_view(),       name='hr-employee-month-calendar'),
+    path('weekly-off-assignments/',                      WeeklyOffAssignmentListView.as_view(),    name='weekly-off-assignments-list'),
+    path('weekly-off-assignments/bulk/',                  WeeklyOffAssignmentBulkView.as_view(),    name='weekly-off-assignments-bulk'),
+    path('weekly-off-assignments/<str:employee_id>/history/', WeeklyOffAssignmentHistoryView.as_view(), name='weekly-off-assignments-history'),
 
     # ── Audit History ─────────────────────────────────────────────────────────
     path('records/<uuid:pk>/audit/',                    HRAttendanceAuditView.as_view(),         name='hr-attendance-audit'),

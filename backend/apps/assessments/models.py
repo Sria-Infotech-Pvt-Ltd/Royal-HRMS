@@ -210,6 +210,17 @@ class CandidateAssignment(models.Model):
                 name='unique_employee_assessment',
             ),
         ]
+        indexes = [
+            # Phase 4: the "does this employee/candidate have a pending
+            # assessment" gate is checked from 5+ call sites (onboarding
+            # status, profile serializers, portal views) with a
+            # (employee/candidate, status__in=[...]) filter. The existing
+            # partial UniqueConstraints above are (candidate,assessment) and
+            # (employee,assessment) — neither includes status, so this hot
+            # check can't use a single covering index today.
+            models.Index(fields=['employee', 'status'], name='assign_emp_status_idx'),
+            models.Index(fields=['candidate', 'status'], name='assign_cand_status_idx'),
+        ]
 
     def __str__(self) -> str:
         if self.candidate_id:

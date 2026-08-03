@@ -1,6 +1,7 @@
 "use client";
 
 import EmpConsole          from "@/components/dashboard/employee/EmpConsole";
+import EmpBirthdayAnnouncement from "@/components/dashboard/employee/EmpBirthdayAnnouncement";
 import EmpLeaveBalances    from "@/components/dashboard/employee/EmpLeaveBalances";
 import EmpAttendanceSummary from "@/components/dashboard/employee/EmpAttendanceSummary";
 import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems";
@@ -24,6 +25,10 @@ export default function EmployeeDashboard({ session }: Props) {
 
   return (
     <>
+      {/* Birthday Announcement — highest priority; renders nothing when nobody
+          has a birthday today, so this is a no-op on every non-birthday day */}
+      <EmpBirthdayAnnouncement />
+
       {/* Row 1 + 2 — Console banner (KPIs + attendance status strip) */}
       <EmpConsole firstName={firstName} />
 

@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
@@ -72,25 +73,24 @@ def _company_name() -> str:
 def _send_leave_email(user, template_name: str, context: dict) -> None:
     """
     Fire-and-forget leave lifecycle email, sent alongside the in-app
-    Notification above. Runs in a background thread (SMTP can be slow) and
-    never raises — a failed email must never break the leave save transaction.
+    Notification above. Queued to Celery (via transaction.on_commit) rather
+    than sent inline — a failed/slow email must never break the leave save
+    transaction. Queuing failure is logged, not raised, for the same reason.
     """
     if not user or not getattr(user, 'email', ''):
         return
-    import threading
-    from apps.accounts.utils import send_template_email
+    from apps.notifications.tasks import send_lifecycle_email_task
 
-    def _send():
+    def _dispatch(user_id=user.id, tpl=template_name, ctx=dict(context)):
         try:
-            send_template_email(
-                recipient_email=user.email,
-                template_name=template_name,
-                context={**context, 'company_name': _company_name()},
+            send_lifecycle_email_task.delay(user_id, tpl, ctx)
+        except Exception as exc:
+            logger.error(
+                'Failed to queue leave email "%s" for user %s: %s',
+                tpl, user_id, exc, exc_info=True,
             )
-        except Exception:
-            logger.exception('Failed to send leave email "%s" to %s', template_name, user.email)
 
-    threading.Thread(target=_send, daemon=True).start()
+    transaction.on_commit(_dispatch)
 
 
 # ─── Leave Request ─────────────────────────────────────────────────────────────

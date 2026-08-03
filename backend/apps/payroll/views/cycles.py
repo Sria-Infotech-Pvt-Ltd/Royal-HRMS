@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -17,7 +18,6 @@ from apps.payroll.models import (
     EmployeeSalaryConfig,
     SalaryStructure,
     SalaryComponent,
-    BranchPayrollConfig,
     StatutoryConfig,
     PayrollAdjustment,
     ManagerAttendanceApproval,
@@ -31,6 +31,312 @@ from apps.accounts.models import User
 from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
+
+_PF_DEFAULT_RATE = Decimal('12.00')
+_PF_DEFAULT_CEILING = Decimal('15000.00')
+
+# Every field the old per-employee update_or_create() used to set — reused
+# as bulk_update's field list so re-processing an existing payslip touches
+# exactly the same columns as before.
+_PAYSLIP_FIELDS = [
+    'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
+    'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
+    'lop_deduction', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
+    'pt_deduction', 'lwf_employee', 'lwf_employer', 'adjustments_earning',
+    'adjustments_deduction', 'total_deductions', 'net_pay', 'status',
+]
+
+
+class PayrollAlreadyProcessing(Exception):
+    """Cycle wasn't in STATUS_ATTENDANCE_APPROVED at claim time — either
+    already processed, or a concurrent request already claimed it."""
+
+
+def _compute_employee_payslip(salary_config, components, branch_config, statutory, adjustments) -> dict:
+    """
+    Pure calculation for one employee — byte-identical formulas to the
+    original ProcessPayrollView loop body (Phase 2: only extracted into its
+    own function so process_payroll_cycle() can call it once per employee
+    against pre-fetched/cached inputs instead of querying inline).
+    """
+    monthly_ctc = salary_config.monthly_ctc
+    basic = Decimal('0')
+    hra = Decimal('0')
+    special_allowance = Decimal('0')
+    other_earnings = {}
+    other_earnings_total = Decimal('0')
+
+    for component in components:
+        if component.calculation_type == SalaryComponent.CALC_PCT_CTC:
+            amount = monthly_ctc * component.value / 100
+        elif component.calculation_type == SalaryComponent.CALC_PCT_BASIC:
+            amount = basic * component.value / 100
+        else:
+            amount = component.value
+
+        name_lower = component.name.lower()
+        if name_lower == 'basic':
+            basic = amount
+        elif name_lower == 'hra':
+            hra = amount
+        elif name_lower == 'special allowance':
+            special_allowance = amount
+        else:
+            # JSONField can't store Decimal directly — cast to float for storage,
+            # but keep the running total in Decimal to avoid binary float noise.
+            other_earnings[component.name] = float(amount)
+            other_earnings_total += amount
+
+    gross = basic + hra + special_allowance + other_earnings_total
+
+    # LOP deduction (placeholder — real value fed in later from attendance)
+    lop_days = Decimal('0')
+    total_working_days = 26
+    lop_deduction = (gross / total_working_days) * lop_days
+
+    # PF: use branch config if present, else statutory defaults (12%/12%, Rs.15,000 ceiling)
+    pf_applicable = branch_config.pf_applicable if branch_config is not None else True
+    pf_employee = Decimal('0')
+    pf_employer = Decimal('0')
+    if pf_applicable:
+        pf_ceiling  = branch_config.pf_wage_ceiling   if branch_config else _PF_DEFAULT_CEILING
+        pf_emp_rate = branch_config.pf_employee_rate   if branch_config else _PF_DEFAULT_RATE
+        pf_er_rate  = branch_config.pf_employer_rate   if branch_config else _PF_DEFAULT_RATE
+        pf_base     = min(basic, pf_ceiling)
+        pf_employee = pf_base * pf_emp_rate / 100
+        pf_employer = pf_base * pf_er_rate  / 100
+
+    # ESI, PT, LWF: from the branch's state statutory config
+    esi_employee = Decimal('0')
+    esi_employer = Decimal('0')
+    if statutory and statutory.esi_applicable and gross <= statutory.esi_wage_ceiling:
+        esi_employee = gross * statutory.esi_employee_rate / 100
+        esi_employer = gross * statutory.esi_employer_rate / 100
+
+    # PT
+    pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
+
+    # LWF
+    lwf_employee = statutory.lwf_employee_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
+    lwf_employer = statutory.lwf_employer_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
+
+    adj_earning = sum(
+        (a.amount for a in adjustments if a.type in (PayrollAdjustment.ADDITION, PayrollAdjustment.ARREAR)),
+        Decimal('0'),
+    )
+    adj_deduction = sum(
+        (a.amount for a in adjustments if a.type == PayrollAdjustment.DEDUCTION),
+        Decimal('0'),
+    )
+
+    total_deductions = (
+        lop_deduction + pf_employee + esi_employee + pt + lwf_employee + adj_deduction
+    )
+    net_pay = gross + adj_earning - total_deductions
+
+    return {
+        'annual_ctc':            salary_config.annual_ctc,
+        'monthly_ctc':           monthly_ctc,
+        'basic':                 basic,
+        'hra':                   hra,
+        'special_allowance':     special_allowance,
+        'other_earnings':        other_earnings,
+        'reimbursements':        Decimal('0'),  # populated in wizard reimbursements step
+        'bonus':                 Decimal('0'),  # populated in wizard bonuses step
+        'gross_earnings':        gross,
+        'total_working_days':    total_working_days,
+        'lop_days':              lop_days,
+        'lop_deduction':         lop_deduction,
+        'pf_employee':           pf_employee,
+        'pf_employer':           pf_employer,
+        'esi_employee':          esi_employee,
+        'esi_employer':          esi_employer,
+        'pt_deduction':          pt,
+        'lwf_employee':          lwf_employee,
+        'lwf_employer':          lwf_employer,
+        'adjustments_earning':   adj_earning,
+        'adjustments_deduction': adj_deduction,
+        'total_deductions':      total_deductions,
+        'net_pay':               net_pay,
+        'status':                EmployeePayslip.STATUS_DRAFT,
+    }
+
+
+def process_payroll_cycle(cycle: PayrollCycle) -> dict:
+    """
+    Compute and persist payslips for every eligible employee in `cycle`.
+
+    Same formulas/business rules as the original ProcessPayrollView loop —
+    only the data-fetching and write strategy changed (Phase 2 performance
+    optimization):
+      - salary configs / branches / adjustments are fetched in 3 bulk
+        queries total instead of up to 3 queries PER employee.
+      - salary-structure components and state statutory config are cached
+        per distinct structure/state instead of re-queried per employee.
+      - payslips are written via one bulk_create + one bulk_update instead
+        of one update_or_create call per employee.
+      - the cycle is claimed via a single conditional UPDATE (atomic
+        compare-and-swap on status) so two concurrent "Process Payroll"
+        clicks can't both run the heavy loop — the second fails fast.
+
+    Returns {'created_count': int, 'skipped': list[str]} — same shape
+    ProcessPayrollView returned before.
+
+    Raises PayrollAlreadyProcessing if the cycle isn't in
+    STATUS_ATTENDANCE_APPROVED at claim time.
+    """
+    claimed = PayrollCycle.objects.filter(
+        pk=cycle.pk, status=PayrollCycle.STATUS_ATTENDANCE_APPROVED,
+    ).update(status=PayrollCycle.STATUS_PROCESSING)
+    if not claimed:
+        raise PayrollAlreadyProcessing(
+            'Cycle is not awaiting processing — it may already be processing or processed.'
+        )
+    cycle.status = PayrollCycle.STATUS_PROCESSING
+
+    try:
+        return _run_payroll_processing(cycle)
+    except Exception:
+        # An unexpected failure after the claim must not leave the cycle
+        # wedged in STATUS_PROCESSING forever (it can never be re-claimed
+        # from that state) — revert it back to STATUS_ATTENDANCE_APPROVED
+        # so the same cycle can simply be reprocessed. The write phase's own
+        # transaction.atomic() below already guarantees no partial payslips
+        # exist for this attempt; this only fixes the cycle's own status.
+        logger.error('process_payroll_cycle failed for cycle %s — reverting to attendance_approved.', cycle.pk, exc_info=True)
+        PayrollCycle.objects.filter(
+            pk=cycle.pk, status=PayrollCycle.STATUS_PROCESSING,
+        ).update(status=PayrollCycle.STATUS_ATTENDANCE_APPROVED)
+        cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
+        raise
+
+
+def _run_payroll_processing(cycle: PayrollCycle) -> dict:
+    """The actual fetch/compute/write work, split out of process_payroll_cycle()
+    only so the claim-revert-on-failure logic above can wrap it cleanly."""
+    settings_obj = PayrollSettings.objects.first()
+    default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
+
+    employees_qs = User.objects.filter(
+        is_active=True,
+    ).exclude(
+        role__name__in=['system_admin'],
+    ).select_related('role')
+
+    if cycle.branch:
+        employees_qs = employees_qs.filter(branch=cycle.branch.branch_name)
+
+    employees = list(employees_qs)
+    employee_ids = [e.id for e in employees]
+
+    # ── Bulk fetch: latest active salary config per employee ───────────────
+    # (was: EmployeeSalaryConfig.objects.filter(employee=employee, ...).first()
+    #  inside the loop — 1 query per employee, plus a hidden extra query per
+    #  employee when accessing salary_config.salary_structure without
+    #  select_related, now fixed here too.)
+    salary_config_by_employee = {}
+    for cfg in (
+        EmployeeSalaryConfig.objects
+        .filter(employee_id__in=employee_ids, is_active=True, effective_from__lte=cycle.cycle_end)
+        .select_related('salary_structure')
+        .order_by('employee_id', '-effective_from')
+    ):
+        # First row seen per employee (ordered by -effective_from) is the latest.
+        salary_config_by_employee.setdefault(cfg.employee_id, cfg)
+
+    # ── Bulk fetch: every branch referenced by these employees ─────────────
+    # (was: Branch.objects.filter(branch_name=employee.branch).first() inside the loop)
+    branch_names = {e.branch for e in employees}
+    branch_by_name = {
+        b.branch_name: b
+        for b in Branch.objects.filter(branch_name__in=branch_names)
+                                .select_related('state', 'payroll_config__salary_structure')
+    }
+
+    # ── Bulk fetch: this month's one-time adjustments for all employees ────
+    # (was: PayrollAdjustment.objects.filter(employee=employee, month=adj_month) inside the loop)
+    adj_month = cycle.cycle_start.replace(day=1)
+    adjustments_by_employee = defaultdict(list)
+    for adj in PayrollAdjustment.objects.filter(employee_id__in=employee_ids, month=adj_month):
+        adjustments_by_employee[adj.employee_id].append(adj)
+
+    # ── Per-distinct-structure / per-distinct-state caches ──────────────────
+    # (was: structure.components.filter(...) and StatutoryConfig.objects.filter(...)
+    #  re-run for every employee even when many employees share a structure/state)
+    components_cache: dict = {}
+    statutory_cache: dict = {}
+
+    def _components_for(structure):
+        if structure.id not in components_cache:
+            components_cache[structure.id] = list(
+                structure.components.filter(is_active=True).order_by('order')
+            )
+        return components_cache[structure.id]
+
+    def _statutory_for(state):
+        if state is None:
+            return None
+        if state.id not in statutory_cache:
+            statutory_cache[state.id] = StatutoryConfig.objects.filter(state=state).first()
+        return statutory_cache[state.id]
+
+    computed = {}   # employee_id -> payslip fields dict
+    skipped = []
+
+    for employee in employees:
+        salary_config = salary_config_by_employee.get(employee.id)
+        if salary_config is None:
+            skipped.append(employee.full_name)
+            continue
+
+        branch_obj = branch_by_name.get(employee.branch)
+        branch_config = getattr(branch_obj, 'payroll_config', None) if branch_obj else None
+
+        # Resolve structure: employee override -> branch -> default
+        structure = salary_config.salary_structure
+        if structure is None and branch_config and branch_config.salary_structure:
+            structure = branch_config.salary_structure
+        if structure is None:
+            structure = default_structure
+        if structure is None:
+            skipped.append(f'{employee.full_name} (no structure)')
+            continue
+
+        components = _components_for(structure)
+        statutory = _statutory_for(branch_obj.state) if branch_obj else None
+        adjustments = adjustments_by_employee.get(employee.id, [])
+
+        computed[employee.id] = _compute_employee_payslip(
+            salary_config, components, branch_config, statutory, adjustments,
+        )
+
+    # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──
+    with transaction.atomic():
+        existing_by_employee = {
+            p.employee_id: p
+            for p in EmployeePayslip.objects.filter(cycle=cycle, employee_id__in=list(computed.keys()))
+        }
+
+        to_create = []
+        to_update = []
+        for employee_id, fields in computed.items():
+            existing = existing_by_employee.get(employee_id)
+            if existing is not None:
+                for field, value in fields.items():
+                    setattr(existing, field, value)
+                to_update.append(existing)
+            else:
+                to_create.append(EmployeePayslip(cycle=cycle, employee_id=employee_id, **fields))
+
+        if to_create:
+            EmployeePayslip.objects.bulk_create(to_create, batch_size=500)
+        if to_update:
+            EmployeePayslip.objects.bulk_update(to_update, _PAYSLIP_FIELDS, batch_size=500)
+
+        cycle.status = PayrollCycle.STATUS_PAYSLIPS_GENERATED
+        cycle.save(update_fields=['status', 'updated_at'])
+
+    return {'created_count': len(computed), 'skipped': skipped}
 
 
 def _has_perm(user, codename: str) -> bool:
@@ -451,186 +757,21 @@ class ProcessPayrollView(APIView):
         if cycle.status != PayrollCycle.STATUS_ATTENDANCE_APPROVED:
             return error('Attendance must be approved before processing payroll.')
 
-        settings_obj = PayrollSettings.objects.first()
-        default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
-
-        employees = User.objects.filter(
-            is_active=True,
-        ).exclude(
-            role__name__in=['system_admin'],
-        ).select_related('role')
-
-        # Scope employees to the cycle's branch when set
-        if cycle.branch:
-            employees = employees.filter(branch=cycle.branch.branch_name)
-
-        created_count = 0
-        skipped = []
-
-        PF_DEFAULT_RATE = Decimal('12.00')
-        PF_DEFAULT_CEILING = Decimal('15000.00')
-
-        with transaction.atomic():
-            cycle.status = PayrollCycle.STATUS_PROCESSING
-            cycle.save(update_fields=['status', 'updated_at'])
-
-            for employee in employees:
-                salary_config = EmployeeSalaryConfig.objects.filter(
-                    employee=employee,
-                    is_active=True,
-                    effective_from__lte=cycle.cycle_end,
-                ).order_by('-effective_from').first()
-
-                if salary_config is None:
-                    skipped.append(employee.full_name)
-                    continue
-
-                # Single branch lookup — used for structure, PF, and statutory below
-                branch_obj = Branch.objects.filter(
-                    branch_name=employee.branch,
-                ).select_related('state', 'payroll_config__salary_structure').first()
-                branch_config = getattr(branch_obj, 'payroll_config', None) if branch_obj else None
-
-                # Resolve structure: employee override -> branch -> default
-                structure = salary_config.salary_structure
-                if structure is None and branch_config and branch_config.salary_structure:
-                    structure = branch_config.salary_structure
-                if structure is None:
-                    structure = default_structure
-                if structure is None:
-                    skipped.append(f'{employee.full_name} (no structure)')
-                    continue
-
-                monthly_ctc = salary_config.monthly_ctc
-                basic = Decimal('0')
-                hra = Decimal('0')
-                special_allowance = Decimal('0')
-                other_earnings = {}
-                other_earnings_total = Decimal('0')
-
-                for component in structure.components.filter(is_active=True).order_by('order'):
-                    if component.calculation_type == SalaryComponent.CALC_PCT_CTC:
-                        amount = monthly_ctc * component.value / 100
-                    elif component.calculation_type == SalaryComponent.CALC_PCT_BASIC:
-                        amount = basic * component.value / 100
-                    else:
-                        amount = component.value
-
-                    name_lower = component.name.lower()
-                    if name_lower == 'basic':
-                        basic = amount
-                    elif name_lower == 'hra':
-                        hra = amount
-                    elif name_lower == 'special allowance':
-                        special_allowance = amount
-                    else:
-                        # JSONField can't store Decimal directly — cast to float for storage,
-                        # but keep the running total in Decimal to avoid binary float noise.
-                        other_earnings[component.name] = float(amount)
-                        other_earnings_total += amount
-
-                gross = basic + hra + special_allowance + other_earnings_total
-
-                # LOP deduction (placeholder — real value fed in later from attendance)
-                lop_days = Decimal('0')
-                total_working_days = 26
-                lop_deduction = (gross / total_working_days) * lop_days
-
-                # PF: use branch config if present, else statutory defaults (12%/12%, Rs.15,000 ceiling)
-                pf_applicable = branch_config.pf_applicable if branch_config is not None else True
-                pf_employee = Decimal('0')
-                pf_employer = Decimal('0')
-                if pf_applicable:
-                    pf_ceiling  = branch_config.pf_wage_ceiling   if branch_config else PF_DEFAULT_CEILING
-                    pf_emp_rate = branch_config.pf_employee_rate   if branch_config else PF_DEFAULT_RATE
-                    pf_er_rate  = branch_config.pf_employer_rate   if branch_config else PF_DEFAULT_RATE
-                    pf_base     = min(basic, pf_ceiling)
-                    pf_employee = pf_base * pf_emp_rate / 100
-                    pf_employer = pf_base * pf_er_rate  / 100
-
-                # ESI, PT, LWF: from the branch's state statutory config
-                esi_employee = Decimal('0')
-                esi_employer = Decimal('0')
-                statutory = StatutoryConfig.objects.filter(
-                    state=branch_obj.state,
-                ).first() if branch_obj else None
-                if statutory and statutory.esi_applicable and gross <= statutory.esi_wage_ceiling:
-                    esi_employee = gross * statutory.esi_employee_rate / 100
-                    esi_employer = gross * statutory.esi_employer_rate / 100
-
-                # PT
-                pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
-
-                # LWF
-                lwf_employee = statutory.lwf_employee_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
-                lwf_employer = statutory.lwf_employer_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
-
-                # One-time adjustments (additions, deductions, arrears) for this employee+month
-                adj_month = cycle.cycle_start.replace(day=1)
-                adjs = PayrollAdjustment.objects.filter(employee=employee, month=adj_month)
-                adj_earning = sum(
-                    (a.amount for a in adjs if a.type in (PayrollAdjustment.ADDITION, PayrollAdjustment.ARREAR)),
-                    Decimal('0'),
-                )
-                adj_deduction = sum(
-                    (a.amount for a in adjs if a.type == PayrollAdjustment.DEDUCTION),
-                    Decimal('0'),
-                )
-
-                total_deductions = (
-                    lop_deduction + pf_employee + esi_employee + pt + lwf_employee + adj_deduction
-                )
-                net_pay = gross + adj_earning - total_deductions
-
-                reimbursements = Decimal('0')
-                bonus = Decimal('0')
-                if settings_obj and settings_obj.enable_reimbursements:
-                    reimbursements = Decimal('0')  # populated in wizard reimbursements step
-                if settings_obj and settings_obj.enable_bonuses:
-                    bonus = Decimal('0')  # populated in wizard bonuses step
-
-                EmployeePayslip.objects.update_or_create(
-                    cycle=cycle,
-                    employee=employee,
-                    defaults={
-                        'annual_ctc':           salary_config.annual_ctc,
-                        'monthly_ctc':          monthly_ctc,
-                        'basic':                basic,
-                        'hra':                  hra,
-                        'special_allowance':    special_allowance,
-                        'other_earnings':       other_earnings,
-                        'reimbursements':       reimbursements,
-                        'bonus':                bonus,
-                        'gross_earnings':       gross,
-                        'total_working_days':   total_working_days,
-                        'lop_days':             lop_days,
-                        'lop_deduction':        lop_deduction,
-                        'pf_employee':          pf_employee,
-                        'pf_employer':          pf_employer,
-                        'esi_employee':         esi_employee,
-                        'esi_employer':         esi_employer,
-                        'pt_deduction':         pt,
-                        'lwf_employee':         lwf_employee,
-                        'lwf_employer':         lwf_employer,
-                        'adjustments_earning':  adj_earning,
-                        'adjustments_deduction': adj_deduction,
-                        'total_deductions':     total_deductions,
-                        'net_pay':              net_pay,
-                        'status':               EmployeePayslip.STATUS_DRAFT,
-                    },
-                )
-                created_count += 1
-
-            cycle.status = PayrollCycle.STATUS_PAYSLIPS_GENERATED
-            cycle.save(update_fields=['status', 'updated_at'])
+        try:
+            result = process_payroll_cycle(cycle)
+        except PayrollAlreadyProcessing:
+            return error(
+                'This payroll cycle is already being processed or has already been processed.',
+                http_status=409,
+            )
 
         logger.info(
             'Payroll processed for cycle %s: %d payslips created, %d skipped by %s',
-            pk, created_count, len(skipped), request.user.email,
+            pk, result['created_count'], len(result['skipped']), request.user.email,
         )
         return success(
-            f'Payroll processed. {created_count} payslips generated.',
-            {'payslip_count': created_count, 'skipped': skipped},
+            f"Payroll processed. {result['created_count']} payslips generated.",
+            {'payslip_count': result['created_count'], 'skipped': result['skipped']},
         )
 
 

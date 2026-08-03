@@ -48,6 +48,19 @@ class Notification(models.Model):
     class Meta:
         db_table = 'notifications'
         ordering = ['-created_at']
+        indexes = [
+            # Phase 4: (user, is_read) is the single highest-traffic query in
+            # this table — the unread-count bell-poll (called every 60s per
+            # active user), the notification list, and mark-all-read all
+            # filter on exactly this pair. Today `user` (FK auto-index) and
+            # `is_read` (standalone) are separate indexes, requiring an
+            # intersection instead of one covering index.
+            models.Index(fields=['user', 'is_read'], name='notif_user_read_idx'),
+            # Phase 4: the paginated notification list is always scoped to
+            # one user and ordered by created_at — no index currently backs
+            # that combination.
+            models.Index(fields=['user', 'created_at'], name='notif_user_created_idx'),
+        ]
 
     def __str__(self) -> str:
         return f'{self.title} → {self.user_id}'

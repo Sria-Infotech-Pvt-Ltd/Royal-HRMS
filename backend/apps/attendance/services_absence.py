@@ -46,10 +46,16 @@ def _get_config():
         return None
 
 
-def _get_weekly_off_days() -> set:
-    """Delegate to the existing helper in services_attendance to avoid duplication."""
-    from apps.attendance.services_attendance import AttendanceDashboardService
-    return AttendanceDashboardService._weekly_off_days()
+def _get_weekly_off_days(employee, start: date, end: date) -> dict:
+    """
+    Per-employee, per-day weekly-off resolution for [start, end] — via the
+    same centralized WeeklyOffCacheService.get_effective_range() resolver
+    AttendanceProcessorService/AttendanceDashboardService/leave.py all use, so
+    an employee's assigned pattern (not just the org default) is respected
+    when deciding which days to skip in their absence streak.
+    """
+    from core.cache_service import WeeklyOffCacheService
+    return WeeklyOffCacheService.get_effective_range(employee, start, end)
 
 
 # ─── Per-employee helpers ──────────────────────────────────────────────────────
@@ -72,7 +78,7 @@ def _get_approved_leave_dates(employee, start: date, today: date) -> set:
 
 
 def _count_consecutive_absent_days(
-    employee, today: date, threshold: int, off_days: set
+    employee, today: date, threshold: int
 ) -> int:
     """
     Walk backwards from yesterday counting consecutive absent working days.
@@ -89,12 +95,13 @@ def _count_consecutive_absent_days(
         )
     }
     leave_dates = _get_approved_leave_dates(employee, start, today)
+    off_days_by_date = _get_weekly_off_days(employee, start, today - timedelta(days=1))
 
     consecutive = 0
     current = today - timedelta(days=1)
 
     while current >= start:
-        if current.strftime('%A').lower() in off_days:
+        if current.strftime('%A').lower() in off_days_by_date[current]:
             current -= timedelta(days=1)
             continue
         if current in leave_dates:
@@ -172,7 +179,6 @@ def detect_absence_alerts() -> dict:
     threshold   = config.alert_after_days
     notify_whom = config.notify_whom
     today       = timezone.localdate()
-    off_days    = _get_weekly_off_days()
 
     from apps.accounts.models import User
     employees = (
@@ -187,7 +193,7 @@ def detect_absence_alerts() -> dict:
 
     for employee in employees:
         checked += 1
-        consecutive = _count_consecutive_absent_days(employee, today, threshold, off_days)
+        consecutive = _count_consecutive_absent_days(employee, today, threshold)
         if consecutive < threshold:
             continue
         if _alert_sent_today(employee, today):

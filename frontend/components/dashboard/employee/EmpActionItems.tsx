@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useActionItems } from "@/hooks/useEmployeeDashboard";
 import type { ActionItem } from "@/types/employeeDashboard";
@@ -29,16 +30,27 @@ const isDone = (item: ActionItem) =>
   item.status === "approved" || item.action_type === "leave_approved";
 
 export default function EmpActionItems() {
-  const { data, loading, status } = useActionItems();
+  const [page, setPage] = useState(1);
+  const { data, loading, status } = useActionItems(page);
 
-  const items   = data?.action_items ?? [];
+  const items      = data?.results ?? [];
+  const totalPages = data?.total_pages ?? 1;
+  // Pending count reflects only the current page once there's more than one
+  // page (the backend doesn't expose a separate cross-page pending total),
+  // so once paginated this badge shows the total item count instead of an
+  // inaccurate partial "pending" count.
   const pending = items.filter(i => !isDone(i)).length;
 
   return (
     <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-clipboard-check" /> Action Items</div>
-        {!loading && pending > 0 && <span className="badge badge-warn">{pending} pending</span>}
+        {!loading && totalPages <= 1 && pending > 0 && (
+          <span className="badge badge-warn">{pending} pending</span>
+        )}
+        {!loading && totalPages > 1 && (
+          <span className="badge badge-neutral">{data?.count} total</span>
+        )}
       </div>
 
       {loading ? (
@@ -76,6 +88,31 @@ export default function EmpActionItems() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination — hidden entirely when everything fits on one page */}
+      {!loading && totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, padding: "8px 20px 12px", borderTop: "1px solid var(--border)" }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={page <= 1}
+            onClick={() => setPage(p => p - 1)}
+            suppressHydrationWarning
+          >
+            <i className="ti ti-chevron-left" /> Previous
+          </button>
+          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => p + 1)}
+            suppressHydrationWarning
+          >
+            Next <i className="ti ti-chevron-right" />
+          </button>
         </div>
       )}
     </div>

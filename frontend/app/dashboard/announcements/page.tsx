@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
+import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
+import type { BirthdayEmployee } from "@/types/employeeDashboard";
+import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
+import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,6 +178,11 @@ export default function AnnouncementsPage() {
 
   // ── Expanded cards ──────────────────────────────────────────────────────────
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  // ── Birthday celebration (Celebration tab) ─────────────────────────────────
+  const { data: birthdayData } = useBirthdaysToday();
+  const todaysBirthdays = birthdayData?.birthdays ?? [];
+  const [celebrateTarget, setCelebrateTarget] = useState<BirthdayEmployee | null>(null);
 
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -422,6 +431,15 @@ export default function AnnouncementsPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Celebration: today's birthdays ───────────────────────────────── */}
+      {(category === "" || category === "celebration") && todaysBirthdays.map(emp => (
+        <BirthdayCelebrationCard
+          key={emp.employee_id}
+          employee={emp}
+          onOpen={() => setCelebrateTarget(emp)}
+        />
+      ))}
 
       {/* ── Error ────────────────────────────────────────────────────────── */}
       {pageErr && (
@@ -796,6 +814,16 @@ export default function AnnouncementsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          Birthday Celebration popup
+      ══════════════════════════════════════════════════════════════════ */}
+      {celebrateTarget && (
+        <BirthdayCelebrationModal
+          employee={celebrateTarget}
+          onClose={() => setCelebrateTarget(null)}
+        />
       )}
     </>
   );

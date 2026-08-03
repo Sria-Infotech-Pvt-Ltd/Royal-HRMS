@@ -24,12 +24,19 @@ from apps.attendance.serializers_hr import (
     HRAttendanceEditSerializer,
     HRAttendanceManualCreateSerializer,
     OvertimeWriteSerializer,
+    WeeklyOffAssignmentFilterSerializer,
+    WeeklyOffAssignmentWriteSerializer,
+    WeeklyOffBulkAssignmentWriteSerializer,
 )
 from apps.attendance.services_hr import (
+    assign_weekly_off,
+    build_weekly_off_assignment_queryset,
+    bulk_assign_weekly_off,
     get_attendance_detail,
     get_attendance_list,
     get_dashboard_stats,
-    reprocess_date,
+    get_weekly_off_assignment_history,
+    serialize_weekly_off_assignment_row,
 )
 from apps.attendance.services_hr_audit import (
     get_invalid_punches,
@@ -619,9 +626,12 @@ class HRAttendanceReprocessView(APIView):
     POST /api/attendance/reprocess/
     Body: { "date": "2026-07-02" }   (optional — defaults to today)
 
-    Reruns AttendanceProcessorService for every employee who has punches on
-    the given date. Safe to call multiple times. Use this after fixing
-    punch data or after a code change to attendance logic.
+    Queues AttendanceProcessorService reprocessing (via Celery) for every
+    employee who has punches or an existing record on the given date, then
+    returns immediately — the request no longer waits for every employee to
+    be recalculated. Safe to queue multiple times: reprocessing a given
+    employee/date never creates a duplicate AttendanceRecord (it's an
+    upsert keyed on the employee+date unique constraint).
     """
     permission_classes = [IsAuthenticated]
 
@@ -637,16 +647,26 @@ class HRAttendanceReprocessView(APIView):
         except ValueError:
             return error('Invalid date format. Use YYYY-MM-DD.')
 
-        result = reprocess_date(
-            target_date=target_date,
-            branch=_branch_scope(request.user, request.data.get('branch', '')),
-            department=request.data.get('department', ''),
-            performed_by=request.user,
-            employee_ids=_manager_scope_employee_ids(request.user),
-        )
+        branch = _branch_scope(request.user, request.data.get('branch', ''))
+        department = request.data.get('department', '')
+        scoped_ids = _manager_scope_employee_ids(request.user)
+        employee_ids = [str(i) for i in scoped_ids] if scoped_ids is not None else None
+
+        from apps.attendance.tasks import reprocess_attendance_task
+        try:
+            async_result = reprocess_attendance_task.delay(
+                target_date.isoformat(), branch, department, str(request.user.pk), employee_ids,
+            )
+        except Exception as exc:
+            logger.error('Failed to queue attendance reprocess task: %s', exc, exc_info=True)
+            return error(
+                'Failed to queue attendance reprocessing. Please try again.',
+                http_status=503,
+            )
+
         return success(
-            f'Reprocessed {result["updated"]} record(s) for {result["date"]}.',
-            result,
+            f'Attendance reprocessing queued for {target_date.isoformat()}.',
+            {'date': target_date.isoformat(), 'status': 'queued', 'task_id': async_result.id},
         )
 
 
@@ -862,3 +882,128 @@ class HREmployeeMonthView(APIView):
             'stats': {**stats, 'total_hours': round(total_minutes / 60, 1)},
             'days':  days,
         })
+
+
+# ── Weekly Off Assignment ──────────────────────────────────────────────────────
+#
+# Assigns a WeeklyDayPolicy (configured under Settings -> Attendance Rules ->
+# Weekly Off Patterns — the existing WeeklyDayPolicy CRUD at
+# /api/attendance/weekly-days/, unchanged) to a specific employee. History is
+# preserved via services_hr.bulk_assign_weekly_off()/assign_weekly_off() — see
+# their docstrings. All actual attendance/leave calculations resolve the
+# effective pattern through the centralized
+# core.cache_service.WeeklyOffCacheService, not through these views.
+
+def _get_policy_or_error(policy_id):
+    from apps.attendance.models import WeeklyDayPolicy
+    try:
+        return WeeklyDayPolicy.objects.get(pk=policy_id, is_active=True), None
+    except (WeeklyDayPolicy.DoesNotExist, ValueError):
+        return None, error('Weekly off pattern not found.', http_status=404)
+
+
+class WeeklyOffAssignmentListView(APIView):
+    """
+    GET  /api/attendance/weekly-off-assignments/  — paginated list, one row
+         per active employee with their current assignment (if any)
+    POST /api/attendance/weekly-off-assignments/  — assign a pattern to a
+         single employee
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'attendance.view'):
+            return error('Permission denied.', http_status=403)
+
+        ser = WeeklyOffAssignmentFilterSerializer(data=request.query_params)
+        if not ser.is_valid():
+            return error(first_error(ser.errors))
+
+        filters = ser.validated_data
+        filters['branch'] = _branch_scope(request.user, filters.get('branch', ''))
+        filters['employee_ids'] = _manager_scope_employee_ids(request.user)
+
+        qs = build_weekly_off_assignment_queryset(filters)
+        page_obj, paginator = paginate(qs, request)
+        rows = [serialize_weekly_off_assignment_row(u) for u in page_obj]
+        return success(
+            'Weekly off assignments retrieved.',
+            paginated_data(paginator, page_obj, rows),
+        )
+
+    def post(self, request):
+        if not _has_perm(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        ser = WeeklyOffAssignmentWriteSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors), data=ser.errors, http_status=422)
+
+        data = ser.validated_data
+        policy, err = _get_policy_or_error(data['pattern'])
+        if err:
+            return err
+
+        assignment = assign_weekly_off(data['employee_id'], policy, data['effective_from'], request.user)
+        if assignment is None:
+            return error('Employee not found.', http_status=404)
+
+        logger.info(
+            'Weekly-off pattern "%s" assigned to %s effective %s by %s',
+            policy.policy_code, data['employee_id'], data['effective_from'], request.user.email,
+        )
+        return success('Weekly off pattern assigned.', {
+            'employee_id':    data['employee_id'],
+            'pattern_id':     str(policy.pk),
+            'pattern_name':   policy.name,
+            'effective_from': assignment.effective_from.strftime('%Y-%m-%d'),
+        }, http_status=201)
+
+
+class WeeklyOffAssignmentBulkView(APIView):
+    """
+    POST /api/attendance/weekly-off-assignments/bulk/ — assign a pattern to
+    many employees at once (explicit id list, or branch/department filter
+    resolved server-side). O(1) queries regardless of how many are selected.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not _has_perm(request.user, 'attendance.create'):
+            return error('Permission denied.', http_status=403)
+
+        ser = WeeklyOffBulkAssignmentWriteSerializer(data=request.data)
+        if not ser.is_valid():
+            return error(first_error(ser.errors), data=ser.errors, http_status=422)
+
+        data = ser.validated_data
+        policy, err = _get_policy_or_error(data['pattern'])
+        if err:
+            return err
+
+        employee_ids = data.get('employee_ids') or []
+        if not employee_ids:
+            # Resolve branch/department filter server-side — the frontend
+            # never has to load all matching employees just to select them.
+            filters = {
+                'branch':     _branch_scope(request.user, data.get('branch', '')),
+                'department': data.get('department', ''),
+                'employee_ids': _manager_scope_employee_ids(request.user),
+            }
+            employee_ids = list(
+                build_weekly_off_assignment_queryset(filters).values_list('employee_id', flat=True)
+            )
+
+        count = bulk_assign_weekly_off(employee_ids, policy, data['effective_from'], request.user)
+        return success(f'Weekly off pattern assigned to {count} employee(s).', {'count': count})
+
+
+class WeeklyOffAssignmentHistoryView(APIView):
+    """GET /api/attendance/weekly-off-assignments/<employee_id>/history/ — full timeline for one employee."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, employee_id: str):
+        if not _has_perm(request.user, 'attendance.view'):
+            return error('Permission denied.', http_status=403)
+        history = get_weekly_off_assignment_history(employee_id)
+        return success('Weekly off assignment history retrieved.', {'employee_id': employee_id, 'history': history})

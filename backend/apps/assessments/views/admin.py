@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from django.db.models import Prefetch
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -40,6 +41,36 @@ def _send_assessment_email(recipient_email: str, context: dict, template_name: s
         )
     except Exception:
         logger.exception('Failed to send %s email to %s', template_name, recipient_email)
+
+
+def _queue_assignment_emails(assignment_ids: list, template_name: str) -> None:
+    """
+    Enqueue assignment-notification email delivery for one or more
+    CandidateAssignment ids, after the current transaction commits.
+
+    Queuing failure (e.g. broker down) is logged, not raised — the
+    assignment row(s) have already been saved successfully by this point,
+    so the request must not fail on their account.
+    """
+    if not assignment_ids:
+        return
+    from apps.assessments.tasks import send_assessment_assignment_emails_task
+
+    def _dispatch(ids=list(assignment_ids), tpl=template_name):
+        try:
+            send_assessment_assignment_emails_task.delay(ids, tpl)
+        except Exception as exc:
+            logger.error(
+                'Failed to queue assessment assignment email(s) for %s: %s',
+                ids, exc, exc_info=True,
+            )
+
+    transaction.on_commit(_dispatch)
+
+
+def _queue_assignment_email(assignment_id, template_name: str) -> None:
+    """Single-assignment convenience wrapper around _queue_assignment_emails."""
+    _queue_assignment_emails([assignment_id], template_name)
 
 
 class AssessmentListCreateView(APIView):
@@ -294,19 +325,7 @@ class AssignAssessmentView(APIView):
                 ).update(assessment_status=User.ASSESSMENT_PENDING)
 
                 if employee.email:
-                    import threading
-                    ctx = {
-                        'candidate_name': employee.full_name or employee.email,
-                        'assessment_title': assessment.title,
-                        'company_name': company_name,
-                        'portal_url': portal_url,
-                        'deadline': str(deadline) if deadline else '',
-                    }
-                    threading.Thread(
-                        target=_send_assessment_email,
-                        args=(employee.email, ctx, template_name),
-                        daemon=True,
-                    ).start()
+                    _queue_assignment_email(assignment.id, template_name)
 
                 logger.info('Assessment "%s" assigned to employee %s by %s', assessment.title, employee.employee_id, request.user.email)
                 return success('Assessment assigned to employee.', {'assignment_id': str(assignment.id)}, http_status=status.HTTP_201_CREATED)
@@ -326,19 +345,7 @@ class AssignAssessmentView(APIView):
                 ).update(assessment_status=User.ASSESSMENT_PENDING)
 
             if candidate.email and candidate.portal_user_id:
-                import threading
-                ctx = {
-                    'candidate_name': candidate.name,
-                    'assessment_title': assessment.title,
-                    'company_name': company_name,
-                    'portal_url': portal_url,
-                    'deadline': str(deadline) if deadline else '',
-                }
-                threading.Thread(
-                    target=_send_assessment_email,
-                    args=(candidate.email, ctx, template_name),
-                    daemon=True,
-                ).start()
+                _queue_assignment_email(assignment.id, template_name)
 
             logger.info('Assessment "%s" assigned to candidate %s by %s', assessment.title, candidate_id, request.user.email)
             return success('Assessment assigned.', {'assignment_id': str(assignment.id)}, http_status=status.HTTP_201_CREATED)
@@ -364,19 +371,7 @@ class AssignAssessmentView(APIView):
             ).update(assessment_status=User.ASSESSMENT_PENDING)
 
             if employee.email:
-                import threading
-                ctx = {
-                    'candidate_name': employee.full_name or employee.email,
-                    'assessment_title': assessment.title,
-                    'company_name': company_name,
-                    'portal_url': portal_url,
-                    'deadline': str(deadline) if deadline else '',
-                }
-                threading.Thread(
-                    target=_send_assessment_email,
-                    args=(employee.email, ctx, template_name),
-                    daemon=True,
-                ).start()
+                _queue_assignment_email(assignment.id, template_name)
 
             logger.info('Assessment "%s" assigned to employee %s by %s', assessment.title, employee_id, request.user.email)
             return success('Assessment assigned to employee.', {'assignment_id': str(assignment.id)}, http_status=status.HTTP_201_CREATED)
@@ -389,44 +384,47 @@ class AssignAssessmentView(APIView):
             if not employee_qs.exists():
                 return error(f'No active employees found in department "{department}".')
 
-        employees        = list(employee_qs.only('id', 'employee_id', 'full_name', 'email'))
-        assigned         = 0
-        skipped          = 0
-        email_jobs       = []
-        newly_assigned_pks = []
+        employees = list(employee_qs.only('id', 'employee_id', 'full_name', 'email'))
 
-        for emp in employees:
-            _, created = CandidateAssignment.objects.get_or_create(
+        # One query to find who already has this assessment — replaces the
+        # old per-employee get_or_create() (one SELECT + maybe one INSERT
+        # per employee, i.e. up to ~2 x N queries for N employees).
+        already_assigned_ids = set(
+            CandidateAssignment.objects.filter(
+                assessment=assessment,
+                employee_id__in=[emp.pk for emp in employees],
+            ).values_list('employee_id', flat=True)
+        )
+
+        to_create = [
+            CandidateAssignment(
                 employee=emp,
                 assessment=assessment,
-                defaults={'assigned_by': request.user, 'max_score': max_score, 'deadline': deadline},
+                assigned_by=request.user,
+                max_score=max_score,
+                deadline=deadline,
             )
-            if created:
-                assigned += 1
-                newly_assigned_pks.append(emp.pk)
-                if emp.email:
-                    email_jobs.append((emp.email, emp.full_name or emp.email))
-            else:
-                skipped += 1
+            for emp in employees if emp.pk not in already_assigned_ids
+        ]
 
+        # ignore_conflicts guards the narrow race of two overlapping bulk
+        # assigns for the same assessment — the same protection the old
+        # per-row get_or_create gave for free — without reintroducing N+1.
+        CandidateAssignment.objects.bulk_create(to_create, ignore_conflicts=True, batch_size=500)
+
+        assigned = len(to_create)
+        skipped  = len(employees) - assigned
+
+        newly_assigned_pks = [obj.employee_id for obj in to_create]
         if newly_assigned_pks:
             User.objects.filter(
                 pk__in=newly_assigned_pks, assessment_status=User.ASSESSMENT_COMPLETE,
             ).update(assessment_status=User.ASSESSMENT_PENDING)
 
-        # Send all notification emails in one background thread
-        if email_jobs:
-            import threading
-            def _bulk_notify():
-                for recipient_email, name in email_jobs:
-                    _send_assessment_email(recipient_email, {
-                        'candidate_name':   name,
-                        'assessment_title': assessment.title,
-                        'company_name':     company_name,
-                        'portal_url':       portal_url,
-                        'deadline':         str(deadline) if deadline else '',
-                    }, template_name)
-            threading.Thread(target=_bulk_notify, daemon=True).start()
+        # obj.employee is the in-memory User instance passed in above, so
+        # this is a plain attribute read — no extra query per assignment.
+        assignment_ids_to_email = [obj.id for obj in to_create if obj.employee.email]
+        _queue_assignment_emails(assignment_ids_to_email, template_name)
 
         scope = f'department "{department}"' if department else 'entire company'
         logger.info(

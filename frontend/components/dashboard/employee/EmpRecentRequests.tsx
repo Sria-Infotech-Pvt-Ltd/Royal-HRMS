@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRecentRequests } from "@/hooks/useEmployeeDashboard";
 import type { RecentRequest } from "@/types/employeeDashboard";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
@@ -53,16 +54,26 @@ function detailLine(req: RecentRequest): string {
 }
 
 export default function EmpRecentRequests() {
-  const { data, loading, status } = useRecentRequests();
+  const [page, setPage] = useState(1);
+  const { data, loading, status } = useRecentRequests(page);
 
-  const requests = data?.requests ?? [];
-  const pending  = requests.filter(r => r.status === "pending" || r.status === "l2_pending").length;
+  const requests   = data?.results ?? [];
+  const totalPages = data?.total_pages ?? 1;
+  // Same-page-only "pending" count once there's more than one page — the
+  // backend doesn't expose a cross-page pending total, so the badge falls
+  // back to the accurate total record count instead of an understated one.
+  const pending = requests.filter(r => r.status === "pending" || r.status === "l2_pending").length;
 
   return (
     <div className="card">
       <div className="card-header">
         <div className="card-title"><i className="ti ti-inbox" /> Recent Requests</div>
-        {!loading && pending > 0 && <span className="badge badge-warn">{pending} pending</span>}
+        {!loading && totalPages <= 1 && pending > 0 && (
+          <span className="badge badge-warn">{pending} pending</span>
+        )}
+        {!loading && totalPages > 1 && (
+          <span className="badge badge-neutral">{data?.count} total</span>
+        )}
       </div>
 
       {loading ? (
@@ -98,6 +109,31 @@ export default function EmpRecentRequests() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination — hidden entirely when everything fits on one page */}
+      {!loading && totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, padding: "8px 20px 12px", borderTop: "1px solid var(--border)" }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={page <= 1}
+            onClick={() => setPage(p => p - 1)}
+            suppressHydrationWarning
+          >
+            <i className="ti ti-chevron-left" /> Previous
+          </button>
+          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => p + 1)}
+            suppressHydrationWarning
+          >
+            Next <i className="ti ti-chevron-right" />
+          </button>
         </div>
       )}
     </div>

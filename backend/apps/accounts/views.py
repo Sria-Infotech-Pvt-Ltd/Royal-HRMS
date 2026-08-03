@@ -3579,46 +3579,19 @@ class OnboardingView(APIView):
         User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
-        # Notify HR in a background thread so SMTP latency doesn't delay the response
-        import threading
-        company      = Company.objects.first()
-        company_name = company.company_name if company else ''
-        portal_url   = (company.portal_url if company else '') or ''
-        email_context = {
-            'candidate_name':  request.user.full_name or request.user.email,
-            'candidate_email': request.user.email,
-            'company_name':    company_name,
-            'portal_url':      portal_url,
-        }
-        if request.user.hr_id:
-            hr_user = User.objects.filter(pk=request.user.hr_id, is_active=True).first()
-            hr_targets = [(hr_user.email, hr_user.full_name or 'HR')] if hr_user and hr_user.email else []
-        else:
-            hr_targets = [
-                (email, 'HR Team')
-                for email in User.objects.filter(
-                                             role__role_permissions__permission__codename='onboarding.approve',
-                                             is_active=True,
-                                         )
-                                         .exclude(email='')
-                                         .values_list('email', flat=True)
-            ]
+        # Notify HR via Celery so SMTP latency doesn't delay the response.
+        from apps.accounts.tasks import send_onboarding_submitted_notification_task
 
-        def _send_hr_notifications():
-            for recipient_email, hr_name in hr_targets:
-                try:
-                    send_template_email(
-                        recipient_email=recipient_email,
-                        template_name='onboarding_submitted',
-                        context={**email_context, 'hr_name': hr_name},
-                    )
-                except Exception:
-                    logger.exception(
-                        'Failed to send onboarding_submitted to %s for user %s',
-                        recipient_email, email_context['candidate_email'],
-                    )
+        def _queue_hr_notification(user_id=request.user.pk):
+            try:
+                send_onboarding_submitted_notification_task.delay(user_id)
+            except Exception as exc:
+                logger.error(
+                    'Failed to queue onboarding_submitted notification for user %s: %s',
+                    user_id, exc, exc_info=True,
+                )
 
-        threading.Thread(target=_send_hr_notifications, daemon=True).start()
+        transaction.on_commit(_queue_hr_notification)
 
         return success('Onboarding submitted. Awaiting HR approval.')
 

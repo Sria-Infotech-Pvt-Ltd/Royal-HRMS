@@ -41,9 +41,8 @@ export default function AuditLogsWidget() {
   const [moduleFilter, setModuleFilter] = useState("All");
   const [logs,         setLogs]         = useState<AuditLogEntry[]>([]);
   const [total,        setTotal]        = useState(0);
-  const [offset,       setOffset]       = useState(0);
+  const [page,         setPage]         = useState(1);
   const [loading,      setLoading]      = useState(true);
-  const [loadingMore,  setLoadingMore]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
 
   const buildUrl = useCallback((mod: string, off: number) => {
@@ -52,37 +51,33 @@ export default function AuditLogsWidget() {
     return `${API.dashboard.auditLogs}?${params.toString()}`;
   }, []);
 
-  useEffect(() => {
+  const fetchPage = useCallback((pg: number) => {
     setLoading(true);
     setError(null);
-    setLogs([]);
-    setOffset(0);
     clientApi
-      .get<{ data: AuditLogsResponse }>(buildUrl(moduleFilter, 0))
+      .get<{ data: AuditLogsResponse }>(buildUrl(moduleFilter, (pg - 1) * PAGE_SIZE))
       .then(res => {
         const payload: AuditLogsResponse = (res.data as unknown as { data: AuditLogsResponse }).data ?? (res.data as unknown as AuditLogsResponse);
         setLogs(payload.results ?? []);
         setTotal(payload.count ?? 0);
-        setOffset(PAGE_SIZE);
       })
       .catch(() => setError("Failed to load audit logs."))
       .finally(() => setLoading(false));
   }, [moduleFilter, buildUrl]);
 
-  function loadMore() {
-    setLoadingMore(true);
-    clientApi
-      .get<{ data: AuditLogsResponse }>(buildUrl(moduleFilter, offset))
-      .then(res => {
-        const payload: AuditLogsResponse = (res.data as unknown as { data: AuditLogsResponse }).data ?? (res.data as unknown as AuditLogsResponse);
-        setLogs(prev => [...prev, ...(payload.results ?? [])]);
-        setOffset(prev => prev + PAGE_SIZE);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingMore(false));
-  }
+  // Reset to page 1 whenever the module filter changes
+  useEffect(() => {
+    setPage(1);
+    fetchPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleFilter]);
 
-  const hasMore = logs.length < total;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  function goToPage(pg: number) {
+    setPage(pg);
+    fetchPage(pg);
+  }
 
   return (
     <div className="card">
@@ -151,21 +146,27 @@ export default function AuditLogsWidget() {
 
           <div style={{ padding: "10px 16px", borderTop: "1px solid var(--bg-high)", background: "var(--bg-low)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
-              {logs.length} of {total} entries
+              Page {page} of {totalPages} · {total} entries
             </span>
-            {hasMore && (
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                suppressHydrationWarning
-                style={{
-                  fontSize: 12, color: "var(--primary)", fontWeight: 500, background: "none",
-                  border: "none", cursor: loadingMore ? "not-allowed" : "pointer", opacity: loadingMore ? 0.6 : 1,
-                  display: "flex", alignItems: "center", gap: 5,
-                }}
-              >
-                {loadingMore ? <><i className="ti ti-loader-2 spin" style={{ fontSize: 12 }} /> Loading…</> : <>Load more <i className="ti ti-chevron-down" style={{ fontSize: 11 }} /></>}
-              </button>
+            {totalPages > 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page <= 1}
+                  suppressHydrationWarning
+                  className="btn btn-ghost btn-sm"
+                >
+                  <i className="ti ti-chevron-left" /> Previous
+                </button>
+                <button
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page >= totalPages}
+                  suppressHydrationWarning
+                  className="btn btn-ghost btn-sm"
+                >
+                  Next <i className="ti ti-chevron-right" />
+                </button>
+              </div>
             )}
           </div>
         </>

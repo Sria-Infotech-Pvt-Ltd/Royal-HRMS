@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import axios from "axios";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
-import { API_URL } from "@/lib/config";
+import { API_URL, API_BASE } from "@/lib/config";
 import type {
   Notification, NotificationListResponse, UnreadCountResponse,
 } from "@/types/notifications";
@@ -21,6 +22,20 @@ function notificationsSocketUrl(): string | null {
   if (!API_URL) return null;
   const wsUrl = API_URL.replace(/^http/, "ws");
   return `${wsUrl}/ws/notifications/`;
+}
+
+// The httpOnly access-token cookie the WS handshake authenticates with
+// (see apps.notifications.ws_auth.CookieJWTAuthMiddleware) expires every 15
+// minutes and is otherwise only refreshed by the 60s unread-count poll below
+// — but browsers throttle setInterval on backgrounded tabs, so that poll can
+// stall well past 15 minutes. Reconnecting after that with the stale cookie
+// gets rejected (WSREJECT) even though the session is still perfectly valid.
+// Refreshing right before each (re)connect attempt closes that gap.
+function refreshTokenSilently(): Promise<void> {
+  return axios
+    .post(`${API_BASE}/token/refresh/`, {}, { withCredentials: true, headers: { "Content-Type": "application/json" } })
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 export function useNotifications() {
@@ -103,6 +118,17 @@ export function useNotifications() {
 
     function connect() {
       if (stopped) return;
+      // Refresh the access-token cookie right before every (re)connect attempt
+      // so a reconnect after a backgrounded/throttled tab never races a stale
+      // token — see refreshTokenSilently() above. Best-effort: if it fails,
+      // fall through and try the handshake anyway (matching prior behavior).
+      refreshTokenSilently().then(() => {
+        if (stopped) return;
+        openSocket();
+      });
+    }
+
+    function openSocket() {
       const socket = new WebSocket(url as string);
       socketRef.current = socket;
 

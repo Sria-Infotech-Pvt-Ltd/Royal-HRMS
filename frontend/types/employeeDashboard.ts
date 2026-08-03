@@ -39,8 +39,11 @@ export interface ActionItem {
 }
 
 export interface ActionItemsResponse {
-  total:        number;
-  action_items: ActionItem[];
+  count:       number;
+  page:        number;
+  page_size:   number;
+  total_pages: number;
+  results:     ActionItem[];
 }
 
 export interface RecentRequest {
@@ -53,8 +56,11 @@ export interface RecentRequest {
 }
 
 export interface RecentRequestsResponse {
-  total:    number;
-  requests: RecentRequest[];
+  count:       number;
+  page:        number;
+  page_size:   number;
+  total_pages: number;
+  results:     RecentRequest[];
 }
 
 export interface AttendanceSummary {
@@ -90,4 +96,21 @@ export interface Announcement {
   is_pinned:  boolean;
   posted_by:  string | null;
   created_at: string;
+}
+
+export interface BirthdayEmployee {
+  employee_id:   string;
+  full_name:     string;
+  email:         string;
+  department:    string;
+  designation:   string;
+  branch:        string;
+  date_of_birth: string;
+  days_until:    number;
+  message:       string;
+}
+
+export interface BirthdaysTodayResponse {
+  count:     number;
+  birthdays: BirthdayEmployee[];
 }

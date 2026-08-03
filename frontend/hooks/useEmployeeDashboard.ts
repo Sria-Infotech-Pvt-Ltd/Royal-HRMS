@@ -8,6 +8,7 @@ import type {
   AttendanceSummary,
   AttendanceStatus,
   Announcement,
+  BirthdaysTodayResponse,
 } from "@/types/employeeDashboard";
 
 export const useEmployeeKPIs = () =>
@@ -20,11 +21,15 @@ export const useLeaveBalances = (year?: number) =>
       : API.employeeDashboard.leaveBalances
   );
 
-export const useActionItems = () =>
-  useFetch<ActionItemsResponse>(API.employeeDashboard.actionItems);
+export const useActionItems = (page: number = 1, pageSize: number = 5) =>
+  useFetch<ActionItemsResponse>(
+    `${API.employeeDashboard.actionItems}?page=${page}&page_size=${pageSize}`
+  );
 
-export const useRecentRequests = () =>
-  useFetch<RecentRequestsResponse>(API.employeeDashboard.recentRequests);
+export const useRecentRequests = (page: number = 1, pageSize: number = 5) =>
+  useFetch<RecentRequestsResponse>(
+    `${API.employeeDashboard.recentRequests}?page=${page}&page_size=${pageSize}`
+  );
 
 export const useAttendanceSummary = (month?: number, year?: number) =>
   useFetch<AttendanceSummary>(
@@ -38,3 +43,6 @@ export const useAttendanceStatus = () =>
 
 export const useSharedAnnouncement = () =>
   useFetch<Announcement | null>(API.employeeDashboard.announcement);
+
+export const useBirthdaysToday = () =>
+  useFetch<BirthdaysTodayResponse>(API.employeeDashboard.birthdaysToday);

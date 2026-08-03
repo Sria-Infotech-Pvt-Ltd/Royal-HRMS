@@ -325,3 +325,43 @@ class HRAttendanceManualCreateSerializer(serializers.Serializer):
         if attrs['date'] > datetime.date.today():
             raise serializers.ValidationError({'date': 'Cannot create attendance for a future date.'})
         return attrs
+
+
+# ── Weekly Off Assignment ──────────────────────────────────────────────────────
+
+class WeeklyOffAssignmentFilterSerializer(serializers.Serializer):
+    branch     = serializers.CharField(required=False, allow_blank=True, default='')
+    department = serializers.CharField(required=False, allow_blank=True, default='')
+    pattern    = serializers.CharField(required=False, allow_blank=True, default='')
+    status     = serializers.ChoiceField(
+        choices=['', 'assigned', 'unassigned'], required=False, allow_blank=True, default='',
+    )
+    search     = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class WeeklyOffAssignmentWriteSerializer(serializers.Serializer):
+    """Validates a POST body assigning one pattern to a single employee."""
+    employee_id    = serializers.CharField()
+    pattern        = serializers.UUIDField(help_text='WeeklyDayPolicy id.')
+    effective_from = serializers.DateField()
+
+
+class WeeklyOffBulkAssignmentWriteSerializer(serializers.Serializer):
+    """
+    Validates a POST body bulk-assigning one pattern to many employees —
+    either an explicit id list or a branch/department filter (server-side
+    resolved, so the frontend never has to load all matching employees just
+    to select them).
+    """
+    employee_ids   = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+    branch         = serializers.CharField(required=False, allow_blank=True, default='')
+    department     = serializers.CharField(required=False, allow_blank=True, default='')
+    pattern        = serializers.UUIDField(help_text='WeeklyDayPolicy id.')
+    effective_from = serializers.DateField()
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs.get('employee_ids') and not attrs.get('branch') and not attrs.get('department'):
+            raise serializers.ValidationError(
+                'Provide employee_ids, or a branch/department filter, to select who this applies to.'
+            )
+        return attrs
