@@ -3447,3 +3447,78 @@ Root cause: **`_approval_scope_filter` and `_can_approve_at_stage` disagreed abo
 - **Two unresolved product decisions from §5** — leave-approval template-selection-vs-signal precedence, and attendance-correction email support.
 - **If the product decision on L2 comes back as "one specific HR person only," don't just revert** — `_approval_scope_filter`'s L2 branch needs to change too or the queue will keep showing requests to HR users who get blocked on approve.
 - **`LeaveApprovals.tsx`'s `act()` swallowing errors silently is still unfixed** — worth a small frontend fix next time.
+
+---
+
+## Session — G.DURGA PRASAD (31 July 2026)
+
+**Branch:** `Backend/31/07/2026`
+
+---
+
+### 1. Full Audit: "Requests Should Only Go To the Assigned Manager + HR, Not the Whole Branch"
+
+Explicit ask this session, in three parts: (1) confirm leave/expense/"anything" routes only to the assigned manager and HR; (2) if a branch has multiple HR users, each should only see the employees actually assigned to them, not the whole branch; (3) verify manager/HR/employee authorization is genuinely permission-based everywhere, not role-name-based. Two research agents audited the whole backend before any code changed. Findings:
+
+- **Leave** (`hrms/views/leave.py`): notification routing (§ `notifications/signals.py`) was already correct — always targets the stamped `l1_approver`/`l2_approver`, never broadcasts. But `_approval_scope_filter`'s L2 branch (documented as a deliberate "shared branch-wide queue" as of the 30 July entry above) showed every L2-pending request in the branch to every HR user, not just the one specifically assigned via `User.hr`.
+- **Expense** (`hrms/views/expenses.py`): worse than leave — no L1/L2 concept exists at all (single-stage), and the non-manager approver path was branch-wide for **both the list and the actual approve/reject action** (`_can_access_expense`). `employee.hr` was never referenced anywhere in the file.
+- **Attendance correction** (`attendance/services_hr_corrections.py`): identical shape to leave's bug in both its list filter and its L2 action-gate fallback — its own docstring says it "mirrors leave.py."
+- **Recruitment** (`recruitment/views.py`): no per-candidate HR-assignment concept and **no branch scoping at all** — any `recruitment.edit`/`recruitment.view` holder could see or decide any candidate company-wide.
+- **Resignation/Loan** workflow types: confirmed rule-definition placeholders only — no model, view, or serializer exists anywhere in the codebase.
+- **Permission-architecture spot check**: found `hrms/views/expenses.py`'s list view still branching on raw `request.user.role.name` strings (inconsistent with the permission-based `_can_access_expense` in the same file), and `LeaveDashboard.tsx`'s `isEmployee = role === "employee"` deciding the entire approver-view switch instead of the `leave.approve` permission already in scope.
+
+**Fix, confirmed with the user via two scoping decisions** (branch-only scoping for recruitment; keep expense single-stage rather than building a full two-stage flow):
+
+- `leave.py` — `_can_hr_access_request` now checks the request's stamped `l2_approver` first, falling back to branch match only when no HR is assigned to the employee at all. `_approval_scope_filter`'s L2 branch does the same (assigned-first, branch-wide orphan fallback), closing the "any branch HR" leak while still leaving orphaned requests actionable by someone.
+- `expenses.py` — `_can_access_expense` and the list view both gained an `employee.hr_id`-based branch, with the same orphan fallback; the list view's role-string check was replaced with `_has_perm`/`can_manage_team`.
+- `services_hr_corrections.py` — same assigned-first/orphan-fallback fix applied to `_can_hr_access_request` and `_approval_scope_filter`.
+- `recruitment/views.py` — new `_can_access_candidate()` helper; wired into `CandidateListCreateView.get()` (non-admins locked to their own branch, `?branch=` query param now admin-only), `CandidateDetailView` (get/put/patch/delete), and `CandidateStatusView.patch()`.
+- `LeaveDashboard.tsx` — `isEmployee` now derived from `usePermission("leave.approve")` OR `useCurrentUser().can_manage_team` instead of a role-name string; the now-unused `role` prop was removed from the component and its call site in `_client.tsx`. Also fixed an unrelated pre-existing compile error in the same file — `getLeaveYear` was called but never imported (a leftover from the 29 July fiscal-year fix); the dead `useFiscalYearConfig` import was swapped for it.
+
+---
+
+### 2. Data Fix: The HR Role Held `settings.edit`, Silently Bypassing Every Scoping Fix Above
+
+While live-verifying fix §1 (two temporary HR test-users in a rolled-back DB transaction — nothing persisted), the assigned-vs-branch-wide scoping test kept coming back wrong: the non-assigned HR could still see and act on the other HR's employee. Root cause wasn't the new code — `Role.objects.get(name='hr').role_permissions` included `settings.edit`, and `_has_perm(user, 'settings.edit')` is used throughout the backend (leave, expense, attendance, announcements, holidays, payroll, dashboard, accounts, and now recruitment) as the de facto "treat as full admin, bypass all scoping" signal. Any role holding that one permission — regardless of why — silently bypasses every branch/assignment check in the codebase.
+
+Confirmed via `Role.objects.all()` that **only** `system_admin` is supposed to hold `settings.edit`; `hr` was the sole outlier. Given the choice between (a) removing `settings.edit` from the `hr` role's permissions (a one-time data fix) or (b) decoupling ~15 files' worth of admin-bypass checks from that specific codename, the user chose (a) — smaller blast radius, zero code risk. Removed via `hr.role_permissions.filter(permission__codename='settings.edit').delete()`; HR keeps `settings.view` and all 59 other permissions. Re-verified the same rolled-back-transaction test afterward — scoping now behaves correctly.
+
+**Flagged, not decided:** the underlying coupling (any role holding `settings.edit` gets treated as a full scoping-bypass admin everywhere) is still there in the code. If a future admin ever re-grants `settings.edit` to a non-system_admin role — e.g. to let HR edit leave policy from Settings — the same bypass will silently return. The durable fix is decoupling those two concerns in code (option (b) above), not documented here as done.
+
+---
+
+### 3. Systemic Bug: Managers Couldn't See Their Own Team's Leave Requests in Approvals (Only Fixed Ones)
+
+Reported live: an employee's leave request appeared in the manager's dashboard widget but not in the Approvals tab for that same manager. Traced to `_approval_scope_filter` in `leave.py`: the `manager__team_lead` role holds **both** `can_manage_team=True` and `leave.approve`(the latter is required for that role to pass the approve-action's permission gate at L1) — and the scope filter checked `leave.approve` *before* `can_manage_team`. Every manager was routed into the L2/HR branch (which only matches `l2_pending` requests) instead of their own L1 branch, making their entire pending-approval queue disappear from the Approvals tab while the dashboard widget (a separate, unaffected query) kept showing it correctly.
+
+This wasn't specific to one employee or manager — it affected **every manager in the system**, and the identical bug shape existed in `services_hr_corrections.py` (the `manager__team_lead` role also holds `attendance.create`, the equivalent gate for attendance corrections).
+
+**Fix:** both files' `_approval_scope_filter` now combine the manager (L1) and HR (L2) scopes with OR instead of short-circuiting on whichever permission is checked first — a manager keeps their L1 queue even though they also hold `leave.approve`/`attendance.create`, and the branch-wide orphan fallback is withheld from managers specifically so that permission alone doesn't also turn them into a shadow branch-wide HR queue. Also found and fixed the same ordering flaw in `_can_adjust_balance` (leave.py) — managers could previously adjust *any* same-branch employee's leave balance instead of only their direct reports, since it hit the `leave.approve` branch before the `can_manage_team` one.
+
+**Live-verified**: the actual reported leave request (employee → Engineering Manager) now appears in `_approval_scope_filter(manager)`'s results; a regression check confirmed HR-assignment scoping from §1 still holds, and that a manager holding `leave.approve` does not leak into HR's branch-wide orphan queue for other branches' unassigned requests.
+
+**Not touched:** `_calendar_scope_filter` (leave.py) has the identical ordering, but the effect there is a manager seeing the *whole branch's* approved-leave calendar instead of just their team — broader, not missing data, and arguably reasonable for absence planning. Left as-is; flag if that's actually wrong.
+
+---
+
+### Key Files Changed (31 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/leave.py` | `_can_hr_access_request`, `_approval_scope_filter`, `_can_adjust_balance` — assigned-HR-first scoping; manager/HR scope combined via OR instead of short-circuited |
+| `backend/apps/hrms/views/expenses.py` | `_can_access_expense` + list view — `employee.hr`-based scoping with orphan fallback; role-string check replaced with `_has_perm`/`can_manage_team` |
+| `backend/apps/attendance/services_hr_corrections.py` | `_can_hr_access_request`, `_approval_scope_filter` — same assigned-first/orphan-fallback and manager/HR OR-combine fixes as leave.py |
+| `backend/apps/recruitment/views.py` | New `_can_access_candidate()`; branch scoping wired into candidate list/detail/status views |
+| `frontend/app/dashboard/leave/_components/LeaveDashboard.tsx` | `isEmployee` now permission-based, not role-string; removed unused `role` prop; fixed missing `getLeaveYear` import |
+| `frontend/app/dashboard/leave/_client.tsx` | Stopped passing the now-unused `role` prop to `LeaveDashboard` |
+| *(data, not code)* `hr` role permissions | Removed `settings.edit` — was silently granting HR a full scoping bypass everywhere in the backend |
+
+---
+
+### Notes for Next Developer
+
+- **`settings.edit` is used throughout the backend as an implicit "full admin, bypass all scoping" signal** (leave, expense, attendance, announcements, holidays, payroll, dashboard, accounts, recruitment) — it is not just a Settings-page gate. Before granting `settings.edit` to any non-`system_admin` role for any reason, know that it will also bypass every branch/assignment scoping check in the codebase. This coupling was flagged, not fixed at the code level — see §2.
+- **Any role that holds an "action" permission also used for authorization scoping (`leave.approve`, `attendance.create`, `expenses.approve`) must be checked for the ordering bug from §3** if a new scope filter is ever added for that permission — `can_manage_team` (or any more-specific role flag) must be checked before the broader permission, or combined via OR, never checked after and short-circuited.
+- **`_calendar_scope_filter` in leave.py has the same ordering as the §3 bug but was deliberately left unfixed** — broader-not-missing data, likely fine, but worth a product confirmation if anyone notices managers seeing the whole branch's calendar.
+- **Expense intentionally stayed single-stage this session** (per user decision) — there is still no manager→HR two-stage flow or HR notification/email for expense submissions, only a single `expenses.approve` gate now correctly scoped to the assigned manager or HR. Revisit if the product ever wants expense to mirror leave's L1→L2 flow.
+- **Recruitment now enforces branch scoping** but still has no per-candidate assigned-recruiter/HR concept (unlike leave/expense's `employee.hr`) — every branch HR/recruiter can act on every candidate in their own branch. Fine for now per user decision; would need a new model field to go further.

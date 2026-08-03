@@ -79,7 +79,6 @@ export default function LeavePageClient({ role }: Props) {
       <div>
         {active === "dashboard" && (
           <LeaveDashboard
-            role={role}
             branch={branch}
             onApply={() => setActive("apply")}
           />

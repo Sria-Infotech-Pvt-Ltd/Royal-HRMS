@@ -19,7 +19,6 @@ import LopBadge from "./LopBadge";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 
 interface Props {
-  role:    string;
   onApply: () => void;
   branch:  string;
 }
@@ -30,11 +29,15 @@ const BALANCE_DISPLAY = [
   { key: "sick"   as const, icon: "ti-stethoscope",  iconClass: "si-info",     barColor: "var(--info)"    },
 ];
 
-export default function LeaveDashboard({ role, onApply, branch }: Props) {
+export default function LeaveDashboard({ onApply, branch }: Props) {
   const { showToast } = useToast();
   const currentUser    = useCurrentUser();
   const canApproveLeave = usePermission("leave.approve");
-  const isEmployee = role === "employee";
+  // Whether to render the approver queue (other employees' requests + actions)
+  // vs. the plain own-requests view is a permission decision, not a role-name
+  // one — leave.approve (HR) and can_manage_team (managers, L1) are the two
+  // ways a user can be an approver; anyone without either is a plain employee.
+  const isEmployee = !canApproveLeave && !currentUser?.can_manage_team;
 
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);

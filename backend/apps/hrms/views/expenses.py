@@ -45,8 +45,11 @@ def _can_access_expense(user, expense) -> bool:
     """
     True for the submitter always. Otherwise the user must hold
     expenses.approve AND be scoped to this expense's employee — managers via
-    the reporting chain, everyone else (e.g. hr_admin) via branch — mirroring
-    the scoping conventions used for leave requests/balances.
+    the reporting chain, HR via the employee's specifically assigned HR
+    (User.hr), falling back to branch only when the employee has no HR
+    assigned — mirroring the scoping conventions used for leave requests. A
+    branch can have several HR users; each should only reach the employees
+    actually assigned to them, not every employee in the branch.
     """
     if expense.employee_id == user.id:
         return True
@@ -58,7 +61,10 @@ def _can_access_expense(user, expense) -> bool:
     # team leads / managers — scoped to their direct reports
     if user.role and getattr(user.role, 'can_manage_team', False):
         return expense.employee.reporting_manager_id == user.id
-    # HR / branch-scoped roles — same branch as the submitter
+    # HR — scoped to their specifically assigned employees
+    if expense.employee.hr_id:
+        return expense.employee.hr_id == user.id
+    # No HR assigned to this employee — branch-scoped fallback
     branch = getattr(user, 'branch', '') or ''
     return not branch or (getattr(expense.employee, 'branch', '') or '') == branch
 
@@ -80,15 +86,18 @@ class ExpenseListCreateView(APIView):
             # Mirrors _can_access_expense's per-record scoping, which was never
             # applied here — without it, any approver saw every expense
             # company-wide instead of just the employees they're allowed to act on.
-            role = request.user.role.name if request.user.role else ''
-            if role == 'system_admin':
+            if _has_perm(request.user, 'settings.edit'):
                 pass
-            elif role == 'manager__team_lead':
+            elif request.user.role and getattr(request.user.role, 'can_manage_team', False):
                 queryset = queryset.filter(employee__reporting_manager_id=request.user.id)
             else:
+                # HR — scoped to specifically assigned employees, falling back to
+                # branch-wide only for employees with no HR assigned at all.
                 user_branch = getattr(request.user, 'branch', '') or ''
+                orphaned = Q(employee__hr__isnull=True)
                 if user_branch:
-                    queryset = queryset.filter(employee__branch=user_branch)
+                    orphaned &= Q(employee__branch=user_branch)
+                queryset = queryset.filter(Q(employee__hr_id=request.user.id) | orphaned)
 
         branch = request.query_params.get('branch')
         if branch:

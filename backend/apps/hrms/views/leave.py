@@ -91,7 +91,15 @@ def _user_branch(user) -> str:
 
 
 def _can_hr_access_request(hr_user, leave_request) -> bool:
-    """Branch guard for hr_admin: True when no branch set (no restriction) or branches match."""
+    """
+    True when hr_user is the request's specifically assigned HR (l2_approver), or —
+    for requests with no HR assigned at all — hr_user shares the employee's branch
+    (or has no branch restriction). Keeps view/detail access in sync with
+    _approval_scope_filter and _can_approve_at_stage: a branch can have several HR
+    users, but each should only reach requests for their own assigned employees.
+    """
+    if leave_request.l2_approver_id:
+        return leave_request.l2_approver_id == hr_user.id
     branch = _user_branch(hr_user)
     if not branch:
         return True
@@ -105,15 +113,16 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
     - settings.edit (admin): always authorised — override for any stuck request.
     - l1 stage: must be the designated l1_approver on the request — L1 is a
                 per-manager assignment, not a shared queue.
-    - l2 stage: must be the designated l2_approver, or a leave.approve holder
-                in the same branch when no l2 was stamped at creation time.
-                L2 is a shared branch-wide HR queue (see _approval_scope_filter,
-                which already lists l2_pending requests to every branch HR).
+    - l2 stage: must be the designated l2_approver (the employee's specifically
+                assigned HR — see User.hr), or any leave.approve holder in the
+                same branch ONLY when the employee has no HR assigned at all.
 
-    Enforcing the designated approver at L1 prevents any user with leave.approve
-    from jumping the queue or acting at the wrong stage. L2 must stay in sync
-    with _approval_scope_filter's branch-wide visibility, or HR users who can
-    see a request in their queue get a 403 when they try to act on it.
+    Enforcing the designated approver prevents any user with leave.approve or
+    can_manage_team from jumping the queue or acting on employees not assigned
+    to them — a branch can have several HR users, and each must stay confined
+    to their own assigned employees. _approval_scope_filter and
+    _can_hr_access_request mirror this same assigned-first, branch-fallback
+    logic so the approval queue a user sees always matches what they can act on.
     """
     if _has_perm(user, 'settings.edit'):
         return True
@@ -136,25 +145,43 @@ def _approval_scope_filter(user) -> 'Q':
     """
     Scope filter for the approval queue — enforces both permission and status visibility.
     can_manage_team  → REQ_PENDING requests where they are the designated L1 approver.
-    leave.approve    → REQ_L2_PENDING requests in their branch.
-                       If no branch is set they see all REQ_L2_PENDING requests org-wide.
+    leave.approve    → REQ_L2_PENDING requests where they are the designated l2_approver
+                       (an employee's specifically assigned HR — see User.hr), plus —
+                       for non-manager approvers only — orphaned requests (no HR
+                       assigned to the employee) in their branch as a fallback so
+                       nothing is left unactionable. A branch can have multiple HR
+                       users; each must only see the employees actually assigned to
+                       them, matching _can_approve_at_stage's action gate.
     settings.edit    → all statuses, all employees except own (admin override).
+
+    can_manage_team and leave.approve are NOT mutually exclusive: every manager
+    role also holds leave.approve (required to pass the approve-action's
+    permission gate at L1). Checking leave.approve first would always route a
+    manager into the L2/HR branch — which only matches REQ_L2_PENDING requests —
+    silently hiding their entire L1 queue. Both scopes are combined via OR
+    instead of short-circuited, so a manager keeps their L1 queue even though
+    they also hold leave.approve; the branch-wide orphan fallback is withheld
+    from managers so leave.approve alone doesn't turn them into a shadow
+    branch-wide HR queue.
     """
     if _has_perm(user, 'settings.edit'):
         return ~Q(employee=user)
-    # Checked before leave.approve: manager__team_lead holds both can_manage_team
-    # and leave.approve (seeded onto the role before the L1/L2 workflow existed),
-    # so checking leave.approve first would route every manager into the HR/L2
-    # branch below and hide their own team's L1-pending requests entirely.
-    if user.role and user.role.can_manage_team:
-        # Scoping by l1_approver (not reporting_manager) is precise — it respects
-        # per-employee overrides and avoids showing requests already past L1.
-        return Q(l1_approver=user, status=REQ_PENDING) & ~Q(employee=user)
+
+    is_manager = bool(user.role and user.role.can_manage_team)
+    scope = Q(l1_approver=user, status=REQ_PENDING) if is_manager else None
+
     if _has_perm(user, 'leave.approve'):
-        branch = _user_branch(user)
-        if branch:
-            return Q(employee__branch__iexact=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
-        return Q(status=REQ_L2_PENDING) & ~Q(employee=user)
+        l2_scope = Q(l2_approver=user, status=REQ_L2_PENDING)
+        if not is_manager:
+            branch = _user_branch(user)
+            orphaned = Q(l2_approver__isnull=True, status=REQ_L2_PENDING)
+            if branch:
+                orphaned &= Q(employee__branch__iexact=branch)
+            l2_scope |= orphaned
+        scope = (scope | l2_scope) if scope is not None else l2_scope
+
+    if scope is not None:
+        return scope & ~Q(employee=user)
     return Q(employee=user)
 
 
@@ -537,11 +564,15 @@ def _can_adjust_balance(user, balance) -> bool:
         return False
     if _has_perm(user, 'settings.edit'):
         return True
+    # Managers also hold leave.approve (needed for the L1 approve-action gate),
+    # so this must be checked before the broader leave.approve branch below —
+    # otherwise a manager could adjust any same-branch employee's balance
+    # instead of only their own direct reports.
+    if user.role and user.role.can_manage_team:
+        return balance.employee.reporting_manager_id == user.id
     if _has_perm(user, 'leave.approve'):
         branch = _user_branch(user)
         return not branch or _user_branch(balance.employee) == branch
-    if user.role and user.role.can_manage_team:
-        return balance.employee.reporting_manager_id == user.id
     return False
 
 

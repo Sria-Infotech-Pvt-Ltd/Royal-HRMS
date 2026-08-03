@@ -44,6 +44,23 @@ def _has_perm(user, codename):
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
+def _can_access_candidate(user, candidate) -> bool:
+    """
+    True for org-wide access (settings.edit) or users with no branch set.
+    Otherwise the candidate's branch must match the user's own branch —
+    a recruitment.edit/view holder should only reach candidates in their own
+    branch, not company-wide, mirroring the branch scoping used for leave and
+    expense requests.
+    """
+    if _has_perm(user, 'settings.edit'):
+        return True
+    user_branch = (getattr(user, 'branch', '') or '').strip()
+    if not user_branch:
+        return True
+    candidate_branch = candidate.branch.branch_name if candidate.branch else ''
+    return candidate_branch.strip().lower() == user_branch.lower()
+
+
 
 _DENIED = 'You do not have permission to perform this action.'
 
@@ -242,15 +259,24 @@ class CandidateListCreateView(APIView):
 
         qs = Candidate.objects.select_related('interviewer', 'referral_by', 'added_by', 'branch').all()
 
+        # Non-admin users are locked to their own branch — the branch query
+        # param (used for the admin branch-picker dropdown) is only honoured
+        # for settings.edit holders, mirroring leave/expense list scoping.
+        is_admin = _has_perm(request.user, 'settings.edit')
+        user_branch = (getattr(request.user, 'branch', '') or '').strip()
+        if not is_admin and user_branch:
+            qs = qs.filter(branch__branch_name__iexact=user_branch)
+
         if s := request.query_params.get('status'):
             if s in {Candidate.STATUS_PENDING, Candidate.STATUS_SELECTED, Candidate.STATUS_REJECTED}:
                 qs = qs.filter(status=s)
 
         if b := request.query_params.get('branch'):
-            try:
-                qs = qs.filter(branch_id=int(b))
-            except (ValueError, TypeError):
-                pass
+            if is_admin:
+                try:
+                    qs = qs.filter(branch_id=int(b))
+                except (ValueError, TypeError):
+                    pass
 
         if q := request.query_params.get('search'):
             qs = qs.filter(
@@ -371,7 +397,7 @@ class CandidateDetailView(APIView):
     def _get(self, pk):
         try:
             return Candidate.objects.select_related(
-                'interviewer', 'referral_by', 'added_by'
+                'interviewer', 'referral_by', 'added_by', 'branch'
             ).prefetch_related('logs').get(pk=pk)
         except Candidate.DoesNotExist:
             return None
@@ -382,6 +408,8 @@ class CandidateDetailView(APIView):
         candidate = self._get(pk)
         if not candidate:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         return success('Candidate retrieved.', data=CandidateDetailSerializer(candidate).data)
 
     def put(self, request, pk):
@@ -390,6 +418,8 @@ class CandidateDetailView(APIView):
         candidate = self._get(pk)
         if not candidate:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error('Cannot edit a candidate who has already been converted to an employee.')
 
@@ -420,6 +450,8 @@ class CandidateDetailView(APIView):
         candidate = self._get(pk)
         if not candidate:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error('Cannot edit a candidate who has already been converted to an employee.')
 
@@ -450,6 +482,8 @@ class CandidateDetailView(APIView):
         candidate = self._get(pk)
         if not candidate:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error(
                 'Cannot delete a candidate who has been converted to an employee.',
@@ -521,9 +555,11 @@ class CandidateStatusView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            candidate = Candidate.objects.get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         new_status = request.data.get('status')
         if new_status not in self._VALID_STATUS_VALUES:
@@ -1297,11 +1333,7 @@ class SendPortalLoginView(APIView):
 # ─── Resend Portal Login ───────────────────────────────────────────────────────
 
 class ResendPortalLoginView(APIView):
-    """
-    POST /api/recruitment/candidates/<pk>/resend-portal-login/
-    Issues a fresh temporary password to the candidate's existing portal account
-    and re-sends the invitation email.  Only valid once credentials have been sent.
-    """
+   
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
@@ -1409,10 +1441,7 @@ class ResendPortalLoginView(APIView):
 # ─── Referrals ────────────────────────────────────────────────────────────────
 
 class ReferralListCreateView(APIView):
-    """
-    GET  /recruitment/referrals/  — my referrals (any authenticated user)
-    POST /recruitment/referrals/  — submit a referral (any authenticated user)
-    """
+   
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1426,9 +1455,7 @@ class ReferralListCreateView(APIView):
         return success('Referrals fetched.', paginated_data(paginator, page_obj, serializer.data))
 
     def post(self, request):
-        # Any authenticated employee may refer a candidate, but only with
-        # referral-safe fields — branch/interview scheduling/interviewer are
-        # HR-only concerns and must not be settable via this endpoint.
+        
         serializer = ReferralSubmitSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
@@ -1452,9 +1479,7 @@ class ReferralListCreateView(APIView):
 
 
 class ReferralAllView(APIView):
-    """
-    GET /recruitment/referrals/all/ — all referrals from all employees (HR/admin)
-    """
+    
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1494,10 +1519,7 @@ class ReferralAllView(APIView):
 # ─── Referral Rules ───────────────────────────────────────────────────────────
 
 class ReferralRuleListCreateView(APIView):
-    """
-    GET  /recruitment/referral-rules/  — list all rules (any authenticated user)
-    POST /recruitment/referral-rules/  — create a rule (settings.view permission)
-    """
+    
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1516,10 +1538,7 @@ class ReferralRuleListCreateView(APIView):
 
 
 class ReferralRuleDetailView(APIView):
-    """
-    PATCH  /recruitment/referral-rules/<pk>/  — partial update (settings.view permission)
-    DELETE /recruitment/referral-rules/<pk>/  — hard delete  (settings.view permission)
-    """
+   
     permission_classes = [IsAuthenticated]
 
     def _get_rule(self, pk):
@@ -1556,10 +1575,7 @@ class ReferralRuleDetailView(APIView):
 # ─── Referral Bonuses ──────────────────────────────────────────────────────────
 
 class ReferralBonusListView(APIView):
-    """
-    GET /recruitment/referral-bonuses/        — HR: all bonuses
-    GET /recruitment/referral-bonuses/?scope=my — Employee: their own bonuses
-    """
+   
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1589,10 +1605,7 @@ class ReferralBonusListView(APIView):
 
 
 class ReferralBonusDetailView(APIView):
-    """
-    GET   /recruitment/referral-bonuses/<pk>/  — view detail
-    PATCH /recruitment/referral-bonuses/<pk>/  — HR updates bonus_amount or notes before approving
-    """
+    
     permission_classes = [IsAuthenticated]
 
     def _get_bonus(self, pk):
@@ -1642,11 +1655,7 @@ class ReferralBonusDetailView(APIView):
 
 
 class ReferralBonusApproveView(APIView):
-    """
-    POST /recruitment/referral-bonuses/<pk>/approve/
-    HR approves a pending bonus. Sets status to approved.
-    Optionally accepts bonus_amount and notes in the body.
-    """
+   
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
@@ -1695,10 +1704,7 @@ class ReferralBonusApproveView(APIView):
 
 
 class ReferralBonusPayView(APIView):
-    """
-    POST /recruitment/referral-bonuses/<pk>/pay/
-    HR marks an approved bonus as paid after processing through payroll.
-    """
+    
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
@@ -1781,13 +1787,7 @@ def _parse_csv_rows(file) -> tuple:
 
 
 def _xlsx_cell_to_str(value) -> str:
-    """Convert an openpyxl cell value to a plain string.
-
-    Excel date/datetime cells are returned by openpyxl as Python date or
-    datetime objects. Calling str() on them produces "2026-07-15 00:00:00"
-    which fails every DateField format pattern. We normalise them to
-    YYYY-MM-DD so the serializer can parse them without issue.
-    """
+   
     import datetime as _dt
     if isinstance(value, _dt.datetime):
         return value.strftime('%Y-%m-%d')
@@ -1826,12 +1826,6 @@ def _parse_xlsx_rows(file) -> tuple:
 
 
 class CandidateBulkImportView(APIView):
-    """POST /api/recruitment/candidates/bulk-import/
-
-    Accepts multipart/form-data with file= (.csv or .xlsx).
-    Validates every row independently and returns a full error report.
-    """
-
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser]
 
@@ -2020,14 +2014,7 @@ class CandidateBulkImportView(APIView):
 # ─── Candidate Bulk Import — Sample Template ──────────────────────────────────
 
 class CandidateBulkImportSampleView(APIView):
-    """
-    GET /api/recruitment/candidates/bulk-import/sample/?format=csv
-    GET /api/recruitment/candidates/bulk-import/sample/?format=xlsx
-
-    Download a sample import template for Candidate Bulk Import.
-    Headers match the column aliases accepted by CandidateBulkImportView exactly.
-    Permission mirrors the upload endpoint (system_admin / hr / hr_admin only).
-    """
+   
     permission_classes = [IsAuthenticated]
 
     def perform_content_negotiation(self, request, force=False):
