@@ -214,6 +214,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.hrms.tasks.reset_annual_leave_balances',
         'schedule': crontab(hour=0, minute=1, day_of_month=1, month_of_year=1),
     },
+    # Runs daily at 10:00 IST — nudges managers who haven't approved payroll
+    # attendance within 24 hours of the cycle being created.
+    'send-payroll-approval-reminders': {
+        'task':     'apps.payroll.tasks.send_payroll_approval_reminders',
+        'schedule': crontab(hour=10, minute=0),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────

@@ -177,18 +177,8 @@ class PayrollCycleListView(APIView):
                 for m in managers
             ])
 
-            from apps.notifications.signals import _notify
-            period = f'{cycle_start} – {cycle_end}'
-            for manager in managers:
-                _notify(
-                    manager,
-                    'Attendance Approval Required',
-                    f'Payroll for {period} has been initiated and requires your attendance sign-off.',
-                    'attendance',
-                    'payroll',
-                    str(cycle.id),
-                    request.user,
-                )
+            from apps.payroll.notifications import notify_l1_approval_required
+            notify_l1_approval_required(cycle)
         except Exception:
             logger.exception(
                 'Failed to seed manager approvals or send notifications for cycle %s', cycle.id,
@@ -342,6 +332,12 @@ class AttendanceApprovalView(APIView):
                     'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
                 ])
                 logger.info('Cycle %s: all managers approved — L1 complete', pk)
+                if requires_l2:
+                    try:
+                        from apps.payroll.notifications import notify_l2_approval_required
+                        notify_l2_approval_required(cycle)
+                    except Exception:
+                        logger.exception('Failed to send L2 payroll notifications for cycle %s', pk)
 
             return success('Your attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
