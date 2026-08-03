@@ -8,6 +8,8 @@ import { usePermission } from "@/hooks/usePermission";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
+  apiDocumentToEntry,
+  type ApiDocument,
   type DetailValues,
   type DocEntry,
   type FieldOption,
@@ -42,16 +44,6 @@ interface ApiProfile {
   uan_number?: string; name_as_per_aadhar?: string;
 }
 
-interface ApiDocument {
-  id: number;
-  document_type: string;
-  document_type_display: string;
-  file: string;
-  file_name: string;
-  file_size: number;
-  uploaded_at: string;
-}
-
 interface ApiEmployee {
   id: string; uuid: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
@@ -66,8 +58,6 @@ interface ApiEmployee {
   documents?: ApiDocument[];
 }
 
-const DOC_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
 function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
   // Use the static expected document types as the base list so the cards section
   // always shows all document slots — uploaded ones get their file info merged in.
@@ -75,17 +65,8 @@ function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
   const base: DocEntry[] = docsSection?.kind === "docs" ? [...docsSection.documents] : [];
 
   return base.map(expected => {
-    const uploaded = apiDocs.find(d => d.document_type_display === expected.name);
-    if (!uploaded) return expected;
-    const dt = new Date(uploaded.uploaded_at);
-    return {
-      ...expected,
-      status: "pending" as const,
-      uploadedOn: `${DOC_MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
-      fileUrl: uploaded.file,
-      fileName: uploaded.file_name,
-      fileSize: uploaded.file_size,
-    };
+    const uploaded = apiDocs.find(d => d.document_type === expected.documentType);
+    return uploaded ? apiDocumentToEntry(expected, uploaded) : expected;
   });
 }
 
@@ -178,9 +159,6 @@ export default function EmployeeProfilePage({
 }) {
   const { id } = use(params);
   const canEdit = usePermission("employees.edit");
-  // /roles/ is gated server-side to settings.edit holders — skip the call
-  // entirely for everyone else instead of firing a request that always 403s.
-  const canViewRoles = usePermission("settings.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
 
@@ -205,15 +183,13 @@ export default function EmployeeProfilePage({
   const [roleOptions,     setRoleOptions]     = useState<FieldOption[]>([]);
   const [branchOptions,   setBranchOptions]   = useState<FieldOption[]>([]);
 
-  // fetch dropdown lists once on mount — use allSettled so one 403 (e.g. roles for
-  // non-admin users) does not block departments/designations/branches from loading
+  // fetch dropdown lists once on mount — use allSettled so one failing fetch
+  // does not block the others from loading
   useEffect(() => {
     Promise.allSettled([
       clientApi.get<{ data: { results: { id: number; name: string }[] } }>(API.departments.list),
       clientApi.get<{ data: unknown }>(API.designations.list),
-      canViewRoles
-        ? clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`)
-        : Promise.resolve(null),
+      clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
     ]).then(([depts, desigs, roles, branches]) => {
       if (depts.status === "fulfilled")
@@ -222,7 +198,7 @@ export default function EmployeeProfilePage({
         const desigData = desigs.value.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
         setAllDesigs(Array.isArray(desigData) ? desigData : (desigData.results ?? []));
       }
-      if (roles.status === "fulfilled" && roles.value)
+      if (roles.status === "fulfilled")
         setRoleOptions(
           roles.value.data.data.results
             .filter(r => r.name !== "system_admin")
@@ -231,7 +207,7 @@ export default function EmployeeProfilePage({
       if (branches.status === "fulfilled")
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
     });
-  }, [canViewRoles]);
+  }, []);
 
   // filter designations whenever the selected department changes
   useEffect(() => {
@@ -390,6 +366,12 @@ export default function EmployeeProfilePage({
     setJustSaved(false);
     setIsEditing(false);
   }
+  function onDocumentUploaded(entry: DocEntry) {
+    setEmployee(emp => emp && {
+      ...emp,
+      documents: (emp.documents ?? []).map(d => d.documentType === entry.documentType ? entry : d),
+    });
+  }
 
   const activeTab = PROFILE_TABS.find(t => t.id === tab)!;
   const isPendingOnboarding = onboardingStatus === "pending" || onboardingStatus === "draft";
@@ -449,6 +431,8 @@ export default function EmployeeProfilePage({
               dirty={dirty}
               saving={saving}
               liveDocuments={sectionId === "documents" ? employee.documents : undefined}
+              employeeId={id}
+              onDocumentUploaded={onDocumentUploaded}
               fieldOptions={{
                 department: [
                   { value: "", label: "Select department" },

@@ -776,17 +776,21 @@ def _employee_doc_path(instance, filename):
 
 
 class EmployeeDocument(models.Model):
-    TYPE_PAN        = 'pan_card'
-    TYPE_AADHAAR    = 'aadhaar_card'
-    TYPE_DEGREE     = 'degree_certificate'
-    TYPE_EXPERIENCE = 'experience_letter'
-    TYPE_OTHER      = 'other'
+    TYPE_PAN               = 'pan_card'
+    TYPE_AADHAAR           = 'aadhaar_card'
+    TYPE_DEGREE            = 'degree_certificate'
+    TYPE_EXPERIENCE        = 'experience_letter'
+    TYPE_PASSPORT_PHOTO    = 'passport_photo'
+    TYPE_CANCELLED_CHEQUE  = 'cancelled_cheque'
+    TYPE_OTHER             = 'other'
     TYPE_CHOICES    = [
-        (TYPE_PAN,        'PAN Card'),
-        (TYPE_AADHAAR,    'Aadhaar Card'),
-        (TYPE_DEGREE,     'Degree Certificate'),
-        (TYPE_EXPERIENCE, 'Experience Letter'),
-        (TYPE_OTHER,      'Other'),
+        (TYPE_PAN,              'PAN Card'),
+        (TYPE_AADHAAR,          'Aadhaar Card'),
+        (TYPE_DEGREE,           'Degree Certificate'),
+        (TYPE_EXPERIENCE,       'Experience Letter'),
+        (TYPE_PASSPORT_PHOTO,   'Passport Photo'),
+        (TYPE_CANCELLED_CHEQUE, 'Cancelled Cheque'),
+        (TYPE_OTHER,            'Other'),
     ]
 
     ALLOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'application/pdf'}
