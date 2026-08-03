@@ -172,6 +172,10 @@ def execute_confirm_leave_approval(request, action: str, request_id: Optional[st
     verb = 'approved' if action == 'approve' else 'rejected'
     subject = f"{employee_name}'s" if employee_name else 'The'
     message = f'{subject} leave request has been {verb}.'
+
+    from apps.dashboard.views.overview import push_leave_update
+    push_leave_update(request.user.id)
+
     return ExecutionResult(success=True, message=message, data=data)
 
 
@@ -188,6 +192,15 @@ def execute_check_team_attendance(request) -> ExecutionResult:
 
     Summarizes the stat-card counts in one sentence, same style as
     check_attendance_stats — not the full per-employee list.
+
+    stat_cards alone only carries present/absent/late/on_leave/total — it has
+    no half-day tile (get_dashboard_stats, services_hr.py:118-125), so a
+    half-day employee is correctly excluded from `absent` but never shows up
+    in `present_today` either. The dashboard UI covers that gap with a
+    separate summary_chips row (AttendanceTab.tsx CHIP_CONFIG) that includes
+    half_day — mirror that here so the spoken summary doesn't silently drop
+    people the same way the My Attendance page never collapses Days Present/
+    Days Absent/Leave Days/Half Days into just two numbers.
     """
     django_request = _api_request_factory.get('/api/attendance/dashboard/')
     force_authenticate(django_request, user=request.user)
@@ -201,10 +214,15 @@ def execute_check_team_attendance(request) -> ExecutionResult:
 
     data = response.data.get('data') if isinstance(response.data, dict) else None
     stat_cards = data.get('stat_cards', {}) if isinstance(data, dict) else {}
+    summary_chips = data.get('summary_chips', {}) if isinstance(data, dict) else {}
+
+    half_day = summary_chips.get('half_day', 0)
+    leave_days = stat_cards.get('on_leave', summary_chips.get('on_leave', 0))
 
     message = (
         f"Today, {stat_cards.get('present_today', 0)} of {stat_cards.get('total_employees', 0)} "
         f"team members are present, {stat_cards.get('absent', 0)} absent, "
-        f"{stat_cards.get('on_leave', 0)} on leave, and {stat_cards.get('late_arrivals', 0)} arrived late."
+        f"{leave_days} on leave, {half_day} on half-day, "
+        f"and {stat_cards.get('late_arrivals', 0)} arrived late."
     )
     return ExecutionResult(success=True, message=message, data=data)

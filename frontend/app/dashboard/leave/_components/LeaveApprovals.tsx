@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import { LeaveRequest, PaginatedResponse, ReqStatus, STATUS_LABEL, fmtShortDate } from "../_data";
 import StatusCell from "./StatusCell";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
@@ -22,8 +24,9 @@ interface Props {
 }
 
 export default function LeaveApprovals({ role }: Props) {
-  const isSystemAdmin = role === "system_admin";
-  const canFilterDept  = role === "system_admin" || role === "hr";
+  const currentUser   = useCurrentUser();
+  const isSystemAdmin = currentUser?.is_superuser === true;
+  const canFilterDept = usePermission("leave.approve");
 
   const [branch,     setBranch]     = useState("");
   const [department, setDepartment] = useState("");
@@ -56,6 +59,12 @@ export default function LeaveApprovals({ role }: Props) {
     `${API.leave.requests}?${params.toString()}`
   );
   const rows = data?.results ?? [];
+
+  useEffect(() => {
+    function handleLeaveUpdate() { refetch(); }
+    window.addEventListener("leave:updated", handleLeaveUpdate);
+    return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
+  }, [refetch]);
 
   async function act(id: string, action: "approve" | "reject", rejectRemarks = "") {
     setActioning(id);

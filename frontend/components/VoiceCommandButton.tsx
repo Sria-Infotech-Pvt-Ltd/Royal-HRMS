@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
@@ -9,6 +9,18 @@ import VoiceConversationPanel from "@/components/VoiceConversationPanel";
 
 const FAB_SIZE = 56;
 const MUTE_TOGGLE_SIZE = 32;
+const IDLE_SIZE = 46;
+
+// Dragging only ever moves the idle orb (46px), but it can expand into the
+// full mute/keyboard/mic row afterward — reserve room for that wider/taller
+// shape so a corner drop never leaves the expanded row spilling off-screen.
+const EDGE_MARGIN = 8;
+const SAFE_W = 180;
+const SAFE_H = 90;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
 
 // Routes where the button shouldn't render at all — not disabled, absent —
 // since there's no session context worth surfacing on the auth screens
@@ -32,18 +44,114 @@ export default function VoiceCommandButton() {
     submitTranscript, conversation, closeConversation,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
-  // Lets a user type the very first command instead of speaking it — the
-  // typed-answer input for mid-conversation follow-ups already exists in
-  // VoiceConversationPanel; this is the same idea, just for before any
-  // conversation has started. Local UI-only state (not lifted into
+  // Lets a user open a chat-style box to type the very first command instead
+  // of speaking it — opens the same VoiceConversationPanel used for the rest
+  // of the exchange (see the "greeting" phase branch below), just ahead of
+  // any real conversation existing yet. Local UI-only state (not lifted into
   // useVoiceCommand) since nothing outside this component's render needs it.
   const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
-  const [typedValue, setTypedValue] = useState("");
-
-  if (HIDDEN_ROUTES.includes(pathname)) return null;
 
   const isListening  = status === "listening";
   const isProcessing = status === "processing";
+
+  // Idle state: the FAB rests as a small orb and only expands to the full
+  // mic/mute/keyboard row on hover (desktop) or tap (touch — no real hover
+  // event, so the orb's own onClick also expands it). Always expanded while
+  // actually in use so it can never collapse out from under an active
+  // interaction.
+  const [isHovered, setIsHovered] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isBusy = isListening || isProcessing || isTypedInputOpen || !!interimTranscript;
+  const showExpanded = isHovered || isBusy;
+
+  // Draggable widget — lets a user physically move it off whatever it's
+  // covering (table pagination, wizard footers) instead of just hoping the
+  // default corner never collides with page content. Deliberately in-memory
+  // only, not persisted — it survives client-side navigation (this component
+  // lives in the root layout, which React Router keeps mounted across route
+  // changes) but resets to the default corner on an actual page reload, by
+  // design. Declared before the outside-click effect below, which reads
+  // isDragging.
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStateRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
+  const justDraggedRef = useRef(false);
+
+  // Re-clamp on resize so a drag from earlier in the session doesn't drift
+  // off-screen after resizing the window.
+  useEffect(() => {
+    function handleResize() {
+      setDragPos(prev => prev && {
+        x: clamp(prev.x, EDGE_MARGIN, window.innerWidth - SAFE_W),
+        y: clamp(prev.y, EDGE_MARGIN, window.innerHeight - SAFE_H),
+      });
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Touch devices don't fire mouseleave, so an expanded-by-tap orb would
+  // otherwise stay expanded forever — collapse on the next tap/click
+  // anywhere outside the widget instead, but never while actually busy or
+  // mid-drag (a drag must never trigger a state change that swaps out the
+  // element currently holding pointer capture).
+  useEffect(() => {
+    if (!isHovered || isBusy || isDragging) return;
+    function handleOutside(e: MouseEvent | TouchEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsHovered(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
+  }, [isHovered, isBusy, isDragging]);
+
+  function handleDragPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragStateRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handleDragPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const ds = dragStateRef.current;
+    if (!ds) return;
+    const dx = e.clientX - ds.startX;
+    const dy = e.clientY - ds.startY;
+    // Threshold so an ordinary click doesn't register as a drag — a real
+    // mouse click alone can easily move 4-5px between press and release,
+    // which was previously enough to misfire and save a stray position.
+    if (!ds.moved && Math.hypot(dx, dy) > 10) {
+      ds.moved = true;
+      setIsDragging(true);
+    }
+    if (ds.moved) {
+      setDragPos({
+        x: clamp(ds.origX + dx, EDGE_MARGIN, window.innerWidth - SAFE_W),
+        y: clamp(ds.origY + dy, EDGE_MARGIN, window.innerHeight - SAFE_H),
+      });
+    }
+  }
+
+  function handleDragPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
+    const ds = dragStateRef.current;
+    if (ds?.moved) {
+      // The click event that follows this pointerup must not also expand
+      // the orb — the drag itself was the intended action.
+      justDraggedRef.current = true;
+      const x = clamp(ds.origX + (e.clientX - ds.startX), EDGE_MARGIN, window.innerWidth - SAFE_W);
+      const y = clamp(ds.origY + (e.clientY - ds.startY), EDGE_MARGIN, window.innerHeight - SAFE_H);
+      setDragPos({ x, y });
+    }
+    dragStateRef.current = null;
+    setIsDragging(false);
+  }
+
+  if (HIDDEN_ROUTES.includes(pathname)) return null;
 
   const disabledReason = !isAuthenticated
     ? "Log in to use voice commands"
@@ -54,19 +162,6 @@ export default function VoiceCommandButton() {
   // enforces regardless). Gating on isAuthenticated alone, not isDisabled,
   // means this also becomes the working fallback on non-Chromium browsers.
   const canType = isAuthenticated;
-
-  function handleTypedSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = typedValue.trim();
-    if (!trimmed || isProcessing) return;
-    setTypedValue("");
-    setIsTypedInputOpen(false);
-    // Same submitTranscript() the recognized-speech path and the mid-
-    // conversation typed-answer input both call — one /api/voice/parse/
-    // flow and one response-handling path for every submission, spoken or
-    // typed, first turn or follow-up.
-    submitTranscript(trimmed);
-  }
 
   // Every voice response now opens this panel — the recognized transcript
   // while the request is in flight, then the result, whether the intent was
@@ -91,7 +186,43 @@ export default function VoiceCommandButton() {
         onStartListening={startListening}
         onStopListening={stopListening}
         onSubmitText={submitTranscript}
-        onClose={closeConversation}
+        onClose={() => { setIsHovered(false); closeConversation(); }}
+        isMuted={isMuted}
+        onToggleMute={toggleMuted}
+      />
+    );
+  }
+
+  // Keyboard toggle opens the same panel component in its "greeting" phase —
+  // a chat box with a static hello and the typed/mic input controls, open
+  // before any real command exists. Submitting from here calls submitTranscript
+  // the same as every other entry point, which sets `conversation` and hands
+  // rendering back to the branch above for the rest of the exchange.
+  //
+  // Gated on canType, not isDisabled — same reasoning as canType's own
+  // definition above: typing needs only authentication, not Web Speech API
+  // support, so this chat box must still open on non-Chromium browsers (the
+  // one place typed commands work at all there). On such a browser,
+  // submitTranscript's own isDisabled check still routes the *result* to a
+  // toast instead of setting `conversation` (see its docstring) — this panel
+  // simply stays open afterwards, ready for the next typed command, rather
+  // than transitioning to a transcript/result view it can't show there.
+  if (isTypedInputOpen && canType) {
+    return (
+      <VoiceConversationPanel
+        transcript=""
+        message=""
+        phase="greeting"
+        conversational={false}
+        awaitingInput={false}
+        resultStatus={null}
+        isListening={isListening}
+        isProcessing={isProcessing}
+        interimTranscript={interimTranscript}
+        onStartListening={startListening}
+        onStopListening={stopListening}
+        onSubmitText={submitTranscript}
+        onClose={() => setIsTypedInputOpen(false)}
         isMuted={isMuted}
         onToggleMute={toggleMuted}
       />
@@ -100,8 +231,14 @@ export default function VoiceCommandButton() {
 
   return (
     <div
+      ref={containerRef}
+      onMouseEnter={() => { if (!isDragging) setIsHovered(true); }}
+      onMouseLeave={() => { if (!isBusy && !isDragging) setIsHovered(false); }}
       style={{
-        position: "fixed", right: 20, bottom: 20, zIndex: 1000,
+        position: "fixed", zIndex: 1000,
+        ...(dragPos
+          ? { left: dragPos.x, top: dragPos.y }
+          : { right: 4, bottom: 4 }),
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8,
       }}
     >
@@ -122,49 +259,38 @@ export default function VoiceCommandButton() {
         </div>
       )}
 
-      {/* Typed-first-command row — only reachable via the keyboard toggle
-          below, and hidden the moment listening starts so it never fights
-          the interim-transcript bubble above for the same space. */}
-      {isTypedInputOpen && !isListening && (
-        <form
-          onSubmit={handleTypedSubmit}
-          style={{ display: "flex", gap: 6, width: 260, maxWidth: "calc(100vw - 40px)" }}
+      {!showExpanded ? (
+        // Idle resting state — a small orb, not the full row, so the widget
+        // stops competing with page content (table pagination, wizard
+        // footers) for the same corner. Hover/tap expands it below; press
+        // and drag physically moves it (position persists across reloads).
+        <button
+          onMouseEnter={() => { if (!isDragging) setIsHovered(true); }}
+          onClick={() => {
+            if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+            setIsHovered(true);
+          }}
+          onPointerDown={handleDragPointerDown}
+          onPointerMove={handleDragPointerMove}
+          onPointerUp={handleDragPointerUp}
+          onPointerCancel={handleDragPointerUp}
+          aria-label={isDisabled ? disabledReason : "Open voice assistant — press and drag to move"}
+          title={isDisabled ? disabledReason : "Voice assistant — drag to move"}
+          data-testid="voice-fab-idle"
+          className={!isDisabled && !isDragging ? "voice-fab-idle-pulse" : undefined}
+          style={{
+            width: IDLE_SIZE, height: IDLE_SIZE, borderRadius: "50%", border: "none",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+            cursor: isDragging ? "grabbing" : "pointer",
+            touchAction: "none", userSelect: "none",
+            background: isDisabled ? "var(--bg-low)" : "var(--primary)",
+            color: isDisabled ? "var(--on-variant)" : "#fff",
+            boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
+          }}
         >
-          <input
-            type="text"
-            autoFocus
-            value={typedValue}
-            onChange={(e) => setTypedValue(e.target.value)}
-            placeholder="Type a command…"
-            disabled={isProcessing}
-            data-testid="voice-fab-typed-input"
-            style={{
-              flex: 1, height: 38, borderRadius: 10, border: "1.5px solid var(--outline-v)",
-              background: "var(--surface)", color: "var(--on-bg)", fontSize: 13,
-              padding: "0 12px", outline: "none", minWidth: 0,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!typedValue.trim() || isProcessing}
-            aria-label="Send typed command"
-            title="Send"
-            data-testid="voice-fab-typed-send"
-            style={{
-              width: 38, height: 38, borderRadius: 10, border: "none",
-              background: "var(--primary)", color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: !typedValue.trim() || isProcessing ? "not-allowed" : "pointer",
-              opacity: !typedValue.trim() || isProcessing ? 0.7 : 1,
-              flexShrink: 0,
-            }}
-          >
-            <i className="ti ti-send" style={{ fontSize: 15 }} />
-          </button>
-        </form>
-      )}
-
+          <i className={`ti ${isDisabled ? "ti-microphone-off" : "ti-microphone"}`} />
+        </button>
+      ) : (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {!isDisabled && (
           <button
@@ -207,18 +333,28 @@ export default function VoiceCommandButton() {
         )}
 
         <button
-          onClick={isDisabled ? undefined : (isListening ? stopListening : () => { setIsTypedInputOpen(false); startListening(); })}
+          onClick={() => {
+            if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+            if (isDisabled) return;
+            if (isListening) stopListening();
+            else { setIsTypedInputOpen(false); startListening(); }
+          }}
+          onPointerDown={isDisabled ? undefined : handleDragPointerDown}
+          onPointerMove={isDisabled ? undefined : handleDragPointerMove}
+          onPointerUp={isDisabled ? undefined : handleDragPointerUp}
+          onPointerCancel={isDisabled ? undefined : handleDragPointerUp}
           disabled={isDisabled}
-          title={isDisabled ? disabledReason : (isListening ? "Click to stop and send" : "Click to speak a voice command")}
+          title={isDisabled ? disabledReason : (isListening ? "Click to stop and send — press and drag to move" : "Click to speak a voice command — press and drag to move")}
           data-testid="voice-fab"
           style={{
             width: FAB_SIZE, height: FAB_SIZE, borderRadius: "50%", border: "none",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
-            cursor: isDisabled || isProcessing ? "not-allowed" : "pointer",
+            cursor: isDisabled || isProcessing ? "not-allowed" : isDragging ? "grabbing" : "pointer",
+            touchAction: "none",
             background: isDisabled ? "var(--bg-low)" : isListening ? "var(--error)" : "var(--primary)",
             color: isDisabled ? "var(--on-variant)" : "#fff",
             opacity: isProcessing ? 0.7 : 1,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+            boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
             userSelect: "none",
             transition: "background 0.15s, opacity 0.15s",
           }}
@@ -233,6 +369,7 @@ export default function VoiceCommandButton() {
           )}
         </button>
       </div>
+      )}
     </div>
   );
 }

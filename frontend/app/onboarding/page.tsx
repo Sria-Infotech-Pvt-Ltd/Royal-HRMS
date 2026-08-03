@@ -53,7 +53,7 @@ const DOC_TYPES = [
 const INP = "field-input";
 const SEL = "field-input";
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const router = useRouter();

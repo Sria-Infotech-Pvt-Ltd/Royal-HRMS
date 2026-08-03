@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
-import { useAnyPermission } from "@/hooks/usePermission";
+import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { ApprovalModal } from "./ApprovalModal";
 import StatusCell from "../leave/_components/StatusCell";
@@ -165,6 +165,12 @@ function TeamApprovalsSection() {
   const { data: expenseRaw,    loading: expenseLoading, error: expenseError, refetch: refetchExpense } = useFetch<ExpenseListResponse>( type === "expense" ? API.approvals.expenseList                        : null);
   const leaveItems:   LeaveRequest[]   = leaveRaw?.results   ?? [];
   const expenseItems: ExpenseRequest[] = expenseRaw?.results ?? [];
+
+  useEffect(() => {
+    function handleLeaveUpdate() { refetchLeave(); }
+    window.addEventListener("leave:updated", handleLeaveUpdate);
+    return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
+  }, [refetchLeave]);
 
   const [modal, setModal] = useState<{
     id:            string;
@@ -330,6 +336,7 @@ function TeamApprovalsSection() {
           employeeName={modal.employeeName}
           employeeEmail={modal.employeeEmail}
           kind={modal.kind === "leave" || modal.kind === "expense" ? modal.kind : undefined}
+          entityId={modal.id}
           autoVars={modal.autoVars}
           onConfirm={handleConfirm}
           onClose={() => setModal(null)}
@@ -345,11 +352,15 @@ function TeamApprovalsSection() {
 export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
-  const isHR = user?.role === "hr" || user?.role === "hr_admin";
-  const canApprove         = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
-  // Attendance sign-off moved to Leave Management for HR — keep it here for other roles (e.g. manager).
-  const hasPayrollPerm       = useAnyPermission("payroll.view", "payroll.approve");
-  const canApproveAttendance = (user?.can_manage_team === true) || (hasPayrollPerm && !isHR);
+  const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
+  const hasPayrollView  = usePermission("payroll.view");
+  const hasLeaveApprove = usePermission("leave.approve");
+  // Managers always get this tab. Payroll admins (payroll.view but not leave.approve) also get it.
+  // HR (who have leave.approve) use Leave Management page for attendance sign-off instead.
+  const canApproveAttendance =
+    user?.can_manage_team === true ||
+    user?.is_superuser === true ||
+    (hasPayrollView && !hasLeaveApprove);
 
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
     ...(canApprove           ? [{ key: "approvals"  as Section, label: "Team Approvals",       icon: "ti-checks"       }] : []),

@@ -6,6 +6,8 @@ from typing import Optional
 
 from django.utils import timezone
 
+from rest_framework.test import APIRequestFactory, force_authenticate
+
 from core.responses import get_client_ip
 
 from apps.attendance.models import AttendancePunch
@@ -15,14 +17,20 @@ from apps.attendance.serializers_my_attendance import (
     StatsSerializer,
 )
 from apps.attendance.services_attendance import AttendanceDashboardService, PunchService
+from apps.attendance.views.my_attendance import AttendanceCorrectionView
 
 from apps.voice_commands.executor_result import ExecutionResult
 
 logger = logging.getLogger(__name__)
 
-_CORRECTION_NEEDS_DASHBOARD_MESSAGE = (
-    'Attendance corrections need a date, punch type, and reason — please submit this from the dashboard.'
-)
+_CORRECTION_SUBMIT_FAILED_MESSAGE = 'Could not submit the attendance correction request.'
+
+# Building a request through this doesn't touch the database or any shared
+# state, just Django's request/response plumbing — same reasoning
+# executor_leave.py's own factory instance gives; kept as a separate
+# instance here rather than importing that one, matching the existing
+# one-factory-per-executor-module convention.
+_api_request_factory = APIRequestFactory()
 
 
 def execute_clock_in(
@@ -108,6 +116,18 @@ def _execute_punch(
     except PermissionError as exc:
         return ExecutionResult(success=False, message=str(exc))
 
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        layer = get_channel_layer()
+        if layer:
+            async_to_sync(layer.group_send)(
+                f'notifications_{request.user.id}',
+                {'type': 'attendance.update'},
+            )
+    except Exception:
+        pass
+
     return ExecutionResult(success=True, message=success_message)
 
 
@@ -139,12 +159,37 @@ def execute_check_attendance_summary(request) -> ExecutionResult:
     return ExecutionResult(success=True, message=message, data=data)
 
 
-def execute_request_attendance_correction() -> ExecutionResult:
+def execute_request_attendance_correction(request, slots: dict) -> ExecutionResult:
     """
-    AttendanceCorrectionView.post() (attendance/views/my_attendance.py:252-265)
-    needs date, punch_type, and the correct in/out time(s) plus a reason —
-    none of which voice can reliably capture without slot-filling
-    infrastructure that doesn't exist yet. Rather than guess or half-fill the
-    payload, always defer to the dashboard until that infrastructure is built.
+    Submits the fully-collected slots (date, punch_type, correct_in_time
+    and/or correct_out_time, reason — see voice_commands/
+    conversation_attendance_correction.py for how they're gathered across
+    turns) to AttendanceCorrectionView.post() directly, rather than
+    duplicating its conflict-check (one pending correction per date) and
+    audit-logging here — same APIRequestFactory + force_authenticate
+    approach executor_leave.execute_apply_leave uses for
+    LeaveRequestListCreateView.
     """
-    return ExecutionResult(success=False, message=_CORRECTION_NEEDS_DASHBOARD_MESSAGE)
+    payload = {
+        'date': slots['date'].isoformat(),
+        'punch_type': slots['punch_type'],
+        'reason': slots['reason'],
+    }
+    if slots.get('correct_in_time'):
+        payload['correct_in_time'] = slots['correct_in_time'].strftime('%H:%M')
+    if slots.get('correct_out_time'):
+        payload['correct_out_time'] = slots['correct_out_time'].strftime('%H:%M')
+
+    django_request = _api_request_factory.post('/api/attendance/correction/', payload, format='json')
+    force_authenticate(django_request, user=request.user)
+    response = AttendanceCorrectionView.as_view()(django_request)
+
+    if response.status_code >= 400:
+        message = _CORRECTION_SUBMIT_FAILED_MESSAGE
+        if isinstance(response.data, dict) and response.data.get('message'):
+            message = response.data['message']
+        return ExecutionResult(success=False, message=message, data=response.data)
+
+    data = response.data.get('data') if isinstance(response.data, dict) else None
+    message = response.data.get('message') if isinstance(response.data, dict) else _CORRECTION_SUBMIT_FAILED_MESSAGE
+    return ExecutionResult(success=True, message=message, data=data)

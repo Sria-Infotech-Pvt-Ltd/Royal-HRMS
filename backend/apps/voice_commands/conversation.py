@@ -3,28 +3,34 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from apps.voice_commands.approval_extractor import (
-    extract_employee_name_query,
-    parse_yes_no,
-    strip_employee_name_phrases,
-)
+from apps.voice_commands.approval_extractor import strip_employee_name_phrases
 from apps.voice_commands.clarification import clear_pending, get_pending, set_pending
+from apps.voice_commands.conversation_attendance_correction import (
+    continue_request_attendance_correction,
+    start_request_attendance_correction,
+)
 from apps.voice_commands.conversation_clarification import (
     CLARIFICATION_STAGE,
     continue_clarification,
     start_clarification,
+)
+from apps.voice_commands.conversation_leave_approval import (
+    LEAVE_APPROVAL_INTENTS,
+    continue_leave_approval,
+    start_leave_approval,
 )
 from apps.voice_commands.conversation_payroll import (
     PAYROLL_CONVERSATIONAL_INTENTS,
     continue_payroll_conversation,
     start_payroll_conversation,
 )
+from apps.voice_commands.correction_slot_extractor import strip_correction_slot_phrases
 from apps.voice_commands.executor import (
     INTENT_APPLY_LEAVE,
-    INTENT_APPROVE_LEAVE,
-    INTENT_REJECT_LEAVE,
+    INTENT_REQUEST_ATTENDANCE_CORRECTION,
     execute_intent,
 )
+from apps.voice_commands.expired_answer_detector import looks_like_expired_slot_answer as _looks_like_expired_slot_answer
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational, match_intent
 from apps.voice_commands.mode_extractor import extract_attendance_mode
 from apps.voice_commands.normalizer import normalize_transcript
@@ -34,21 +40,20 @@ from apps.voice_commands.payslip_extractor import (
 )
 from apps.voice_commands.slot_extractor import (
     extract_apply_leave_slots,
-    extract_date_range,
-    extract_leave_type,
     next_missing_slot,
     parse_slot_answer,
     question_for_slot,
     strip_leave_slot_phrases,
 )
 
-_LEAVE_APPROVAL_INTENTS = (INTENT_APPROVE_LEAVE, INTENT_REJECT_LEAVE)
-_LEAVE_APPROVAL_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
-
 logger = logging.getLogger(__name__)
 
 _NO_MATCH_MESSAGE = "Sorry, I didn't understand that command."
-_EXPIRED_CLARIFICATION_MESSAGE = "Your leave application timed out — let's start over."
+# Generic on purpose — apply_leave was the only conversational intent when
+# this was first written, but request_attendance_correction is conversational
+# now too (see _looks_like_expired_slot_answer below), and any future
+# multi-turn intent will hit this same branch.
+_EXPIRED_CLARIFICATION_MESSAGE = "Your request timed out — let's start over."
 
 
 def handle_transcript(
@@ -95,7 +100,8 @@ def handle_transcript(
     text = strip_leave_slot_phrases(intent_text)
     text = strip_employee_name_phrases(text)
     text = strip_payslip_query_phrases(text)
-    matching_text = strip_payslip_employee_name_phrases(text)
+    text = strip_payslip_employee_name_phrases(text)
+    matching_text = strip_correction_slot_phrases(text)
     fresh_match = match_intent(matching_text, lang=lang)
 
     if pending and fresh_match.intent != NO_MATCH_INTENT and fresh_match.intent != pending['intent']:
@@ -109,24 +115,34 @@ def handle_transcript(
     if pending:
         if pending['slots'].get('stage') == CLARIFICATION_STAGE:
             return continue_clarification(request, pending, normalized, _dispatch_matched_intent)
-        if pending['intent'] in _LEAVE_APPROVAL_INTENTS:
-            return _continue_leave_approval(request, pending, normalized)
+        if pending['intent'] in LEAVE_APPROVAL_INTENTS:
+            return continue_leave_approval(request, pending, normalized)
         if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
             return continue_payroll_conversation(request, pending, normalized)
+        if pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION:
+            return continue_request_attendance_correction(request, pending, normalized)
         return _continue_apply_leave(request, pending, normalized)
 
     if fresh_match.intent == NO_MATCH_INTENT:
+        # A real fuzzy-match signal against actual registered phrases beats
+        # the expired-slot-answer heuristic below, which is just a crude
+        # keyword-in-text guess — checked first so a genuinely correction-
+        # or leave-flavored first utterance that merely scores in the
+        # clarification band (e.g. mentions "clock in"/"clock out" as part
+        # of a longer sentence, which also happens to satisfy the expired-
+        # answer heuristic) gets the far more useful "did you mean" question
+        # instead of being misread as an expired session that never existed.
+        if fresh_match.candidate_intent:
+            return start_clarification(
+                request, fresh_match.candidate_intent, fresh_match.matched_phrase,
+                fresh_match.confidence, intent_text, attendance_mode, lang,
+            )
         if _looks_like_expired_slot_answer(intent_text):
             logger.info(
                 'Voice command: no pending state but transcript looks like an expired '
                 'clarification answer — user=%s transcript=%r', user.pk, transcript,
             )
             return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, _EXPIRED_CLARIFICATION_MESSAGE, success=False)
-        if fresh_match.candidate_intent:
-            return start_clarification(
-                request, fresh_match.candidate_intent, fresh_match.matched_phrase,
-                fresh_match.confidence, intent_text, attendance_mode, lang,
-            )
         logger.info(
             'Voice command no match: user=%s transcript=%r confidence=%s',
             user.pk, transcript, fresh_match.confidence,
@@ -157,11 +173,14 @@ def _dispatch_matched_intent(
     if intent == INTENT_APPLY_LEAVE:
         return _start_apply_leave(request, intent_text, confidence)
 
-    if intent in _LEAVE_APPROVAL_INTENTS:
-        return _start_leave_approval(request, intent, intent_text, confidence)
+    if intent in LEAVE_APPROVAL_INTENTS:
+        return start_leave_approval(request, intent, intent_text, confidence)
 
     if intent in PAYROLL_CONVERSATIONAL_INTENTS:
         return start_payroll_conversation(request, intent, intent_text, confidence)
+
+    if intent == INTENT_REQUEST_ATTENDANCE_CORRECTION:
+        return start_request_attendance_correction(request, intent_text, confidence)
 
     outcome = execute_intent(
         intent, request, attendance_mode=attendance_mode, lang=lang,
@@ -172,22 +191,6 @@ def _dispatch_matched_intent(
         request.user.pk, intent, confidence, outcome.success,
     )
     return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
-
-
-def _looks_like_expired_slot_answer(text: str) -> bool:
-    """
-    Best-effort guess that a transcript matching no registered command was
-    actually a targeted answer to an apply_leave clarification question —
-    e.g. "sick leave" or "july 24th" — that arrived after its 120s window
-    had already lapsed (get_pending() returned None), rather than a
-    genuinely unrecognized command. Reuses the exact signals apply_leave's
-    own slot extraction looks for (a leave-type keyword, a parseable date)
-    so an unrelated gibberish command isn't mislabeled as a timeout.
-    """
-    if extract_leave_type(text):
-        return True
-    start, end = extract_date_range(text)
-    return bool(start or end)
 
 
 def _start_apply_leave(request, intent_text: str, confidence: float) -> dict:
@@ -230,73 +233,6 @@ def _continue_apply_leave(request, pending: dict, answer_text: str) -> dict:
     set_pending(request.user.id, intent, slots)
     result = {'slots': slots, 'awaiting_slot': missing}
     return _payload(intent, None, result, question_for_slot(missing), awaiting_input=True)
-
-
-def _start_leave_approval(request, intent: str, intent_text: str, confidence: float) -> dict:
-    """First turn of approve_leave/reject_leave: pull an employee name out of
-    the utterance if one is there (e.g. "approve leave for sarah"), then
-    resolve it the same way a disambiguation retry does."""
-    name_query = extract_employee_name_query(intent_text)
-    return _resolve_leave_approval_target(request, intent, name_query, confidence)
-
-
-def _resolve_leave_approval_target(
-    request, intent: str, name_query: Optional[str], confidence: Optional[float],
-) -> dict:
-    """
-    Shared by the first turn and any "be more specific" retry — both need
-    the same identify step: look up the team's pending requests and
-    fuzzy-match name_query against them (execute_intent()'s leave.approve
-    gate runs on every call here, not just the final confirm).
-    """
-    outcome = execute_intent(intent, request, slots={'stage': 'identify', 'name_query': name_query})
-    data = outcome.data or {}
-    result_kind = data.get('outcome')
-
-    if result_kind in ('need_name', 'multiple_match'):
-        set_pending(request.user.id, intent, {'stage': 'awaiting_name'})
-        return _payload(intent, confidence, data, outcome.message, awaiting_input=True)
-
-    if result_kind == 'single_match':
-        matched = data['matched']
-        set_pending(request.user.id, intent, {'stage': 'awaiting_confirmation', 'request_id': matched['request_id']})
-        return _payload(intent, confidence, data, outcome.message, awaiting_input=True)
-
-    # zero_match, permission denied, or a lookup error — nothing to continue.
-    return _payload(intent, confidence, data or None, outcome.message, success=outcome.success)
-
-
-def _continue_leave_approval(request, pending: dict, answer_text: str) -> dict:
-    intent = pending['intent']
-    stage = pending['slots'].get('stage')
-
-    if stage == 'awaiting_confirmation':
-        return _continue_leave_approval_confirmation(request, intent, pending, answer_text)
-
-    # awaiting_name: either the very first "who do you mean" ask, or a
-    # "be more specific" retry — the whole answer text IS the name this time,
-    # not a full sentence to run the phrase-extraction regex against.
-    return _resolve_leave_approval_target(request, intent, answer_text.strip(), None)
-
-
-def _continue_leave_approval_confirmation(request, intent: str, pending: dict, answer_text: str) -> dict:
-    action = _LEAVE_APPROVAL_ACTIONS[intent]
-    decision = parse_yes_no(answer_text)
-
-    if decision is None:
-        set_pending(request.user.id, intent, pending['slots'])
-        question = f'Sorry, was that a yes or a no — should I {action} this leave request?'
-        return _payload(intent, None, None, question, awaiting_input=True)
-
-    request_id = pending['slots'].get('request_id')
-    clear_pending(request.user.id)
-
-    if not decision:
-        verb = 'approved' if action == 'approve' else 'rejected'
-        return _payload(intent, None, None, f"Okay, that leave request has not been {verb}.")
-
-    outcome = execute_intent(intent, request, slots={'stage': 'confirm', 'request_id': request_id})
-    return _payload(intent, None, outcome.data, outcome.message, success=outcome.success)
 
 
 def _payload(

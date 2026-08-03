@@ -9,6 +9,7 @@ from apps.attendance.views import (
     AttendanceSettingsAPIView,
     AttendanceStatsView,
     AttendanceSummaryView,
+    MyCorrectionsListView,
     LateMarkLOPPolicyDetailView,
     LateMarkLOPPolicyListCreateView,
     OvertimePolicyDetailView,
@@ -79,6 +80,7 @@ urlpatterns = [
     path('summary/',    AttendanceSummaryView.as_view(),  name='attendance-summary'),
     path('calendar/',   AttendanceCalendarView.as_view(), name='attendance-calendar'),
     path('correction/', AttendanceCorrectionView.as_view(), name='attendance-correction'),
+    path('corrections/my/', MyCorrectionsListView.as_view(), name='attendance-corrections-my'),
 
     # ── HR Attendance Management ───────────────────────────────────────────────
     path('dashboard/',                    HRAttendanceDashboardView.as_view(), name='hr-attendance-dashboard'),

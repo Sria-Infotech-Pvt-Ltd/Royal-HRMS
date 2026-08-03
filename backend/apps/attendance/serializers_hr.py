@@ -170,6 +170,8 @@ class CorrectionRowSerializer(serializers.Serializer):
     branch             = serializers.CharField()
     date               = serializers.CharField()
     punch_type         = serializers.CharField()
+    original_in        = serializers.CharField(allow_null=True)
+    original_out       = serializers.CharField(allow_null=True)
     requested_in       = serializers.CharField(allow_null=True)
     requested_out      = serializers.CharField(allow_null=True)
     reason             = serializers.CharField()

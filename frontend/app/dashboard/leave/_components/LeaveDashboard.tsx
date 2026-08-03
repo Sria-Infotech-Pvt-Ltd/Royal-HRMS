@@ -5,7 +5,9 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
-import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import { getLeaveYear } from "@/lib/fiscalYear";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
   LEAVE_TYPE_CONFIG,
@@ -30,6 +32,8 @@ const BALANCE_DISPLAY = [
 
 export default function LeaveDashboard({ role, onApply, branch }: Props) {
   const { showToast } = useToast();
+  const currentUser    = useCurrentUser();
+  const canApproveLeave = usePermission("leave.approve");
   const isEmployee = role === "employee";
 
   const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
@@ -40,7 +44,7 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
   // Branch filter changed — the current page no longer means the same thing.
   useEffect(() => { setPage(1); }, [branch]);
 
-  const { currentYear } = useFiscalYearConfig();
+  const currentYear = getLeaveYear();
 
   const { data: balances } = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`
@@ -266,9 +270,9 @@ export default function LeaveDashboard({ role, onApply, branch }: Props) {
 
   // ── Approver layout (manager / hr / system_admin) ─────────────────────────
   const pendingCount = stats?.pending ?? 0;
-  const scopeLabel   = role === "manager__team_lead" ? "Your team's requests"
-                     : role === "hr"                 ? "Your branch requests"
-                     : "Organisation-wide requests";
+  const scopeLabel = currentUser?.can_manage_team   ? "Your team's requests"
+                   : canApproveLeave               ? "Your branch requests"
+                   : "Organisation-wide requests";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import type { HRActionQueue } from "@/types/dashboard";
+import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 
 const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; icon: string; href: string }[] = [
   { key: "candidate_reviews",      label: "Candidate Reviews",       icon: "ti-user-search",  href: "/dashboard/recruitment"     },
@@ -15,7 +16,22 @@ const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; ic
 ];
 
 export default function HrActionQueue() {
-  const { data, loading } = useFetch<HRActionQueue>(API.dashboard.hrActionQueue);
+  const { data: fetchedData, loading } = useFetch<HRActionQueue>(API.dashboard.hrActionQueue);
+  // Live data pushed by the backend over WebSocket — takes priority over the
+  // HTTP-fetched copy so the counts update instantly without a round trip.
+  const [liveData, setLiveData] = useState<HRActionQueue | null>(null);
+  const data = liveData ?? fetchedData;
+
+  useEffect(() => {
+    function handleLeaveUpdate(event: Event) {
+      const { detail } = event as CustomEvent<LeaveUpdatePayload>;
+      if (detail?.action_queue) {
+        setLiveData(detail.action_queue);
+      }
+    }
+    window.addEventListener("leave:updated", handleLeaveUpdate);
+    return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
+  }, []);
 
   return (
     <div className="card">

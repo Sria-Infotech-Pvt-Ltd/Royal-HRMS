@@ -14,10 +14,23 @@ from datetime import datetime
 import cloudinary.utils
 import requests as http_req
 
-PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+PHONE_RE = re.compile(r'^(?:\+?91)?\d{10}$')
+_PHONE_FORMAT_CHARS_RE = re.compile(r'[\s\-()./]')
+NAME_RE = re.compile(r"^[A-Za-z0-9]+(?:[ '\-][A-Za-z0-9]+)*$")
+EMAIL_RE = re.compile(
+    r'^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?'
+    r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$'
+)
+
+
+def _is_valid_phone(raw: str) -> bool:
+    """True if raw is a 10-digit number, with formatting (spaces/-/()/. /) and
+    an optional +91/91 prefix stripped out first."""
+    return bool(PHONE_RE.match(_PHONE_FORMAT_CHARS_RE.sub('', raw)))
 
 from django.conf import settings
 from django.core import signing
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, StreamingHttpResponse
@@ -32,6 +45,12 @@ from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission
 from core.responses import error, first_error, get_client_ip, success
+from core.template_context import (
+    candidate_context as _candidate_template_context,
+    expense_context as _expense_template_context,
+    leave_request_context as _leave_request_template_context,
+    universal_context as _universal_template_context,
+)
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -134,7 +153,7 @@ def _auto_assign_managers(employee: 'User') -> list:
             changed.append('hr')
 
     # Managers are the reporting manager for others — they have none themselves.
-    if role_name == 'manager__team_lead':
+    if employee.role and employee.role.can_manage_team:
         return changed
 
     # Need at least a branch to find a manager.
@@ -167,7 +186,7 @@ def _auto_assign_managers(employee: 'User') -> list:
     if assigned is None:
         assigned = (
             User.objects
-            .filter(role__name='manager__team_lead', branch__iexact=emp_branch, is_active=True)
+            .filter(role__can_manage_team=True, branch__iexact=emp_branch, is_active=True)
             .exclude(pk=employee.pk)
             .order_by('id')
             .first()
@@ -291,7 +310,7 @@ def _employee_dict(user: User) -> dict:
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
-    if role_name != 'manager__team_lead':
+    if not (user.role and user.role.can_manage_team):
         result['reporting_manager'] = {
             'id':   mgr.employee_id if mgr else None,
             'name': mgr.full_name   if mgr else None,
@@ -418,6 +437,7 @@ class LoginView(APIView):
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
                 'can_manage_team':     user.role.can_manage_team if user.role else False,
+                'is_superuser':        user.is_superuser or (user.role and user.role.name == 'system_admin'),
             },
         })
         resp.set_cookie(
@@ -1964,6 +1984,90 @@ class EmailTemplatePreviewView(APIView):
         logger.info('Email template "%s" deleted by %s', name, request.user.email)
         return success(f'Email template "{name}" deleted successfully.')
 
+
+# ─── Template variable resolution (single source of truth for auto-fill) ─────
+#
+# Every "approve/reject/decide + send email" modal in the frontend used to
+# hand-build its own small, inconsistently-cased list of "variables I can
+# auto-fill" — anything outside that list showed as an empty box the human
+# had to type in by hand, even when the real value was already known
+# server-side. This endpoint is the fix: given an entity, it returns every
+# variable this codebase knows how to resolve for it, under BOTH the
+# lowercase snake_case names newer templates use AND the legacy UPPER_CASE
+# names older ones use — so any template, existing or future, that
+# references a variable matching a real field on the entity gets it for
+# free. Only genuinely custom, non-derivable variables should ever need
+# manual entry after this.
+
+
+class ResolveTemplateVariablesView(APIView):
+    """
+    POST /api/settings/email-templates/resolve-context/
+    Body: { "entity_type": "candidate" | "leave_request" | "expense", "entity_id": "..." }
+
+    Returns every known variable this codebase can resolve for the entity —
+    used by the approve/reject/decide send-email modals to auto-fill
+    template variables instead of leaving them as manual empty boxes.
+    """
+    permission_classes = [IsAuthenticated]
+    _DENIED = 'You do not have permission to perform this action.'
+
+    def post(self, request):
+        entity_type = request.data.get('entity_type', '')
+        entity_id   = request.data.get('entity_id', '')
+        if not entity_type or not entity_id:
+            return error('entity_type and entity_id are required.')
+
+        if entity_type == 'candidate':
+            if not (_has_perm(request.user, 'recruitment.approve') or _has_perm(request.user, 'recruitment.edit')):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            from apps.recruitment.models import Candidate
+            try:
+                candidate = Candidate.objects.select_related('branch').get(pk=entity_id)
+            except (Candidate.DoesNotExist, ValueError, ValidationError):
+                return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+            context = _candidate_template_context(candidate, actor=request.user)
+
+        elif entity_type == 'leave_request':
+            if not _has_perm(request.user, 'leave.approve'):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            from apps.hrms.models import LeaveRequest, REQ_PENDING
+            from apps.hrms.views.leave import _can_approve_at_stage
+            try:
+                leave_request = LeaveRequest.objects.select_related('employee').get(pk=entity_id)
+            except (LeaveRequest.DoesNotExist, ValueError, ValidationError):
+                return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
+            # Holding leave.approve isn't enough on its own — same as the real
+            # approve/reject endpoint, only the request's designated approver
+            # at its current stage (or system_admin) may see its details.
+            stage = 'l1' if leave_request.status == REQ_PENDING else 'l2'
+            if not _can_approve_at_stage(request.user, leave_request, stage):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            context = _leave_request_template_context(leave_request)
+
+        elif entity_type == 'expense':
+            if not _has_perm(request.user, 'expenses.approve'):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            from apps.hrms.models import Expense
+            from apps.hrms.views.expenses import _can_access_expense
+            lookup = {'expense_number': entity_id} if str(entity_id).isdigit() else {'pk': entity_id}
+            try:
+                expense = Expense.objects.select_related('employee').get(**lookup)
+            except (Expense.DoesNotExist, ValueError, ValidationError):
+                return error('Expense not found.', http_status=status.HTTP_404_NOT_FOUND)
+            # Same per-record scoping the real approve/reject endpoint uses —
+            # holding expenses.approve alone would let any approver pull any
+            # other manager's team's expense details.
+            if not _can_access_expense(request.user, expense):
+                return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
+            context = _expense_template_context(expense)
+
+        else:
+            return error(f'Unknown entity_type "{entity_type}".')
+
+        return success('Template variables resolved.', data={'context': {**_universal_template_context(), **context}})
+
+
 # ─── Document Center ───────────────────────────────────────────────────────────
 
 
@@ -2363,7 +2467,7 @@ class CompanyFinancialYearView(APIView):
         return success('Financial year configuration retrieved.', data)
 
     def put(self, request):
-        if not (request.user.role and request.user.role.name == 'system_admin'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error(
                 'Only system administrators can update the financial year configuration.',
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -2441,13 +2545,21 @@ class EmployeeListCreateView(APIView):
             .order_by('-date_joined')
         )
 
-        # Non-system-admin users are always scoped to their own branch — cannot be overridden by query params
-        role_name = request.user.role.name if request.user.role else ''
-        if role_name != 'system_admin' and request.user.branch:
+        # Managers (role.can_manage_team) only see their own direct reports — not
+        # every employee in the branch — matching the scoping already applied to
+        # Attendance, Expenses, and the Leave approval queues for the same role.
+        # Everyone else without settings.edit is scoped to their own branch, and
+        # cannot be overridden by query params.
+        role = request.user.role
+        if role and role.can_manage_team:
+            qs = qs.filter(reporting_manager=request.user)
+        elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
 
-        search = request.query_params.get('search', '').strip()
-        dept   = request.query_params.get('department', '').strip()
+        search       = request.query_params.get('search', '').strip()
+        dept         = request.query_params.get('department', '').strip()
+        branch_param = request.query_params.get('branch', '').strip()
+        status_param = request.query_params.get('status', '').strip()
         if search:
             qs = qs.filter(
                 Q(full_name__icontains=search) |
@@ -2456,6 +2568,17 @@ class EmployeeListCreateView(APIView):
             )
         if dept:
             qs = qs.filter(department=dept)
+        if branch_param:
+            qs = qs.filter(branch=branch_param)
+        if status_param:
+            if status_param == 'inactive':
+                qs = qs.filter(is_active=False)
+            elif status_param == 'active':
+                qs = qs.filter(is_active=True, must_change_password=False)
+            elif status_param == 'onboarding':
+                qs = qs.filter(is_active=True, must_change_password=True)
+            else:
+                return error('status must be one of: active, onboarding, inactive.')
 
         try:
             page_num  = max(1, int(request.query_params.get('page', 1)))
@@ -2472,6 +2595,54 @@ class EmployeeListCreateView(APIView):
             'page_size':   page_size,
             'total_pages': paginator.num_pages,
             'results':     [_employee_dict(u) for u in page_obj.object_list],
+        })
+
+
+class EmployeeStatsView(APIView):
+    """
+    Dashboard counts for the Employees page header cards.
+
+    Computed directly from the full queryset (not a single page) — the
+    frontend used to derive these from the currently loaded page of results,
+    which under-counted everything once there was more than one page.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'employees.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+
+        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
+
+        role = request.user.role
+        role_name = role.name if role else ''
+        if role and role.can_manage_team:
+            base_qs = base_qs.filter(reporting_manager=request.user)
+        elif role_name != 'system_admin' and request.user.branch:
+            base_qs = base_qs.filter(branch=request.user.branch)
+
+        # branch_names/department_names always come from base_qs (ignores the
+        # branch filter below) so the branch dropdown never shrinks to just
+        # the currently-selected branch once one is picked.
+        branch_names = list(
+            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
+        )
+        department_names = list(
+            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
+        )
+
+        qs = base_qs
+        branch_filter = request.query_params.get('branch', '').strip()
+        if branch_filter and branch_filter != 'all':
+            qs = qs.filter(branch=branch_filter)
+
+        return success('Employee statistics retrieved.', data={
+            'total':             qs.count(),
+            'active':            qs.filter(is_active=True, must_change_password=False).count(),
+            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
+            'departments':       qs.exclude(department='').values('department').distinct().count(),
+            'branch_names':      branch_names,
+            'department_names':  department_names,
         })
 
     def post(self, request):
@@ -2504,10 +2675,19 @@ class EmployeeListCreateView(APIView):
         if last_name   and len(last_name)   > 150: errs['last_name']   = 'Last name must be 150 characters or fewer.'
         if email       and len(email)       > 254: errs['email']       = 'Email must be 254 characters or fewer.'
         if phone       and len(phone)       > 20:  errs['phone']       = 'Phone must be 20 characters or fewer.'
-        if phone       and 'phone' not in errs and not PHONE_RE.match(phone): errs['phone'] = 'Enter a valid phone number (digits, spaces, +, -, ( ) allowed).'
         if branch      and len(branch)      > 100: errs['branch']      = 'Branch must be 100 characters or fewer.'
         if department  and len(department)  > 100: errs['department']  = 'Department must be 100 characters or fewer.'
         if designation and len(designation) > 100: errs['designation'] = 'Designation must be 100 characters or fewer.'
+
+        # Name format check — letters with single space/hyphen/apostrophe separators only
+        if first_name and 'first_name' not in errs and not NAME_RE.match(first_name):
+            errs['first_name'] = 'First name may only contain letters, numbers, spaces, hyphens and apostrophes.'
+        if last_name  and 'last_name'  not in errs and not NAME_RE.match(last_name):
+            errs['last_name']  = 'Last name may only contain letters, numbers, spaces, hyphens and apostrophes.'
+
+        # Phone format check — exactly 10 digits, optional +91/91 prefix
+        if phone and 'phone' not in errs and not _is_valid_phone(phone):
+            errs['phone'] = 'Enter a valid 10-digit phone number (optionally prefixed with +91).'
 
         # Date format check
         if date_of_joining and 'date_of_joining' not in errs:
@@ -2516,8 +2696,8 @@ class EmployeeListCreateView(APIView):
             except ValueError:
                 errs['date_of_joining'] = 'Date of joining must be in YYYY-MM-DD format.'
 
-        # Basic email format check
-        if email and 'email' not in errs and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        # Email format check
+        if email and 'email' not in errs and not EMAIL_RE.match(email):
             errs['email'] = 'Enter a valid email address.'
 
         if errs:
@@ -2671,9 +2851,8 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     scoping already applied to EmployeeListCreateView.get(). Returns True when
     the employee should be treated as not found for this requester.
     """
-    role_name = requesting_user.role.name if requesting_user.role else ''
     return (
-        role_name != 'system_admin'
+        not _has_perm(requesting_user, 'settings.edit')
         and bool(requesting_user.branch)
         and employee.branch != requesting_user.branch
     )
@@ -2790,8 +2969,7 @@ class EmployeeDetailView(APIView):
 
         # Manual reporting manager assignment (overrides auto-assign; blocked for managers)
         if 'reporting_manager_id' in data:
-            current_role = (employee.role.name if employee.role else '').lower()
-            if current_role == 'manager__team_lead':
+            if employee.role and employee.role.can_manage_team:
                 return error('Managers do not have a reporting manager.')
             rm_val = data.get('reporting_manager_id')
             if rm_val:
@@ -3752,9 +3930,7 @@ class OnboardingApprovalView(APIView):
         if target.onboarding_status != User.ONBOARDING_SUBMITTED:
             return error('This user has not submitted their onboarding form.')
 
-        role_name        = request.user.role.name if request.user.role else ''
-        target_role_name = target.role.name if target.role else ''
-        if role_name != 'system_admin' and target_role_name in ('hr', 'system_admin'):
+        if not _has_perm(request.user, 'settings.edit') and _has_perm(target, 'employees.view'):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
@@ -4022,8 +4198,8 @@ class OnboardingApprovalView(APIView):
             .distinct()
             .order_by('-date_joined')
         )
-        if role_name != 'system_admin':
-            base_qs = base_qs.exclude(role__name__in=['hr', 'system_admin'])
+        if not _has_perm(request.user, 'settings.edit'):
+            base_qs = base_qs.exclude(role__name__in=['system_admin'])
 
         stats = {
             'pending':   base_qs.filter(onboarding_status=User.ONBOARDING_PENDING).count(),
@@ -4066,8 +4242,8 @@ class OnboardingApprovalView(APIView):
             .prefetch_related('employee_documents')
             .order_by('date_joined')
         )
-        if role_name != 'system_admin':
-            qs = qs.exclude(role__name__in=['hr', 'system_admin'])
+        if not _has_perm(request.user, 'settings.edit'):
+            qs = qs.exclude(role__name__in=['system_admin'])
 
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         user_ids = [u.pk for u in page_obj.object_list]
@@ -4248,7 +4424,7 @@ class EmployeeReportingManagerView(APIView):
         if employee is None:
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        if employee.role and employee.role.name.lower() == 'manager__team_lead':
+        if employee.role and employee.role.can_manage_team:
             return error('Managers do not have a reporting manager.')
 
         manager_id = request.data.get('reporting_manager_id')
@@ -4349,11 +4525,22 @@ class ApprovalWorkflowRuleView(APIView):
 # ─── Employee Approval Matrix ─────────────────────────────────────────────────
 
 def _resolve_rule_approver(role_str: str, employee):
-    """Resolve a role string to the actual User for a given employee."""
+    """Resolve a role string to the actual User for a given employee.
+
+    Uses PBAC capability checks to validate the resolved approver still holds
+    the expected capability — a user whose role changed after assignment will
+    no longer resolve, preventing stale approver chains.
+    """
     if role_str in ('reporting_manager', 'rm', 'manager'):
-        return getattr(employee, 'reporting_manager', None)
+        rm = getattr(employee, 'reporting_manager', None)
+        if rm and rm.role and rm.role.can_manage_team:
+            return rm
+        return None
     if role_str in ('hr', 'hr_manager', 'hr_admin'):
-        return getattr(employee, 'hr', None)
+        hr_user = getattr(employee, 'hr', None)
+        if hr_user and _has_perm(hr_user, 'leave.approve'):
+            return hr_user
+        return None
     return None
 
 
@@ -4829,6 +5016,13 @@ class EmployeeBulkImportView(APIView):
                         },
                     )
 
+                # Auto-allocate leave balances based on active leave policies —
+                # same step EmployeeListCreateView.post() does for a single
+                # employee; this bulk path re-implements creation separately
+                # and had been missing it entirely.
+                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                _allocate_leaves_for_employee(user, user.date_of_joining)
+
                 seen_emails.add(email)
                 created_ids.append(employee_id)
                 created_rows.append({'row': idx, 'identifier': email,
@@ -4884,7 +5078,7 @@ class EmployeeBulkImportView(APIView):
 
 # ─── Employee Bulk Import — Sample Template ───────────────────────────────────
 
-_EMP_ALLOWED_ROLES = frozenset({'system_admin', 'hr_admin'})
+# Replaced by _has_perm check below — 'employees.create' covers both system_admin and HR.
 
 
 class EmployeeBulkImportSampleView(APIView):
@@ -4924,10 +5118,9 @@ class EmployeeBulkImportSampleView(APIView):
     ]
 
     def get(self, request):
-        role_name = (request.user.role.name if request.user.role else '')
-        if role_name not in _EMP_ALLOWED_ROLES:
+        if not _has_perm(request.user, 'employees.create'):
             return error(
-                'Only System Admin and HR Admin can download the employee import template.',
+                'You do not have permission to download the employee import template.',
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 

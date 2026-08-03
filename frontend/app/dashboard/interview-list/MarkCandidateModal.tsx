@@ -13,15 +13,6 @@ interface Props {
   onConfirmed:  (updated: Candidate) => void;
 }
 
-const AUTO_KEYS = new Set([
-  "candidate_name", "full_name", "first_name", "last_name",
-  "email", "position_applied", "position",
-  "branch", "branch_name",
-  "interview_date", "interview_mode", "interview_mode_display",
-  "company_name",
-  "full_name", "fname", "lname", "email", "position", "company",
-]);
-
 export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirmed }: Props) {
   const isSelect = targetStatus === "selected";
 
@@ -31,6 +22,7 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [company,          setCompany]          = useState<CompanyInfo | null>(null);
+  const [serverContext,    setServerContext]    = useState<Record<string, string>>({});
 
   // The template is fixed by status — "selected" always sends candidate_selected,
   // "rejected" always sends candidate_rejected. No manual override.
@@ -57,13 +49,26 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
       .finally(() => setLoadingTemplates(false));
   }, [defaultSlug]);
 
+  // Resolve every real variable the backend knows for this candidate — the
+  // source of truth, so any template variable matching a real field
+  // auto-fills instead of relying on a hardcoded local list.
+  useEffect(() => {
+    clientApi
+      .post<{ data: { context: Record<string, string> } }>(API.settings.resolveTemplateContext, {
+        entity_type: "candidate",
+        entity_id:   candidate.id,
+      })
+      .then(res => setServerContext(res.data?.data?.context ?? {}))
+      .catch(() => setServerContext({}));
+  }, [candidate.id]);
+
   function candidateVars(): Record<string, string> {
     const parts      = candidate.name.trim().split(/\s+/);
     const firstName  = parts[0] ?? candidate.name;
     const lastName   = parts.length > 1 ? parts[parts.length - 1] : "";
     const companyName = company?.company_name ?? "[Company]";
     return {
-      // Snake-case keys matching Django model fields and template placeholders
+      // Client-side fallback while serverContext is still loading.
       candidate_name:   candidate.name,
       full_name:        candidate.name,
       first_name:       firstName,
@@ -77,13 +82,14 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
       interview_mode:        candidate.interview_mode ?? "",
       interview_mode_display: MODE_LABELS[candidate.interview_mode] ?? candidate.interview_mode ?? "",
       company_name:     companyName,
-      // Legacy uppercase keys for templates that still use them
       FULL_NAME:        candidate.name,
       FNAME:            firstName,
       LNAME:            lastName,
       EMAIL:            candidate.email,
       POSITION:         candidate.position_applied,
       COMPANY:          companyName,
+      // Server-resolved values win — they're the source of truth.
+      ...serverContext,
     };
   }
 
@@ -123,8 +129,9 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
     }
   }
 
+  const vars = candidateVars();
   const hasManualVars = (selectedTemplate?.available_variables ?? [])
-    .some(v => !AUTO_KEYS.has(v.toLowerCase()));
+    .some(v => vars[v] === undefined && vars[v.toUpperCase()] === undefined && vars[v.toLowerCase()] === undefined);
 
   return (
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>

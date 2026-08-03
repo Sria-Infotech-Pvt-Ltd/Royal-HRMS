@@ -3225,3 +3225,225 @@ Fixed (required an elevated PowerShell — outside this session's write access) 
 - **WebSockets need `daphne`, not `manage.py runserver`, locally** — see §5. This is the single most likely thing to trip up the next person testing notifications.
 - **`REDIS_URL` is still unset in `.env`** — caching and the channel layer both silently degrade to per-process fallbacks without it. Not urgent for local dev, but must be set before any multi-worker deployment.
 - **Manager-scoping fix (§1) covers every attendance list/action endpoint** — if a new attendance endpoint is added later that takes a `branch` filter, check whether it also needs `_manager_scope_employee_ids` wired in, or managers will see the whole branch again on that one endpoint.
+
+---
+
+## Session — Rithwika (28 July 2026)
+
+**Branch:** `Frontend/28-07`
+
+---
+
+> **Flag — a prior session's log entry appears to have been lost.** A "Session — Rithwika (27 July 2026)" entry (auth retry-storm fix, employee-modal 403 fixes, expense claims list fix, referrals modal blur fix) was committed on `frontend/27-07` at `9d26413`, but is no longer present in this file — it isn't between the 23 July and 27 July (G.Durga Prasad) entries above, most likely dropped during the `feature/voice-commands` / `Backend/Bug-Fixes` / `cache/27-07` → `demo` merge. The actual code changes from that commit are still live (confirmed still in place while working today); only this file's record of them was lost. Not restored here — flagging for the team to decide whether to re-add it, since re-inserting it out of order could itself cause a future merge conflict.
+
+---
+
+### 1. Voice Assistant FAB — Idle Collapse + Drag-to-Reposition
+
+**Files:** `components/VoiceCommandButton.tsx`, `app/globals.css`
+
+Reported symptom (via screenshot): the always-visible mic/mute/keyboard row, fixed at the bottom-right corner, visually collided with page content that also lives in that corner — table pagination controls, wizard footers, dashboard cards.
+
+- **Idle collapse.** Rests as a single 46px orb (down from the ~150px-wide 3-button row) with a soft pulsing ring (new `voiceIdlePulse` keyframe in `globals.css`, `prefers-reduced-motion` respected). Expands to the full mic/mute/keyboard row on hover (desktop) or tap (touch); auto-expands and *stays* expanded whenever actually in use (listening, processing, typed input open, showing an interim transcript) so it can never collapse mid-interaction.
+- **Draggable.** Press-and-drag either the idle orb or the expanded mic button to reposition anywhere on screen (Pointer Events, unified mouse+touch, `touch-action: none`). A movement threshold (raised 4px → 10px after the 4px value misfired on ordinary clicks — see below) distinguishes a genuine drag from a click; the click that follows a drag is suppressed via a ref flag so it doesn't also trigger listening/expand. Position is clamped with extra margin reserved for the wider expanded row (`SAFE_W`/`SAFE_H`), so a corner drop never leaves the expanded row spilling off-screen.
+- **Persistence — added, then explicitly reverted.** First built with `localStorage` persistence across reloads (an explicit ask at the time). Two real bugs then surfaced from a live screenshot: (a) the 4px drag threshold was low enough that an ordinary click's natural pointer jitter got misread as a drag, saving a stray position — the mic rendered mid-page after reload; (b) hovering the idle orb immediately swapped it for the expanded row *before* a press-drag could start on the orb itself, so the button being dragged (the expanded FAB) had no drag handlers attached at all — dragging silently did nothing. Fixed the threshold and added the same drag handlers to the expanded FAB. Immediately after, the requirement itself changed: drag should persist during the session but reset on an actual page reload, not survive reloads at all. Removed the `localStorage` read/write entirely — `useState` alone already gives exactly that behavior for free, since this component lives in the root layout, which Next.js keeps mounted across client-side navigation but fully remounts on a real reload.
+- **Corner position tightened.** Default resting position moved from `right:24,bottom:24` → `right:4,bottom:4` (flush against the actual corner), per explicit feedback that it should sit in the "complete right corner," not just nearby.
+
+---
+
+### 2. Employees List — Edit Action
+
+**Files:** `app/dashboard/employees/page.tsx`, `app/dashboard/employees/_components/EditEmployeeModal.tsx` (**new**)
+
+Added an Edit action (pencil icon) to the employee list's row actions, between the existing View and Deactivate — gated by the same `usePermission("employees.edit")` already guarding Deactivate.
+
+- `EditEmployeeModal.tsx` prefills from the row's already-loaded data (no extra fetch on open) and edits Full Name, Phone, Branch, Department, Designation, Date of Joining, and Status.
+- Branch/Department `<select>` options are the list page's own already-computed `branchOptions`/`deptOptions` (derived client-side from `GET /api/employees/`, passed down as props) — per explicit instruction, no separate branches/departments fetch for this modal. The employee's own current value is folded into each option list so it's never shown blank if they're the only person in that branch/department on the currently-loaded page.
+- Status is Active/Inactive only, deliberately not "Onboarding" — onboarding is a derived backend state (`is_active && must_change_password`), not something the API can set directly; offering it as a selectable option would be dishonest UI. An onboarding employee shows as "Active" with a short explanatory note instead.
+- Save flow: `PUT api/employees/<employee_id>/` with the profile fields, then a separate `PATCH` of the same endpoint with `is_active` only if status actually changed — mirrors the existing `toggleStatus` function already in this file rather than inventing a new pattern.
+- `ApiEmployee` (previously module-private in `page.tsx`) is now exported so the new modal can type the already-loaded row data consistently instead of redefining an overlapping interface.
+
+---
+
+### 3. Static Audit — 11 Additional Bugs Found (Not Fixed)
+
+At the user's request, ran a full static code-reading pass (5 parallel investigations, no live browser) against every checklist item in the flow-based manual test guide published the previous session. 46 items checked; 35 confirmed correct via direct code evidence, 11 confirmed broken. None of the 11 were fixed this session — logged here as a punch list, not yet actioned:
+
+| # | Bug | Where |
+|---|---|---|
+| 1 | Candidate status changes to screening/scheduled/interview-done never log or send an email (only selected/rejected do); Email Logs page is itself a dead "coming soon" stub that never calls the real, working log endpoint | `apps/recruitment/views.py:519-592`, `frontend/.../email-logs/page.tsx` |
+| 2 | `proxy.ts` reads onboarding/assessment status from the unsigned, client-writable cookie instead of the signed JWT — spoofable in DevTools | `frontend/proxy.ts:65-85` |
+| 3 | Department/designation never carried over from onboarding to the new employee record — HR must manually re-pick both every time | `apps/accounts/views.py` (`OnboardingApprovalView`) |
+| 4 | `UnpunchesTab` renders `CorrectionsTab`'s data instead of the actual un-punches endpoint that exists for it | `frontend/.../UnpunchesTab.tsx` |
+| 5 | Expense stat cards always total *all* categories while the list below is category-filtered — can visibly disagree | `apps/hrms/views/expenses.py:311-340` |
+| 6 | Expense rejection reason is collected in the UI, sent to the backend, and silently discarded — the `Expense` model has no field for it | `apps/hrms/models.py`, `views/expenses.py:172-188` |
+| 7 | Approvals hub's request-type dropdown always shows Leave/Expense/Attendance regardless of which specific permission the manager holds | `frontend/.../approvals/page.tsx:143-156` |
+| 8 | Org chart is 100% hardcoded fake data — no fetch at all, never reflects a real reporting-manager change | `frontend/.../OrgChartClient.tsx` |
+| 9 | Email Logs page only reflects recruitment emails — SMTP test sends and most other email sends are invisible there | `apps/accounts/utils.py`, `views.py:1500-1520` |
+| 10 | Audit log doesn't cover leave/expense approvals at all, despite login and settings changes being logged | `apps/hrms/views/leave.py:933-998`, `views/expenses.py` |
+| 11 | Reports page is a pure "Coming Soon" placeholder — no data, mock or real | `frontend/.../reports/page.tsx` |
+
+---
+
+### Key Files Changed (28 July 2026)
+
+| File | Change |
+|------|--------|
+| `components/VoiceCommandButton.tsx` | Idle-orb collapse/expand, drag-to-reposition (mouse+touch), session-only position (no `localStorage`), default corner tightened to `right:4,bottom:4` |
+| `app/globals.css` | Added `voiceIdlePulse` keyframe + `.voice-fab-idle-pulse` (respects `prefers-reduced-motion`) |
+| `app/dashboard/employees/page.tsx` | Added Edit action to row actions; exported `ApiEmployee` interface; wires `EditEmployeeModal` |
+| `app/dashboard/employees/_components/EditEmployeeModal.tsx` | **NEW** — edit Full Name/Phone/Branch/Department/Designation/DOJ/Status, `PUT`+conditional `PATCH` to `api/employees/<employee_id>/` |
+
+---
+
+## Session — G.Durga Prasad (29 July 2026)
+
+**Branch:** `Backend/bug-fix-29/07/2026`
+
+---
+
+### 1. Leave Requests Were Routing to HR, Never the Employee's Manager
+
+**Files:** `backend/apps/accounts/views.py` (`ApprovalWorkflowRuleView` — pre-existing, unchanged), no code fix needed
+
+Reported bug: an employee's leave request should be visible to their assigned manager first; instead it went straight to HR. Root cause was **configuration, not code** — the global "Leave Request" `ApprovalWorkflowRule` had `l1_approver_role = 'hr_manager'` instead of `'reporting_manager'`. Cross-checked all 5 workflow types — leave was the *only* one misconfigured this way (expense/resignation/loan/attendance_correction all correctly default to `reporting_manager`), and the model's own field default is `reporting_manager`, confirming this was a one-off manual change via Settings → Approval Rules, not the shipped default.
+
+Fixed by calling the real `PATCH /api/settings/approval-rules/` endpoint (not a raw DB edit) so cache invalidation and audit logging ran normally. **Live-verified**: submitted a real leave request before the fix (`l1_approver_name: "HR Hyderabad"`) and after (`l1_approver_name: "Finance Manager"`), then confirmed it appeared in that manager's `?scope=team` queue with `can_approve: true`.
+
+---
+
+### 2. Expense Requests Were Visible to Every Approver, Not Just the Employee's Manager
+
+**File:** `backend/apps/hrms/views/expenses.py`
+
+`ExpenseListCreateView.get()` returned **every expense company-wide** to any user holding `expenses.approve`, with zero scoping — the per-record helper `_can_access_expense()` already existed and correctly scoped by `reporting_manager_id` for managers, but was never applied to the *list* query. A manager saw not just their own team's expenses but every other manager's team's too.
+
+Fixed by mirroring `_can_access_expense()`'s exact logic in the queryset: `system_admin` unrestricted, `manager__team_lead` → `employee__reporting_manager_id=request.user.id`, everyone else branch-scoped. **Live-verified**: before the fix the Engineering Manager could see Pooja Sharma's expense (she reports to a different manager); after, she's gone from his list and what remains matches his actual direct reports exactly.
+
+---
+
+### 3. Bulk-Imported Employees Never Got Leave Balances
+
+**File:** `backend/apps/accounts/views.py` (`EmployeeBulkImportView.post()`)
+
+Reported bug: employees added via CSV/XLSX bulk import had no leave balances at all, while single-created employees did. Root cause: `EmployeeListCreateView.post()` (single creation) calls `_allocate_leaves_for_employee(user, user.date_of_joining)` from `apps/hrms/views/leave.py` right after creating the user — `EmployeeBulkImportView` re-implements employee creation independently in its per-row loop and had simply never included this call.
+
+Fixed by adding the identical call after the per-row `EmployeeProfile` creation. **Live-verified**: submitted a real 1-row bulk-import CSV (joining 2026-07-01) — the new employee came out with 4 correctly pro-rated leave balances. Does **not** retroactively backfill employees already bulk-imported before this fix — none were requested to be fixed this session, but the same `_allocate_leaves_for_employee` helper is safe to run again for anyone missing balances (idempotent via `get_or_create`).
+
+---
+
+### 4. Leave Balances/Requests Showed Empty for ~7 Months of Every Year (Fiscal Year vs Calendar Year)
+
+**Files:** `frontend/lib/fiscalYear.ts`, `components/dashboard/employee/EmpLeaveBalances.tsx`, `app/dashboard/leave/_components/{ApplyLeaveForm,LeaveAnalytics,LeaveDashboard}.tsx`, `app/dashboard/settings/leave-policy/_components/CreditTab.tsx`, `hooks/useEmployeeLeave.ts`
+
+Reported as "no leaves showing" for a specific employee (Pooja Kumar), but the bug is systemic across the entire Leave module. Five frontend files queried leave data using `useFiscalYearConfig().currentYear` — the company's fiscal-year label's start year (fiscal year starts **August** here) — while the backend stores `LeaveBalance`/`LeaveRequest.year` as the plain **calendar** year (`_allocate_leaves_for_employee` uses `joining_date.year`; the annual reset Celery task runs every **Jan 1**, not on the fiscal-year boundary — calendar-year signals throughout). For the ~7 months of the year before the fiscal year rolls over (Jan–Jul here), `currentYear` resolves one year behind where the real data lives, so every leave query returns empty.
+
+Fixed by adding `getLeaveYear()` (plain `new Date().getFullYear()`, with a comment explaining why leave is the one exception to the fiscal-year convention) to `lib/fiscalYear.ts`, and switching all 5 files to it. Also removed a now-dead year-sync `useEffect` and a mislabeled "Financial Year" input (it's a calendar year) in `CreditTab.tsx`. **Live-reproduced and confirmed**: `?year=2025` (what was being sent) → empty; `?year=2026` (real data) → 6 real balances; `getLeaveYear()` now returns 2026, matching the system clock.
+
+---
+
+### 5. Email Template Variables Not Auto-Filling (Root-Caused Across the Whole Notification System)
+
+**New:** `backend/core/template_context.py`, `backend/apps/hrms/migrations/0017_seed_expense_email_templates.py`
+**Modified:** `backend/apps/accounts/views.py`, `backend/apps/accounts/urls.py`, `backend/apps/hrms/views/expenses.py`, `frontend/lib/api/endpoints.ts`, `frontend/app/dashboard/approvals/{ApprovalModal.tsx,page.tsx}`, `frontend/app/dashboard/candidate-review/HRDecisionModal.tsx`, `frontend/app/dashboard/interview-list/MarkCandidateModal.tsx`
+
+Reported as "some variables in empty boxes don't auto-fill" — root cause was architectural: three separate "approve/reject/decide + send email" modals (`ApprovalModal`, `HRDecisionModal`, `MarkCandidateModal`) each hand-maintained their own small, inconsistently-cased "auto-fillable variables" list. `HRDecisionModal` additionally had a case-sensitivity bug (`AUTO_KEYS.has(v)`, all-caps only) that made every lowercase variable — what current templates actually use — permanently unfillable regardless of whether real data existed.
+
+**Fix — single source of truth.** New `ResolveTemplateVariablesView` (`POST /api/settings/email-templates/resolve-context/`) takes `{entity_type, entity_id}` (`candidate` / `leave_request` / `expense`) and returns every real variable the codebase knows for that record, in both lowercase snake_case and legacy UPPER_CASE, so any template — existing or created in the future — that references a variable matching a real field just resolves. Context builders (`candidate_context`, `leave_request_context`, `expense_context`, `universal_context`, `employee_identity_fields`) live in the new shared `core/template_context.py` rather than as private functions in one app's views, specifically so other apps (`hrms/views/expenses.py`) can reuse them without reaching into another app's internals.
+
+**Follow-on gaps found and fixed while checking "every template" per your instruction:**
+- **No expense-approval template existed at all** — every template selectable during an expense approval (Pay Slip, Leave Request Approved, birthday wishes, …) was genuinely unrelated; `MONTH`/`YEAR`/`leave_type` don't exist on an Expense record and never could. Seeded `expense_approved`/`expense_rejected` via migration `0017`, matching the existing `0014_seed_leave_email_templates.py` convention exactly.
+- **Template dropdowns showed every category regardless of context** — the actual reason mismatched templates were selectable at all. `ApprovalModal` now only lists `leave_*`/`expense_*`-named templates per its `kind`; `HRDecisionModal` now only lists `recruitment`/`onboarding` category templates. This is the guardrail that makes the fix hold for future templates too — a new template can only ever be picked in the context it's named for.
+- **`MONTH`/`YEAR`/`DATE` are calendar concepts, not entity fields** — added as universal variables (`universal_context()`) merged in regardless of entity type.
+- **Candidate context was missing onboarding-specific fields** (`employee_id`, `designation`, `department`, `date_of_joining`, `portal_url`, `has_assessments`, `assessment_count`, `hr_name`) that `HRDecisionModal`'s own preferred templates (`onboarding_approved`/`onboarding_rejected`) need — pulled from `candidate.portal_user` (the converted employee) where conversion has happened, blank otherwise.
+
+**Permission-architecture audit (explicitly requested) found a real gap:** `ResolveTemplateVariablesView` checked permission *type* only (e.g. "holds `leave.approve`") with no per-record authorization — a manager could pull any other manager's team's leave/expense details through this endpoint despite never being able to act on them. Fixed by reusing the exact same scoping already enforced on the real approve/reject actions — `_can_approve_at_stage()` for leave, `_can_access_expense()` for expense — rather than inventing new logic. **Live-verified**: a manager holding `leave.approve` but not assigned as approver on a specific request now gets a clean `403`.
+
+**Production-standards audit found the deepest gap:** `template_name`/`extra_context` — the entire point of the modal — were being **silently discarded** by both approval endpoints. Leave only appeared to work because `notifications/signals.py` sends its own hardcoded `leave_approved`/`leave_rejected` email regardless of what's manually selected; **expense sent nothing at all, ever**, no matter what was chosen. Fixed `ExpenseDetailView._handle_approval()` to actually call `send_template_email()` with the selected template, re-deriving context server-side (never trusting the client's copy, which is only a preview) so the sent email always matches the real record. **Live-verified**: created a real expense, approved it with `expense_approved` selected, confirmed the email actually sends.
+
+> **Flagged, not decided unilaterally:** leave approvals still ignore the modal's template selection entirely (the signal always wins). Whether to bring leave to the same "selection actually controls the send" behavior as expense, or leave the signal as the reliable default, is a product decision — not made this session.
+>
+> **Also flagged:** `attendance_correction` has zero email notification (in-app only) — the only one of the 5 approval workflow types with no email at all. Not fixed, because `CorrectionsTab.tsx` has no template-selection UI to wire up in the first place; would need new UI design, not just a wiring fix like leave/expense got.
+
+---
+
+### 6. Employees Page — Manager Department Scoping Added, Then Reverted
+
+**File:** `backend/apps/accounts/views.py` (`EmployeeListCreateView.get()`), `frontend/app/dashboard/employees/page.tsx`
+
+Mid-session, added department scoping for `manager__team_lead` (on top of existing branch scoping) so a manager would only see their own department's employees, plus a locked department-dropdown UI to match. **Explicitly reverted later the same session** — managers should see every department within their branch (matching `hr_admin`'s scoping), not just their own. Net effect: no behavioral change from before this session; branch-only scoping for managers stands. Documented here only so nobody re-discovers and re-reverts the same thing from git history alone without the context of why.
+
+---
+
+### Key Files Changed / Created (29 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/expenses.py` | Manager scoping added to `ExpenseListCreateView.get()`; `_handle_approval()` now actually sends the selected template email |
+| `backend/apps/accounts/views.py` | `ResolveTemplateVariablesView` (new); context builders moved out to `core/template_context.py` |
+| `backend/core/template_context.py` | **NEW** — shared, single-source-of-truth email-template context builders |
+| `backend/apps/hrms/migrations/0017_seed_expense_email_templates.py` | **NEW** — seeds `expense_approved`/`expense_rejected` |
+| `backend/apps/accounts/urls.py` | Added `settings/email-templates/resolve-context/` |
+| `frontend/lib/api/endpoints.ts` | Added `settings.resolveTemplateContext` |
+| `frontend/lib/fiscalYear.ts` | Added `getLeaveYear()` — calendar year, not fiscal year, for anything under `/leave/` |
+| `frontend/app/dashboard/approvals/ApprovalModal.tsx` | Calls resolve-context endpoint; template dropdown filtered by `kind` |
+| `frontend/app/dashboard/approvals/page.tsx` | Passes `entityId` into `ApprovalModal` |
+| `frontend/app/dashboard/candidate-review/HRDecisionModal.tsx` | Calls resolve-context endpoint; dropdown restricted to recruitment/onboarding categories; fixed case-sensitivity bug; now sends full resolved context, not just manual leftovers |
+| `frontend/app/dashboard/interview-list/MarkCandidateModal.tsx` | Calls resolve-context endpoint instead of a hardcoded var list |
+| `frontend/components/dashboard/employee/EmpLeaveBalances.tsx` | `getLeaveYear()` instead of fiscal year |
+| `frontend/app/dashboard/leave/_components/{ApplyLeaveForm,LeaveAnalytics,LeaveDashboard}.tsx` | `getLeaveYear()` instead of fiscal year |
+| `frontend/app/dashboard/settings/leave-policy/_components/CreditTab.tsx` | `getLeaveYear()`; removed dead sync effect; "Financial Year" label corrected to "Year" |
+| `frontend/hooks/useEmployeeLeave.ts` | `getLeaveYear()` instead of fiscal year |
+
+---
+
+### Notes for Next Developer (28 July 2026)
+
+- **The 11 bugs in §3 are confirmed via direct code reading, not live-tested** — each has a file:line citation in the finding, but none have been fixed or manually clicked through yet. Treat as a prioritized backlog, not a changelog.
+- **Voice FAB drag position is intentionally NOT persisted** — this was a deliberate reversal mid-session (see §1). Don't re-add `localStorage` for it without re-confirming the requirement; the last explicit instruction was session-only, reset-on-reload.
+- **A stray `royal_hrms_voice_fab_pos` key may still exist in some team members' browser `localStorage`** from the brief window this session where persistence was implemented — it's harmless now (nothing reads it), no cleanup needed.
+- **`EditEmployeeModal`'s Branch/Department options are only as complete as the current page/search result of `GET /api/employees/`** — same known limitation as the list's own filter dropdowns. Not fixed here; if a canonical "all branches/departments" endpoint is ever wired up for the filters, this modal should switch to it too.
+- **See the flag at the top of this session** — a previous log entry for 27 July (Rithwika) is missing from this file; the code changes are still in git (`9d26413`) even though the doc entry isn't here.
+
+---
+
+## Session — G.Durga Prasad (30 July 2026)
+
+**Branch:** `Backend/bug-fix-29/07/2026`
+
+---
+
+### 1. HR (L2) Leave Approval Silently Failed to Send the `leave_approved` Email
+
+**File:** `backend/apps/hrms/views/leave.py` (`_can_approve_at_stage`)
+
+Reported bug: "manager approval sends the template email, HR approval doesn't." The email itself was never the problem — `notifications/signals.py` fires the exact same `leave_approved` template on both the L1→approved and L2→approved transitions. The bug was that the L2 transition often never happened at all.
+
+Root cause: **`_approval_scope_filter` and `_can_approve_at_stage` disagreed about what "HR approval" means.** The queue (`_approval_scope_filter`, unchanged) treats L2 as a shared branch-wide HR queue — every HR user in the branch sees every `l2_pending` request. But `_can_approve_at_stage` treated L2 as a single-person assignment — only the one HR user auto-stamped as `l2_approver` was allowed to actually approve; every other HR user got a `403`. Any HR user other than the stamped approver would open the request, click Approve, get rejected, and the status never flipped to `approved` — so the signal that sends the email never fired.
+
+**Fix:** `_can_approve_at_stage`'s `l2` branch now allows the designated `l2_approver` **or** any `leave.approve` holder with branch access (via the existing `_can_hr_access_request` helper) — matching what the queue already shows them.
+
+**Flagged:** this makes L2 a "first HR to click it wins" shared queue. If the product intent is "one specific HR person only," restrict `_approval_scope_filter`'s L2 branch instead.
+
+**Also flagged:** `LeaveApprovals.tsx`'s `act()` has no `catch` on the approve/reject call — a `403` fails silently in the UI. Worth a small frontend fix next time frontend is in scope.
+
+---
+
+### Key Files Changed (30 July 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/leave.py` | `_can_approve_at_stage` L2 branch now allows designated `l2_approver` **or** any branch-scoped `leave.approve` holder |
+
+---
+
+### Notes for Next Developer (29–30 July 2026)
+
+- **The Leave Request approval rule is fixed in the DB now, but if anyone ever re-seeds `ApprovalWorkflowRule` from scratch, double-check `l1_approver_role` for `leave` comes out as `reporting_manager`** — this was a one-off manual misconfiguration, not a seed bug.
+- **`getLeaveYear()` vs `useFiscalYearConfig()` — know which one to reach for.** Anything touching `/leave/` (balances, requests, stats, credit) is calendar-year. Payroll/Reports/Carry-Forward remain fiscal-year-based.
+- **Bulk import backfill**: employees bulk-imported before this session's fix have no leave balances. Re-run `_allocate_leaves_for_employee(user, user.date_of_joining)` for each — it's idempotent.
+- **`ResolveTemplateVariablesView` is the only place that should ever build template context.** If a new modal is added for a new entity type, add a `<entity>_context()` to `core/template_context.py` — don't hand-roll another local variable list.
+- **New templates must be named `leave_*` / `expense_*`** to appear in `ApprovalModal`'s filtered dropdown.
+- **Two unresolved product decisions from §5** — leave-approval template-selection-vs-signal precedence, and attendance-correction email support.
+- **If the product decision on L2 comes back as "one specific HR person only," don't just revert** — `_approval_scope_filter`'s L2 branch needs to change too or the queue will keep showing requests to HR users who get blocked on approve.
+- **`LeaveApprovals.tsx`'s `act()` swallowing errors silently is still unfixed** — worth a small frontend fix next time.

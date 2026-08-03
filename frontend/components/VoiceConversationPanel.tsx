@@ -1,7 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import type { VoicePanelPhase, VoiceResultStatus } from "@/hooks/useVoiceCommand";
+import VoiceInputControls from "@/components/VoiceInputControls";
+
+// Static placeholder shown only in the "greeting" phase, before any command
+// has been typed or spoken yet — never sent through speak() (see
+// useVoiceCommand.ts), so it never delays the user actually giving a
+// command by narrating itself first. Naming coincidence only: unrelated to
+// the backend's "greeting" voice intent (registry/intents_en.yaml, matched
+// when the user actually says "hi"/"hello"/"good morning" etc.) — this
+// string is pure frontend UI and never reaches /api/voice/parse/.
+const GREETING_MESSAGE = "Hi, how can I help you?";
 
 interface VoiceConversationPanelProps {
   transcript: string;
@@ -33,22 +42,6 @@ export default function VoiceConversationPanel({
   onStartListening, onStopListening, onSubmitText, onClose,
   isMuted, onToggleMute,
 }: VoiceConversationPanelProps) {
-  const [typedValue, setTypedValue] = useState("");
-
-  function handleTextSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = typedValue.trim();
-    if (!trimmed || isListening || isProcessing) return;
-    onSubmitText(trimmed);
-    setTypedValue("");
-  }
-
-  const micLabel = isListening
-    ? (interimTranscript || "Listening…")
-    : isProcessing
-    ? "Processing…"
-    : "Tap to speak";
-
   return (
     <div
       data-testid="voice-panel"
@@ -97,7 +90,25 @@ export default function VoiceConversationPanel({
         </div>
       </div>
 
-      {phase === "transcript" ? (
+      {phase === "greeting" ? (
+        <>
+          {/* Opened via the keyboard toggle, before anything has been typed
+              or spoken yet — same message styling as a real assistant
+              response (voice-panel-message below) so it reads as part of
+              the same conversation, not a separate splash screen. */}
+          <div data-testid="voice-panel-greeting" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-bg)" }}>
+            {GREETING_MESSAGE}
+          </div>
+          <VoiceInputControls
+            isListening={isListening}
+            isProcessing={isProcessing}
+            interimTranscript={interimTranscript}
+            onStartListening={onStartListening}
+            onStopListening={onStopListening}
+            onSubmitText={onSubmitText}
+          />
+        </>
+      ) : phase === "transcript" ? (
         <>
           {/* What was recognized, shown while the request is in flight —
               every voice response starts here now, not just conversational
@@ -123,66 +134,14 @@ export default function VoiceConversationPanel({
           </div>
 
           {awaitingInput && (
-            <>
-              {/* Primary: voice */}
-              <button
-                onClick={isProcessing ? undefined : (isListening ? onStopListening : onStartListening)}
-                disabled={isProcessing}
-                data-testid="voice-panel-mic"
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  height: 48, borderRadius: 10, border: "none",
-                  background: isListening ? "var(--error)" : "var(--primary)",
-                  color: "#fff", fontSize: 13, fontWeight: 500,
-                  cursor: isProcessing ? "not-allowed" : "pointer",
-                  opacity: isProcessing ? 0.7 : 1,
-                  transition: "background 0.15s, opacity 0.15s",
-                }}
-              >
-                <i
-                  className={`ti ${isProcessing ? "ti-loader-2" : "ti-microphone"}`}
-                  style={{
-                    fontSize: 18,
-                    animation: isProcessing ? "spin 1s linear infinite" : isListening ? "clockPulse 1s ease-in-out infinite" : undefined,
-                  }}
-                />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {micLabel}
-                </span>
-              </button>
-
-              {/* Secondary: type an answer */}
-              <form onSubmit={handleTextSubmit} style={{ display: "flex", gap: 6 }}>
-                <input
-                  type="text"
-                  value={typedValue}
-                  onChange={(e) => setTypedValue(e.target.value)}
-                  placeholder="Or type your answer…"
-                  disabled={isListening || isProcessing}
-                  data-testid="voice-panel-input"
-                  style={{
-                    flex: 1, height: 34, borderRadius: 8, border: "1.5px solid var(--outline-v)",
-                    background: "var(--bg)", color: "var(--on-bg)", fontSize: 12,
-                    padding: "0 10px", outline: "none", minWidth: 0,
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={!typedValue.trim() || isListening || isProcessing}
-                  aria-label="Send"
-                  data-testid="voice-panel-send"
-                  style={{
-                    width: 34, height: 34, borderRadius: 8, border: "none",
-                    background: "var(--bg-low)", color: "var(--on-variant)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: !typedValue.trim() || isListening || isProcessing ? "not-allowed" : "pointer",
-                    flexShrink: 0,
-                  }}
-                >
-                  <i className="ti ti-send" style={{ fontSize: 14 }} />
-                </button>
-              </form>
-            </>
+            <VoiceInputControls
+              isListening={isListening}
+              isProcessing={isProcessing}
+              interimTranscript={interimTranscript}
+              onStartListening={onStartListening}
+              onStopListening={onStopListening}
+              onSubmitText={onSubmitText}
+            />
           )}
         </>
       ) : (

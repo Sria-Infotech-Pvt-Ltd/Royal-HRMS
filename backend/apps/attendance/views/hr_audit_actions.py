@@ -25,20 +25,12 @@ from apps.attendance.serializers_hr import (
 logger = logging.getLogger(__name__)
 
 
-def _has_hr_permission(user, codename: str) -> bool:
-    if user.is_superuser:
-        return True
-    try:
-        # Employee role must never access HR attendance views — they use /my-attendance endpoints.
-        # Migration 0029 removed attendance.view from the employee role, but this guard
-        # defends against DB state divergence or accidental re-grants.
-        if user.role and user.role.name == 'employee':
-            return False
-        return user.role.role_permissions.filter(
-            permission__codename=codename
-        ).exists()
-    except Exception:
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
         return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 # ── Audit History ─────────────────────────────────────────────────────────────
@@ -53,7 +45,7 @@ class HRAttendanceAuditView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         from apps.attendance.services_audit_log import get_audit_history
@@ -75,7 +67,7 @@ class HRInvalidPunchAssignView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = InvalidPunchAssignSerializer(data=request.data)
@@ -100,7 +92,7 @@ class HRInvalidPunchDiscardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = InvalidPunchDiscardSerializer(data=request.data)
@@ -125,7 +117,7 @@ class HRInvalidPunchConvertView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = InvalidPunchConvertSerializer(data=request.data)

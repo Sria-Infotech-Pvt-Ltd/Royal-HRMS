@@ -8,6 +8,14 @@ from apps.branch.models import Branch
 from .models import Announcement, AnnouncementReaction
 
 
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
 class AnnouncementSerializer(serializers.ModelSerializer):
     """Read serializer — includes all computed fields needed by the frontend."""
 
@@ -76,7 +84,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         user = request.user
         if not user.role:
             return False
-        if user.role.name == 'system_admin':
+        if _has_perm(user, 'settings.edit'):
             return True
         return obj.posted_by_id == user.id
 

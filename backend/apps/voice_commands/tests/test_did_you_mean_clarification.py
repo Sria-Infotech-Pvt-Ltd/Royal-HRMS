@@ -53,13 +53,19 @@ def _patch_pending_store(store: _FakePendingStore):
 
 class MiddleConfidenceTriggersClarificationTests(SimpleTestCase):
     """
-    These three transcripts are real garbled speech-to-text near-misses pulled
-    from logs/voice_commands.log — actual attempts at "raise a query about my
-    payslip"/"...my attendance" mangled by the browser's speech recognizer.
-    All three score in [60, 80) against the real registry
-    (matcher.CLARIFICATION_CONFIDENCE_THRESHOLD to
-    matcher.DEFAULT_CONFIDENCE_THRESHOLD) — below the confident-match bar but
-    clearly not gibberish either.
+    These transcripts are real garbled speech-to-text near-misses pulled from
+    logs/voice_commands.log — actual attempts at "raise a query about my
+    payslip" mangled by the browser's speech recognizer. Both score in
+    [60, 80) against the real registry (matcher.CLARIFICATION_CONFIDENCE_THRESHOLD
+    to matcher.DEFAULT_CONFIDENCE_THRESHOLD) — below the confident-match bar
+    but clearly not gibberish either.
+
+    A third logged near-miss, "raise a query about my attendance", used to
+    land here too (candidate raise_payslip_query, ~69.84) before
+    request_attendance_correction gained its own "raise a query/concern about
+    my attendance" phrases — it now resolves as a confident direct match to
+    request_attendance_correction instead, which is the fix, not a
+    regression. See test_matcher.py's collision tests for that pair.
     """
 
     def tearDown(self):
@@ -83,17 +89,6 @@ class MiddleConfidenceTriggersClarificationTests(SimpleTestCase):
         self.assertTrue(result['success'])
 
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_garbled_attendance_flavored_query_asks_did_you_mean(self, mock_get_pending):
-        request = _fake_request()
-
-        result = handle_transcript(request, 'raise a query about my attendance')
-
-        self.assertEqual(result['intent'], 'raise_payslip_query')
-        self.assertTrue(60 <= result['confidence'] < 80)
-        self.assertTrue(result['awaiting_input'])
-        self.assertIn('did you mean', result['message'].lower())
-
-    @patch('apps.voice_commands.conversation.get_pending', return_value=None)
     def test_heavily_garbled_query_asks_did_you_mean(self, mock_get_pending):
         request = _fake_request()
 
@@ -110,9 +105,9 @@ class MiddleConfidenceTriggersClarificationTests(SimpleTestCase):
         answerable question."""
         request = _fake_request()
 
-        result = handle_transcript(request, 'raise a query about my attendance')
+        result = handle_transcript(request, 'raise a queryAbout my Paisley')
 
-        self.assertEqual(result['message'], 'Did you mean: "raise a query about my payslip"?')
+        self.assertEqual(result['message'], 'Did you mean: "raise a query on my payslip"?')
 
 
 class LowConfidenceStillNoMatchTests(SimpleTestCase):
@@ -166,7 +161,7 @@ class ClarificationConfirmationTests(SimpleTestCase):
 
     def test_yes_confirms_and_dispatches_the_candidate_intent(self):
         # Turn 1: middle-confidence guess.
-        first = handle_transcript(self.request, 'raise a query about my attendance')
+        first = handle_transcript(self.request, 'raise a queryAbout my Paisley')
         self.assertTrue(first['awaiting_input'])
 
         # Turn 2: user confirms. raise_payslip_query is itself a
@@ -176,7 +171,7 @@ class ClarificationConfirmationTests(SimpleTestCase):
         with patch('apps.voice_commands.conversation_payroll.execute_intent', self.mock_execute), \
              patch(
                  'apps.voice_commands.conversation_payroll.extract_payslip_query_description',
-                 return_value='my attendance record looks wrong',
+                 return_value='my payslip amount looks wrong',
              ):
             result = handle_transcript(self.request, 'yes')
 
@@ -187,7 +182,7 @@ class ClarificationConfirmationTests(SimpleTestCase):
         self.assertNotIn(42, self.store._store)  # pending cleared
 
     def test_no_declines_and_falls_back_to_generic_no_match(self):
-        handle_transcript(self.request, 'raise a query about my attendance')
+        handle_transcript(self.request, 'raise a queryAbout my Paisley')
 
         result = handle_transcript(self.request, 'no')
 
@@ -198,7 +193,7 @@ class ClarificationConfirmationTests(SimpleTestCase):
         self.assertNotIn(42, self.store._store)  # pending cleared, not left dangling
 
     def test_unclear_answer_re_asks_the_same_question_instead_of_guessing(self):
-        first = handle_transcript(self.request, 'raise a query about my attendance')
+        first = handle_transcript(self.request, 'raise a queryAbout my Paisley')
 
         result = handle_transcript(self.request, 'maybe')
 
@@ -213,7 +208,7 @@ class ClarificationConfirmationTests(SimpleTestCase):
         else clear and confident should get THAT command, not be stuck
         answering yes/no for a guess they've moved past — same abandonment
         rule apply_leave/approve_leave already have."""
-        handle_transcript(self.request, 'raise a query about my attendance')
+        handle_transcript(self.request, 'raise a queryAbout my Paisley')
 
         result = handle_transcript(self.request, 'clock in')
 

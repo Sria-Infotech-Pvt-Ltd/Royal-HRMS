@@ -166,8 +166,7 @@ def _find_employees_by_name(request, name_query: str) -> list:
     """
     qs = User.objects.filter(is_active=True).exclude(employee_id='')
 
-    role_name = request.user.role.name if request.user.role else ''
-    if role_name != 'system_admin' and request.user.branch:
+    if not (request.user.role and (request.user.role.name == 'system_admin' or getattr(request.user, 'is_superuser', False))) and request.user.branch:
         qs = qs.filter(branch=request.user.branch)
 
     candidates = [{'user_id': u.id, 'employee_name': u.full_name} for u in qs]

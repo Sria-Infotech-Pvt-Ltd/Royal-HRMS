@@ -37,6 +37,7 @@ export const API = {
 
   employees: {
     list: "/employees/",
+    stats: "/employees/stats/",
     hrList: "/employees/hrs/",
     managerList: "/employees/managers/",
     me: "/employees/me/",
@@ -65,6 +66,7 @@ export const API = {
     financialYear: "/settings/company/financial-year/",
     employeeCode: "/settings/employee-code/",
     emailTemplates: "/settings/email-templates/",
+    resolveTemplateContext: "/settings/email-templates/resolve-context/",
     approvalRules: "/settings/approval-rules/",
     assessmentConfig: "/assessments/settings/",
   },
@@ -198,6 +200,7 @@ export const API = {
     export: "/attendance/export/",
     corrections: "/attendance/corrections/",
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
+    myCorrections: "/attendance/corrections/my/",
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
   },
 
@@ -279,6 +282,9 @@ export const API = {
     adjustments: "/payroll/adjustments/",
     adjustmentDetail: (id: string) => `/payroll/adjustments/${id}/`,
     adjustmentsBulkImport: "/payroll/adjustments/bulk-import/",
+
+    // Branch payroll status overview (admin only)
+    branchStatus: "/payroll/branch-status/",
   },
 
   dashboard: {

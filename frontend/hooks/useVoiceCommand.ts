@@ -46,6 +46,10 @@ const VOICE_LOCALE = "en-US";
 // only these can come back with the geofencing rejection below.
 const CLOCK_INTENTS = new Set(["clock_in", "clock_out"]);
 
+// HR/manager intents that change leave request state — dispatching
+// leave:updated lets the approval table and action queue refresh immediately.
+const LEAVE_APPROVAL_INTENTS = new Set(["approve_leave", "reject_leave"]);
+
 // Mirrors backend/apps/attendance/services_geofencing.py's _validate_office
 // verbatim — this is the ONE rejection reason a client-side geolocation
 // retry can actually fix (the branch requires GPS and none was sent yet).
@@ -128,10 +132,14 @@ function captureLocationOrErrorMessage(): Promise<LocationResult> {
 // a no-op-fast-path otherwise.
 const TTS_CANCEL_SETTLE_MS = 200;
 
-// "transcript": the panel just opened, showing what was recognized while the
-// request is in flight. "result": a response has come back — either the next
-// turn of a conversational dialogue, or the final answer to a one-shot intent.
-export type VoicePanelPhase = "transcript" | "result";
+// "greeting": the panel opened via the keyboard toggle, before any command
+// has been typed yet — never produced by this hook itself (see
+// VoiceCommandButton, which renders the panel in this phase directly, ahead
+// of `conversation` ever being set here). "transcript": the panel just
+// opened, showing what was recognized while the request is in flight.
+// "result": a response has come back — either the next turn of a
+// conversational dialogue, or the final answer to a one-shot intent.
+export type VoicePanelPhase = "greeting" | "transcript" | "result";
 export type VoiceResultStatus = "success" | "error";
 
 export interface VoiceConversationState {
@@ -325,6 +333,16 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         }
 
         const { message, conversational, awaitingInput, success: isSuccess } = outcome;
+
+        // Notify ClockWidget and dashboard consoles immediately on success —
+        // don't wait for the WebSocket path which requires Daphne to be up.
+        if (isSuccess && CLOCK_INTENTS.has(outcome.intent)) {
+          window.dispatchEvent(new CustomEvent("attendance:updated"));
+        }
+        // Leave approvals: no direct dispatch — the backend pushes fresh counts
+        // through the WebSocket (overview.py:push_leave_update) with the full
+        // action_queue payload, so components update state directly from the WS
+        // frame without an HTTP refetch.
 
         if (isDisabled) {
           // Panel can't render (e.g. the session expired mid-request) —

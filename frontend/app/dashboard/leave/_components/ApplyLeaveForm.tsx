@@ -5,7 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
-import { useFiscalYearConfig } from "@/lib/fiscalYear";
+import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
   LeaveTypeKey, DurationKey,
@@ -60,7 +60,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const [submitted,     setSubmitted]     = useState<LeaveRequest | null>(null);
   const [docFile,       setDocFile]       = useState<File | null>(null);
 
-  const { currentYear } = useFiscalYearConfig();
+  const currentYear = getLeaveYear();
   const { data: balances } = useFetch<LeaveBalance[]>(API.leave.balance + `?year=${currentYear}`);
   const { data: policies } = useFetch<LeavePolicy[]>(API.leave.policy);
 

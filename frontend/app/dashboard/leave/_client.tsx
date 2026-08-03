@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import { usePermission, useAnyPermission } from "@/hooks/usePermission";
+import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import LeaveDashboard from "./_components/LeaveDashboard";
 import LeaveApprovals from "./_components/LeaveApprovals";
@@ -20,16 +21,14 @@ type TabId = "dashboard" | "apply" | "approvals" | "attendance" | "corrections" 
 interface Props { role: string }
 
 export default function LeavePageClient({ role }: Props) {
-  const isSystemAdmin = role === "system_admin";
+  const currentUser   = useCurrentUser();
+  const isSystemAdmin = currentUser?.is_superuser === true;
   const canApprove    = usePermission("leave.approve");
-  // Attendance sign-off lives here only for HR — other roles still use /dashboard/approvals.
-  const isHR = role === "hr" || role === "hr_admin";
-  const hasAttendanceApprovalPermission = useAnyPermission("payroll.view", "payroll.approve");
-  const canApproveAttendance = isHR && hasAttendanceApprovalPermission;
-  // Attendance correction (missed-clockout) requests reach HR at the L2 stage —
-  // same permission managers use on /dashboard/approvals, HR-scoped here.
-  const hasCorrectionPermission = useAnyPermission("attendance.create");
-  const canApproveCorrections = isHR && hasCorrectionPermission;
+  // Attendance sign-off and correction tabs here are scoped to HR-level users
+  // (those with payroll.view / attendance.create permissions). Managers access
+  // the same tabs via /dashboard/approvals instead.
+  const canApproveAttendance  = usePermission("payroll.view");
+  const canApproveCorrections = usePermission("attendance.create");
 
   const ALL_TABS: { id: TabId; label: string }[] = [
     { id: "dashboard",  label: "Dashboard"   },

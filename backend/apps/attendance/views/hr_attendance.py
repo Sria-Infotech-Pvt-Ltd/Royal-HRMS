@@ -46,28 +46,16 @@ from core.pagination import paginate, paginated_data
 logger = logging.getLogger(__name__)
 
 
-def _has_hr_permission(user, codename: str) -> bool:
-    if user.is_superuser:
-        return True
-    try:
-      
-        if user.role and user.role.name == 'employee':
-            return False
-        return user.role.role_permissions.filter(
-            permission__codename=codename
-        ).exists()
-    except Exception:
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
         return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _is_unrestricted(user) -> bool:
-    
-    if user.is_superuser:
-        return True
-    try:
-        return user.role.name == 'system_admin'
-    except Exception:
-        return False
+    return _has_perm(user, 'settings.edit')
 
 
 def _branch_scope(user, requested: str) -> str:
@@ -98,7 +86,7 @@ def _manager_scope_employee_ids(user) -> list[str] | None:
     them every other manager's team too, not just their own.
     """
     try:
-        if user.role and user.role.name == 'manager__team_lead':
+        if user.role and getattr(user.role, 'can_manage_team', False):
             return list(
                 user.direct_reports.filter(is_active=True).values_list('id', flat=True)
             )
@@ -127,7 +115,7 @@ class HRAttendanceDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         ser = DateFilterSerializer(data=request.query_params)
@@ -151,7 +139,7 @@ class HRAttendanceListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         ser = AttendanceListFilterSerializer(data=request.query_params)
@@ -175,7 +163,7 @@ class HRAttendanceDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk: str):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         target_date_str = request.query_params.get('date', '')
@@ -201,7 +189,7 @@ class HRAttendanceDetailView(APIView):
 
     def patch(self, request, pk: str):
         """HR edits an existing attendance record — status, punch times, note."""
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = HRAttendanceEditSerializer(data=request.data)
@@ -284,7 +272,7 @@ class HRAttendanceCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = HRAttendanceManualCreateSerializer(data=request.data)
@@ -378,7 +366,7 @@ class HROvertimeListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         date_str = request.query_params.get('date', '')
@@ -408,7 +396,7 @@ class HROvertimeCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = OvertimeWriteSerializer(data=request.data)
@@ -433,7 +421,7 @@ class HRInvalidPunchesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         date_str = request.query_params.get('date', '')
@@ -463,7 +451,7 @@ class HRUnpunchesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         date_str = request.query_params.get('date', '')
@@ -494,7 +482,7 @@ class HRAttendanceImportView(APIView):
     parser_classes = [MultiPartParser]
 
     def post(self, request):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         file = request.FILES.get('file')
@@ -543,7 +531,7 @@ class HRAttendanceImportStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, import_id):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         from apps.attendance.models import AttendanceImportLog
@@ -604,7 +592,7 @@ class HRAttendanceImportSampleView(APIView):
     ]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         from core.file_utils import build_sample_csv, build_sample_xlsx, _CSV_MIME, _XLSX_MIME
@@ -638,7 +626,7 @@ class HRAttendanceReprocessView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         date_str = request.data.get('date', '')
@@ -676,7 +664,7 @@ class HRCorrectionListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         ser = CorrectionListFilterSerializer(data=request.query_params)
@@ -716,7 +704,7 @@ class HRCorrectionReviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        if not _has_hr_permission(request.user, 'attendance.create'):
+        if not _has_perm(request.user, 'attendance.create'):
             return error('Permission denied.', http_status=403)
 
         ser = CorrectionReviewSerializer(data=request.data)
@@ -747,7 +735,7 @@ class HRAttendanceExportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         ser = AttendanceListFilterSerializer(data=request.query_params)
@@ -774,7 +762,7 @@ class HREmployeeMonthView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not _has_hr_permission(request.user, 'attendance.view'):
+        if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
 
         employee_pk = request.query_params.get('employee_id')

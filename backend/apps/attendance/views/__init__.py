@@ -30,6 +30,7 @@ from apps.attendance.views.my_attendance import (
     AttendanceSummaryView,
     AttendanceCalendarView,
     AttendanceCorrectionView,
+    MyCorrectionsListView,
 )
 from apps.attendance.views.hr_attendance import (
     HRAttendanceDashboardView,
@@ -76,6 +77,7 @@ __all__ = [
     'AttendanceSummaryView',
     'AttendanceCalendarView',
     'AttendanceCorrectionView',
+    'MyCorrectionsListView',
     # HR Management
     'HRAttendanceDashboardView',
     'HRAttendanceListView',

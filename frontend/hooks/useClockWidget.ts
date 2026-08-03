@@ -34,7 +34,7 @@ function parseOS(): string {
 
 export function useClockWidget() {
   const { showToast } = useToast();
-  const { data: todayData, loading: fetchLoading } = useFetch<TodaySession>(API.attendance.today);
+  const { data: todayData, loading: fetchLoading, refetch } = useFetch<TodaySession>(API.attendance.today);
   const [session, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -42,6 +42,12 @@ export function useClockWidget() {
   useEffect(() => {
     if (todayData) setSession(todayData);
   }, [todayData]);
+
+  useEffect(() => {
+    function handleAttendanceUpdate() { refetch(); }
+    window.addEventListener("attendance:updated", handleAttendanceUpdate);
+    return () => window.removeEventListener("attendance:updated", handleAttendanceUpdate);
+  }, [refetch]);
 
   const isClockedIn = session?.is_clocked_in ?? false;
 

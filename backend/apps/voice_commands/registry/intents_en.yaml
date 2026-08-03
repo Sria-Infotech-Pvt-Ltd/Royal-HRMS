@@ -36,6 +36,25 @@ intents:
       - "i showed up"
       - "mark me present"
       - "i'm at the office now"
+      - "i need to clock in"
+      - "i need to clockin"
+      # Added to fix a phrase-collision regression: neither phrase above uses
+      # an "i need to ___" request framing, so that framing — including the
+      # concatenated typo variant "clockin" (no space) — was drifting to
+      # request_attendance_correction's near-identical "i need to fix my
+      # punch" / "i need to correct my punch time" instead (60.87 vs this
+      # intent's OLD best of 57.14 for "clock me in"). Confirmed via direct
+      # rapidfuzz scoring, not a matcher bug — same shape as the
+      # raise_payslip_query collision fixed below. See test_matcher.py's
+      # collision tests for this pair.
+      #
+      # Deliberately NOT "i need to clock myself in" — token_sort_ratio is a
+      # character ratio over alphabetically-sorted tokens, not a directional
+      # comparison, so that phrase scored 88.00 against "i need to clockout
+      # myself" (a clock_OUT transcript) vs only 86.27 for clock_out's own
+      # "i need to clock myself out" — it would have silently stolen
+      # clock_out's traffic. The shorter "clockin"/"clockout" forms below
+      # separate cleanly instead (each ~10+ points ahead on its own target).
 
   clock_out:
     # Same as clock_in — AttendancePunchView has no per-punch-type permission check.
@@ -57,6 +76,15 @@ intents:
       - "i'm out for the day"
       - "i'm done for today"
       - "signing off for the day"
+      - "i need to clock out"
+      - "i need to clockout"
+      # Same collision as clock_in above, symmetric case: "i need to clockout
+      # myself" was scoring higher (60.71) against request_attendance_correction's
+      # "i need to correct my punch time" than against this intent's OLD best
+      # of 54.05 for "clock me out". See clock_in's comment above for why
+      # "clock myself out" was deliberately left out (it collided with
+      # clock_in's own "clock myself in" phrase — direction words alone
+      # aren't enough signal for a character-based ratio scorer).
 
   check_leave_balance:
     # No domain codename required for the caller's own balance — matches the
@@ -434,11 +462,12 @@ intents:
   request_attendance_correction:
     # No domain codename required — matches AttendanceCorrectionView.post()
     # (attendance/views/my_attendance.py:252-265), which is IsAuthenticated-only.
-    # Voice can't yet capture the required slots (date, punch type, in/out
-    # time, reason) — the executor always defers this one to the dashboard
-    # until slot-filling infrastructure exists.
+    # Now conversational: true — slot-filling infrastructure (date, punch_type,
+    # correct_in_time/correct_out_time depending on punch_type, reason) lives
+    # in correction_slot_extractor.py / conversation_attendance_correction.py,
+    # mirroring apply_leave's turn-taking shape.
     required_permission: null
-    conversational: false
+    conversational: true
     phrases:
       - "request attendance correction"
       - "correct my attendance"
@@ -455,6 +484,52 @@ intents:
       - "help me correct my attendance"
       - "i missed a punch can you fix it"
       - "i need to correct my punch time"
+      # Added to close a coverage gap: none of the phrases above use a "raise
+      # a query/concern" framing, so that phrasing was drifting to
+      # raise_payslip_query's near-identical "raise a query about my
+      # payslip" instead (69.84 vs the best this intent's OLD phrase list
+      # could offer, 56.72) — confirmed via direct rapidfuzz scoring, not a
+      # matcher bug. See test_matcher.py's collision tests for this pair.
+      - "raise a query about my attendance"
+      - "raise a concern about my attendance"
+      - "raise an issue with my attendance"
+      - "raise a query regarding my attendance"
+      - "i have a query about my attendance"
+      - "i have an issue with my attendance"
+
+  greeting:
+    # No domain codename required — matches VoiceParseView itself, which is
+    # IsAuthenticated only (voice_commands/views.py:41). Single-turn: unlike
+    # apply_leave/request_attendance_correction, there's nothing to slot-fill,
+    # so this never sets conversational: true.
+    #
+    # Distinct from VoiceConversationPanel's static "Hi, how can I help you?"
+    # placeholder (frontend/components/VoiceConversationPanel.tsx's
+    # GREETING_MESSAGE) — that text is shown before any transcript exists and
+    # never reaches this registry or /api/voice/parse/ at all. This intent
+    # only fires once a real transcript ("hi", "good morning", ...) has been
+    # spoken or typed and fuzzy-matched here — see executor_greeting.py for
+    # the personalized, time-of-day-aware response it produces.
+    required_permission: null
+    conversational: false
+    phrases:
+      - "hi"
+      - "hi there"
+      - "hello"
+      - "hello there"
+      - "hey"
+      - "hey there"
+      - "good morning"
+      - "good morning to you"
+      - "good afternoon"
+      - "good evening"
+      - "greetings"
+      - "good day"
+      - "howdy"
+      - "yo"
+      - "hiya"
+      - "hi assistant"
+      - "hello assistant"
 
 # Attendance mode phrases — scanned independently of which intent matched.
 # Shared by clock_in and clock_out since PunchService.record_punch() reads

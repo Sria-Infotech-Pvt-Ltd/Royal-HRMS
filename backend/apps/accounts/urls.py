@@ -24,6 +24,7 @@ from apps.accounts.views import (
     DocumentListCreateView,
     DocumentStatsView,
     EmployeeListCreateView,
+    EmployeeStatsView,
     LoginView,
     LogoutView,
     TokenRefreshAPIView,
@@ -44,6 +45,7 @@ from apps.accounts.views import (
     EmailTemplateListCreateView,
     EmailTemplateDetailView,
     EmailTemplatePreviewView,
+    ResolveTemplateVariablesView,
 )
 
 urlpatterns = [
@@ -58,6 +60,7 @@ urlpatterns = [
 
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
+    path('employees/stats/',                                     EmployeeStatsView.as_view(),             name='employee-stats'),
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
@@ -113,6 +116,7 @@ urlpatterns = [
     path('settings/email-templates/',              EmailTemplateListCreateView.as_view(), name='email-template-list'),
     path('settings/email-templates/<int:pk>/',     EmailTemplateDetailView.as_view(),     name='email-template-detail'),
     path('settings/email-templates/<int:pk>/preview/', EmailTemplatePreviewView.as_view(), name='email-template-preview'),
+    path('settings/email-templates/resolve-context/',   ResolveTemplateVariablesView.as_view(), name='email-template-resolve-context'),
 
     # Document Center (admin)
     path('documents/',           DocumentListCreateView.as_view(), name='document-list-create'),

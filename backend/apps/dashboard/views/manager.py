@@ -17,17 +17,26 @@ _DENIED = 'You do not have permission to perform this action.'
 
 _TTL_BIRTHDAYS = 6 * 3600   # 6 h — team birthday data is stable
 
+
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _is_manager_or_lead(user) -> bool:
     if not user or not user.role:
         return False
-    # can_manage_team is the authoritative flag — set per-role in the admin,
-    # no role-name strings to maintain here.
+    # can_manage_team is the authoritative flag — set per-role, no role-name strings.
     if user.role.can_manage_team:
         return True
-    # system_admin and hr always have dashboard access too.
-    if user.role.name in ('system_admin', 'hr', 'hr_admin'):
+    # Admin/HR have employees.view — they also get manager dashboard access.
+    if _has_perm(user, 'employees.view'):
         return True
     # Fallback: any user who has direct reports is effectively a manager.
     return user.direct_reports.filter(is_active=True).exists()
@@ -233,7 +242,7 @@ def _build_quick_actions(manager, pending_count):
             'count': None,
         },
     ]
-    if role in ('system_admin', 'hr_admin', 'hr', 'manager'):
+    if _has_perm(manager, 'recruitment.view'):
         actions.append({
             'id':    'interviews',
             'label': 'Interviews',

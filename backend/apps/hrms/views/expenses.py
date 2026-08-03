@@ -7,8 +7,10 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from apps.accounts.utils import send_template_email
 from core.pagination import paginate, paginated_data
 from core.responses import error, first_error, success
+from core.template_context import expense_context, universal_context
 
 from ..models import (
     Expense, ExpenseReceipt,
@@ -26,6 +28,8 @@ logger = logging.getLogger(__name__)
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
@@ -48,11 +52,13 @@ def _can_access_expense(user, expense) -> bool:
         return True
     if not _has_perm(user, 'expenses.approve'):
         return False
-    role = user.role.name if user.role else ''
-    if role == 'system_admin':
+    # system_admin (and superusers) — all-org access
+    if _has_perm(user, 'settings.edit'):
         return True
-    if role == 'manager__team_lead':
+    # team leads / managers — scoped to their direct reports
+    if user.role and getattr(user.role, 'can_manage_team', False):
         return expense.employee.reporting_manager_id == user.id
+    # HR / branch-scoped roles — same branch as the submitter
     branch = getattr(user, 'branch', '') or ''
     return not branch or (getattr(expense.employee, 'branch', '') or '') == branch
 
@@ -66,12 +72,23 @@ class ExpenseListCreateView(APIView):
         queryset = (
             Expense.objects.select_related('employee', 'branch')
                            .prefetch_related('receipts')
-                           .all()
-            if has_approve
-            else Expense.objects.select_related('employee', 'branch')
-                                .prefetch_related('receipts')
-                                .filter(employee=request.user)
         )
+
+        if not has_approve:
+            queryset = queryset.filter(employee=request.user)
+        else:
+            # Mirrors _can_access_expense's per-record scoping, which was never
+            # applied here — without it, any approver saw every expense
+            # company-wide instead of just the employees they're allowed to act on.
+            role = request.user.role.name if request.user.role else ''
+            if role == 'system_admin':
+                pass
+            elif role == 'manager__team_lead':
+                queryset = queryset.filter(employee__reporting_manager_id=request.user.id)
+            else:
+                user_branch = getattr(request.user, 'branch', '') or ''
+                if user_branch:
+                    queryset = queryset.filter(employee__branch=user_branch)
 
         branch = request.query_params.get('branch')
         if branch:
@@ -185,7 +202,32 @@ class ExpenseDetailView(APIView):
         expense.status = status_val
         expense.save(update_fields=['status', 'updated_at'])
         logger.info('Expense %s %s by %s', expense_number, status_val, request.user.email)
+
+        # Optional notification email — the approve/reject modal lets the
+        # approver pick a template and fill in its variables; previously this
+        # was accepted and silently discarded, so nothing was ever sent.
+        template_name = request.data.get('template_name')
+        if template_name:
+            self._send_decision_email(expense, template_name, request.data.get('extra_context') or {})
+
         return success(f'Expense {status_val}.', self._fresh(expense.pk, request))
+
+    def _send_decision_email(self, expense, template_name: str, extra_context: dict) -> None:
+        # Server-computed values win over whatever the client sent — the
+        # client's copy is only a preview; re-deriving it here guarantees the
+        # email always matches the real record, not a stale client-side echo.
+        context = {**universal_context(), **extra_context, **expense_context(expense)}
+        try:
+            send_template_email(
+                recipient_email=expense.employee.email,
+                template_name=template_name,
+                context=context,
+            )
+        except LookupError:
+            logger.warning('Expense %s: unknown/inactive template "%s" — no email sent.',
+                            expense.expense_number, template_name)
+        except Exception:
+            logger.exception('Failed to send "%s" email for expense %s', template_name, expense.expense_number)
 
     # ── UPDATE (full) — PUT replaces all receipts if files are sent ───────────
 

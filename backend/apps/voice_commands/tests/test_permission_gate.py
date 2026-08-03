@@ -140,13 +140,19 @@ class ExistingIntentsUnaffectedTests(SimpleTestCase):
         mock_service.get_monthly_summary.assert_called_once()
         self.assertTrue(result.success)
 
-    def test_request_attendance_correction_reaches_dispatch_for_user_with_no_role(self):
-        # No mocking needed — this intent never touches the database, it
-        # always defers to the dashboard (see executor_attendance.execute_request_attendance_correction).
+    @patch('apps.voice_commands.executor_attendance.AttendanceCorrectionView')
+    @patch('apps.voice_commands.executor_attendance.force_authenticate')
+    def test_request_attendance_correction_reaches_dispatch_for_user_with_no_role(
+        self, mock_force_authenticate, mock_view_cls,
+    ):
+        from datetime import date, time
+
+        mock_view_cls.as_view.return_value.return_value = MagicMock(status_code=201, data={'data': {}})
         request = _fake_request()
         request.user.role = None
+        slots = {'date': date(2026, 7, 22), 'punch_type': 'IN', 'correct_in_time': time(9, 0), 'reason': 'forgot_to_punch'}
 
-        result = execute_intent(INTENT_REQUEST_ATTENDANCE_CORRECTION, request)
+        result = execute_intent(INTENT_REQUEST_ATTENDANCE_CORRECTION, request, slots=slots)
 
         self.assertNotEqual(result.message, _PERMISSION_DENIED_MESSAGE)
 

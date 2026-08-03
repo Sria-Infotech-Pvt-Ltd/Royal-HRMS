@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/components/ToastProvider";
 import PolicyTab from "./_components/PolicyTab";
 import CreditTab from "./_components/CreditTab";
@@ -12,11 +12,6 @@ import OpeningBalanceImportModal from "./_components/OpeningBalanceImportModal";
 
 type Tab = "types" | "policies" | "credit" | "carryForward";
 
-// Carry Forward and Opening Balance Import are both execution/audit actions
-// restricted to system_admin, hr_admin, hr — kept out of the employee-visible
-// tab bar even though this whole settings page already requires settings.view
-// at the route level.
-const LEAVE_ADMIN_ROLES = ["system_admin", "hr_admin", "hr"];
 
 const BASE_TABS: { id: Tab; icon: string; label: string }[] = [
   { id: "types",    icon: "ti-beach",      label: "Leave Types"  },
@@ -26,12 +21,11 @@ const BASE_TABS: { id: Tab; icon: string; label: string }[] = [
 
 export default function LeavePolicyPage() {
   const router = useRouter();
-  const user = useCurrentUser();
   const { showToast } = useToast();
   const [tab, setTab] = useState<Tab>("types");
   const [showImportModal, setShowImportModal] = useState(false);
 
-  const isLeaveAdmin = !!user && LEAVE_ADMIN_ROLES.includes(user.role);
+  const isLeaveAdmin = usePermission("leave.edit");
   const TABS = isLeaveAdmin
     ? [...BASE_TABS, { id: "carryForward" as Tab, icon: "ti-repeat", label: "Carry Forward" }]
     : BASE_TABS;

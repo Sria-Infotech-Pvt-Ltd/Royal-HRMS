@@ -114,6 +114,11 @@ export interface HRActionQueue {
   separation_requests:    number;
 }
 
+export interface LeaveUpdatePayload {
+  action_queue:    HRActionQueue | null;
+  pending_actions: number | null;
+}
+
 export interface RecruitmentFunnel {
   interviews_scheduled: number;
   interviewed:          number;

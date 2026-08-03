@@ -1,7 +1,16 @@
+import sys
 import environ
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+
+if sys.platform == 'win32':
+    # Windows consoles default stdout/stderr to the legacy cp1252 codepage,
+    # which can't encode characters like '→' or '—' used in log messages —
+    # that crashes logging.StreamHandler.emit() with UnicodeEncodeError.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, 'reconfigure'):
+            _stream.reconfigure(encoding='utf-8', errors='backslashreplace')
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
@@ -313,6 +322,7 @@ LOGGING = {
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
             'formatter': 'verbose',
+            'encoding': 'utf-8',
         },
         'error_file': {
             'level': 'WARNING',
@@ -321,6 +331,7 @@ LOGGING = {
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
             'formatter': 'verbose',
+            'encoding': 'utf-8',
         },
         'voice_commands_file': {
             'level': 'INFO',
@@ -329,6 +340,7 @@ LOGGING = {
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
             'formatter': 'verbose',
+            'encoding': 'utf-8',
         },
         'console': {
             'class': 'logging.StreamHandler',
@@ -346,6 +358,14 @@ LOGGING = {
             'level': 'WARNING',
             'propagate': False,
         },
+        # Keyed 'apps.voice_commands' (not a bare 'voice_commands' string) —
+        # every module in this app logs via logging.getLogger(__name__), which
+        # resolves to 'apps.voice_commands.<module>' (e.g.
+        # 'apps.voice_commands.conversation'). Python's logging hierarchy walks
+        # up dotted parents, so a logger registered here as 'apps.voice_commands'
+        # catches every submodule's calls via propagation. A bare 'voice_commands'
+        # key (mirroring the 'accounts' entry above literally) would NOT match
+        # that hierarchy and would silently catch nothing.
         'apps.voice_commands': {
             'handlers': ['voice_commands_file', 'console'],
             'level': 'INFO',

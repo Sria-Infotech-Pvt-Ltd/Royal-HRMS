@@ -19,13 +19,11 @@ from apps.announcements.serializers import AnnouncementSerializer, AnnouncementW
 logger = logging.getLogger(__name__)
 
 
-def _has_perm(user, codename):
-    if not user:
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
         return False
-    if getattr(user, 'is_superuser', False):
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
         return True
-    if not user.role:
-        return False
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
@@ -56,7 +54,7 @@ class CanPostAnnouncement(BasePermission):
             return True
         if not request.user.role:
             return False
-        if request.user.role.name == 'system_admin':
+        if _has_perm(request.user, 'settings.edit'):
             return True
         return obj.posted_by_id == request.user.id
 

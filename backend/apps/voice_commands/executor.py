@@ -15,6 +15,7 @@ from apps.voice_commands.executor_attendance import (
     execute_clock_out,
     execute_request_attendance_correction,
 )
+from apps.voice_commands.executor_greeting import execute_greeting
 from apps.voice_commands.executor_leave import (
     execute_apply_leave,
     execute_cancel_leave,
@@ -48,6 +49,7 @@ INTENT_CHECK_MY_PAYSLIP = 'check_my_payslip'
 INTENT_ACKNOWLEDGE_PAYSLIP = 'acknowledge_payslip'
 INTENT_RAISE_PAYSLIP_QUERY = 'raise_payslip_query'
 INTENT_CHECK_EMPLOYEE_PAYSLIP = 'check_employee_payslip'
+INTENT_GREETING = 'greeting'
 
 _LEAVE_APPROVAL_INTENT_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
 
@@ -77,6 +79,7 @@ def execute_intent(
         approve_leave, reject_leave
       - executor_payroll.py     — check_my_payslip, acknowledge_payslip,
         raise_payslip_query, check_employee_payslip
+      - executor_greeting.py    — greeting
     This function's only job is the permission gate (below) and routing to
     the right one — no domain-specific imports live here.
 
@@ -96,7 +99,12 @@ def execute_intent(
     slots is meaningful for apply_leave — voice_commands/conversation.py fills
     it in once all required slots (leave_type, start_date, end_date, reason)
     have been collected, possibly across several turns, and only calls
-    execute_intent() at that point — and for approve_leave/reject_leave,
+    execute_intent() at that point. request_attendance_correction works the
+    same way (date, punch_type, reason, plus correct_in_time and/or
+    correct_out_time depending on punch_type — see correction_slot_extractor.py
+    /conversation_attendance_correction.py), the one difference being that
+    which slots are required isn't a flat list, since the time slots are
+    only needed for some punch_type values. And for approve_leave/reject_leave,
     which use it differently: every turn of those two dispatches through
     execute_intent() (not just the last one), so the leave.approve gate below
     always runs before any team leave data is looked up. slots['stage'] is
@@ -155,7 +163,7 @@ def execute_intent(
     if intent == INTENT_CHECK_ATTENDANCE_SUMMARY:
         return execute_check_attendance_summary(request)
     if intent == INTENT_REQUEST_ATTENDANCE_CORRECTION:
-        return execute_request_attendance_correction()
+        return execute_request_attendance_correction(request, slots or {})
     if intent == INTENT_CHECK_TEAM_LEAVE_QUEUE:
         return execute_check_team_leave_queue(request)
     if intent == INTENT_CHECK_TEAM_ATTENDANCE:
@@ -176,4 +184,6 @@ def execute_intent(
         return execute_raise_payslip_query(request, (slots or {}).get('description', ''))
     if intent == INTENT_CHECK_EMPLOYEE_PAYSLIP:
         return execute_identify_employee_payslip(request, (slots or {}).get('name_query'))
+    if intent == INTENT_GREETING:
+        return execute_greeting(request)
     return ExecutionResult(success=False, message="I didn't understand that command.")

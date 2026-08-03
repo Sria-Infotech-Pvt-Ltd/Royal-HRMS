@@ -40,12 +40,6 @@ from ..serializers import (
 logger = logging.getLogger(__name__)
 
 
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
-
-
 def _current_year() -> int:
     from apps.accounts.utils import get_company_financial_year_config, get_fy_start_year
     config = get_company_financial_year_config()
@@ -84,8 +78,12 @@ def _resolve_approval_chain(employee):
     return l1, l2
 
 
-def _role_name(user) -> str:
-    return user.role.name if user.role else 'employee'
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _user_branch(user) -> str:
@@ -104,80 +102,78 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
     """
     Return True if `user` is authorised to act at the given approval stage.
 
-    - system_admin: always authorised (admin override for any stuck request).
-    - l1 stage: must be the designated l1_approver on the request.
-    - l2 stage: must be the designated l2_approver, or an hr_admin / hr in
-                the same branch when no l2 was stamped at creation time.
+    - settings.edit (admin): always authorised — override for any stuck request.
+    - l1 stage: must be the designated l1_approver on the request — L1 is a
+                per-manager assignment, not a shared queue.
+    - l2 stage: must be the designated l2_approver, or a leave.approve holder
+                in the same branch when no l2 was stamped at creation time.
+                L2 is a shared branch-wide HR queue (see _approval_scope_filter,
+                which already lists l2_pending requests to every branch HR).
 
-    Enforcing the designated approver prevents any user with leave.approve from
-    jumping the queue or acting at the wrong stage.
+    Enforcing the designated approver at L1 prevents any user with leave.approve
+    from jumping the queue or acting at the wrong stage. L2 must stay in sync
+    with _approval_scope_filter's branch-wide visibility, or HR users who can
+    see a request in their queue get a 403 when they try to act on it.
     """
-    role = _role_name(user)
-    if role == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return True
 
     if stage == 'l1':
         if leave_request.l1_approver_id:
             return leave_request.l1_approver_id == user.id
-        # No designated L1 — only system_admin (handled above) may unblock.
         return False
 
     if stage == 'l2':
         if leave_request.l2_approver_id:
             return leave_request.l2_approver_id == user.id
-        # No designated L2 — HR admin with branch access may step in.
-        return role in ('hr_admin', 'hr') and _can_hr_access_request(user, leave_request)
+        # No designated L2 — any leave.approve holder with branch access may step in.
+        return _has_perm(user, 'leave.approve') and _can_hr_access_request(user, leave_request)
 
     return False
 
 
-def _is_hr_role(role: str) -> bool:
-    """True for both 'hr' (current DB value) and legacy 'hr_admin' alias."""
-    return role in ('hr', 'hr_admin')
-
-
 def _approval_scope_filter(user) -> 'Q':
     """
-    Scope filter for the approval queue — enforces both role and status visibility.
-    manager__team_lead → REQ_PENDING requests where they are the designated L1 approver.
-    hr / hr_admin      → REQ_L2_PENDING requests in their branch (case-insensitive).
-                         If no branch is set on the HR user they see all REQ_L2_PENDING
-                         requests org-wide (company-wide HR role).
-    system_admin       → all statuses, all employees except own.
+    Scope filter for the approval queue — enforces both permission and status visibility.
+    can_manage_team  → REQ_PENDING requests where they are the designated L1 approver.
+    leave.approve    → REQ_L2_PENDING requests in their branch.
+                       If no branch is set they see all REQ_L2_PENDING requests org-wide.
+    settings.edit    → all statuses, all employees except own (admin override).
     """
-    role = _role_name(user)
-    if role == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return ~Q(employee=user)
-    if _is_hr_role(role):
-        branch = _user_branch(user)
-        if branch:
-            # iexact prevents mismatches from casing differences in branch names.
-            return Q(employee__branch__iexact=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
-        # No branch set → treat as company-wide HR; see all L2-pending requests.
-        return Q(status=REQ_L2_PENDING) & ~Q(employee=user)
-    if role == 'manager__team_lead':
-        # Show only requests where this manager is the designated L1 approver.
+    # Checked before leave.approve: manager__team_lead holds both can_manage_team
+    # and leave.approve (seeded onto the role before the L1/L2 workflow existed),
+    # so checking leave.approve first would route every manager into the HR/L2
+    # branch below and hide their own team's L1-pending requests entirely.
+    if user.role and user.role.can_manage_team:
         # Scoping by l1_approver (not reporting_manager) is precise — it respects
         # per-employee overrides and avoids showing requests already past L1.
         return Q(l1_approver=user, status=REQ_PENDING) & ~Q(employee=user)
+    if _has_perm(user, 'leave.approve'):
+        branch = _user_branch(user)
+        if branch:
+            return Q(employee__branch__iexact=branch, status=REQ_L2_PENDING) & ~Q(employee=user)
+        return Q(status=REQ_L2_PENDING) & ~Q(employee=user)
     return Q(employee=user)
 
 
 def _calendar_scope_filter(user) -> 'Q':
     """
     Scope filter for the team calendar.
-    employee           → all approved (to see who's out)
-    manager__team_lead → team + own
-    hr_admin           → branch
-    system_admin       → all
+    settings.edit    → all (admin sees everything)
+    can_manage_team  → team + own
+    leave.approve    → branch-scoped or org-wide if no branch
+    employee         → all approved (to see who's out for absence planning)
     """
-    role = _role_name(user)
-    if role == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return Q()
-    if _is_hr_role(role):
-        return Q(employee__branch__iexact=user.branch) if user.branch else Q()
-    if role == 'manager__team_lead':
+    # Same precedence as _approval_scope_filter above: can_manage_team must be
+    # checked before leave.approve, since manager__team_lead holds both.
+    if user.role and user.role.can_manage_team:
         return Q(employee__reporting_manager=user) | Q(employee=user)
+    if _has_perm(user, 'leave.approve'):
+        return Q(employee__branch__iexact=user.branch) if user.branch else Q()
     return Q()  # employee: see all approved leaves to plan around absences
 
 
@@ -534,18 +530,17 @@ class LeaveBalanceView(APIView):
 def _can_adjust_balance(user, balance) -> bool:
     """
     Block self-adjustment entirely (nobody may inflate their own balance),
-    then scope by role — mirrors _can_approve_at_stage's branch/
+    then scope by permission — mirrors _can_approve_at_stage's branch/
     reporting-chain conventions used for leave request approval.
     """
     if balance.employee_id == user.id:
         return False
-    role = _role_name(user)
-    if role == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return True
-    if _is_hr_role(role):
+    if _has_perm(user, 'leave.approve'):
         branch = _user_branch(user)
         return not branch or _user_branch(balance.employee) == branch
-    if role == 'manager__team_lead':
+    if user.role and user.role.can_manage_team:
         return balance.employee.reporting_manager_id == user.id
     return False
 
@@ -730,7 +725,7 @@ class LeaveRequestListCreateView(APIView):
             queryset = queryset.filter(start_date__year=year)
 
         branch = request.query_params.get('branch')
-        if branch and _role_name(request.user) == 'system_admin':
+        if branch and _has_perm(request.user, 'settings.edit'):
             queryset = queryset.filter(employee__branch__iexact=branch)
 
         department = request.query_params.get('department')
@@ -813,8 +808,7 @@ class LeaveRequestListCreateView(APIView):
             # Managers skip L1 — their leave routes directly to HR (L2).
             # Also escalate to L2 when the employee has no reporting manager set,
             # so the request is never orphaned with no one to act on it.
-            role = _role_name(request.user)
-            if role == 'manager__team_lead' or l1 is None:
+            if (request.user.role and request.user.role.can_manage_team) or l1 is None:
                 initial_status = REQ_L2_PENDING
                 l1_approver    = None
                 l2_approver    = l2
@@ -861,7 +855,7 @@ class LeaveRequestDetailView(APIView):
         has_approve = _has_perm(user, 'leave.approve')
         if not has_approve and leave_request.employee_id != user.id:
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
-        if has_approve and _is_hr_role(_role_name(user)) and not _can_hr_access_request(user, leave_request):
+        if has_approve and not _can_hr_access_request(user, leave_request):
             return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         return leave_request, None
@@ -923,7 +917,7 @@ class LeaveApprovalView(APIView):
             ).get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
-        if _is_hr_role(_role_name(request.user)) and not _can_hr_access_request(request.user, leave_request):
+        if _has_perm(request.user, 'leave.approve') and not _can_hr_access_request(request.user, leave_request):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return success(
             'Leave request retrieved.',
@@ -941,7 +935,7 @@ class LeaveApprovalView(APIView):
 
         if leave_request.employee_id == request.user.id:
             return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
-        if _is_hr_role(_role_name(request.user)) and not _can_hr_access_request(request.user, leave_request):
+        if _has_perm(request.user, 'leave.approve') and not _can_hr_access_request(request.user, leave_request):
             return error('You can only approve leave requests for employees in your branch.', http_status=status.HTTP_403_FORBIDDEN)
 
         action  = request.data.get('action')
@@ -995,6 +989,10 @@ class LeaveApprovalView(APIView):
 
         leave_request.save()
         logger.info('Leave request %s %sd by %s', leave_request.id, action, request.user.email)
+
+        from apps.dashboard.views.overview import push_leave_update
+        push_leave_update(request.user.id)
+
         return success(f'Request {action}d.', LeaveRequestSerializer(leave_request, context={'request': request}).data)
 
 
@@ -1138,7 +1136,7 @@ class LeaveCalendarView(APIView):
 
         # system_admin can still narrow by branch via the UI branch dropdown
         branch = request.query_params.get('branch')
-        if branch and _role_name(request.user) == 'system_admin':
+        if branch and _has_perm(request.user, 'settings.edit'):
             qs = qs.filter(employee__branch__iexact=branch)
 
         events = [
@@ -1240,8 +1238,7 @@ class CarryForwardYearsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        role = _role_name(request.user)
-        if role not in ('system_admin', 'hr_admin', 'hr'):
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         today = date.today()
@@ -1268,8 +1265,7 @@ class CarryForwardPreviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        role = _role_name(request.user)
-        if role not in ('system_admin', 'hr_admin', 'hr'):
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         ser = CarryForwardInputSerializer(data=request.data)
@@ -1304,8 +1300,7 @@ class CarryForwardRunView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        role = _role_name(request.user)
-        if role not in ('system_admin', 'hr_admin', 'hr'):
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         ser = CarryForwardInputSerializer(data=request.data)
@@ -1408,8 +1403,7 @@ class CarryForwardHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        role = _role_name(request.user)
-        if role not in ('system_admin', 'hr_admin', 'hr'):
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         qs                  = CarryForwardLog.objects.select_related('executed_by').order_by('-created_at')
@@ -1420,7 +1414,6 @@ class CarryForwardHistoryView(APIView):
 
 # ─── Leave Opening Balance Import ─────────────────────────────────────────────
 
-_LEAVE_IMPORT_ALLOWED_ROLES = frozenset({'system_admin', 'hr_admin', 'hr'})
 _LEAVE_IMPORT_BATCH_SIZE    = 500
 _LEAVE_IMPORT_MAX_BYTES     = 5 * 1024 * 1024  # 5 MB
 
@@ -1832,8 +1825,7 @@ class LeaveOpeningBalanceImportView(APIView):
     parser_classes     = [MultiPartParser, FormParser]
 
     def post(self, request):
-        role = _role_name(request.user)
-        if role not in _LEAVE_IMPORT_ALLOWED_ROLES:
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Only System Admin, HR Admin, and HR can import leave balances.', http_status=status.HTTP_403_FORBIDDEN)
 
         uploaded = request.FILES.get('file')
@@ -1921,8 +1913,7 @@ class LeaveOpeningBalanceSampleView(APIView):
         return (JSONRenderer(), 'application/json')
 
     def get(self, request):
-        role = _role_name(request.user)
-        if role not in _LEAVE_IMPORT_ALLOWED_ROLES:
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Only System Admin, HR Admin, and HR can download the leave balance import template.', http_status=status.HTTP_403_FORBIDDEN)
 
         from core.file_utils import _CSV_MIME, _XLSX_MIME, build_sample_csv, build_sample_xlsx
@@ -1947,8 +1938,7 @@ class LeaveOpeningBalanceValidateView(APIView):
     parser_classes     = [MultiPartParser, FormParser]
 
     def post(self, request):
-        role = _role_name(request.user)
-        if role not in _LEAVE_IMPORT_ALLOWED_ROLES:
+        if not _has_perm(request.user, 'leave.approve'):
             return error('Only System Admin, HR Admin, and HR can validate import files.', http_status=status.HTTP_403_FORBIDDEN)
 
         uploaded = request.FILES.get('file')

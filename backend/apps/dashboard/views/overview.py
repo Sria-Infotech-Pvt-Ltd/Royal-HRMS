@@ -21,12 +21,21 @@ _TTL_ACTION_QUEUE  = 45          # seconds — action-queue counts, short TTL to
 _TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
 
 
+
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
 def _is_system_admin(user):
-    return bool(user and user.role and user.role.name == 'system_admin')
+    return _has_perm(user, 'settings.edit')
 
 
 def _is_hr_or_admin(user):
-    return bool(user and user.role and user.role.name in ('hr', 'system_admin'))
+    return _has_perm(user, 'employees.view')
 
 
 def _headcount_data():
@@ -304,6 +313,64 @@ class HRActionQueueView(APIView):
         }
         cache.set(cache_key, data, _TTL_ACTION_QUEUE)
         return success('Action queue retrieved.', data=data)
+
+
+def push_leave_update(approving_user_id) -> None:
+    """
+    Recompute action-queue counts, refresh the cache, then push the full
+    data payload through the WebSocket so dashboard components update their
+    state directly — no HTTP refetch needed on the client.
+
+    Called from LeaveApprovalView.post() and execute_confirm_leave_approval()
+    immediately after a leave is approved or rejected.
+    """
+    from apps.accounts.models import User
+    from apps.attendance.models import AttendanceCorrection
+    from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
+    from apps.recruitment.models import Candidate
+
+    leave_approvals        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
+    expense_claims         = Expense.objects.filter(status='pending').count()
+    onboarding_reviews     = User.objects.filter(
+        onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
+    ).count()
+    candidate_reviews      = Candidate.objects.filter(
+        status=Candidate.STATUS_SELECTED, details_filled=True, hr_approved=False,
+    ).count()
+    attendance_corrections = AttendanceCorrection.objects.filter(
+        status=AttendanceCorrection.STATUS_PENDING,
+    ).count()
+
+    action_queue = {
+        'total_pending':           candidate_reviews + leave_approvals + attendance_corrections + expense_claims + onboarding_reviews,
+        'candidate_reviews':       candidate_reviews,
+        'leave_approvals':         leave_approvals,
+        'attendance_corrections':  attendance_corrections,
+        'expense_claims':          expense_claims,
+        'onboarding_reviews':      onboarding_reviews,
+        'separation_requests':     0,
+    }
+    pending_actions = leave_approvals + expense_claims + onboarding_reviews
+
+    # Refresh the cache with the freshly computed data so the next HTTP GET
+    # also returns accurate counts (for users whose WS connection is down).
+    cache.set('dashboard:hr:action_queue', action_queue, _TTL_ACTION_QUEUE)
+
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        layer = get_channel_layer()
+        if layer:
+            async_to_sync(layer.group_send)(
+                f'notifications_{approving_user_id}',
+                {
+                    'type':            'leave.update',
+                    'action_queue':    action_queue,
+                    'pending_actions': pending_actions,
+                },
+            )
+    except Exception:
+        logger.exception('WebSocket push failed for leave_update (user %s)', approving_user_id)
 
 
 # ─── HR Recruitment Funnel ────────────────────────────────────────────────────

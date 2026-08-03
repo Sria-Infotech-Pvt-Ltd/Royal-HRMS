@@ -12,6 +12,7 @@ Endpoints:
   GET    /api/attendance/summary/        — Monthly Summary grid (?month=&year=)
   GET    /api/attendance/calendar/       — Calendar + detail table (?month=&year=)
   POST   /api/attendance/correction/     — Submit Attendance Correction Request
+  GET    /api/attendance/corrections/my/ — Own correction requests + status (?status=&date_from=&date_to=)
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.pagination import paginate, paginated_data
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.attendance.models import AttendanceCorrection
@@ -34,6 +36,7 @@ from apps.attendance.serializers_my_attendance import (
     HistoryRowSerializer,
     MonthYearQuerySerializer,
     MonthlySummarySerializer,
+    MyCorrectionsFilterSerializer,
     PunchWriteSerializer,
     StatsSerializer,
     TodayAttendanceSerializer,
@@ -47,12 +50,10 @@ logger = logging.getLogger(__name__)
 
 
 def _has_perm(user, codename: str) -> bool:
-    if not user:
+    if not user or not user.role:
         return False
-    if getattr(user, 'is_superuser', False):
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
         return True
-    if not user.role:
-        return False
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
@@ -62,9 +63,6 @@ def _resolve_target_user(request):
     if not employee_id:
         return request.user, None
     # Employees can only view their own attendance — looking up others is HR/manager only
-    role_name = getattr(request.user.role, 'name', '') if request.user.role else ''
-    if role_name == 'employee':
-        return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
     if not (_has_perm(request.user, 'attendance.view') or _has_perm(request.user, 'employees.view')):
         return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
     from apps.accounts.models import User
@@ -75,8 +73,8 @@ def _resolve_target_user(request):
     # Scope who a non-system_admin can look up — managers get their direct
     # reports only, everyone else (e.g. hr_admin) is scoped to their own
     # branch, mirroring the reporting-chain/branch scoping used in leave.py.
-    if role_name != 'system_admin':
-        if role_name == 'manager__team_lead':
+    if not _has_perm(request.user, 'settings.edit'):
+        if request.user.role and getattr(request.user.role, 'can_manage_team', False):
             if user.reporting_manager_id != request.user.id:
                 return None, error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
         elif request.user.branch and user.branch != request.user.branch:
@@ -141,6 +139,19 @@ class AttendancePunchView(APIView):
 
         punch_type = punch_data['punch_type']
         session    = PunchService.get_today_session(request.user)
+
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+            layer = get_channel_layer()
+            if layer:
+                async_to_sync(layer.group_send)(
+                    f'notifications_{request.user.id}',
+                    {'type': 'attendance.update'},
+                )
+        except Exception:
+            pass
+
         return success(
             f'Clocked {"in" if punch_type == "IN" else "out"} successfully.',
             TodayAttendanceSerializer(session).data,
@@ -338,4 +349,34 @@ class AttendanceCorrectionView(APIView):
                 'created_at': correction.created_at,
             }).data,
             http_status=status.HTTP_201_CREATED,
+        )
+
+
+class MyCorrectionsListView(APIView):
+    """
+    GET /api/attendance/corrections/my/
+
+    An employee's own attendance correction / un-punch requests, newest
+    first, with approval status and reviewer info — read-only.
+    Query params: status, date_from, date_to; ?page=&page_size= for pagination.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        ser = MyCorrectionsFilterSerializer(data=request.query_params)
+        if not ser.is_valid():
+            return error(first_error(ser.errors))
+
+        from apps.attendance.services_hr_corrections import list_my_corrections
+        rows = list_my_corrections(
+            request.user,
+            status_filter=ser.validated_data['status'],
+            date_from=ser.validated_data['date_from'],
+            date_to=ser.validated_data['date_to'],
+        )
+        page_obj, paginator = paginate(rows, request)
+        return success(
+            f'{paginator.count} correction request(s) found.',
+            paginated_data(paginator, page_obj, list(page_obj)),
         )

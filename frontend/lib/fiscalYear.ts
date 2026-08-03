@@ -36,6 +36,17 @@ function parseStartYear(label: string | null | undefined): number | null {
   return match ? Number(match[1]) : null;
 }
 
+// Leave balances/requests are keyed by plain calendar year on the backend —
+// LeaveBalance.year is set from the joining/request date's .year directly,
+// and the annual reset Celery task runs every Jan 1, not on the company's
+// fiscal-year start month. Querying leave endpoints with the fiscal year's
+// start year instead (e.g. via useFiscalYearConfig().currentYear) silently
+// returns empty data for however many months precede the fiscal year's
+// start month each year. Use this instead for anything under /leave/.
+export function getLeaveYear(): number {
+  return new Date().getFullYear();
+}
+
 export function useFiscalYearConfig(): FiscalYearConfig {
   const { data, loading, error } = useFetch<FinancialYearApiConfig>(API.settings.financialYear);
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
+import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
 import { usePermission } from "@/hooks/usePermission";
@@ -19,9 +20,11 @@ import Avatar from "./_components/Avatar";
 import StatusBadge from "./_components/StatusBadge";
 import AddEmployeeModal  from "./_components/AddEmployeeModal";
 import BulkImportModal  from "./_components/BulkImportModal";
+import EditEmployeeModal  from "./_components/EditEmployeeModal";
+import BranchFilterSelect from "@/components/BranchFilterSelect";
 
 /* ── API response shape ─────────────────────────────────────── */
-interface ApiEmployee {
+export interface ApiEmployee {
   id: string; employee_id: string;
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
@@ -96,6 +99,7 @@ export default function EmployeesPage() {
   const canEdit   = usePermission("employees.edit");
 
   const [isAdmin,    setIsAdmin]    = useState(false);
+  const [isManager,  setIsManager]  = useState(false);
   const [userBranch, setUserBranch] = useState("");
 
   const [employees,   setEmployees]   = useState<Employee[]>([]);
@@ -104,13 +108,19 @@ export default function EmployeesPage() {
   const [search,      setSearch]      = useState("");
   const [branch,      setBranch]      = useState("all");
   const [dept,        setDept]        = useState("all");
+  const [role,        setRole]        = useState("all");
   const [status,      setStatus]      = useState<"all" | EmployeeStatus>("all");
   const [showModal,   setShowModal]   = useState(false);
   const [showImport,  setShowImport]  = useState(false);
+  const [editing,     setEditing]     = useState<Employee | null>(null);
   const [toggling,    setToggling]    = useState<string | null>(null);
   const [page,        setPage]        = useState(1);
   const [totalPages,  setTotalPages]  = useState(1);
   const [totalCount,  setTotalCount]  = useState(0);
+  const [empStats,    setEmpStats]    = useState({
+    total: 0, active: 0, onboarding: 0, departments: 0,
+    branch_names: [] as string[], department_names: [] as string[],
+  });
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -119,7 +129,10 @@ export default function EmployeesPage() {
     setFetchError("");
     try {
       const params: Record<string, string | number> = { page: p };
-      if (q) params.search = q;
+      if (q)              params.search     = q;
+      if (branch !== "all") params.branch     = branch;
+      if (dept   !== "all") params.department = dept;
+      if (status !== "all") params.status     = status;
       const { data } = await clientApi.get<{
         data: { results: ApiEmployee[]; count: number; page: number; total_pages: number };
       }>(API.employees.list, { params });
@@ -132,9 +145,27 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
+  }, [branch, dept, status]);
+
+  // Runs on mount, and again whenever a filter changes (fetchEmployees' identity
+  // changes with branch/dept/status) — always resets to page 1, keeps the current search term.
+  useEffect(() => { fetchEmployees(search, 1); }, [fetchEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchStats = useCallback(async (br: string) => {
+    try {
+      const { data } = await clientApi.get<{
+        data: {
+          total: number; active: number; onboarding: number; departments: number;
+          branch_names: string[]; department_names: string[];
+        };
+      }>(API.employees.stats, { params: br === "all" ? {} : { branch: br } });
+      if (data.data) setEmpStats(data.data);
+    } catch {
+      // keep previous stats on failure rather than zeroing the cards out
+    }
   }, []);
 
-  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  useEffect(() => { fetchStats(branch); }, [branch, fetchStats]);
 
   function handleSearch(val: string) {
     setSearch(val);
@@ -148,41 +179,26 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     const user = getStoredUser();
-    setIsAdmin(user?.role === "system_admin");
+    setIsAdmin(user?.is_superuser === true);
+    setIsManager(user?.can_manage_team === true);
     setUserBranch(user?.branch ?? "");
   }, []);
 
-  /* derive unique branches + departments from loaded data */
-  const branchOptions = useMemo(
-    () => [...new Set(employees.map(e => e.location).filter(Boolean))].sort(),
-    [employees],
-  );
-  const deptOptions = useMemo(
-    () => [...new Set(employees.map(e => e.department).filter(Boolean))].sort(),
-    [employees],
-  );
+  // Sourced from the stats endpoint (scoped over ALL employees), not just the loaded page.
+  const branchOptions = empStats.branch_names;
+  const deptOptions    = empStats.department_names;
 
-  const filtered = useMemo(() => {
-    return employees.filter(e => {
-      const matchesBranch = branch === "all" || e.location === branch;
-      const matchesDept   = dept   === "all" || e.department === dept;
-      const matchesStatus = status === "all" || e.status === status;
-      return matchesBranch && matchesDept && matchesStatus;
-    });
-  }, [employees, branch, dept, status]);
+  const { data: rolesData } = useFetch<{ results: { id: number; name: string; display_name: string }[] }>(
+    isAdmin ? `${API.roles.list}?page_size=100` : null
+  );
+  const roleOptions = rolesData?.results ?? [];
 
-  const stats = useMemo(() => {
-    const source     = branch === "all" ? employees : employees.filter(e => e.location === branch);
-    const active     = source.filter(e => e.status === "active").length;
-    const onboarding = source.filter(e => e.status === "onboarding").length;
-    const depts      = new Set(source.map(e => e.department)).size;
-    return [
-      { label: "Total Employees", value: totalCount,    icon: "ti-users",      tint: "primary" as const },
-      { label: "Active",          value: active,        icon: "ti-user-check", tint: "success" as const },
-      { label: "Onboarding",      value: onboarding,    icon: "ti-user-plus",  tint: "warn"    as const },
-      { label: "Departments",     value: depts,         icon: "ti-building",   tint: "info"    as const },
-    ];
-  }, [employees, branch, totalCount]);
+  const stats = useMemo(() => [
+    { label: "Total Employees", value: empStats.total,       icon: "ti-users",      tint: "primary" as const },
+    { label: "Active",          value: empStats.active,      icon: "ti-user-check", tint: "success" as const },
+    { label: "Onboarding",      value: empStats.onboarding,  icon: "ti-user-plus",  tint: "warn"    as const },
+    { label: "Departments",     value: empStats.departments, icon: "ti-building",   tint: "info"    as const },
+  ], [empStats]);
 
   function open(id: string) {
     router.push(`/dashboard/employees/${id}`);
@@ -216,9 +232,11 @@ export default function EmployeesPage() {
           <div className="page-sub">
             {isAdmin
               ? "All employees across all branches"
-              : userBranch
-                ? `${userBranch} — your branch`
-                : "All active and onboarding employees"
+              : isManager
+                ? "Your direct reports"
+                : userBranch
+                  ? `${userBranch} — your branch`
+                  : "All active and onboarding employees"
             }
           </div>
         </div>
@@ -271,29 +289,44 @@ export default function EmployeesPage() {
 
       {/* ── Filters ── */}
       <div className="flex items-center gap-3 flex-wrap mb-4">
-        {/* Branch */}
-        <select
-          value={branch}
-          onChange={e => { setBranch(e.target.value); setDept("all"); }}
-          suppressHydrationWarning
-          className={SEL_CLS}
-          style={SEL_STYLE}
-        >
-          <option value="all">All Branches</option>
-          {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
+        {/* Branch — locked to the user's own branch for anyone but system_admin;
+            the backend already enforces this, this just keeps the UI honest about it. */}
+        <BranchFilterSelect
+          branches={branchOptions.map((b, i) => ({ id: i, branch_name: b }))}
+          value={branch === "all" ? "" : branch}
+          onChange={v => { setBranch(v || "all"); setDept("all"); }}
+          locked={!isAdmin}
+          lockedBranchName={userBranch}
+          width={180}
+        />
 
-        {/* Department */}
-        <select
-          value={dept}
-          onChange={e => setDept(e.target.value)}
-          suppressHydrationWarning
-          className={SEL_CLS}
-          style={SEL_STYLE}
-        >
-          <option value="all">All Departments</option>
-          {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
+        {/* Department & Role — system_admin only; managers and employees are
+            already scoped to their own team/branch so these filters don't apply. */}
+        {isAdmin && (
+          <>
+            <select
+              value={dept}
+              onChange={e => setDept(e.target.value)}
+              suppressHydrationWarning
+              className={SEL_CLS}
+              style={SEL_STYLE}
+            >
+              <option value="all">All Departments</option>
+              {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value)}
+              suppressHydrationWarning
+              className={SEL_CLS}
+              style={SEL_STYLE}
+            >
+              <option value="all">All Roles</option>
+              {roleOptions.map(r => <option key={r.id} value={r.display_name}>{r.display_name}</option>)}
+            </select>
+          </>
+        )}
 
         {/* Status */}
         <select
@@ -337,7 +370,7 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {employees.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-14 text-center">
                       <i className="ti ti-users-group text-4xl text-[var(--outline)] block mb-3" />
@@ -345,7 +378,7 @@ export default function EmployeesPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(e => (
+                  employees.map(e => (
                     <tr key={e.id} onClick={() => open(e.id)}
                       className="border-b border-[var(--outline-v)] last:border-0 hover:bg-[var(--bg-low)] transition-colors cursor-pointer">
                       <td className="px-5 py-3.5">
@@ -381,6 +414,12 @@ export default function EmployeesPage() {
                             className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
                             <i className="ti ti-eye text-[15px]" />
                           </button>
+                          {canEdit && (
+                            <button onClick={() => setEditing(e)} suppressHydrationWarning title="Edit"
+                              className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
+                              <i className="ti ti-edit text-[15px]" />
+                            </button>
+                          )}
                           {canEdit && (
                             <button
                               onClick={() => toggleStatus(e)}
@@ -467,6 +506,20 @@ export default function EmployeesPage() {
         <BulkImportModal
           onClose={() => setShowImport(false)}
           onSuccess={() => fetchEmployees(search, 1)}
+        />
+      )}
+
+      {/* ── Edit Employee Modal ── */}
+      {editing && (
+        <EditEmployeeModal
+          employee={editing}
+          branchOptions={branchOptions}
+          deptOptions={deptOptions}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            fetchEmployees(search, page);
+          }}
         />
       )}
     </div>

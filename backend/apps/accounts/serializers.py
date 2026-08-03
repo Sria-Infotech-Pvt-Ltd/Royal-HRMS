@@ -1234,7 +1234,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
 
     def get_reporting_manager(self, obj):
         # Managers are the reporting manager for others — they have none of their own to show.
-        if obj.role and obj.role.name == 'manager__team_lead':
+        if obj.role and obj.role.can_manage_team:
             return None
         mgr = obj.reporting_manager
         if not mgr:
