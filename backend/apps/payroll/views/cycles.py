@@ -442,8 +442,10 @@ class ProcessPayrollView(APIView):
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
 
-        # HR can only process cycles for their own branch
-        if not _is_admin(request.user) and cycle.branch:
+        # HR can only process cycles for their own branch.
+        # Guard must not short-circuit on cycle.branch being None — a NULL-branch
+        # (global/legacy) cycle must still be blocked for non-admins, not opened.
+        if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
                 return error('You can only process payroll for your own branch.', http_status=403)
@@ -645,7 +647,7 @@ class MarkCyclePaidView(APIView):
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
 
-        if not _is_admin(request.user) and cycle.branch:
+        if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
                 return error('You can only update payroll for your own branch.', http_status=403)
@@ -692,7 +694,7 @@ class CancelPayrollCycleView(APIView):
 
         cycle = get_object_or_404(PayrollCycle, pk=pk)
 
-        if not _is_admin(request.user) and cycle.branch:
+        if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
                 return error('You can only cancel payroll for your own branch.', http_status=403)
