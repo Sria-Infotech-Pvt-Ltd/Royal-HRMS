@@ -28,6 +28,7 @@ from apps.payroll.serializers import (
     ManagerAttendanceApprovalSerializer,
 )
 from apps.accounts.models import User
+from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,10 @@ class PayrollAlreadyProcessing(Exception):
     already processed, or a concurrent request already claimed it."""
 
 
-def _compute_employee_payslip(salary_config, components, branch_config, statutory, adjustments) -> dict:
+def _compute_employee_payslip(
+    salary_config, components, branch_config, statutory, adjustments,
+    lop_days=Decimal('0'), total_working_days=26,
+) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
     original ProcessPayrollView loop body (Phase 2: only extracted into its
@@ -89,10 +93,8 @@ def _compute_employee_payslip(salary_config, components, branch_config, statutor
 
     gross = basic + hra + special_allowance + other_earnings_total
 
-    # LOP deduction (placeholder — real value fed in later from attendance)
-    lop_days = Decimal('0')
-    total_working_days = 26
-    lop_deduction = (gross / total_working_days) * lop_days
+    # LOP deduction — lop_days and total_working_days come from actual AttendanceRecord data
+    lop_deduction = (gross / total_working_days) * lop_days if total_working_days else Decimal('0')
 
     # PF: use branch config if present, else statutory defaults (12%/12%, Rs.15,000 ceiling)
     pf_applicable = branch_config.pf_applicable if branch_config is not None else True
@@ -262,6 +264,48 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
     for adj in PayrollAdjustment.objects.filter(employee_id__in=employee_ids, month=adj_month):
         adjustments_by_employee[adj.employee_id].append(adj)
 
+    # ── Load attendance LOP rules from settings ───────────────────────────
+    att_settings = (
+        AttendanceSettings.objects
+        .select_related('late_mark_rules')
+        .filter(is_active=True)
+        .first()
+    )
+    late_mark_rules = getattr(att_settings, 'late_mark_rules', None) if att_settings else None
+    late_per_lop = (
+        late_mark_rules.late_marks_per_lop
+        if late_mark_rules and late_mark_rules.late_marks_per_lop > 0
+        else 0
+    )
+    # Each late-mark LOP trigger counts as full day or half day per policy.
+    late_lop_unit = Decimal('0')
+    if late_per_lop:
+        late_lop_unit = (
+            Decimal('1')
+            if late_mark_rules.lop_deduction_unit == AttendanceLateMarkRules.LOP_UNIT_FULL_DAY
+            else Decimal('0.5')
+        )
+
+    # ── Bulk fetch: daily attendance for LOP calculation ──────────────────
+    _NON_WORKING = {AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY}
+    absent_count_by_emp:   dict = defaultdict(int)
+    half_day_count_by_emp: dict = defaultdict(int)
+    late_count_by_emp:     dict = defaultdict(int)
+    working_days_by_emp:   dict = defaultdict(int)
+
+    for rec in AttendanceRecord.objects.filter(
+        employee_id__in=employee_ids,
+        date__range=(cycle.cycle_start, cycle.cycle_end),
+    ).only('employee_id', 'status'):
+        if rec.status not in _NON_WORKING:
+            working_days_by_emp[rec.employee_id] += 1
+        if rec.status == AttendanceRecord.STATUS_ABSENT:
+            absent_count_by_emp[rec.employee_id] += 1
+        elif rec.status == AttendanceRecord.STATUS_HALF_DAY:
+            half_day_count_by_emp[rec.employee_id] += 1
+        elif rec.status == AttendanceRecord.STATUS_LATE:
+            late_count_by_emp[rec.employee_id] += 1
+
     # ── Per-distinct-structure / per-distinct-state caches ──────────────────
     # (was: structure.components.filter(...) and StatutoryConfig.objects.filter(...)
     #  re-run for every employee even when many employees share a structure/state)
@@ -308,8 +352,18 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
         statutory = _statutory_for(branch_obj.state) if branch_obj else None
         adjustments = adjustments_by_employee.get(employee.id, [])
 
+        absent_days  = Decimal(absent_count_by_emp.get(employee.id, 0))
+        half_days    = Decimal(half_day_count_by_emp.get(employee.id, 0))
+        late_count   = late_count_by_emp.get(employee.id, 0)
+        # Late marks → LOP per the configured policy threshold (0 if late-mark LOP is disabled)
+        late_lop     = (Decimal(late_count // late_per_lop) * late_lop_unit) if late_per_lop else Decimal('0')
+        emp_lop      = absent_days + (half_days * Decimal('0.5')) + late_lop
+        # Use actual working days from attendance records; fall back to settings default if no records
+        emp_working_days = working_days_by_emp.get(employee.id) or 26
         computed[employee.id] = _compute_employee_payslip(
             salary_config, components, branch_config, statutory, adjustments,
+            lop_days=emp_lop,
+            total_working_days=emp_working_days,
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──
