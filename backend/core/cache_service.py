@@ -228,6 +228,66 @@ class WeeklyOffCacheService:
         except Exception:
             logger.warning('Cache delete failed for weekly_off')
 
+    # ── Per-employee resolution (centralized resolver) ────────────────────────
+    #
+    # Single unambiguous priority, used by every attendance/leave calculation:
+    #   1. EmployeeWeeklyOffAssignment covering the date (employee-specific)
+    #   2. WeeklyDayPolicy.is_default                     ┐ same org-wide
+    #   3. AttendanceSettings.weekly_off (Settings page)  ┘ fallback chain
+    #                                                        already in get()
+    #   4. {'saturday', 'sunday'}                         — hardcoded floor
+    #
+    # get()/_fetch_from_db()/invalidate() above are untouched — steps 2-4 are
+    # exactly the existing org-default resolution, unchanged. This only adds
+    # step 1 in front of it. Not cached per-employee: the assignment lookup is
+    # a single indexed query per employee, cheap even during batch daily
+    # processing; caching it would need a per-employee key/invalidation scheme
+    # for a value that changes far more often than the 24h org default does.
+
+    @classmethod
+    def get_effective_range(cls, employee, start: date, end: date) -> dict:
+        """
+        Resolve the effective weekly-off day-name set for `employee` for every
+        date in [start, end] inclusive. Fetches the employee's assignment rows
+        ONCE regardless of range length (not once per day), so this is safe to
+        call for a whole calendar month or a whole leave request range.
+        """
+        from datetime import timedelta
+
+        result: dict = {}
+        assignments: list = []
+        if employee is not None:
+            from apps.attendance.models import EmployeeWeeklyOffAssignment
+            from django.db.models import Q
+            try:
+                assignments = list(
+                    EmployeeWeeklyOffAssignment.objects
+                    .filter(employee=employee, effective_from__lte=end)
+                    .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=start))
+                    .select_related('policy')
+                )
+            except Exception:
+                logger.warning('Weekly-off assignment lookup failed for employee=%s', getattr(employee, 'pk', None))
+                assignments = []
+
+        org_default = None
+        cur = start
+        while cur <= end:
+            match = next((a for a in assignments if a.covers(cur)), None)
+            if match is not None:
+                result[cur] = set(match.policy.weekly_off_days)
+            else:
+                if org_default is None:
+                    org_default = cls.get()
+                result[cur] = org_default
+            cur += timedelta(days=1)
+        return result
+
+    @classmethod
+    def get_effective(cls, employee, for_date: date) -> set:
+        """Single-day convenience wrapper around get_effective_range()."""
+        return cls.get_effective_range(employee, for_date, for_date)[for_date]
+
 
 # ── Approval Workflow ─────────────────────────────────────────────────────────
 

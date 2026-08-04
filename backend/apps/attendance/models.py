@@ -220,6 +220,73 @@ class WeeklyDayPolicy(models.Model):
         return len(self.working_days)
 
 
+# ─── Employee Weekly Off Assignment ───────────────────────────────────────────
+
+class EmployeeWeeklyOffAssignment(models.Model):
+    """
+    Assigns a WeeklyDayPolicy to a specific employee, effective from a given date.
+
+    History is preserved, never overwritten: assigning a new pattern closes out
+    the employee's previously-open row (sets its effective_to) instead of
+    deleting or mutating it, so historical attendance/leave/payroll calculations
+    for past dates keep resolving against whatever pattern was actually in
+    effect on that date. See services_weekly_off_assignment.py for the
+    create/close-out logic and core.cache_service.WeeklyOffCacheService for the
+    centralized resolver every attendance/leave calculation must go through.
+
+    effective_to = null means "currently open" (in effect until superseded).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='weekly_off_assignments',
+    )
+    policy = models.ForeignKey(
+        WeeklyDayPolicy,
+        on_delete=models.PROTECT,
+        related_name='employee_assignments',
+        help_text='PROTECT — a policy actively assigned to an employee cannot be deleted out from under them.',
+    )
+
+    effective_from = models.DateField()
+    effective_to = models.DateField(
+        null=True, blank=True,
+        help_text='Null means this assignment is currently open (in effect until superseded).',
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='created_weekly_off_assignments',
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='updated_weekly_off_assignments',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_employee_weekly_off_assignment'
+        ordering = ['-effective_from']
+        indexes = [
+            models.Index(fields=['employee', 'effective_from'], name='ewoa_emp_from_idx'),
+            models.Index(fields=['employee', 'effective_to'],   name='ewoa_emp_to_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} → {self.policy.policy_code} from {self.effective_from}'
+
+    def covers(self, for_date) -> bool:
+        return self.effective_from <= for_date and (self.effective_to is None or self.effective_to >= for_date)
+
+
 # ─── Punch Rules Policy ───────────────────────────────────────────────────────
 
 class PunchRulesPolicy(models.Model):
@@ -1234,6 +1301,10 @@ class AttendanceCorrection(models.Model):
         indexes  = [
             models.Index(fields=['employee', 'date'],   name='corr_emp_date_idx'),
             models.Index(fields=['employee', 'status'], name='corr_emp_status_idx'),
+            # Phase 4: global HR/admin dashboard action-queue counters filter
+            # by status alone (no employee) — neither existing composite
+            # (both employee-leading) can serve that without an employee bound.
+            models.Index(fields=['status'], name='corr_status_idx'),
         ]
 
     def __str__(self) -> str:

@@ -9,9 +9,10 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, OuterRef, Subquery, Q
 
-from apps.attendance.models import AttendanceRecord, AttendancePunch
+from apps.attendance.models import AttendanceRecord, AttendancePunch, EmployeeWeeklyOffAssignment
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -163,7 +164,6 @@ def reprocess_date(
     """
     from apps.attendance.models import AttendanceAuditLog
     from apps.attendance.services_attendance import AttendanceProcessorService
-    from apps.attendance.services_audit_log import write_audit_log
 
     employee_qs = User.objects.filter(is_active=True)
     if employee_ids is not None:
@@ -188,23 +188,36 @@ def reprocess_date(
 
     updated = 0
     errors  = 0
+    audit_entries = []
 
     for employee in employee_qs.filter(pk__in=all_ids).iterator(chunk_size=200):
         try:
             record = AttendanceProcessorService.process_day(employee, target_date)
-            write_audit_log(
+            # Collected instead of written per-employee (was one INSERT per
+            # employee via write_audit_log) — bulk_create()'d once below.
+            audit_entries.append(AttendanceAuditLog(
+                record=record,
                 employee=employee,
                 date=target_date,
                 event=AttendanceAuditLog.EVENT_REPROCESSED,
-                performed_by=performed_by,
-                record=record,
+                old_value='',
                 new_value=record.status if record else '',
                 action='Attendance reprocessed by HR',
-            )
+                performed_by=performed_by,
+                remarks='',
+            ))
             updated += 1
         except Exception as exc:
             logger.error('Reprocess failed for %s on %s: %s', employee.pk, target_date, exc)
             errors += 1
+
+    if audit_entries:
+        try:
+            AttendanceAuditLog.objects.bulk_create(audit_entries, batch_size=500)
+        except Exception as exc:
+            # Audit log failures must never surface to the caller — matches
+            # write_audit_log()'s own swallow-and-log behaviour.
+            logger.error('Bulk audit log write failed for reprocess on %s: %s', target_date, exc)
 
     # Reprocessing changes the exact numbers get_dashboard_stats reports for
     # this date/scope — don't make HR wait out the TTL to see their own action.
@@ -380,3 +393,172 @@ def _count_unpunches(
 ) -> int:
     from apps.attendance.services_hr_audit import get_unpunch_count
     return get_unpunch_count(target_date, branch, department, employee_ids)
+
+
+# ─── Weekly Off Assignment ─────────────────────────────────────────────────────
+#
+# Assigns a WeeklyDayPolicy (configured under Settings -> Attendance Rules ->
+# Weekly Off Patterns — the existing WeeklyDayPolicy CRUD) to a specific
+# employee, effective from a given date. History is preserved, never
+# overwritten: assigning a new pattern closes out the employee's previously-
+# open row (effective_to) instead of deleting/mutating it, so past attendance/
+# leave/payroll calculations keep resolving against whatever pattern was
+# actually in effect on that date. Every calculation resolves the effective
+# pattern through the single centralized resolver —
+# core.cache_service.WeeklyOffCacheService.get_effective()/get_effective_range()
+# — not through this module directly.
+
+def _current_weekly_off_subqueries(as_of: datetime.date) -> dict:
+    """Subquery annotations for each employee's assignment open as_of a date — one query, no N+1."""
+    current_qs = (
+        EmployeeWeeklyOffAssignment.objects
+        .filter(employee=OuterRef('pk'), effective_from__lte=as_of)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of))
+        .order_by('-effective_from')
+    )
+    return {
+        '_woa_id':             Subquery(current_qs.values('id')[:1]),
+        '_woa_policy_id':      Subquery(current_qs.values('policy_id')[:1]),
+        '_woa_policy_name':    Subquery(current_qs.values('policy__name')[:1]),
+        '_woa_effective_from': Subquery(current_qs.values('effective_from')[:1]),
+        '_woa_effective_to':   Subquery(current_qs.values('effective_to')[:1]),
+    }
+
+
+def build_weekly_off_assignment_queryset(filters: dict):
+    """
+    Filtered/annotated/ordered User queryset — one row per active employee,
+    with their CURRENT weekly-off assignment (if any) as of today attached via
+    Subquery. NOT evaluated here — the caller pages it with core.pagination
+    before converting rows to dicts, so only one page of employees is ever
+    actually fetched from the database (safe for 2,000+ employees).
+
+    filters: branch, department, pattern (policy id), status
+             ('assigned'|'unassigned'|''), search, employee_ids (manager scope)
+    """
+    branch       = filters.get('branch', '')
+    department   = filters.get('department', '')
+    pattern_id   = filters.get('pattern', '')
+    status_f     = filters.get('status', '')
+    search       = filters.get('search', '').strip()
+    employee_ids = filters.get('employee_ids')
+
+    today = datetime.date.today()
+    qs = User.objects.filter(is_active=True)
+    if employee_ids is not None:
+        qs = qs.filter(id__in=employee_ids)
+    elif branch:
+        qs = qs.filter(branch=branch)
+    if department:
+        qs = qs.filter(department=department)
+    if search:
+        qs = qs.filter(Q(full_name__icontains=search) | Q(employee_id__icontains=search))
+
+    qs = qs.annotate(**_current_weekly_off_subqueries(today))
+
+    if pattern_id:
+        qs = qs.filter(_woa_policy_id=pattern_id)
+    if status_f == 'assigned':
+        qs = qs.exclude(_woa_id__isnull=True)
+    elif status_f == 'unassigned':
+        qs = qs.filter(_woa_id__isnull=True)
+
+    return qs.order_by('full_name')
+
+
+def serialize_weekly_off_assignment_row(user) -> dict:
+    """Build one list row from a User instance annotated by build_weekly_off_assignment_queryset()."""
+    return {
+        'employee_id':    user.employee_id or '',
+        'employee_name':  user.full_name or '',
+        'department':     user.department or '',
+        'branch':         user.branch or '',
+        'pattern_id':     str(user._woa_policy_id) if user._woa_policy_id else None,
+        'pattern_name':   user._woa_policy_name or None,
+        'effective_from': user._woa_effective_from.strftime('%Y-%m-%d') if user._woa_effective_from else None,
+        'effective_to':   user._woa_effective_to.strftime('%Y-%m-%d') if user._woa_effective_to else None,
+        'status':         'Assigned' if user._woa_policy_id else 'Not Assigned',
+    }
+
+
+def get_weekly_off_assignment_history(employee_id: str) -> list[dict]:
+    """Full weekly-off assignment history for one employee, newest first."""
+    rows = (
+        EmployeeWeeklyOffAssignment.objects
+        .filter(employee__employee_id=employee_id)
+        .select_related('policy')
+        .order_by('-effective_from')
+    )
+    return [
+        {
+            'id':             str(r.id),
+            'pattern_id':     str(r.policy_id),
+            'pattern_name':   r.policy.name,
+            'effective_from': r.effective_from.strftime('%Y-%m-%d'),
+            'effective_to':   r.effective_to.strftime('%Y-%m-%d') if r.effective_to else None,
+            'is_current':     r.effective_to is None,
+        }
+        for r in rows
+    ]
+
+
+@transaction.atomic
+def bulk_assign_weekly_off(employee_codes: list, policy, effective_from: datetime.date, actor=None) -> int:
+    """
+    Assign `policy` to every employee whose human-readable employee_id is in
+    `employee_codes` (matching what the list/history helpers above expose —
+    not the internal User UUID pk), effective `effective_from`. Preserves
+    history: each employee's currently-open assignment (if it started before
+    this new one) is closed out (effective_to = effective_from - 1 day),
+    never deleted or overwritten. An open row that starts on/after the new
+    effective_from is superseded outright (correcting a future-dated
+    assignment before it took effect).
+
+    Four queries total regardless of len(employee_codes) — safe for 2,000+.
+    """
+    if not employee_codes:
+        return 0
+
+    user_ids = list(
+        User.objects.filter(employee_id__in=employee_codes, is_active=True).values_list('id', flat=True)
+    )
+    if not user_ids:
+        return 0
+
+    day_before = effective_from - datetime.timedelta(days=1)
+
+    (
+        EmployeeWeeklyOffAssignment.objects
+        .filter(employee_id__in=user_ids, effective_to__isnull=True, effective_from__lt=effective_from)
+        .update(effective_to=day_before, updated_by=actor)
+    )
+    (
+        EmployeeWeeklyOffAssignment.objects
+        .filter(employee_id__in=user_ids, effective_to__isnull=True, effective_from__gte=effective_from)
+        .delete()
+    )
+    EmployeeWeeklyOffAssignment.objects.bulk_create([
+        EmployeeWeeklyOffAssignment(
+            employee_id=uid, policy=policy, effective_from=effective_from,
+            created_by=actor, updated_by=actor,
+        )
+        for uid in user_ids
+    ])
+    logger.info(
+        'Weekly-off pattern "%s" assigned to %d employee(s) effective %s by %s',
+        policy.policy_code, len(user_ids), effective_from, getattr(actor, 'email', 'system'),
+    )
+    return len(user_ids)
+
+
+def assign_weekly_off(employee_code: str, policy, effective_from: datetime.date, actor=None):
+    """Single-employee convenience wrapper around bulk_assign_weekly_off()."""
+    count = bulk_assign_weekly_off([employee_code], policy, effective_from, actor)
+    if count == 0:
+        return None
+    return (
+        EmployeeWeeklyOffAssignment.objects
+        .filter(employee__employee_id=employee_code, effective_to__isnull=True)
+        .select_related('policy')
+        .first()
+    )

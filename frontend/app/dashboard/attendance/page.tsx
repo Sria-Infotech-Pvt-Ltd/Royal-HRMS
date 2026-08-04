@@ -11,8 +11,9 @@ import OtEntryTab        from "./_components/OtEntryTab";
 import InvalidPunchesTab from "./_components/InvalidPunchesTab";
 import UnpunchesTab      from "./_components/UnpunchesTab";
 import EmployeeMonthView from "./_components/EmployeeMonthView";
+import WeeklyOffAssignmentTab from "./_components/WeeklyOffAssignmentTab";
 
-type TabId = "attendance" | "ot" | "invalid" | "unpunches";
+type TabId = "attendance" | "ot" | "invalid" | "unpunches" | "weekly-off";
 
 interface Tab {
   id: TabId;
@@ -55,6 +56,7 @@ export default function AttendancePage() {
     { id: "ot",         label: "OT Entry"        },
     { id: "invalid",    label: "Invalid Punches", badge: dashboard?.tab_badges.invalid_punches },
     { id: "unpunches",  label: "Un-punches",      badge: dashboard?.tab_badges.un_punches },
+    { id: "weekly-off", label: "Weekly Off Assignment" },
   ];
 
   return (
@@ -195,6 +197,7 @@ export default function AttendancePage() {
         {active === "ot"         && <OtEntryTab />}
         {active === "invalid"    && <InvalidPunchesTab onMutated={refetchDashboard} />}
         {active === "unpunches"  && <UnpunchesTab />}
+        {active === "weekly-off" && <WeeklyOffAssignmentTab />}
       </div>
     </div>
   );

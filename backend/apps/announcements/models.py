@@ -56,6 +56,13 @@ class Announcement(models.Model):
     class Meta:
         db_table = 'hrms_announcements'
         ordering = ['-is_pinned', '-created_at']
+        indexes = [
+            # Phase 4: every list request sorts by this exact pair
+            # (views.py's explicit .order_by('-is_pinned','-created_at')) —
+            # neither column is indexed today, so the whole table is sorted
+            # on every request as it grows.
+            models.Index(fields=['is_pinned', 'created_at'], name='ann_pinned_created_idx'),
+        ]
 
     def __str__(self) -> str:
         return self.title

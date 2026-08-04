@@ -91,3 +91,50 @@ def check_absence_alerts(self):
     except Exception as exc:
         logger.error('check_absence_alerts failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def reprocess_attendance_task(self, target_date_iso, branch, department, performed_by_id, employee_ids):
+    """
+    On-demand worker for HRAttendanceReprocessView — dispatched so the HTTP
+    request can return immediately instead of blocking on however many
+    employees are in scope.
+
+    Accepts only primitive identifiers (an ISO date string, a branch/
+    department string, a performed_by user id, and a list of employee id
+    strings or None) rather than model instances, and re-fetches everything
+    it needs inside reprocess_date()/AttendanceProcessorService — it does
+    NOT reimplement any attendance calculation itself.
+
+    Per-employee failures are already caught and counted individually inside
+    reprocess_date() (it never raises for a single employee's failure), so a
+    retry here only ever covers a genuinely unexpected failure before that
+    per-employee loop even starts (e.g. the initial employee query itself
+    failing) — nothing will have been written yet at that point, so retrying
+    is safe. Reprocessing is itself idempotent: AttendanceRecord is written
+    via update_or_create() keyed on the (employee, date) unique constraint,
+    so running this task twice for the same date never creates duplicates.
+    """
+    import datetime as _dt
+
+    from apps.attendance.services_hr import reprocess_date
+
+    try:
+        target_date = _dt.date.fromisoformat(target_date_iso)
+        performed_by = None
+        if performed_by_id:
+            from apps.accounts.models import User
+            performed_by = User.objects.filter(pk=performed_by_id).first()
+
+        result = reprocess_date(
+            target_date=target_date,
+            branch=branch,
+            department=department,
+            performed_by=performed_by,
+            employee_ids=employee_ids,
+        )
+        logger.info('reprocess_attendance_task completed: %s', result)
+        return result
+    except Exception as exc:
+        logger.error('reprocess_attendance_task failed: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)

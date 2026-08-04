@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.pagination import paginate, paginated_data
 from core.permissions import HasCompletedOnboarding
 from core.responses import error, success
 from apps.dashboard.views.overview import _is_system_admin, _is_hr_or_admin
@@ -28,6 +29,7 @@ def _serialize_birthday(profile, days_until):
         'full_name':     user.full_name or user.email,
         'email':         user.email,
         'department':    user.department or '',
+        'designation':   user.designation or '',
         'branch':        user.branch or '',
         'date_of_birth': profile.date_of_birth.strftime('%Y-%m-%d'),
         'days_until':    days_until,
@@ -35,11 +37,12 @@ def _serialize_birthday(profile, days_until):
 
 
 def _today_birthdays_data():
-    cached = cache.get('dashboard:hr:birthdays:today')
+    today = timezone.localdate()
+    key = f'dashboard:hr:birthdays:today:{today.isoformat()}'
+    cached = cache.get(key)
     if cached is not None:
         return cached
     from apps.accounts.models import EmployeeProfile
-    today = timezone.localdate()
     profiles = (
         EmployeeProfile.objects
         .select_related('user')
@@ -48,16 +51,17 @@ def _today_birthdays_data():
         .filter(birth_month=today.month, birth_day=today.day)
     )
     data = [_serialize_birthday(p, 0) for p in profiles]
-    cache.set('dashboard:hr:birthdays:today', data, _TTL_BIRTHDAYS)
+    cache.set(key, data, _TTL_BIRTHDAYS)
     return data
 
 
 def _upcoming_birthdays_data():
-    cached = cache.get('dashboard:hr:birthdays:upcoming')
+    today = timezone.localdate()
+    key = f'dashboard:hr:birthdays:upcoming:{today.isoformat()}'
+    cached = cache.get(key)
     if cached is not None:
         return cached
     from apps.accounts.models import EmployeeProfile
-    today = timezone.localdate()
     base_qs = (
         EmployeeProfile.objects
         .select_related('user')
@@ -74,7 +78,7 @@ def _upcoming_birthdays_data():
         [_serialize_birthday(p, offset_map[(p.birth_month, p.birth_day)]) for p in profiles],
         key=lambda x: x['days_until'],
     )
-    cache.set('dashboard:hr:birthdays:upcoming', data, _TTL_BIRTHDAYS)
+    cache.set(key, data, _TTL_BIRTHDAYS)
     return data
 
 
@@ -260,21 +264,58 @@ class HRBirthdayUpcomingView(APIView):
         return success('Upcoming birthdays retrieved.', data=_upcoming_birthdays_data())
 
 
+# ─── Employee Dashboard — Birthday Announcement ──────────────────────────────
+
+class EmployeeBirthdayTodayView(APIView):
+    """
+    GET /api/dashboard/employee/birthdays/today/
+
+    Birthday announcement widget for the Employee Dashboard. Unlike
+    HRBirthdayTodayView/SystemAdminBirthdayTodayView above (which gate on
+    employees.view / HR-admin so reviewers can browse the whole company),
+    this is open to any authenticated, onboarded employee — seeing who's
+    having a birthday today is not sensitive HR data. Reuses the same
+    cached _today_birthdays_data() helper, so there's no duplicate query
+    or cache-invalidation logic to maintain.
+    """
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
+
+    def get(self, request):
+        birthdays = [
+            {**b, 'message': f"Happy Birthday, {b['full_name']}!"}
+            for b in _today_birthdays_data()
+        ]
+        return success("Today's birthdays retrieved.", data={
+            'count':     len(birthdays),
+            'birthdays': birthdays,
+        })
+
+
 # ─── Employee Action Items ────────────────────────────────────────────────────
 
 class EmployeeActionItemsView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
+        employee  = request.user
+        cache_key = f'dashboard:employee:action_items:{employee.id}'
+        items     = cache.get(cache_key)
+
+        if items is None:
+            items = self._compute_items(employee)
+            cache.set(cache_key, items, 5 * 60)
+
+        page_obj, paginator = paginate(items, request, default_page_size=5)
+        return success(
+            'Action items retrieved.',
+            data=paginated_data(paginator, page_obj, list(page_obj)),
+        )
+
+    @staticmethod
+    def _compute_items(employee) -> list:
         from apps.accounts.models import EmployeeProfile, EmployeeDocument
         from apps.attendance.models import AttendanceCorrection
         from apps.hrms.models import LeaveRequest, REQ_APPROVED, REQ_REJECTED
-
-        employee  = request.user
-        cache_key = f'dashboard:employee:action_items:{employee.id}'
-        cached    = cache.get(cache_key)
-        if cached is not None:
-            return success('Action items retrieved.', data=cached)
 
         items = []
 
@@ -349,9 +390,7 @@ class EmployeeActionItemsView(APIView):
                 'navigation_url': '/dashboard/leave',
             })
 
-        result = {'total': len(items), 'action_items': items}
-        cache.set(cache_key, result, 5 * 60)
-        return success('Action items retrieved.', data=result)
+        return items
 
 
 # ─── Employee Recent Requests ─────────────────────────────────────────────────
@@ -364,10 +403,16 @@ class EmployeeRecentRequestsView(APIView):
         from apps.hrms.models import Expense, LeaveRequest
 
         employee = request.user
-        recent   = []
+        # Each row is (sort_key, row_dict) — sort_key is the full-precision
+        # created_at + pk so same-day requests (a common case) still get a
+        # deterministic, stable order across separate page requests. Sorting
+        # by the display-only `applied_date` (date, no time) ties constantly
+        # and produced a different relative order on every request, which
+        # shifted page boundaries between "Previous"/"Next" round-trips.
+        recent = []
 
-        for lr in LeaveRequest.objects.filter(employee=employee).order_by('-created_at')[:5]:
-            recent.append({
+        for lr in LeaveRequest.objects.filter(employee=employee).order_by('-created_at', '-id'):
+            recent.append(((lr.created_at, lr.id), {
                 'request_type': 'leave',
                 'title':        f'{lr.leave_type.replace("_", " ").title()} Leave',
                 'applied_date': str(lr.created_at.date()),
@@ -378,10 +423,10 @@ class EmployeeRecentRequestsView(APIView):
                     'end_date':   str(lr.end_date),
                     'days':       float(lr.total_days),
                 },
-            })
+            }))
 
-        for ex in Expense.objects.filter(employee=employee).order_by('-created_at')[:5]:
-            recent.append({
+        for ex in Expense.objects.filter(employee=employee).order_by('-created_at', '-id'):
+            recent.append(((ex.created_at, ex.id), {
                 'request_type': 'expense',
                 'title':        ex.title,
                 'applied_date': str(ex.created_at.date()),
@@ -391,10 +436,10 @@ class EmployeeRecentRequestsView(APIView):
                     'amount':   float(ex.amount),
                     'category': ex.category,
                 },
-            })
+            }))
 
-        for ac in AttendanceCorrection.objects.filter(employee=employee).order_by('-created_at')[:5]:
-            recent.append({
+        for ac in AttendanceCorrection.objects.filter(employee=employee).order_by('-created_at', '-id'):
+            recent.append(((ac.created_at, ac.id), {
                 'request_type': 'attendance_correction',
                 'title':        f'Attendance Correction — {ac.date}',
                 'applied_date': str(ac.created_at.date()),
@@ -404,10 +449,13 @@ class EmployeeRecentRequestsView(APIView):
                     'date':       str(ac.date),
                     'punch_type': ac.punch_type,
                 },
-            })
+            }))
 
-        recent.sort(key=lambda x: x['applied_date'], reverse=True)
-        return success('Recent requests retrieved.', data={
-            'total':    len(recent[:10]),
-            'requests': recent[:10],
-        })
+        recent.sort(key=lambda pair: pair[0], reverse=True)
+        recent = [row for _sort_key, row in recent]
+
+        page_obj, paginator = paginate(recent, request, default_page_size=5)
+        return success(
+            'Recent requests retrieved.',
+            data=paginated_data(paginator, page_obj, list(page_obj)),
+        )

@@ -89,60 +89,6 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
     ).select_related('posted_by', 'posted_by__role', 'target_department', 'target_branch')
 
 
-# ─── Email helper ─────────────────────────────────────────────────────────────
-
-def _send_announcement_email(announcement: Announcement) -> None:
-    """Fire-and-forget email notification. Logs a warning on failure — never raises."""
-    try:
-        from apps.accounts.models import User
-        from apps.accounts.utils import (  # type: ignore[attr-defined]
-            _get_smtp_connection, _company_email_wrapper, _get_company_branding,
-        )
-
-        if announcement.visibility == Announcement.VISIBILITY_ALL:
-            recipients = list(User.objects.filter(is_active=True).exclude(
-                email=''
-            ).values_list('email', flat=True))
-        elif announcement.visibility == Announcement.VISIBILITY_DEPARTMENT and announcement.target_department_id:
-            recipients = list(User.objects.filter(
-                is_active=True,
-                department=announcement.target_department.name,
-            ).exclude(email='').values_list('email', flat=True))
-        elif announcement.visibility == Announcement.VISIBILITY_BRANCH and announcement.target_branch_id:
-            recipients = list(User.objects.filter(
-                is_active=True,
-                branch=announcement.target_branch.branch_name,
-            ).exclude(email='').values_list('email', flat=True))
-        else:
-            return
-
-        if not recipients:
-            return
-
-        connection, from_email = _get_smtp_connection()
-        if not connection:
-            logger.warning('Announcement email skipped — no active SMTP config.')
-            return
-
-        from django.core.mail import EmailMultiAlternatives
-        subject = f'[Announcement] {announcement.title}'
-        body    = _company_email_wrapper(announcement.body, *_get_company_branding())
-
-        with connection:
-            msg = EmailMultiAlternatives(
-                subject=subject,
-                body=body,
-                from_email=from_email,
-                to=[from_email],   # required "to" for RFC compliance
-                bcc=recipients,
-                connection=connection,
-            )
-            msg.send()
-
-    except Exception as exc:
-        logger.warning('Announcement email failed: %s', exc)
-
-
 # ─── Views ────────────────────────────────────────────────────────────────────
 
 class AnnouncementListCreateView(APIView):
@@ -220,7 +166,22 @@ class AnnouncementListCreateView(APIView):
         )
 
         if announcement.send_email:
-            _send_announcement_email(announcement)
+            from apps.announcements.tasks import send_announcement_email_task
+
+            def _queue_announcement_email(ann_id=announcement.id):
+                # Runs after the transaction actually commits, so the worker
+                # (a separate DB connection) is guaranteed to find the row.
+                # Queuing failure (e.g. broker down) is logged, not raised —
+                # the announcement itself has already been saved successfully.
+                try:
+                    send_announcement_email_task.delay(ann_id)
+                except Exception as exc:
+                    logger.error(
+                        'Failed to queue announcement email for %s: %s',
+                        ann_id, exc, exc_info=True,
+                    )
+
+            transaction.on_commit(_queue_announcement_email)
 
         out = AnnouncementSerializer(announcement, context={'request': request})
         return success('Announcement posted.', out.data, http_status=status.HTTP_201_CREATED)

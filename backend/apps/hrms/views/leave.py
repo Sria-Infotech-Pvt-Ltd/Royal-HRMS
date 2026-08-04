@@ -318,13 +318,13 @@ def _get_holidays_with_names(start: date, end: date, branch_name: str = '') -> l
     return HolidayCacheService.get_holidays_with_names(start, end, branch_name)
 
 
-def _get_weekoffs_in_range(start: date, end: date) -> list:
+def _get_weekoffs_in_range(start: date, end: date, employee=None) -> list:
     """Return [{'date': 'YYYY-MM-DD', 'day': str}] for week-off days in range."""
     from datetime import timedelta
-    off_days = _get_weekly_off_days()
+    off_days_by_date = _get_weekly_off_days(employee, start, end)
     result, cur = [], start
     while cur <= end:
-        if cur.strftime('%A').lower() in off_days:
+        if cur.strftime('%A').lower() in off_days_by_date[cur]:
             result.append({'date': cur.strftime('%Y-%m-%d'), 'day': cur.strftime('%A')})
         cur += timedelta(days=1)
     return result
@@ -333,7 +333,7 @@ def _get_weekoffs_in_range(start: date, end: date) -> list:
 def _calc_working_days(start: date, end: date, duration: str, policy=None, employee=None) -> float:
     if duration != 'full_day':
         return 0.5
-    off_days       = _get_weekly_off_days()
+    off_days_by_date = _get_weekly_off_days(employee, start, end)
     count_offs     = getattr(policy, 'count_weekoffs_as_leave', False)
     sandwich       = getattr(policy, 'sandwich_leave_enabled', False)
     count_holidays = getattr(policy, 'count_holidays_as_leave', False)
@@ -344,7 +344,7 @@ def _calc_working_days(start: date, end: date, duration: str, policy=None, emplo
     current = start
     from datetime import timedelta
     while current <= end:
-        is_off     = current.strftime('%A').lower() in off_days
+        is_off     = current.strftime('%A').lower() in off_days_by_date[current]
         is_holiday = current in holiday_dates
 
         if is_holiday and not count_holidays:
@@ -359,15 +359,31 @@ def _calc_working_days(start: date, end: date, duration: str, policy=None, emplo
     return float(count)
 
 
-def _get_weekly_off_days() -> set:
+def _get_weekly_off_days(employee=None, start: date = None, end: date = None) -> dict:
+    """
+    Centralized weekly-off resolution for the leave module — per-day, per-
+    employee via WeeklyOffCacheService.get_effective_range() (the same
+    resolver AttendanceProcessorService/AttendanceDashboardService use), so an
+    employee's assigned pattern changing mid-range (e.g. a leave request
+    spanning a pattern-change date) resolves correctly for each day rather
+    than using one flat org-wide set for the whole range.
+
+    Returns {date: set_of_weekly_off_day_names} for every date in [start, end].
+    `start`/`end` default to today when omitted (kept optional so any existing
+    caller that only needs "today's" off-days still works unchanged).
+    """
     from core.cache_service import WeeklyOffCacheService
-    return WeeklyOffCacheService.get()
+    if start is None:
+        start = date.today()
+    if end is None:
+        end = start
+    return WeeklyOffCacheService.get_effective_range(employee, start, end)
 
 
 def _zero_working_days_reason(start: date, end: date, policy=None, employee=None) -> str:
     """Return a user-friendly message explaining why a date range has no working days."""
     from datetime import timedelta
-    off_days       = _get_weekly_off_days()
+    off_days_by_date = _get_weekly_off_days(employee, start, end)
     count_offs     = getattr(policy, 'count_weekoffs_as_leave', False)
     count_holidays = getattr(policy, 'count_holidays_as_leave', False)
     branch_name    = (getattr(employee, 'branch', '') or '') if employee else ''
@@ -379,7 +395,7 @@ def _zero_working_days_reason(start: date, end: date, policy=None, employee=None
         total += 1
         if cur in holiday_dates and not count_holidays:
             holiday_count += 1
-        elif cur.strftime('%A').lower() in off_days and not count_offs:
+        elif cur.strftime('%A').lower() in off_days_by_date[cur] and not count_offs:
             weekoff_count += 1
         cur += timedelta(days=1)
 
@@ -690,7 +706,7 @@ def _leave_preview(request):
     actual_days  = _calc_working_days(start, end, duration, policy, request.user)
     branch_name  = (getattr(request.user, 'branch', '') or '')
     holidays     = _get_holidays_with_names(start, end, branch_name)
-    week_offs    = _get_weekoffs_in_range(start, end)
+    week_offs    = _get_weekoffs_in_range(start, end, request.user)
     calendar_days = (end - start).days + 1
 
     holidays_out  = [{'date': h['date'].strftime('%d %b'), 'name': h['name']} for h in holidays]

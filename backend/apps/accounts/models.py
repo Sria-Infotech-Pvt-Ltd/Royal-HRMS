@@ -181,6 +181,15 @@ class User(AbstractBaseUser, PermissionsMixin):
             models.Index(fields=['role', 'is_active'],  name='user_role_active_idx'),
             models.Index(fields=['department'],          name='user_department_idx'),
             models.Index(fields=['designation'],         name='user_designation_idx'),
+            # Phase 4: `branch` is a plain CharField with no index at all today,
+            # despite being filtered repeatedly (payroll cycle scoping, branch
+            # admin screens, dashboard counts) — matches the existing
+            # (role, is_active) precedent above.
+            models.Index(fields=['branch', 'is_active'], name='user_branch_active_idx'),
+            # Phase 4: onboarding_status is filtered alongside is_active in
+            # several dashboard aggregate-count queries (onboarding funnel
+            # widgets) with no supporting index today.
+            models.Index(fields=['onboarding_status', 'is_active'], name='user_onboard_active_idx'),
         ]
 
     def __str__(self) -> str:
@@ -375,6 +384,13 @@ class AuditLog(models.Model):
     class Meta:
         db_table = 'hrms_audit_logs'
         ordering = ['-created_at']
+        indexes = [
+            # Phase 4: AuditLogListView / SystemAdminAuditLogsView both filter
+            # by module combined with a created_at date-range, on an
+            # ever-growing, unbounded table — the standalone created_at index
+            # alone can't serve the module-scoped queries efficiently.
+            models.Index(fields=['module', 'created_at'], name='auditlog_module_created_idx'),
+        ]
 
     def __str__(self) -> str:
         actor = self.user.email if self.user_id else 'system'

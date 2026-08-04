@@ -3084,4 +3084,105 @@ Full cascading-dropdown contract specified for Add Employee: Branch → Departme
 - Frontend implementation of the 4 cascading Add Employee dropdowns (prompt given above).
 - Decide on `EMP002`'s orphaned `department="IT"` value.
 - Decide on `TASK` branch's missing HR assignment.
+
+---
+
+## Session Log — 2026-08-03
+**Author: Teerdaveni**
+
+Two separate bodies of work this session: (1) a full Weekly Off Pattern + per-employee assignment feature, and (2) a multi-phase production performance/scalability/security hardening pass driven by a detailed team spec, executed phase-by-phase with explicit approval gates between phases.
+
+### Features Shipped
+
+**1. Weekly Off Pattern + Employee Weekly Off Assignment (full feature)**
+
+Reusable named weekly-off patterns (`WeeklyDayPolicy`, already partially existing) extended with per-employee assignment and effective-dating, plus a single centralized resolver used everywhere weekly-off status is needed — replacing what had been ad hoc per-module logic.
+
+- New model `EmployeeWeeklyOffAssignment` (`apps/attendance/models.py`) — per-employee, per-policy, `effective_from`/`effective_to` (nullable = current), history preserved by closing out the prior row on reassignment rather than deleting it. Migration `attendance/0020_employeeweeklyoffassignment.py`.
+- Centralized resolver added to the *existing* `core/cache_service.py::WeeklyOffCacheService` (two new methods, `get_effective()`/`get_effective_range()`) rather than a new service file — the single unambiguous priority order is: per-employee assignment → `WeeklyDayPolicy.is_default` → legacy `AttendanceSettings.weekly_off` → hardcoded Sat/Sun fallback. Verified byte-identical output to the pre-existing resolver for any org not using per-employee assignment (zero behavior change for the common case).
+- Wired into every consumer that used to read weekly-off state independently: `AttendanceProcessorService._is_weekly_off()`, `AttendanceDashboardService` calendar generation, `services_absence.py` consecutive-absence counting, and `apps/hrms/views/leave.py` working-days calculation — all now go through the one resolver.
+- New backend service functions in the *existing* `apps/attendance/services_hr.py` (a prior attempt to put this in a new service file was explicitly rejected — reused this file instead): `build_weekly_off_assignment_queryset()`, `bulk_assign_weekly_off()` (O(1)-query bulk close-out + supersede + `bulk_create`, resolves human-readable employee codes internally), `assign_weekly_off()`, `get_weekly_off_assignment_history()`.
+- New endpoints: `GET/POST /api/attendance/weekly-off-assignments/`, `POST /api/attendance/weekly-off-assignments/bulk/`, `GET /api/attendance/weekly-off-assignments/<employee_id>/history/`.
+- `assigned_employee_count` annotation added to the existing `WeeklyDayPolicy` list/detail serializers (one extra `Count(..., filter=..., distinct=True)` per page, no N+1) and a delete-safety check (blocks deleting an in-use or default pattern, 409 with a clear message).
+- Frontend: new `WeeklyOffAssignmentTab.tsx` (5th tab under Attendance & Time), and `WeeklyOffPatternsCard.tsx` replacing the old "Weekly Off Days" 7-day-toggle card in `AttendanceSettings.tsx` — confirmed safe to remove only after verifying a default `WeeklyDayPolicy` already exists as the live fallback.
+
+**2. Weekly Off Patterns UI — cleanup, pagination, compact table**
+
+Three follow-up passes on the same screen, each scoped tightly to what was asked:
+- Hid internal `WD-xxx` policy codes from the UI; added "Used by N employees" via the annotation above.
+- Added compact pagination (max 3 patterns/page) reusing the existing backend `core/pagination.py` — no new pagination API.
+- Replaced individual card rows with a compact `<table>` (reusing the app's existing `.table-wrap`/table CSS, ~55-65px rows), abbreviated day labels ("Mon • Sat • Sun"), icon-only Edit/Delete buttons. Verified via `tsc --noEmit`/`eslint` clean and `git status` confirming the diff was isolated to `WeeklyOffPatternsCard.tsx` each time.
+
+**Known, honestly-flagged gap:** "Alternate Saturday" and "Rotational 4-week" pattern types shown in the original UI mockups are **not** functionally supported by the current `WeeklyDayPolicy` schema (only 7 flat day-type fields, no week-of-month/cycle dimension) — flagged to the user as an existing limitation rather than silently built incomplete or faked.
+
+---
+
+### Production Hardening — Phased Backend Optimization
+
+Driven by a detailed team spec (performance/scalability/security for 2,000+ employees). Executed in the spec's own mandated order, one phase at a time, with an explicit approval gate before starting the next phase. Every phase's testing used the same discipline: real dev-DB data wrapped in `transaction.savepoint()`/`savepoint_rollback()` so nothing was ever persisted by a verification run.
+
+**Phase 0 — Architecture analysis (read-only, no code changes)**
+
+Six parallel research passes across email/Celery/Redis config, payroll/attendance processing, DB indexes, auth/JWT, frontend authorization, sensitive-data storage, and dependency versions. Key confirmed findings that shaped every later phase:
+- Announcement bulk-email and one assessment-assignment path were doing synchronous, unbounded SMTP sends in the request path.
+- Payroll processing was fully synchronous, ~5-6 queries per employee (~12,000 queries at 2,000 employees), one giant transaction, no job-progress model.
+- `LogoutView` only reads the refresh token from a cookie (no header/body fallback) — Flutter/mobile logout never blacklists its refresh token.
+- Frontend `proxy.ts` trusts a plain, JS-writable cookie for route/permission gating with zero JWT signature verification.
+- Bank account fields (`account_number`, `ifsc_code`, etc.) are stored unencrypted but aren't used in search/export/import, so encrypting them looks safe without a risky migration (not yet implemented — flagged for a controlled follow-up, not attempted this session).
+- `next` 16.2.9 has known high-severity CVEs fixed in 16.2.12; `xlsx` has 2 high CVEs with no compliant npm-published fix.
+
+**Phase 1(a) — Announcement bulk email → Celery**
+- New `apps/announcements/tasks.py` (`send_announcement_email_task`) — the only new backend file this phase, since no `tasks.py` existed for this app. Recipients batched into ≤90-per-message BCC groups (avoids provider recipient-cap failures at company-wide scale) sent over one SMTP connection.
+- `AnnouncementListCreateView.post()` now saves the announcement and queues via `transaction.on_commit(...)` instead of sending inline; queuing failure is logged, not raised, so a broker outage never blocks the already-saved announcement.
+- Retries only cover the pre-send setup phase; once a batch has been attempted, failures are logged and skipped rather than retried, so a task retry can never double-send to a batch that already went out.
+
+**Phase 1(b) — Recruitment assessment bulk-assign → Celery + N+1 fix**
+- `AssignAssessmentView`'s department/company-wide branch: replaced a per-employee `get_or_create()` loop with one existence-check query + `bulk_create(..., ignore_conflicts=True)`. Measured 26-employee bulk assign: **12 queries after vs. an estimated ~52+ before** (re-running the identical assign, all-already-assigned: 9 queries).
+- New `apps/assessments/tasks.py` (`send_assessment_assignment_emails_task`) — reused by all 4 assign paths (single-candidate, single-employee, department, company-wide), calling the existing `_send_assessment_email()` helper rather than duplicating email logic.
+
+**Phase 1(c) — remaining `threading.Thread` → Celery**
+- Found and converted the last 4 unmanaged background threads in the codebase: leave-lifecycle email (`apps/notifications/signals.py`), interview-scheduled + referral-submission emails (`apps/recruitment/views.py`), and onboarding-submitted HR notification (`apps/accounts/views.py`).
+- Three new task files (`apps/notifications/tasks.py`, `apps/recruitment/tasks.py`, `apps/accounts/tasks.py`) — each a thin dispatcher calling existing, unmodified email-sending functions. Confirmed via repo-wide grep: zero `threading.Thread` remains anywhere in the backend.
+
+**Phase 2 — Payroll processing optimization**
+- `ProcessPayrollView`'s per-employee loop (salary config, branch, structure components, statutory config, adjustments — all queried per employee) rewritten as bulk-fetch + per-distinct-structure/state caching + `bulk_create`/`bulk_update` instead of `update_or_create` per employee. All extracted into module-level functions inside the *existing* `apps/payroll/views/cycles.py` (a new `services_processing.py` was drafted and explicitly rejected — moved into the existing file instead).
+- Measured (N=23 real employees): **query count 138 → 14 (90% reduction)**; also fixed a previously-hidden extra N+1 (`salary_config.salary_structure` accessed without `select_related`).
+- Idempotency: cycle claimed via one atomic `UPDATE ... WHERE status='attendance_approved'` (a real compare-and-swap, not a check-then-write) — two concurrent "Process Payroll" clicks can't both run the heavy loop.
+- Rollback safety (found *during* verification, fixed before sign-off): an unexpected mid-write failure now reverts the cycle back to `attendance_approved` instead of leaving it wedged in `processing` forever, with zero partial payslip writes surviving.
+- Deliberately **stayed synchronous** rather than moving to Celery: the frontend payroll wizard (`EarningsDeductionsStep.tsx`) reads `skipped` directly from the POST response with no polling mechanism — true fire-and-forget would have broken that screen without a frontend change, which was out of scope. The query-count fix was judged sufficient to keep it well within normal request timeouts.
+
+**Phase 3 — Attendance reprocessing → Celery**
+- `HRAttendanceReprocessView` now validates, queues `reprocess_attendance_task` (new, in the *existing* `apps/attendance/tasks.py`), and returns immediately — confirmed via repo-wide search that no frontend UI currently calls this endpoint, so the response-shape change (synchronous results → `{status: "queued", task_id}`) carries no UI risk.
+- `reprocess_date()`'s per-employee audit-log write (`AttendanceAuditLog.objects.create()` per employee) batched into one `bulk_create()` — `AttendanceProcessorService` itself was left completely untouched, per the explicit "call it, don't rewrite it" constraint.
+- Verified per-employee failure isolation still works, audit-log write failures are swallowed without affecting the reprocess result, and re-running the same date never duplicates `AttendanceRecord` rows (existing `unique_together`/`update_or_create` protection, unchanged).
+
+**Phase 4 — Database index review**
+- Four parallel research passes cross-checked `Meta.indexes`/migrations against real ORM query call sites (not guesswork) across User, AttendanceRecord/Punch/Correction, LeaveRequest, EmployeePayslip, PayrollCycle, Notification, Announcement, CandidateAssignment, and every audit-log-style model in the codebase.
+- 11 new indexes added across 7 apps (one migration per app, index-only, no data/field changes): `User(branch,is_active)`, `User(onboarding_status,is_active)`, `AuditLog(module,created_at)`, `AttendanceCorrection(status)`, `LeaveRequest(employee,status,start_date,end_date)`, `PayrollCycle(status)`, `PayrollCycle(cycle_start,cycle_end)`, `Notification(user,is_read)`, `Notification(user,created_at)`, `Announcement(is_pinned,created_at)`, `CandidateAssignment(employee,status)` + `(candidate,status)`.
+- Several *candidate* indexes were deliberately **not** added, with reasons recorded (e.g. `AttendancePunch`'s dominant `punched_at__date=X` lookup would need a Postgres expression index precisely matching Django's timezone-sensitive `__date` SQL translation — judged higher-risk than this phase's mandate; `CarryForwardLog`'s unindexed guard query stays fine since that table realistically never exceeds a few hundred rows).
+- Verified with real `EXPLAIN (ANALYZE, BUFFERS)` before/after using synthetic bulk data generated and rolled back inside a transaction (real dev-DB tables are far too small today for Postgres to ever choose an index over a seq scan). Measured, not estimated: notification list query **5.82ms → 0.06ms**; unread-count bell-poll **0.97ms → 0.04ms**; leave-overlap check on a 5,000-row single-employee history **0.66ms → 0.25ms**. One honest nuance recorded rather than hidden: for one specific skewed-data query shape, the planner's choice between two new indexes was measurably worse than before — reported as-is, not smoothed over.
+
+### Files Changed (hardening phases — high-level; see phase notes above for detail)
+
+```
+backend/apps/announcements/views.py, tasks.py (new)
+backend/apps/assessments/views/admin.py, tasks.py (new)
+backend/apps/notifications/signals.py, tasks.py (new)
+backend/apps/recruitment/views.py, tasks.py (new)
+backend/apps/accounts/views.py, tasks.py (new)
+backend/apps/payroll/views/cycles.py
+backend/apps/attendance/views/hr_attendance.py, services_hr.py, tasks.py
+backend/apps/accounts/models.py + migrations/0048_phase4_index_review.py
+backend/apps/attendance/models.py + migrations/0021_phase4_index_review.py
+backend/apps/hrms/models.py + migrations/0018_phase4_index_review.py
+backend/apps/payroll/models.py + migrations/0008_phase4_index_review.py
+backend/apps/notifications/models.py + migrations/0002_phase4_index_review.py
+backend/apps/announcements/models.py + migrations/0002_phase4_index_review.py
+backend/apps/assessments/models.py + migrations/0011_phase4_index_review.py
+```
+
+### Pending
+
+- Hardening spec Phases 5–15 not yet started: Redis/Celery production-safety validation (fail-safe when `REDIS_URL` is unset), mobile logout refresh-token-blacklist fix, frontend `proxy.ts` JWT-verification fix, attendance CSV upload MIME/header validation, bank-detail field encryption (analysis done in Phase 0, migration not attempted), Gunicorn/ASGI/DB-connection review, monitoring, dependency security fixes (`next` → 16.2.12, `xlsx` CVE decision), and load testing.
+- Weekly Off "Alternate Saturday"/"Rotational 4-week" pattern types (see above) — schema doesn't support them yet; no decision made on building this.
 - Everything listed as Pending in the 2026-07-28 entry above is still outstanding.

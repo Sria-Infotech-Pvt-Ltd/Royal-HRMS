@@ -23,6 +23,7 @@ from apps.dashboard.views.people import (
     HREmployeeLifecycleView,
     HRBirthdayTodayView,
     HRBirthdayUpcomingView,
+    EmployeeBirthdayTodayView,
     EmployeeActionItemsView,
     EmployeeRecentRequestsView,
 )
@@ -49,6 +50,7 @@ __all__ = [
     'HREmployeeLifecycleView',
     'HRBirthdayTodayView',
     'HRBirthdayUpcomingView',
+    'EmployeeBirthdayTodayView',
     'EmployeeActionItemsView',
     'EmployeeRecentRequestsView',
 ]

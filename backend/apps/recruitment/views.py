@@ -234,18 +234,24 @@ def _send_interview_scheduled_email_general(candidate):
 
 
 def _fire_interview_date_emails_if_needed(candidate, old_interview_date):
-    """Fire interview scheduled emails when interview_date is set or changed."""
+    """Queue interview-scheduled emails when interview_date is set or changed."""
     if candidate.interview_date is None:
         return
     if old_interview_date == candidate.interview_date:
         return
-    import threading
-    target = (
-        _send_interview_scheduled_emails        # referred: candidate + referrer emails
-        if candidate.referral_by_id
-        else _send_interview_scheduled_email_general  # direct: candidate email only
-    )
-    threading.Thread(target=target, args=(candidate,), daemon=True).start()
+
+    from apps.recruitment.tasks import send_interview_scheduled_emails_task
+
+    def _dispatch(candidate_id=candidate.pk):
+        try:
+            send_interview_scheduled_emails_task.delay(candidate_id)
+        except Exception as exc:
+            logger.error(
+                'Failed to queue interview-scheduled email for candidate %s: %s',
+                candidate_id, exc, exc_info=True,
+            )
+
+    transaction.on_commit(_dispatch)
 
 
 # ─── Candidate List + Create ──────────────────────────────────────────────────
@@ -1464,12 +1470,18 @@ class ReferralListCreateView(APIView):
             added_by=request.user,
             status=Candidate.STATUS_PENDING,
         )
-        import threading
-        threading.Thread(
-            target=_send_referral_submission_emails,
-            args=(candidate,),
-            daemon=True,
-        ).start()
+        from apps.recruitment.tasks import send_referral_submission_emails_task
+
+        def _dispatch(candidate_id=candidate.pk):
+            try:
+                send_referral_submission_emails_task.delay(candidate_id)
+            except Exception as exc:
+                logger.error(
+                    'Failed to queue referral-submission email for candidate %s: %s',
+                    candidate_id, exc, exc_info=True,
+                )
+
+        transaction.on_commit(_dispatch)
         logger.info('Referral submitted by %s for %s', request.user.email, candidate.email)
         return success(
             'Referral submitted successfully.',

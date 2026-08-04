@@ -1,19 +1,8 @@
 "use client";
 
 import { useAttendanceSettings } from "@/hooks/useAttendanceSettings";
-import type { AttendanceSettingsForm, WeeklyOffSection } from "@/types/attendanceSettings";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const DAYS: Array<{ label: string; key: keyof WeeklyOffSection }> = [
-  { label: "Mon", key: "monday"    },
-  { label: "Tue", key: "tuesday"   },
-  { label: "Wed", key: "wednesday" },
-  { label: "Thu", key: "thursday"  },
-  { label: "Fri", key: "friday"    },
-  { label: "Sat", key: "saturday"  },
-  { label: "Sun", key: "sunday"    },
-];
+import type { AttendanceSettingsForm } from "@/types/attendanceSettings";
+import WeeklyOffPatternsCard from "./WeeklyOffPatternsCard";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -133,34 +122,15 @@ export default function AttendanceSettings() {
         </div>
       </div>
 
-      {/* Weekly Off */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-calendar-week" /> Weekly Off Days</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span className="badge badge-error" style={{ fontSize: 10 }}>Critical</span>
-            <SectionSave section="weekly_off" />
-          </div>
-        </div>
-        <div className="card-body">
-          <p className="field-label" style={{ marginBottom: 10 }}>Select off days — excluded from attendance calculations</p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {DAYS.map(({ label, key }) => {
-              const isOff = form.weekly_off[key];
-              return (
-                <label key={key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer" }}
-                  onClick={() => setForm(f => ({ ...f, weekly_off: { ...f.weekly_off, [key]: !f.weekly_off[key] } }))}
-                >
-                  <div style={{ width: 38, height: 38, borderRadius: 7, border: `1.5px solid ${isOff ? "var(--primary)" : "var(--outline-v)"}`, background: isOff ? "var(--primary)" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: isOff ? "#fff" : "var(--on-variant)" }}>
-                    {label}
-                  </div>
-                  <span style={{ fontSize: 9, color: "var(--on-variant)" }}>{label}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {/* Weekly Off Patterns — the visible Weekly Off configuration area. Replaces the old
+          flat "Weekly Off Days" toggle grid in this UI (removed — it was a confusing second
+          way to configure the same thing). The org default is still backed by whichever
+          pattern below is marked Default; the old Settings-page config
+          (AttendanceSettings.weekly_off) is untouched on the backend and still exists as the
+          final fallback if no pattern is ever marked default — see
+          core.cache_service.WeeklyOffCacheService.get(). Assign patterns to individual
+          employees from Attendance & Time -> Weekly Off Assignment. */}
+      <WeeklyOffPatternsCard />
 
       {/* Punch Rules */}
       <div className="card">

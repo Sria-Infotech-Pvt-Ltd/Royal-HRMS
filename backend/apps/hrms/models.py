@@ -349,6 +349,18 @@ class LeaveRequest(models.Model):
     class Meta:
         db_table = 'hrms_leave_requests'
         ordering = ['-created_at']
+        indexes = [
+            # Phase 4: matches the dominant repeated query shape across the
+            # codebase — the leave-overlap check, absence detection, monthly
+            # working-days calc, and manager/HR dashboards all filter by
+            # employee + status(__in) + a start_date/end_date range. Today
+            # only `employee` (FK auto-index) and `status` (standalone) exist
+            # separately, with no composite covering all four together.
+            models.Index(
+                fields=['employee', 'status', 'start_date', 'end_date'],
+                name='leave_emp_status_dates_idx',
+            ),
+        ]
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.leave_type} ({self.start_date})'

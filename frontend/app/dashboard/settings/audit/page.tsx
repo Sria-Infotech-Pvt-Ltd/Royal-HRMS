@@ -105,7 +105,7 @@ export default function AuditLogPage() {
     setLoading(true);
     setApiError(null);
     try {
-      const params: Record<string, string> = { page: String(pg), page_size: '25' };
+      const params: Record<string, string> = { page: String(pg), page_size: '10' };
       if (module)   params.module    = module;
       if (search)   params.search    = search;
       if (dateFrom) params.date_from = dateFrom;

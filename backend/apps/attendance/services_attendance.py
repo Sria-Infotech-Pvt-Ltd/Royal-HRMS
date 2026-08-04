@@ -290,7 +290,7 @@ class AttendanceProcessorService:
                 'note':                  cls._holiday_name(for_date, branch_name),
             }
         # Weekly off with no punches → mark weekly_off, not absent
-        elif not punches and cls._is_weekly_off(for_date, cfg):
+        elif not punches and cls._is_weekly_off(employee, for_date):
             record_data = {
                 'status':                AttendanceRecord.STATUS_WEEKLY_OFF,
                 'first_punch_in':        None,
@@ -331,12 +331,18 @@ class AttendanceProcessorService:
         return holidays[0]['name'] if holidays else 'Holiday'
 
     @staticmethod
-    def _is_weekly_off(for_date: date, cfg) -> bool:
-        """Return True if `for_date` is a configured weekly off day."""
-        if not cfg or not hasattr(cfg, 'weekly_off'):
-            return False
+    def _is_weekly_off(employee, for_date: date) -> bool:
+        """
+        Return True if `for_date` is a configured weekly off day for `employee`.
+
+        Resolves via the centralized WeeklyOffCacheService.get_effective():
+        the employee's own EmployeeWeeklyOffAssignment (if one covers this
+        date) takes priority, falling back to the org-wide default (unchanged
+        from before this method resolved employee-specific assignments).
+        """
+        from core.cache_service import WeeklyOffCacheService
         day_name = for_date.strftime('%A').lower()   # 'monday' … 'sunday'
-        return bool(getattr(cfg.weekly_off, day_name, False))
+        return day_name in WeeklyOffCacheService.get_effective(employee, for_date)
 
     # ── Calculation ───────────────────────────────────────────────────────────
 
@@ -614,13 +620,13 @@ class AttendanceDashboardService:
         leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_names = cls._holiday_names(month_start, month_end, branch_name)
         holiday_dates = set(holiday_names.keys())
-        off_days      = cls._weekly_off_days()
+        off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
         pending_dates = cls._pending_correction_dates(employee, year, month)
 
         days: dict[int, dict] = {}
         for day_num in range(1, days_in_month + 1):
             entry = cls._build_day(
-                day_num, year, month, records, leave_dates, off_days,
+                day_num, year, month, records, leave_dates, off_dates,
                 pending_dates, today, holiday_dates, holiday_names,
             )
             if entry is not None:
@@ -707,9 +713,17 @@ class AttendanceDashboardService:
         return leave_dates
 
     @staticmethod
-    def _weekly_off_days() -> set[str]:
+    def _weekly_off_dates(employee, month_start: date, month_end: date) -> set[date]:
+        """
+        Actual calendar dates (not weekday names) that resolve as weekly-off
+        for `employee` across [month_start, month_end] — per-day via the
+        centralized resolver, since the employee's assigned pattern can change
+        mid-month (that's the whole point of effective-dating). One query for
+        the employee's assignment rows regardless of days-in-range.
+        """
         from core.cache_service import WeeklyOffCacheService
-        return WeeklyOffCacheService.get()
+        resolved = WeeklyOffCacheService.get_effective_range(employee, month_start, month_end)
+        return {d for d, off_days in resolved.items() if d.strftime('%A').lower() in off_days}
 
     @staticmethod
     def _holiday_dates(month_start: date, month_end: date, branch_name: str = '') -> set:
@@ -726,21 +740,20 @@ class AttendanceDashboardService:
     @staticmethod
     def _build_day(
         day_num: int, year: int, month: int,
-        records: dict, leave_dates: set, off_days: set,
+        records: dict, leave_dates: set, off_dates: set,
         pending_dates: set, today: date,
         holiday_dates: set = None,
         holiday_names: dict = None,
     ) -> dict | None:
         """Builds the response dict for one calendar day; returns None for blank future days."""
         cur           = date(year, month, day_num)
-        day           = cur.strftime('%A').lower()
         rec           = records.get(cur)
         holiday_dates = holiday_dates or set()
         holiday_names = holiday_names or {}
 
         if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
             key = AttendanceRecord.STATUS_HOLIDAY
-        elif day in off_days or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
+        elif cur in off_dates or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
             key = AttendanceRecord.STATUS_WEEKLY_OFF
         elif cur in leave_dates or (rec and rec.status == AttendanceRecord.STATUS_ON_LEAVE):
             key = AttendanceRecord.STATUS_ON_LEAVE

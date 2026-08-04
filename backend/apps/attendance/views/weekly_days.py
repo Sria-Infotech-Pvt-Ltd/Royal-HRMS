@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -43,7 +44,18 @@ class WeeklyDayPolicyListCreateView(APIView):
         qs = (
             WeeklyDayPolicy.objects
             .select_related('created_by', 'updated_by')
-            .all()
+            .annotate(
+                # One aggregation query for the whole page — counts each
+                # policy's currently-open assignments, not one query per row.
+                assigned_employee_count=Count(
+                    'employee_assignments',
+                    filter=Q(employee_assignments__effective_to__isnull=True),
+                    distinct=True,
+                ),
+            )
+            # Explicit — the Count() annotation's GROUP BY otherwise loses
+            # Meta.ordering, tripping Paginator's UnorderedObjectListWarning.
+            .order_by('-is_default', 'name')
         )
 
         is_active_param = request.query_params.get('is_active')
@@ -160,6 +172,14 @@ class WeeklyDayPolicyDetailView(APIView):
             return error(
                 'Cannot deactivate the default weekly day policy. '
                 'Assign another policy as default before removing this one.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        assigned_count = policy.employee_assignments.filter(effective_to__isnull=True).count()
+        if assigned_count:
+            return error(
+                f'This weekly-off pattern is currently assigned to {assigned_count} '
+                f'employee{"s" if assigned_count != 1 else ""} and cannot be deleted. '
+                'Reassign them to a different pattern first.',
                 http_status=status.HTTP_409_CONFLICT,
             )
         if not policy.is_active:
