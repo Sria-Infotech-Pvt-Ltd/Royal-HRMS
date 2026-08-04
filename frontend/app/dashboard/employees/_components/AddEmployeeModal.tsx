@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { usePermission } from "@/hooks/usePermission";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 
 /* ── Types ────────────────────────────────────────────────────── */
@@ -110,9 +109,6 @@ export default function AddEmployeeModal({
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
   const effectiveBranch = getEffectiveBranch(user);
-  // /roles/ is gated server-side to settings.edit holders — skip the call
-  // entirely for everyone else instead of firing a request that always 403s.
-  const canViewRoles    = usePermission("settings.edit");
 
   const [form,   setForm]   = useState<Form>(EMPTY);
   const [errs,   setErrs]   = useState<Errs>({});
@@ -130,24 +126,21 @@ export default function AddEmployeeModal({
 
   /* fetch roles, departments, branches on mount */
   useEffect(() => {
-    // allSettled, not all — a permission-denied roles fetch (see canViewRoles)
-    // must not also wipe out the departments/branches dropdowns.
+    // allSettled, not all — one failing fetch must not wipe out the others.
     Promise.allSettled([
-      canViewRoles
-        ? clientApi.get<{ data: { results: ApiRole[]   } }>(API.roles.list,          { params: { page_size: 100 } })
-        : Promise.resolve(null),
+      clientApi.get<{ data: { results: ApiRole[]   } }>(API.roles.list,          { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: ApiDept[]   } }>(API.departments.list,     { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: ApiBranch[] } }>(API.employees.branches,   { params: { page_size: 100 } }),
     ])
       .then(([r, d, b]) => {
-        if (r.status === "fulfilled" && r.value) {
+        if (r.status === "fulfilled") {
           setRoles(r.value.data.data.results.filter(x => x.name !== "system_admin"));
         }
         if (d.status === "fulfilled") setDepts(d.value.data.data?.results ?? []);
         if (b.status === "fulfilled") setBranches(b.value.data.data.results);
       })
       .finally(() => setLoading(false));
-  }, [canViewRoles]);
+  }, []);
 
   // Branch-restricted users (everyone except system_admin) always add employees
   // to their own branch — lock the field instead of offering every branch.

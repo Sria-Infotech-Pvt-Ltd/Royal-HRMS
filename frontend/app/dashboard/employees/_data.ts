@@ -87,12 +87,39 @@ export interface TableSection {
 export type DocStatus = "verified" | "pending" | "not-uploaded";
 export interface DocEntry {
   name: string;
+  documentType: string; // backend EmployeeDocument.document_type choice value
   required: boolean;
   status?: DocStatus;
   uploadedOn?: string;
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;
+}
+
+/** Raw document shape returned by the employee-detail and document-upload APIs. */
+export interface ApiDocument {
+  id: number;
+  document_type: string;
+  document_type_display: string;
+  file: string;
+  file_name: string;
+  file_size: number;
+  uploaded_at: string;
+}
+
+const DOC_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/** Merge an uploaded ApiDocument onto its matching static DocEntry slot. */
+export function apiDocumentToEntry(base: DocEntry, doc: ApiDocument): DocEntry {
+  const dt = new Date(doc.uploaded_at);
+  return {
+    ...base,
+    status: "pending",
+    uploadedOn: `${DOC_MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
+    fileUrl: doc.file,
+    fileName: doc.file_name,
+    fileSize: doc.file_size,
+  };
 }
 export interface DocSection {
   id: string;
@@ -215,12 +242,12 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     icon: "ti-files",
     kind: "docs",
     documents: [
-      { name: "PAN Card",                  required: true  },
-      { name: "Aadhaar Card",              required: true  },
-      { name: "Degree Certificate",        required: false },
-      { name: "Experience Letter",         required: false },
-      { name: "Passport Photo",            required: true  },
-      { name: "Cancelled Cheque",          required: true  },
+      { name: "PAN Card",           documentType: "pan_card",           required: true  },
+      { name: "Aadhaar Card",       documentType: "aadhaar_card",       required: true  },
+      { name: "Degree Certificate", documentType: "degree_certificate", required: false },
+      { name: "Experience Letter",  documentType: "experience_letter",  required: false },
+      { name: "Passport Photo",     documentType: "passport_photo",     required: true  },
+      { name: "Cancelled Cheque",   documentType: "cancelled_cheque",   required: true  },
     ],
   },
 

@@ -210,6 +210,26 @@ def _cloudinary_signed_url(file_field) -> str:
     return _cu.private_download_url(name, fmt, resource_type='raw', type='upload', attachment=False)
 
 
+def _document_dict(doc) -> dict:
+    """Shared shape for a single EmployeeDocument, used by _employee_dict() and
+    EmployeeDocumentAdminView so the profile page and the upload response always
+    match the ApiDocument shape the frontend expects."""
+    try:
+        file_url = _cloudinary_signed_url(doc.file) if doc.file else ''
+    except Exception:
+        logger.warning('Cloudinary signed URL failed for employee document %s', doc.id, exc_info=True)
+        file_url = ''
+    return {
+        'id':                    doc.id,
+        'document_type':         doc.document_type,
+        'document_type_display': doc.get_document_type_display(),
+        'file':                  file_url,
+        'file_name':             doc.file_name,
+        'file_size':             doc.file_size,
+        'uploaded_at':           doc.uploaded_at.isoformat() if doc.uploaded_at else '',
+    }
+
+
 def _employee_dict(user: User) -> dict:
     parts = user.full_name.strip().split(' ', 1)
     first = parts[0]
@@ -261,22 +281,8 @@ def _employee_dict(user: User) -> dict:
         'emergency_email':        p.emergency_email        if p else '',
     }
 
-    documents = []
     try:
-        for doc in user.employee_documents.all():
-            try:
-                file_url = _cloudinary_signed_url(doc.file) if doc.file else ''
-            except Exception:
-                file_url = ''
-            documents.append({
-                'id':                   doc.id,
-                'document_type':        doc.document_type,
-                'document_type_display': doc.get_document_type_display(),
-                'file':                 file_url,
-                'file_name':            doc.file_name,
-                'file_size':            doc.file_size,
-                'uploaded_at':          doc.uploaded_at.isoformat() if doc.uploaded_at else '',
-            })
+        documents = [_document_dict(doc) for doc in user.employee_documents.all()]
     except Exception:
         documents = []
     role_name = (user.role.name if user.role else '').lower()
@@ -2598,54 +2604,6 @@ class EmployeeListCreateView(APIView):
             'results':     [_employee_dict(u) for u in page_obj.object_list],
         })
 
-
-class EmployeeStatsView(APIView):
-    """
-    Dashboard counts for the Employees page header cards.
-
-    Computed directly from the full queryset (not a single page) — the
-    frontend used to derive these from the currently loaded page of results,
-    which under-counted everything once there was more than one page.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if not _has_perm(request.user, 'employees.view'):
-            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
-
-        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
-
-        role = request.user.role
-        role_name = role.name if role else ''
-        if role and role.can_manage_team:
-            base_qs = base_qs.filter(reporting_manager=request.user)
-        elif role_name != 'system_admin' and request.user.branch:
-            base_qs = base_qs.filter(branch=request.user.branch)
-
-        # branch_names/department_names always come from base_qs (ignores the
-        # branch filter below) so the branch dropdown never shrinks to just
-        # the currently-selected branch once one is picked.
-        branch_names = list(
-            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
-        )
-        department_names = list(
-            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
-        )
-
-        qs = base_qs
-        branch_filter = request.query_params.get('branch', '').strip()
-        if branch_filter and branch_filter != 'all':
-            qs = qs.filter(branch=branch_filter)
-
-        return success('Employee statistics retrieved.', data={
-            'total':             qs.count(),
-            'active':            qs.filter(is_active=True, must_change_password=False).count(),
-            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
-            'departments':       qs.exclude(department='').values('department').distinct().count(),
-            'branch_names':      branch_names,
-            'department_names':  department_names,
-        })
-
     def post(self, request):
         if not _has_perm(request.user, 'employees.create'):
             return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
@@ -2831,6 +2789,54 @@ class EmployeeStatsView(APIView):
             data=_employee_dict(user),
             http_status=status.HTTP_201_CREATED,
         )
+
+
+class EmployeeStatsView(APIView):
+    """
+    Dashboard counts for the Employees page header cards.
+
+    Computed directly from the full queryset (not a single page) — the
+    frontend used to derive these from the currently loaded page of results,
+    which under-counted everything once there was more than one page.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'employees.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+
+        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
+
+        role = request.user.role
+        role_name = role.name if role else ''
+        if role and role.can_manage_team:
+            base_qs = base_qs.filter(reporting_manager=request.user)
+        elif role_name != 'system_admin' and request.user.branch:
+            base_qs = base_qs.filter(branch=request.user.branch)
+
+        # branch_names/department_names always come from base_qs (ignores the
+        # branch filter below) so the branch dropdown never shrinks to just
+        # the currently-selected branch once one is picked.
+        branch_names = list(
+            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
+        )
+        department_names = list(
+            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
+        )
+
+        qs = base_qs
+        branch_filter = request.query_params.get('branch', '').strip()
+        if branch_filter and branch_filter != 'all':
+            qs = qs.filter(branch=branch_filter)
+
+        return success('Employee statistics retrieved.', data={
+            'total':             qs.count(),
+            'active':            qs.filter(is_active=True, must_change_password=False).count(),
+            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
+            'departments':       qs.exclude(department='').values('department').distinct().count(),
+            'branch_names':      branch_names,
+            'department_names':  department_names,
+        })
 
 
 def _get_employee(identifier: str):
@@ -3880,6 +3886,54 @@ class EmployeeDocumentView(APIView):
         return success('Document deleted.')
 
 
+class EmployeeDocumentAdminView(APIView):
+    """
+    POST /employees/<employee_id>/documents/ → HR/Admin uploads or replaces a
+    document on behalf of a specific employee from that employee's profile page.
+    Unlike EmployeeDocumentView.post, this is not gated on the acting user's own
+    onboarding_status — HR's own onboarding is always complete, and they are
+    uploading for someone else.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def post(self, request, employee_id: str):
+        if not _has_perm(request.user, 'employees.edit'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        from apps.accounts.models import EmployeeDocument as ED
+        from apps.accounts.serializers import EmployeeDocumentSerializer
+        serializer = EmployeeDocumentSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        file_obj = serializer.validated_data['file']
+        doc_type = serializer.validated_data['document_type']
+        with transaction.atomic():
+            doc = serializer.save(
+                user=employee,
+                file_name=file_obj.name,
+                file_size=file_obj.size,
+            )
+            ED.objects.filter(
+                user=employee,
+                document_type=doc_type,
+            ).exclude(pk=doc.pk).delete()
+
+        try:
+            AuditLog.objects.create(
+                user=request.user, action='document_uploaded', module='documents',
+                object_id=str(doc.id),
+                changes={'employee': employee.employee_id, 'document_type': doc_type},
+                ip_address=get_client_ip(request),
+            )
+        except Exception:
+            logger.warning('AuditLog write failed for document_uploaded id=%s', doc.id)
+
+        logger.info('Document %s uploaded for %s by %s', doc_type, employee.email, request.user.email)
+        return success('Document uploaded.', data=_document_dict(doc), http_status=status.HTTP_201_CREATED)
 
 
 # ─── Onboarding — HR management (pipeline + approvals queue + approve/reject) ──

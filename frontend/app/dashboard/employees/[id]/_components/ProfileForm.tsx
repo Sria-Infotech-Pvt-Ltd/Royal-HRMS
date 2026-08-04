@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import type {
-  DetailValues,
-  DocEntry,
-  FieldOption,
-  ProfileSection,
-  TableColumn,
-  TableRow,
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
+import {
+  apiDocumentToEntry,
+  type ApiDocument,
+  type DetailValues,
+  type DocEntry,
+  type FieldOption,
+  type ProfileSection,
+  type TableColumn,
+  type TableRow,
 } from "../../_data";
 import FormField from "../../_components/FormField";
 import DocPreviewModal from "@/components/DocPreviewModal";
@@ -25,6 +29,8 @@ export default function ProfileForm({
   dirty,
   saving,
   liveDocuments,
+  employeeId,
+  onDocumentUploaded,
   fieldOptions,
   fieldSlot,
   readOnly,
@@ -40,6 +46,8 @@ export default function ProfileForm({
   dirty: boolean;
   saving?: boolean;
   liveDocuments?: DocEntry[];
+  employeeId?: string;
+  onDocumentUploaded?: (entry: DocEntry) => void;
   fieldOptions?: Record<string, FieldOption[]>;
   fieldSlot?: (key: string, disabled: boolean) => React.ReactNode | null | "hidden";
   readOnly?: boolean;
@@ -112,7 +120,13 @@ export default function ProfileForm({
         {section.kind === "docs" && (
           section.variant === "table"
             ? <DocsTable documents={liveDocuments ?? section.documents} />
-            : <DocsCards documents={liveDocuments ?? section.documents} />
+            : (
+              <DocsCards
+                documents={liveDocuments ?? section.documents}
+                employeeId={employeeId ?? ""}
+                onUploaded={onDocumentUploaded ?? (() => {})}
+              />
+            )
         )}
       </div>
 
@@ -407,9 +421,41 @@ function fmtBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const DOC_ACCEPT = ".pdf,.jpg,.jpeg,.png";
+
 /* ── Employee Documents — 4-col card grid ───────────────────── */
-function DocsCards({ documents }: { documents: DocEntry[] }) {
+function DocsCards({
+  documents,
+  employeeId,
+  onUploaded,
+}: {
+  documents: DocEntry[];
+  employeeId: string;
+  onUploaded: (entry: DocEntry) => void;
+}) {
   const [preview, setPreview] = useState<DocEntry | null>(null);
+  const [uploadingType, setUploadingType] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [headerType, setHeaderType] = useState(documents[0]?.documentType ?? "");
+
+  async function uploadFile(doc: DocEntry, file: File) {
+    setUploadError(null);
+    setUploadingType(doc.documentType);
+    try {
+      const fd = new FormData();
+      fd.append("document_type", doc.documentType);
+      fd.append("file", file);
+      const res = await clientApi.post<{ data: ApiDocument }>(
+        API.employees.documents(employeeId),
+        fd,
+      );
+      onUploaded(apiDocumentToEntry(doc, res.data.data));
+    } catch (err: unknown) {
+      setUploadError((err as { message?: string })?.message ?? "Upload failed. Max 5 MB, PDF/JPG/PNG only.");
+    } finally {
+      setUploadingType(null);
+    }
+  }
 
   return (
     <>
@@ -424,24 +470,59 @@ function DocsCards({ documents }: { documents: DocEntry[] }) {
       )}
 
       <div>
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-3">
           <p className="text-[13px]" style={{ color: "var(--on-variant)" }}>
             All documents uploaded by the employee or{" "}
             <span className="font-semibold" style={{ color: "var(--primary)" }}>HR</span>
           </p>
-          <label
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-colors hover:bg-[var(--bg-mid)]"
-            style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "#fff" }}
-          >
-            <i className="ti ti-upload text-[14px]" />
-            Upload Document
-            <input type="file" className="hidden" />
-          </label>
+          <div className="flex items-center gap-2">
+            <select
+              value={headerType}
+              onChange={(e) => setHeaderType(e.target.value)}
+              suppressHydrationWarning
+              className="px-2.5 py-2 rounded-lg border text-[13px] outline-none"
+              style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+            >
+              {documents.map((doc) => (
+                <option key={doc.documentType} value={doc.documentType}>{doc.name}</option>
+              ))}
+            </select>
+            <label
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-colors hover:bg-[var(--bg-mid)]"
+              style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "#fff" }}
+            >
+              <i className={`ti ${uploadingType === headerType ? "ti-loader-2 animate-spin" : "ti-upload"} text-[14px]`} />
+              Upload Document
+              <input
+                type="file"
+                accept={DOC_ACCEPT}
+                className="hidden"
+                disabled={uploadingType !== null}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  const doc = documents.find((d) => d.documentType === headerType);
+                  if (file && doc) uploadFile(doc, file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
         </div>
+
+        {uploadError && (
+          <div
+            className="flex items-center gap-2 px-3.5 py-2 mb-4 rounded-lg text-[12.5px] font-medium"
+            style={{ background: "var(--error-c)", color: "var(--error)" }}
+          >
+            <i className="ti ti-alert-circle text-[15px]" />
+            {uploadError}
+          </div>
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
           {documents.map((doc) => {
             const uploaded = !!doc.fileUrl;
+            const isUploading = uploadingType === doc.documentType;
             return (
               <div
                 key={doc.name}
@@ -462,7 +543,9 @@ function DocsCards({ documents }: { documents: DocEntry[] }) {
                     {doc.name}
                   </p>
                   <p className="text-[11.5px] leading-snug" style={{ color: "var(--on-variant)" }}>
-                    {uploaded
+                    {isUploading
+                      ? "Uploading…"
+                      : uploaded
                       ? `${doc.uploadedOn}${doc.fileSize ? ` · ${fmtBytes(doc.fileSize)}` : ""}`
                       : "Not uploaded"}
                   </p>
@@ -474,8 +557,18 @@ function DocsCards({ documents }: { documents: DocEntry[] }) {
                     className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-mid)] flex-shrink-0 cursor-pointer transition-colors"
                     style={{ color: "var(--on-variant)" }}
                   >
-                    <i className="ti ti-refresh text-[15px]" />
-                    <input type="file" className="hidden" />
+                    <i className={`ti ${isUploading ? "ti-loader-2 animate-spin" : "ti-refresh"} text-[15px]`} />
+                    <input
+                      type="file"
+                      accept={DOC_ACCEPT}
+                      className="hidden"
+                      disabled={uploadingType !== null}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadFile(doc, file);
+                        e.target.value = "";
+                      }}
+                    />
                   </label>
                 )}
                 <button

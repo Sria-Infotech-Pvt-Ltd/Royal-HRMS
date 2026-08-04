@@ -38,6 +38,24 @@ def _is_hr_or_admin(user):
     return _has_perm(user, 'employees.view')
 
 
+def _hr_dashboard_branch(user):
+    """
+    Branch to scope the HR dashboard's KPI/action-queue counts to, or None for
+    company-wide totals. Deliberately checks role name / the raw is_superuser
+    flag rather than the 'settings.edit' permission — that permission has
+    historically also been granted to the HR role itself (see seed migration
+    0002_seed_roles_permissions), which would make company-wide totals leak
+    to branch HR users if used here.
+    """
+    if not user:
+        return None
+    if user.role and user.role.name == 'system_admin':
+        return None
+    if getattr(user, 'is_superuser', False):
+        return None
+    return user.branch or None
+
+
 def _headcount_data():
     """Shared department headcount — cached 12 h, used by both dashboards."""
     rows = cache.get('dashboard:hr:headcount')
@@ -214,28 +232,41 @@ class HRKPIView(APIView):
         from apps.recruitment.models import Candidate
 
         today = timezone.localdate()
+        branch = _hr_dashboard_branch(request.user)
+        cache_scope = branch or 'all'
 
-        total_workforce = cache.get('dashboard:hr:kpis:workforce')
+        total_workforce = cache.get(f'dashboard:hr:kpis:workforce:{cache_scope}')
         if total_workforce is None:
-            total_workforce = User.objects.filter(is_active=True).count()
-            cache.set('dashboard:hr:kpis:workforce', total_workforce, 5 * 60)
+            workforce_qs = User.objects.filter(is_active=True)
+            if branch:
+                workforce_qs = workforce_qs.filter(branch=branch)
+            total_workforce = workforce_qs.count()
+            cache.set(f'dashboard:hr:kpis:workforce:{cache_scope}', total_workforce, 5 * 60)
 
-        active_interviews = cache.get('dashboard:hr:kpis:interviews')
+        active_interviews = cache.get(f'dashboard:hr:kpis:interviews:{cache_scope}')
         if active_interviews is None:
-            active_interviews = Candidate.objects.filter(
+            interviews_qs = Candidate.objects.filter(
                 status__in=[Candidate.STATUS_INTERVIEW_SCHEDULED, Candidate.STATUS_INTERVIEW_DONE]
-            ).count()
-            cache.set('dashboard:hr:kpis:interviews', active_interviews, _TTL_FUNNEL)
+            )
+            if branch:
+                interviews_qs = interviews_qs.filter(branch__branch_name=branch)
+            active_interviews = interviews_qs.count()
+            cache.set(f'dashboard:hr:kpis:interviews:{cache_scope}', active_interviews, _TTL_FUNNEL)
 
         # Real-time counts — not cached per spec
-        leave_pending      = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
-        expense_pending    = Expense.objects.filter(status='pending').count()
-        onboarding_pending = User.objects.filter(
-            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
-        ).count()
-        correction_pending = AttendanceCorrection.objects.filter(
-            status=AttendanceCorrection.STATUS_PENDING
-        ).count()
+        leave_qs      = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])
+        expense_qs    = Expense.objects.filter(status='pending')
+        onboarding_qs = User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
+        correction_qs = AttendanceCorrection.objects.filter(status=AttendanceCorrection.STATUS_PENDING)
+        if branch:
+            leave_qs      = leave_qs.filter(employee__branch=branch)
+            expense_qs    = expense_qs.filter(employee__branch=branch)
+            onboarding_qs = onboarding_qs.filter(branch=branch)
+            correction_qs = correction_qs.filter(employee__branch=branch)
+        leave_pending      = leave_qs.count()
+        expense_pending    = expense_qs.count()
+        onboarding_pending = onboarding_qs.count()
+        correction_pending = correction_qs.count()
         pending_actions = leave_pending + expense_pending + onboarding_pending
 
         # Requesting user's own attendance today
@@ -274,11 +305,13 @@ class HRActionQueueView(APIView):
         if not _is_hr_or_admin(request.user):
             return error(_DENIED, http_status=403)
 
+        branch = _hr_dashboard_branch(request.user)
+
         # Short TTL rather than a full skip: this endpoint is hit on every
         # dashboard load, and a 45s-stale badge count is an acceptable
         # trade-off for the load reduction — long enough to matter under
         # concurrent traffic, short enough that no admin will notice.
-        cache_key = 'dashboard:hr:action_queue'
+        cache_key = f'dashboard:hr:action_queue:{branch or "all"}'
         cached = cache.get(cache_key)
         if cached is not None:
             return success('Action queue retrieved.', data=cached)
@@ -288,17 +321,25 @@ class HRActionQueueView(APIView):
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
         from apps.recruitment.models import Candidate
 
-        candidate_reviews      = Candidate.objects.filter(
+        candidate_qs  = Candidate.objects.filter(
             status=Candidate.STATUS_SELECTED, details_filled=True, hr_approved=False,
-        ).count()
-        leave_approvals        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
-        attendance_corrections = AttendanceCorrection.objects.filter(
-            status=AttendanceCorrection.STATUS_PENDING
-        ).count()
-        expense_claims         = Expense.objects.filter(status='pending').count()
-        onboarding_reviews     = User.objects.filter(
-            onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
-        ).count()
+        )
+        leave_qs      = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])
+        correction_qs = AttendanceCorrection.objects.filter(status=AttendanceCorrection.STATUS_PENDING)
+        expense_qs    = Expense.objects.filter(status='pending')
+        onboarding_qs = User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
+        if branch:
+            candidate_qs  = candidate_qs.filter(branch__branch_name=branch)
+            leave_qs      = leave_qs.filter(employee__branch=branch)
+            correction_qs = correction_qs.filter(employee__branch=branch)
+            expense_qs    = expense_qs.filter(employee__branch=branch)
+            onboarding_qs = onboarding_qs.filter(branch=branch)
+
+        candidate_reviews      = candidate_qs.count()
+        leave_approvals        = leave_qs.count()
+        attendance_corrections = correction_qs.count()
+        expense_claims         = expense_qs.count()
+        onboarding_reviews     = onboarding_qs.count()
 
         total = candidate_reviews + leave_approvals + attendance_corrections + expense_claims + onboarding_reviews
 
@@ -329,17 +370,28 @@ def push_leave_update(approving_user_id) -> None:
     from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
     from apps.recruitment.models import Candidate
 
-    leave_approvals        = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING]).count()
-    expense_claims         = Expense.objects.filter(status='pending').count()
-    onboarding_reviews     = User.objects.filter(
-        onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True
-    ).count()
-    candidate_reviews      = Candidate.objects.filter(
+    approving_user = User.objects.filter(pk=approving_user_id).select_related('role').first()
+    branch = _hr_dashboard_branch(approving_user)
+
+    leave_qs      = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])
+    expense_qs    = Expense.objects.filter(status='pending')
+    onboarding_qs = User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
+    candidate_qs  = Candidate.objects.filter(
         status=Candidate.STATUS_SELECTED, details_filled=True, hr_approved=False,
-    ).count()
-    attendance_corrections = AttendanceCorrection.objects.filter(
-        status=AttendanceCorrection.STATUS_PENDING,
-    ).count()
+    )
+    correction_qs = AttendanceCorrection.objects.filter(status=AttendanceCorrection.STATUS_PENDING)
+    if branch:
+        leave_qs      = leave_qs.filter(employee__branch=branch)
+        expense_qs    = expense_qs.filter(employee__branch=branch)
+        onboarding_qs = onboarding_qs.filter(branch=branch)
+        candidate_qs  = candidate_qs.filter(branch__branch_name=branch)
+        correction_qs = correction_qs.filter(employee__branch=branch)
+
+    leave_approvals        = leave_qs.count()
+    expense_claims         = expense_qs.count()
+    onboarding_reviews     = onboarding_qs.count()
+    candidate_reviews      = candidate_qs.count()
+    attendance_corrections = correction_qs.count()
 
     action_queue = {
         'total_pending':           candidate_reviews + leave_approvals + attendance_corrections + expense_claims + onboarding_reviews,
@@ -354,7 +406,7 @@ def push_leave_update(approving_user_id) -> None:
 
     # Refresh the cache with the freshly computed data so the next HTTP GET
     # also returns accurate counts (for users whose WS connection is down).
-    cache.set('dashboard:hr:action_queue', action_queue, _TTL_ACTION_QUEUE)
+    cache.set(f'dashboard:hr:action_queue:{branch or "all"}', action_queue, _TTL_ACTION_QUEUE)
 
     try:
         from asgiref.sync import async_to_sync
