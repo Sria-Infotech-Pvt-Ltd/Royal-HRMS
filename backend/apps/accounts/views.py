@@ -1030,6 +1030,20 @@ class DepartmentListCreateView(APIView):
         if is_active := request.query_params.get('is_active'):
             qs = qs.filter(is_active=is_active.lower() == 'true')
 
+        # Department has no branch FK of its own — it's a company-wide master
+        # list — so "departments at this branch" is derived from which
+        # departments actually have an active employee there.
+        branch = (request.query_params.get('branch') or '').strip()
+        if branch:
+            dept_names_in_branch = (
+                User.objects
+                .filter(is_active=True, branch__iexact=branch)
+                .exclude(department='')
+                .values_list('department', flat=True)
+                .distinct()
+            )
+            qs = qs.filter(name__in=list(dept_names_in_branch))
+
         # Single query for all user/role data across departments — avoids N+1
         dept_users = (
             User.objects
@@ -2665,6 +2679,8 @@ class EmployeeStatsView(APIView):
         employee_type   = (request.data.get('employee_type')   or 'Permanent').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
+        hr_id                 = request.data.get('hr_id')
+        reporting_manager_id  = request.data.get('reporting_manager_id')
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
@@ -2684,6 +2700,29 @@ class EmployeeStatsView(APIView):
         if branch      and len(branch)      > 100: errs['branch']      = 'Branch must be 100 characters or fewer.'
         if department  and len(department)  > 100: errs['department']  = 'Department must be 100 characters or fewer.'
         if designation and len(designation) > 100: errs['designation'] = 'Designation must be 100 characters or fewer.'
+
+        # Branch must match an active branch in the master Branch list. A free-text
+        # value that doesn't match exactly (e.g. "Hyderabad HQ" vs the real
+        # "Hyderabad") silently breaks HR/manager auto-assignment below, which
+        # matches on this exact string — so it's rejected here instead of saved.
+        branch_obj = None
+        if branch and 'branch' not in errs:
+            from apps.branch.models import Branch
+            branch_obj = Branch.objects.filter(
+                branch_name__iexact=branch, status=Branch.STATUS_ACTIVE,
+            ).first()
+            if branch_obj is None:
+                errs['branch'] = 'Select a valid, active branch from the list.'
+
+        # Department must match the master Department list for the same reason —
+        # an unrecognized free-text value (e.g. "IT" when no such Department
+        # exists) would silently fall out of every department-scoped dropdown
+        # and report built on this field.
+        dept_obj = None
+        if department and 'department' not in errs:
+            dept_obj = Department.objects.filter(name__iexact=department, is_active=True).first()
+            if dept_obj is None:
+                errs['department'] = 'Select a valid, active department from the list.'
 
         # Name format check — letters with single space/hyphen/apostrophe separators only
         if first_name and 'first_name' not in errs and not NAME_RE.match(first_name):
@@ -2709,6 +2748,13 @@ class EmployeeStatsView(APIView):
         if errs:
             return error('Please fix the errors below.', data=errs)
 
+        # Store the canonical Branch.branch_name / Department.name casing, not
+        # whatever the client sent — keeps these fields byte-for-byte consistent
+        # with lookups elsewhere (HR/manager auto-assignment, geofencing, the
+        # department dropdown's branch filter, reports).
+        branch     = branch_obj.branch_name
+        department = dept_obj.name
+
         if User.objects.filter(email__iexact=email).exists():
             return error(
                 'An account with this email already exists.',
@@ -2722,6 +2768,28 @@ class EmployeeStatsView(APIView):
 
         if role.name == 'system_admin':
             return error('system_admin cannot be assigned via employee creation.')
+
+        selected_hr = None
+        if hr_id:
+            try:
+                selected_hr = User.objects.get(pk=hr_id, is_active=True)
+            except (User.DoesNotExist, ValueError, TypeError):
+                return error('HR user not found or is inactive.', data={'hr_id': 'Invalid HR selected.'})
+
+        selected_manager = None
+        if reporting_manager_id:
+            if role.can_manage_team:
+                return error(
+                    'Managers do not have a reporting manager.',
+                    data={'reporting_manager_id': 'Not applicable for this role.'},
+                )
+            try:
+                selected_manager = User.objects.get(pk=reporting_manager_id, is_active=True)
+            except (User.DoesNotExist, ValueError, TypeError):
+                return error(
+                    'Reporting manager not found or is inactive.',
+                    data={'reporting_manager_id': 'Invalid manager selected.'},
+                )
 
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
@@ -2747,12 +2815,23 @@ class EmployeeStatsView(APIView):
                 must_change_password = True,
                 onboarding_status    = User.ONBOARDING_PENDING,
             )
+            manual_fields = []
+            if selected_hr is not None:
+                user.hr = selected_hr
+                manual_fields.append('hr')
+            if selected_manager is not None:
+                user.reporting_manager = selected_manager
+                manual_fields.append('reporting_manager')
+
+            # _auto_assign_managers() only fills in fields left unset above, so an
+            # explicit hr_id/reporting_manager_id from the form always wins.
             auto_fields = _auto_assign_managers(user)
             # Auto-assign creating HR admin as the employee's branch HR
             if (_has_perm(request.user, 'employees.edit')
                     and user.hr_id is None and user.pk != request.user.pk):
                 user.hr = request.user
                 auto_fields.append('hr')
+            auto_fields = list(dict.fromkeys(manual_fields + auto_fields))
             if auto_fields:
                 user.save(update_fields=[*auto_fields, 'updated_at'])
 
@@ -4514,58 +4593,56 @@ class HRListView(APIView):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         branch = (request.query_params.get('branch') or '').strip()
-        # Filter by permission so any role named hr/hr_admin/etc. is included
-        hrs = User.objects.filter(
-            role__role_permissions__permission__codename='onboarding.approve',
-            is_active=True,
-        ).select_related('role').distinct()
-        if branch:
-            hrs = hrs.filter(
-                Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch)
-            ).distinct()
-        hrs = hrs.order_by('full_name')
+        if not branch:
+            return error('branch query parameter is required.')
+        # Filter by permission so any role named hr/hr_admin/etc. is included.
+        # system_admin is explicitly excluded — that role is seeded with every
+        # permission (including onboarding.approve) so it would otherwise match
+        # here too, even though a system admin isn't a branch's actual HR contact.
+        hrs = (
+            User.objects
+            .filter(
+                role__role_permissions__permission__codename='onboarding.approve',
+                is_active=True,
+            )
+            .exclude(role__name='system_admin')
+            .filter(Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch))
+            .select_related('role')
+            .distinct()
+            .order_by('full_name')
+        )
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}
             for u in hrs
         ]
-        # If the requesting user holds onboarding.approve but isn't in the results
-        # (e.g. branch filter excluded them), include them so the picker always
-        # has at least the current HR visible.
-        requester_is_hr = _has_perm(request.user, 'onboarding.approve')
-        if requester_is_hr and not any(d['id'] == str(request.user.id) for d in data):
-            data.insert(0, {
-                'id': str(request.user.id),
-                'employee_id': request.user.employee_id,
-                'full_name': request.user.full_name,
-                'department': request.user.department,
-                'branch': request.user.branch,
-            })
         return success('HR users retrieved.', data=data)
 
 
 class ManagerListView(APIView):
-    """GET list of active managers — optionally filtered by branch.
-    Query param: branch (optional) — e.g. ?branch=Mumbai HQ
+    """GET list of active managers — filtered by department and/or branch.
+    Query params: department (optional), branch (optional) — at least one is
+    required. e.g. ?department=Engineering or ?branch=Mumbai HQ or both.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
-        branch = (request.query_params.get('branch') or '').strip()
-        if not branch:
-            return error('branch query parameter is required.')
+        department = (request.query_params.get('department') or '').strip()
+        branch     = (request.query_params.get('branch') or '').strip()
+        if not department and not branch:
+            return error('department or branch query parameter is required.')
         managers = (
             User.objects
-            .filter(
-                role__can_manage_team=True,
-                is_active=True,
-                branch__iexact=branch,
-            )
+            .filter(role__can_manage_team=True, is_active=True)
             .select_related('role')
-            .order_by('full_name')
         )
+        if department:
+            managers = managers.filter(department__iexact=department)
+        if branch:
+            managers = managers.filter(branch__iexact=branch)
+        managers = managers.order_by('full_name')
         data = [
             {'id': str(u.id), 'employee_id': u.employee_id, 'full_name': u.full_name,
              'department': u.department, 'branch': u.branch}

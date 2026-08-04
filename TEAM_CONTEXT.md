@@ -3008,3 +3008,80 @@ Picked back up the `.next` stale-cache issue from the prior session: stopped the
 - Next.js dev server repeatedly crashing silently after a period of normal operation — not root-caused yet, worse than the simple stale-cache issue first diagnosed on 2026-07-27 (see above).
 - Frontend implementation of the "My Corrections" tab (prompt given, not yet built).
 - Everything listed as Pending in the 2026-07-27 entry above is still outstanding.
+
+---
+
+## Session Log — 2026-08-04
+**Author: Swetha**
+
+### Investigation (informational, no code changed)
+
+Full-codebase review answering three questions: cause of intermittent request timeouts, presence of security vulnerabilities, and whether the app can support 2000+ concurrent users. Delivered as a structured report only (not persisted to a file) covering: synchronous email sends in the request path instead of Celery, N+1 queries in payroll processing, missing indexes (`User.branch`, `PayrollCycle.status`, `LeaveRequest` composite), unencrypted PAN/Aadhaar/bank fields, a mobile-logout token-blacklist gap, a `proxy.ts` permission-check bypass via the unsigned `royal_hrms_user` cookie, single-VM deployment with no APM/monitoring, and Gunicorn/Celery worker config being entirely outside this repo (unknown from code alone).
+
+### Features Shipped
+
+**1. Add Employee — manual HR / Reporting Manager selection**
+
+`EmployeeStatsView.post()` (the actual Add Employee creation handler — note: this method lives inside a class literally named `EmployeeStatsView`, not `EmployeeListCreateView`; pre-existing naming oddity, not touched) now accepts optional `hr_id` and `reporting_manager_id` in the request body. Both are validated (must be an active user; `reporting_manager_id` rejected if the new employee's role has `can_manage_team=True`) and applied to the new user **before** the existing `_auto_assign_managers()` call, which only fills in fields left unset — so an explicit selection always wins over the automatic guess, and omitting either field preserves the original auto-assign behavior exactly as before.
+
+**2. Manager dropdown (`GET /api/employees/managers/`) — added `department` filter**
+
+Previously required `branch` only. Now accepts `department` and/or `branch` (at least one required). Verified against real data: this org has one manager per department **per branch** (e.g. 3 separate "Engineering Manager" accounts across Hyderabad/Mumbai/TASK) — `department` alone correctly returns all of them company-wide; the Add Employee form needs to send **both** `department` and `branch` together to narrow to the one manager for that specific branch.
+
+**3. HR dropdown (`GET /api/employees/hrs/`) — two real bugs fixed**
+- `branch` is now actually required (was silently optional — omitting it returned every HR company-wide).
+- Removed a fallback that unconditionally inserted the requesting user into results if they held the HR permission, even when their own branch didn't match the one queried (could leak an unrelated branch's HR into the dropdown).
+- Excluded `system_admin` role explicitly — that role is seeded with every permission including `onboarding.approve` (the permission used to identify "who is HR"), so any system admin whose branch happened to match was incorrectly appearing as an HR option. Verified: `EMP002` no longer appears in Hyderabad's HR list.
+
+**4. Department dropdown (`GET /api/departments/`) — added `branch` filter**
+
+`Department` has no branch field of its own (company-wide master list) — the filter derives "departments at this branch" from which departments actually have an active employee there. Verified per-branch: Hyderabad has 6 (incl. Customer Support), Mumbai/TASK have 5 (no Customer Support — nobody's there yet). "Management" won't appear for any branch — it currently has zero employees anywhere, not a bug.
+
+### Bug Fixes Shipped
+
+**5. Root-caused and fixed: wrong HR auto-assigned for the Hyderabad branch**
+
+`User.branch` is free-text with no validation against the master `Branch` table. Some employees had `branch = "Hyderabad HQ"`, which doesn't match the real Branch record `"Hyderabad"` — silently broke HR auto-assignment (which compares exact strings), falling back to assigning whoever created the employee as HR instead. Fix: Add Employee's `branch` is now validated against the active `Branch` table (rejects unrecognized values with a clear 400) and the stored value is canonicalized to `Branch.branch_name`. Same class of fix applied to `department` (see #6) after finding an identical orphaned-string case there too.
+
+**6. Add Employee — added `department` validation + canonicalization**, mirroring #5. Found one existing employee (`EMP002`) with `department = "IT"`, which isn't a real Department row — same bug class as "Hyderabad HQ". Not yet cleaned up in data (flagged below, decision pending).
+
+### Data fixes applied directly (not code — read-only-verified before each write, confirmed with the user first)
+
+```
+Branch(branch_name='Hyderabad').hr = hr.hyderabad@example.com (RSS00097)   — was unset
+User(employee_id='EMP002').branch: 'Hyderabad HQ' -> 'Hyderabad'           — normalized, confirmed low-impact (system_admin, hr was already None)
+Branch.objects.create(branch_name='Mumbai', branch_code='MUM',
+                       state=Maharashtra, city=Mumbai, hr=RSS00049)         — 9 employees (3 managers + 1 HR) were using
+                                                                              branch="Mumbai" with no matching Branch row at all
+```
+
+### Known issues found but not yet fixed (flagged to user, awaiting decision)
+
+- `EMP002`'s `department="IT"` still orphaned (same class as the branch issue) — decision pending.
+- `TASK` branch has no HR assigned (`Branch.hr` unset) — flagged, not yet actioned.
+- `_auto_assign_managers()`'s reporting-manager fallback (used when no `Department.manager` is set — true for all 7 departments currently) picks "first active manager in that branch by database id," without filtering by department at all. Currently resolves correctly for Hyderabad+Engineering only by luck of id ordering — a branch with managers from multiple departments could silently get the wrong one assigned. Not fixed, since not explicitly requested this session.
+- **Operational risk found**: the backend on port 8000 is served by a long-running Daphne process (confirmed via `wmic`, started 2026-08-04 11:02) which — per the 2026-07-28 entry above — does **not auto-reload** on code changes. None of today's `views.py` edits take effect until this process is restarted. Not restarted without confirmation, since it's bound to `0.0.0.0` and may be reachable by other devices on the network right now (same precedent as 2026-07-28).
+
+### Files changed
+```
+backend/apps/accounts/views.py
+  - EmployeeStatsView.post()      — hr_id/reporting_manager_id accepted + validated;
+                                     branch validated against Branch table + canonicalized;
+                                     department validated against Department table + canonicalized
+  - HRListView.get()               — branch now required; system_admin excluded;
+                                     removed cross-branch requester-insertion fallback
+  - ManagerListView.get()          — department filter added (alongside existing branch filter)
+  - DepartmentListCreateView.get() — branch filter added (derived from employee data)
+```
+
+### Frontend prompt given (not implemented this session — explicitly backend-only per instruction)
+
+Full cascading-dropdown contract specified for Add Employee: Branch → Department (`?branch=`) → Designation (`?department=<id>`, unchanged/pre-existing) → Reporting Manager (`?department=&branch=` combined) and Branch → HR (`?branch=`). Response shape, param types (name string vs ID), pagination differences between endpoints, and field-clearing rules all specified. Not yet built.
+
+### Pending
+
+- Restart the Daphne backend process so today's changes actually go live — action pending confirmation (see above).
+- Frontend implementation of the 4 cascading Add Employee dropdowns (prompt given above).
+- Decide on `EMP002`'s orphaned `department="IT"` value.
+- Decide on `TASK` branch's missing HR assignment.
+- Everything listed as Pending in the 2026-07-28 entry above is still outstanding.
