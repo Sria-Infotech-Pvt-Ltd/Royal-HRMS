@@ -71,7 +71,7 @@ function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
     return {
       ...expected,
       status: "pending" as const,
-      uploadedOn: `${DOC_MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
+      uploadedOn: dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       fileUrl: uploaded.file,
       fileName: uploaded.file_name,
       fileSize: uploaded.file_size,
