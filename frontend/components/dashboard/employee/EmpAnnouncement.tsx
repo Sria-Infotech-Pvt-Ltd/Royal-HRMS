@@ -18,6 +18,7 @@ export default function EmpAnnouncement() {
     <div style={{
       display: "flex", alignItems: "flex-start", gap: 12,
       padding: "11px 16px",
+      marginBottom: 20,
       borderRadius: 8,
       background: "rgba(30,78,140,0.07)",
       border: "1px solid rgba(30,78,140,0.18)",

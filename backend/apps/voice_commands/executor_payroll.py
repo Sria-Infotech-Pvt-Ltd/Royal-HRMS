@@ -166,7 +166,15 @@ def _find_employees_by_name(request, name_query: str) -> list:
     """
     qs = User.objects.filter(is_active=True).exclude(employee_id='')
 
-    if not (request.user.role and (request.user.role.name == 'system_admin' or getattr(request.user, 'is_superuser', False))) and request.user.branch:
+    # Same "settings.edit = org-wide access" convention used everywhere else
+    # (e.g. accounts/views.py's _employee_out_of_branch_scope) rather than a
+    # role-name string — keeps Branch Admin (can_manage_branch) correctly
+    # branch-scoped here too, same as HR/employee.
+    is_org_admin = bool(
+        request.user.role
+        and request.user.role.role_permissions.filter(permission__codename='settings.edit').exists()
+    ) or getattr(request.user, 'is_superuser', False)
+    if not is_org_admin and request.user.branch:
         qs = qs.filter(branch=request.user.branch)
 
     candidates = [{'user_id': u.id, 'employee_name': u.full_name} for u in qs]

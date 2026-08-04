@@ -1,6 +1,7 @@
 "use client";
 
 import DeptHeadcountChart        from "@/components/dashboard/DeptHeadcountChart";
+import AnnouncementCard          from "@/components/dashboard/AnnouncementCard";
 import HrConsole                 from "@/components/dashboard/hr/HrConsole";
 import HrAttendanceSummary       from "@/components/dashboard/hr/HrAttendanceSummary";
 import HrActionQueue             from "@/components/dashboard/hr/HrActionQueue";
@@ -29,6 +30,9 @@ export default function HRDashboard({ session }: Props) {
     <>
       {/* Row 1 — Console banner with live KPIs */}
       <HrConsole firstName={firstName} />
+
+      {/* Announcement */}
+      <AnnouncementCard />
 
       {/* Quick Actions */}
       <div className="card mb-20">

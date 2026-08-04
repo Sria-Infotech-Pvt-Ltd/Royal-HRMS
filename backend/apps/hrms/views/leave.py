@@ -90,6 +90,18 @@ def _user_branch(user) -> str:
     return (getattr(user, 'branch', '') or '').strip()
 
 
+def _is_branch_admin(user) -> bool:
+    return bool(user.role and getattr(user.role, 'can_manage_branch', False))
+
+
+def _branch_admin_covers(user, employee) -> bool:
+    """True when user is a branch_admin whose branch matches the employee's."""
+    branch = _user_branch(user)
+    if not branch:
+        return True
+    return (getattr(employee, 'branch', '') or '').strip() == branch
+
+
 def _can_hr_access_request(hr_user, leave_request) -> bool:
     """
     True when hr_user is the request's specifically assigned HR (l2_approver), or —
@@ -97,7 +109,13 @@ def _can_hr_access_request(hr_user, leave_request) -> bool:
     (or has no branch restriction). Keeps view/detail access in sync with
     _approval_scope_filter and _can_approve_at_stage: a branch can have several HR
     users, but each should only reach requests for their own assigned employees.
+
+    branch_admin bypasses the assignment check entirely — unconditional access
+    to every request in their own branch, same as they get for employees/
+    expenses/documents.
     """
+    if _is_branch_admin(hr_user):
+        return _branch_admin_covers(hr_user, leave_request.employee)
     if leave_request.l2_approver_id:
         return leave_request.l2_approver_id == hr_user.id
     branch = _user_branch(hr_user)
@@ -111,6 +129,8 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
     Return True if `user` is authorised to act at the given approval stage.
 
     - settings.edit (admin): always authorised — override for any stuck request.
+    - can_manage_branch (Branch Admin): always authorised for any request whose
+      employee is in their own branch — unconditional, unlike HR/manager below.
     - l1 stage: must be the designated l1_approver on the request — L1 is a
                 per-manager assignment, not a shared queue.
     - l2 stage: must be the designated l2_approver (the employee's specifically
@@ -126,6 +146,8 @@ def _can_approve_at_stage(user, leave_request, stage: str) -> bool:
     """
     if _has_perm(user, 'settings.edit'):
         return True
+    if _is_branch_admin(user):
+        return _branch_admin_covers(user, leave_request.employee)
 
     if stage == 'l1':
         if leave_request.l1_approver_id:
@@ -163,9 +185,17 @@ def _approval_scope_filter(user) -> 'Q':
     they also hold leave.approve; the branch-wide orphan fallback is withheld
     from managers so leave.approve alone doesn't turn them into a shadow
     branch-wide HR queue.
+
+    can_manage_branch (Branch Admin) sees every pending/l2_pending request in
+    their own branch unconditionally, regardless of l1/l2 assignment.
     """
     if _has_perm(user, 'settings.edit'):
         return ~Q(employee=user)
+
+    if _is_branch_admin(user):
+        branch = _user_branch(user)
+        branch_q = Q(employee__branch__iexact=branch) if branch else Q()
+        return branch_q & Q(status__in=[REQ_PENDING, REQ_L2_PENDING]) & ~Q(employee=user)
 
     is_manager = bool(user.role and user.role.can_manage_team)
     scope = Q(l1_approver=user, status=REQ_PENDING) if is_manager else None

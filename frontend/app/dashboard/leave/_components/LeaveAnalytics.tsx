@@ -3,13 +3,16 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { getLeaveYear } from "@/lib/fiscalYear";
+import { usePermission } from "@/hooks/usePermission";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LeaveStats, LEAVE_TYPE_CONFIG } from "../_data";
 
-
-interface Props { role?: string }
-
-export default function LeaveAnalytics({ role = "employee" }: Props) {
-  const isEmployee  = role === "employee";
+export default function LeaveAnalytics() {
+  const canApproveLeave = usePermission("leave.approve");
+  const currentUser     = useCurrentUser();
+  // Own-vs-team/branch/org scope is a permission decision, not a role-name
+  // one — mirrors the same fix in LeaveDashboard.tsx.
+  const isEmployee  = !canApproveLeave && !currentUser?.can_manage_team && !currentUser?.can_manage_branch;
   const currentYear = getLeaveYear();
   // Employees see own stats+balances; approvers see team/branch/org stats (backend auto-scopes by role)
   const statsUrl = isEmployee

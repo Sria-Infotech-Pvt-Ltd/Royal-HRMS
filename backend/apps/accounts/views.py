@@ -444,6 +444,7 @@ class LoginView(APIView):
                 'assessment_status':   _login_assessment_status(user),
                 'permissions':         permissions,
                 'can_manage_team':     user.role.can_manage_team if user.role else False,
+                'can_manage_branch':   user.role.can_manage_branch if user.role else False,
                 'is_superuser':        user.is_superuser or (user.role and user.role.name == 'system_admin'),
             },
         })
@@ -2604,6 +2605,52 @@ class EmployeeListCreateView(APIView):
             'results':     [_employee_dict(u) for u in page_obj.object_list],
         })
 
+
+
+class EmployeeStatsView(APIView):
+    """
+    Dashboard counts for the Employees page header cards.
+
+    Computed directly from the full queryset (not a single page) — the
+    frontend used to derive these from the currently loaded page of results,
+    which under-counted everything once there was more than one page.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'employees.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+
+        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
+
+        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
+            base_qs = base_qs.filter(branch=request.user.branch)
+
+        # branch_names/department_names always come from base_qs (ignores the
+        # branch filter below) so the branch dropdown never shrinks to just
+        # the currently-selected branch once one is picked.
+        branch_names = list(
+            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
+        )
+        department_names = list(
+            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
+        )
+
+        qs = base_qs
+        branch_filter = request.query_params.get('branch', '').strip()
+        if branch_filter and branch_filter != 'all':
+            qs = qs.filter(branch=branch_filter)
+
+        return success('Employee statistics retrieved.', data={
+            'total':             qs.count(),
+            'active':            qs.filter(is_active=True, must_change_password=False).count(),
+            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
+            'departments':       qs.exclude(department='').values('department').distinct().count(),
+            'branch_names':      branch_names,
+            'department_names':  department_names,
+        })
+
+
     def post(self, request):
         if not _has_perm(request.user, 'employees.create'):
             return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
@@ -3886,26 +3933,58 @@ class EmployeeDocumentView(APIView):
         return success('Document deleted.')
 
 
-class EmployeeDocumentAdminView(APIView):
+def _can_manage_employee_documents(user, employee) -> bool:
     """
-    POST /employees/<employee_id>/documents/ → HR/Admin uploads or replaces a
-    document on behalf of a specific employee from that employee's profile page.
-    Unlike EmployeeDocumentView.post, this is not gated on the acting user's own
-    onboarding_status — HR's own onboarding is always complete, and they are
-    uploading for someone else.
+    True for the employee themself, their specifically assigned reporting
+    manager or HR (falling back to branch match only when the employee has
+    no HR assigned), system_admin, or a Branch Admin (unconditional access
+    within their own branch). Mirrors the assigned-employee scoping used for
+    leave/expense — a blanket documents.create grant should not let any HR
+    act on any employee company-wide.
+    """
+    if employee.id == user.id:
+        return True
+    if not _has_perm(user, 'documents.create'):
+        return False
+    if user.role and user.role.name == 'system_admin':
+        return True
+    if user.role and getattr(user.role, 'can_manage_branch', False):
+        branch = (getattr(user, 'branch', '') or '').strip()
+        return not branch or (getattr(employee, 'branch', '') or '').strip() == branch
+    if user.role and getattr(user.role, 'can_manage_team', False):
+        return employee.reporting_manager_id == user.id
+    if employee.hr_id:
+        return employee.hr_id == user.id
+    branch = (getattr(user, 'branch', '') or '').strip()
+    return not branch or (getattr(employee, 'branch', '') or '').strip() == branch
+
+
+class EmployeeProfileDocumentView(APIView):
+    """
+    POST /employees/<employee_id>/documents/ → upload or replace a document on
+    an employee's profile (the Employee Profile page's "Documents" tab).
+
+    Distinct from /onboarding/documents/, which is self-service-only (always
+    saves against request.user) and permanently locks once onboarding_status
+    is complete — so it can never be used by HR/admin to manage documents on
+    an active employee's profile after onboarding, which is the normal state
+    for everyone this feature actually targets.
     """
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser, FormParser]
 
     def post(self, request, employee_id: str):
-        if not _has_perm(request.user, 'employees.edit'):
-            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
-        employee = _get_employee(employee_id)
-        if employee is None or _employee_out_of_branch_scope(request.user, employee):
-            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
-
         from apps.accounts.models import EmployeeDocument as ED
         from apps.accounts.serializers import EmployeeDocumentSerializer
+
+        employee = _get_employee(employee_id)
+        if employee is None:
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if not _can_manage_employee_documents(request.user, employee):
+            return error('You do not have permission to upload documents for this employee.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         serializer = EmployeeDocumentSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -3917,10 +3996,9 @@ class EmployeeDocumentAdminView(APIView):
                 file_name=file_obj.name,
                 file_size=file_obj.size,
             )
-            ED.objects.filter(
-                user=employee,
-                document_type=doc_type,
-            ).exclude(pk=doc.pk).delete()
+            # Upsert by type — a re-upload of the same document_type replaces
+            # the previous file rather than accumulating duplicates.
+            ED.objects.filter(user=employee, document_type=doc_type).exclude(pk=doc.pk).delete()
 
         try:
             AuditLog.objects.create(
@@ -3933,7 +4011,11 @@ class EmployeeDocumentAdminView(APIView):
             logger.warning('AuditLog write failed for document_uploaded id=%s', doc.id)
 
         logger.info('Document %s uploaded for %s by %s', doc_type, employee.email, request.user.email)
-        return success('Document uploaded.', data=_document_dict(doc), http_status=status.HTTP_201_CREATED)
+        return success(
+            'Document uploaded.',
+            data=EmployeeDocumentSerializer(doc, context={'request': request}).data,
+            http_status=status.HTTP_201_CREATED,
+        )
 
 
 # ─── Onboarding — HR management (pipeline + approvals queue + approve/reject) ──
@@ -3989,15 +4071,21 @@ class OnboardingApprovalView(APIView):
             return error('HR admin can only approve employee onboarding.',
                          http_status=status.HTTP_403_FORBIDDEN)
 
-        decision          = request.data.get('decision')
-        remarks           = request.data.get('remarks', '')
-        req_designation   = (request.data.get('designation')        or '').strip()
-        req_department    = (request.data.get('department')         or '').strip()
-        req_assessment_id = request.data.get('assessment_id')       or None
-        req_manager_id    = request.data.get('reporting_manager_id')
-        annual_ctc_raw    = (request.data.get('annual_ctc')         or '').strip()
-        req_uan_number        = (request.data.get('uan_number')         or '').strip()
-        req_name_as_per_aadhar = (request.data.get('name_as_per_aadhar') or '').strip()
+        decision           = request.data.get('decision')
+        remarks            = request.data.get('remarks', '')
+        req_designation    = (request.data.get('designation')        or '').strip()
+        req_department     = (request.data.get('department')         or '').strip()
+        # assessment_ids (list) is the current contract; assessment_id (single)
+        # is accepted too for any older caller still sending one value.
+        req_assessment_ids = request.data.get('assessment_ids')
+        if not isinstance(req_assessment_ids, list):
+            single = request.data.get('assessment_id')
+            req_assessment_ids = [single] if single else []
+        req_assessment_ids     = [str(a) for a in req_assessment_ids if a]
+        req_manager_id         = request.data.get('reporting_manager_id')
+        annual_ctc_raw         = (request.data.get('annual_ctc')          or '').strip()
+        req_uan_number         = (request.data.get('uan_number')          or '').strip()
+        req_name_as_per_aadhar = (request.data.get('name_as_per_aadhar')  or '').strip()
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
         if decision == 'approve':
@@ -4137,14 +4225,18 @@ class OnboardingApprovalView(APIView):
             assessments_to_assign = list(
                 Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
             )
-            # HR may pick a specific (possibly non-default) assessment in the approval
-            # confirmation dialog — honor that choice, not just the global defaults.
-            if req_assessment_id and not any(str(a.id) == str(req_assessment_id) for a in assessments_to_assign):
-                selected_assessment = Assessment.objects.filter(
-                    pk=req_assessment_id, is_active=True,
-                ).prefetch_related('items').first()
-                if selected_assessment:
-                    assessments_to_assign.append(selected_assessment)
+            # HR may pick one or more specific (possibly non-default) assessments
+            # in the approval confirmation dialog — honor that choice, not just
+            # the global defaults. A branch/role can have several relevant
+            # tests, so this is a list, not a single value.
+            if req_assessment_ids:
+                already_ids = {str(a.id) for a in assessments_to_assign}
+                new_ids = [aid for aid in req_assessment_ids if aid not in already_ids]
+                if new_ids:
+                    selected_assessments = Assessment.objects.filter(
+                        pk__in=new_ids, is_active=True,
+                    ).prefetch_related('items')
+                    assessments_to_assign.extend(selected_assessments)
             for assessment in assessments_to_assign:
                 max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
                 if linked_candidate:

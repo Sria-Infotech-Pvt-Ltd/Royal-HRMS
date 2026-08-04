@@ -92,9 +92,9 @@ function toEmbedUrl(url: string): string | null {
 
 // ── Completion Modal ──────────────────────────────────────────────────────────
 
-function CompletionModal({ result, title, attemptNumber, retaking, onRetake, onDashboard }: {
-  result: CompleteData; title: string; attemptNumber: number;
-  retaking: boolean; onRetake: () => void; onDashboard: () => void;
+function CompletionModal({ result, title, attemptNumber, isLastPending, retaking, onRetake, onContinue, onDashboard }: {
+  result: CompleteData; title: string; attemptNumber: number; isLastPending: boolean;
+  retaking: boolean; onRetake: () => void; onContinue: () => void; onDashboard: () => void;
 }) {
   const pct = result.max_score > 0 ? Math.round((result.score / result.max_score) * 100) : 0;
   const R = 52; const C = 2 * Math.PI * R;
@@ -120,9 +120,13 @@ function CompletionModal({ result, title, attemptNumber, retaking, onRetake, onD
           </div>
           <p style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>{pct}% Score</p>
           <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px" }}>{title} · Attempt #{attemptNumber}</p>
-          {passed ? (
+          {passed && isLastPending ? (
             <button suppressHydrationWarning onClick={onDashboard} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               Go to Dashboard <i className="ti ti-arrow-right" />
+            </button>
+          ) : passed ? (
+            <button suppressHydrationWarning onClick={onContinue} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              Continue to Next Assessment <i className="ti ti-arrow-right" />
             </button>
           ) : (
             <button suppressHydrationWarning onClick={onRetake} disabled={retaking} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: retaking ? "#94a3b8" : "#dc2626", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: retaking ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -211,7 +215,7 @@ export default function AssessmentsPage() {
   const [completing, setCompleting]           = useState<string | null>(null);
   const [finalResults, setFinalResults]       = useState<Record<string, CompleteData>>({});
   const [completeError, setCompleteError]     = useState<Record<string, string>>({});
-  const [completionModal, setCompletionModal] = useState<{ result: CompleteData; title: string; assignmentId: string; attemptNumber: number } | null>(null);
+  const [completionModal, setCompletionModal] = useState<{ result: CompleteData; title: string; assignmentId: string; attemptNumber: number; isLastPending: boolean } | null>(null);
   const [retaking, setRetaking]               = useState<string | null>(null);
   const [retakeError, setRetakeError]         = useState<Record<string, string>>({});
 
@@ -295,7 +299,14 @@ export default function AssessmentsPage() {
       const result   = (response.data?.data ?? response.data) as CompleteData;
       setFinalResults(prev => ({ ...prev, [assignmentId]: result }));
       const assignment = assignments.find(a => a.id === assignmentId);
-      setCompletionModal({ result, title: assignment?.assessment_title ?? "Assessment", assignmentId, attemptNumber: (assignment?.attempt_number ?? 0) + 1 });
+      // Other assessments still pending/in_progress besides this one? If so,
+      // the dashboard must stay locked — only offer it once this was truly
+      // the last one, otherwise the proxy will immediately bounce the
+      // employee back here anyway (assessment_status is still "pending").
+      const isLastPending = !assignments.some(a =>
+        a.id !== assignmentId && (a.status === "pending" || a.status === "in_progress")
+      );
+      setCompletionModal({ result, title: assignment?.assessment_title ?? "Assessment", assignmentId, attemptNumber: (assignment?.attempt_number ?? 0) + 1, isLastPending });
       setSelectedPanel(null); refetch();
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not submit assessment.";
@@ -818,9 +829,21 @@ export default function AssessmentsPage() {
           result={completionModal.result}
           title={completionModal.title}
           attemptNumber={completionModal.attemptNumber}
+          isLastPending={completionModal.isLastPending}
           retaking={retaking === completionModal.assignmentId}
           onRetake={() => handleRetake(completionModal.assignmentId)}
-          onDashboard={() => { setCompletionModal(null); router.push("/dashboard"); }}
+          onContinue={() => setCompletionModal(null)}
+          onDashboard={() => {
+            // Set explicitly rather than waiting on the allComplete effect —
+            // that depends on the refetch() from handleComplete resolving
+            // first, which can lose the race against this click. The proxy
+            // gate reads assessment_status straight from this cookie, so an
+            // immediate navigation right after refetch fires needs it to
+            // already be correct, not eventually-correct.
+            setAssessmentStatus("complete");
+            setCompletionModal(null);
+            router.push("/dashboard");
+          }}
         />
       )}
     </div>

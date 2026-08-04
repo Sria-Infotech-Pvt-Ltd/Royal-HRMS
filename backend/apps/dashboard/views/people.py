@@ -305,7 +305,10 @@ class EmployeeActionItemsView(APIView):
                     'title':          f'Upload {label}',
                     'description':    f'{label} has not been uploaded yet.',
                     'status':         'pending',
-                    'navigation_url': '/dashboard/documents',
+                    # My Profile's own Documents section — where an employee
+                    # can actually upload/replace a document. /dashboard/
+                    # documents is the separate, unrelated Document Center.
+                    'navigation_url': '/dashboard/profile',
                 })
 
         # 3. Pending attendance corrections (max 5)

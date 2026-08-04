@@ -80,6 +80,17 @@ def _has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
+def _is_branch_admin(user) -> bool:
+    return bool(user.role and getattr(user.role, 'can_manage_branch', False))
+
+
+def _branch_admin_covers(user, employee) -> bool:
+    branch = _user_branch(user)
+    if not branch:
+        return True
+    return (getattr(employee, 'branch', '') or '').strip() == branch
+
+
 def _can_hr_access_request(hr_user, correction: AttendanceCorrection) -> bool:
     """
     True when hr_user is the request's specifically assigned HR (l2_approver), or —
@@ -87,7 +98,12 @@ def _can_hr_access_request(hr_user, correction: AttendanceCorrection) -> bool:
     (or has no branch restriction). Mirrors leave.py's _can_hr_access_request: a
     branch can have several HR users, but each should only reach requests for
     their own assigned employees.
+
+    branch_admin bypasses the assignment check — unconditional access to every
+    request in their own branch.
     """
+    if _is_branch_admin(hr_user):
+        return _branch_admin_covers(hr_user, correction.employee)
     if correction.l2_approver_id:
         return correction.l2_approver_id == hr_user.id
     branch = _user_branch(hr_user)
@@ -104,6 +120,8 @@ def _can_approve_at_stage(user, correction: AttendanceCorrection, stage: str) ->
     """
     if _has_perm(user, 'settings.edit'):
         return True
+    if _is_branch_admin(user):
+        return _branch_admin_covers(user, correction.employee)
 
     if stage == 'l1':
         if correction.l1_approver_id:
@@ -142,6 +160,10 @@ def _approval_scope_filter(user) -> Q:
     """
     if _has_perm(user, 'settings.edit'):
         return Q()
+
+    if _is_branch_admin(user):
+        branch = _user_branch(user)
+        return Q(employee__branch=branch) if branch else Q()
 
     is_manager = bool(user.role and user.role.can_manage_team)
     scope = Q(l1_approver=user) if is_manager else None

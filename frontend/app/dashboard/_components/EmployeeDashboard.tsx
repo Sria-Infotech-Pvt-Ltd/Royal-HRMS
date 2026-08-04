@@ -27,6 +27,9 @@ export default function EmployeeDashboard({ session }: Props) {
       {/* Row 1 + 2 — Console banner (KPIs + attendance status strip) */}
       <EmpConsole firstName={firstName} />
 
+      {/* Row 2.5 — Announcement banner (renders nothing when null or dismissed) */}
+      <EmpAnnouncement />
+
       {/* Quick Actions */}
       <div className="card mb-20">
         <div className="card-header">
@@ -57,9 +60,6 @@ export default function EmployeeDashboard({ session }: Props) {
         <EmpActionItems />
         <EmpRecentRequests />
       </div>
-
-      {/* Row 5 — Announcement banner (renders nothing when null or dismissed) */}
-      <EmpAnnouncement />
     </>
   );
 }

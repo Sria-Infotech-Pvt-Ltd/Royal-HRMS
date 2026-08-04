@@ -126,7 +126,9 @@ export default function AddEmployeeModal({
 
   /* fetch roles, departments, branches on mount */
   useEffect(() => {
-    // allSettled, not all — one failing fetch must not wipe out the others.
+    // allSettled — one endpoint failing must not wipe out the others' dropdowns.
+    // GET /roles/ is intentionally open to any authenticated user (needed for
+    // role-selector dropdowns like this one) — see RoleListCreateView.get().
     Promise.allSettled([
       clientApi.get<{ data: { results: ApiRole[]   } }>(API.roles.list,          { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: ApiDept[]   } }>(API.departments.list,     { params: { page_size: 100 } }),

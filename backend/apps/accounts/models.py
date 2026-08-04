@@ -22,6 +22,16 @@ class Role(models.Model):
         default=False,
         help_text='Users with this role appear in manager dropdowns and can manage a team.',
     )
+    can_manage_branch = models.BooleanField(
+        default=False,
+        help_text=(
+            'Users with this role have unconditional access to every employee, '
+            'request, and record within their own branch — not limited to '
+            'employees specifically assigned to them (unlike HR) or their direct '
+            'reports (unlike a manager). Scoped to one branch, unlike settings.edit '
+            'which is org-wide.'
+        ),
+    )
     created_at   = models.DateTimeField(auto_now_add=True, null=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -736,6 +746,10 @@ class EmployeeProfile(models.Model):
     bank_branch_name    = models.CharField(max_length=200, blank=True)
     account_holder_name = models.CharField(max_length=150, blank=True)
     account_type        = models.CharField(max_length=10, choices=ACCOUNT_CHOICES, blank=True)
+
+    # Statutory identity
+    name_as_per_aadhar = models.CharField(max_length=150, blank=True, help_text='Name exactly as printed on the Aadhaar card')
+    uan_number         = models.CharField(max_length=12, blank=True, help_text='12-digit Universal Account Number issued by EPFO')
 
     # Emergency Contact
     emergency_name         = models.CharField(max_length=150, blank=True)

@@ -3522,3 +3522,126 @@ This wasn't specific to one employee or manager — it affected **every manager 
 - **`_calendar_scope_filter` in leave.py has the same ordering as the §3 bug but was deliberately left unfixed** — broader-not-missing data, likely fine, but worth a product confirmation if anyone notices managers seeing the whole branch's calendar.
 - **Expense intentionally stayed single-stage this session** (per user decision) — there is still no manager→HR two-stage flow or HR notification/email for expense submissions, only a single `expenses.approve` gate now correctly scoped to the assigned manager or HR. Revisit if the product ever wants expense to mirror leave's L1→L2 flow.
 - **Recruitment now enforces branch scoping** but still has no per-candidate assigned-recruiter/HR concept (unlike leave/expense's `employee.hr`) — every branch HR/recruiter can act on every candidate in their own branch. Fine for now per user decision; would need a new model field to go further.
+
+---
+
+## Session — G.Durga Prasad (03 August 2026)
+
+**Branch:** `Backend/03/08/2026`
+
+---
+
+### 1. Employee Profile "Documents" Tab — Upload Was Completely Non-Functional
+
+Reported as "upload not working, and system admin can't upload either." Root cause was three separate gaps stacked on top of each other: the file `<input>` had **no `onChange` handler at all** (selecting a file did nothing, no request ever sent); the only existing upload endpoint (`/onboarding/documents/`) is self-service-only, always saves against `request.user`, and permanently locks once `onboarding_status == complete` — the normal state for every active employee, which is why literally no one could use it here; and the document-type model only supported 4 of the 6 types shown in the UI (Passport Photo and Cancelled Cheque didn't exist as `EmployeeDocument.TYPE_CHOICES` at all).
+
+**Fix**: added `passport_photo`/`cancelled_cheque` to `TYPE_CHOICES` (migration `0048`), added a new `POST /employees/<id>/documents/` endpoint (`EmployeeProfileDocumentView`) scoped via a new `_can_manage_employee_documents()` helper — self, assigned manager, assigned HR, or system_admin, mirroring the assignment-scoping built the previous session — and wired real upload/replace/preview controls into every document card in `ProfileForm.tsx`. Later also fixed the identical dead-end on `/dashboard/profile`'s own Documents section (read-only, and its preview link read a `write_only` field that was never actually returned) when an Action Item's "Upload PAN Card" link was found redirecting to the unrelated Document Center instead of here.
+
+Also fixed a real CSS bug found via screenshot: the Documents card grid used `gridTemplateColumns: repeat(4, 1fr)`, and `1fr` tracks default to a minimum size of their content's min-content width — once the row content couldn't shrink, the 4th column pushed past the viewport instead of wrapping. Changed to `repeat(4, minmax(0, 1fr))`, the standard fix.
+
+---
+
+### 2. Full Project-Wide Permission-Architecture Re-Audit
+
+Explicit ask: "everything permission based, no hardcoded thing in the code, check once." Re-ran the audit across the *entire* project (not just the files touched previously), since a lot of new code had landed since the last pass. Found and fixed:
+
+- `backend/apps/accounts/views.py` (employee dashboard-counts view) — `role_name != 'system_admin'` string check instead of `_has_perm(user, 'settings.edit')`.
+- `backend/apps/voice_commands/executor_payroll.py` (`_find_employees_by_name`) — same pattern, inline instead of through the app's `_has_perm` convention, and silently unaware of `can_manage_branch`.
+- `frontend/app/dashboard/leave/_components/LeaveAnalytics.tsx` — still had `role === "employee"` for the own-vs-team stats split, the same bug already fixed in the sibling `LeaveDashboard.tsx` but missed here.
+- `frontend/proxy.ts` — `getPermissions()` had a fallback to the unsigned `royal_hrms_user` cookie if the JWT lacked a `permissions` claim. Confirmed the JWT (`RoleBasedRefreshToken`) always sets that claim (even as `[]`), so this wasn't actively exploitable — but it directly contradicted the CLAUDE.md rule, so removed the fallback to fail closed instead.
+
+---
+
+### 3. New "Branch Admin" Role — Full Design Discussion, Then Implementation
+
+Long back-and-forth (chat only) on what a per-branch admin tier should look like versus Superuser and HR, converging on: Superuser = unrestricted everywhere; Branch Admin = unrestricted *within one branch*, cutting across every HR's assignment silo; HR = scoped to specifically assigned employees only. Landed on the permission set through iteration — initially proposed CRUD-only, corrected to include View (can't act on what you can't see) and `.approve` (a distinct permission from edit/delete in this system), then implemented:
+
+- New `Role.can_manage_branch` boolean (migration `0049`), parallel to the existing `can_manage_team`.
+- New `branch_admin` role seeded with 56 permissions (migration `0050`) — full View+CRUD+Approve on every operational module; deliberately withheld `settings.edit` (it's wired everywhere as "bypass all scoping, treat as global admin" — giving it to Branch Admin would make them org-wide, not branch-scoped), `branches.create/edit/delete` (branch-record editing isn't scoped to "your own branch only" in code yet), and initially payroll run rights.
+- Added a `can_manage_branch` tier to every scope-filter/access-check touched last session — `leave.py`, `expenses.py`, `services_hr_corrections.py`, and the new document-upload scoping — as an unconditional branch-wide check sitting above the assignment-scoped HR/manager tiers. Employee list/detail and recruitment needed **zero code changes** — they already branch-scope any non-`settings.edit` user, so Branch Admin inherited correct behavior automatically.
+- Per user follow-up decision, flipped payroll execution: Branch Admin gained `payroll.create/edit/delete`, HR lost them (migration `0051`) — payroll should sit with whoever runs the branch, not routine HR ops.
+- `can_manage_branch` had to be threaded through to the frontend too (it didn't exist there at all) — added to the login response payload, `UserInfo` type, and `login/page.tsx`'s parsing — otherwise Branch Admin would have been invisible to every frontend permission check.
+
+**Verified live** (rolled-back transactions): Branch Admin sees/can-act-on both L1 and L2 leave requests, any expense, and any employee's documents in their branch regardless of assignment; correctly denied for other branches; existing HR-assignment scoping regression-checked and still holds; a manager holding `leave.approve` still doesn't leak into HR's orphan queue.
+
+---
+
+### 4. Onboarding Was Crashing For Every New Employee
+
+Reported as a generic error on the very first onboarding page load. Root cause: the earlier `git pull` from `demo` had briefly put a teammate's migration on disk (`0048_add_uan_aadhar_to_employee_profile`, adding two NOT NULL columns to `EmployeeProfile`) which got applied to the shared database — but that migration's number collided with this branch's own unrelated `0048`, so once back on this branch, the model no longer declared those two fields at all while the database still required them on every insert.
+
+**Fix**: added `name_as_per_aadhar`/`uan_number` to the `EmployeeProfile` model, and used `SeparateDatabaseAndState` (migration `0052`) to sync Django's migration state to the columns that already physically exist, without re-running `AddField` (which would fail — the columns are already there). Verified: fresh employee login → `GET /onboarding/` now returns 200 with profile data instead of a 500.
+
+**Still outstanding**: the `0048` migration-number collision itself (this branch's `accounts.0048_alter_employeedocument_document_type` vs. demo's `accounts.0048_add_uan_aadhar_to_employee_profile`) is not resolved — will need renumbering when this branch merges with `demo`.
+
+---
+
+### 5. Assessment Assignment During Onboarding — Three Separate Problems
+
+**a) "Test assigned to all employees, not the one I picked."** Traced to two leftover test assessments — "TEST SINGLE ASSIGN" and "TEST BULK ASSIGN — phase1b verification" — created during earlier verification work and never cleaned up. The bulk one was assigned to **26 real employees** (including a real reported case, Rithwika), all stuck `pending` forever, since HR's own manually-picked assessment during approval was actually scoped correctly the whole time — this stray test data was riding along on every approval in addition to it. Deleted both test assessments and their 27 stray assignments, recomputed `assessment_status` for all 26 affected employees. Root cause of the *pattern* (not this specific instance) was an assessment flagged `is_default = True` ("Training") — any default-flagged assessment auto-assigns to *every* approval regardless of what HR picks. Un-flagged it per user decision (data fix, not code) rather than removing the auto-default-assignment mechanism entirely.
+
+**b) HR could only pick one assessment per approval.** Backend accepted a single `assessment_id`; changed to accept `assessment_ids` (a list), still backward-compatible with the old single-value shape. Frontend's single `<select>` became a checkbox list in the onboarding-approval dialog. Verified: two employees approved with different multi-selections each get exactly their own set, no cross-contamination.
+
+**c) Dashboard wasn't reliably opening after finishing all assessments.** Two stacked bugs: the "Go to Dashboard" button appeared after passing *any single* assessment even when others were still pending (should only appear once nothing is left); and even on the genuinely last assessment, there was a race — the button navigated immediately, but the local session cookie the route guard reads only updates via an async `refetch()` that isn't guaranteed to resolve first. Fixed both: the modal now shows "Continue to Next Assessment" unless this was truly the last pending one, and clicking "Go to Dashboard" sets the cookie value directly and immediately instead of relying on the async effect to win the race.
+
+---
+
+### 6. Leave Balances Missing For Specific Branches (Rithwika Case)
+
+Follow-up from the assessment investigation on the same reported employee: Sick leave's `LeavePolicy.applicable_branches` was `['Mumbai', 'TASK']` — Hyderabad wasn't in it at all, so no one in Hyderabad ever got a sick-leave balance. Casual leave had the mirror gap (missing Mumbai). Marriage leave was also short one branch, though separately gated by a genuine 6-month minimum-service rule that correctly excludes brand-new joiners regardless.
+
+Per user decision, added the missing branch to every policy that had an incomplete list (data fix), then re-ran leave-balance allocation for every active employee to backfill anyone previously excluded — **16 employees affected, 18 new balance rows created**, not just the one reported case.
+
+---
+
+### 7. Dashboard Announcement Banner Was Buried at the Bottom
+
+Reported for the Employee dashboard specifically ("why announcements were in the down"); moved `EmpAnnouncement` from dead last to right after the console banner, before Quick Actions. Follow-up ask extended this to every dashboard variant: Admin's `AnnouncementCard` was buried in a side column in Row 3 (moved to the top); HR and Manager dashboards had **no announcement widget at all** (added `AnnouncementCard` to both, top position). Separately verified — no code needed — that new announcements already generate a real-time notification-bell entry for every affected user via an existing signal (`_on_announcement_save` in `notifications/signals.py`) with WebSocket push; this was already fully wired, just not visually obvious since it's independent of where the banner sits on the dashboard page.
+
+---
+
+### 8. "Add New Employee" Role Dropdown Was Empty For Non-Admins
+
+`GET /roles/` is deliberately open to any authenticated user server-side (`RoleListCreateView.get()`'s own code comment says so, specifically for role-selector dropdowns) — but `AddEmployeeModal.tsx` and `employees/[id]/page.tsx` both had a stale, incorrect client-side gate (`usePermission("settings.edit")`) that skipped the fetch entirely for anyone without it, based on an assumption about the backend that was never true. Removed the gate in both files; verified live that a real HR (non-admin) account gets a 200 with the full role list.
+
+---
+
+### 9. Expense-Approval Email Investigated, Not Resolved
+
+Reported: an approved expense never generated an email to the employee. Traced the entire pipeline end-to-end — template exists and is active, isn't hidden by pagination, SMTP sends successfully in isolation, and a full HTTP-level reproduction of the exact approval request the frontend sends completes cleanly with no errors anywhere. **Could not reproduce a code bug.** Left open, pending confirmation from the user on (a) whether the email landed in spam, and (b) whether whoever approved it actually saw/kept the email-template selection in the approval modal, since it can be manually cleared to "— No email —" with no visible error if so.
+
+---
+
+### Key Files Changed (03 August 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/models.py` | New `EmployeeDocument` types (passport_photo, cancelled_cheque); new `Role.can_manage_branch`; `EmployeeProfile.name_as_per_aadhar`/`uan_number` |
+| `backend/apps/accounts/views.py` | New `EmployeeProfileDocumentView` + `_can_manage_employee_documents`; dashboard-counts role-string fix; multi-assessment (`assessment_ids`) support in onboarding approval; login response now includes `can_manage_branch` |
+| `backend/apps/accounts/urls.py` | New `employees/<id>/documents/` route |
+| `backend/apps/accounts/migrations/0048–0052` | Document types; `can_manage_branch` field; `branch_admin` seed; payroll permission flip; `EmployeeProfile` aadhar/UAN state-sync |
+| `backend/apps/hrms/views/leave.py`, `expenses.py` | `can_manage_branch` scoping tier added throughout |
+| `backend/apps/attendance/services_hr_corrections.py` | Same `can_manage_branch` tier |
+| `backend/apps/voice_commands/executor_payroll.py` | Role-string check replaced with permission-based equivalent |
+| `backend/apps/dashboard/views/people.py` | Action-item `navigation_url` for missing documents now points to My Profile, not Document Center |
+| `frontend/app/dashboard/employees/[id]/_components/ProfileForm.tsx`, `page.tsx` | Real document upload/replace/preview wiring; grid overflow fix; role-dropdown gate removed |
+| `frontend/app/dashboard/employees/_components/AddEmployeeModal.tsx` | Role-dropdown gate removed |
+| `frontend/app/dashboard/employees/_data.ts` | `DocEntry.documentType` field added |
+| `frontend/app/dashboard/profile/ProfileClient.tsx` | Documents section: read-only → real upload; fixed `file` → `file_url` |
+| `frontend/app/dashboard/leave/_components/LeaveAnalytics.tsx`, `_client.tsx` | Permission-based scope split, not role-string |
+| `frontend/app/dashboard/candidate-review/_components/OnboardingQueueTab.tsx` | Single assessment dropdown → multi-select checkboxes |
+| `frontend/app/onboarding/assessments/page.tsx` | "Continue to Next Assessment" vs "Go to Dashboard" split; cookie race fix |
+| `frontend/app/dashboard/_components/{Employee,Admin,HR,Manager}Dashboard.tsx` | Announcement widget moved to top / added where missing |
+| `frontend/proxy.ts` | Removed unsigned-cookie fallback in `getPermissions()` |
+| `frontend/lib/auth.ts`, `app/login/page.tsx` | `can_manage_branch` threaded into `UserInfo` and login parsing |
+| *(data, not code)* | `is_default` removed from "Training" assessment; 2 leftover test assessments deleted (27 stray assignments); leave-policy `applicable_branches` gaps fixed + 18 balance rows backfilled |
+
+---
+
+### Notes for Next Developer
+
+- **The `0048` migration-number collision (this branch vs. `demo`) is still unresolved** — resolve before merging, and double-check `0052`'s `SeparateDatabaseAndState` dependency chain still makes sense after renumbering.
+- **`can_manage_branch` is now the third authorization signal alongside `can_manage_team` and raw permission codenames** — any new scope-filter added to leave/expense/attendance-correction/documents going forward must consider all three, in the right order (branch-admin unconditional, then manager/HR assignment-scoped), or repeat the exact ordering bug fixed last session.
+- **Branch Admin still can't edit branch records or company/approval-routing settings** — deliberately deferred, needs the `settings.edit` global-bypass coupling untangled first (see the 31 July entry's notes) before that's safe to build.
+- **The `is_default` assessment flag auto-assigns to every future onboarding approval, unconditionally** — this is still true going forward, not just fixed retroactively. Think twice before flagging any assessment as default unless it really should land on every single new hire.
+- **Expense-approval email non-delivery is still an open report** — the entire pipeline tests clean; needs a real-world data point (spam folder? modal screenshot from the approver?) to go further, not more code-level investigation.

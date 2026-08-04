@@ -36,6 +36,9 @@ export default function AdminDashboard({ session }: Props) {
       {/* KPI Console — welcome + health pills + live stats */}
       <KpiConsole firstName={firstName} />
 
+      {/* Announcement */}
+      <AnnouncementCard />
+
       {/* Quick Actions */}
       <div className="card mb-20">
         <div className="card-header">
@@ -62,7 +65,6 @@ export default function AdminDashboard({ session }: Props) {
           <DeptHeadcountChart />
         </div>
         <div>
-          <AnnouncementCard />
           <EmployeeLifecycleTabs />
         </div>
       </div>
