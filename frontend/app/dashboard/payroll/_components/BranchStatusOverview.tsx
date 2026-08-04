@@ -16,7 +16,7 @@ interface BranchPayrollStatus {
 
 interface Props {
   onRunBranch:    (branchId: string, branchName: string) => void;
-  onResumeBranch: (cycleId: string, status: string) => void;
+  onResumeBranch: (cycleId: string, status: string, cycleStart?: string) => void;
 }
 
 const IN_PROGRESS_STATUSES = new Set([
@@ -206,7 +206,7 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
                       ) : isInProgress && branch.cycle_id && branch.status ? (
                         <button
                           className="btn btn-outline btn-sm"
-                          onClick={() => onResumeBranch(branch.cycle_id!, branch.status!)}
+                          onClick={() => onResumeBranch(branch.cycle_id!, branch.status!, branch.cycle_start ?? undefined)}
                         >
                           <i className="ti ti-player-play" /> Resume
                         </button>

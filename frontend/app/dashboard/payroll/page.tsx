@@ -21,7 +21,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "analytics",    label: "Analytics",    icon: "ti-chart-bar"         },
 ];
 
-interface ResumeState { cycleId: string; status: string; }
+interface ResumeState { cycleId: string; status: string; cycleStart?: string; }
 interface BranchWizardState { branchId?: string; branchName?: string; }
 
 export default function PayrollPage() {
@@ -50,8 +50,8 @@ export default function PayrollPage() {
     setRunWizard(true);
   }
 
-  function openResume(cycleId: string, status: string) {
-    setResume({ cycleId, status });
+  function openResume(cycleId: string, status: string, cycleStart?: string) {
+    setResume({ cycleId, status, cycleStart });
     setBranchWizard({});
     setRunWizard(true);
   }
@@ -81,7 +81,10 @@ export default function PayrollPage() {
           <div className="page-title">Payroll Management</div>
           <div className="page-sub">
             Process, approve and disburse salaries —{" "}
-            {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })}
+            {(runWizard && resume?.cycleStart
+              ? new Date(resume.cycleStart)
+              : new Date()
+            ).toLocaleString("en-IN", { month: "long", year: "numeric" })}
             {!isAdmin && userBranch && (
               <span style={{ marginLeft: 10, fontSize: 12, color: "var(--primary)", fontWeight: 600 }}>
                 <i className="ti ti-building" style={{ marginRight: 4 }} />{userBranch}

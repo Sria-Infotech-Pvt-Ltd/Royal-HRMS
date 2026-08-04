@@ -185,8 +185,16 @@ def process_payroll_cycle(cycle: PayrollCycle) -> dict:
     Raises PayrollAlreadyProcessing if the cycle isn't in
     STATUS_ATTENDANCE_APPROVED at claim time.
     """
+    is_reprocess = cycle.status == PayrollCycle.STATUS_PAYSLIPS_GENERATED
+    revert_status = (
+        PayrollCycle.STATUS_PAYSLIPS_GENERATED
+        if is_reprocess
+        else PayrollCycle.STATUS_ATTENDANCE_APPROVED
+    )
+
     claimed = PayrollCycle.objects.filter(
-        pk=cycle.pk, status=PayrollCycle.STATUS_ATTENDANCE_APPROVED,
+        pk=cycle.pk,
+        status__in=[PayrollCycle.STATUS_ATTENDANCE_APPROVED, PayrollCycle.STATUS_PAYSLIPS_GENERATED],
     ).update(status=PayrollCycle.STATUS_PROCESSING)
     if not claimed:
         raise PayrollAlreadyProcessing(
@@ -197,17 +205,11 @@ def process_payroll_cycle(cycle: PayrollCycle) -> dict:
     try:
         return _run_payroll_processing(cycle)
     except Exception:
-        # An unexpected failure after the claim must not leave the cycle
-        # wedged in STATUS_PROCESSING forever (it can never be re-claimed
-        # from that state) — revert it back to STATUS_ATTENDANCE_APPROVED
-        # so the same cycle can simply be reprocessed. The write phase's own
-        # transaction.atomic() below already guarantees no partial payslips
-        # exist for this attempt; this only fixes the cycle's own status.
-        logger.error('process_payroll_cycle failed for cycle %s — reverting to attendance_approved.', cycle.pk, exc_info=True)
+        logger.error('process_payroll_cycle failed for cycle %s — reverting status.', cycle.pk, exc_info=True)
         PayrollCycle.objects.filter(
             pk=cycle.pk, status=PayrollCycle.STATUS_PROCESSING,
-        ).update(status=PayrollCycle.STATUS_ATTENDANCE_APPROVED)
-        cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
+        ).update(status=revert_status)
+        cycle.status = revert_status
         raise
 
 
