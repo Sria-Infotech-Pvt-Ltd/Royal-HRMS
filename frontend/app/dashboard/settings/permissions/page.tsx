@@ -25,6 +25,11 @@ export default function RolesPermissionsPage() {
   const [saving,         setSaving]         = useState(false);
   const [togglingId,     setTogglingId]     = useState<number | null>(null);
   const [saveMsg,        setSaveMsg]        = useState<string | null>(null);
+  // Shown inside the Add/Edit modal while it's still open (validation/save failures).
+  const [formError,      setFormError]      = useState<string | null>(null);
+  // Shown as a page-level banner for errors that happen after a modal has
+  // already been closed (e.g. a 409 conflict forces the edit modal shut).
+  const [pageError,      setPageError]      = useState<string | null>(null);
 
   const modules = Object.keys(permissionsMap);
 
@@ -61,6 +66,7 @@ export default function RolesPermissionsPage() {
 
   async function addRole(form: RoleForm) {
     setSaving(true);
+    setFormError(null);
     try {
       await clientApi.post(API.roles.list, {
         name:                slugifyName(form.display_name),
@@ -74,7 +80,7 @@ export default function RolesPermissionsPage() {
       setShowAddModal(false);
       setSaveMsg("Role created successfully.");
     } catch (err: unknown) {
-      alert(apiErr(err));
+      setFormError(apiErr(err));
     } finally {
       setSaving(false);
     }
@@ -85,6 +91,7 @@ export default function RolesPermissionsPage() {
   async function editRole(form: RoleForm) {
     if (!editingRole) return;
     setSaving(true);
+    setFormError(null);
     try {
       await clientApi.put(API.roles.detail(editingRole.id), {
         name:                editingRole.name,       // slug is immutable
@@ -101,13 +108,18 @@ export default function RolesPermissionsPage() {
     } catch (err: unknown) {
       const e = err as { response?: { status?: number } };
       if (e.response?.status === 409) {
-        // Someone else changed this role since the modal opened — refresh
-        // so a retry starts from the current data instead of looping.
+        // Someone else changed this role since the modal opened — refresh so
+        // a retry starts from current data, and close the modal since the
+        // form it was showing is now stale. The modal is gone by the time
+        // this resolves, so the message has to surface as a page banner
+        // instead of inline in the (now-closed) modal.
         const res = await clientApi.get(API.roles.list);
         setRoles(res.data.data?.results ?? []);
         setEditingRole(null);
+        setPageError(apiErr(err));
+      } else {
+        setFormError(apiErr(err));
       }
-      alert(apiErr(err));
     } finally {
       setSaving(false);
     }
@@ -123,8 +135,7 @@ export default function RolesPermissionsPage() {
         prev.map(r => r.id === role.id ? { ...r, is_active: !r.is_active } : r)
       );
     } catch (err: unknown) {
-      const e = err as { message?: string };
-      alert(e.message ?? "Failed to update role");
+      setPageError(apiErr(err));
     } finally {
       setTogglingId(null);
     }
@@ -169,12 +180,26 @@ export default function RolesPermissionsPage() {
             <i className="ti ti-arrow-left" /> Back
           </button>
           {canEdit && (
-            <button className="btn btn-filled" onClick={() => setShowAddModal(true)}>
+            <button className="btn btn-filled" onClick={() => { setFormError(null); setShowAddModal(true); }}>
               <i className="ti ti-plus" /> Add Role
             </button>
           )}
         </div>
       </div>
+
+      {/* ── Page-level error banner ───────────────────────────────────────── */}
+      {pageError && (
+        <div className="alert alert-error mb-16" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <i className="ti ti-alert-circle" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>{pageError}</div>
+          <button
+            onClick={() => setPageError(null)}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }}
+          >
+            <i className="ti ti-x" style={{ fontSize: 14 }} />
+          </button>
+        </div>
+      )}
 
       {/* ── Save confirmation banner ─────────────────────────────────────── */}
       {saveMsg && (
@@ -230,7 +255,7 @@ export default function RolesPermissionsPage() {
                         <>
                           <button
                             className="btn btn-ghost btn-sm icon-tooltip"
-                            onClick={() => setEditingRole(role)}
+                            onClick={() => { setFormError(null); setEditingRole(role); }}
                             data-tip="Edit role"
                             style={{ padding: "5px 8px" }}
                           >
@@ -333,7 +358,8 @@ export default function RolesPermissionsPage() {
         <AddRoleModal
           permissionsMap={permissionsMap}
           saving={saving}
-          onClose={() => setShowAddModal(false)}
+          error={formError}
+          onClose={() => { setShowAddModal(false); setFormError(null); }}
           onAdd={addRole}
         />
       )}
@@ -343,7 +369,8 @@ export default function RolesPermissionsPage() {
           role={editingRole}
           permissionsMap={permissionsMap}
           saving={saving}
-          onClose={() => setEditingRole(null)}
+          error={formError}
+          onClose={() => { setEditingRole(null); setFormError(null); }}
           onEdit={editRole}
         />
       )}

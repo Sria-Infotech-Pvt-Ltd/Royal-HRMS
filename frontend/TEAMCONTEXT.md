@@ -3522,3 +3522,118 @@ This wasn't specific to one employee or manager — it affected **every manager 
 - **`_calendar_scope_filter` in leave.py has the same ordering as the §3 bug but was deliberately left unfixed** — broader-not-missing data, likely fine, but worth a product confirmation if anyone notices managers seeing the whole branch's calendar.
 - **Expense intentionally stayed single-stage this session** (per user decision) — there is still no manager→HR two-stage flow or HR notification/email for expense submissions, only a single `expenses.approve` gate now correctly scoped to the assigned manager or HR. Revisit if the product ever wants expense to mirror leave's L1→L2 flow.
 - **Recruitment now enforces branch scoping** but still has no per-candidate assigned-recruiter/HR concept (unlike leave/expense's `employee.hr`) — every branch HR/recruiter can act on every candidate in their own branch. Fine for now per user decision; would need a new model field to go further.
+
+---
+
+## Session — Rithwika (03 August 2026)
+
+**Branch:** `Frontend/03-08`
+
+---
+
+### 1. Manager Dashboard — Quick Actions All 404'd
+
+`ManagerDashboard.tsx`'s Quick Actions tiles link straight to `action.url`, which comes verbatim from the backend's `_build_quick_actions()` (`apps/dashboard/views/manager.py`). That backend payload points at routes that don't exist in this frontend at all — `/dashboard/leave/apply`, `/dashboard/requests`, `/dashboard/team`, `/dashboard/payroll/payslips`, `/dashboard/interviews` — none of which have a matching `page.tsx`. Every tile 404'd.
+
+Fixed frontend-only (no backend touched): added a `QA_URL_OVERRIDE` map keyed by `action.id` that redirects each tile to its real page (`/dashboard/leave?tab=apply`, `/dashboard/my-requests`, `/dashboard/employees`, `/dashboard/my-payslip`, `/dashboard/interview-list`), falling back to `action.url` for any id not in the map. For "Apply Leave" specifically, `/dashboard/leave` only ever opened on its default "Dashboard" tab (tab state is local `useState`, not URL-driven) — added `initialTab` support: `leave/page.tsx` now awaits the Next 16 `searchParams` promise and passes `initialTab` down to `leave/_client.tsx`, which seeds `useState<TabId>` with it instead of a hardcoded `"dashboard"`.
+
+---
+
+### 2. Add Employee Form — Reporting Manager & HR Fields
+
+**File:** `app/dashboard/employees/_components/AddEmployeeModal.tsx`
+
+Added both fields to the actual modal the "Add Employee" button opens (confirmed via `employees/page.tsx` — **not** the unused wizard at `/dashboard/employees/new`, which already had its own disconnected copy of a "Reporting Manager" text input that was never sent anywhere).
+
+- First pass used the `EmployeePickerInline` component (borrowed from the employee-profile edit page) — visually wrong for this form (its own gray-background, left-aligned-label style, not this modal's `Field`/`Sel` top-label style). Rebuilt as a plain `Field`+`Sel` populated via `useFetch`, matching every other dropdown in the form.
+- Neither field is accepted by the employee-creation endpoint itself — confirmed by reading the actual `post()` handler in `apps/accounts/views.py`: it only reads `first_name/last_name/email/role/department/designation/branch/employee_type/date_of_joining/phone`, nothing else. So after creation succeeds, a follow-up `PUT api/employees/<new_employee_id>/` sends `reporting_manager_id`/`hr_id` — only the keys the admin actually picked, since sending an empty value for the untouched one would explicitly null out whatever the backend's `_auto_assign_managers()` already auto-assigned on creation.
+- Both lists are branch-scoped (`?branch=<name>`) against `API.employees.managerList`/`hrList`. Found and fixed a real bug from this: neither `reportingManagerId` nor `hrId` cleared when `form.branch` changed, so a stale manager/HR id from a previously-selected branch could get silently submitted even though the `<select>` visually reset to its placeholder. Added a `useEffect` clearing both on branch change (later split — see §5).
+
+---
+
+### 3. Add Employee Form — Field Order + Dead "Role" Filter Removed
+
+**Files:** `AddEmployeeModal.tsx`, `app/dashboard/employees/page.tsx`
+
+Two explicit asks:
+- Reordered Employment Details to Role → Branch → Department → Designation → Employee Type → Date of Joining → Reporting Manager → HR (previously Branch sat after Designation).
+- On the Employees list page, `isAdmin` system_admin users saw "All Roles" **twice** — one `<select>` gated behind `{isAdmin && (...)}` and a second, identical one rendered unconditionally right after it, both bound to the same `role`/`setRole` state. Confirmed via `git diff` that this file had **zero changes from me all session** — pre-existing bug, not something introduced this branch. Also confirmed the `role` state was never actually wired into `fetchEmployees()`'s query params (`branch`/`department`/`status` are, `role` isn't) — it was dead, non-functional UI even before the duplicate. Removed the filter entirely (not just deduped), along with the now-unused `role` state, `roleOptions`/`rolesData` fetch, and the now-unused `useFetch` import.
+
+---
+
+### 4. Assessments Page — Wrong Permission Module Gated the Whole Admin View
+
+**File:** `app/dashboard/assessments/page.tsx`
+
+Reported symptom: a role granted the "Assessments" permission set (view/create/edit/delete) still only saw the read-only employee "My Assessments" view, with no way to create/edit/delete anything. Root cause: `isAdminView`/`canCreate`/`canEdit`/`canDelete` all checked `recruitment.*` codenames instead of `assessments.*`. Every real assessments endpoint (`apps/assessments/views/admin.py`, `sections.py`, `settings.py`) gates exclusively on `assessments.view/create/edit/delete` — confirmed via every `_has_perm()` call in those files — while the sidebar nav item and `proxy.ts`'s route guard were already correctly wired to `assessments.view`. Only this page's internal gating was wrong.
+
+Fixed: swapped all four checks to `assessments.*`. Also moved the "Assign" button from `canCreate` to `canEdit` — the backend's `AssignAssessmentView` actually requires `assessments.edit`, not `assessments.create`, so a role with only create+view would previously have seen a button that 403'd on click.
+
+---
+
+### 5. Replaced Every `alert()` Error Popup With In-App Banners
+
+Reported symptom (concurrent-edit scenario): two people editing the same role's permissions at once produced a native `alert()` — "localhost says: This role was changed by someone else..." — instead of any in-app UI. Grepped the whole frontend for `alert(` and found **9 call sites across 5 files**, all doing the same thing: catching an API error and popping a browser dialog instead of using the `alert alert-error` card pattern already used everywhere else in the app.
+
+| File | What changed |
+|---|---|
+| `settings/permissions/page.tsx` + `AddRoleModal.tsx` + `EditRoleModal.tsx` | Add/Edit-role failures now render inline inside the still-open modal (`formError`). The 409-conflict case (this is the actual "changed by someone else" bug) closes the modal and refreshes stale data before the catch block returns — since there's no modal left to show an inline error in, that one specifically surfaces as a new dismissible page-level `pageError` banner instead. Toggle-active failures route to the same banner. |
+| `announcements/page.tsx` | Delete-announcement failure now shows inside the delete-confirm modal instead of `alert()`. |
+| `assessments/page.tsx` | Delete-assessment failure now shows as a dismissible page banner. |
+| `assessments/_components/ItemsModal.tsx` | Delete-section/delete-item failures reuse the modal's existing `formErr` banner, now also rendered in the list view (previously only shown inside the add/edit panels). |
+| `payroll/_components/PayrollAdjustments.tsx` | Delete and bulk-import failures (including the multi-row-error import summary, preserved via `white-space: pre-line`) now show as a page banner; Add Adjustment's save failure shows inline in that modal. |
+
+---
+
+### 6. Dev Environment — Turbopack Cache Corruption Caused Global 404s (Not a Code Bug)
+
+Reported symptom: every page 404'd except `/dashboard` itself. Reproduced by hitting routes directly with synthetic auth cookies (bypassing login) — confirmed real Next.js `404: This page could not be found` on every nested `/dashboard/*` route, while `/dashboard` returned a 500 (found the page, crashed on the fake cookie — unrelated to the bug). The on-disk manifests (`.next/app-path-routes-manifest.json`) correctly listed every route; the running dev server's in-memory route table just didn't match it. Also found **two separate `npm run dev` processes running simultaneously** against the same project, both writing to the same `.next` cache — a second, compounding cause.
+
+Killed both, cleared `.next`, started one clean server. Its own startup log confirmed the actual root cause directly: *"Turbopack's filesystem cache has been deleted because we previously detected an internal error in Turbopack."* — a known Turbopack dev-mode cache-corruption issue, not anything in this branch's code. Re-tested all previously-404'ing routes plus the manager dashboard end-to-end afterward: all 200, zero errors logged, full content rendered. **No code changes** — environmental only, logged here so a future "everything is suddenly 404" report isn't mistaken for a regression.
+
+---
+
+### 7. Manager Login Redirected to the Assessment Portal Instead of the Dashboard
+
+**Files:** `proxy.ts`, `app/login/page.tsx`
+
+Reported: a manager logging in landed on `/onboarding/assessments` instead of `/dashboard`. Root cause (confirmed via `apps/accounts/views.py`'s employee-creation handler): default assessments (`is_default=True`) get auto-assigned to **every** new employee record on creation with no role check at all — managers included — flipping `assessment_status` to `"pending"`. `proxy.ts`'s `needsAssessments` gate (`onboardingStatus === "complete" && assessmentStatus === "pending"`) then applies to any authenticated user with no exemption, and `login/page.tsx` independently computes the same forced redirect a second time, immediately after login, before `proxy.ts` ever runs.
+
+Explicitly frontend-only per user instruction — the real fix (exempting managers from default-assessment auto-assignment, or from the gate, at the source) is backend work, not done here. Instead: added a `getCanManageTeam()` helper in `proxy.ts` reading `can_manage_team` off the same already-client-writable `royal_hrms_user` cookie `getOnboardingStatus`/`getAssessmentStatus` already read (confirmed `can_manage_team` is already carried in that cookie via `lib/auth.ts`'s `UserInfo`/`saveAuth`), and excluded it from `needsAssessments`. Added the identical `!user.can_manage_team` condition to `login/page.tsx`'s `dest` computation, since it's a second, independent redirect decision that would otherwise still fire before `proxy.ts` gets a say. Verified against the running dev server with synthetic cookies both ways: manager + pending assessment → `/dashboard` (200); regular employee + pending assessment → still correctly redirected to `/onboarding/assessments` (307).
+
+---
+
+### 8. Rejected Two Incorrect "Verified" Endpoint Specs — Checked Against Actual Backend Code Instead
+
+Twice this session, a detailed-sounding endpoint spec was handed over as "verified against live data" and turned out to contradict the actual backend on inspection:
+
+- **First spec** claimed Reporting Manager needed `department` switched in for `branch` on the managers endpoint, and that submitting the create-employee form would "automatically" persist `reporting_manager_id`/`hr_id` with no extra call needed. Both false: `ManagerListView` (`apps/accounts/views.py`) filters on `branch` only and errors without it; the create endpoint never reads either field (see §2's follow-up-`PUT` design, which was already the correct approach).
+- **Second spec** asked for the Department dropdown to cascade off Branch, "the same way Reporting Manager does." Checked the `Department` model directly — `name`, `description`, `manager` FK, `is_active`, timestamps, **no branch field or relationship of any kind**. Not a missing query param; there's nothing in the schema to filter on. Flagged as a backend gap (would need a schema change) rather than faked with a client-side approximation — left Department as the existing unfiltered global list, the only version that isn't misleading.
+- User separately asked, after this correction, for Reporting Manager to still send `department=<name>&branch=<name>` together regardless (harmless against the current backend — an unrecognized param is silently ignored — and forward-compatible if the backend adds department filtering later). Implemented: the fetch now only fires once **both** `form.branch` and `form.department` are set, and the `<select>` is disabled with a "Select branch and department first" placeholder until then. Split the stale-selection-clear effect from §2 accordingly — Reporting Manager now clears on either branch **or** department change; HR still only clears on branch change, since it has no department dependency.
+
+---
+
+### Key Files Changed (03 August 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/_components/ManagerDashboard.tsx` | `QA_URL_OVERRIDE` map fixes every Quick Actions tile's broken backend-supplied URL |
+| `app/dashboard/leave/page.tsx`, `leave/_client.tsx` | `initialTab` via `?tab=apply`, read from the Next 16 `searchParams` promise |
+| `app/dashboard/employees/_components/AddEmployeeModal.tsx` | Added Reporting Manager + HR fields (branch-scoped, follow-up `PUT` after creation); reordered Employment Details fields; Reporting Manager now also requires `form.department` and sends it in the query |
+| `app/dashboard/employees/page.tsx` | Removed the duplicate + entirely non-functional "Role" filter, and its now-dead state/fetch/import |
+| `app/dashboard/assessments/page.tsx` | `recruitment.*` → `assessments.*` permission checks; Assign button moved to `canEdit`; delete-error page banner |
+| `app/dashboard/assessments/_components/ItemsModal.tsx` | Delete-section/item errors → existing `formErr` banner instead of `alert()` |
+| `app/dashboard/announcements/page.tsx` | Delete-announcement error → inline modal banner instead of `alert()` |
+| `app/dashboard/payroll/_components/PayrollAdjustments.tsx` | Delete/import/add-adjustment errors → page or modal banners instead of `alert()` |
+| `app/dashboard/settings/permissions/page.tsx`, `_components/AddRoleModal.tsx`, `_components/EditRoleModal.tsx` | Add/Edit-role and toggle-active errors → inline modal banner or page banner (409-conflict case) instead of `alert()` |
+| `proxy.ts` | New `getCanManageTeam()`; `needsAssessments` now excludes managers |
+| `app/login/page.tsx` | Post-login `dest` computation also excludes managers from the forced assessment redirect |
+
+---
+
+### Notes for Next Developer
+
+- **The backend's `_build_quick_actions()` (`apps/dashboard/views/manager.py`) still returns URLs that don't exist in this frontend** — §1's fix is a frontend-side override map, not a backend fix. If that backend payload is ever corrected to point at real routes, the override map becomes redundant (harmless either way, since it only overrides known ids).
+- **Default-assessment auto-assignment on employee creation has no role check** (§7) — the actual fix belongs in `apps/accounts/views.py`'s employee-creation handler (skip auto-assigning default assessments to `can_manage_team` roles) or in whatever decides `is_default` assignment. What's here is a frontend workaround at the two places that force the redirect, not a fix at the source — a newly created manager will still show `assessment_status: "pending"` in the database indefinitely, with only the redirect suppressed on the frontend.
+- **`Department` has no `branch` relationship in the schema at all** (§8) — if branch-scoped departments become a real requirement, it needs a model change (either a direct FK, or defining "belongs to branch" via department members' branches, which is a product decision, not just a migration).
+- **`ManagerListView` still ignores the `department` query param entirely** — the frontend now sends it (§8) but it has zero effect on results until the backend view is updated to actually filter on it. Today's behavior is still branch-only in practice.

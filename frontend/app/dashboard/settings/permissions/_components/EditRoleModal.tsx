@@ -11,11 +11,12 @@ interface Props {
   role: ApiRole;
   permissionsMap: PermissionsMap;
   saving: boolean;
+  error: string | null;
   onClose: () => void;
   onEdit: (form: RoleForm) => Promise<void>;
 }
 
-export default function EditRoleModal({ role, permissionsMap, saving, onClose, onEdit }: Props) {
+export default function EditRoleModal({ role, permissionsMap, saving, error, onClose, onEdit }: Props) {
   const [form, setForm]     = useState<RoleForm>({
     display_name:        role.display_name,
     can_manage_team:     role.can_manage_team,
@@ -58,6 +59,13 @@ export default function EditRoleModal({ role, permissionsMap, saving, onClose, o
         </div>
 
         <div className="modal-body">
+
+          {error && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" />
+              <div>{error}</div>
+            </div>
+          )}
 
           {/* Read-only slug */}
           <div className="field-group mb-16">

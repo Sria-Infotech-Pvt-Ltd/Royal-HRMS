@@ -5,13 +5,15 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermission } from "@/hooks/usePermission";
+import { useFetch } from "@/hooks/useFetch";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 
 /* ── Types ────────────────────────────────────────────────────── */
-interface ApiRole   { id: number; name: string; display_name: string }
-interface ApiDept   { id: number; name: string }
-interface ApiDesig  { id: number; name: string; department_name: string }
-interface ApiBranch { id: number; branch_name: string; branch_code: string }
+interface ApiRole    { id: number; name: string; display_name: string }
+interface ApiDept    { id: number; name: string }
+interface ApiDesig   { id: number; name: string; department_name: string }
+interface ApiBranch  { id: number; branch_name: string; branch_code: string }
+interface ApiManager { id: string; full_name: string; employee_id: string }
 
 interface Form {
   first_name: string; last_name: string; email: string; phone: string;
@@ -120,6 +122,11 @@ export default function AddEmployeeModal({
   const [apiErr, setApiErr] = useState("");
   const [done,   setDone]   = useState<string>("");
 
+  /* reporting manager & HR — assigned via a follow-up call after creation,
+     since employee creation doesn't accept either directly */
+  const [reportingManagerId, setReportingManagerId] = useState("");
+  const [hrId,               setHrId]               = useState("");
+
   /* dropdown data */
   const [roles,    setRoles]    = useState<ApiRole[]>([]);
   const [depts,    setDepts]    = useState<ApiDept[]>([]);
@@ -169,6 +176,31 @@ export default function AddEmployeeModal({
       .finally(() => setDesigLoading(false));
   }, [form.department, depts]);
 
+  /* reporting manager — needs both branch and department picked first */
+  const { data: managersRaw } = useFetch<ApiManager[]>(
+    form.branch && form.department
+      ? `${API.employees.managerList}?department=${encodeURIComponent(form.department)}&branch=${encodeURIComponent(form.branch)}`
+      : null
+  );
+  const managers = managersRaw ?? [];
+
+  /* HR — branch-scoped, optional (falls back to the unfiltered list) */
+  const { data: hrsRaw } = useFetch<ApiManager[]>(
+    form.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(form.branch)}` : API.employees.hrList
+  );
+  const hrs = hrsRaw ?? [];
+
+  // A manager/HR picked under one branch (or department, for the manager
+  // list) isn't necessarily valid once that changes, so drop the stale
+  // selection instead of silently submitting an ID that no longer applies.
+  useEffect(() => {
+    setReportingManagerId("");
+  }, [form.branch, form.department]);
+
+  useEffect(() => {
+    setHrId("");
+  }, [form.branch]);
+
   function set(k: keyof Form, v: string) {
     setForm(f => {
       const next = { ...f, [k]: v };
@@ -207,6 +239,21 @@ export default function AddEmployeeModal({
         API.employees.list,
         { ...form, role: Number(form.role) },
       );
+      const newEmployeeId = (data.data.employee_id ?? data.data.id) as string | undefined;
+      // Only include keys the admin actually picked — sending an empty value
+      // for the other would overwrite whatever _auto_assign_managers already
+      // set on creation instead of leaving it alone.
+      const assignments: Record<string, string> = {};
+      if (reportingManagerId) assignments.reporting_manager_id = reportingManagerId;
+      if (hrId)               assignments.hr_id                = hrId;
+      if (newEmployeeId && Object.keys(assignments).length > 0) {
+        try {
+          await clientApi.put(API.employees.detail(newEmployeeId), assignments);
+        } catch {
+          // Employee was created successfully regardless — the manager/HR can
+          // still be assigned from the employee's profile if this call fails.
+        }
+      }
       setDone(data.message || "Employee added successfully.");
       onCreated(data.data);
     } catch (err) {
@@ -303,6 +350,22 @@ export default function AddEmployeeModal({
                         ))}
                       </Sel>
                     </Field>
+                    <Field label="Branch" required error={errs.branch}>
+                      {unrestricted ? (
+                        <Sel v={form.branch} set={v => set("branch", v)} err={!!errs.branch}>
+                          <option value="">— Select Branch —</option>
+                          {branches.map(b => (
+                            <option key={b.id} value={b.branch_name}>{b.branch_name}</option>
+                          ))}
+                        </Sel>
+                      ) : (
+                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                          title="Scoped to your branch">
+                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                          {effectiveBranch}
+                        </div>
+                      )}
+                    </Field>
                     <Field label="Department" required error={errs.department}>
                       <Sel v={form.department} set={v => set("department", v)} err={!!errs.department}>
                         <option value="">— Select Department —</option>
@@ -326,22 +389,6 @@ export default function AddEmployeeModal({
                         ))}
                       </Sel>
                     </Field>
-                    <Field label="Branch" required error={errs.branch}>
-                      {unrestricted ? (
-                        <Sel v={form.branch} set={v => set("branch", v)} err={!!errs.branch}>
-                          <option value="">— Select Branch —</option>
-                          {branches.map(b => (
-                            <option key={b.id} value={b.branch_name}>{b.branch_name}</option>
-                          ))}
-                        </Sel>
-                      ) : (
-                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                          title="Scoped to your branch">
-                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                          {effectiveBranch}
-                        </div>
-                      )}
-                    </Field>
                     <Field label="Employee Type">
                       <Sel v={form.employee_type} set={v => set("employee_type", v)}>
                         {EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -349,6 +396,24 @@ export default function AddEmployeeModal({
                     </Field>
                     <Field label="Date of Joining" required error={errs.date_of_joining}>
                       <Inp v={form.date_of_joining} set={v => set("date_of_joining", v)} type="date" err={!!errs.date_of_joining} />
+                    </Field>
+                    <Field label="Reporting Manager">
+                      <Sel v={reportingManagerId} set={setReportingManagerId} disabled={!form.branch || !form.department}>
+                        <option value="">
+                          {!form.branch || !form.department ? "Select branch and department first" : managers.length === 0 ? "No managers available" : "— Select Reporting Manager —"}
+                        </option>
+                        {managers.map(m => (
+                          <option key={m.id} value={m.id}>{m.full_name} ({m.employee_id})</option>
+                        ))}
+                      </Sel>
+                    </Field>
+                    <Field label="HR">
+                      <Sel v={hrId} set={setHrId}>
+                        <option value="">— Select HR —</option>
+                        {hrs.map(h => (
+                          <option key={h.id} value={h.id}>{h.full_name} ({h.employee_id})</option>
+                        ))}
+                      </Sel>
                     </Field>
                   </div>
 

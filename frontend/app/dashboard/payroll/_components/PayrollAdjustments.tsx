@@ -47,6 +47,8 @@ export default function PayrollAdjustments() {
   const [showAdd,   setShowAdd]   = useState(false);
   const [saving,    setSaving]    = useState(false);
   const [saveMsg,   setSaveMsg]   = useState("");
+  const [errMsg,    setErrMsg]    = useState("");
+  const [addErr,    setAddErr]    = useState("");
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -58,17 +60,19 @@ export default function PayrollAdjustments() {
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this adjustment?")) return;
+    setErrMsg("");
     try {
       await clientApi.delete(API.payroll.adjustmentDetail(id));
       refetch();
       setSaveMsg("Adjustment deleted.");
     } catch {
-      alert("Failed to delete adjustment.");
+      setErrMsg("Failed to delete adjustment.");
     }
   }
 
   async function handleBulkImport(file: File) {
     setImporting(true);
+    setErrMsg("");
     try {
       const form = new FormData();
       form.append("file", file);
@@ -81,14 +85,14 @@ export default function PayrollAdjustments() {
       const rowErrors = res.data?.data?.row_errors ?? [];
       refetch();
       if (rowErrors.length > 0) {
-        alert(`${imported} imported. ${rowErrors.length} row(s) had errors:\n` +
+        setErrMsg(`${imported} imported. ${rowErrors.length} row(s) had errors:\n` +
           rowErrors.slice(0, 5).map((e: { row: number; error: string }) => `Row ${e.row}: ${e.error}`).join("\n"));
       } else {
         setSaveMsg(`${imported} adjustment(s) imported.`);
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Import failed.";
-      alert(msg);
+      setErrMsg(msg);
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -110,6 +114,13 @@ export default function PayrollAdjustments() {
         <div className="alert alert-success" style={{ marginBottom: 16 }}>
           {saveMsg}
           <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => setSaveMsg("")}>Dismiss</button>
+        </div>
+      )}
+
+      {errMsg && (
+        <div className="alert alert-error" style={{ marginBottom: 16, whiteSpace: "pre-line" }}>
+          {errMsg}
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => setErrMsg("")}>Dismiss</button>
         </div>
       )}
 
@@ -140,7 +151,7 @@ export default function PayrollAdjustments() {
                   onChange={e => { if (e.target.files?.[0]) handleBulkImport(e.target.files[0]); }}
                 />
               </label>
-              <button className="btn btn-filled btn-sm" onClick={() => setShowAdd(true)}>
+              <button className="btn btn-filled btn-sm" onClick={() => { setAddErr(""); setShowAdd(true); }}>
                 <i className="ti ti-plus" /> Add Adjustment
               </button>
             </>
@@ -211,9 +222,11 @@ export default function PayrollAdjustments() {
         <AddAdjustmentModal
           month={param}
           saving={saving}
-          onClose={() => setShowAdd(false)}
+          error={addErr}
+          onClose={() => { setShowAdd(false); setAddErr(""); }}
           onSave={async (form) => {
             setSaving(true);
+            setAddErr("");
             try {
               await clientApi.post(API.payroll.adjustments, form);
               refetch();
@@ -221,7 +234,7 @@ export default function PayrollAdjustments() {
               setSaveMsg("Adjustment added.");
             } catch (err: unknown) {
               const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to save.";
-              alert(msg);
+              setAddErr(msg);
             } finally {
               setSaving(false);
             }
@@ -244,11 +257,12 @@ interface AddForm {
 interface AddModalProps {
   month: string;
   saving: boolean;
+  error: string;
   onClose: () => void;
   onSave: (form: { employee_code: string; type: string; label: string; amount: number; month: string }) => Promise<void>;
 }
 
-function AddAdjustmentModal({ month, saving, onClose, onSave }: AddModalProps) {
+function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalProps) {
   const [form, setForm] = useState<AddForm>({ employee_code: "", type: "addition", label: "", amount: "" });
   const [errors, setErrors] = useState<Partial<AddForm>>({});
 
@@ -281,6 +295,13 @@ function AddAdjustmentModal({ month, saving, onClose, onSave }: AddModalProps) {
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
         <div className="modal-body">
+
+          {error && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" />
+              <div>{error}</div>
+            </div>
+          )}
 
           <div className="field-group mb-16">
             <label className="field-label">Employee Code <span style={{ color: "var(--error)" }}>*</span></label>

@@ -10,11 +10,12 @@ import RoleFormFields from "./RoleFormFields";
 interface Props {
   permissionsMap: PermissionsMap;
   saving: boolean;
+  error: string | null;
   onClose: () => void;
   onAdd: (form: RoleForm) => Promise<void>;
 }
 
-export default function AddRoleModal({ permissionsMap, saving, onClose, onAdd }: Props) {
+export default function AddRoleModal({ permissionsMap, saving, error, onClose, onAdd }: Props) {
   const [form, setForm]     = useState<RoleForm>(EMPTY_ROLE_FORM);
   const [errors, setErrors] = useState<RoleFormErrors>({});
 
@@ -48,6 +49,12 @@ export default function AddRoleModal({ permissionsMap, saving, onClose, onAdd }:
         </div>
 
         <div className="modal-body">
+          {error && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" />
+              <div>{error}</div>
+            </div>
+          )}
           <RoleFormFields
             form={form}
             errors={errors}
