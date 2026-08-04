@@ -73,6 +73,7 @@ from apps.accounts.models import (
     PasswordResetToken,
     Permission,
     Role,
+    RolePermission,
     SMTPSettings,
     User,
 )
@@ -4474,8 +4475,6 @@ class EmployeeReportingManagerView(APIView):
 _WORKFLOW_ORDER = [
     ApprovalWorkflowRule.WORKFLOW_LEAVE,
     ApprovalWorkflowRule.WORKFLOW_EXPENSE,
-    ApprovalWorkflowRule.WORKFLOW_RESIGNATION,
-    ApprovalWorkflowRule.WORKFLOW_LOAN,
     ApprovalWorkflowRule.WORKFLOW_ATTENDANCE_CORRECTION,
 ]
 
@@ -4487,23 +4486,27 @@ def _ensure_default_rules():
     missing  = [wf for wf in _WORKFLOW_ORDER if wf not in existing]
     if not missing:
         return
-    l1 = ApprovalWorkflowRule.ROLE_REPORTING_MANAGER
-    l2 = ApprovalWorkflowRule.ROLE_HR_MANAGER
+    manager_role = Role.objects.filter(can_manage_team=True, is_active=True).first()
+    hr_role      = None
+    perm = Permission.objects.filter(codename='leave.approve').first()
+    if perm:
+        rp = RolePermission.objects.filter(permission=perm, role__is_active=True).select_related('role').first()
+        if rp:
+            hr_role = rp.role
     ApprovalWorkflowRule.objects.bulk_create([
-        ApprovalWorkflowRule(workflow_type=wf, l1_approver_role=l1, l2_approver_role=l2)
+        ApprovalWorkflowRule(workflow_type=wf, l1_approver_role=manager_role, l2_approver_role=hr_role)
         for wf in missing
     ])
 
 
 def _serialize_rule(rule: ApprovalWorkflowRule) -> dict:
-    role_labels = dict(ApprovalWorkflowRule.APPROVER_ROLE_CHOICES)
     return {
         'workflow_type':      rule.workflow_type,
         'workflow_label':     rule.get_workflow_type_display(),
-        'l1_approver_role':   rule.l1_approver_role,
-        'l1_approver_label':  role_labels.get(rule.l1_approver_role, ''),
-        'l2_approver_role':   rule.l2_approver_role,
-        'l2_approver_label':  role_labels.get(rule.l2_approver_role, '') if rule.l2_approver_role else '',
+        'l1_approver_role':   rule.l1_approver_role_id,
+        'l1_approver_label':  rule.l1_approver_role.display_name if rule.l1_approver_role else '',
+        'l2_approver_role':   rule.l2_approver_role_id,
+        'l2_approver_label':  rule.l2_approver_role.display_name if rule.l2_approver_role else '',
     }
 
 
@@ -4529,11 +4532,16 @@ class ApprovalWorkflowRuleView(APIView):
         data = serializer.validated_data
         _ensure_default_rules()
 
-        rule = ApprovalWorkflowRule.objects.get(workflow_type=data['workflow_type'])
+        rule = ApprovalWorkflowRule.objects.select_related(
+            'l1_approver_role', 'l2_approver_role'
+        ).get(workflow_type=data['workflow_type'])
         rule.l1_approver_role = data['l1_approver_role']
-        rule.l2_approver_role = data.get('l2_approver_role', '')
+        rule.l2_approver_role = data.get('l2_approver_role') or None
         rule.updated_by       = request.user
         rule.save(update_fields=['l1_approver_role', 'l2_approver_role', 'updated_by', 'updated_at'])
+
+        from core.cache_service import ApprovalWorkflowCacheService
+        ApprovalWorkflowCacheService.invalidate(data['workflow_type'])
 
         logger.info('Approval rule for %s updated by %s', data['workflow_type'], request.user.email)
         return success('Approval rule updated.', data=_serialize_rule(rule))
@@ -4541,29 +4549,28 @@ class ApprovalWorkflowRuleView(APIView):
 
 # ─── Employee Approval Matrix ─────────────────────────────────────────────────
 
-def _resolve_rule_approver(role_str: str, employee):
-    """Resolve a role string to the actual User for a given employee.
+def _resolve_rule_approver(role, employee):
+    """Resolve a Role FK to the actual User approver for a given employee.
 
-    Uses PBAC capability checks to validate the resolved approver still holds
-    the expected capability — a user whose role changed after assignment will
-    no longer resolve, preventing stale approver chains.
+    Roles with can_manage_team=True resolve via employee.reporting_manager;
+    all other roles resolve via employee.hr. Validates the assigned person
+    still holds the expected capability.
     """
-    if role_str in ('reporting_manager', 'rm', 'manager'):
+    if role is None:
+        return None
+    if role.can_manage_team:
         rm = getattr(employee, 'reporting_manager', None)
         if rm and rm.role and rm.role.can_manage_team:
             return rm
         return None
-    if role_str in ('hr', 'hr_manager', 'hr_admin'):
+    else:
         hr_user = getattr(employee, 'hr', None)
         if hr_user and _has_perm(hr_user, 'leave.approve'):
             return hr_user
         return None
-    return None
 
 
 def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> dict:
-    role_labels = dict(ApprovalWorkflowRule.APPROVER_ROLE_CHOICES)
-
     # Per-employee override takes priority; otherwise resolve from employee's FK fields
     if override and override.l1_override:
         l1_id, l1_name, l1_is_override = str(override.l1_override.id), override.l1_override.full_name, True
@@ -4584,13 +4591,13 @@ def _build_matrix_row(rule: ApprovalWorkflowRule, override, employee=None) -> di
     return {
         'workflow_type':     rule.workflow_type,
         'workflow_label':    rule.get_workflow_type_display(),
-        'l1_approver_role':  rule.l1_approver_role,
-        'l1_approver_label': role_labels.get(rule.l1_approver_role, ''),
+        'l1_approver_role':  rule.l1_approver_role_id,
+        'l1_approver_label': rule.l1_approver_role.display_name if rule.l1_approver_role else '',
         'l1_approver_id':    l1_id,
         'l1_approver_name':  l1_name,
         'l1_is_override':    l1_is_override,
-        'l2_approver_role':  rule.l2_approver_role,
-        'l2_approver_label': role_labels.get(rule.l2_approver_role, '') if rule.l2_approver_role else '',
+        'l2_approver_role':  rule.l2_approver_role_id,
+        'l2_approver_label': rule.l2_approver_role.display_name if rule.l2_approver_role else '',
         'l2_approver_id':    l2_id,
         'l2_approver_name':  l2_name,
         'l2_is_override':    l2_is_override,
@@ -4628,7 +4635,10 @@ class EmployeeApprovalMatrixView(APIView):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         _ensure_default_rules()
-        rules = {r.workflow_type: r for r in ApprovalWorkflowRule.objects.all()}
+        rules = {
+            r.workflow_type: r
+            for r in ApprovalWorkflowRule.objects.select_related('l1_approver_role', 'l2_approver_role')
+        }
         overrides = {
             o.workflow_type: o
             for o in EmployeeApprovalOverride.objects

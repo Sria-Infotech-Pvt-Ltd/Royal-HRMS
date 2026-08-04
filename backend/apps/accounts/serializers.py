@@ -1300,7 +1300,9 @@ class MyProfileUpdateSerializer(serializers.Serializer):
 
 class ApprovalWorkflowRuleSerializer(serializers.ModelSerializer):
     workflow_label    = serializers.CharField(source='get_workflow_type_display', read_only=True)
+    l1_approver_role  = serializers.SerializerMethodField()
     l1_approver_label = serializers.SerializerMethodField()
+    l2_approver_role  = serializers.SerializerMethodField()
     l2_approver_label = serializers.SerializerMethodField()
 
     class Meta:
@@ -1312,27 +1314,40 @@ class ApprovalWorkflowRuleSerializer(serializers.ModelSerializer):
             'l2_approver_role', 'l2_approver_label',
         ]
 
+    def get_l1_approver_role(self, obj):
+        return obj.l1_approver_role_id
+
     def get_l1_approver_label(self, obj) -> str:
-        from apps.accounts.models import ApprovalWorkflowRule
-        return dict(ApprovalWorkflowRule.APPROVER_ROLE_CHOICES).get(obj.l1_approver_role, '')
+        return obj.l1_approver_role.display_name if obj.l1_approver_role else ''
+
+    def get_l2_approver_role(self, obj):
+        return obj.l2_approver_role_id
 
     def get_l2_approver_label(self, obj) -> str:
-        if not obj.l2_approver_role:
-            return ''
-        from apps.accounts.models import ApprovalWorkflowRule
-        return dict(ApprovalWorkflowRule.APPROVER_ROLE_CHOICES).get(obj.l2_approver_role, '')
+        return obj.l2_approver_role.display_name if obj.l2_approver_role else ''
 
 
 class ApprovalWorkflowRuleUpdateSerializer(serializers.Serializer):
     from apps.accounts.models import ApprovalWorkflowRule as _Rule
     workflow_type    = serializers.ChoiceField(choices=[c[0] for c in _Rule.WORKFLOW_CHOICES])
-    l1_approver_role = serializers.ChoiceField(choices=[c[0] for c in _Rule.APPROVER_ROLE_CHOICES])
-    l2_approver_role = serializers.ChoiceField(
-                           choices=[''] + [c[0] for c in _Rule.APPROVER_ROLE_CHOICES],
-                           required=False,
-                           allow_blank=True,
-                           default='',
-                       )
+    l1_approver_role = serializers.IntegerField(min_value=1)
+    l2_approver_role = serializers.IntegerField(min_value=1, required=False, allow_null=True, default=None)
+
+    def validate_l1_approver_role(self, value):
+        from apps.accounts.models import Role
+        try:
+            return Role.objects.get(pk=value, is_active=True)
+        except Role.DoesNotExist:
+            raise serializers.ValidationError('Role not found or inactive.')
+
+    def validate_l2_approver_role(self, value):
+        if value is None:
+            return None
+        from apps.accounts.models import Role
+        try:
+            return Role.objects.get(pk=value, is_active=True)
+        except Role.DoesNotExist:
+            raise serializers.ValidationError('Role not found or inactive.')
 
 
 # ── Employee Bulk Import ───────────────────────────────────────────────────────

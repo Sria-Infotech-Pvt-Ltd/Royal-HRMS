@@ -24,12 +24,13 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [skipped, setSkipped]       = useState<string[]>([]);
 
+  // Always fetch payslips — if they already exist (cycle previously computed), show results directly.
   const { data: payslipPage, loading, refetch } =
-    useFetch<PagedResponse<EmployeePayslip>>(
-      processed ? API.payroll.cyclePayslips(cycleId) : null
-    );
+    useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
 
   const payslips = payslipPage?.results ?? [];
+  // Show results view if user just computed OR if payslips already existed from a prior run
+  const showResults = processed || (payslipPage !== null && payslips.length > 0);
 
   async function runProcess() {
     setProcessing(true);
@@ -38,6 +39,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
       const res = await clientApi.post<{ data: ProcessPayrollResult }>(API.payroll.processCycle(cycleId));
       setSkipped(res.data.data.skipped ?? []);
       setProcessed(true);
+      refetch();
     } catch (error: unknown) {
       const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
         ?? "Failed to process payroll. Check that the cycle is approved.";
@@ -55,7 +57,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
       {/* Process trigger card */}
-      {!processed && (
+      {!showResults && (
         <div className="card">
           <div className="card-body" style={{ textAlign: "center", padding: "40px 20px" }}>
             <i className="ti ti-calculator" style={{ fontSize: 44, color: "var(--primary)", display: "block", marginBottom: 12 }} />
@@ -86,7 +88,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
       )}
 
       {/* Results */}
-      {processed && (
+      {showResults && (
         <>
           {skipped.length > 0 && (
             <div className="alert alert-warn" style={{ alignItems: "flex-start" }}>
@@ -121,10 +123,24 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
           <div className="card">
             <div className="card-header">
               <div className="card-title"><i className="ti ti-cash" /> Earnings Breakdown</div>
-              <button className="btn btn-outline btn-sm" onClick={refetch}>
-                <i className="ti ti-refresh" /> Refresh
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-outline btn-sm" onClick={runProcess} disabled={processing}>
+                  {processing
+                    ? <><i className="ti ti-loader-2 animate-spin" /> Recomputing…</>
+                    : <><i className="ti ti-calculator" /> Recompute</>}
+                </button>
+                <button className="btn btn-outline btn-sm" onClick={refetch} disabled={processing}>
+                  <i className="ti ti-refresh" /> Refresh
+                </button>
+              </div>
             </div>
+
+            {processErr && (
+              <div className="alert alert-error" style={{ margin: "0 16px 0", borderRadius: 0 }}>
+                <i className="ti ti-alert-circle" />
+                <span>{processErr}</span>
+              </div>
+            )}
 
             {loading ? (
               <div style={{ padding: "32px", textAlign: "center", color: "var(--on-variant)" }}>
@@ -255,7 +271,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
         </>
       )}
 
-      {!processed && (
+      {!showResults && (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
           <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
         </div>

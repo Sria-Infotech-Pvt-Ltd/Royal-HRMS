@@ -246,7 +246,9 @@ class ApprovalWorkflowCacheService:
         except Exception:
             logger.warning('Cache read failed for %s', key)
         from apps.accounts.models import ApprovalWorkflowRule
-        rule = ApprovalWorkflowRule.objects.filter(workflow_type=workflow_type).first()
+        rule = ApprovalWorkflowRule.objects.select_related(
+            'l1_approver_role', 'l2_approver_role'
+        ).filter(workflow_type=workflow_type).first()
         if rule is not None:
             try:
                 cache.set(key, rule, CacheTTL.APPROVAL_WORKFLOW)

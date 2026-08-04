@@ -13,13 +13,15 @@ import ValidationStep         from "./ValidationStep";
 import PayslipsStep           from "./PayslipsStep";
 import BankTransferStep       from "./BankTransferStep";
 
-// Maps a cycle's backend status to the wizard step key to resume at
+// Maps a cycle's backend status to the wizard step key to resume at.
+// payslips_generated opens at earnings (not validation) so the user can
+// review existing payslips and optionally recompute to include new employees.
 const STATUS_STEP_KEY: Record<string, string> = {
   draft:               "approval",
   attendance_pending:  "approval",
   attendance_approved: "earnings",
   processing:          "calc",
-  payslips_generated:  "validation",
+  payslips_generated:  "earnings",
   query_window_open:   "payslips",
   paid:                "paid",
 };
@@ -70,7 +72,7 @@ export default function RunPayrollWizard({
     { key: "paid",       label: "Mark as Paid",    icon: "ti-circle-check"  },
   ];
 
-  // Once settings load and STEPS is final, jump to the correct step for a resumed cycle
+  // Once settings load, jump to the correct step for a resumed cycle.
   useEffect(() => {
     if (jumped.current || !initialStatus || !settings) return;
     const targetKey = STATUS_STEP_KEY[initialStatus];
@@ -78,7 +80,7 @@ export default function RunPayrollWizard({
     const idx = STEPS.findIndex(s => s.key === targetKey);
     if (idx >= 0) setStep(idx);
     jumped.current = true;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- STEPS is derived from settings, already in deps
   }, [settings]);
 
   const currentKey = STEPS[step]?.key ?? "";

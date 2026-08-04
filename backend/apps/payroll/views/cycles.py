@@ -446,7 +446,11 @@ class ProcessPayrollView(APIView):
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
                 return error('You can only process payroll for your own branch.', http_status=403)
 
-        if cycle.status != PayrollCycle.STATUS_ATTENDANCE_APPROVED:
+        is_reprocess = cycle.status == PayrollCycle.STATUS_PAYSLIPS_GENERATED
+        if cycle.status not in (
+            PayrollCycle.STATUS_ATTENDANCE_APPROVED,
+            PayrollCycle.STATUS_PAYSLIPS_GENERATED,
+        ):
             return error('Attendance must be approved before processing payroll.')
 
         settings_obj = PayrollSettings.objects.first()
@@ -469,6 +473,9 @@ class ProcessPayrollView(APIView):
         PF_DEFAULT_CEILING = Decimal('15000.00')
 
         with transaction.atomic():
+            if is_reprocess:
+                EmployeePayslip.objects.filter(cycle=cycle).delete()
+
             cycle.status = PayrollCycle.STATUS_PROCESSING
             cycle.save(update_fields=['status', 'updated_at'])
 

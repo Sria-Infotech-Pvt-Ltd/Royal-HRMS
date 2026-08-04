@@ -341,7 +341,8 @@ export function ApprovalMatrixTab({
     );
   }
 
-  const rows = (data ?? []).filter(r => (r.workflow_type as string) !== "loan");
+  const ACTIVE_WORKFLOWS = new Set(["leave", "expense", "attendance_correction"]);
+  const rows = (data ?? []).filter(r => ACTIVE_WORKFLOWS.has(r.workflow_type as string));
 
   return (
     <>
@@ -351,7 +352,7 @@ export function ApprovalMatrixTab({
           <div>
             <div className="settings-card-title" style={{ marginBottom: 2 }}>Reporting Relationships</div>
             <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-              Reporting manager and branch HR assigned to this employee
+              Used as the default approvers for all workflows unless overridden below
             </div>
           </div>
         </div>
@@ -422,7 +423,7 @@ export function ApprovalMatrixTab({
         <div style={{ marginBottom: 16 }}>
           <div className="settings-card-title" style={{ marginBottom: 2 }}>Approval Matrix</div>
           <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            Specific person overrides take precedence over global role defaults.
+            By default the global role rules apply. Override below to assign a specific person for this employee.
           </div>
         </div>
 

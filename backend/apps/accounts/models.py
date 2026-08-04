@@ -813,37 +813,27 @@ class EmployeeDocument(models.Model):
 class ApprovalWorkflowRule(models.Model):
     WORKFLOW_LEAVE                 = 'leave'
     WORKFLOW_EXPENSE               = 'expense'
-    WORKFLOW_RESIGNATION           = 'resignation'
-    WORKFLOW_LOAN                  = 'loan'
     WORKFLOW_ATTENDANCE_CORRECTION = 'attendance_correction'
     WORKFLOW_CHOICES = [
         (WORKFLOW_LEAVE,                 'Leave Request'),
         (WORKFLOW_EXPENSE,               'Expense Claim'),
-        (WORKFLOW_RESIGNATION,           'Resignation'),
-        (WORKFLOW_LOAN,                  'Loan Request'),
         (WORKFLOW_ATTENDANCE_CORRECTION, 'Attendance Correction'),
     ]
 
-    ROLE_REPORTING_MANAGER = 'reporting_manager'
-    ROLE_HR_MANAGER        = 'hr_manager'
-    ROLE_ADMIN             = 'admin'
-    APPROVER_ROLE_CHOICES = [
-        (ROLE_REPORTING_MANAGER, 'Reporting Manager'),
-        (ROLE_HR_MANAGER,        'HR Manager'),
-        (ROLE_ADMIN,             'Admin'),
-    ]
-
     workflow_type    = models.CharField(max_length=25, choices=WORKFLOW_CHOICES, unique=True)
-    l1_approver_role = models.CharField(
-                           max_length=20,
-                           choices=APPROVER_ROLE_CHOICES,
-                           default=ROLE_REPORTING_MANAGER,
-                       )
-    l2_approver_role = models.CharField(
-                           max_length=20,
-                           choices=APPROVER_ROLE_CHOICES,
+    l1_approver_role = models.ForeignKey(
+                           'Role',
+                           on_delete=models.SET_NULL,
+                           null=True,
                            blank=True,
-                           default='',
+                           related_name='rules_as_l1',
+                       )
+    l2_approver_role = models.ForeignKey(
+                           'Role',
+                           on_delete=models.SET_NULL,
+                           null=True,
+                           blank=True,
+                           related_name='rules_as_l2',
                        )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -858,7 +848,8 @@ class ApprovalWorkflowRule(models.Model):
         db_table = 'hrms_approval_workflow_rules'
 
     def __str__(self) -> str:
-        return f'{self.get_workflow_type_display()} — L1: {self.l1_approver_role}'
+        l1_name = self.l1_approver_role.display_name if self.l1_approver_role else 'None'
+        return f'{self.get_workflow_type_display()} — L1: {l1_name}'
 
 
 # ─── Employee Approval Overrides (per-employee) ───────────────────────────────

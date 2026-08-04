@@ -46,13 +46,13 @@ def _current_year() -> int:
     return get_fy_start_year(date.today(), config.get('financial_year_start_month', 'April'))
 
 
-def _resolve_approver(role_str: str, employee) -> 'accounts.User | None':
-    """Map a role string from ApprovalWorkflowRule to an actual User on the employee."""
-    if role_str in ('reporting_manager', 'rm', 'manager'):
+def _resolve_approver(role, employee) -> 'accounts.User | None':
+    """Resolve a Role FK to the actual User approver for a given employee."""
+    if role is None:
+        return None
+    if role.can_manage_team:
         return getattr(employee, 'reporting_manager', None)
-    if role_str in ('hr', 'hr_manager', 'hr_admin'):
-        return getattr(employee, 'hr', None)
-    return None
+    return getattr(employee, 'hr', None)
 
 
 def _resolve_approval_chain(employee):

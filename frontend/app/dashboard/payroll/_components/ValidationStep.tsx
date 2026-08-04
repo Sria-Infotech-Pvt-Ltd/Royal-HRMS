@@ -32,7 +32,7 @@ function deriveIssues(payslips: EmployeePayslip[]): Issue[] {
   if (payslips.length === 0) {
     issues.push({
       id: "no-payslips", type: "No Payslips Generated", employees: [], severity: "error", status: "open",
-      message: "No payslips were generated for this cycle. Ensure employees have CTC configured and the cycle was processed.",
+      message: "No payslips were generated. Click Back → Back → Earn & Deduct → \"Compute Salaries\" to reprocess after ensuring all employees have CTC configured.",
     });
     return issues;
   }
@@ -86,10 +86,11 @@ export default function ValidationStep({ cycleId, onNext, onBack }: Props) {
   function markReviewed(id: string) { setStatuses(p => ({ ...p, [id]: "reviewed" })); }
   function ignore(id: string)       { setStatuses(p => ({ ...p, [id]: "ignored" }));  }
 
+  const hasNoPayslips = issues.some(i => i.id === "no-payslips");
   const openErrors   = issues.filter(i => i.severity === "error" && i.status === "open").length;
   const openWarnings = issues.filter(i => i.severity === "warn"  && i.status === "open").length;
   const openCount    = issues.filter(i => i.status === "open").length;
-  const canContinue  = !loading && openErrors === 0;
+  const canContinue  = !loading && openErrors === 0 && !hasNoPayslips;
 
   return (
     <div className="card">
@@ -165,13 +166,13 @@ export default function ValidationStep({ cycleId, onNext, onBack }: Props) {
                       <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 8 }}>{issue.message}</div>
                       {issue.employees.length > 0 && (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {issue.employees.map(name => (
-                            <span key={name} className="badge badge-neutral">{name}</span>
+                          {issue.employees.map((name, i) => (
+                            <span key={`${i}-${name}`} className="badge badge-neutral">{name}</span>
                           ))}
                         </div>
                       )}
                     </div>
-                    {!isDone && (
+                    {!isDone && issue.id !== "no-payslips" && (
                       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                         <button className="btn btn-success btn-sm" onClick={() => markReviewed(issue.id)}>
                           <i className="ti ti-check" /> Reviewed

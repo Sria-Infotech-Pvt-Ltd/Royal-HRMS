@@ -1,12 +1,13 @@
 import logging
 import uuid as _uuid_mod
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
+
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
-from core.responses import success, error, first_error
 from core.pagination import paginate, paginated_data
+from core.responses import error, first_error, success
 from apps.payroll.models import EmployeeSalaryConfig
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
 

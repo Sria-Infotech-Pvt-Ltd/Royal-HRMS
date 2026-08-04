@@ -5,39 +5,45 @@ import { useRouter } from "next/navigation";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
-import type { GlobalApprovalRule, ApprovalWorkflowType, ApproverRole } from "@/types/approvalMatrix";
+import type { GlobalApprovalRule, ApprovalWorkflowType } from "@/types/approvalMatrix";
+
+interface RoleOption {
+  id:           number;
+  name:         string;
+  display_name: string;
+  is_active:    boolean;
+}
+
+interface RolesPage {
+  results: RoleOption[];
+  count:   number;
+}
 
 const WORKFLOW_ICONS: Record<string, string> = {
   leave:                 "ti-beach",
   expense:               "ti-wallet",
-  resignation:           "ti-logout",
-  loan:                  "ti-coin",
   attendance_correction: "ti-clock-edit",
 };
 
-const APPROVER_ROLE_OPTIONS: { value: ApproverRole; label: string }[] = [
-  { value: "reporting_manager", label: "Reporting Manager" },
-  { value: "hr_manager",        label: "HR Manager" },
-  { value: "admin",             label: "Admin" },
-];
-
 interface EditState {
-  workflow_type:   ApprovalWorkflowType;
-  workflow_label:  string;
-  l1_approver_role: ApproverRole;
-  l2_approver_role: ApproverRole | "";
+  workflow_type:    ApprovalWorkflowType;
+  workflow_label:   string;
+  l1_approver_role: number | null;
+  l2_approver_role: number | null;
 }
 
 export default function ApprovalRulesPage() {
   const router = useRouter();
 
   const { data, loading, error, refetch } = useFetch<GlobalApprovalRule[]>(API.settings.approvalRules);
+  const { data: rolesPage, loading: loadingRoles } = useFetch<RolesPage>(`${API.roles.list}?is_active=true&page_size=100`);
 
-  const [editing, setEditing] = useState<EditState | null>(null);
-  const [saving,  setSaving]  = useState(false);
+  const [editing,  setEditing]  = useState<EditState | null>(null);
+  const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState("");
 
   const rules = data ?? [];
+  const roles: RoleOption[] = rolesPage?.results ?? [];
 
   function openEdit(rule: GlobalApprovalRule) {
     setEditing({
@@ -57,7 +63,7 @@ export default function ApprovalRulesPage() {
       await clientApi.patch(API.settings.approvalRules, {
         workflow_type:    editing.workflow_type,
         l1_approver_role: editing.l1_approver_role,
-        l2_approver_role: editing.l2_approver_role,
+        l2_approver_role: editing.l2_approver_role || null,
       });
       refetch();
       setEditing(null);
@@ -81,7 +87,7 @@ export default function ApprovalRulesPage() {
             <i className="ti ti-arrow-left" /> Settings
           </button>
           <div className="page-title">Approval Rules</div>
-          <div className="page-sub">Configure who approves each workflow type — globally, with per-employee overrides on the employee profile.</div>
+          <div className="page-sub">Configure which role approves each workflow — globally, with per-employee overrides on the employee profile.</div>
         </div>
       </div>
 
@@ -126,7 +132,9 @@ export default function ApprovalRulesPage() {
                         <span style={{ fontWeight: 500, color: "var(--on-bg)" }}>{rule.workflow_label}</span>
                       </div>
                     </td>
-                    <td style={{ padding: "14px", color: "var(--on-bg)" }}>{rule.l1_approver_label}</td>
+                    <td style={{ padding: "14px", color: "var(--on-bg)" }}>
+                      {rule.l1_approver_label || <span style={{ opacity: 0.5, color: "var(--on-variant)" }}>Not set</span>}
+                    </td>
                     <td style={{ padding: "14px", color: rule.l2_approver_role ? "var(--on-bg)" : "var(--on-variant)" }}>
                       {rule.l2_approver_label || <span style={{ opacity: 0.5 }}>Single level</span>}
                     </td>
@@ -165,32 +173,42 @@ export default function ApprovalRulesPage() {
                 <label className="field-label">L1 Approver Role *</label>
                 <select
                   className="field-input field-select"
-                  value={editing.l1_approver_role}
-                  onChange={e => setEditing(prev => prev ? { ...prev, l1_approver_role: e.target.value as ApproverRole } : prev)}
+                  value={editing.l1_approver_role ?? ""}
+                  onChange={e => setEditing(prev => prev ? { ...prev, l1_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
+                  disabled={loadingRoles}
                 >
-                  {APPROVER_ROLE_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option value="">{loadingRoles ? "Loading roles…" : "— Select role —"}</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={r.id}>{r.display_name}</option>
                   ))}
                 </select>
               </div>
 
               <div className="field-group">
-                <label className="field-label">L2 Approver Role <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span></label>
+                <label className="field-label">
+                  L2 Approver Role{" "}
+                  <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span>
+                </label>
                 <select
                   className="field-input field-select"
-                  value={editing.l2_approver_role}
-                  onChange={e => setEditing(prev => prev ? { ...prev, l2_approver_role: e.target.value as ApproverRole | "" } : prev)}
+                  value={editing.l2_approver_role ?? ""}
+                  onChange={e => setEditing(prev => prev ? { ...prev, l2_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
+                  disabled={loadingRoles}
                 >
                   <option value="">— Single level (no L2) —</option>
-                  {APPROVER_ROLE_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={r.id}>{r.display_name}</option>
                   ))}
                 </select>
               </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={saving || !editing.l1_approver_role}
+              >
                 {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save Rule"}
               </button>
             </div>
