@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from apps.voice_commands.approval_extractor import strip_employee_name_phrases
+from apps.voice_commands.audit import log_no_match
 from apps.voice_commands.clarification import clear_pending, get_pending, set_pending
 from apps.voice_commands.conversation_attendance_correction import (
     continue_request_attendance_correction,
@@ -114,7 +115,10 @@ def handle_transcript(
 
     if pending:
         if pending['slots'].get('stage') == CLARIFICATION_STAGE:
-            return continue_clarification(request, pending, normalized, _dispatch_matched_intent)
+            return continue_clarification(
+                request, pending, normalized, _dispatch_matched_intent,
+                latitude=latitude, longitude=longitude,
+            )
         if pending['intent'] in LEAVE_APPROVAL_INTENTS:
             return continue_leave_approval(request, pending, normalized)
         if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
@@ -124,6 +128,14 @@ def handle_transcript(
         return _continue_apply_leave(request, pending, normalized)
 
     if fresh_match.intent == NO_MATCH_INTENT:
+        # Every path through this branch — a "did you mean" candidate, an
+        # expired-slot-answer guess, or a flat no-match — is a no-match/
+        # low-confidence event for audit purposes; logged once here rather
+        # than in each of the three branches below. See apps/voice_commands/
+        # audit.py's own docstring for why this goes to the real AuditLog
+        # table, not just this module's file logger.
+        log_no_match(request, transcript, fresh_match.confidence, fresh_match.candidate_intent)
+
         # A real fuzzy-match signal against actual registered phrases beats
         # the expired-slot-answer heuristic below, which is just a crude
         # keyword-in-text guess — checked first so a genuinely correction-
@@ -190,7 +202,10 @@ def _dispatch_matched_intent(
         'Voice command: user=%s intent=%s confidence=%s success=%s',
         request.user.pk, intent, confidence, outcome.success,
     )
-    return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
+    return _payload(
+        intent, confidence, outcome.data, outcome.message,
+        success=outcome.success, speech_message=outcome.speech_message,
+    )
 
 
 def _start_apply_leave(request, intent_text: str, confidence: float) -> dict:
@@ -238,8 +253,16 @@ def _continue_apply_leave(request, pending: dict, answer_text: str) -> dict:
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
+    speech_message: Optional[str] = None,
 ) -> dict:
     """
+    speech_message is the redacted stand-in for `message` that VoiceParseView's
+    caller should actually pass to TTS — None (the default, true for almost
+    every call site) means "speak `message` unchanged". Only set by intents
+    whose ExecutionResult.speech_message was itself set — see that field's
+    own docstring for which intents and why. `message` is never redacted; it
+    always carries the full detail for the panel/toast.
+
     conversational reflects the registry (get_conversational) — a property of
     the intent itself, true for apply_leave on every one of its responses
     (including an immediate single-utterance submission), false for
@@ -269,6 +292,7 @@ def _payload(
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': speech_message,
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,

@@ -3,6 +3,15 @@ export interface VoiceParseResult {
   confidence: number;
   result: unknown;
   message: string;
+  // TTS confidentiality: the redacted stand-in for `message` that speech
+  // synthesis should actually speak — null for almost every intent (speak
+  // `message` unchanged, same as before this field existed). Set only for
+  // intents whose `message` carries figures or a third party's personal
+  // details (payslip amounts, leave balances/dates, another employee's
+  // leave type) — see backend apps/voice_commands/executor_result.py's
+  // ExecutionResult.speech_message. `message` itself is never redacted —
+  // the panel/toast always shows full detail regardless of what's spoken.
+  speech_message: string | null;
   // Always present. conversational: true for a multi-turn intent (apply_leave
   // today) on every one of its responses, including an immediate one-shot
   // submission — false for every other intent and for no-match. awaiting_input:

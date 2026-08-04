@@ -106,7 +106,10 @@ def _resolve_check_employee_payslip(
     # single_match is already the terminal response (payslip summary read
     # back directly — no yes/no confirmation to wait for); zero_match or a
     # permission/lookup error likewise has nothing left to continue.
-    return _payload(INTENT_CHECK_EMPLOYEE_PAYSLIP, confidence, data or None, outcome.message, success=outcome.success)
+    return _payload(
+        INTENT_CHECK_EMPLOYEE_PAYSLIP, confidence, data or None, outcome.message,
+        success=outcome.success, speech_message=outcome.speech_message,
+    )
 
 
 def continue_check_employee_payslip(request, pending: dict, answer_text: str) -> dict:
@@ -134,6 +137,7 @@ def continue_payroll_conversation(request, pending: dict, answer_text: str) -> d
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
+    speech_message: Optional[str] = None,
 ) -> dict:
     """
     Small, deliberate duplicate of conversation.py's own private _payload —
@@ -141,13 +145,15 @@ def _payload(
     conversation.py <-> conversation_payroll.py circular import (conversation.py
     must import start_raise_payslip_query etc. from this module); same
     reasoning executor_result.py's docstring gives for splitting
-    ExecutionResult out of executor.py.
+    ExecutionResult out of executor.py. speech_message: see conversation.py's
+    own _payload docstring.
     """
     return {
         'intent': intent,
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': speech_message,
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,

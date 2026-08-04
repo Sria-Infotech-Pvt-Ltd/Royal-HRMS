@@ -69,6 +69,47 @@ class MatchIntentTests(SimpleTestCase):
         result = match_intent(normalize_transcript('I need to clockout myself'))
         self.assertNotEqual(result.intent, 'clock_in')
 
+    def test_matches_i_wanted_toclockin_myself_as_clock_in(self):
+        """
+        Second occurrence of the same collision class, one concatenation
+        deeper than the pair above: real logs (2026-08-04) showed "i wanted
+        toclockin myself" — the STT/typo dropped the space between "to" and
+        "clockin" too, not just inside "clock in". That scored only 52.83
+        against this intent's then-best 'i need to clockin' (52.38) and lost
+        outright to raise_payslip_query's 'i want to dispute my payslip'
+        (also 52.83) — both below CLARIFICATION_CONFIDENCE_THRESHOLD (60),
+        so it actually surfaced as a silent no-match rather than a wrong
+        "did you mean". Confirmed via direct rapidfuzz scoring, not a
+        matcher bug. Now registered directly as 'toclockin' / 'toclockin
+        myself' / 'i wanted toclockin' etc."""
+        result = match_intent(normalize_transcript('i wanted toclockin myself'))
+        self.assertEqual(result.intent, 'clock_in')
+        self.assertNotEqual(result.intent, 'raise_payslip_query')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_i_wanted_toclockout_myself_as_clock_out(self):
+        """Symmetric case of the toclockin fix above."""
+        result = match_intent(normalize_transcript('i wanted toclockout myself'))
+        self.assertEqual(result.intent, 'clock_out')
+        self.assertNotEqual(result.intent, 'raise_payslip_query')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_toclockin_anchor_generalizes_to_an_unlisted_verb(self):
+        """The bare 'toclockin'/'toclockin myself' anchors must carry
+        transcripts using a verb that isn't explicitly registered (only
+        'want'/'wanted'/'need' are spelled out) — proves this isn't just
+        another enumerate-every-verb whack-a-mole fix."""
+        result = match_intent(normalize_transcript('i gotta toclockin myself'))
+        self.assertEqual(result.intent, 'clock_in')
+
+    def test_toclockin_myself_not_confused_with_clock_out(self):
+        result = match_intent(normalize_transcript('i wanted toclockin myself'))
+        self.assertNotEqual(result.intent, 'clock_out')
+
+    def test_toclockout_myself_not_confused_with_clock_in(self):
+        result = match_intent(normalize_transcript('i wanted toclockout myself'))
+        self.assertNotEqual(result.intent, 'clock_in')
+
     def test_matches_check_leave_balance_exact_phrase(self):
         result = match_intent(normalize_transcript('how many leaves do i have'))
         self.assertEqual(result.intent, 'check_leave_balance')
@@ -99,6 +140,26 @@ class MatchIntentTests(SimpleTestCase):
         """'status' vs 'balance' are different intents — must not cross-match."""
         result = match_intent(normalize_transcript('check my leave balance'))
         self.assertEqual(result.intent, 'check_leave_balance')
+
+    def test_matches_concatenated_checkmyleavebalance_as_check_leave_balance(self):
+        """
+        Same collision class as clock_in's 'toclockin' fix, different
+        collision partner: token_sort_ratio sorts a multi-word phrase's
+        tokens alphabetically ('leave balance' -> 'balance leave') before
+        scoring, which actively hurts a concatenated transcript that
+        preserves natural spoken word order. 'checkmyleavebalance' scored
+        only 72.22 against this intent's own phrases and lost to
+        check_my_payslip's 'check my salary' instead. Confirmed via direct
+        rapidfuzz scoring, not a matcher bug."""
+        result = match_intent(normalize_transcript('checkmyleavebalance'))
+        self.assertEqual(result.intent, 'check_leave_balance')
+        self.assertNotEqual(result.intent, 'check_my_payslip')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_concatenated_leavebalance_as_check_leave_balance(self):
+        result = match_intent(normalize_transcript('leavebalance'))
+        self.assertEqual(result.intent, 'check_leave_balance')
+        self.assertGreaterEqual(result.confidence, 80)
 
     def test_matches_cancel_leave_exact_phrase(self):
         result = match_intent(normalize_transcript('cancel my leave'))
@@ -158,6 +219,15 @@ class MatchIntentTests(SimpleTestCase):
         result = match_intent(normalize_transcript('show my attendance stats'))
         self.assertEqual(result.intent, 'check_attendance_stats')
 
+    def test_matches_concatenated_checkmyattendance_as_check_attendance_stats(self):
+        """Same collision class as clock_in's 'toclockin' fix. 'checkmyattendance'
+        scored only 58.82 against this intent's own 'check my attendance' and
+        lost to request_attendance_correction's 'fix my attendance' instead."""
+        result = match_intent(normalize_transcript('checkmyattendance'))
+        self.assertEqual(result.intent, 'check_attendance_stats')
+        self.assertNotEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
     def test_matches_request_attendance_correction_exact_phrase(self):
         result = match_intent(normalize_transcript('request attendance correction'))
         self.assertEqual(result.intent, 'request_attendance_correction')
@@ -200,6 +270,23 @@ class MatchIntentTests(SimpleTestCase):
         must not cross-match in the other direction either."""
         result = match_intent(normalize_transcript('raise a query about my payslip'))
         self.assertNotEqual(result.intent, 'request_attendance_correction')
+
+    def test_matches_concatenated_fixmypunch_as_request_attendance_correction(self):
+        """Same collision class as clock_in's 'toclockin' fix. 'fixmypunch'
+        scored only 66.67 against this intent's own 'fix my attendance'/
+        'correct my punch' and lost to clock_in's short 'punch in' instead."""
+        result = match_intent(normalize_transcript('fixmypunch'))
+        self.assertEqual(result.intent, 'request_attendance_correction')
+        self.assertNotEqual(result.intent, 'clock_in')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_matches_concatenated_requestattendancecorrection_directly(self):
+        """This intent's own fullest phrase, concatenated, used to land as
+        the correct candidate (71.43) but short of the direct-match
+        threshold — now anchored to clear it outright."""
+        result = match_intent(normalize_transcript('requestattendancecorrection'))
+        self.assertEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
 
     # ── Fuzzy-match collision checks ────────────────────────────────────────
     # The new attendance intents share the "check my <noun>" phrasing pattern
@@ -323,6 +410,20 @@ class MatchIntentTests(SimpleTestCase):
         """Team-wide dashboard vs. the caller's own attendance — must not cross-match."""
         result = match_intent(normalize_transcript('check my attendance'))
         self.assertEqual(result.intent, 'check_attendance_stats')
+
+    def test_matches_concatenated_checkteamattendance_as_check_team_attendance(self):
+        """Same collision class as clock_in's 'toclockin' fix. 'checkteamattendance'
+        scored only 55.56 against this intent's own 'check team attendance'
+        and lost to request_attendance_correction's 'fix my attendance' instead."""
+        result = match_intent(normalize_transcript('checkteamattendance'))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertNotEqual(result.intent, 'request_attendance_correction')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_checkteamattendance_not_confused_with_check_attendance_stats(self):
+        """The 'team' vs 'my' distinction must survive concatenation too."""
+        result = match_intent(normalize_transcript('checkteamattendance'))
+        self.assertNotEqual(result.intent, 'check_attendance_stats')
 
     def test_check_attendance_stats_not_confused_with_check_team_attendance(self):
         result = match_intent(normalize_transcript('show attendance dashboard'))
@@ -631,6 +732,17 @@ class MatchIntentTests(SimpleTestCase):
         under CLARIFICATION_CONFIDENCE_THRESHOLD (60)."""
         result = match_intent(normalize_transcript('deny leave'))
         self.assertEqual(result.intent, 'reject_leave')
+
+    def test_matches_concatenated_rejectleave_as_reject_leave(self):
+        """Same collision class as clock_in's 'toclockin' fix. 'rejectleave'
+        scored only 58.33 against this intent's own 'reject leave' (token_sort_ratio
+        sorts 'reject leave' to 'leave reject' before scoring, hurting the
+        concatenated, word-order-preserving form) and lost to approve_leave's
+        'approve leave' instead — the wrong action on the same leave request."""
+        result = match_intent(normalize_transcript('rejectleave'))
+        self.assertEqual(result.intent, 'reject_leave')
+        self.assertNotEqual(result.intent, 'approve_leave')
+        self.assertGreaterEqual(result.confidence, 80)
 
     def test_check_my_payslip_not_confused_with_greeting(self):
         result = match_intent(normalize_transcript('check my payslip'))

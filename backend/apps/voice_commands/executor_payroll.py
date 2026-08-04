@@ -25,6 +25,15 @@ _api_request_factory = APIRequestFactory()
 
 _NO_PAYSLIP_MESSAGE = "You don't have any payslips on record yet."
 
+# Spoken instead of the figures-bearing `message` — TTS confidentiality:
+# gross/net pay figures shouldn't be read aloud by default (shoulder-surfing
+# risk in a shared space), even though the full breakdown stays visible in
+# the panel/toast. check_employee_payslip's version doesn't even say the
+# employee's name aloud — it's someone else's financial data, not the
+# caller's own. See executor_result.ExecutionResult.speech_message.
+_OWN_PAYSLIP_SPEECH_MESSAGE = 'Your payslip is ready — check your screen for the details.'
+_EMPLOYEE_PAYSLIP_SPEECH_MESSAGE = 'The payslip is ready — check your screen for the details.'
+
 # Built straight from the model's own choices rather than hand-copied, so a
 # future status added to EmployeePayslip.STATUS_CHOICES is picked up here
 # too — same intent as executor_leave.py's _STATUS_LABELS, but there's
@@ -78,7 +87,9 @@ def execute_check_my_payslip(request) -> ExecutionResult:
 
     data = EmployeePayslipSerializer(payslip).data
     message = _payslip_summary_message(data, subject='Your')
-    return ExecutionResult(success=True, message=message, data=data)
+    return ExecutionResult(
+        success=True, message=message, data=data, speech_message=_OWN_PAYSLIP_SPEECH_MESSAGE,
+    )
 
 
 def execute_acknowledge_payslip(request) -> ExecutionResult:
@@ -247,4 +258,5 @@ def execute_identify_employee_payslip(request, name_query: Optional[str]) -> Exe
     return ExecutionResult(
         success=True, message=message,
         data={'outcome': 'single_match', 'matched': matched, 'payslip': data},
+        speech_message=_EMPLOYEE_PAYSLIP_SPEECH_MESSAGE,
     )

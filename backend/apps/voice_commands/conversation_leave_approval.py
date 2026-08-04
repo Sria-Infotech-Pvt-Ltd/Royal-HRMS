@@ -45,7 +45,10 @@ def _resolve_leave_approval_target(
     if result_kind == 'single_match':
         matched = data['matched']
         set_pending(request.user.id, intent, {'stage': 'awaiting_confirmation', 'request_id': matched['request_id']})
-        return _payload(intent, confidence, data, outcome.message, awaiting_input=True)
+        return _payload(
+            intent, confidence, data, outcome.message,
+            awaiting_input=True, speech_message=outcome.speech_message,
+        )
 
     # zero_match, permission denied, or a lookup error — nothing to continue.
     return _payload(intent, confidence, data or None, outcome.message, success=outcome.success)
@@ -87,15 +90,18 @@ def _continue_leave_approval_confirmation(request, intent: str, pending: dict, a
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
+    speech_message: Optional[str] = None,
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload —
     same reasoning conversation_payroll.py's docstring gives for its own copy
-    (avoiding a circular import back into conversation.py)."""
+    (avoiding a circular import back into conversation.py). speech_message:
+    see conversation.py's own _payload docstring."""
     return {
         'intent': intent,
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': speech_message,
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,

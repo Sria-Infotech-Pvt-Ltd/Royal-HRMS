@@ -427,8 +427,6 @@ class LoginView(APIView):
         )
 
         resp = success('Login successful.', data={
-            'access':  str(refresh.access_token),
-            'refresh': str(refresh),
             'user': {
                 'id':                  str(user.id),
                 'email':               user.email,

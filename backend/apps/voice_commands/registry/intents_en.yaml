@@ -55,6 +55,26 @@ intents:
       # "i need to clock myself out" — it would have silently stolen
       # clock_out's traffic. The shorter "clockin"/"clockout" forms below
       # separate cleanly instead (each ~10+ points ahead on its own target).
+      - "toclockin"
+      - "toclockin myself"
+      - "i want toclockin"
+      - "i wanted toclockin"
+      - "i need toclockin"
+      # Second occurrence of the same collision class, one concatenation
+      # deeper: real logs (2026-08-04) showed "i wanted toclockin myself" —
+      # here the STT/typo dropped the space between "to" and "clockin" too,
+      # not just inside "clock in" — scoring only 52.83 against this
+      # intent's then-best "i need to clockin" (52.38) and losing outright to
+      # raise_payslip_query's "i want to dispute my payslip" (also 52.83, a
+      # coincidental tie broken in the wrong direction by iteration order).
+      # Both scores sat below CLARIFICATION_CONFIDENCE_THRESHOLD (60), so
+      # this actually surfaced as a silent generic no-match, not a wrong
+      # "did you mean" — see matcher.py's threshold comment. Confirmed via
+      # direct rapidfuzz scoring, not a matcher bug. Anchored directly here
+      # rather than enumerating every possible verb before "toclockin"
+      # ("want"/"wanted"/"need"/"gotta"/...) — the short bare "toclockin" /
+      # "toclockin myself" anchors above already generalize to prefixes not
+      # explicitly listed, same reasoning as the "clockin"-alone case.
 
   clock_out:
     # Same as clock_in — AttendancePunchView has no per-punch-type permission check.
@@ -85,6 +105,13 @@ intents:
       # "clock myself out" was deliberately left out (it collided with
       # clock_in's own "clock myself in" phrase — direction words alone
       # aren't enough signal for a character-based ratio scorer).
+      - "toclockout"
+      - "toclockout myself"
+      - "i want toclockout"
+      - "i wanted toclockout"
+      - "i need toclockout"
+      # Symmetric case of clock_in's "toclockin" fix above — see that
+      # intent's comment for the real log entry this closes.
 
   check_leave_balance:
     # No domain codename required for the caller's own balance — matches the
@@ -108,6 +135,23 @@ intents:
       - "how many days of leave do i have"
       - "my remaining leaves"
       - "what leave do i have left"
+      - "checkmyleavebalance"
+      - "checkleavebalance"
+      - "leavebalance"
+      # Concatenated/no-space renderings — same class of bug as clock_in's
+      # "toclockin" fix above, different collision partner: token_sort_ratio
+      # sorts a multi-word phrase's tokens alphabetically ("leave balance" ->
+      # "balance leave") before scoring, which actively hurts a concatenated
+      # transcript that preserves natural spoken word order ("leavebalance").
+      # "checkmyleavebalance"/"checkleavebalance"/"leavebalance" scored only
+      # 58-67 against this intent's own "leave balance"/"check my leave
+      # balance" and lost to check_my_payslip's "check my salary" or
+      # check_leave_status's "check my leave status" instead. Anchored here
+      # as exact concatenations (each scores 100 against itself) rather than
+      # relying on the spaced phrase to double as a fuzzy anchor for its own
+      # unspaced form — it can't. Deliberately NOT bare "checkmyleave"/
+      # "checkleave" (no "balance"/"status" suffix) — that's genuinely
+      # ambiguous with check_leave_status and left unresolved on purpose.
 
   check_leave_status:
     # No domain codename required — matches the own-requests default branch
@@ -179,6 +223,15 @@ intents:
       - "tell me my attendance percentage"
       - "what's my attendance like this month"
       - "how many days did i attend this month"
+      - "checkmyattendance"
+      - "checkattendance"
+      # Concatenated/no-space rendering — same class as check_leave_balance's
+      # fix above. "checkmyattendance" scored only 58.82 against this
+      # intent's own "check my attendance" (token_sort_ratio's alphabetical
+      # token reordering hurts it) and lost to request_attendance_correction's
+      # "fix my attendance" instead. Anchored as an exact concatenation.
+      # Deliberately not "checkteamattendance"/"teamattendance" — those
+      # belong to check_team_attendance below, a different permission tier.
 
   check_attendance_summary:
     # No domain codename required — matches the own-summary default branch
@@ -279,6 +332,12 @@ intents:
       - "give me the team attendance report"
       - "show me who's in today"
       - "pull up team attendance"
+      - "checkteamattendance"
+      - "teamattendance"
+      # Concatenated/no-space rendering — same class as check_attendance_stats'
+      # fix above. "checkteamattendance" scored only 55.56 against this
+      # intent's own "check team attendance" and lost to
+      # request_attendance_correction's "fix my attendance" instead.
 
   approve_leave:
     # Requires leave.approve — same codename LeaveApprovalView.post() itself
@@ -327,6 +386,15 @@ intents:
       - "decline leave for"
       - "please reject this leave request"
       - "i want to reject this leave"
+      - "rejectleave"
+      # Concatenated/no-space rendering. "rejectleave" scored only 58.33
+      # against this intent's own "reject leave" (token_sort_ratio's
+      # alphabetical token reordering hurts it — "reject leave" sorts to
+      # "leave reject") and lost to approve_leave's "approve leave" instead
+      # — the wrong action on the same leave request. "denyleave" doesn't
+      # need its own anchor: "deny leave" -> "deny leave" sorted is already
+      # its own natural word order, so the concatenated form scores high
+      # (94.74) against it without help.
 
   check_my_payslip:
     # Requires payroll.view_own — the exact codename MyPayslipsView.get()
@@ -496,6 +564,17 @@ intents:
       - "raise a query regarding my attendance"
       - "i have a query about my attendance"
       - "i have an issue with my attendance"
+      - "correctmyattendance"
+      - "fixmyattendance"
+      - "fixmypunch"
+      - "requestattendancecorrection"
+      # Concatenated/no-space renderings — same class as the fixes above.
+      # "fixmypunch" in particular scored only 66.67 against this intent's
+      # own "fix my attendance"/"correct my punch" and lost to clock_in's
+      # short "punch in" instead. "requestattendancecorrection" already
+      # landed on this intent as the closest candidate (71.43) even before
+      # this fix, just short of DEFAULT_CONFIDENCE_THRESHOLD (80) — anchored
+      # here so it clears it outright instead of needing a "did you mean".
 
   greeting:
     # No domain codename required — matches VoiceParseView itself, which is

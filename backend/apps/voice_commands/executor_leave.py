@@ -20,6 +20,13 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 _APPLY_LEAVE_SUBMIT_FAILED_MESSAGE = 'Could not submit the leave request.'
 
+# Spoken instead of the full detail (own balance figures / own leave dates)
+# in `message` — TTS confidentiality, same reasoning as executor_payroll.py's
+# _OWN_PAYSLIP_SPEECH_MESSAGE. See executor_result.ExecutionResult.speech_message.
+_LEAVE_BALANCE_SPEECH_MESSAGE = 'Your leave balance is ready to view.'
+_LEAVE_STATUS_SPEECH_MESSAGE = 'Your leave status is ready to view.'
+_LEAVE_CANCELLED_SPEECH_MESSAGE = 'Your leave request has been cancelled.'
+
 # One shared factory — building a request through it doesn't touch the
 # database or any shared state, just Django's request/response plumbing.
 # Reused for apply_leave, the only intent here that dispatches through an
@@ -52,7 +59,10 @@ def execute_check_leave_balance(request) -> ExecutionResult:
         )
 
     summary = ', '.join(f"{row['leave_type_display']}: {row['available_days']}" for row in data)
-    return ExecutionResult(success=True, message=f'Your leave balance — {summary}.', data=data)
+    return ExecutionResult(
+        success=True, message=f'Your leave balance — {summary}.', data=data,
+        speech_message=_LEAVE_BALANCE_SPEECH_MESSAGE,
+    )
 
 
 def execute_check_leave_status(request) -> ExecutionResult:
@@ -79,7 +89,9 @@ def execute_check_leave_status(request) -> ExecutionResult:
     if len(data) > 1:
         message += f' You have {len(data) - 1} more recent request(s) on file.'
 
-    return ExecutionResult(success=True, message=message, data=data)
+    return ExecutionResult(
+        success=True, message=message, data=data, speech_message=_LEAVE_STATUS_SPEECH_MESSAGE,
+    )
 
 
 def execute_cancel_leave(request) -> ExecutionResult:
@@ -121,6 +133,7 @@ def execute_cancel_leave(request) -> ExecutionResult:
             f'Your {leave_request.get_leave_type_display()} request from '
             f'{leave_request.start_date} to {leave_request.end_date} has been cancelled.'
         ),
+        speech_message=_LEAVE_CANCELLED_SPEECH_MESSAGE,
     )
 
 

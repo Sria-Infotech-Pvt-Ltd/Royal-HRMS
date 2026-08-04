@@ -276,6 +276,24 @@ CORS_PREFLIGHT_MAX_AGE = 86400
 # Production origins (e.g. the deployed frontend/admin domain) must be supplied via env.
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
+# ─── CSRF: deliberate reliance on SameSite, not a token check ────────────────
+# DRF's APIView.as_view() always disables Django's CsrfViewMiddleware for API
+# views; DRF only re-enables a CSRF check itself when SessionAuthentication is
+# the authenticating class (SessionAuthentication.enforce_csrf()). This app's
+# DEFAULT_AUTHENTICATION_CLASSES is apps.accounts.authentication.CookieJWTAuthentication
+# (see below), which reads the JWT straight from the httpOnly royal_access_token
+# cookie — so that CSRF check path never runs, and no separate CSRF token is
+# issued or verified anywhere in this stack.
+#
+# The only thing preventing a cross-site page from riding that cookie into a
+# state-changing request is SameSite=Lax on royal_access_token/royal_refresh_token
+# (set in accounts/views.py's LoginView/TokenRefreshAPIView) — every modern
+# browser withholds a Lax cookie from cross-site POST/PUT/PATCH/DELETE and from
+# any cross-site fetch/XHR regardless of method, which covers this API (JSON,
+# no state-changing GETs). This is an accepted, explicit design choice, not an
+# oversight — revisit with a real double-submit CSRF token if a client that
+# doesn't honor SameSite ever needs to be supported.
+
 if DEBUG:
     # Dev-only: allow any localhost port (Flutter web) and any 192.168.x.x port
     # (local network devices). Not active in production — CORS_ALLOWED_ORIGINS only.

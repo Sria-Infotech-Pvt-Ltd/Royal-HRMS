@@ -3,9 +3,12 @@ from __future__ import annotations
 import logging
 from typing import Callable, Optional
 
+from apps.attendance.services_geofencing import GPS_REQUIRED_MESSAGE
+
 from apps.voice_commands.approval_extractor import parse_yes_no
 from apps.voice_commands.clarification import clear_pending, set_pending
-from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational
+from apps.voice_commands.executor import INTENT_CLOCK_IN, INTENT_CLOCK_OUT
+from apps.voice_commands.matcher import DEFAULT_LANG, get_conversational
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +36,20 @@ logger = logging.getLogger(__name__)
 # intent (e.g. 'clock_in', 'raise_payslip_query'), not a dedicated marker.
 CLARIFICATION_STAGE = 'awaiting_clarification_confirmation'
 
+# Distinct from matcher.NO_MATCH_INTENT on purpose — declining a clarification
+# is a normal, expected conversational outcome (the user was asked a direct
+# yes/no question and answered it), not an unrecognized command. Giving it its
+# own intent name keeps conversation.py's _payload docstring's invariant
+# intact ("NO_MATCH_INTENT is always a terminal negative outcome") without
+# reusing that marker for a case that is success=True here.
+CLARIFICATION_DECLINED_INTENT = 'clarification_declined'
+
 _REASK_MESSAGE = 'Sorry, was that a yes or a no — did you mean: "{phrase}"?'
-_NO_MATCH_MESSAGE = "Sorry, I didn't understand that command."
+# A "no" answer is a deliberate, expected decline — not a failure to
+# understand — so it gets its own friendly reset instead of conversation.py's
+# generic no-match message (reserved for transcripts that never matched
+# anything at all).
+_DECLINED_MESSAGE = "Okay, is there anything else I can help you with?"
 
 
 def start_clarification(
@@ -52,11 +67,11 @@ def start_clarification(
     redispatch using what the user ACTUALLY said the first time (so e.g. a
     slot-filled apply_leave utterance still has its dates recognized on
     confirmation) rather than the literal word "yes". latitude/longitude are
-    deliberately NOT threaded through: only clock_in/clock_out ever use them,
-    and the browser only ever attaches them to the transcript that triggered
-    a geofencing rejection directly, never to an unrelated later "yes"/"no" —
-    a clock_in/clock_out landing in this band and then needing geofencing on
-    confirmation is a rare, currently-unhandled combination.
+    NOT stashed here — the browser only ever attaches them to the specific
+    transcript that triggered a geofencing rejection, never to the original,
+    location-less command that started the clarification. See
+    continue_clarification below for how a clock_in/clock_out confirmation
+    that itself gets geofence-rejected still ends up retried with location.
     """
     phrase = matched_phrase or candidate_intent
     set_pending(request.user.id, candidate_intent, {
@@ -82,11 +97,16 @@ def start_clarification(
 def continue_clarification(
     request, pending: dict, answer_text: str,
     dispatch_matched_intent: Callable[..., dict],
+    latitude: Optional[float] = None, longitude: Optional[float] = None,
 ) -> dict:
     """
     Second turn of a pending clarification. dispatch_matched_intent is
     conversation.py's _dispatch_matched_intent, injected by the caller rather
     than imported — see this module's docstring above for why.
+
+    latitude/longitude are whatever the browser attached to THIS turn's
+    request — None on the user's original "yes"/"no", populated only on the
+    browser's silent geolocation retry (see the re-arming logic below).
     """
     candidate_intent = pending['intent']
     slots = pending['slots']
@@ -104,12 +124,35 @@ def continue_clarification(
     clear_pending(request.user.id)
 
     if not decision:
-        return _payload(NO_MATCH_INTENT, None, None, _NO_MATCH_MESSAGE, success=False)
+        return _payload(CLARIFICATION_DECLINED_INTENT, None, None, _DECLINED_MESSAGE, conversational=True)
 
-    return dispatch_matched_intent(
+    outcome = dispatch_matched_intent(
         request, candidate_intent, slots.get('original_text', ''), None,
         attendance_mode=slots.get('attendance_mode'), lang=slots.get('lang', DEFAULT_LANG),
+        latitude=latitude, longitude=longitude,
     )
+
+    # A confirmed clock_in/clock_out that fails specifically for missing GPS
+    # is client-retryable: useVoiceCommand.ts's submitTranscript catches this
+    # exact rejection, captures the browser's location, and silently
+    # resubmits the SAME answer transcript ("yes") with coordinates attached.
+    # clear_pending above already fired, so without re-arming it here that
+    # resubmit would find no pending state at all and read as a stale/
+    # expired answer (see expired_answer_detector.looks_like_expired_slot_answer)
+    # instead of finally completing the clock-in with location. Guarded to
+    # this one specific rejection with no location yet supplied — any other
+    # failure (permission denied, already clocked in, still outside the
+    # geofence with GPS already provided, etc.) is terminal and must not
+    # re-ask.
+    if (
+        candidate_intent in (INTENT_CLOCK_IN, INTENT_CLOCK_OUT)
+        and not outcome.get('success', True)
+        and outcome.get('message') == GPS_REQUIRED_MESSAGE
+        and latitude is None and longitude is None
+    ):
+        set_pending(request.user.id, candidate_intent, slots)
+
+    return outcome
 
 
 def _payload(
@@ -123,12 +166,20 @@ def _payload(
     (avoiding a circular import back into conversation.py). conversational
     defaults to the registry lookup but both call sites above pass True
     explicitly — see start_clarification's docstring.
+
+    speech_message is always None here (never redacted) — neither the "did
+    you mean" question nor the decline/reset message carries figures or a
+    third party's personal details (see conversation.py's own _payload for
+    where it's actually set); included for shape-consistency with every
+    other _payload builder so the frontend can rely on the key always being
+    present.
     """
     return {
         'intent': intent,
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': None,
         'conversational': get_conversational(intent) if conversational is None else conversational,
         'awaiting_input': awaiting_input,
         'success': success,

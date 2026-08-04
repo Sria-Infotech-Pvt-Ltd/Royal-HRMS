@@ -77,12 +77,16 @@ def _payload(
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload —
     same reasoning conversation_payroll.py's docstring gives for its own copy
-    (avoiding a circular import back into conversation.py)."""
+    (avoiding a circular import back into conversation.py). speech_message is
+    always None here — request_attendance_correction doesn't speak figures or
+    a third party's personal details; included for shape-consistency with
+    every other _payload builder (see conversation.py's own _payload)."""
     return {
         'intent': intent,
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': None,
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,

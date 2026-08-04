@@ -181,15 +181,21 @@ class ClarificationConfirmationTests(SimpleTestCase):
         self.assertTrue(result['success'])
         self.assertNotIn(42, self.store._store)  # pending cleared
 
-    def test_no_declines_and_falls_back_to_generic_no_match(self):
+    def test_no_declines_with_a_friendly_reset_not_the_generic_no_match_message(self):
+        # A "no" answer is a deliberate, expected decline -- not a failure to
+        # understand -- so it must NOT reuse the generic no-match message
+        # (that message is reserved for transcripts that never matched
+        # anything at all, see LowConfidenceStillNoMatchTests below).
         handle_transcript(self.request, 'raise a queryAbout my Paisley')
 
         result = handle_transcript(self.request, 'no')
 
         self.mock_execute.assert_not_called()
-        self.assertEqual(result['intent'], NO_MATCH_INTENT)
-        self.assertEqual(result['message'], _NO_MATCH_MESSAGE)
-        self.assertFalse(result['success'])
+        self.assertNotEqual(result['intent'], NO_MATCH_INTENT)
+        self.assertNotEqual(result['message'], _NO_MATCH_MESSAGE)
+        self.assertEqual(result['message'], "Okay, is there anything else I can help you with?")
+        self.assertTrue(result['success'])
+        self.assertFalse(result['awaiting_input'])
         self.assertNotIn(42, self.store._store)  # pending cleared, not left dangling
 
     def test_unclear_answer_re_asks_the_same_question_instead_of_guessing(self):
