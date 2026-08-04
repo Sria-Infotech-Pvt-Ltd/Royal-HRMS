@@ -115,8 +115,9 @@ export default function ItemsModal({ assessment, onClose }: Props) {
   }
   async function deleteSection(id: string) {
     if (!confirm("Delete this section? Items will become unsectioned.")) return;
+    setFormErr("");
     try { await clientApi.delete(API.assessments.sectionDetail(assessment.id, id)); refetchSections(); refetchItems(); }
-    catch (e) { alert(apiErr(e)); }
+    catch (e) { setFormErr(apiErr(e)); }
   }
 
   // ── Item helpers ──
@@ -164,8 +165,9 @@ export default function ItemsModal({ assessment, onClose }: Props) {
   }
   async function deleteItem(id: string) {
     if (!confirm("Remove this item?")) return;
+    setFormErr("");
     try { await clientApi.delete(API.assessments.itemDetail(id)); refetchItems(); }
-    catch (e) { alert(apiErr(e)); }
+    catch (e) { setFormErr(apiErr(e)); }
   }
 
   function sectionItems(sectionId: string) {
@@ -192,6 +194,10 @@ export default function ItemsModal({ assessment, onClose }: Props) {
             <div className="text-center py-10" style={{ color: "var(--text-secondary)", fontSize: ".88rem" }}>
               No sections or items yet. Click <strong>Add Section</strong> to get started.
             </div>
+          )}
+
+          {!loading && !panelMode && formErr && (
+            <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{formErr}</div></div>
           )}
 
           {!loading && (

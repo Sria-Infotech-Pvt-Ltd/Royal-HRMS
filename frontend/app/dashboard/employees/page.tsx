@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
-import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
 import { usePermission } from "@/hooks/usePermission";
@@ -108,7 +107,6 @@ export default function EmployeesPage() {
   const [search,      setSearch]      = useState("");
   const [branch,      setBranch]      = useState("all");
   const [dept,        setDept]        = useState("all");
-  const [role,        setRole]        = useState("all");
   const [status,      setStatus]      = useState<"all" | EmployeeStatus>("all");
   const [showModal,   setShowModal]   = useState(false);
   const [showImport,  setShowImport]  = useState(false);
@@ -187,11 +185,6 @@ export default function EmployeesPage() {
   // Sourced from the stats endpoint (scoped over ALL employees), not just the loaded page.
   const branchOptions = empStats.branch_names;
   const deptOptions    = empStats.department_names;
-
-  const { data: rolesData } = useFetch<{ results: { id: number; name: string; display_name: string }[] }>(
-    isAdmin ? `${API.roles.list}?page_size=100` : null
-  );
-  const roleOptions = rolesData?.results ?? [];
 
   const stats = useMemo(() => [
     { label: "Total Employees", value: empStats.total,       icon: "ti-users",      tint: "primary" as const },
@@ -300,45 +293,20 @@ export default function EmployeesPage() {
           width={180}
         />
 
-        {/* Department & Role — system_admin only; managers and employees are
-            already scoped to their own team/branch so these filters don't apply. */}
+        {/* Department — system_admin only; managers and employees are
+            already scoped to their own team/branch so this filter doesn't apply. */}
         {isAdmin && (
-          <>
-            <select
-              value={dept}
-              onChange={e => setDept(e.target.value)}
-              suppressHydrationWarning
-              className={SEL_CLS}
-              style={SEL_STYLE}
-            >
-              <option value="all">All Departments</option>
-              {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-
-            <select
-              value={role}
-              onChange={e => setRole(e.target.value)}
-              suppressHydrationWarning
-              className={SEL_CLS}
-              style={SEL_STYLE}
-            >
-              <option value="all">All Roles</option>
-              {roleOptions.map(r => <option key={r.id} value={r.display_name}>{r.display_name}</option>)}
-            </select>
-          </>
+          <select
+            value={dept}
+            onChange={e => setDept(e.target.value)}
+            suppressHydrationWarning
+            className={SEL_CLS}
+            style={SEL_STYLE}
+          >
+            <option value="all">All Departments</option>
+            {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
         )}
-
-        {/* Role */}
-        <select
-          value={role}
-          onChange={e => setRole(e.target.value)}
-          suppressHydrationWarning
-          className={SEL_CLS}
-          style={SEL_STYLE}
-        >
-          <option value="all">All Roles</option>
-          {roleOptions.map(r => <option key={r.id} value={r.display_name}>{r.display_name}</option>)}
-        </select>
 
         {/* Status */}
         <select

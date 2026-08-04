@@ -63,7 +63,11 @@ export default function LoginPage() {
       resetSessionExpired();
       let dest = "/dashboard";
       if (user.onboarding_status !== "complete") dest = "/onboarding";
-      else if (user.assessment_status === "pending") dest = "/onboarding/assessments";
+      // Managers get auto-assigned default assessments the same as any new
+      // employee (no role distinction on the backend), but the pre-onboarding
+      // assessment portal isn't meant for them — skip it here too, matching
+      // the same exemption in proxy.ts.
+      else if (user.assessment_status === "pending" && !user.can_manage_team) dest = "/onboarding/assessments";
       router.push(dest);
     } catch (err) {
       const { message } = err as { message: string };

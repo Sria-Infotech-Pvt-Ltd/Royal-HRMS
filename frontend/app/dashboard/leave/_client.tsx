@@ -18,9 +18,9 @@ interface BranchOption { id: number; branch_name: string }
 
 type TabId = "dashboard" | "apply" | "approvals" | "attendance" | "corrections" | "calendar" | "analytics";
 
-interface Props { role: string }
+interface Props { role: string; initialTab?: TabId }
 
-export default function LeavePageClient({ role }: Props) {
+export default function LeavePageClient({ role, initialTab = "dashboard" }: Props) {
   const currentUser   = useCurrentUser();
   const isSystemAdmin = currentUser?.is_superuser === true;
   const canApprove    = usePermission("leave.approve");
@@ -42,7 +42,7 @@ export default function LeavePageClient({ role }: Props) {
 
   const tabs = ALL_TABS;
 
-  const [active, setActive] = useState<TabId>("dashboard");
+  const [active, setActive] = useState<TabId>(initialTab);
   const [branch, setBranch] = useState("");
 
   // Branch filter is system_admin only — HR/manager are already branch-scoped

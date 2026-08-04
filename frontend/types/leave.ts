@@ -74,7 +74,7 @@ export interface CarryForwardHistoryResponse {
   results: CarryForwardLog[];
 }
 
-// ── Input ─────────────────────────────────────────────────────
+// ── Input ────────────────────────────────────────────────────
 export interface CarryForwardInput {
   from_year: number;
   to_year: number;
@@ -89,46 +89,46 @@ export interface CarryForwardInput {
 // employee/leave-type/year combination.
 
 export interface OpeningBalanceImportRowError {
-  row:            number;
-  employee_id:    string;
-  leave_type:     string;
+  row: number;
+  employee_id: string;
+  leave_type: string;
   financial_year: string;
-  from_date?:     string;
-  to_date?:       string;
-  reason:         string;
+  from_date?: string;
+  to_date?: string;
+  reason: string;
 }
 
 export interface OpeningBalanceImportResult {
-  total_records:    number;
+  total_records: number;
   balances_created: number;
   history_imported: number;
-  successful:       number;
-  failed:           number;
-  skipped:          number;
-  errors:           OpeningBalanceImportRowError[];
+  successful: number;
+  failed: number;
+  skipped: number;
+  errors: OpeningBalanceImportRowError[];
   error_report_csv: string | null;
 }
 
 export type ImportRowType = "balance" | "history";
 
 export interface ImportPreviewRow {
-  row:            number;
-  row_type:       ImportRowType;
-  employee_id:    string;
-  leave_type:     string;
+  row: number;
+  row_type: ImportRowType;
+  employee_id: string;
+  leave_type: string;
   financial_year: string;
-  from_date:      string | null;
-  to_date:        string | null;
-  days:           string | null;
-  valid:          boolean;
-  error:          string | null;
+  from_date: string | null;
+  to_date: string | null;
+  days: string | null;
+  valid: boolean;
+  error: string | null;
 }
 
 export interface ImportValidateResult {
-  total_rows:   number;
-  valid_rows:   number;
-  error_rows:   number;
+  total_rows: number;
+  valid_rows: number;
+  error_rows: number;
   balance_rows: number;
   history_rows: number;
-  preview:      ImportPreviewRow[];
+  preview: ImportPreviewRow[];
 }

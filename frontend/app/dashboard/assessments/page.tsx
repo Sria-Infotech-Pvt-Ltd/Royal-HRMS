@@ -120,13 +120,20 @@ function StatusBadge({ status }: { status: AssessmentCandidate["status"] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AssessmentsPage() {
-  // Users with recruitment permissions see the HR management view;
+  // Users with assessments permissions see the HR management view;
   // everyone else (e.g. employees) sees their own assignments.
-  const isAdminView = useAnyPermission("recruitment.view", "recruitment.create", "recruitment.edit");
+  // (The backend gates every assessments/* endpoint on assessments.*, not
+  // recruitment.* — see apps/assessments/views/admin.py — so a role granted
+  // only the Assessments permission set was previously bounced to the
+  // employee "My Assessments" view with no way to create/edit/delete.)
+  const isAdminView = useAnyPermission("assessments.view", "assessments.create", "assessments.edit", "assessments.delete");
 
-  const canCreate = usePermission("recruitment.create");
-  const canEdit   = usePermission("recruitment.edit");
-  const canDelete = usePermission("recruitment.delete");
+  const canCreate = usePermission("assessments.create");
+  // Assigning an assessment and managing its sections both PUT/POST through
+  // endpoints gated on assessments.edit on the backend (AssignAssessmentView,
+  // AssessmentItemListCreateView) — not assessments.create.
+  const canEdit   = usePermission("assessments.edit");
+  const canDelete = usePermission("assessments.delete");
 
   // Skip the admin list fetch for employees — useFetch(null) is a no-op.
   const { data, loading, error, refetch } = useFetch<{ results: Assessment[] }>(
@@ -143,6 +150,7 @@ export default function AssessmentsPage() {
   const [saving,    setSaving]    = useState(false);
   const [formErr,   setFormErr]   = useState("");
 
+  const [deleteErr,   setDeleteErr]   = useState("");
   const [itemsFor,    setItemsFor]    = useState<Assessment | null>(null);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
   const [expandedBreakdown, setExpandedBreakdown] = useState<string | null>(null);
@@ -224,8 +232,9 @@ export default function AssessmentsPage() {
 
   async function deleteAssessment(id: string) {
     if (!confirm("Delete this assessment? This cannot be undone.")) return;
+    setDeleteErr("");
     try { await clientApi.delete(API.assessments.detail(id)); refetch(); }
-    catch (e) { alert(apiErr(e)); }
+    catch (e) { setDeleteErr(apiErr(e)); }
   }
 
   // ── Assign ─────────────────────────────────────────────────────────────────
@@ -312,6 +321,18 @@ export default function AssessmentsPage() {
       )}
 
       {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>}
+      {deleteErr && (
+        <div className="alert alert-error mb-16" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <i className="ti ti-alert-circle" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>{deleteErr}</div>
+          <button
+            onClick={() => setDeleteErr("")}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "inherit" }}
+          >
+            <i className="ti ti-x" style={{ fontSize: 14 }} />
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-20"><i className="ti ti-loader-2 spin" style={{ fontSize: 28 }} /></div>
@@ -352,7 +373,7 @@ export default function AssessmentsPage() {
                         <i className="ti ti-layout-list" /> Sections
                       </button>
                     )}
-                    {canCreate && (
+                    {canEdit && (
                       <button className="btn btn-ghost btn-sm" onClick={() => openAssign(a)}>
                         <i className="ti ti-user-plus" /> Assign
                       </button>

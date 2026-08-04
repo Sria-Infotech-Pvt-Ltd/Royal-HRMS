@@ -16,6 +16,16 @@ const QA_META: Record<string, { icon: string; bg: string; color: string }> = {
   interviews:       { icon: "ti-user-search",  bg: "rgba(30,78,140,0.12)",  color: "var(--primary)" },
 };
 
+// The backend's quick_actions payload (_build_quick_actions in apps/dashboard/views/manager.py)
+// points at routes that don't exist in this frontend — override with the actual page paths.
+const QA_URL_OVERRIDE: Record<string, string> = {
+  apply_leave:  "/dashboard/leave?tab=apply",
+  my_requests:  "/dashboard/my-requests",
+  team_members: "/dashboard/employees",
+  my_payslip:   "/dashboard/my-payslip",
+  interviews:   "/dashboard/interview-list",
+};
+
 const APPROVAL_META: Record<string, { icon: string; color: string; bg: string }> = {
   leave:                 { icon: "ti-beach",   color: "var(--primary)", bg: "rgba(30,78,140,0.12)"  },
   expense:               { icon: "ti-receipt", color: "var(--warn)",    bg: "rgba(181,101,29,0.12)" },
@@ -156,8 +166,9 @@ function ManagerDashboardInner({ session }: Props) {
             <div className="qa-grid">
               {actions.map(action => {
                 const meta = QA_META[action.id] ?? { icon: "ti-link", bg: "var(--bg-low)", color: "var(--primary)" };
+                const url = QA_URL_OVERRIDE[action.id] ?? action.url;
                 return (
-                  <a key={action.id} href={action.url} className="qa-tile" style={{ position: "relative" }}>
+                  <a key={action.id} href={url} className="qa-tile" style={{ position: "relative" }}>
                     <div className="qa-icon" style={{ background: meta.bg, color: meta.color }}>
                       <i className={`ti ${meta.icon}`} />
                     </div>

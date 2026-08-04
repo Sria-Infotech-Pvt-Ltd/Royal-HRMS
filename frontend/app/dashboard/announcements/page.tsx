@@ -167,6 +167,7 @@ export default function AnnouncementsPage() {
   // ── Delete confirm ──────────────────────────────────────────────────────────
   const [deleteId,  setDeleteId]  = useState<number | null>(null);
   const [deleting,  setDeleting]  = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   // ── Dropdown data ───────────────────────────────────────────────────────────
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -319,6 +320,7 @@ export default function AnnouncementsPage() {
   async function handleDelete() {
     if (deleteId == null) return;
     setDeleting(true);
+    setDeleteErr(null);
     try {
       await clientApi.delete(API.announcements.detail(deleteId));
       setDeleteId(null);
@@ -328,7 +330,7 @@ export default function AnnouncementsPage() {
       setPage(newPage);
       fetchAnnouncements(newPage, category);
     } catch (e: unknown) {
-      alert((e as { message?: string }).message ?? "Delete failed.");
+      setDeleteErr((e as { message?: string }).message ?? "Delete failed.");
     } finally {
       setDeleting(false);
     }
@@ -510,7 +512,7 @@ export default function AnnouncementsPage() {
                           className="btn btn-ghost btn-sm"
                           title="Delete"
                           style={{ color: "var(--error)" }}
-                          onClick={() => setDeleteId(ann.id)}
+                          onClick={() => { setDeleteErr(null); setDeleteId(ann.id); }}
                           suppressHydrationWarning
                         >
                           <i className="ti ti-trash" />
@@ -762,23 +764,29 @@ export default function AnnouncementsPage() {
           Delete Confirm Dialog
       ══════════════════════════════════════════════════════════════════ */}
       {deleteId != null && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget && !deleting) setDeleteId(null); }}>
+        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget && !deleting) { setDeleteId(null); setDeleteErr(null); } }}>
           <div className="modal" style={{ width: "min(420px, 94vw)" }}>
             <div className="modal-header">
               <div className="modal-title" style={{ color: "var(--error)" }}>
                 <i className="ti ti-trash" /> Delete Announcement
               </div>
-              <button className="modal-close" onClick={() => setDeleteId(null)} disabled={deleting} suppressHydrationWarning>
+              <button className="modal-close" onClick={() => { setDeleteId(null); setDeleteErr(null); }} disabled={deleting} suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>
             <div className="modal-body">
+              {deleteErr && (
+                <div className="alert alert-error mb-16">
+                  <i className="ti ti-alert-circle" />
+                  <div>{deleteErr}</div>
+                </div>
+              )}
               <p style={{ fontSize: 14, color: "var(--on-variant)" }}>
                 This announcement will be permanently deleted and cannot be recovered.
               </p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setDeleteId(null)} disabled={deleting} suppressHydrationWarning>
+              <button className="btn btn-ghost" onClick={() => { setDeleteId(null); setDeleteErr(null); }} disabled={deleting} suppressHydrationWarning>
                 Cancel
               </button>
               <button

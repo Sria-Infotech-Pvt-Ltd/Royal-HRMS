@@ -78,6 +78,17 @@ function getAssessmentStatus(request: NextRequest): string {
   }
 }
 
+function getCanManageTeam(request: NextRequest): boolean {
+  const raw = request.cookies.get(USER_COOKIE)?.value;
+  if (!raw) return false;
+  try {
+    const user = JSON.parse(decodeURIComponent(raw)) as { can_manage_team?: boolean };
+    return user.can_manage_team === true;
+  } catch {
+    return false;
+  }
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -118,12 +129,18 @@ export function proxy(request: NextRequest) {
   if (isAuthenticated) {
     const onboardingStatus = getOnboardingStatus(request);
     const assessmentStatus = getAssessmentStatus(request);
+    const canManageTeam    = getCanManageTeam(request);
     const isAssessmentsPage = pathname.startsWith("/onboarding/assessments");
 
     // "approved" means HR has approved the onboarding form; only then can
     // the employee access the assessment portal.
     const needsOnboarding = onboardingStatus !== "complete";
-    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending";
+    // Default assessments get auto-assigned to every new employee record on
+    // creation — including managers — with no role distinction, so a manager
+    // can end up with assessment_status "pending" despite the pre-onboarding
+    // assessment portal being meant for new-hire employees, not managers.
+    // Exempt can_manage_team here since the backend doesn't.
+    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending" && !canManageTeam;
 
     // Block /onboarding/assessments until HR has approved the onboarding form.
     // Without this explicit check the route slips through because isOnboarding
