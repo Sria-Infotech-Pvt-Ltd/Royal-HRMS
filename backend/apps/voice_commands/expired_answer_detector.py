@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from apps.voice_commands.approval_extractor import parse_yes_no
 from apps.voice_commands.correction_datetime_extractor import extract_time
 from apps.voice_commands.correction_slot_extractor import extract_punch_type, looks_like_correction_reason
 from apps.voice_commands.slot_extractor import extract_date_range, extract_leave_type
@@ -18,14 +19,18 @@ def looks_like_expired_slot_answer(text: str) -> bool:
     """
     Best-effort guess that a transcript matching no registered command was
     actually a targeted answer to a clarification question — e.g. "sick
-    leave", "july 24th", "9:15 am", or "i forgot to punch" — that arrived
-    after its 120s window had already lapsed (get_pending() returned None),
-    rather than a genuinely unrecognized command. Reuses the exact signals
-    apply_leave's and request_attendance_correction's own slot extraction
-    look for (a leave-type keyword, a parseable date, a clock time, a punch
-    type, a correction reason) so an unrelated gibberish command isn't
+    leave", "july 24th", "9:15 am", "i forgot to punch", or a bare "yes"/"no"
+    answering a "did you mean ...?" question — that arrived after its 120s
+    window had already lapsed (get_pending() returned None), rather than a
+    genuinely unrecognized command. Reuses the exact signals apply_leave's
+    and request_attendance_correction's own slot extraction look for (a
+    leave-type keyword, a parseable date, a clock time, a punch type, a
+    correction reason), plus the same yes/no parser the live "did you mean"
+    confirmation step uses, so an unrelated gibberish command isn't
     mislabeled as a timeout.
     """
+    if parse_yes_no(text) is not None:
+        return True
     if extract_leave_type(text):
         return True
     start, end = extract_date_range(text)

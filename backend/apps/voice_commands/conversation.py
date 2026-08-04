@@ -115,7 +115,10 @@ def handle_transcript(
 
     if pending:
         if pending['slots'].get('stage') == CLARIFICATION_STAGE:
-            return continue_clarification(request, pending, normalized, _dispatch_matched_intent)
+            return continue_clarification(
+                request, pending, normalized, _dispatch_matched_intent,
+                latitude=latitude, longitude=longitude,
+            )
         if pending['intent'] in LEAVE_APPROVAL_INTENTS:
             return continue_leave_approval(request, pending, normalized)
         if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:

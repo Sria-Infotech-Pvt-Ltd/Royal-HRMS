@@ -38,14 +38,17 @@ a new intent needs to add.
 from __future__ import annotations
 
 import datetime
+import time
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from apps.voice_commands.conversation import handle_transcript
+from apps.voice_commands import clarification
+from apps.voice_commands.conversation import _EXPIRED_CLARIFICATION_MESSAGE, handle_transcript
 from apps.voice_commands.executor import ExecutionResult
 
 _NO_MATCH_MESSAGE = "Sorry, I didn't understand that command."
+_DECLINED_MESSAGE = "Okay, is there anything else I can help you with?"
 
 
 def _fake_request(user_id=42):
@@ -298,6 +301,227 @@ class DidYouMeanYesMatrixTests(SimpleTestCase):
         mock.assert_called_once()
         self.assertEqual(mock.call_args.args[0], 'request_attendance_correction')
         self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE)
+
+    def test_no_declines_with_friendly_reset_for_every_intent(self):
+        """
+        For every intent in BORDERLINE: a "did you mean" clarification
+        declined with "no" must get the distinct, friendly reset message —
+        never the generic "didn't understand" message, which is reserved for
+        transcripts that never matched anything at all. Declining never
+        reaches execute_intent for any intent (the decision is made before
+        dispatch), so unlike the "yes" tests above this doesn't need a
+        per-module execute_intent patch — one loop covers all 17 by name via
+        subTest.
+        """
+        for intent, transcript in BORDERLINE.items():
+            with self.subTest(intent=intent):
+                self.store._store.clear()
+
+                first = handle_transcript(self.request, transcript)
+                self.assertTrue(first['awaiting_input'], f'{intent}: turn 1 did not await input')
+
+                second = handle_transcript(self.request, 'no')
+
+                self.assertEqual(second['message'], _DECLINED_MESSAGE, f'{intent}: wrong decline message')
+                self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE, f'{intent}: fell back to generic no-match')
+                self.assertTrue(second['success'], f'{intent}: decline must not be reported as a failure')
+                self.assertFalse(second['awaiting_input'])
+                self.assertNotIn(42, self.store._store, f'{intent}: pending not cleared')
+
+
+class RealCacheRoundTripTests(SimpleTestCase):
+    """
+    Everything above patches conversation.py's and its sibling modules'
+    set_pending/get_pending/clear_pending with an in-memory dict
+    (_FakePendingStore) — deliberately unlike apps.voice_commands.clarification,
+    that dict has no TTL and nothing ever evicts it, so it can NEVER
+    reproduce "the pending clarification is gone by the time the answer
+    arrives" (real TTL expiry, real cache eviction, or any other real
+    session-state gap) no matter how it's exercised. This class instead goes
+    through the real clarification.py cache functions untouched (the same
+    cache backend config/settings.py wires up for every environment,
+    including this test run — see get_pending/set_pending/clear_pending's
+    own docstrings), for three intents spanning the three different dispatch
+    shapes in the registry (an immediate-action intent, a
+    conversational-band-only-when-borderline intent, and a fully
+    conversational multi-turn intent), to close exactly the "unit tests pass
+    but it doesn't actually work live" gap this suite's own bug once fell
+    into (see this file's module docstring).
+    """
+
+    def setUp(self):
+        self._user_id = 90210
+        clarification.clear_pending(self._user_id)
+        self.addCleanup(clarification.clear_pending, self._user_id)
+        self.request = _fake_request(self._user_id)
+
+    def _yes_then_no(self, intent, transcript, execute_patch_target, extra_patches=None):
+        # yes leg
+        with patch(execute_patch_target) as mock_execute:
+            mock_execute.return_value = ExecutionResult(success=True, message=f'{intent}-DONE')
+            patches = [patch(target, return_value=retval) for target, retval in (extra_patches or [])]
+            for p in patches:
+                p.start()
+            try:
+                first = handle_transcript(self.request, transcript)
+                self.assertTrue(first['awaiting_input'], f'{intent}: turn 1 did not await input (real cache)')
+                second_yes = handle_transcript(self.request, 'yes')
+            finally:
+                for p in patches:
+                    p.stop()
+        mock_execute.assert_called_once()
+        self.assertNotEqual(second_yes['message'], _NO_MATCH_MESSAGE)
+
+        # no leg, fresh clarification
+        clarification.clear_pending(self._user_id)
+        with patch(execute_patch_target) as mock_execute_no:
+            handle_transcript(self.request, transcript)
+            second_no = handle_transcript(self.request, 'no')
+        mock_execute_no.assert_not_called()
+        self.assertEqual(second_no['message'], _DECLINED_MESSAGE)
+        self.assertIsNone(clarification.get_pending(self._user_id))
+
+    def test_clock_in_yes_and_no_over_the_real_cache(self):
+        self._yes_then_no('clock_in', BORDERLINE['clock_in'], 'apps.voice_commands.conversation.execute_intent')
+
+    def test_check_leave_balance_yes_and_no_over_the_real_cache(self):
+        self._yes_then_no('check_leave_balance', BORDERLINE['check_leave_balance'], 'apps.voice_commands.conversation.execute_intent')
+
+    def test_request_attendance_correction_yes_and_no_over_the_real_cache(self):
+        full_slots = {
+            'date': datetime.date(2026, 7, 20),
+            'punch_type': 'IN',
+            'correct_in_time': datetime.time(9, 0),
+            'reason': 'FORGOT',
+        }
+        self._yes_then_no(
+            'request_attendance_correction', BORDERLINE['request_attendance_correction'],
+            'apps.voice_commands.conversation_attendance_correction.execute_intent',
+            extra_patches=[('apps.voice_commands.conversation_attendance_correction.extract_correction_slots', full_slots)],
+        )
+
+
+class RealCacheExpiryRegressionTests(SimpleTestCase):
+    """
+    The actual reported regression, reproduced end to end: a "did you mean"
+    clarification whose pending state has genuinely expired (real TTL, real
+    cache, real elapsed wall-clock time — not a mocked get_pending) by the
+    time the user's "yes" or "no" answer arrives. Before this fix, BOTH
+    answers fell all the way through to conversation.py's fully generic
+    no-match branch, since nothing there knew a clarification had ever been
+    pending — see expired_answer_detector.looks_like_expired_slot_answer's
+    now-added parse_yes_no() check. Uses a real, shortened TTL and an actual
+    sleep past it, exactly like test_apply_leave_conversation.py's own
+    GenuineExpiryAfterRealInactivityTests does for the slot-filling case.
+    """
+
+    def setUp(self):
+        self._user_id = 90211
+        clarification.clear_pending(self._user_id)
+        self.addCleanup(clarification.clear_pending, self._user_id)
+        self.request = _fake_request(self._user_id)
+
+    @patch('apps.voice_commands.clarification.PENDING_TIMEOUT_SECONDS', 1)
+    @patch('apps.voice_commands.conversation.execute_intent')
+    def test_yes_after_genuine_expiry_gets_the_timeout_message_not_the_generic_one(self, mock_execute):
+        first = handle_transcript(self.request, BORDERLINE['clock_in'])
+        self.assertTrue(first['awaiting_input'])
+
+        time.sleep(1.5)
+        self.assertIsNone(clarification.get_pending(self._user_id))
+
+        result = handle_transcript(self.request, 'yes')
+
+        mock_execute.assert_not_called()
+        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertNotEqual(result['message'], _NO_MATCH_MESSAGE)
+
+    @patch('apps.voice_commands.clarification.PENDING_TIMEOUT_SECONDS', 1)
+    @patch('apps.voice_commands.conversation.execute_intent')
+    def test_no_after_genuine_expiry_gets_the_timeout_message_not_the_generic_one(self, mock_execute):
+        first = handle_transcript(self.request, BORDERLINE['check_leave_balance'])
+        self.assertTrue(first['awaiting_input'])
+
+        time.sleep(1.5)
+        self.assertIsNone(clarification.get_pending(self._user_id))
+
+        result = handle_transcript(self.request, 'no')
+
+        mock_execute.assert_not_called()
+        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertNotEqual(result['message'], _NO_MATCH_MESSAGE)
+
+
+class GeofencingRetryDuringClarificationTests(SimpleTestCase):
+    """
+    Real reported follow-up: clock_in landing in the clarification band
+    ("did you mean: clock in?"), confirmed with "yes", dispatches correctly
+    but then gets geofence-rejected for missing GPS (office mode, no
+    coordinates yet — voice never collects them up front). useVoiceCommand.ts
+    catches exactly this rejection, captures the browser's location, and
+    silently resubmits the SAME answer transcript ("yes") with coordinates
+    attached. Before continue_clarification re-armed pending for this one
+    case, that resubmit found no pending state (continue_clarification's own
+    clear_pending had already fired on the first "yes") and was misread as a
+    stale answer to an expired clarification — clock-in never actually
+    completed no matter how quickly the user answered.
+    """
+
+    def setUp(self):
+        self.store = _FakePendingStore()
+        patchers = _patch_pending_store(self.store)
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+        self.request = _fake_request()
+
+    def test_yes_rejected_for_missing_gps_stays_pending_then_succeeds_on_located_retry(self):
+        first = handle_transcript(self.request, BORDERLINE['clock_in'])
+        self.assertTrue(first['awaiting_input'])
+
+        with patch('apps.voice_commands.conversation.execute_intent') as mock_execute:
+            mock_execute.return_value = ExecutionResult(
+                success=False,
+                message=(
+                    'Your location is required to clock in at this branch. '
+                    'Please allow location access in your browser and try again.'
+                ),
+            )
+            rejected = handle_transcript(self.request, 'yes')
+
+        self.assertFalse(rejected['success'])
+        # Not re-labeled as a stale/expired answer -- the clarification must
+        # still be alive for the browser's silent retry to complete.
+        self.assertNotEqual(rejected['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertNotEqual(rejected['message'], _NO_MATCH_MESSAGE)
+        self.assertIn(42, self.store._store)
+        self.assertEqual(self.store._store[42]['intent'], 'clock_in')
+
+        with patch('apps.voice_commands.conversation.execute_intent') as mock_execute_located:
+            mock_execute_located.return_value = ExecutionResult(
+                success=True, message='You have been clocked in successfully.',
+            )
+            located = handle_transcript(self.request, 'yes', latitude=17.38, longitude=78.48)
+
+        mock_execute_located.assert_called_once()
+        self.assertEqual(mock_execute_located.call_args.kwargs['latitude'], 17.38)
+        self.assertEqual(mock_execute_located.call_args.kwargs['longitude'], 78.48)
+        self.assertTrue(located['success'])
+        self.assertEqual(located['message'], 'You have been clocked in successfully.')
+        self.assertNotIn(42, self.store._store)  # cleared once it actually succeeds
+
+    def test_non_gps_rejection_is_terminal_and_does_not_stay_pending(self):
+        """A DIFFERENT failure (e.g. already clocked in) must not be treated
+        as retryable -- only the specific missing-GPS message re-arms."""
+        handle_transcript(self.request, BORDERLINE['clock_in'])
+
+        with patch('apps.voice_commands.conversation.execute_intent') as mock_execute:
+            mock_execute.return_value = ExecutionResult(success=False, message='You have already clocked in today.')
+            result = handle_transcript(self.request, 'yes')
+
+        self.assertFalse(result['success'])
+        self.assertEqual(result['message'], 'You have already clocked in today.')
+        self.assertNotIn(42, self.store._store)
 
 
 class ReportedBugLiteralTranscriptTests(SimpleTestCase):

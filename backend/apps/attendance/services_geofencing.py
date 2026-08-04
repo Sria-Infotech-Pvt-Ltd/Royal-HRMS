@@ -34,6 +34,16 @@ _EARTH_RADIUS_M = 6_371_000
 # accurate to only 1-2km) would make the geofence meaningless.
 _MAX_ACCURACY_TOLERANCE_M = 100
 
+# Named so callers (e.g. voice_commands.conversation_clarification, which
+# needs to recognize this specific, client-retryable rejection to keep a
+# "did you mean" clarification alive across the browser's silent
+# geolocation-retry resubmit) can compare against it without duplicating the
+# literal string — see that module's own usage.
+GPS_REQUIRED_MESSAGE = (
+    'Your location is required to clock in at this branch. '
+    'Please allow location access in your browser and try again.'
+)
+
 
 # ── Data structures ────────────────────────────────────────────────────────────
 
@@ -226,10 +236,7 @@ def _validate_office(
             is_inside_geofence=False,
             calculated_distance=None,
             branch=validated_branches[0],
-            rejection_message=(
-                'Your location is required to clock in at this branch. '
-                'Please allow location access in your browser and try again.'
-            ),
+            rejection_message=GPS_REQUIRED_MESSAGE,
         )
 
     employee_coord = GpsCoordinate(latitude=float(employee_lat), longitude=float(employee_lon))
