@@ -190,7 +190,10 @@ def _dispatch_matched_intent(
         'Voice command: user=%s intent=%s confidence=%s success=%s',
         request.user.pk, intent, confidence, outcome.success,
     )
-    return _payload(intent, confidence, outcome.data, outcome.message, success=outcome.success)
+    return _payload(
+        intent, confidence, outcome.data, outcome.message,
+        success=outcome.success, speech_message=outcome.speech_message,
+    )
 
 
 def _start_apply_leave(request, intent_text: str, confidence: float) -> dict:
@@ -238,8 +241,16 @@ def _continue_apply_leave(request, pending: dict, answer_text: str) -> dict:
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
+    speech_message: Optional[str] = None,
 ) -> dict:
     """
+    speech_message is the redacted stand-in for `message` that VoiceParseView's
+    caller should actually pass to TTS — None (the default, true for almost
+    every call site) means "speak `message` unchanged". Only set by intents
+    whose ExecutionResult.speech_message was itself set — see that field's
+    own docstring for which intents and why. `message` is never redacted; it
+    always carries the full detail for the panel/toast.
+
     conversational reflects the registry (get_conversational) — a property of
     the intent itself, true for apply_leave on every one of its responses
     (including an immediate single-utterance submission), false for
@@ -269,6 +280,7 @@ def _payload(
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': speech_message,
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,

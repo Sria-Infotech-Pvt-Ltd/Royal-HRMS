@@ -69,6 +69,9 @@ const LOCATION_UNAVAILABLE_MESSAGE =
 interface VoiceParseOutcome {
   intent: string;
   message: string;
+  // TTS confidentiality — see types/voice.ts's VoiceParseResult.speech_message.
+  // null for almost every intent; speak() calls below fall back to `message`.
+  speechMessage: string | null;
   conversational: boolean;
   awaitingInput: boolean;
   success: boolean;
@@ -90,6 +93,7 @@ async function postVoiceParse(transcript: string, lang: string, coords?: { latit
   return {
     intent: data?.intent ?? "",
     message: envelope.message ?? data?.message ?? "Command processed.",
+    speechMessage: data?.speech_message ?? null,
     conversational: !!data?.conversational,
     awaitingInput: !!data?.awaiting_input,
     success: data?.success ?? true,
@@ -328,13 +332,20 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           }
         }
 
-        const { message, conversational, awaitingInput, success: isSuccess } = outcome;
+        const { message, speechMessage, conversational, awaitingInput, success: isSuccess } = outcome;
+        // TTS confidentiality: sensitive intents (payslip figures, leave
+        // balances/dates, another employee's leave type) supply a redacted
+        // speechMessage — spoken instead of `message` regardless of the mute
+        // toggle's state, so this is conservative by default rather than
+        // only when the user already muted everything. The panel/toast below
+        // always renders the full `message`, never spokenText.
+        const spokenText = speechMessage ?? message;
 
         if (isDisabled) {
           // Panel can't render (e.g. the session expired mid-request) —
           // toast is the guaranteed-visible fallback for this edge case only.
           showToast(message, isSuccess ? "success" : "error");
-          speak(message);
+          speak(spokenText);
         } else {
           setConversation({
             transcript, message, phase: "result", conversational, awaitingInput,
@@ -343,12 +354,12 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           if (awaitingInput) {
             // Still mid-dialogue — the question is spoken, but the panel
             // stays open waiting for the user's answer, no dismissal to time.
-            speak(message);
+            speak(spokenText);
           } else {
             // Conversational flows get the slower fixed-delay fallback (used
             // only when muted/unsupported); a one-shot result's fallback is
             // faster. Either way, real speech takes priority over both.
-            speakThenDismiss(message, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+            speakThenDismiss(spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS);
           }
         }
       } catch (err: unknown) {

@@ -139,7 +139,22 @@ def execute_identify_leave_approval_target(request, action: str, name_query: Opt
         f"from {matched['start_date']} to {matched['end_date']} — {action} this request? "
         'Please say yes or no.'
     )
-    return ExecutionResult(success=True, message=message, data={'outcome': 'single_match', 'matched': matched})
+    # TTS confidentiality: name + dates stay in speech (needed for the
+    # caller to confirm by voice which request this is — the entire point
+    # of this turn), but the leave TYPE is dropped from speech only — it can
+    # reveal a health/personal category (e.g. "sick", "maternity") about a
+    # THIRD PARTY to whoever's in earshot of the approving manager. The full
+    # sentence, leave type included, still shows in the panel/toast. See
+    # executor_result.ExecutionResult.speech_message.
+    speech_message = (
+        f"{matched['employee_name']}'s leave request "
+        f"from {matched['start_date']} to {matched['end_date']} — {action} this? "
+        'Please say yes or no.'
+    )
+    return ExecutionResult(
+        success=True, message=message, data={'outcome': 'single_match', 'matched': matched},
+        speech_message=speech_message,
+    )
 
 
 def execute_confirm_leave_approval(request, action: str, request_id: Optional[str]) -> ExecutionResult:

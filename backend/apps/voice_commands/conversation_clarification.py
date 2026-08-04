@@ -123,12 +123,20 @@ def _payload(
     (avoiding a circular import back into conversation.py). conversational
     defaults to the registry lookup but both call sites above pass True
     explicitly — see start_clarification's docstring.
+
+    speech_message is always None here (never redacted) — neither the "did
+    you mean" question nor the decline/reset message carries figures or a
+    third party's personal details (see conversation.py's own _payload for
+    where it's actually set); included for shape-consistency with every
+    other _payload builder so the frontend can rely on the key always being
+    present.
     """
     return {
         'intent': intent,
         'confidence': confidence,
         'result': result,
         'message': message,
+        'speech_message': None,
         'conversational': get_conversational(intent) if conversational is None else conversational,
         'awaiting_input': awaiting_input,
         'success': success,
