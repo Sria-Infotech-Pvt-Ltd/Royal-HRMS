@@ -28,6 +28,7 @@ from apps.voice_commands.executor_payroll import (
     execute_identify_employee_payslip,
     execute_raise_payslip_query,
 )
+from apps.voice_commands.audit import log_permission_denied
 from apps.voice_commands.executor_result import ExecutionResult
 from apps.voice_commands.matcher import DEFAULT_LANG, get_required_permission
 from apps.voice_commands.permissions import has_required_permission
@@ -146,6 +147,7 @@ def execute_intent(
     """
     required_permission = get_required_permission(intent, lang=lang)
     if required_permission and not has_required_permission(request.user, required_permission):
+        log_permission_denied(request, intent, required_permission)
         return ExecutionResult(success=False, message=_PERMISSION_DENIED_MESSAGE)
 
     if intent == INTENT_CLOCK_IN:

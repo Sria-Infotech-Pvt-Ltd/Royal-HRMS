@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from apps.voice_commands.approval_extractor import strip_employee_name_phrases
+from apps.voice_commands.audit import log_no_match
 from apps.voice_commands.clarification import clear_pending, get_pending, set_pending
 from apps.voice_commands.conversation_attendance_correction import (
     continue_request_attendance_correction,
@@ -124,6 +125,14 @@ def handle_transcript(
         return _continue_apply_leave(request, pending, normalized)
 
     if fresh_match.intent == NO_MATCH_INTENT:
+        # Every path through this branch — a "did you mean" candidate, an
+        # expired-slot-answer guess, or a flat no-match — is a no-match/
+        # low-confidence event for audit purposes; logged once here rather
+        # than in each of the three branches below. See apps/voice_commands/
+        # audit.py's own docstring for why this goes to the real AuditLog
+        # table, not just this module's file logger.
+        log_no_match(request, transcript, fresh_match.confidence, fresh_match.candidate_intent)
+
         # A real fuzzy-match signal against actual registered phrases beats
         # the expired-slot-answer heuristic below, which is just a crude
         # keyword-in-text guess — checked first so a genuinely correction-
