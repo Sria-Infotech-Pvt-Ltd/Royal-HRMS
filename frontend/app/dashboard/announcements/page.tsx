@@ -11,8 +11,12 @@ import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCe
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Category   = "general" | "policy" | "event" | "celebration";
-type Visibility = "all" | "department" | "branch";
+type Category      = "general" | "policy" | "event" | "celebration";
+type Visibility    = "all" | "department" | "branch";
+// The Branch field is now its own always-present field in the form, separate
+// from Visibility — so the form only ever chooses between these two; "branch"
+// targeting is derived from the Branch field instead (see handleSave).
+type FormVisibility = "all" | "department";
 
 interface Announcement {
   id:                     number;
@@ -55,7 +59,7 @@ type FormState = {
   title:             string;
   body:              string;
   category:          Category | "";
-  visibility:        Visibility;
+  visibility:        FormVisibility;
   target_department: string;
   target_branch:     string;
   is_pinned:         boolean;
@@ -73,10 +77,9 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: "celebration", label: "Celebration" },
 ];
 
-const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
+const VISIBILITY_OPTIONS: { value: FormVisibility; label: string }[] = [
   { value: "all",        label: "All Employees" },
   { value: "department", label: "By Department" },
-  { value: "branch",     label: "By Branch"     },
 ];
 
 const FILTERS = [
@@ -114,6 +117,12 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function fullDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 const CAT_BADGE: Record<Category, string> = {
   general:     "badge-info",
   policy:      "badge-warn",
@@ -148,8 +157,12 @@ export default function AnnouncementsPage() {
   const [currentUser, setCurrentUser] = useState<ReturnType<typeof getStoredUser>>(null);
   useEffect(() => { setCurrentUser(getStoredUser()); }, []);
 
-  const canPost  = (currentUser?.permissions.includes("announcements.create") ?? false) || (currentUser?.is_superuser === true);
-  const canEdit  = (currentUser?.permissions.includes("announcements.edit")   ?? false) || (currentUser?.is_superuser === true);
+  const canPost   = (currentUser?.permissions.includes("announcements.create") ?? false) || (currentUser?.is_superuser === true);
+  const canEdit   = (currentUser?.permissions.includes("announcements.edit")   ?? false) || (currentUser?.is_superuser === true);
+  // "settings.edit" is this codebase's existing "bypass all branch scoping,
+  // treat as global admin" flag (see Branch Admin's role migration) — reused
+  // here so the Branch field is unrestricted only for genuinely org-wide roles.
+  const isOrgWide = (currentUser?.permissions.includes("settings.edit")       ?? false) || (currentUser?.is_superuser === true);
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [meta,    setMeta]    = useState<PageMeta | null>(null);
@@ -177,8 +190,12 @@ export default function AnnouncementsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [branches,    setBranches]    = useState<Branch[]>([]);
 
-  // ── Expanded cards ──────────────────────────────────────────────────────────
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // The poster's own branch id, resolved from their branch name — used to lock
+  // the Branch field for anyone who isn't org-wide (see isOrgWide above).
+  const myBranchId = branches.find(b => b.branch_name === currentUser?.branch)?.id ?? null;
+
+  // ── Detail view modal ───────────────────────────────────────────────────────
+  const [viewTarget, setViewTarget] = useState<Announcement | null>(null);
 
   // ── Birthday celebration (Celebration tab) ─────────────────────────────────
   const { data: birthdayData } = useBirthdaysToday();
@@ -208,12 +225,18 @@ export default function AnnouncementsPage() {
     fetchAnnouncements(page, category);
   }, [page, category, fetchAnnouncements]);
 
-  // Fetch departments + branches once for modal dropdowns
+  // Fetch departments + branches from the backend for the modal dropdowns.
+  // Non-org-wide posters get departments scoped to their own branch — org-wide
+  // posters get the full company-wide list (branch param omitted).
   useEffect(() => {
     if (!canPost) return;
-    clientApi.get(API.departments.list).then(r => setDepartments(r.data?.data ?? [])).catch(() => {});
-    clientApi.get(API.branches.list).then(r => setBranches(r.data?.data ?? [])).catch(() => {});
-  }, [canPost]);
+    const deptUrl = !isOrgWide && currentUser?.branch
+      ? `${API.departments.list}?branch=${encodeURIComponent(currentUser.branch)}`
+      : API.departments.list;
+    clientApi.get(deptUrl).then(r => setDepartments(r.data?.data?.results ?? [])).catch(() => {});
+    clientApi.get(`${API.branches.list}?status=active&page_size=100`)
+      .then(r => setBranches(r.data?.data?.results ?? [])).catch(() => {});
+  }, [canPost, isOrgWide, currentUser?.branch]);
 
   // Track views once per card per session (non-authors only)
   useEffect(() => {
@@ -231,9 +254,15 @@ export default function AnnouncementsPage() {
 
   // ─── Modal helpers ─────────────────────────────────────────────────────────
 
+  // Branch-scoped (non-org-wide) posters are always locked to their own
+  // branch; org-wide posters default to "All Branches" ("") and may change it.
+  function defaultBranchField(): string {
+    return isOrgWide ? "" : (myBranchId != null ? String(myBranchId) : "");
+  }
+
   function openCreate() {
     setEditTarget(null);
-    setForm({ ...EMPTY_FORM, send_email: canPost });
+    setForm({ ...EMPTY_FORM, send_email: canPost, target_branch: defaultBranchField() });
     setFormErrors({});
     setSaveErr(null);
     setShowModal(true);
@@ -246,9 +275,11 @@ export default function AnnouncementsPage() {
       title:             ann.title,
       body:              ann.body,
       category:          ann.category,
-      visibility:        ann.visibility,
+      visibility:        ann.visibility === "department" ? "department" : "all",
       target_department: ann.target_department ? String(ann.target_department) : "",
-      target_branch:     ann.target_branch     ? String(ann.target_branch)     : "",
+      target_branch:     isOrgWide
+        ? (ann.visibility === "branch" && ann.target_branch ? String(ann.target_branch) : "")
+        : defaultBranchField(),
       is_pinned:         ann.is_pinned,
       send_email:        ann.send_email,
     });
@@ -266,9 +297,8 @@ export default function AnnouncementsPage() {
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => {
       const next = { ...prev, [key]: value };
-      if (key === "visibility") {
-        if (value !== "department") next.target_department = "";
-        if (value !== "branch")     next.target_branch     = "";
+      if (key === "visibility" && value !== "department") {
+        next.target_department = "";
       }
       return next;
     });
@@ -284,8 +314,6 @@ export default function AnnouncementsPage() {
     if (!form.category)        errs.category = "Category is required.";
     if (form.visibility === "department" && !form.target_department)
       errs.target_department = "Select a department.";
-    if (form.visibility === "branch" && !form.target_branch)
-      errs.target_branch = "Select a branch.";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -294,31 +322,64 @@ export default function AnnouncementsPage() {
 
   async function handleSave() {
     if (!validate()) return;
+    if (!isOrgWide && myBranchId == null) {
+      setSaveErr("Your branch could not be resolved. Contact your administrator.");
+      return;
+    }
     setSaving(true);
     setSaveErr(null);
     try {
+      // Visibility is now derived, not chosen directly: "By Department" always
+      // wins (department reach isn't branch-limited in this system); otherwise
+      // a selected Branch narrows to that branch, and no branch means company-wide.
+      let apiVisibility: Visibility;
+      let targetBranch: number | null;
+      let targetDepartment: number | null;
+
+      if (form.visibility === "department") {
+        apiVisibility    = "department";
+        targetDepartment = form.target_department ? Number(form.target_department) : null;
+        targetBranch     = null;
+      } else if (form.target_branch) {
+        apiVisibility    = "branch";
+        targetBranch     = Number(form.target_branch);
+        targetDepartment = null;
+      } else {
+        apiVisibility    = "all";
+        targetBranch     = null;
+        targetDepartment = null;
+      }
+
       const payload: Record<string, unknown> = {
         title:             form.title.trim(),
         body:              form.body.trim(),
         category:          form.category,
-        visibility:        form.visibility,
+        visibility:        apiVisibility,
         is_pinned:         form.is_pinned,
         send_email:        form.send_email,
-        target_department: form.target_department ? Number(form.target_department) : null,
-        target_branch:     form.target_branch     ? Number(form.target_branch)     : null,
+        target_department: targetDepartment,
+        target_branch:     targetBranch,
       };
 
+      // Longer timeout than the client default — posting/updating an
+      // announcement (esp. with "send email" on) can take longer than the
+      // usual request.
+      const requestConfig = { timeout: 30000 };
       if (editTarget) {
-        await clientApi.put(API.announcements.detail(editTarget.id), payload);
+        await clientApi.put(API.announcements.detail(editTarget.id), payload, requestConfig);
       } else {
-        await clientApi.post(API.announcements.list, payload);
+        await clientApi.post(API.announcements.list, payload, requestConfig);
       }
 
       closeModal();
       setPage(1);
       fetchAnnouncements(1, category);
     } catch (e: unknown) {
-      setSaveErr((e as { message?: string }).message ?? "Failed to save announcement.");
+      const err = e as { message?: string; code?: string };
+      const message = err.code === "ECONNABORTED"
+        ? "The request timed out. The announcement may still have been saved — check the list before trying again."
+        : (err.message ?? "Failed to save announcement.");
+      setSaveErr(message);
     } finally {
       setSaving(false);
     }
@@ -369,14 +430,6 @@ export default function AnnouncementsPage() {
       // Rollback on error
       fetchAnnouncements(page, category);
     }
-  }
-
-  function toggleExpand(id: number) {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); } else { next.add(id); }
-      return next;
-    });
   }
 
   // ─── Stats from API meta ───────────────────────────────────────────────────
@@ -473,16 +526,15 @@ export default function AnnouncementsPage() {
       {!loading && meta && meta.results.length > 0 && (
         <div className="ann-cards-list">
           {meta.results.map(ann => {
-            const av    = avatarColor(ann.posted_by_name);
-            const isExp = expanded.has(ann.id);
+            const av = avatarColor(ann.posted_by_name);
 
             return (
               <div
                 key={ann.id}
-                className="card"
-                style={ann.is_pinned ? { borderLeft: "3px solid var(--warn)" } : undefined}
+                className={`ann-card${ann.is_pinned ? " pinned" : ""}`}
+                onClick={() => setViewTarget(ann)}
               >
-                <div style={{ padding: "16px 20px" }}>
+                <div className="ann-card-body">
                   {/* ── Author row ─────────────────────────────────────── */}
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
                     <div style={{
@@ -522,7 +574,7 @@ export default function AnnouncementsPage() {
                     </div>
 
                     {ann.can_edit && (
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                         <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => openEdit(ann)} suppressHydrationWarning>
                           <i className="ti ti-pencil" />
                         </button>
@@ -544,32 +596,19 @@ export default function AnnouncementsPage() {
                     {ann.title}
                   </div>
 
-                  {/* ── Body ──────────────────────────────────────────── */}
-                  <div style={{ fontSize: 14, color: "var(--on-variant)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-                    {isExp || ann.body.length <= BODY_PREVIEW
-                      ? ann.body
-                      : ann.body.slice(0, BODY_PREVIEW) + "…"}
+                  {/* ── Body preview ─────────────────────────────────── */}
+                  <div className="ann-body-preview">
+                    {ann.body.length <= BODY_PREVIEW ? ann.body : ann.body.slice(0, BODY_PREVIEW) + "…"}
                   </div>
                   {ann.body.length > BODY_PREVIEW && (
-                    <button
-                      onClick={() => toggleExpand(ann.id)}
-                      style={{ fontSize: 12, color: "var(--primary)", background: "none", border: "none", cursor: "pointer", marginTop: 4, padding: 0 }}
-                      suppressHydrationWarning
-                    >
-                      {isExp ? "Show less" : "Read more"}
-                    </button>
+                    <span className="ann-read-more">Read more</span>
                   )}
 
                   {/* ── Footer ────────────────────────────────────────── */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--outline-v)" }}>
+                  <div className="ann-card-footer">
                     <button
-                      onClick={() => toggleReact(ann)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 5,
-                        background: "none", border: "none", cursor: "pointer", fontSize: 13,
-                        color: ann.has_reacted ? "var(--error)" : "var(--on-variant)",
-                        fontWeight: ann.has_reacted ? 600 : 400,
-                      }}
+                      onClick={e => { e.stopPropagation(); toggleReact(ann); }}
+                      className={`ann-view-react-btn${ann.has_reacted ? " reacted" : ""}`}
                       suppressHydrationWarning
                     >
                       <i className={`ti ${ann.has_reacted ? "ti-heart-filled" : "ti-heart"}`} style={{ fontSize: 16 }} />
@@ -660,19 +699,31 @@ export default function AnnouncementsPage() {
                 {formErrors.title && <div className="field-error-msg">{formErrors.title}</div>}
               </div>
 
-              {/* Category + Visibility */}
+              {/* Branch + Visibility */}
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Category <span style={{ color: "var(--error)" }}>*</span></label>
-                  <select
-                    className={`field-input${formErrors.category ? " field-error" : ""}`}
-                    value={form.category}
-                    onChange={e => setField("category", e.target.value as Category)}
-                  >
-                    <option value="">Select category…</option>
-                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                  {formErrors.category && <div className="field-error-msg">{formErrors.category}</div>}
+                  <label className="field-label">Branch{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
+                  {isOrgWide ? (
+                    <select
+                      className="field-input"
+                      value={form.target_branch}
+                      onChange={e => setField("target_branch", e.target.value)}
+                      disabled={form.visibility === "department"}
+                    >
+                      <option value="">All Branches</option>
+                      {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}
+                    </select>
+                  ) : (
+                    <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
+                      <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
+                      {branches.find(b => String(b.id) === form.target_branch)?.branch_name ?? "Not assigned"}
+                    </div>
+                  )}
+                  {form.visibility === "department" && (
+                    <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
+                      Not used for "By Department" — that reaches the department across all branches.
+                    </div>
+                  )}
                 </div>
 
                 <div className="field-group">
@@ -680,7 +731,7 @@ export default function AnnouncementsPage() {
                   <select
                     className="field-input"
                     value={form.visibility}
-                    onChange={e => setField("visibility", e.target.value as Visibility)}
+                    onChange={e => setField("visibility", e.target.value as FormVisibility)}
                   >
                     {VISIBILITY_OPTIONS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
                   </select>
@@ -703,21 +754,19 @@ export default function AnnouncementsPage() {
                 </div>
               )}
 
-              {/* Conditional: Branch */}
-              {form.visibility === "branch" && (
-                <div className="field-group">
-                  <label className="field-label">Branch <span style={{ color: "var(--error)" }}>*</span></label>
-                  <select
-                    className={`field-input${formErrors.target_branch ? " field-error" : ""}`}
-                    value={form.target_branch}
-                    onChange={e => setField("target_branch", e.target.value)}
-                  >
-                    <option value="">Select branch…</option>
-                    {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}
-                  </select>
-                  {formErrors.target_branch && <div className="field-error-msg">{formErrors.target_branch}</div>}
-                </div>
-              )}
+              {/* Category */}
+              <div className="field-group">
+                <label className="field-label">Category <span style={{ color: "var(--error)" }}>*</span></label>
+                <select
+                  className={`field-input${formErrors.category ? " field-error" : ""}`}
+                  value={form.category}
+                  onChange={e => setField("category", e.target.value as Category)}
+                >
+                  <option value="">Select category…</option>
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                {formErrors.category && <div className="field-error-msg">{formErrors.category}</div>}
+              </div>
 
               {/* Body */}
               <div className="field-group">
@@ -823,6 +872,108 @@ export default function AnnouncementsPage() {
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          Announcement Detail Modal
+      ══════════════════════════════════════════════════════════════════ */}
+      {viewTarget && (() => {
+        const live = meta?.results.find(a => a.id === viewTarget.id) ?? viewTarget;
+        const av   = avatarColor(live.posted_by_name);
+
+        return (
+          <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setViewTarget(null); }}>
+            <div className="modal" style={{ width: "min(640px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
+              <div className="modal-header">
+                <div className="modal-title">
+                  <i className="ti ti-speakerphone" /> Announcement Details
+                </div>
+                <button className="modal-close" onClick={() => setViewTarget(null)} suppressHydrationWarning>
+                  <i className="ti ti-x" />
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="ann-view-author-row">
+                  <div style={{
+                    width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                    background: av.bg, color: av.color,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontWeight: 700, fontSize: 14,
+                  }}>
+                    {initials(live.posted_by_name)}
+                  </div>
+                  <div>
+                    <div className="ann-view-name-row">
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{live.posted_by_name}</span>
+                      {live.posted_by_role && <span className="ann-view-role">{live.posted_by_role}</span>}
+                    </div>
+                    <div className="ann-view-timestamp">
+                      Posted {fullDateTime(live.created_at)}
+                      {live.updated_at !== live.created_at && ` · edited ${fullDateTime(live.updated_at)}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="ann-view-badges">
+                  {live.is_pinned && (
+                    <span className="badge badge-warn"><i className="ti ti-pin" /> Pinned</span>
+                  )}
+                  <span className={`badge ${CAT_BADGE[live.category]}`} style={{ textTransform: "capitalize" }}>
+                    {CAT_LABEL[live.category]}
+                  </span>
+                  <span className="badge badge-neutral">
+                    <i className={`ti ${live.visibility === "all" ? "ti-users" : live.visibility === "department" ? "ti-sitemap" : "ti-building"}`} />
+                    {" "}{live.visibility === "all" ? "All Employees" : live.visibility === "department" ? live.target_department_name : live.target_branch_name}
+                  </span>
+                </div>
+
+                <div className="ann-view-title">{live.title}</div>
+                <div className="ann-view-body">{live.body}</div>
+
+                <div className="ann-view-stats">
+                  <button
+                    className={`ann-view-react-btn${live.has_reacted ? " reacted" : ""}`}
+                    onClick={() => toggleReact(live)}
+                    suppressHydrationWarning
+                  >
+                    <i className={`ti ${live.has_reacted ? "ti-heart-filled" : "ti-heart"}`} style={{ fontSize: 16 }} />
+                    {live.reactions_count > 0 ? live.reactions_count : "React"}
+                  </button>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--on-variant)" }}>
+                    <i className="ti ti-eye" style={{ fontSize: 15 }} />
+                    {live.views_count > 0 ? live.views_count : "—"} views
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                {live.can_edit && (
+                  <>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ color: "var(--error)" }}
+                      onClick={() => { setViewTarget(null); setDeleteErr(null); setDeleteId(live.id); }}
+                      suppressHydrationWarning
+                    >
+                      <i className="ti ti-trash" /> Delete
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => { setViewTarget(null); openEdit(live); }}
+                      suppressHydrationWarning
+                    >
+                      <i className="ti ti-pencil" /> Edit
+                    </button>
+                  </>
+                )}
+                <button className="btn btn-filled" onClick={() => setViewTarget(null)} suppressHydrationWarning>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════════════════════════
           Birthday Celebration popup
