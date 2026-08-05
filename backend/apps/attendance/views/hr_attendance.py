@@ -654,8 +654,15 @@ class HRAttendanceReprocessView(APIView):
 
         from apps.attendance.tasks import reprocess_attendance_task
         try:
-            async_result = reprocess_attendance_task.delay(
-                target_date.isoformat(), branch, department, str(request.user.pk), employee_ids,
+            # retry=False + ignore_result=True — bounds broker/backend
+            # retries so a down Redis can't block this request; see the
+            # referral-submission dispatch in recruitment/views.py. Nothing
+            # reads this task's result via Celery — .id is still available
+            # on the returned AsyncResult immediately, independent of
+            # whether the broker publish itself succeeds.
+            async_result = reprocess_attendance_task.apply_async(
+                args=[target_date.isoformat(), branch, department, str(request.user.pk), employee_ids],
+                retry=False, ignore_result=True,
             )
         except Exception as exc:
             logger.error('Failed to queue attendance reprocess task: %s', exc, exc_info=True)

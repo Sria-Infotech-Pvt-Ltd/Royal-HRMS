@@ -2617,52 +2617,6 @@ class EmployeeListCreateView(APIView):
             'results':     [_employee_dict(u) for u in page_obj.object_list],
         })
 
-
-
-class EmployeeStatsView(APIView):
-    """
-    Dashboard counts for the Employees page header cards.
-
-    Computed directly from the full queryset (not a single page) — the
-    frontend used to derive these from the currently loaded page of results,
-    which under-counted everything once there was more than one page.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if not _has_perm(request.user, 'employees.view'):
-            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
-
-        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
-
-        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
-            base_qs = base_qs.filter(branch=request.user.branch)
-
-        # branch_names/department_names always come from base_qs (ignores the
-        # branch filter below) so the branch dropdown never shrinks to just
-        # the currently-selected branch once one is picked.
-        branch_names = list(
-            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
-        )
-        department_names = list(
-            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
-        )
-
-        qs = base_qs
-        branch_filter = request.query_params.get('branch', '').strip()
-        if branch_filter and branch_filter != 'all':
-            qs = qs.filter(branch=branch_filter)
-
-        return success('Employee statistics retrieved.', data={
-            'total':             qs.count(),
-            'active':            qs.filter(is_active=True, must_change_password=False).count(),
-            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
-            'departments':       qs.exclude(department='').values('department').distinct().count(),
-            'branch_names':      branch_names,
-            'department_names':  department_names,
-        })
-
-
     def post(self, request):
         if not _has_perm(request.user, 'employees.create'):
             return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
@@ -3725,7 +3679,12 @@ class OnboardingView(APIView):
 
         def _queue_hr_notification(user_id=request.user.pk):
             try:
-                send_onboarding_submitted_notification_task.delay(user_id)
+                # retry=False + ignore_result=True — bounds broker/backend
+                # retries so a down Redis can't block this request; see the
+                # referral-submission dispatch in recruitment/views.py.
+                send_onboarding_submitted_notification_task.apply_async(
+                    args=[user_id], retry=False, ignore_result=True,
+                )
             except Exception as exc:
                 logger.error(
                     'Failed to queue onboarding_submitted notification for user %s: %s',

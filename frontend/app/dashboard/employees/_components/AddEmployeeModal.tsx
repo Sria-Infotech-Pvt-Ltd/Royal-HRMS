@@ -180,9 +180,9 @@ export default function AddEmployeeModal({
   );
   const managers = managersRaw ?? [];
 
-  /* HR — branch-scoped, optional (falls back to the unfiltered list) */
+  /* HR — needs branch picked first, same as the manager list above */
   const { data: hrsRaw } = useFetch<ApiManager[]>(
-    form.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(form.branch)}` : API.employees.hrList
+    form.branch ? `${API.employees.hrList}?branch=${encodeURIComponent(form.branch)}` : null
   );
   const hrs = hrsRaw ?? [];
 

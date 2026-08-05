@@ -83,7 +83,12 @@ def _send_leave_email(user, template_name: str, context: dict) -> None:
 
     def _dispatch(user_id=user.id, tpl=template_name, ctx=dict(context)):
         try:
-            send_lifecycle_email_task.delay(user_id, tpl, ctx)
+            # retry=False + ignore_result=True — bounds broker/backend
+            # retries so a down Redis can't block this request; see the
+            # referral-submission dispatch in recruitment/views.py.
+            send_lifecycle_email_task.apply_async(
+                args=[user_id, tpl, ctx], retry=False, ignore_result=True,
+            )
         except Exception as exc:
             logger.error(
                 'Failed to queue leave email "%s" for user %s: %s',

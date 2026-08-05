@@ -24,6 +24,15 @@ def _find_manager_role(Role):
 
 
 def _find_hr_role(Role, RolePermission, Permission):
+    # Prefer the role literally named 'hr' — multiple roles (manager,
+    # system_admin, branch_admin, hr) all hold leave.approve, so falling
+    # straight to the permission-based lookup below without this is
+    # non-deterministic (an unordered query) and can silently resolve to
+    # "Manager" instead of "HR".
+    hr_role = Role.objects.filter(name='hr', is_active=True).first()
+    if hr_role:
+        return hr_role
+
     perm = Permission.objects.filter(codename='leave.approve').first()
     if not perm:
         return None
@@ -31,6 +40,7 @@ def _find_hr_role(Role, RolePermission, Permission):
         RolePermission.objects
         .filter(permission=perm, role__is_active=True)
         .select_related('role')
+        .order_by('role_id')
         .first()
     )
     return rp.role if rp else None
@@ -54,7 +64,7 @@ def populate_role_fks(apps, schema_editor):
         else:
             rule.l1_role_fk = None
 
-        if old_l2 in ('hr_manager', 'hr', 'hr_admin'):
+        if old_l2 in ('hr_manager', 'hr', 'hr_admin', 'admin'):
             rule.l2_role_fk = hr_role
         elif old_l2 == 'reporting_manager':
             rule.l2_role_fk = manager_role

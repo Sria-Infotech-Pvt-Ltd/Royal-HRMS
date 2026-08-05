@@ -3186,3 +3186,100 @@ backend/apps/assessments/models.py + migrations/0011_phase4_index_review.py
 - Hardening spec Phases 5–15 not yet started: Redis/Celery production-safety validation (fail-safe when `REDIS_URL` is unset), mobile logout refresh-token-blacklist fix, frontend `proxy.ts` JWT-verification fix, attendance CSV upload MIME/header validation, bank-detail field encryption (analysis done in Phase 0, migration not attempted), Gunicorn/ASGI/DB-connection review, monitoring, dependency security fixes (`next` → 16.2.12, `xlsx` CVE decision), and load testing.
 - Weekly Off "Alternate Saturday"/"Rotational 4-week" pattern types (see above) — schema doesn't support them yet; no decision made on building this.
 - Everything listed as Pending in the 2026-07-28 entry above is still outstanding.
+
+---
+
+## Session Log — 2026-08-05
+**Author: Swetha**
+
+Reactive bug-fixing session — each item below was reported live (via browser Network tab / server logs) while exercising the app, fixed, then the next one surfaced. Two of the six are schema-drift issues distinct from anything in prior sessions' hardening work; worth reading if you hit a mysterious "column does not exist" or "not-null constraint" error anywhere else.
+
+### Bug Fixes Shipped
+
+**1. Add Employee — `POST /api/employees/` returned 405**
+- Root cause: the codebase has **two** `class EmployeeStatsView(APIView):` definitions in `views.py` — Python silently keeps only the second, so the first is dead code. The employee-creation `post()` method (real logic: validation, `User.objects.create_user`, auto-assign, welcome email) had been pasted into that dead first copy instead of into `EmployeeListCreateView`, which is what `POST /api/employees/` actually routes to — so that view had no `post()` at all.
+- Fix: moved `post()` into `EmployeeListCreateView`; deleted the dead duplicate `EmployeeStatsView` shell (its `get()` was already fully superseded by the second, real definition).
+- File: `backend/apps/accounts/views.py`
+
+**2. Add Employee modal — `GET /api/employees/hrs/` returned 400**
+- Root cause: `HRListView` requires `?branch=`, but the HR dropdown's `useFetch` call fell back to hitting the endpoint with no query string at all when `form.branch` was still empty (e.g. before a branch is picked, or for unrestricted/system_admin users) — a pre-existing "falls back to unfiltered list" comment that doesn't match what the backend actually supports.
+- Fix: gated the fetch the same way the Manager dropdown right above it already does — `useFetch(form.branch ? ... : null)`, so it simply doesn't fire until a branch is selected.
+- File: `frontend/app/dashboard/employees/_components/AddEmployeeModal.tsx`
+
+**3. Referral submission — `POST /api/recruitment/referrals/` returned 500**
+- Root cause: `hrms_candidates.meeting_link` is a **NOT NULL** column with no default and **no corresponding Django model field at all** — it (and a second, nullable `interview_time` column with one real value on an old row) exist in the live DB but were never part of any migration. Classic schema drift: added directly against the DB at some point for a feature that never shipped, then abandoned. Blocked every `Candidate` insert (referrals, direct add, bulk import).
+- Fix: `ALTER TABLE hrms_candidates ALTER COLUMN meeting_link DROP NOT NULL` — applied directly (not via `manage.py migrate`, since the migration graph was broken at the time — see #5). Added `backend/apps/recruitment/migrations/0012_fix_meeting_link_not_null.py` so the fix is tracked in version control; it's a no-op if it ever actually runs. `interview_time` left alone (nullable, not breaking anything, explicitly out of scope).
+
+**4. Referral submission — succeeded but the frontend still timed out (axios 15s)**
+- Root cause (the real one, took several passes): `Task.apply_async()`/`.delay()` — even with a message broker that's up — implicitly subscribes to a Redis pub/sub channel for the task's result (`on_task_call()` → `result_consumer.consume_from()`) **unless `ignore_result=True` is passed**, regardless of whether anything ever reads that result. When Redis was unreachable, that subscription retried **up to 20 times** against the Redis *result backend* — a completely separate retry loop from anything broker-related, which is why tuning broker settings first (`CELERY_BROKER_TRANSPORT_OPTIONS` socket timeouts, `CELERY_BROKER_CONNECTION_MAX_RETRIES`) didn't fix it alone.
+- Confirmed via repo-wide grep that `AsyncResult` (Celery's actual result-lookup API) is **never used anywhere** in this codebase — every "task status" feature (e.g. attendance import progress) is implemented by having the task write progress into its own DB row, not by querying Celery's result backend. So `ignore_result=True` is safe everywhere `.delay()` is called here.
+- Fixed **all 7** fire-and-forget Celery dispatch call sites found repo-wide, not just the one that was reported — same `apply_async(..., retry=False, ignore_result=True)` pattern applied to each (two of them return/store the task's `.id` for display/audit purposes only, which still works fine under `ignore_result=True` since the id is generated locally, independent of the broker publish or result backend):
+  - `backend/apps/recruitment/views.py` — referral-submission email, interview-scheduled email
+  - `backend/apps/announcements/views.py` — announcement email
+  - `backend/apps/accounts/views.py` — onboarding-submitted HR notification
+  - `backend/apps/assessments/views/admin.py` — assessment assignment emails
+  - `backend/apps/attendance/views/hr_attendance.py` — attendance reprocess (keeps `task_id` in the response)
+  - `backend/apps/attendance/services_hr_ops.py` — attendance import (keeps `task.id` on `AttendanceImportLog`)
+  - `backend/apps/notifications/signals.py` — leave lifecycle emails
+- Also added, as defense-in-depth for the broker side specifically: `CELERY_BROKER_TRANSPORT_OPTIONS = {'socket_connect_timeout': 0.2, 'socket_timeout': 0.2}` and `CELERY_BROKER_CONNECTION_MAX_RETRIES = 1` in `backend/config/settings.py`. Note: Kombu treats `max_retries=0` as falsy and silently falls back to its own default retry count — `1` is the smallest value that actually takes effect.
+- **Separately diagnosed, not fixed**: Redis itself (via WSL2 Ubuntu's `redis-server`, reachable at `localhost:6379` through Windows' localhost-forwarding) is intermittently unreachable from the Windows-side Python process — confirmed Redis is healthy and `PONG`s fine *inside* WSL the whole time; the flakiness is in the Windows↔WSL2 network relay. `wsl --shutdown` + restart did not fully resolve it (still ~50% connection failures right after). This is why the fixes above focus on bounding retry/timeout behavior rather than assuming Redis will reliably be reachable — that's a real, unresolved gap in this dev environment, separate from anything fixable in the Django/Celery config.
+
+**5. Employee profile — `GET /api/employees/<id>/approval-matrix/` returned 500**
+- Root cause: `hrms_approval_workflow_rules.l1_approver_role`/`l2_approver_role` were still the **old string-enum columns**, while the model has expected a `ForeignKey` to `Role` since migration `0049_approval_workflow_role_fk`. That migration was recorded as **applied** in `django_migrations` but its actual `AddField`/`RenameField`/data-population/`RemoveField` steps had never run for real against this DB (fake-applied at some point, cause unknown) — the classic "Django thinks it ran, the DB disagrees" drift, same family of bug as #3 but on the migration-tracking side instead of a raw manual column.
+- Also found (already fixed by the time it was checked, possibly by another concurrent session): `backend/apps/announcements/migrations/0002_phase4_index_review.py` depended on `("accounts", "0048_phase4_index_review")`, a migration name that no longer exists after accounts' migrations were renumbered — the real one is `0055_phase4_index_review`. This alone was enough to make `manage.py migrate`/`showmigrations` fail outright with `NodeNotFoundError` for the *entire project*, not just this table.
+- Fix: deleted the stray `django_migrations` row for `0049` and re-applied it **for real** via `MigrationExecutor.apply_migration()` called directly (bypasses `manage.py migrate`'s `check_consistent_history` gate, which otherwise refuses to touch `0049` alone once `0050`–`0055` are already — correctly — marked applied; blindly unfaking and rerunning the whole 0049–0055 range risked "already exists" errors against schema that had genuinely already landed).
+- Two real bugs found *inside* migration `0049` itself while doing this (fixed in the migration file, since it had never actually executed successfully before):
+  - Its data-population step didn't recognize a legacy `l2_approver_role='admin'` value present on the live Leave/Expense rules — would have silently discarded it. Confirmed with the user: maps to the `hr` role, same as `'hr_manager'`/`'hr_admin'`.
+  - Its `_find_hr_role()` helper picked *any* role holding `leave.approve` permission from an unordered query — since Manager/System Admin/Branch Admin/HR all hold that permission, it non-deterministically resolved to "Manager" the first time (had to be manually corrected). Rewrote it to prefer the role literally named `hr` first.
+- **Regression mid-fix**: after the first successful fix, migration `0049` reverted again — its `django_migrations` row disappeared and the schema went back to plain strings. Root cause: someone (very likely independent troubleshooting of the same `InconsistentMigrationHistory` error, from outside this session) ran a **real** (non-`--fake`) rollback of `0049` — which is not safely reversible, since its data-population step's reverse is a no-op and its `RemoveField` steps permanently drop whatever's in the FK columns on the way back. Re-applied the same way a second time, this time resolving correctly on the first pass since `_find_hr_role()` was already fixed.
+- Also found three `django_migrations` rows (`0058_fix_approval_workflow_rule_columns`, `0059_refix_approval_workflow_rule_columns`, `0060_refix_approval_workflow_rule_columns_again`) with **no corresponding files on disk** — evidence someone else attempted to solve this exact problem via new migrations that were later deleted. Confirmed harmless (Django's loader silently ignores DB-recorded migrations it can't find on disk; `showmigrations` and `migrate --check` both run clean) and left alone rather than guessing at further cleanup.
+- File: `backend/apps/accounts/migrations/0049_approval_workflow_role_fk.py`
+
+**6. `POST /candidates/<id>/send-email/` — misleading error message**
+- Not a bug: Gmail's own daily sending-limit (`550 5.4.5 Daily user sending limit exceeded`) on the configured SMTP account, from the volume of test emails sent throughout this session. No code fix for the limit itself — resets on Gmail's own schedule.
+- Fixed the generic catch-all message it surfaced as (`"Failed to send email. Check SMTP configuration."`), which sends HR down the wrong troubleshooting path for this specific failure. Now detects 450/451/452/550-with-"limit" SMTP responses specifically and returns "The sending mailbox has hit its daily email limit. Try again later or contact your administrator." instead.
+- File: `backend/apps/recruitment/views.py` (`SendCandidateEmailView.post()`)
+
+### Investigation (informational, no code changed)
+
+**7. Announcements — Branch + Visibility(2-option) + conditional Department create-form redesign**
+
+User described a target UI (mockup screenshots) for the "Post New Announcement" form: an always-visible Branch dropdown ("All Branches" + real branches) alongside a Visibility dropdown with only two options ("All Employees" / "By Department"), with a Department dropdown appearing (and its options filtered by the selected Branch) only when "By Department" is chosen. Asked for backend-only work.
+
+Confirmed by reading `Announcement.visibility`/`target_branch`/`target_department`, `AnnouncementWriteSerializer.validate()`, `DepartmentListCreateView` (already supports `?branch=<name>`), and `BranchListCreateView` that **the backend already fully supports this exact behavior** — the serializer already force-nulls `target_branch` whenever `visibility='department'` (matching the mockup's own helper text: department targeting always spans all branches), so the described 2-axis UI is just a different arrangement of the existing 3-value `visibility` enum, not a new capability. Verified all 3 roles that can create announcements (`hr`, `system_admin`, `branch_admin`) already hold both `branches.view` and `departments.view` — no permission gap either. Zero backend changes made; gave the frontend team the precise 3-case request-payload contract (`all` / `branch`+id / `department`+id) plus the full existing endpoint reference (list/create/detail/update/delete/react/view + the two supporting dropdown endpoints).
+
+### Files Changed
+
+```
+backend/apps/accounts/views.py                             — EmployeeListCreateView.post() restored (moved out of dead duplicate class);
+                                                               onboarding-submitted notification dispatch: ignore_result=True, retry=False
+backend/apps/accounts/migrations/0049_approval_workflow_role_fk.py — _find_hr_role() made deterministic (prefers role name='hr');
+                                                               'admin' added to legacy l2 string mapping
+backend/apps/recruitment/migrations/0012_fix_meeting_link_not_null.py — NEW; drops stray NOT NULL on hrms_candidates.meeting_link
+backend/apps/recruitment/views.py                           — referral + interview-scheduled email dispatch: ignore_result=True, retry=False;
+                                                               SendCandidateEmailView: SMTP quota-specific error message
+backend/apps/announcements/views.py                         — announcement email dispatch: ignore_result=True, retry=False
+backend/apps/assessments/views/admin.py                     — assessment assignment email dispatch: ignore_result=True, retry=False
+backend/apps/attendance/views/hr_attendance.py               — attendance reprocess dispatch: ignore_result=True, retry=False (task_id preserved)
+backend/apps/attendance/services_hr_ops.py                  — attendance import dispatch: ignore_result=True, retry=False (task.id preserved)
+backend/apps/notifications/signals.py                       — leave lifecycle email dispatch: ignore_result=True, retry=False
+backend/config/settings.py                                  — CELERY_BROKER_TRANSPORT_OPTIONS, CELERY_BROKER_CONNECTION_MAX_RETRIES added
+frontend/app/dashboard/employees/_components/AddEmployeeModal.tsx — HR dropdown fetch gated on branch being selected
+```
+
+### Data / DB fixes applied directly (not via `manage.py migrate` — see root causes above for why)
+
+```
+ALTER TABLE hrms_candidates ALTER COLUMN meeting_link DROP NOT NULL
+django_migrations: accounts.0049_approval_workflow_role_fk re-applied for real via MigrationExecutor
+                    (twice — see regression note above)
+hrms_approval_workflow_rules: l2_approver_role corrected to the 'hr' Role for all 3 rows
+                    (manual patch only needed the first time, before _find_hr_role() was fixed)
+```
+
+### Pending
+
+- WSL2 → Windows localhost-forwarding to Redis is genuinely unreliable on this dev machine (confirmed, not root-caused) — email dispatch degrades gracefully now, but emails still won't actually send while it's down. Worth a dedicated pass (native Windows Redis / Memurai, or Docker Desktop, instead of WSL2 relay) rather than more Celery-side tolerance.
+- Three orphan `django_migrations` records (`0058`/`0059`/`0060_refix_approval_workflow_rule_columns*`) with no matching files — confirmed harmless, not cleaned up.
+- Frontend implementation of the Announcements Branch+Visibility+Department form redesign (backend confirmed ready, contract given above) — not started.
+- Gmail SMTP daily send limit will keep tripping until it resets or a higher-volume provider/account is configured for real usage.

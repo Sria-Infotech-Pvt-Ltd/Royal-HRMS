@@ -269,6 +269,20 @@ class BranchDetailView(APIView):
         if not branch:
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
         code = branch.branch_code
+
+        # User.branch is a free-text field, not a FK to Branch, so deleting a
+        # Branch row never raises ProtectedError on its account — this explicit
+        # count is the only thing that actually blocks deletion while employees
+        # are still assigned to it.
+        employee_count = User.objects.filter(branch__iexact=branch.branch_name).count()
+        if employee_count:
+            return error(
+                f'Cannot delete branch "{code}" — {employee_count} employee'
+                f'{"s" if employee_count != 1 else ""} still assigned to it. '
+                'Reassign or remove them before deleting this branch.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
         try:
             branch.delete()
         except ProtectedError:
