@@ -18,6 +18,7 @@ from core.responses import error, first_error, get_client_ip, success
 from apps.accounts.models import AuditLog, Company, User
 from apps.accounts.utils import send_template_email
 from core.pagination import paginate, paginated_data
+from core.template_context import candidate_context, candidate_interview_location, company_name, universal_context
 from .models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
 from .serializers import (
     CandidateBulkImportRowSerializer,
@@ -73,9 +74,11 @@ def _send_candidate_email(candidate, template_slug, actor, extra_context=None):
     sent_status  = CandidateEmail.STATUS_FAILED
 
     context = {
-        'candidate_name': candidate.name,
-        'position':       candidate.position_applied,
-        'company_name':   company_name,
+        'candidate_name':   candidate.name,
+        'position':         candidate.position_applied,
+        'position_applied': candidate.position_applied,
+        'branch_name':      candidate.branch.branch_name if candidate.branch else '',
+        'company_name':     company_name,
     }
     if extra_context:
         context.update(extra_context)
@@ -104,7 +107,7 @@ def _send_candidate_email(candidate, template_slug, actor, extra_context=None):
 
 # ─── Referral email helpers ───────────────────────────────────────────────────
 
-def _send_referral_email(candidate, template_slug, recipient_email, context):
+def _send_referral_email(candidate, template_slug, recipient_email, context, extra_attachments=None):
     """Send one referral-flow email and write CandidateEmail + CandidateLog records."""
     sent_status = CandidateEmail.STATUS_FAILED
     try:
@@ -112,6 +115,7 @@ def _send_referral_email(candidate, template_slug, recipient_email, context):
             recipient_email=recipient_email,
             template_name=template_slug,
             context=context,
+            extra_attachments=extra_attachments,
         )
         sent_status = CandidateEmail.STATUS_SENT
         logger.info('Sent %s to %s for candidate %s', template_slug, recipient_email, candidate.id)
@@ -171,73 +175,127 @@ def _send_referral_submission_emails(candidate):
 
 def _send_interview_scheduled_emails(candidate):
     """Background: notify referred candidate + referrer when interview_date is first set."""
-    company      = Company.objects.first()
-    company_name = company.company_name if company else ''
-    branch_name  = candidate.branch.branch_name if candidate.branch else ''
+    context = {**universal_context(), **candidate_context(candidate)}
     referrer     = candidate.referral_by
     referrer_name = (referrer.full_name or referrer.email) if referrer else ''
-    interview_date_str     = candidate.interview_date.strftime('%d %b %Y') if candidate.interview_date else ''
-    interview_mode_display = candidate.get_interview_mode_display()
+    ics = _build_interview_ics(candidate)
 
     # Email A — to the referred candidate
     _send_referral_email(
         candidate=candidate,
         template_slug='referral_interview_scheduled_candidate',
         recipient_email=candidate.email,
-        context={
-            'candidate_name':        candidate.name,
-            'position_applied':      candidate.position_applied,
-            'interview_date':        interview_date_str,
-            'interview_mode_display': interview_mode_display,
-            'branch_name':           branch_name,
-            'company_name':          company_name,
-        },
+        context=context,
+        extra_attachments=[ics] if ics else None,
     )
 
-    # Email B — to the referring employee
+    # Email B — to the referring employee (no calendar invite — it's not their interview)
     if referrer and referrer.email:
         _send_referral_email(
             candidate=candidate,
             template_slug='referral_interview_scheduled_referrer',
             recipient_email=referrer.email,
-            context={
-                'referrer_name':    referrer_name,
-                'candidate_name':   candidate.name,
-                'position_applied': candidate.position_applied,
-                'interview_date':   interview_date_str,
-                'company_name':     company_name,
-            },
+            context={**context, 'referrer_name': referrer_name},
         )
 
 
 def _send_interview_scheduled_email_general(candidate):
     """Background: notify a non-referred candidate when their interview date is first set."""
-    company      = Company.objects.first()
-    company_name = company.company_name if company else ''
-    branch_name  = candidate.branch.branch_name if candidate.branch else ''
-    interview_date_str     = candidate.interview_date.strftime('%d %b %Y') if candidate.interview_date else ''
-    interview_mode_display = candidate.get_interview_mode_display()
+    context = {**universal_context(), **candidate_context(candidate)}
+    ics = _build_interview_ics(candidate)
 
     _send_referral_email(
         candidate=candidate,
         template_slug='interview_scheduled_candidate',
         recipient_email=candidate.email,
-        context={
-            'candidate_name':         candidate.name,
-            'position_applied':       candidate.position_applied,
-            'interview_date':         interview_date_str,
-            'interview_mode_display': interview_mode_display,
-            'branch_name':            branch_name,
-            'company_name':           company_name,
-        },
+        context=context,
+        extra_attachments=[ics] if ics else None,
     )
 
 
-def _fire_interview_date_emails_if_needed(candidate, old_interview_date):
-    """Fire interview scheduled emails when interview_date is set or changed."""
+_ICS_ESCAPE = str.maketrans({',': '\\,', ';': '\\;', '\n': '\\n'})
+
+
+def _build_interview_ics(candidate):
+    """
+    Build a minimal .ics calendar invite for the candidate's interview, so it
+    lands directly on their calendar instead of relying on them to remember
+    the email. Returns None when there's no interview_date to build from.
+
+    interview_date/interview_time are naive values in the company's operating
+    timezone (IST — matching apps/attendance's own convention elsewhere in
+    this codebase); converted to UTC for DTSTART/DTEND so every calendar
+    client reads them correctly without an embedded VTIMEZONE block.
+    """
+    if not candidate.interview_date:
+        return None
+
+    from datetime import datetime, time as dt_time, timedelta
+    from zoneinfo import ZoneInfo
+
+    IST = ZoneInfo('Asia/Kolkata')
+    UTC = ZoneInfo('UTC')
+    start_time = candidate.interview_time or dt_time(hour=10)
+    start_dt = datetime.combine(candidate.interview_date, start_time, tzinfo=IST)
+    end_dt   = start_dt + timedelta(minutes=30)
+
+    def _fmt(dt):
+        return dt.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')
+
+    location    = candidate_interview_location(candidate).translate(_ICS_ESCAPE)
+    summary     = f'Interview — {candidate.position_applied}'.translate(_ICS_ESCAPE)
+    description = f'Interview for {candidate.position_applied} at {company_name()}.'.translate(_ICS_ESCAPE)
+
+    ics_text = '\r\n'.join([
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Royal HRMS//Interview Scheduling//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        f'UID:interview-{candidate.id}@royalhrms',
+        f'DTSTAMP:{_fmt(datetime.now(UTC))}',
+        f'DTSTART:{_fmt(start_dt)}',
+        f'DTEND:{_fmt(end_dt)}',
+        f'SUMMARY:{summary}',
+        f'DESCRIPTION:{description}',
+        f'LOCATION:{location}',
+        'END:VEVENT',
+        'END:VCALENDAR',
+        '',
+    ])
+    return ('interview_invite.ics', ics_text.encode('utf-8'), 'text/calendar')
+
+
+def _advance_status_on_interview_scheduled(candidate):
+    """
+    Move a still-pending candidate to "Interview Scheduled" once an
+    interview_date is set. Nothing else in the app does this — without it,
+    a candidate can receive the interview-scheduled email while the pipeline
+    still shows them as "Pending". Only advances from pending; never
+    overwrites a later pipeline stage (e.g. rescheduling someone already
+    "selected" shouldn't regress their status).
+    """
+    if candidate.interview_date and candidate.status == Candidate.STATUS_PENDING:
+        candidate.status = Candidate.STATUS_INTERVIEW_SCHEDULED
+        candidate.save(update_fields=['status'])
+
+
+def _fire_interview_date_emails_if_needed(candidate, old_interview_date, old_interview_time=None, old_meeting_link=None):
+    """
+    Fire interview scheduled emails when interview_date, interview_time, or
+    meeting_link changes — a candidate needs to be re-notified if the time
+    shifts or a video link gets added/changed, even when the date itself
+    stays the same.
+    """
     if candidate.interview_date is None:
         return
-    if old_interview_date == candidate.interview_date:
+    unchanged = (
+        old_interview_date == candidate.interview_date
+        and old_interview_time == candidate.interview_time
+        and old_meeting_link == candidate.meeting_link
+    )
+    if unchanged:
         return
     import threading
     target = (
@@ -311,6 +369,7 @@ class CandidateListCreateView(APIView):
 
         with transaction.atomic():
             candidate = serializer.save(added_by=request.user)
+            _advance_status_on_interview_scheduled(candidate)
 
             CandidateLog.objects.create(
                 candidate=candidate,
@@ -428,19 +487,22 @@ class CandidateDetailView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         old_interview_date = candidate.interview_date
+        old_interview_time = candidate.interview_time
+        old_meeting_link   = candidate.meeting_link
         try:
             updated = serializer.save()
         except Exception as exc:
             logger.error('CandidateDetailView PUT failed pk=%s: %s', pk, exc, exc_info=True)
             return error('Failed to update candidate. Please try again.',
                          http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        _advance_status_on_interview_scheduled(updated)
         AuditLog.objects.create(
             user=request.user, action='candidate_updated', module='recruitment',
             object_id=str(updated.pk),
             changes={k: v for k, v in request.data.items()},
             ip_address=get_client_ip(request),
         )
-        _fire_interview_date_emails_if_needed(updated, old_interview_date)
+        _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link)
         logger.info('Candidate %s fully updated by %s', pk, request.user.email)
         return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
 
@@ -460,19 +522,22 @@ class CandidateDetailView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         old_interview_date = candidate.interview_date
+        old_interview_time = candidate.interview_time
+        old_meeting_link   = candidate.meeting_link
         try:
             updated = serializer.save()
         except Exception as exc:
             logger.error('CandidateDetailView PATCH failed pk=%s: %s', pk, exc, exc_info=True)
             return error('Failed to update candidate. Please try again.',
                          http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        _advance_status_on_interview_scheduled(updated)
         AuditLog.objects.create(
             user=request.user, action='candidate_updated', module='recruitment',
             object_id=str(updated.pk),
             changes={k: v for k, v in request.data.items()},
             ip_address=get_client_ip(request),
         )
-        _fire_interview_date_emails_if_needed(updated, old_interview_date)
+        _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link)
         logger.info('Candidate %s partially updated by %s', pk, request.user.email)
         return success('Candidate updated.', data=CandidateDetailSerializer(updated).data)
 

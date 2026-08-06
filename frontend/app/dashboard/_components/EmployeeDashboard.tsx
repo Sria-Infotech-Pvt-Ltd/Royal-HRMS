@@ -5,7 +5,7 @@ import EmpLeaveBalances    from "@/components/dashboard/employee/EmpLeaveBalance
 import EmpAttendanceSummary from "@/components/dashboard/employee/EmpAttendanceSummary";
 import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems";
 import EmpRecentRequests   from "@/components/dashboard/employee/EmpRecentRequests";
-import EmpAnnouncement     from "@/components/dashboard/employee/EmpAnnouncement";
+import EmpUpdatesCard      from "@/components/dashboard/employee/EmpUpdatesCard";
 import type { SessionPayload } from "@/lib/session";
 
 interface Props { session: SessionPayload }
@@ -27,8 +27,8 @@ export default function EmployeeDashboard({ session }: Props) {
       {/* Row 1 + 2 — Console banner (KPIs + attendance status strip) */}
       <EmpConsole firstName={firstName} />
 
-      {/* Row 2.5 — Announcement banner (renders nothing when null or dismissed) */}
-      <EmpAnnouncement />
+      {/* Row 2.5 — Announcement + today's birthdays, one combined card (renders nothing when both are empty/dismissed) */}
+      <EmpUpdatesCard />
 
       {/* Quick Actions */}
       <div className="card mb-20">

@@ -11,11 +11,13 @@ interface ApiRole   { id: number; name: string; display_name: string }
 interface ApiDept   { id: number; name: string }
 interface ApiDesig  { id: number; name: string; department_name: string }
 interface ApiBranch { id: number; branch_name: string; branch_code: string }
+interface ApiPerson { id: string; employee_id: string; full_name: string }
 
 interface Form {
   first_name: string; last_name: string; email: string; phone: string;
   role: string; department: string; designation: string; branch: string;
   employee_type: string; date_of_joining: string;
+  hr: string; reporting_manager: string;
 }
 type Errs = Partial<Record<keyof Form, string>>;
 
@@ -41,6 +43,7 @@ const EMPTY: Form = {
   first_name: "", last_name: "", email: "", phone: "",
   role: "", department: "", designation: "", branch: "",
   employee_type: "Permanent", date_of_joining: "",
+  hr: "", reporting_manager: "",
 };
 
 /* ── Shared input style (matches app globals) ─────────────────── */
@@ -121,8 +124,11 @@ export default function AddEmployeeModal({
   const [depts,    setDepts]    = useState<ApiDept[]>([]);
   const [desigs,   setDesigs]   = useState<ApiDesig[]>([]);
   const [branches, setBranches] = useState<ApiBranch[]>([]);
+  const [hrs,       setHrs]       = useState<ApiPerson[]>([]);
+  const [managers,  setManagers]  = useState<ApiPerson[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [desigLoading, setDesigLoading] = useState(false);
+  const [peopleLoading, setPeopleLoading] = useState(false);
 
   /* fetch roles, departments, branches on mount */
   useEffect(() => {
@@ -164,6 +170,22 @@ export default function AddEmployeeModal({
       .finally(() => setDesigLoading(false));
   }, [form.department, depts]);
 
+  /* fetch HR + reporting-manager candidates whenever branch changes — both
+     endpoints scope by branch, and ManagerListView 400s without one. */
+  useEffect(() => {
+    if (!form.branch) { setHrs([]); setManagers([]); return; }
+    setPeopleLoading(true);
+    Promise.allSettled([
+      clientApi.get<{ data: ApiPerson[] }>(API.employees.hrList,      { params: { branch: form.branch } }),
+      clientApi.get<{ data: ApiPerson[] }>(API.employees.managerList, { params: { branch: form.branch } }),
+    ])
+      .then(([h, m]) => {
+        setHrs(h.status === "fulfilled" ? (h.value.data?.data ?? []) : []);
+        setManagers(m.status === "fulfilled" ? (m.value.data?.data ?? []) : []);
+      })
+      .finally(() => setPeopleLoading(false));
+  }, [form.branch]);
+
   function set(k: keyof Form, v: string) {
     setForm(f => {
       const next = { ...f, [k]: v };
@@ -198,9 +220,15 @@ export default function AddEmployeeModal({
     setSaving(true);
     setApiErr("");
     try {
+      const { hr, reporting_manager, ...rest } = form;
       const { data } = await clientApi.post<{ message: string; data: Record<string, unknown> }>(
         API.employees.list,
-        { ...form, role: Number(form.role) },
+        {
+          ...rest,
+          role: Number(form.role),
+          ...(hr ? { hr_id: hr } : {}),
+          ...(reporting_manager ? { reporting_manager_id: reporting_manager } : {}),
+        },
       );
       setDone(data.message || "Employee added successfully.");
       onCreated(data.data);
@@ -344,6 +372,26 @@ export default function AddEmployeeModal({
                     </Field>
                     <Field label="Date of Joining" required error={errs.date_of_joining}>
                       <Inp v={form.date_of_joining} set={v => set("date_of_joining", v)} type="date" err={!!errs.date_of_joining} />
+                    </Field>
+                    <Field label="Assign HR">
+                      <Sel v={form.hr} set={v => set("hr", v)} disabled={!form.branch || peopleLoading}>
+                        <option value="">
+                          {!form.branch ? "Select branch first" : peopleLoading ? "Loading…" : hrs.length === 0 ? "No HR found for this branch" : "— Auto-assign —"}
+                        </option>
+                        {hrs.map(h => (
+                          <option key={h.id} value={h.id}>{h.full_name}{h.employee_id ? ` (${h.employee_id})` : ""}</option>
+                        ))}
+                      </Sel>
+                    </Field>
+                    <Field label="Reporting Manager">
+                      <Sel v={form.reporting_manager} set={v => set("reporting_manager", v)} disabled={!form.branch || peopleLoading}>
+                        <option value="">
+                          {!form.branch ? "Select branch first" : peopleLoading ? "Loading…" : managers.length === 0 ? "No managers found for this branch" : "— Auto-assign —"}
+                        </option>
+                        {managers.map(m => (
+                          <option key={m.id} value={m.id}>{m.full_name}{m.employee_id ? ` (${m.employee_id})` : ""}</option>
+                        ))}
+                      </Sel>
                     </Field>
                   </div>
 

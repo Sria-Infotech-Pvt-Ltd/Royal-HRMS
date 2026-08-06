@@ -16,6 +16,8 @@ interface Props {
   onSaved: (c: Candidate) => void;
 }
 
+interface PickerEmployee { uuid: string; id: string; full_name: string }
+
 const todayStr = todayDateString();
 
 export function AddCandidateModal({ onClose, onSaved }: Props) {
@@ -25,14 +27,17 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
 
   const [form, setForm] = useState<{
     name: string; email: string; phone: string; position_applied: string;
-    branch: string; interview_date: string; interview_mode: InterviewMode; notes: string;
+    branch: string; interview_date: string; interview_time: string;
+    interview_mode: InterviewMode; meeting_link: string; interviewer: string; notes: string;
   }>({
     name: "", email: "", phone: "", position_applied: "",
-    branch: "", interview_date: "", interview_mode: "in_person", notes: "",
+    branch: "", interview_date: "", interview_time: "",
+    interview_mode: "in_person", meeting_link: "", interviewer: "", notes: "",
   });
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState("");
+  const [branches,  setBranches]  = useState<Branch[]>([]);
+  const [employees, setEmployees] = useState<PickerEmployee[]>([]);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState("");
 
   // Fetch active branches for the dropdown using branch app URL
   useEffect(() => {
@@ -42,6 +47,16 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
       })
       .then(r => setBranches(r.data?.data?.results ?? []))
       .catch(() => {/* non-blocking — user can still submit without branch */});
+  }, []);
+
+  // Employees for the Interviewer picker — the candidate serializer's
+  // `interviewer` field is a straight FK, so it needs the real user uuid,
+  // not the human-readable employee_id code `_employee_dict` puts under `id`.
+  useEffect(() => {
+    clientApi
+      .get<{ data: { results: PickerEmployee[] } }>(API.employees.list, { params: { page_size: 200 } })
+      .then(r => setEmployees(r.data?.data?.results ?? []))
+      .catch(() => {/* non-blocking — user can still submit without an interviewer */});
   }, []);
 
   // Branch-restricted users (everyone except system_admin) always add candidates
@@ -90,6 +105,7 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
       const res = await RECRUITMENT_API.create({
         ...form,
         branch: Number(form.branch),
+        interviewer: form.interviewer || null,
       });
       onSaved(res.data.data);
     } catch (e: unknown) {
@@ -159,6 +175,13 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
               <input className="field-input" type="date" min={todayStr} value={form.interview_date} onChange={e => set("interview_date", e.target.value)} />
             </div>
             <div className="field-group">
+              <label className="field-label">Interview Time</label>
+              <input className="field-input" type="time" value={form.interview_time} onChange={e => set("interview_time", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="form-row cols-2">
+            <div className="field-group">
               <label className="field-label">Interview Mode</label>
               <select className="field-input field-select" value={form.interview_mode} onChange={e => set("interview_mode", e.target.value)}>
                 <option value="in_person">In-Person</option>
@@ -166,6 +189,22 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
                 <option value="phone">Phone</option>
               </select>
             </div>
+            {form.interview_mode === "video_call" && (
+              <div className="field-group">
+                <label className="field-label">Meeting Link</label>
+                <input className="field-input" type="url" placeholder="https://meet.google.com/..." value={form.meeting_link} onChange={e => set("meeting_link", e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          <div className="field-group mb-16">
+            <label className="field-label">Interviewer</label>
+            <select className="field-input field-select" value={form.interviewer} onChange={e => set("interviewer", e.target.value)}>
+              <option value="">— Select interviewer —</option>
+              {employees.map(e => (
+                <option key={e.uuid} value={e.uuid}>{e.full_name} ({e.id})</option>
+              ))}
+            </select>
           </div>
 
           <div className="field-group">

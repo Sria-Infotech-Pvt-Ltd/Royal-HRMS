@@ -37,5 +37,6 @@ urlpatterns = [
     path('employee/recent-requests/',    views.EmployeeRecentRequestsView.as_view()),
     path('employee/attendance-summary/', views.EmployeeAttendanceSummaryView.as_view()),
     path('employee/attendance-status/',  views.EmployeeAttendanceStatusView.as_view()),
+    path('employee/birthdays/today/',    views.EmployeeBirthdayTodayView.as_view()),
 
 ]

@@ -251,7 +251,13 @@ def send_template_email(
     recipient_email: str,
     template_name: str,
     context: dict,
+    extra_attachments: list[tuple[str, bytes, str]] | None = None,
 ) -> None:
+    """
+    extra_attachments: optional list of (filename, content_bytes, mime_type) —
+    for per-send dynamic attachments (e.g. a calendar invite whose date/time
+    differs on every send) that can't be a static EmailTemplateAttachment row.
+    """
 
     from apps.accounts.models import EmailTemplate  # avoid circular import
 
@@ -280,6 +286,9 @@ def send_template_email(
     for att in tpl.attachments.all():
         with att.file.open('rb') as f:
             msg.attach(att.filename, f.read(), att.mime_type)
+
+    for filename, content, mime_type in (extra_attachments or []):
+        msg.attach(filename, content, mime_type)
 
     msg.send(fail_silently=False)
     logger.info(

@@ -9,6 +9,7 @@ import type {
   AttendanceStatus,
   Announcement,
 } from "@/types/employeeDashboard";
+import type { HRBirthdayEmployee } from "@/types/dashboard";
 
 export const useEmployeeKPIs = () =>
   useFetch<EmployeeKPIs>(API.employeeDashboard.kpis);
@@ -38,3 +39,6 @@ export const useAttendanceStatus = () =>
 
 export const useSharedAnnouncement = () =>
   useFetch<Announcement | null>(API.employeeDashboard.announcement);
+
+export const useBirthdaysToday = () =>
+  useFetch<HRBirthdayEmployee[]>(API.employeeDashboard.birthdaysToday);

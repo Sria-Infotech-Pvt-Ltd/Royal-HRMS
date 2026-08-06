@@ -260,6 +260,18 @@ class HRBirthdayUpcomingView(APIView):
         return success('Upcoming birthdays retrieved.', data=_upcoming_birthdays_data())
 
 
+# ─── Employee Birthdays ───────────────────────────────────────────────────────
+# Unlike the HR/system-admin variants above, this is open to every employee
+# (no _is_hr_or_admin/_is_system_admin gate) — the point is for a birthday to
+# be visible on everyone ELSE's dashboard too, not just HR's.
+
+class EmployeeBirthdayTodayView(APIView):
+    permission_classes = [IsAuthenticated, HasCompletedOnboarding]
+
+    def get(self, request):
+        return success("Today's birthdays retrieved.", data=_today_birthdays_data())
+
+
 # ─── Employee Action Items ────────────────────────────────────────────────────
 
 class EmployeeActionItemsView(APIView):

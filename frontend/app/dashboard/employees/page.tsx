@@ -183,8 +183,27 @@ export default function EmployeesPage() {
   }, []);
 
   // Sourced from the stats endpoint (scoped over ALL employees), not just the loaded page.
+  // Used for the list filters only — a branch/department with zero employees still
+  // legitimately has zero matching rows to filter to, so deriving from employees is fine here.
   const branchOptions = empStats.branch_names;
   const deptOptions    = empStats.department_names;
+
+  // Full master lists (from the Branch/Department models, not "branches/departments that
+  // currently have an employee"). Edit Employee needs these — a brand-new branch or
+  // department with no one assigned to it yet must still be selectable when reassigning
+  // someone, which the employee-derived branchOptions/deptOptions above can never show.
+  const [allBranchNames, setAllBranchNames] = useState<string[]>([]);
+  const [allDeptNames,   setAllDeptNames]   = useState<string[]>([]);
+
+  useEffect(() => {
+    Promise.allSettled([
+      clientApi.get<{ data: { results: { branch_name: string }[] } }>(API.employees.branches, { params: { page_size: 100 } }),
+      clientApi.get<{ data: { results: { name: string }[] } }>(API.departments.list, { params: { page_size: 100 } }),
+    ]).then(([b, d]) => {
+      if (b.status === "fulfilled") setAllBranchNames(b.value.data.data.results.map(r => r.branch_name));
+      if (d.status === "fulfilled") setAllDeptNames(d.value.data.data.results.map(r => r.name));
+    });
+  }, []);
 
   const { data: rolesData } = useFetch<{ results: { id: number; name: string; display_name: string }[] }>(
     `${API.roles.list}?page_size=100`
@@ -505,8 +524,8 @@ export default function EmployeesPage() {
       {editing && (
         <EditEmployeeModal
           employee={editing}
-          branchOptions={branchOptions}
-          deptOptions={deptOptions}
+          branchOptions={allBranchNames}
+          deptOptions={allDeptNames}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);

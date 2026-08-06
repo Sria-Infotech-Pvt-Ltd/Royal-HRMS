@@ -148,6 +148,15 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   }
 
   function handleAssessmentConfirm() {
+    // The Department/Designation selects stay visible (and editable) after the
+    // Confirm click that advances to this step, so re-check here too — without
+    // this, clearing either dropdown after passing that first check would
+    // silently submit an empty value and the backend would reject it.
+    if (!selDept || !selDesig) {
+      setAssignErr("Please select both Department and Designation before confirming.");
+      setShowAssessment(false);
+      return;
+    }
     onAction(user.id, "approve", {
       department:   selDept,
       designation:  selDesig,

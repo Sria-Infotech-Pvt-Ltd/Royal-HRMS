@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { normalizeExtraContext } from "@/lib/emailPreview";
+import clientApi from "@/lib/clientApi";
+import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { NAME_RE, POSITION_RE, sanitizeName, sanitizePosition, todayDateString } from "@/lib/candidateValidation";
@@ -13,6 +14,8 @@ interface Props {
   onClose:   () => void;
   onSaved:   (updated: Candidate) => void;
 }
+
+interface PickerEmployee { uuid: string; id: string; full_name: string }
 
 const MODE_OPTIONS: InterviewMode[] = ["in_person", "video_call", "phone"];
 const todayStr = todayDateString();
@@ -37,9 +40,23 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
   const [interviewDate,  setInterviewDate]  = useState<string>(
     candidate.interview_date ? candidate.interview_date.slice(0, 16) : ""
   );
+  const [interviewTime,  setInterviewTime]  = useState<string>(candidate.interview_time ?? "");
   const [interviewMode,  setInterviewMode]  = useState<InterviewMode>(candidate.interview_mode ?? "in_person");
+  const [meetingLink,    setMeetingLink]    = useState<string>(candidate.meeting_link ?? "");
+  const [interviewer,    setInterviewer]    = useState<string>(candidate.interviewer ?? "");
+  const [employees,      setEmployees]      = useState<PickerEmployee[]>([]);
   const [saving,         setSaving]         = useState(false);
   const [error,          setError]          = useState("");
+
+  // Employees for the Interviewer picker — the candidate serializer's
+  // `interviewer` field is a straight FK, so it needs the real user uuid,
+  // not the human-readable employee_id code `_employee_dict` puts under `id`.
+  useEffect(() => {
+    clientApi
+      .get<{ data: { results: PickerEmployee[] } }>(API.employees.list, { params: { page_size: 200 } })
+      .then(r => setEmployees(r.data?.data?.results ?? []))
+      .catch(() => {/* non-blocking — user can still save without an interviewer */});
+  }, []);
 
   async function handleSave() {
     const trimmedName = name.trim();
@@ -69,38 +86,21 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
     setSaving(true);
     setError("");
     try {
-      const isFirstSchedule = !!formattedDate && !candidate.interview_date;
-
+      // Interview-scheduled notification (with calendar invite) is sent
+      // automatically by the backend whenever interview_date/interview_time/
+      // meeting_link changes (see _fire_interview_date_emails_if_needed) —
+      // no separate client-triggered send needed here. There used to be one,
+      // which meant the candidate got the same email twice.
       const res = await RECRUITMENT_API.update(candidate.id, {
         name:             name.trim(),
         position_applied: positionApplied.trim(),
         branch:           branch ? Number(branch) : null,
         interview_date:   formattedDate || null,
+        interview_time:   interviewTime || null,
         interview_mode:   interviewMode,
+        meeting_link:     interviewMode === "video_call" ? meetingLink.trim() : "",
+        interviewer:      interviewer || null,
       });
-
-      if (isFirstSchedule) {
-        const parts     = name.trim().split(/\s+/);
-        const firstName = parts[0] ?? name;
-        const lastName  = parts.length > 1 ? parts[parts.length - 1] : "";
-        const extraContext = normalizeExtraContext({
-          candidate_name:         name,
-          full_name:              name,
-          first_name:             firstName,
-          last_name:              lastName,
-          email:                  candidate.email,
-          position_applied:       positionApplied,
-          position:               positionApplied,
-          branch_name:            candidate.branch_name ?? "",
-          interview_date:         formattedDate,
-          interview_mode:         interviewMode,
-          interview_mode_display: MODE_LABELS[interviewMode] ?? interviewMode,
-        });
-        await RECRUITMENT_API.sendEmail(candidate.id, {
-          template_name: "interview_scheduled_candidate",
-          extra_context: extraContext,
-        });
-      }
 
       onSaved(res.data?.data ?? {
         ...candidate,
@@ -108,7 +108,10 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
         position_applied: positionApplied.trim(),
         branch:           branch ? Number(branch) : null,
         interview_date:   formattedDate || null,
+        interview_time:   interviewTime || null,
         interview_mode:   interviewMode,
+        meeting_link:     interviewMode === "video_call" ? meetingLink.trim() : "",
+        interviewer:      interviewer || null,
       });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
@@ -177,7 +180,16 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
                 </p>
               )}
             </div>
+            <div className="field-group">
+              <label className="field-label">Interview Time</label>
+              <input type="time" className="field-input"
+                value={interviewTime}
+                onChange={e => setInterviewTime(e.target.value)}
+                suppressHydrationWarning />
+            </div>
+          </div>
 
+          <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Interview Mode</label>
               <select className="field-input field-select" value={interviewMode}
@@ -187,6 +199,26 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
                 ))}
               </select>
             </div>
+            {interviewMode === "video_call" && (
+              <div className="field-group">
+                <label className="field-label">Meeting Link</label>
+                <input type="url" className="field-input" placeholder="https://meet.google.com/..."
+                  value={meetingLink}
+                  onChange={e => setMeetingLink(e.target.value)}
+                  suppressHydrationWarning />
+              </div>
+            )}
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Interviewer</label>
+            <select className="field-input field-select" value={interviewer}
+              onChange={e => setInterviewer(e.target.value)} suppressHydrationWarning>
+              <option value="">— Select interviewer —</option>
+              {employees.map(e => (
+                <option key={e.uuid} value={e.uuid}>{e.full_name} ({e.id})</option>
+              ))}
+            </select>
           </div>
         </div>
 

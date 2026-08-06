@@ -224,6 +224,7 @@ export const API = {
     attendanceSummary: "/dashboard/employee/attendance-summary/",
     attendanceStatus:  "/dashboard/employee/attendance-status/",
     announcement:      "/dashboard/announcement/",
+    birthdaysToday:    "/dashboard/employee/birthdays/today/",
   },
 
   payroll: {

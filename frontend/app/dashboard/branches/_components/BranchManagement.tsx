@@ -309,7 +309,8 @@ export default function BranchManagement() {
   };
 
   // Non-superusers are scoped to their assigned branch; system_admin sees all.
-  const visibleBranches = !user?.is_superuser && user?.branch
+  const isHrAdmin = !user?.is_superuser && !!user?.branch;
+  const visibleBranches = isHrAdmin
     ? branches.filter(b => b.branch_name === user.branch)
     : branches;
 
