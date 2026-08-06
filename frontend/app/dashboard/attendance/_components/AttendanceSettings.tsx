@@ -28,6 +28,30 @@ function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
 }
 
+// Section save button (PATCH) — declared outside the component so React
+// doesn't recreate it (and reset its state) on every render.
+interface SectionSaveProps {
+  section:       keyof AttendanceSettingsForm;
+  savingSection: keyof AttendanceSettingsForm | null;
+  isBusy:        boolean;
+  onSave:        (section: keyof AttendanceSettingsForm) => void;
+}
+
+function SectionSave({ section, savingSection, isBusy, onSave }: SectionSaveProps) {
+  return (
+    <button
+      className="btn btn-ghost"
+      style={{ height: 28, fontSize: 12, padding: "0 12px" }}
+      onClick={() => onSave(section)}
+      disabled={isBusy}
+    >
+      {savingSection === section
+        ? <><Spin />&nbsp;Saving…</>
+        : <><i className="ti ti-device-floppy" />&nbsp;Save</>}
+    </button>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AttendanceSettings() {
@@ -46,22 +70,6 @@ export default function AttendanceSettings() {
   const errStyle = (s: string, f: string) =>
     fe[s]?.[f]?.length ? { borderColor: "var(--error)" } : undefined;
   const fieldErr = (s: string, f: string) => fe[s]?.[f]?.[0];
-
-  // Section save button (PATCH)
-  function SectionSave({ section }: { section: keyof AttendanceSettingsForm }) {
-    return (
-      <button
-        className="btn btn-ghost"
-        style={{ height: 28, fontSize: 12, padding: "0 12px" }}
-        onClick={() => saveSection(section)}
-        disabled={isBusy}
-      >
-        {savingSection === section
-          ? <><Spin />&nbsp;Saving…</>
-          : <><i className="ti ti-device-floppy" />&nbsp;Save</>}
-      </button>
-    );
-  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -82,7 +90,7 @@ export default function AttendanceSettings() {
       <div className="card">
         <div className="card-header">
           <div className="card-title"><i className="ti ti-clock" /> Working Hours</div>
-          <SectionSave section="working_hours" />
+          <SectionSave section="working_hours" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
         </div>
         <div className="card-body">
           <div className="form-row cols-4">
@@ -136,7 +144,7 @@ export default function AttendanceSettings() {
       <div className="card">
         <div className="card-header">
           <div className="card-title"><i className="ti ti-hand-finger" /> Punch Rules</div>
-          <SectionSave section="punch_rules" />
+          <SectionSave section="punch_rules" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
         </div>
         <div className="card-body">
           <div className="form-row cols-3">
@@ -184,7 +192,7 @@ export default function AttendanceSettings() {
       <div className="card">
         <div className="card-header">
           <div className="card-title"><i className="ti ti-trending-up" /> Overtime Rules</div>
-          <SectionSave section="overtime_rules" />
+          <SectionSave section="overtime_rules" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
         </div>
         <div className="card-body">
           <div className="form-row cols-3">
@@ -234,7 +242,7 @@ export default function AttendanceSettings() {
           <div className="card-title"><i className="ti ti-alert-triangle" /> Late Mark &amp; LOP Rule</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span className="badge badge-error" style={{ fontSize: 10 }}>Critical</span>
-            <SectionSave section="late_mark_rules" />
+            <SectionSave section="late_mark_rules" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
           </div>
         </div>
         <div className="card-body">
@@ -273,7 +281,7 @@ export default function AttendanceSettings() {
         <div className="card-header">
           <div className="card-title"><i className="ti ti-bell" /> Absence Alert</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <SectionSave section="absence_alert" />
+            <SectionSave section="absence_alert" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
             <Toggle
               on={form.absence_alert.is_enabled}
               onChange={() => setForm(f => ({ ...f, absence_alert: { ...f.absence_alert, is_enabled: !f.absence_alert.is_enabled } }))}
@@ -310,6 +318,31 @@ export default function AttendanceSettings() {
               {fieldErr("absence_alert", "notify_whom") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 4, display: "block" }}>{fieldErr("absence_alert", "notify_whom")}</span>}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Face ID Verification */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title"><i className="ti ti-face-id" /> Face ID Verification</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className="badge badge-error" style={{ fontSize: 10 }}>Critical</span>
+            <SectionSave section="face_verification" savingSection={savingSection} isBusy={isBusy} onSave={saveSection} />
+            <Toggle
+              on={form.face_verification.is_mandatory}
+              onChange={() => setForm(f => ({ ...f, face_verification: { ...f.face_verification, is_mandatory: !f.face_verification.is_mandatory } }))}
+            />
+          </div>
+        </div>
+        <div className="card-body">
+          <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>
+            {form.face_verification.is_mandatory ? (
+              <>Face ID registration is <strong>mandatory</strong> for every employee. Web clock-in/out is blocked until an employee registers and is approved, and every web punch after that requires a live face match.</>
+            ) : (
+              <>Face ID verification is <strong>off</strong>. Employees cannot register a face ID or be asked to verify — their Profile page shows &ldquo;Contact admin to use this feature&rdquo;, and no punch requires a face match.</>
+            )}
+          </p>
+          {fieldErr("face_verification", "is_mandatory") && <span style={{ fontSize: 11, color: "var(--error)", marginTop: 8, display: "block" }}>{fieldErr("face_verification", "is_mandatory")}</span>}
         </div>
       </div>
 

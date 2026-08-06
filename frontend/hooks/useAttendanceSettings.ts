@@ -39,6 +39,9 @@ const DEFAULTS: AttendanceSettingsForm = {
     alert_after_days: 3,
     notify_whom: "manager_and_hr",
   },
+  face_verification: {
+    is_mandatory: false,
+  },
 };
 
 function toTime(v: string | undefined): string {
@@ -56,6 +59,7 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
   const ot = api.overtime_rules  ?? {};
   const lm = api.late_mark_rules ?? {};
   const aa = api.absence_alert   ?? {};
+  const fv = api.face_verification ?? {};
   return {
     working_hours: {
       shift_start:            toTime(wh.shift_start)           || DEFAULTS.working_hours.shift_start,
@@ -91,6 +95,9 @@ function mergeWithDefaults(api: AttendanceSettingsApiResponse): AttendanceSettin
       alert_after_days: aa.alert_after_days ?? DEFAULTS.absence_alert.alert_after_days,
       notify_whom:      aa.notify_whom      ?? DEFAULTS.absence_alert.notify_whom,
     },
+    face_verification: {
+      is_mandatory: fv.is_mandatory ?? DEFAULTS.face_verification.is_mandatory,
+    },
   };
 }
 
@@ -101,11 +108,12 @@ function buildPutPayload(form: AttendanceSettingsForm) {
       shift_start: ensureSeconds(form.working_hours.shift_start),
       shift_end:   ensureSeconds(form.working_hours.shift_end),
     },
-    weekly_off:      form.weekly_off,
-    punch_rules:     form.punch_rules,
-    overtime_rules:  form.overtime_rules,
-    late_mark_rules: form.late_mark_rules,
-    absence_alert:   form.absence_alert,
+    weekly_off:        form.weekly_off,
+    punch_rules:       form.punch_rules,
+    overtime_rules:    form.overtime_rules,
+    late_mark_rules:   form.late_mark_rules,
+    absence_alert:     form.absence_alert,
+    face_verification: form.face_verification,
   };
 }
 

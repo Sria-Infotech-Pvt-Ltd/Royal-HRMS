@@ -32,7 +32,7 @@ class PunchWriteSerializer(serializers.Serializer):
 
     # ── Source & mode ─────────────────────────────────────────────────────────
     source          = serializers.ChoiceField(
-        choices=['web', 'mobile', 'biometric', 'manual'],
+        choices=['web', 'mobile', 'biometric', 'manual', 'voice'],
         default='web',
     )
     attendance_mode = serializers.ChoiceField(
@@ -44,6 +44,26 @@ class PunchWriteSerializer(serializers.Serializer):
     latitude        = serializers.FloatField(required=False, allow_null=True, default=None)
     longitude       = serializers.FloatField(required=False, allow_null=True, default=None)
     accuracy        = serializers.FloatField(required=False, allow_null=True, default=None)
+
+    # ── Face verification ─────────────────────────────────────────────────────
+    # Only required when the employee has an approved FaceRegistrationRequest —
+    # see FaceVerificationService.verify_for_punch. Never required otherwise.
+    face_embedding  = serializers.ListField(
+        child=serializers.FloatField(), required=False, allow_null=True, default=None,
+    )
+    # liveness_passed/liveness_score are the SAME capture-time liveness result
+    # FaceRegistrationSubmitSerializer records at enrollment — carried here too
+    # so FaceVerificationService's anti-replay check has something to compare
+    # (see services_face_antispoofing.py). capture_session_id is a client-
+    # generated UUID minted once per camera session (useFaceLivenessCapture.
+    # start()) — used the same way, to tell a fresh capture apart from a
+    # resubmitted one. None of the three are ever required on their own; they
+    # only matter once face_embedding is present.
+    liveness_passed = serializers.BooleanField(required=False, allow_null=True, default=None)
+    liveness_score  = serializers.FloatField(required=False, allow_null=True, default=None)
+    capture_session_id = serializers.CharField(
+        required=False, allow_blank=True, default='', max_length=64,
+    )
 
     # ── Device info ───────────────────────────────────────────────────────────
     device_time     = serializers.DateTimeField(required=False, allow_null=True, default=None)
