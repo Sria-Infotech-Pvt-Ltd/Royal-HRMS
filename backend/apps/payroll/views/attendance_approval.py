@@ -101,11 +101,9 @@ class CycleAttendanceSummaryView(APIView):
         ).select_related('employee')
 
         if _is_manager(request.user) and not _is_hr(request.user):
-            # Only scope to direct reportees when the manager actually has some;
-            # fall back to all employees if reporting_manager hierarchy isn't set up.
-            has_reportees = request.user.direct_reports.filter(is_active=True).exists()
-            if has_reportees:
-                records = records.filter(employee__reporting_manager=request.user)
+            # Always scope to direct reportees — a manager with no reportees
+            # configured must see an empty table, never every employee.
+            records = records.filter(employee__reporting_manager=request.user)
 
         summary = (
             records
@@ -152,6 +150,7 @@ class CycleAttendanceSummaryView(APIView):
             'l2_approver':         cycle.attendance_approved_by_l2.full_name if cycle.attendance_approved_by_l2 else None,
             'l1_approved_at':      str(cycle.attendance_l1_approved_at) if cycle.attendance_l1_approved_at else None,
             'l2_approved_at':      str(cycle.attendance_l2_approved_at) if cycle.attendance_l2_approved_at else None,
+            'hr_self_approved_at': str(cycle.hr_self_approved_at) if cycle.hr_self_approved_at else None,
             # Per-manager breakdown
             'manager_approvals':       mgr_serializer.data,
             'mgr_approved_count':      approved_mgrs,
@@ -205,10 +204,9 @@ class CycleEmployeeDailyView(APIView):
         if not employee:
             return error('Employee not found.', http_status=404)
 
-        # Managers can only drill into their own direct reportees (when hierarchy is configured)
+        # Managers can only drill into their own direct reportees
         if _is_manager(request.user) and not _is_hr(request.user):
-            has_reportees = request.user.direct_reports.filter(is_active=True).exists()
-            if has_reportees and employee.reporting_manager_id != request.user.pk:
+            if employee.reporting_manager_id != request.user.pk:
                 return error('Access denied.', http_status=403)
 
         from apps.attendance.models import AttendanceRecord

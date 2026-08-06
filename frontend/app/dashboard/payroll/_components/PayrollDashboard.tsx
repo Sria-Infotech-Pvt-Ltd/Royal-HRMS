@@ -15,7 +15,7 @@ const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct
 
 interface Props {
   onRunPayroll: (month?: string, year?: string) => void;
-  onResumeCycle: (id: string, status: string) => void;
+  onResumeCycle: (id: string, status: string, cycleStart?: string) => void;
   canResume: boolean;
 }
 interface PagedResponse<T> { results: T[]; count: number; }
@@ -271,7 +271,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                     <button
                       className="btn btn-ghost btn-sm"
                       style={{ width: "100%", justifyContent: "center" }}
-                      onClick={() => onResumeCycle(selectedCycle.id, selectedCycle.status)}
+                      onClick={() => onResumeCycle(selectedCycle.id, selectedCycle.status, selectedCycle.cycle_start)}
                     >
                       <i className="ti ti-arrow-right" /> Resume {calMonthName}
                     </button>
@@ -342,7 +342,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                     const isTerminal = TERMINAL_STATUSES.has(c.status);
                     const handleClick = isDetail
                       ? () => router.push(`/dashboard/payroll/runs/${c.id}`)
-                      : !isTerminal && canResume ? () => onResumeCycle(c.id, c.status) : undefined;
+                      : !isTerminal && canResume ? () => onResumeCycle(c.id, c.status, c.cycle_start) : undefined;
                     return (
                     <tr key={c.id} style={{ cursor: handleClick ? "pointer" : "default" }} onClick={handleClick}>
                       <td style={{ fontWeight: 600, fontSize: 13 }}>
@@ -389,7 +389,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
               </thead>
               <tbody>
                 {pending.map(c => (
-                  <tr key={c.id} style={{ cursor: canResume ? "pointer" : "default" }} onClick={canResume ? () => onResumeCycle(c.id, c.status) : undefined}>
+                  <tr key={c.id} style={{ cursor: canResume ? "pointer" : "default" }} onClick={canResume ? () => onResumeCycle(c.id, c.status, c.cycle_start) : undefined}>
                     <td style={{ fontWeight: 600 }}>
                       {new Date(c.cycle_start).toLocaleString("en-IN", { month: "long", year: "numeric" })}
                     </td>

@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("accounts", "0048_phase4_index_review"),
+        ("accounts", "0055_phase4_index_review"),
         ("announcements", "0001_initial"),
         ("branch", "0008_merge_0007"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

@@ -342,6 +342,10 @@ class PayrollCycle(models.Model):
     )
     attendance_l1_approved_at = models.DateTimeField(null=True, blank=True)
     attendance_l2_approved_at = models.DateTimeField(null=True, blank=True)
+    # Set alongside L2 when the HR approver also self-attests their own
+    # attendance for the cycle — distinct from attendance_l2_approved_at so
+    # reports can tell a self-attestation apart from a third-party review.
+    hr_self_approved_at = models.DateTimeField(null=True, blank=True)
 
     query_window_closes_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
@@ -419,6 +423,15 @@ class EmployeePayslip(models.Model):
     employee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
+        related_name='payslips',
+    )
+    # Structure actually used for this computation (employee override, branch,
+    # or global default — whichever cycles.py resolved at the time).
+    salary_structure = models.ForeignKey(
+        SalaryStructure,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='payslips',
     )
 
@@ -543,6 +556,10 @@ class ManagerAttendanceApproval(models.Model):
         related_name='payroll_attendance_approvals',
     )
     approved_at = models.DateTimeField(null=True, blank=True)
+    # Set alongside approved_at when the manager also self-attests their own
+    # attendance for the cycle — distinct from approved_at (which covers their
+    # team) so reports can tell a self-attestation apart from a peer review.
+    self_approved_at = models.DateTimeField(null=True, blank=True)
     note        = models.TextField(blank=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)

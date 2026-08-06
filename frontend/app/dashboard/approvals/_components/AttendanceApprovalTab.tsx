@@ -33,6 +33,7 @@ interface CycleSummary {
     l2_approver: string | null;
     l1_approved_at: string | null;
     l2_approved_at: string | null;
+    hr_self_approved_at: string | null;
     manager_approvals: ManagerApproval[];
     mgr_approved_count: number;
     mgr_total_count: number;
@@ -56,11 +57,12 @@ const fmtDateTime = (d: string) =>
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function AttendanceApprovalTab() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [comment,    setComment]    = useState("");
-  const [approving,  setApproving]  = useState(false);
-  const [apiErr,     setApiErr]     = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [selectedId,  setSelectedId]  = useState<string | null>(null);
+  const [comment,     setComment]     = useState("");
+  const [selfApprove, setSelfApprove] = useState(false);
+  const [approving,   setApproving]   = useState(false);
+  const [apiErr,      setApiErr]      = useState<string | null>(null);
+  const [successMsg,  setSuccessMsg]  = useState<string | null>(null);
 
   const { data: cycles, loading: cyclesLoading, error: cyclesError, refetch: refetchCycles } =
     useFetch<PendingCycle[]>(API.payroll.pendingApprovalCycles);
@@ -90,9 +92,11 @@ export default function AttendanceApprovalTab() {
       await clientApi.post(API.payroll.approveAttendance(selectedId), {
         level: `L${approvalLevel}`,
         comment,
+        self_approve: selfApprove,
       });
       setSuccessMsg(`L${approvalLevel} attendance approval recorded.`);
       setComment("");
+      setSelfApprove(false);
       refetchSummary();
       refetchCycles();
       setTimeout(() => setSuccessMsg(null), 4000);
@@ -204,6 +208,14 @@ export default function AttendanceApprovalTab() {
                 }}>
                   {l2Done ? `L2 ✓ ${summary.cycle.l2_approver}` : "L2 Waiting"}
                 </span>
+                {summary.cycle.hr_self_approved_at && (
+                  <span style={{
+                    padding: "4px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                    background: "rgba(217,119,6,0.12)", color: "#b45309",
+                  }}>
+                    HR Self-Approved
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -243,6 +255,14 @@ export default function AttendanceApprovalTab() {
                     {row.approved_at && (
                       <span style={{ color: "var(--on-variant)", fontSize: 11 }}>
                         {fmtDateTime(row.approved_at)}
+                      </span>
+                    )}
+                    {row.self_approved_at && (
+                      <span style={{
+                        padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                        background: "rgba(217,119,6,0.12)", color: "#b45309",
+                      }}>
+                        Self-Approved
                       </span>
                     )}
                   </div>
@@ -303,6 +323,14 @@ export default function AttendanceApprovalTab() {
                 onChange={e => setComment(e.target.value)}
                 style={{ resize: "vertical" }}
               />
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={selfApprove}
+                  onChange={e => setSelfApprove(e.target.checked)}
+                />
+                I also confirm my own attendance for this period is accurate (self-attested)
+              </label>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   className="btn btn-filled"

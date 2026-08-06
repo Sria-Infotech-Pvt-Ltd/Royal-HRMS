@@ -21,7 +21,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "analytics",    label: "Analytics",    icon: "ti-chart-bar"         },
 ];
 
-interface ResumeState { cycleId: string; status: string; }
+interface ResumeState { cycleId: string; status: string; cycleStart?: string; }
 interface BranchWizardState { branchId?: string; branchName?: string; }
 
 export default function PayrollPage() {
@@ -35,30 +35,36 @@ export default function PayrollPage() {
   const [runWizard, setRunWizard] = useState(false);
   const [resume,    setResume]    = useState<ResumeState | null>(null);
   const [branchWizard, setBranchWizard] = useState<BranchWizardState>({});
+  const [pendingPeriod, setPendingPeriod] = useState<{ month?: string; year?: string }>({});
 
   /** Admin opens wizard for a specific branch. */
   function openForBranch(branchId: string, branchName: string) {
     setResume(null);
     setBranchWizard({ branchId, branchName });
+    setPendingPeriod({});
     setRunWizard(true);
   }
 
-  /** HR opens wizard for their own branch (no month/year pre-fill needed). */
+  /** HR opens wizard for their own branch. month/year are set when opened
+   * from the payroll calendar's "Run {month} Payroll" button. */
   function openFresh(month?: string, year?: string) {
     setResume(null);
     setBranchWizard({});
+    setPendingPeriod({ month, year });
     setRunWizard(true);
   }
 
-  function openResume(cycleId: string, status: string) {
-    setResume({ cycleId, status });
+  function openResume(cycleId: string, status: string, cycleStart?: string) {
+    setResume({ cycleId, status, cycleStart });
     setBranchWizard({});
+    setPendingPeriod({});
     setRunWizard(true);
   }
 
   function closeWizard() {
     setResume(null);
     setBranchWizard({});
+    setPendingPeriod({});
     setRunWizard(false);
   }
 
@@ -67,11 +73,15 @@ export default function PayrollPage() {
     ? {
         isAdmin: true as const,
         initialBranchId: branchWizard.branchId,
+        initialMonth: pendingPeriod.month,
+        initialYear: pendingPeriod.year,
       }
     : {
         lockedBranch: userBranch
           ? { id: "", name: userBranch }  // id resolved server-side via user.branch
           : undefined,
+        initialMonth: pendingPeriod.month,
+        initialYear: pendingPeriod.year,
       };
 
   return (
@@ -81,7 +91,10 @@ export default function PayrollPage() {
           <div className="page-title">Payroll Management</div>
           <div className="page-sub">
             Process, approve and disburse salaries —{" "}
-            {new Date().toLocaleString("en-IN", { month: "long", year: "numeric" })}
+            {(runWizard && resume?.cycleStart
+              ? new Date(resume.cycleStart)
+              : new Date()
+            ).toLocaleString("en-IN", { month: "long", year: "numeric" })}
             {!isAdmin && userBranch && (
               <span style={{ marginLeft: 10, fontSize: 12, color: "var(--primary)", fontWeight: 600 }}>
                 <i className="ti ti-building" style={{ marginRight: 4 }} />{userBranch}
