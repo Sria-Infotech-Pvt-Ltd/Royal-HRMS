@@ -212,7 +212,7 @@ def _cloudinary_signed_url(file_field) -> str:
 
 def _document_dict(doc) -> dict:
     """Shared shape for a single EmployeeDocument, used by _employee_dict() and
-    EmployeeDocumentAdminView so the profile page and the upload response always
+    EmployeeProfileDocumentView so the profile page and the upload response always
     match the ApiDocument shape the frontend expects."""
     try:
         file_url = _cloudinary_signed_url(doc.file) if doc.file else ''
@@ -3717,6 +3717,20 @@ class OnboardingView(APIView):
                 f'{", ".join(missing_docs)}.'
             )
 
+        # Face ID registration — only required when the admin's org-wide
+        # "Face ID Verification" toggle (Attendance Settings) is mandatory.
+        # Approval isn't required at this point, only that a request was
+        # submitted — same "uploaded, not yet approved, is enough" bar as
+        # the documents check above.
+        from apps.attendance.services_face_matching import is_face_verification_mandatory
+        if is_face_verification_mandatory():
+            from apps.attendance.models import FaceRegistrationRequest
+            has_face_registration = FaceRegistrationRequest.objects.filter(employee=request.user).exists()
+            if not has_face_registration:
+                return error(
+                    'Please complete Face ID registration before submitting your onboarding profile.'
+                )
+
         User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
@@ -4522,7 +4536,7 @@ class MyProfileView(APIView):
         from apps.accounts.serializers import MyProfileSerializer
         EmployeeProfile.objects.get_or_create(user=request.user)
         user = User.objects.select_related('role', 'profile').get(pk=request.user.pk)
-        return success('Profile retrieved.', MyProfileSerializer(user).data)
+        return success('Profile retrieved.', MyProfileSerializer(user, context={'request': request}).data)
 
     def patch(self, request):
         from apps.accounts.models import EmployeeProfile

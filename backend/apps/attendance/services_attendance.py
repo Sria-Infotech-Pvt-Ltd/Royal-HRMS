@@ -91,7 +91,7 @@ class PunchService:
 
         punch_data keys (all from validated serializer):
           punch_type      — 'IN' | 'OUT'
-          source          — 'web' | 'mobile' | 'biometric' | 'manual'
+          source          — 'web' | 'mobile' | 'biometric' | 'manual' | 'voice'
           attendance_mode — 'office' | 'wfh' | 'field' | ...
           latitude        — float or None
           longitude       — float or None
@@ -101,16 +101,25 @@ class PunchService:
           device_id       — str
           browser         — str
           operating_system— str
+          face_embedding  — list[float] or None (web/voice only — see FaceVerificationService)
+          liveness_passed — bool or None (only meaningful alongside face_embedding)
+          liveness_score  — float or None (only meaningful alongside face_embedding)
+          capture_session_id — str (client-generated UUID per camera session; used
+                                for FaceVerificationService's anti-replay check)
+          is_secure       — bool (injected by the view from request.is_secure())
           ip_address      — str or None  (injected by the view from request)
 
         Raises ValueError with a user-facing message on validation failure.
-        Raises PermissionError with a user-facing message on geofence failure.
+        Raises PermissionError with a user-facing message on geofence or
+        face-verification failure.
         """
         from apps.attendance.services_geofencing import GeofencingService
+        from apps.attendance.services_face_matching import FaceVerificationService
 
         now        = timezone.now()
         today      = timezone.localdate()   # IST calendar date — not now.date() (UTC)
         punch_type = punch_data['punch_type']
+        source     = punch_data.get('source', AttendancePunch.SOURCE_WEB)
         mode       = punch_data.get('attendance_mode', AttendancePunch.MODE_OFFICE)
 
         # ── Consecutive punch validation ──────────────────────────────────────
@@ -122,6 +131,20 @@ class PunchService:
             raise ValueError(
                 'You are not currently clocked in. Please clock in first.'
             )
+
+        # ── Face verification (web/voice only, only when employee has an
+        #    approved registration) ────────────────────────────────────────────
+        face = FaceVerificationService.verify_for_punch(
+            employee, source, punch_data.get('face_embedding'),
+            capture_session_id=punch_data.get('capture_session_id') or '',
+            liveness_passed=punch_data.get('liveness_passed'),
+            liveness_score=punch_data.get('liveness_score'),
+            is_secure=punch_data.get('is_secure', True),
+        )
+        if face.required and not face.embedding_provided:
+            raise ValueError(face.rejection_message)
+        if face.required and face.embedding_provided and not face.is_match:
+            raise PermissionError(face.rejection_message)
 
         # ── Geofence validation ───────────────────────────────────────────────
         geo = GeofencingService.validate(
@@ -154,6 +177,8 @@ class PunchService:
                 operating_system=punch_data.get('operating_system', ''),
                 device_name=punch_data.get('device_name', ''),
                 device_id=punch_data.get('device_id', ''),
+                face_verified=face.is_match if face.required else False,
+                face_match_distance=face.distance,
             )
 
         record = AttendanceProcessorService.process_day(employee, today)

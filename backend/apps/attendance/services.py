@@ -15,6 +15,7 @@ from django.db import transaction
 
 from apps.attendance.models import (
     AttendanceAbsenceAlert,
+    AttendanceFaceVerificationRules,
     AttendanceLateMarkRules,
     AttendanceOvertimeRules,
     AttendancePunchRules,
@@ -33,6 +34,7 @@ _RELATED = (
     'overtime_rules',
     'late_mark_rules',
     'absence_alert',
+    'face_verification',
     'updated_by',
 )
 
@@ -72,6 +74,9 @@ DEFAULT_SETTINGS: dict = {
         'is_enabled':      True,
         'alert_after_days': 3,
         'notify_whom':     'manager_and_hr',
+    },
+    'face_verification': {
+        'is_mandatory': False,
     },
 }
 
@@ -124,6 +129,7 @@ class AttendanceSettingsService:
         AttendanceOvertimeRules.objects.create(settings=settings, **data['overtime_rules'])
         AttendanceLateMarkRules.objects.create(settings=settings, **data['late_mark_rules'])
         AttendanceAbsenceAlert.objects.create(settings=settings, **data['absence_alert'])
+        AttendanceFaceVerificationRules.objects.create(settings=settings, **data['face_verification'])
 
         logger.info('AttendanceSettings created (pk=%s) by user %s', settings.pk, user.pk)
         return AttendanceSettings.objects.select_related(*_RELATED).get(pk=settings.pk)
@@ -151,6 +157,7 @@ class AttendanceSettingsService:
             'overtime_rules': 'overtime_rules',
             'late_mark_rules': 'late_mark_rules',
             'absence_alert':  'absence_alert',
+            'face_verification': 'face_verification',
         }
         for key, related_name in _SECTION_MAP.items():
             if key in data:

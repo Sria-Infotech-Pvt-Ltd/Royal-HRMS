@@ -36,31 +36,47 @@ _api_request_factory = APIRequestFactory()
 def execute_clock_in(
     request, attendance_mode: Optional[str],
     latitude: Optional[float] = None, longitude: Optional[float] = None,
+    face_embedding: Optional[list] = None, liveness_passed: Optional[bool] = None,
+    liveness_score: Optional[float] = None, capture_session_id: str = '',
 ) -> ExecutionResult:
     """No mode said -> office, same default a fresh web punch gets
-    (PunchWriteSerializer's own default, services_attendance.py:114)."""
+    (PunchWriteSerializer's own default, services_attendance.py:114).
+
+    face_embedding etc. are only ever non-None once
+    conversation_clock_in_face.py has already run its own "taking facial
+    proof" turn and matched — see that module. Passed straight through so
+    PunchService.record_punch's own FaceVerificationService call (the single
+    authoritative check) still runs; this is never a second, separate gate."""
     mode = attendance_mode or AttendancePunch.MODE_OFFICE
     return _execute_punch(
         request, punch_type='IN', attendance_mode=mode,
         success_message='You have been clocked in successfully.',
-        latitude=latitude, longitude=longitude,
+        latitude=latitude, longitude=longitude, face_embedding=face_embedding,
+        liveness_passed=liveness_passed, liveness_score=liveness_score,
+        capture_session_id=capture_session_id,
     )
 
 
 def execute_clock_out(
     request, attendance_mode: Optional[str],
     latitude: Optional[float] = None, longitude: Optional[float] = None,
+    face_embedding: Optional[list] = None, liveness_passed: Optional[bool] = None,
+    liveness_score: Optional[float] = None, capture_session_id: str = '',
 ) -> ExecutionResult:
     """No mode said -> inherit today's still-open IN punch's mode, mirroring
     the web ClockWidget (reuses the same mode-dropdown value for both the
     IN and OUT clicks — see useClockWidget.ts / ClockWidget.tsx:89).
     Defaulting to office here instead would force a geofence check
-    against the office on a day that was opened as WFH/field/etc."""
+    against the office on a day that was opened as WFH/field/etc.
+
+    face_embedding etc. — see execute_clock_in's docstring above."""
     mode = attendance_mode or _resolve_clock_out_mode(request.user)
     return _execute_punch(
         request, punch_type='OUT', attendance_mode=mode,
         success_message='You have been clocked out successfully.',
-        latitude=latitude, longitude=longitude,
+        latitude=latitude, longitude=longitude, face_embedding=face_embedding,
+        liveness_passed=liveness_passed, liveness_score=liveness_score,
+        capture_session_id=capture_session_id,
     )
 
 
@@ -87,20 +103,30 @@ def _resolve_clock_out_mode(employee) -> str:
 def _execute_punch(
     request, punch_type: str, attendance_mode: str, success_message: str,
     latitude: Optional[float] = None, longitude: Optional[float] = None,
+    face_embedding: Optional[list] = None, liveness_passed: Optional[bool] = None,
+    liveness_score: Optional[float] = None, capture_session_id: str = '',
 ) -> ExecutionResult:
     """
     Same path as AttendancePunchView.post() — PunchWriteSerializer then
-    PunchService.record_punch(). latitude/longitude are passed straight into
-    the serializer exactly like the manual ClockWidget's punch payload
-    (frontend/hooks/useClockWidget.ts) — PunchWriteSerializer already
-    defaults both to None/allows either omitted, so there's nothing extra to
-    validate here.
+    PunchService.record_punch(). latitude/longitude/face_embedding/etc. are
+    passed straight into the serializer exactly like the manual ClockWidget's
+    punch payload (frontend/hooks/useClockWidget.ts) — PunchWriteSerializer
+    already defaults all of them to None/allows omission, so there's nothing
+    extra to validate here.
     """
     serializer = PunchWriteSerializer(data={
         'punch_type': punch_type,
         'attendance_mode': attendance_mode,
         'latitude': latitude,
         'longitude': longitude,
+        'face_embedding': face_embedding,
+        'liveness_passed': liveness_passed,
+        'liveness_score': liveness_score,
+        'capture_session_id': capture_session_id,
+        # Tags this punch distinctly from a browser punch — kept even though
+        # voice DOES have camera access now (see AttendancePunch's own
+        # docstring), so audit trails still show which channel initiated it.
+        'source': 'voice',
     })
     if not serializer.is_valid():
         logger.error('Voice %s payload invalid: %s', punch_type, serializer.errors)
@@ -108,6 +134,14 @@ def _execute_punch(
 
     punch_data = serializer.validated_data.copy()
     punch_data['ip_address'] = get_client_ip(request)
+    # Voice runs through the same browser tab as the web dashboard — same TLS
+    # guarantee applies, checked the same way the web punch view checks it.
+    # NOTE: request.is_secure() only reflects the real scheme when Django
+    # itself terminates TLS; if this is ever deployed behind a reverse proxy
+    # that terminates TLS instead, config/settings.py needs
+    # SECURE_PROXY_SSL_HEADER set too, or this (and the web view's identical
+    # check) will misread every request as insecure.
+    punch_data['is_secure'] = request.is_secure()
 
     try:
         PunchService.record_punch(request.user, punch_data)

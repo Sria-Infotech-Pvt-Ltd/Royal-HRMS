@@ -5,13 +5,15 @@ import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import TeamApprovalsSection from "./_components/TeamApprovalsSection";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
+import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApprovalsTab";
 
-type Section = "approvals" | "attendance";
+type Section = "approvals" | "attendance" | "face_registration";
 
 export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
   const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
+  const canApproveFace  = usePermission("facial_recognition.approve");
   const hasPayrollView  = usePermission("payroll.view");
   // Managers, superusers, and anyone with payroll.view (payroll admins and HR
   // alike) get this tab — it's the only place attendance-cycle sign-off lives
@@ -22,9 +24,10 @@ export default function ApprovalsPage() {
     hasPayrollView;
 
   const sections: { key: Section; label: string; icon: string }[] = useMemo(() => [
-    ...(canApprove           ? [{ key: "approvals"  as Section, label: "Team Approvals",       icon: "ti-checks"       }] : []),
-    ...(canApproveAttendance ? [{ key: "attendance" as Section, label: "Attendance Approval",  icon: "ti-calendar-check" }] : []),
-  ], [canApprove, canApproveAttendance]);
+    ...(canApprove           ? [{ key: "approvals"         as Section, label: "Team Approvals",      icon: "ti-checks"         }] : []),
+    ...(canApproveAttendance ? [{ key: "attendance"         as Section, label: "Attendance Approval", icon: "ti-calendar-check" }] : []),
+    ...(canApproveFace       ? [{ key: "face_registration"  as Section, label: "Face Registration",   icon: "ti-face-id"        }] : []),
+  ], [canApprove, canApproveAttendance, canApproveFace]);
 
   useEffect(() => {
     if (sections.length > 0 && !sections.some(s => s.key === section)) {
@@ -56,8 +59,9 @@ export default function ApprovalsPage() {
         ))}
       </div>
 
-      {section === "approvals"   && canApprove           && <TeamApprovalsSection />}
-      {section === "attendance"  && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
+      {section === "approvals"         && canApprove           && <TeamApprovalsSection />}
+      {section === "attendance"        && canApproveAttendance && <div className="settings-card"><AttendanceApprovalTab /></div>}
+      {section === "face_registration" && canApproveFace        && <div className="settings-card"><FaceRegistrationApprovalsTab /></div>}
     </div>
   );
 }

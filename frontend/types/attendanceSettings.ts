@@ -38,6 +38,10 @@ export interface AbsenceAlertSection {
   notify_whom: string;              // "manager_and_hr" | "hr_only" | "manager_only"
 }
 
+export interface FaceVerificationSection {
+  is_mandatory: boolean;
+}
+
 export interface AttendanceSettingsForm {
   working_hours: WorkingHoursSection;
   weekly_off: WeeklyOffSection;
@@ -45,6 +49,7 @@ export interface AttendanceSettingsForm {
   overtime_rules: OvertimeRulesSection;
   late_mark_rules: LateMarkRulesSection;
   absence_alert: AbsenceAlertSection;
+  face_verification: FaceVerificationSection;
 }
 
 export type AttendanceSettingsApiResponse = {
@@ -55,6 +60,7 @@ export type AttendanceSettingsApiResponse = {
   overtime_rules?: Partial<OvertimeRulesSection>;
   late_mark_rules?: Partial<LateMarkRulesSection>;
   absence_alert?: Partial<AbsenceAlertSection>;
+  face_verification?: Partial<FaceVerificationSection>;
 };
 
 export type FieldErrors = Record<string, Record<string, string[]>>;

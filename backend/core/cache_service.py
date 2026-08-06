@@ -342,7 +342,7 @@ class AttendanceSettingsCacheService:
             AttendanceSettings.objects
             .select_related(
                 'working_hours', 'weekly_off', 'punch_rules', 'overtime_rules',
-                'late_mark_rules', 'absence_alert', 'updated_by',
+                'late_mark_rules', 'absence_alert', 'face_verification', 'updated_by',
             )
             .filter(is_active=True)
             .order_by('-created_at')

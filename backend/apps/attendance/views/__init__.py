@@ -59,6 +59,18 @@ from apps.attendance.views.hr_audit_actions import (
     HRInvalidPunchDiscardView,
     HRInvalidPunchConvertView,
 )
+from apps.attendance.views.face_registration import (
+    FaceRegistrationSubmitView,
+    FaceRegistrationMyStatusView,
+    FaceRegistrationPendingListView,
+    FaceRegistrationReviewView,
+    FaceVerificationStatusView,
+)
+from apps.attendance.views.face_registration_hr import (
+    FaceRegistrationEmployeePickerView,
+    FaceRegistrationEmployeeStatusView,
+    FaceRegistrationHRRegisterView,
+)
 
 __all__ = [
     'WorkingHoursPolicyListCreateView',
@@ -106,4 +118,13 @@ __all__ = [
     'HRInvalidPunchAssignView',
     'HRInvalidPunchDiscardView',
     'HRInvalidPunchConvertView',
+    # Face Registration
+    'FaceRegistrationSubmitView',
+    'FaceRegistrationMyStatusView',
+    'FaceRegistrationPendingListView',
+    'FaceRegistrationReviewView',
+    'FaceVerificationStatusView',
+    'FaceRegistrationEmployeePickerView',
+    'FaceRegistrationEmployeeStatusView',
+    'FaceRegistrationHRRegisterView',
 ]
