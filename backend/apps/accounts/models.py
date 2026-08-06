@@ -121,6 +121,13 @@ class User(AbstractBaseUser, PermissionsMixin):
         (ASSESSMENT_COMPLETE, 'Complete'),
     ]
 
+    # Profile photo — a plain displayable image (shown in the sidebar, header,
+    # and Profile page), unrelated to apps.attendance's face-ID verification
+    # feature which stores a numeric face descriptor, never an image.
+    PROFILE_PHOTO_ALLOWED_MIME_TYPES = {'image/jpeg', 'image/png'}
+    PROFILE_PHOTO_MIN_SIZE           = 100 * 1024   # 100 KB
+    PROFILE_PHOTO_MAX_SIZE           = 200 * 1024   # 200 KB
+
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email       = models.EmailField(unique=True)
     full_name   = models.CharField(max_length=150)
@@ -167,6 +174,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     failed_login_attempts   = models.PositiveSmallIntegerField(default=0)
     locked_until            = models.DateTimeField(null=True, blank=True)
     last_login_ip           = models.GenericIPAddressField(null=True, blank=True)
+    profile_photo           = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
     date_joined  = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 

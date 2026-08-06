@@ -11,6 +11,8 @@ import {
   type NavItem,
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useFetch } from "@/hooks/useFetch";
+import Avatar from "@/app/dashboard/employees/_components/Avatar";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -34,6 +36,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/candidate-review": "Candidate Review & Onboarding",
   "/dashboard/assessments":      "Assessment Management",
   "/dashboard/email-logs": "Email Logs",
+  "/dashboard/face-id-registrations": "Face ID Registrations",
   "/dashboard/org-chart": "Organisation Chart",
   "/dashboard/announcements": "Announcements",
   "/dashboard/my-payslip": "My Payslips",
@@ -55,6 +58,11 @@ export default function DashboardShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  // Fetched independently of the server-rendered session cookie (name/role
+  // only) so a photo change shows up immediately, without needing to log in
+  // again for the cookie to refresh.
+  const { data: myProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me);
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -217,9 +225,7 @@ export default function DashboardShell({
             title="My Profile"
             suppressHydrationWarning
           >
-            <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 text-white bg-[var(--primary)]">
-              {initials(session.name)}
-            </div>
+            <Avatar text={initials(session.name)} size={30} photoUrl={myProfile?.profile_photo_url} />
             {!collapsed && (
               <div className="flex-1 overflow-hidden text-left">
                 <div className="text-xs font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--on-bg)]">
