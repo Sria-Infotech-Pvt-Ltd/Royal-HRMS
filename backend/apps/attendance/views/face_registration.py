@@ -1,0 +1,226 @@
+"""
+Face Registration views.
+
+Single-approver workflow: the facial_recognition.approve permission grant IS
+the approver pool — no manager/HR approval-chain resolution like leave or
+expenses, since this is an identity-verification control, not a delegated
+approval.
+
+Endpoints:
+  POST  /api/attendance/face-registration/         — Employee submits embedding for approval
+  GET   /api/attendance/face-registration/me/      — Employee's own latest request status
+  GET   /api/attendance/face-registration/pending/  — HR/admin queue of pending requests
+  PATCH /api/attendance/face-registration/<uuid:pk>/review/ — Approve/reject
+
+HR-initiated registration (picker/register/status-by-employee, for HR
+capturing a face in person on someone else's behalf) lives in
+face_registration_hr.py — split out to keep this file under the 300-line
+convention; it reuses _has_perm/_resolve_branch from here.
+"""
+from __future__ import annotations
+
+import logging
+
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from core.pagination import paginate, paginated_data
+from core.permissions import RequiresSecureTransport
+from core.responses import error, first_error, success
+
+from apps.attendance.models import FACE_RECOGNITION_MODEL_VERSION, FaceRegistrationRequest
+from apps.attendance.serializers_face_registration import (
+    FaceRegistrationDecisionSerializer,
+    FaceRegistrationReadSerializer,
+    FaceRegistrationSubmitSerializer,
+)
+from apps.attendance.services_face_matching import is_face_verification_mandatory
+
+_FEATURE_DISABLED_MESSAGE = (
+    'Face ID verification is currently disabled. Contact your administrator to use this feature.'
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _has_perm(user, codename: str) -> bool:
+    if not user or not user.role:
+        return False
+    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+        return True
+    return user.role.role_permissions.filter(permission__codename=codename).exists()
+
+
+def _resolve_branch(user):
+    branch_name = getattr(user, 'branch', None)
+    if not branch_name:
+        return None
+    from apps.branch.models import Branch
+    return Branch.objects.filter(branch_name__iexact=branch_name).first()
+
+
+class FaceRegistrationSubmitView(APIView):
+    """
+    POST /api/attendance/face-registration/
+
+    Any authenticated employee submits their own face embedding for
+    approval — no special permission needed to submit, only to approve.
+    """
+
+    permission_classes = [IsAuthenticated, RequiresSecureTransport]
+
+    def post(self, request: Request) -> Response:
+        if not is_face_verification_mandatory():
+            return error(_FEATURE_DISABLED_MESSAGE, http_status=status.HTTP_403_FORBIDDEN)
+
+        serializer = FaceRegistrationSubmitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(
+                first_error(serializer.errors),
+                data=serializer.errors,
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        data = serializer.validated_data
+        face_request = FaceRegistrationRequest.objects.create(
+            employee=request.user,
+            branch=_resolve_branch(request.user),
+            face_embedding=data['face_embedding'],
+            embedding_model_version=FACE_RECOGNITION_MODEL_VERSION,
+            liveness_passed=data['liveness_passed'],
+            liveness_score=data.get('liveness_score'),
+        )
+        logger.info('Face registration submitted by %s', request.user.email)
+
+        return success(
+            'Face registration request submitted for approval.',
+            FaceRegistrationReadSerializer(face_request).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+class FaceRegistrationMyStatusView(APIView):
+    """
+    GET /api/attendance/face-registration/me/
+
+    The caller's own latest face registration request, any status — lets the
+    web clock-in flow (useClockWidget.ts) know whether it must run the face
+    capture step before punching (status == 'approved').
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        latest = (
+            FaceRegistrationRequest.objects
+            .filter(employee=request.user)
+            .order_by('-created_at')
+            .first()
+        )
+        if not latest:
+            return success('No face registration found.', None)
+        return success(
+            'Face registration status retrieved.',
+            FaceRegistrationReadSerializer(latest).data,
+        )
+
+
+class FaceRegistrationPendingListView(APIView):
+    """
+    GET /api/attendance/face-registration/pending/
+
+    HR/admin queue backing the approval UI — gated by the same
+    facial_recognition.approve permission required to act on a request.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        if not _has_perm(request.user, 'facial_recognition.approve'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        queryset = (
+            FaceRegistrationRequest.objects
+            .filter(status=FaceRegistrationRequest.STATUS_PENDING)
+            .select_related('employee', 'approved_by')
+            .order_by('-created_at')
+        )
+        page_obj, paginator = paginate(queryset, request)
+        serializer = FaceRegistrationReadSerializer(page_obj.object_list, many=True)
+        return success(
+            f'{paginator.count} pending face registration request(s) found.',
+            paginated_data(paginator, page_obj, serializer.data),
+        )
+
+
+class FaceRegistrationReviewView(APIView):
+    """
+    PATCH /api/attendance/face-registration/<uuid:pk>/review/
+
+    Approve or reject a pending face registration request.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request: Request, pk) -> Response:
+        if not _has_perm(request.user, 'facial_recognition.approve'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            face_request = FaceRegistrationRequest.objects.select_related('employee').get(pk=pk)
+        except FaceRegistrationRequest.DoesNotExist:
+            return error('Face registration request not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if face_request.employee_id == request.user.id:
+            return error(
+                'You cannot approve or reject your own face registration request.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+        if face_request.status != FaceRegistrationRequest.STATUS_PENDING:
+            return error(
+                f'Request is already {face_request.status}. Only pending requests can be actioned.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = FaceRegistrationDecisionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+
+        data = serializer.validated_data
+        face_request.status      = data['status']
+        face_request.approved_by = request.user
+        face_request.approved_at = timezone.now()
+        if data.get('notes'):
+            face_request.notes = data['notes']
+        face_request.save(update_fields=['status', 'approved_by', 'approved_at', 'notes', 'updated_at'])
+
+        logger.info('Face registration %s %s by %s', pk, data['status'], request.user.email)
+
+        return success(
+            f"Face registration request {data['status']}.",
+            FaceRegistrationReadSerializer(face_request).data,
+        )
+
+
+class FaceVerificationStatusView(APIView):
+    """
+    GET /api/attendance/face-verification/status/
+
+    Exposes the org-wide face ID toggle (AttendanceFaceVerificationRules,
+    configured on the Attendance Settings page) to every authenticated
+    employee — not gated behind settings.view, since every employee's own
+    Profile page and clock-in flow need to know whether the feature is on
+    to render "Register your face" vs. "Contact admin to use this feature".
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        return success(
+            'Face verification status retrieved.',
+            {'is_mandatory': is_face_verification_mandatory()},
+        )
