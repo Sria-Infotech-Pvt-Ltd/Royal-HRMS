@@ -175,7 +175,12 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                                 </div>
                                 <div>
                                   <div style={{ fontWeight: 600, fontSize: 13 }}>{p.employee_name}</div>
-                                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{p.department} · {p.branch}</div>
+                                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                                    {p.department} · {p.branch}
+                                    {p.structure_name && (
+                                      <span style={{ marginLeft: 6, color: "var(--outline)" }}>· {p.structure_name}</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </td>

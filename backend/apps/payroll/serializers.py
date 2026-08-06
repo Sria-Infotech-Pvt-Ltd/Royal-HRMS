@@ -219,6 +219,7 @@ class PayrollCycleSerializer(serializers.ModelSerializer):
             'l2_approver_name',
             'attendance_l1_approved_at',
             'attendance_l2_approved_at',
+            'hr_self_approved_at',
             'query_window_closes_at',
             'paid_at',
             'cancelled_at',
@@ -258,6 +259,7 @@ class ManagerAttendanceApprovalSerializer(serializers.ModelSerializer):
             'manager_name',
             'manager_email',
             'approved_at',
+            'self_approved_at',
             'note',
             'created_at',
             'updated_at',
@@ -276,6 +278,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
     cycle_start = serializers.DateField(source='cycle.cycle_start', read_only=True)
     cycle_end = serializers.DateField(source='cycle.cycle_end', read_only=True)
     pay_date = serializers.DateField(source='cycle.pay_date', read_only=True)
+    structure_name = serializers.CharField(source='salary_structure.name', read_only=True, default=None)
     open_query_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -291,6 +294,8 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'employee_id_code',
             'department',
             'branch',
+            'salary_structure',
+            'structure_name',
             'annual_ctc',
             'monthly_ctc',
             'basic',

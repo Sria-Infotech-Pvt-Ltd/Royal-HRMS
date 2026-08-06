@@ -136,6 +136,7 @@ export interface ManagerApproval {
   manager_name: string;
   manager_email: string;
   approved_at: string | null;
+  self_approved_at: string | null;
   note: string;
   created_at: string;
   updated_at: string;
@@ -157,6 +158,8 @@ export interface EmployeePayslip {
   employee_id_code: string;
   department: string;
   branch: string;
+  salary_structure: string | null;
+  structure_name: string | null;
   annual_ctc: string;
   monthly_ctc: string;
   basic: string;

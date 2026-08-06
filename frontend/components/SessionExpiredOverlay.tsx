@@ -15,6 +15,8 @@ export default function SessionExpiredOverlay() {
       triggeredRef.current = true;
       setVisible(true);
       timerRef.current = setTimeout(() => {
+        setVisible(false);
+        triggeredRef.current = false;
         router.replace("/login");
       }, 2500);
     }

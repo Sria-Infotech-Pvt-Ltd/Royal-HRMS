@@ -28,6 +28,7 @@ from apps.payroll.serializers import (
     ManagerAttendanceApprovalSerializer,
 )
 from apps.accounts.models import User
+from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ _PF_DEFAULT_CEILING = Decimal('15000.00')
 # as bulk_update's field list so re-processing an existing payslip touches
 # exactly the same columns as before.
 _PAYSLIP_FIELDS = [
+    'salary_structure',
     'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
     'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
     'lop_deduction', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
@@ -52,7 +54,10 @@ class PayrollAlreadyProcessing(Exception):
     already processed, or a concurrent request already claimed it."""
 
 
-def _compute_employee_payslip(salary_config, components, branch_config, statutory, adjustments) -> dict:
+def _compute_employee_payslip(
+    salary_config, components, branch_config, statutory, adjustments, structure,
+    lop_days=Decimal('0'), total_working_days=26,
+) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
     original ProcessPayrollView loop body (Phase 2: only extracted into its
@@ -89,10 +94,8 @@ def _compute_employee_payslip(salary_config, components, branch_config, statutor
 
     gross = basic + hra + special_allowance + other_earnings_total
 
-    # LOP deduction (placeholder — real value fed in later from attendance)
-    lop_days = Decimal('0')
-    total_working_days = 26
-    lop_deduction = (gross / total_working_days) * lop_days
+    # LOP deduction — lop_days and total_working_days come from actual AttendanceRecord data
+    lop_deduction = (gross / total_working_days) * lop_days if total_working_days else Decimal('0')
 
     # PF: use branch config if present, else statutory defaults (12%/12%, Rs.15,000 ceiling)
     pf_applicable = branch_config.pf_applicable if branch_config is not None else True
@@ -135,6 +138,7 @@ def _compute_employee_payslip(salary_config, components, branch_config, statutor
     net_pay = gross + adj_earning - total_deductions
 
     return {
+        'salary_structure':      structure,
         'annual_ctc':            salary_config.annual_ctc,
         'monthly_ctc':           monthly_ctc,
         'basic':                 basic,
@@ -185,8 +189,16 @@ def process_payroll_cycle(cycle: PayrollCycle) -> dict:
     Raises PayrollAlreadyProcessing if the cycle isn't in
     STATUS_ATTENDANCE_APPROVED at claim time.
     """
+    is_reprocess = cycle.status == PayrollCycle.STATUS_PAYSLIPS_GENERATED
+    revert_status = (
+        PayrollCycle.STATUS_PAYSLIPS_GENERATED
+        if is_reprocess
+        else PayrollCycle.STATUS_ATTENDANCE_APPROVED
+    )
+
     claimed = PayrollCycle.objects.filter(
-        pk=cycle.pk, status=PayrollCycle.STATUS_ATTENDANCE_APPROVED,
+        pk=cycle.pk,
+        status__in=[PayrollCycle.STATUS_ATTENDANCE_APPROVED, PayrollCycle.STATUS_PAYSLIPS_GENERATED],
     ).update(status=PayrollCycle.STATUS_PROCESSING)
     if not claimed:
         raise PayrollAlreadyProcessing(
@@ -197,17 +209,11 @@ def process_payroll_cycle(cycle: PayrollCycle) -> dict:
     try:
         return _run_payroll_processing(cycle)
     except Exception:
-        # An unexpected failure after the claim must not leave the cycle
-        # wedged in STATUS_PROCESSING forever (it can never be re-claimed
-        # from that state) — revert it back to STATUS_ATTENDANCE_APPROVED
-        # so the same cycle can simply be reprocessed. The write phase's own
-        # transaction.atomic() below already guarantees no partial payslips
-        # exist for this attempt; this only fixes the cycle's own status.
-        logger.error('process_payroll_cycle failed for cycle %s — reverting to attendance_approved.', cycle.pk, exc_info=True)
+        logger.error('process_payroll_cycle failed for cycle %s — reverting status.', cycle.pk, exc_info=True)
         PayrollCycle.objects.filter(
             pk=cycle.pk, status=PayrollCycle.STATUS_PROCESSING,
-        ).update(status=PayrollCycle.STATUS_ATTENDANCE_APPROVED)
-        cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
+        ).update(status=revert_status)
+        cycle.status = revert_status
         raise
 
 
@@ -260,6 +266,48 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
     for adj in PayrollAdjustment.objects.filter(employee_id__in=employee_ids, month=adj_month):
         adjustments_by_employee[adj.employee_id].append(adj)
 
+    # ── Load attendance LOP rules from settings ───────────────────────────
+    att_settings = (
+        AttendanceSettings.objects
+        .select_related('late_mark_rules')
+        .filter(is_active=True)
+        .first()
+    )
+    late_mark_rules = getattr(att_settings, 'late_mark_rules', None) if att_settings else None
+    late_per_lop = (
+        late_mark_rules.late_marks_per_lop
+        if late_mark_rules and late_mark_rules.late_marks_per_lop > 0
+        else 0
+    )
+    # Each late-mark LOP trigger counts as full day or half day per policy.
+    late_lop_unit = Decimal('0')
+    if late_per_lop:
+        late_lop_unit = (
+            Decimal('1')
+            if late_mark_rules.lop_deduction_unit == AttendanceLateMarkRules.LOP_UNIT_FULL_DAY
+            else Decimal('0.5')
+        )
+
+    # ── Bulk fetch: daily attendance for LOP calculation ──────────────────
+    _NON_WORKING = {AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY}
+    absent_count_by_emp:   dict = defaultdict(int)
+    half_day_count_by_emp: dict = defaultdict(int)
+    late_count_by_emp:     dict = defaultdict(int)
+    working_days_by_emp:   dict = defaultdict(int)
+
+    for rec in AttendanceRecord.objects.filter(
+        employee_id__in=employee_ids,
+        date__range=(cycle.cycle_start, cycle.cycle_end),
+    ).only('employee_id', 'status'):
+        if rec.status not in _NON_WORKING:
+            working_days_by_emp[rec.employee_id] += 1
+        if rec.status == AttendanceRecord.STATUS_ABSENT:
+            absent_count_by_emp[rec.employee_id] += 1
+        elif rec.status == AttendanceRecord.STATUS_HALF_DAY:
+            half_day_count_by_emp[rec.employee_id] += 1
+        elif rec.status == AttendanceRecord.STATUS_LATE:
+            late_count_by_emp[rec.employee_id] += 1
+
     # ── Per-distinct-structure / per-distinct-state caches ──────────────────
     # (was: structure.components.filter(...) and StatutoryConfig.objects.filter(...)
     #  re-run for every employee even when many employees share a structure/state)
@@ -306,8 +354,18 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
         statutory = _statutory_for(branch_obj.state) if branch_obj else None
         adjustments = adjustments_by_employee.get(employee.id, [])
 
+        absent_days  = Decimal(absent_count_by_emp.get(employee.id, 0))
+        half_days    = Decimal(half_day_count_by_emp.get(employee.id, 0))
+        late_count   = late_count_by_emp.get(employee.id, 0)
+        # Late marks → LOP per the configured policy threshold (0 if late-mark LOP is disabled)
+        late_lop     = (Decimal(late_count // late_per_lop) * late_lop_unit) if late_per_lop else Decimal('0')
+        emp_lop      = absent_days + (half_days * Decimal('0.5')) + late_lop
+        # Use actual working days from attendance records; fall back to settings default if no records
+        emp_working_days = working_days_by_emp.get(employee.id) or 26
         computed[employee.id] = _compute_employee_payslip(
-            salary_config, components, branch_config, statutory, adjustments,
+            salary_config, components, branch_config, statutory, adjustments, structure,
+            lop_days=emp_lop,
+            total_working_days=emp_working_days,
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──
@@ -584,6 +642,7 @@ class AttendanceApprovalView(APIView):
         settings_obj = PayrollSettings.objects.first()
         level = request.data.get('level', '').upper()
         note = request.data.get('comment', '').strip()
+        self_approve = bool(request.data.get('self_approve', False))
 
         if level == 'L1':
             manager_row = ManagerAttendanceApproval.objects.filter(
@@ -595,7 +654,11 @@ class AttendanceApprovalView(APIView):
                     return error('You have already approved attendance for this cycle.')
                 manager_row.approved_at = timezone.now()
                 manager_row.note = note
-                manager_row.save(update_fields=['approved_at', 'note', 'updated_at'])
+                update_fields = ['approved_at', 'note', 'updated_at']
+                if self_approve:
+                    manager_row.self_approved_at = timezone.now()
+                    update_fields.append('self_approved_at')
+                manager_row.save(update_fields=update_fields)
                 logger.info('Cycle %s: manager %s approved L1', pk, request.user.email)
             else:
                 # Fallback path: HR/sysadmin can approve L1 when no manager rows exist
@@ -658,9 +721,11 @@ class AttendanceApprovalView(APIView):
             cycle.attendance_approved_by_l2 = request.user
             cycle.attendance_l2_approved_at = timezone.now()
             cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
-            cycle.save(update_fields=[
-                'attendance_approved_by_l2', 'attendance_l2_approved_at', 'status', 'updated_at',
-            ])
+            update_fields = ['attendance_approved_by_l2', 'attendance_l2_approved_at', 'status', 'updated_at']
+            if self_approve:
+                cycle.hr_self_approved_at = timezone.now()
+                update_fields.append('hr_self_approved_at')
+            cycle.save(update_fields=update_fields)
             logger.info('Cycle %s L2 attendance approved by %s', pk, request.user.email)
             return success('L2 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
