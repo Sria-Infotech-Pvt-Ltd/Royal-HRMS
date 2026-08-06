@@ -457,11 +457,24 @@ export default function ReferralsPage() {
                       required suppressHydrationWarning />
                   </div>
                   <div className="field-group">
-                    <label className="field-label">Branch</label>
-                    <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
-                      <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
-                      {branches.find(b => String(b.id) === String(myBranch))?.branch_name ?? (myBranch ? "Your Branch" : "Not assigned")}
-                    </div>
+                    <label className="field-label">Branch{isAdmin && <span style={{ color: "var(--error)" }}> *</span>}</label>
+                    {isAdmin ? (
+                      <select
+                        className="field-input field-select"
+                        value={form.branch}
+                        onChange={e => setField("branch", e.target.value)}
+                        required
+                        suppressHydrationWarning
+                      >
+                        <option value="">Select branch…</option>
+                        {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name}</option>)}
+                      </select>
+                    ) : (
+                      <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
+                        <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
+                        {branches.find(b => String(b.id) === String(myBranch))?.branch_name ?? (myBranch ? "Your Branch" : "Not assigned")}
+                      </div>
+                    )}
                   </div>
                   <div className="field-group">
                     <label className="field-label">Your Relationship <span style={{ color: "var(--error)" }}>*</span></label>

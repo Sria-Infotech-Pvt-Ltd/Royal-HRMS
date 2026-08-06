@@ -3761,6 +3761,82 @@ Twice this session, a detailed-sounding endpoint spec was handed over as "verifi
 
 ---
 
+## Session — Rithwika (05 August 2026)
+
+**Branch:** `Frontend/05-08`
+
+---
+
+### 1. Announcements — Branch/Department Dropdowns Crashed on Open (`TypeError: X.map is not a function`)
+
+**File:** `app/dashboard/announcements/page.tsx`
+
+Both `departments.list` and `branches.list` return the standard paginated envelope (`data: { count, page, results: [...] }`), but the dropdown fetch read `r.data?.data` directly instead of drilling into `.results` — so `departments`/`branches` state was set to the pagination *object* itself (truthy, so no fallback kicked in), and calling `.map()` on it threw. Fixed both fetches to read `r.data?.data?.results ?? []`.
+
+---
+
+### 2. Announcement Cards — "Read More" Replaced with a Detail Modal
+
+**Files:** `app/dashboard/announcements/page.tsx`, `app/globals.css`
+
+Requested for better UX: replaced the inline body-truncation "Read more / Show less" toggle with a full detail modal. Clicking anywhere on a card now opens a modal showing the full title/body, exact timestamps (not just relative "2h ago"), all badges, a reaction toggle, and view count; Edit/Delete/React buttons on the card use `stopPropagation()` so they still work without also opening the modal. Removed the now-dead `expanded` state and `toggleExpand()`. Added new CSS classes (`.ann-card`, `.ann-body-preview`, `.ann-read-more`, `.ann-view-*`) instead of inline styles for everything touched, per this repo's no-inline-CSS rule — also migrated the card body/footer to the pre-existing-but-previously-unused `.ann-card-body`/`.ann-card-footer` classes already sitting in `globals.css`.
+
+---
+
+### 3. Referrals Form — Branch Field Was Locked for Everyone, Now a Real Dropdown for Recruitment Admins
+
+**File:** `app/dashboard/referrals/page.tsx`
+
+The "Refer Someone" modal's Branch field was a read-only display locked to the referring employee's own branch for every user. Changed so users holding `recruitment.view` (the same flag that already unlocks the "All Referrals" tab on this page) get an actual `<select>` listing every branch — letting them refer a candidate for a branch other than their own — while everyone else stays locked to their own branch, unchanged. Reused the branches list already being fetched on this page (`/branch/branches/?status=active&page_size=100`); no new endpoint call needed.
+
+---
+
+### 4. Post Announcement Form — Restructured Fields + Branch-Scoped Posting
+
+**File:** `app/dashboard/announcements/page.tsx`
+
+Multi-turn design discussion landed on: HR/branch-scoped roles should never be able to target a branch other than their own when posting, without hardcoding role names (this codebase already keys branch-scoping off `Role.can_manage_branch` and treats `settings.edit` as the existing "bypass all branch scoping, global admin" flag — reused both here rather than inventing a third convention).
+
+Implemented:
+- New field order: **Title → Branch → Visibility → Department (if applicable) → Category → Body → checkboxes.**
+- **Branch** is now its own always-present field. Org-wide posters (`settings.edit` or superuser) get a free `<select>` of every branch, defaulting to "All Branches". Everyone else is locked to their own branch (resolved from `currentUser.branch` against the fetched branches list, same pattern as §3), shown read-only.
+- **Visibility** reduced to 2 choices — "All Employees" / "By Department" — dropped "By Branch" as its own radio since Branch is now a separate field.
+- The actual `visibility` value sent to the backend (`all` / `department` / `branch`) is **derived at save time**, not chosen directly: "By Department" always wins if selected (department reach isn't branch-limited server-side — see Notes below); otherwise a selected Branch narrows to `"branch"`; no branch selected means `"all"`. The backend's 3-way enum + mutually-exclusive target fields contract was left untouched — this is purely a frontend re-derivation of the same payload shape.
+- Edit (`openEdit`) correctly reverse-maps an existing record's `visibility`/`target_branch` back into the new Branch+Visibility fields. Save is blocked with an explicit error ("Your branch could not be resolved. Contact your administrator.") if a locked poster's own branch can't be matched against the branches list, rather than silently falling back to "All Branches" for them.
+- Decided explicitly, per user direction, **not** to build: ownership-based edit restrictions (anyone holding `announcements.edit` can edit/delete any announcement — accepted as a trust/process issue, not a code one) or a branch-lock on editing itself (an editor's own branch-lock still applies to the Branch field when editing someone else's post — same restriction as create, not loosened).
+
+---
+
+### 5. Announcement Dropdowns — Now Sourced from the Documented Endpoints, With Branch-Scoped Departments
+
+**File:** `app/dashboard/announcements/page.tsx`
+
+Given the actual endpoint reference for this module: branches fetch corrected to `/branch/branches/?status=active&page_size=100` (was an unfiltered call before). Departments fetch now uses the `?branch=<branch_name>` scoping the reference revealed — non-org-wide posters get `/departments/?branch=<their branch>` so the dropdown only lists departments with people at their branch; org-wide posters still get the unfiltered company-wide list.
+
+**Important limitation flagged, not fixed (out of frontend scope):** this only narrows which departments *appear as options* — it does not change delivery. Once "By Department" is posted, the backend's recipient-visibility logic still reaches that department company-wide, since that filter has no branch check at all. A real fix needs a backend change to the recipient-filtering logic itself.
+
+---
+
+### 6. Announcement Create/Update — Request Timeout Handling
+
+**File:** `app/dashboard/announcements/page.tsx`
+
+Reported symptom: `POST /api/announcements/` appeared to "not trigger" — DevTools showed the request reaching `localhost:3000/api/announcements/` with a completely empty Response Headers section and failing after exactly the client's timeout, with a second, unrelated endpoint (`unread-count`) failing identically at the same moment. That pattern (no response at all, ever — not a slow response) plus a second unrelated endpoint failing the same way points to the backend being unresponsive at that moment, not a frontend or request-shape bug; not resolvable from this side.
+
+Frontend-side hardening applied regardless: extended the timeout on the create/update call specifically from the client default (15s) to 30s, and made the error message explicit when the failure is specifically a timeout (`err.code === "ECONNABORTED"`) — *"The request timed out. The announcement may still have been saved — check the list before trying again"* — since `transaction.on_commit`-style flows can mean the record already saved even though the client gave up waiting.
+
+---
+
+### Key Files Changed (05 August 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/announcements/page.tsx` | Fixed `.data`→`.data.results` dropdown crash; card-click detail modal (removed Read More/expand state); Post form restructured (Branch as own field, Visibility reduced to 2 options, derived `visibility` on save); branches/departments fetches corrected to documented endpoints + branch-scoped department query; 30s timeout + explicit timeout error message on create/update |
+| `app/globals.css` | New `.ann-card`, `.ann-body-preview`, `.ann-read-more`, `.ann-view-*` classes; reused previously-unused `.ann-card-body`/`.ann-card-footer` |
+| `app/dashboard/referrals/page.tsx` | Branch field: real `<select>` of all branches for `recruitment.view` users, unchanged locked display for everyone else |
+
+---
+
 ## Session — G.Durga Prasad (06 August 2026)
 
 **Branch:** `Backend/06/08/2026`
@@ -3816,9 +3892,14 @@ Reported as a live runtime `ReferenceError` crashing `/dashboard/branches` for t
 ---
 
 ### Notes for Next Developer
-
 - **No active SMTP configuration exists in the database as of this session** — every system email (not just interview scheduling) will fail at send time until an admin adds and activates one via Settings → SMTP. Don't mistake this for a code bug if email reports keep coming in.
 - **Interview/referral email templates were found completely missing from the DB despite their seeding migrations showing as applied** — if other "silently missing" template reports surface, check `EmailTemplate.objects.filter(name=...)` directly rather than trusting `showmigrations`.
 - Several other migrations appear in the working tree (`accounts/migrations/0053`–`0060`, `attendance/migrations/0020`–`0022`, `hrms/migrations/0018`) that were **not** authored in this session — they carry their own descriptive docstrings (DB-drift fixes: payroll/recruitment permission grants, column widening, ghost-table FK fixes, leave-balance backfill). Whoever wrote them should add their own dated entry here so this log stays complete.
 
 **Merge note (demo, 2026-08-06):** `accounts/migrations/0058`–`0060` were dropped during the merge into `demo` — they revert `ApprovalWorkflowRule.l1_approver_role`/`l2_approver_role` from a `Role` ForeignKey back to plain CharFields, undoing a conversion (`accounts/0049_approval_workflow_role_fk`) that `demo` had already committed to and that other code on `demo` depends on. The other numbering collisions (`accounts/0053`–`0057`, `attendance/0020`–`0022`, `hrms/0018`) were renumbered to land after `demo`'s existing heads with their `dependencies` updated accordingly — their actual fixes were kept, only the numbers changed.
+
+**Frontend/05-08 (Rithwika — 05 August 2026)**
+
+- **"By Department" visibility still reaches every branch, not just the poster's own** (§4/§5) — this is a backend limitation (`_visible_qs()`'s department filter has no branch check), not something the frontend form can close. If branch-scoped department targeting becomes a real requirement, it needs a backend change to that recipient query, not another frontend workaround.
+- **Branch-locking on the Post form is frontend-only, not enforced server-side** — nothing stops a branch-scoped user from calling the API directly with a different `target_branch`. Accepted as-is per explicit user direction (small org, trust-based), but worth remembering if this ever needs to hold up under less-trusted conditions.
+- **The `POST /api/announcements/` timeout is still an open, unconfirmed root cause** — evidence (empty response headers, a second unrelated endpoint failing identically at the same moment) points at the backend being unresponsive at that moment rather than anything in this request's shape or the frontend's handling of it. Needs someone with backend/infra access to check whether the server process was actually up and responsive at the time, ideally by hitting the backend directly (bypassing the Next.js `/api/*` rewrite) with the same request.
