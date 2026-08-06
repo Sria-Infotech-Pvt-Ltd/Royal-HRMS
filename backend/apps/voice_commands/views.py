@@ -36,6 +36,14 @@ class VoiceParseView(APIView):
     PunchWriteSerializer -> PunchService.record_punch() runs the real
     validation exactly as the manual flow does. Every other intent ignores
     them untouched, same as they already ignore attendance_mode.
+
+    face_embedding/liveness_passed/liveness_score/capture_session_id are the
+    same kind of optional, clock_in/clock_out-only payload — carried by the
+    silent resubmit FaceVerificationModal triggers once it produces a
+    descriptor for the "taking facial proof" turn (see
+    apps.voice_commands.conversation_clock_in_face). Not re-validated here
+    either — FaceVerificationService.verify_for_punch is the one place that
+    actually checks them.
     """
 
     permission_classes = [IsAuthenticated]
@@ -46,8 +54,13 @@ class VoiceParseView(APIView):
             return error('transcript is required.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         lang = (request.data.get('lang') or 'en').strip() or 'en'
-        latitude = request.data.get('latitude')
-        longitude = request.data.get('longitude')
-        payload = handle_transcript(request, transcript, lang=lang, latitude=latitude, longitude=longitude)
+        payload = handle_transcript(
+            request, transcript, lang=lang,
+            latitude=request.data.get('latitude'), longitude=request.data.get('longitude'),
+            face_embedding=request.data.get('face_embedding'),
+            liveness_passed=request.data.get('liveness_passed'),
+            liveness_score=request.data.get('liveness_score'),
+            capture_session_id=request.data.get('capture_session_id') or '',
+        )
 
         return success(payload['message'], payload)

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useRecentRequests } from "@/hooks/useEmployeeDashboard";
 import type { RecentRequest } from "@/types/employeeDashboard";
 import AssessmentLockedNotice from "./AssessmentLockedNotice";
@@ -53,26 +52,21 @@ function detailLine(req: RecentRequest): string {
   return "";
 }
 
+// Dashboard stays lightweight — this shows the latest 5 requests only
+// (useRecentRequests defaults to page_size=5); the full, searchable history
+// lives on the My Requests page.
 export default function EmpRecentRequests() {
-  const [page, setPage] = useState(1);
-  const { data, loading, status } = useRecentRequests(page);
+  const { data, loading, status } = useRecentRequests(1);
 
-  const requests   = data?.results ?? [];
-  const totalPages = data?.total_pages ?? 1;
-  // Same-page-only "pending" count once there's more than one page — the
-  // backend doesn't expose a cross-page pending total, so the badge falls
-  // back to the accurate total record count instead of an understated one.
-  const pending = requests.filter(r => r.status === "pending" || r.status === "l2_pending").length;
+  const requests = data?.results ?? [];
+  const pending  = requests.filter(r => r.status === "pending" || r.status === "l2_pending").length;
 
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-title"><i className="ti ti-inbox" /> Recent Requests</div>
-        {!loading && totalPages <= 1 && pending > 0 && (
+        <div className="card-title"><i className="ti ti-inbox" /> Recent Activity</div>
+        {!loading && pending > 0 && (
           <span className="badge badge-warn">{pending} pending</span>
-        )}
-        {!loading && totalPages > 1 && (
-          <span className="badge badge-neutral">{data?.count} total</span>
         )}
       </div>
 
@@ -112,30 +106,11 @@ export default function EmpRecentRequests() {
         </div>
       )}
 
-      {/* Pagination — hidden entirely when everything fits on one page */}
-      {!loading && totalPages > 1 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, padding: "8px 20px 12px", borderTop: "1px solid var(--border)" }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            disabled={page <= 1}
-            onClick={() => setPage(p => p - 1)}
-            suppressHydrationWarning
-          >
-            <i className="ti ti-chevron-left" /> Previous
-          </button>
-          <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            className="btn btn-ghost btn-sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage(p => p + 1)}
-            suppressHydrationWarning
-          >
-            Next <i className="ti ti-chevron-right" />
-          </button>
-        </div>
-      )}
+      <div style={{ padding: "10px 20px", borderTop: "1px solid var(--border)" }}>
+        <a href="/dashboard/my-requests" style={{ fontSize: 12, color: "var(--primary)", fontWeight: 500, textDecoration: "none" }}>
+          View All Requests <i className="ti ti-arrow-right" style={{ fontSize: 11 }} />
+        </a>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { API } from "@/lib/api/endpoints";
-import { buildEmailPreview, CompanyInfo, normalizeExtraContext, renderTemplateVars } from "@/lib/emailPreview";
+import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailPreview";
 import { Candidate, EmailTemplate, MODE_LABELS, RECRUITMENT_API } from "./_data";
 import clientApi from "@/lib/clientApi";
 
@@ -108,17 +108,13 @@ export function MarkCandidateModal({ candidate, targetStatus, onClose, onConfirm
     setSaving(true);
     setApiError("");
     try {
+      // CandidateStatusView.patch already sends the candidate_selected/candidate_rejected
+      // email as a side effect of the status change — a separate sendEmail() call here
+      // used to fire a second, duplicate copy of the same email to the candidate.
       const res = await RECRUITMENT_API.setStatus(candidate.id, {
         status:  targetStatus,
         remarks,
       });
-
-      if (selectedTemplate) {
-        await RECRUITMENT_API.sendEmail(candidate.id, {
-          template_name: selectedTemplate.name,
-          extra_context: normalizeExtraContext(candidateVars()),
-        });
-      }
 
       onConfirmed(res.data.data);
     } catch (e: unknown) {

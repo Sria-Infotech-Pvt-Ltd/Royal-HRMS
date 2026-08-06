@@ -212,7 +212,7 @@ def _cloudinary_signed_url(file_field) -> str:
 
 def _document_dict(doc) -> dict:
     """Shared shape for a single EmployeeDocument, used by _employee_dict() and
-    EmployeeDocumentAdminView so the profile page and the upload response always
+    EmployeeProfileDocumentView so the profile page and the upload response always
     match the ApiDocument shape the frontend expects."""
     try:
         file_url = _cloudinary_signed_url(doc.file) if doc.file else ''
@@ -2631,8 +2631,8 @@ class EmployeeListCreateView(APIView):
         employee_type   = (request.data.get('employee_type')   or 'Permanent').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
-        hr_id                 = request.data.get('hr_id')
-        reporting_manager_id  = request.data.get('reporting_manager_id')
+        hr_id                 = (request.data.get('hr_id')                 or '').strip()
+        reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
@@ -2725,7 +2725,7 @@ class EmployeeListCreateView(APIView):
         if hr_id:
             try:
                 selected_hr = User.objects.get(pk=hr_id, is_active=True)
-            except (User.DoesNotExist, ValueError, TypeError):
+            except (User.DoesNotExist, ValueError, ValidationError):
                 return error('HR user not found or is inactive.', data={'hr_id': 'Invalid HR selected.'})
 
         selected_manager = None
@@ -2737,7 +2737,7 @@ class EmployeeListCreateView(APIView):
                 )
             try:
                 selected_manager = User.objects.get(pk=reporting_manager_id, is_active=True)
-            except (User.DoesNotExist, ValueError, TypeError):
+            except (User.DoesNotExist, ValueError, ValidationError):
                 return error(
                     'Reporting manager not found or is inactive.',
                     data={'reporting_manager_id': 'Invalid manager selected.'},
@@ -2915,33 +2915,6 @@ class EmployeeStatsView(APIView):
             'branch_names':      branch_names,
             'department_names':  department_names,
         })
-
-
-def _get_employee(identifier: str):
-    """Look up an employee by employee_id code (e.g. EMP001)."""
-    try:
-        return (
-            User.objects
-            .select_related('role', 'profile', 'reporting_manager', 'hr')
-            .prefetch_related('employee_documents')
-            .get(employee_id=identifier)
-        )
-    except User.DoesNotExist:
-        return None
-
-
-def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
-    """
-    Non-system-admin users are always scoped to their own branch — mirrors the
-    scoping already applied to EmployeeListCreateView.get(). Returns True when
-    the employee should be treated as not found for this requester.
-    """
-    return (
-        not _has_perm(requesting_user, 'settings.edit')
-        and bool(requesting_user.branch)
-        and employee.branch != requesting_user.branch
-    )
-
 
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -3671,6 +3644,20 @@ class OnboardingView(APIView):
                 f'{", ".join(missing_docs)}.'
             )
 
+        # Face ID registration — only required when the admin's org-wide
+        # "Face ID Verification" toggle (Attendance Settings) is mandatory.
+        # Approval isn't required at this point, only that a request was
+        # submitted — same "uploaded, not yet approved, is enough" bar as
+        # the documents check above.
+        from apps.attendance.services_face_matching import is_face_verification_mandatory
+        if is_face_verification_mandatory():
+            from apps.attendance.models import FaceRegistrationRequest
+            has_face_registration = FaceRegistrationRequest.objects.filter(employee=request.user).exists()
+            if not has_face_registration:
+                return error(
+                    'Please complete Face ID registration before submitting your onboarding profile.'
+                )
+
         User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
@@ -3914,7 +3901,7 @@ class EmployeeDocumentView(APIView):
         with transaction.atomic():
             doc = serializer.save(
                 user=request.user,
-                file_name=file_obj.name,
+                file_name=file_obj.name[:255],
                 file_size=file_obj.size,
             )
             ED.objects.filter(
@@ -4481,7 +4468,7 @@ class MyProfileView(APIView):
         from apps.accounts.serializers import MyProfileSerializer
         EmployeeProfile.objects.get_or_create(user=request.user)
         user = User.objects.select_related('role', 'profile').get(pk=request.user.pk)
-        return success('Profile retrieved.', MyProfileSerializer(user).data)
+        return success('Profile retrieved.', MyProfileSerializer(user, context={'request': request}).data)
 
     def patch(self, request):
         from apps.accounts.models import EmployeeProfile

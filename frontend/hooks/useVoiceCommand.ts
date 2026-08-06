@@ -79,19 +79,39 @@ interface VoiceParseOutcome {
   conversational: boolean;
   awaitingInput: boolean;
   success: boolean;
+  result: unknown;
 }
 
 type LocationResult = { latitude: number; longitude: number } | { errorMessage: string };
 
-// One round trip to /voice/parse/ — used for both the original submission
-// and, when needed, the silent geolocation retry resubmit (same transcript
-// and lang, coords added the second time only).
-async function postVoiceParse(transcript: string, lang: string, coords?: { latitude: number; longitude: number }): Promise<VoiceParseOutcome> {
-  const res = await clientApi.post(API.voice.parse, {
-    transcript,
-    lang,
-    ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
-  });
+// Extra fields layered onto the base { transcript, lang } body for a silent
+// resubmit of the SAME original transcript — either the geofence-retry's
+// coordinates, or clock_in/clock_out's "taking facial proof" turn (see
+// conversation_clock_in_face.py). Never both in the same request.
+type VoiceParseExtra = Partial<{
+  latitude: number; longitude: number;
+  face_embedding: number[]; liveness_passed: boolean; liveness_score: number; capture_session_id: string;
+}>;
+
+// Marks a clock_in/clock_out response as the "taking facial proof" turn —
+// mirrors conversation_clock_in_face.py's own _payload(result={'awaiting_face_proof': True}, ...).
+interface FaceProofPendingResult {
+  awaiting_face_proof: boolean;
+}
+
+function isAwaitingFaceProof(result: unknown): boolean {
+  return (
+    typeof result === "object" && result !== null && "awaiting_face_proof" in result &&
+    (result as FaceProofPendingResult).awaiting_face_proof === true
+  );
+}
+
+// One round trip to /voice/parse/ — used for the original submission and,
+// when needed, a silent resubmit of the SAME transcript with `extra` fields
+// attached (a geofence retry's coordinates, or a face-proof turn's captured
+// descriptor).
+async function postVoiceParse(transcript: string, lang: string, extra?: VoiceParseExtra): Promise<VoiceParseOutcome> {
+  const res = await clientApi.post(API.voice.parse, { transcript, lang, ...(extra ?? {}) });
   const envelope = res.data as { message?: string; data?: VoiceParseResult };
   const data = envelope.data;
   return {
@@ -101,6 +121,7 @@ async function postVoiceParse(transcript: string, lang: string, coords?: { latit
     conversational: !!data?.conversational,
     awaitingInput: !!data?.awaiting_input,
     success: data?.success ?? true,
+    result: data?.result,
   };
 }
 
@@ -159,6 +180,11 @@ export interface VoiceConversationState {
   // (permission denied, a geofencing rejection that survived the retry
   // above, etc.) — see postVoiceParse's `success` field.
   resultStatus: VoiceResultStatus | null;
+  // True only for clock_in/clock_out's "taking facial proof" turn (see
+  // conversation_clock_in_face.py) — VoiceCommandButton opens
+  // FaceVerificationModal on top of this panel when it sees this flip true,
+  // and submitFaceProof (below) is how a captured descriptor gets back in.
+  awaitingFaceProof: boolean;
 }
 
 function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
@@ -314,7 +340,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       if (!isDisabled) {
         setConversation({
           transcript, message: "", phase: "transcript",
-          conversational: false, awaitingInput: false, resultStatus: null,
+          conversational: false, awaitingInput: false, resultStatus: null, awaitingFaceProof: false,
         });
       }
 
@@ -364,6 +390,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           setConversation({
             transcript, message, phase: "result", conversational, awaitingInput,
             resultStatus: isSuccess ? "success" : "error",
+            awaitingFaceProof: awaitingInput && isAwaitingFaceProof(outcome.result),
           });
           if (awaitingInput) {
             // Still mid-dialogue — the question is spoken, but the panel
@@ -386,7 +413,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         } else {
           setConversation({
             transcript, message, phase: "result",
-            conversational: false, awaitingInput: false, resultStatus: "error",
+            conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
           });
           speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS);
         }
@@ -396,6 +423,57 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       }
     },
     [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled]
+  );
+
+  // Second+ turn of the clock_in/clock_out facial-proof dialogue —
+  // VoiceCommandButton calls this once FaceVerificationModal produces a
+  // captured descriptor, resubmitting the SAME original transcript
+  // (conversation.transcript) with it attached, exactly like the geofence
+  // retry above resubmits it with coordinates. Never called unless
+  // conversation.awaitingFaceProof is already true, so `conversation` is
+  // always non-null in practice; the guard is defensive only.
+  const submitFaceProof = useCallback(
+    async (embedding: number[], livenessScore: number, captureSessionId: string) => {
+      if (!conversation) return;
+      const transcript = conversation.transcript;
+      setStatus("processing");
+      clearAutoCloseTimer();
+
+      try {
+        const outcome = await postVoiceParse(transcript, VOICE_LANG, {
+          face_embedding: embedding, liveness_passed: true,
+          liveness_score: livenessScore, capture_session_id: captureSessionId,
+        });
+        const { message, speechMessage, conversational, awaitingInput, success: isSuccess } = outcome;
+        const spokenText = speechMessage ?? message;
+
+        if (isSuccess && CLOCK_INTENTS.has(outcome.intent)) {
+          window.dispatchEvent(new CustomEvent("attendance:updated"));
+        }
+
+        setConversation({
+          transcript, message, phase: "result", conversational, awaitingInput,
+          resultStatus: isSuccess ? "success" : "error",
+          awaitingFaceProof: awaitingInput && isAwaitingFaceProof(outcome.result),
+        });
+        if (awaitingInput) {
+          speak(spokenText);
+        } else {
+          speakThenDismiss(spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+        }
+      } catch (err: unknown) {
+        const e = err as NormalisedError;
+        const message = e?.message ?? "Could not verify your face. Please try again.";
+        setConversation({
+          transcript, message, phase: "result",
+          conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
+        });
+        speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+      } finally {
+        setStatus("idle");
+      }
+    },
+    [conversation, clearAutoCloseTimer, speak, speakThenDismiss]
   );
 
   const clearPendingStartTimer = useCallback(() => {
@@ -519,6 +597,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     startListening,
     stopListening,
     submitTranscript,
+    submitFaceProof,
     conversation,
     closeConversation,
   };

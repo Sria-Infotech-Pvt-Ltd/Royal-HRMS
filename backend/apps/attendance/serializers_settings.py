@@ -16,6 +16,7 @@ from rest_framework import serializers
 
 from apps.attendance.models import (
     AttendanceAbsenceAlert,
+    AttendanceFaceVerificationRules,
     AttendanceLateMarkRules,
     AttendanceOvertimeRules,
     AttendancePunchRules,
@@ -140,19 +141,24 @@ class AbsenceAlertWriteSerializer(serializers.Serializer):
     notify_whom      = serializers.ChoiceField(choices=AttendanceAbsenceAlert.NOTIFY_CHOICES)
 
 
+class FaceVerificationRulesWriteSerializer(serializers.Serializer):
+    is_mandatory = serializers.BooleanField(default=False)
+
+
 class AttendanceSettingsWriteSerializer(serializers.Serializer):
     """
     Top-level write serializer.
-    Nests the six section serializers; performs cross-section validation
+    Nests the seven section serializers; performs cross-section validation
     (e.g. OT threshold must exceed full-day minimum hours).
     """
 
-    working_hours  = WorkingHoursWriteSerializer()
-    weekly_off     = WeeklyOffWriteSerializer()
-    punch_rules    = PunchRulesWriteSerializer()
-    overtime_rules = OvertimeRulesWriteSerializer()
-    late_mark_rules = LateMarkRulesWriteSerializer()
-    absence_alert  = AbsenceAlertWriteSerializer()
+    working_hours     = WorkingHoursWriteSerializer()
+    weekly_off        = WeeklyOffWriteSerializer()
+    punch_rules       = PunchRulesWriteSerializer()
+    overtime_rules    = OvertimeRulesWriteSerializer()
+    late_mark_rules   = LateMarkRulesWriteSerializer()
+    absence_alert     = AbsenceAlertWriteSerializer()
+    face_verification = FaceVerificationRulesWriteSerializer()
 
     def validate(self, attrs: dict) -> dict:
         pr = attrs.get('punch_rules', {})
@@ -183,12 +189,13 @@ class AttendanceSettingsPatchSerializer(serializers.Serializer):
     At least one section must be provided.
     """
 
-    working_hours   = WorkingHoursWriteSerializer(required=False)
-    weekly_off      = WeeklyOffWriteSerializer(required=False)
-    punch_rules     = PunchRulesWriteSerializer(required=False)
-    overtime_rules  = OvertimeRulesWriteSerializer(required=False)
-    late_mark_rules = LateMarkRulesWriteSerializer(required=False)
-    absence_alert   = AbsenceAlertWriteSerializer(required=False)
+    working_hours     = WorkingHoursWriteSerializer(required=False)
+    weekly_off        = WeeklyOffWriteSerializer(required=False)
+    punch_rules       = PunchRulesWriteSerializer(required=False)
+    overtime_rules    = OvertimeRulesWriteSerializer(required=False)
+    late_mark_rules   = LateMarkRulesWriteSerializer(required=False)
+    absence_alert     = AbsenceAlertWriteSerializer(required=False)
+    face_verification = FaceVerificationRulesWriteSerializer(required=False)
 
     def validate(self, attrs: dict) -> dict:
         if not attrs:
@@ -279,14 +286,22 @@ class AbsenceAlertReadSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class FaceVerificationRulesReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = AttendanceFaceVerificationRules
+        fields = ('is_mandatory',)
+        read_only_fields = fields
+
+
 class AttendanceSettingsReadSerializer(serializers.ModelSerializer):
-    working_hours   = WorkingHoursReadSerializer(read_only=True)
-    weekly_off      = WeeklyOffReadSerializer(read_only=True)
-    punch_rules     = PunchRulesReadSerializer(read_only=True)
-    overtime_rules  = OvertimeRulesReadSerializer(read_only=True)
-    late_mark_rules = LateMarkRulesReadSerializer(read_only=True)
-    absence_alert   = AbsenceAlertReadSerializer(read_only=True)
-    updated_by_name = serializers.SerializerMethodField()
+    working_hours     = WorkingHoursReadSerializer(read_only=True)
+    weekly_off        = WeeklyOffReadSerializer(read_only=True)
+    punch_rules       = PunchRulesReadSerializer(read_only=True)
+    overtime_rules    = OvertimeRulesReadSerializer(read_only=True)
+    late_mark_rules   = LateMarkRulesReadSerializer(read_only=True)
+    absence_alert     = AbsenceAlertReadSerializer(read_only=True)
+    face_verification = FaceVerificationRulesReadSerializer(read_only=True)
+    updated_by_name   = serializers.SerializerMethodField()
 
     class Meta:
         model  = AttendanceSettings
@@ -298,6 +313,7 @@ class AttendanceSettingsReadSerializer(serializers.ModelSerializer):
             'overtime_rules',
             'late_mark_rules',
             'absence_alert',
+            'face_verification',
             'updated_by_name',
             'created_at',
             'updated_at',

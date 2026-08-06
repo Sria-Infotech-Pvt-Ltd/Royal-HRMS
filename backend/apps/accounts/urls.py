@@ -48,6 +48,7 @@ from apps.accounts.views import (
     EmailTemplatePreviewView,
     ResolveTemplateVariablesView,
 )
+from apps.accounts.views_profile_photo import ProfilePhotoView
 
 urlpatterns = [
     # Auth
@@ -65,13 +66,18 @@ urlpatterns = [
     path('employees/bulk-import/',                               EmployeeBulkImportView.as_view(),       name='employee-bulk-import'),
     path('employees/bulk-import/sample/',                        EmployeeBulkImportSampleView.as_view(), name='employee-bulk-import-sample'),
     path('employees/me/',                                        MyProfileView.as_view(),                name='my-profile'),
+    path('employees/me/photo/',                                  ProfilePhotoView.as_view(),             name='my-profile-photo'),
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
     path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
-    path('employees/<str:employee_id>/documents/',               EmployeeDocumentAdminView.as_view(),    name='employee-documents'),
+<<<<<<<<< Temporary merge branch 1
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
-    path('employees/<str:employee_id>/documents/',                EmployeeProfileDocumentView.as_view(), name='employee-profile-documents'),
+    path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(), name='employee-profile-documents'),
+=========
+    path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
+    path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
+>>>>>>>>> Temporary merge branch 2
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
     # Onboarding (self-service wizard — unified view)

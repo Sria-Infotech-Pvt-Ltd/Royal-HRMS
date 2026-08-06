@@ -1,327 +1,85 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import clientApi from "@/lib/clientApi";
-import { useToast } from "@/components/ToastProvider";
 import { getLeaveYear } from "@/lib/fiscalYear";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { usePermission } from "@/hooks/usePermission";
+import { useState } from "react";
+import { useToast } from "@/components/ToastProvider";
+import clientApi from "@/lib/clientApi";
 import {
   LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
-  LEAVE_TYPE_CONFIG,
   fmtShortDate,
 } from "../_data";
-import RejectModal from "./RejectModal";
 import StatusCell from "./StatusCell";
 import LopBadge from "./LopBadge";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
 
 interface Props {
-  onApply: () => void;
-  branch:  string;
+  onApply:        () => void;
+  onViewCalendar: () => void;
 }
 
+const RECENT_COUNT = 5;
+
 const BALANCE_DISPLAY = [
-  { key: "casual" as const, icon: "ti-circle-check", iconClass: "si-success", barColor: "var(--success)" },
-  { key: "earned" as const, icon: "ti-calendar",     iconClass: "si-primary",  barColor: "var(--primary)" },
-  { key: "sick"   as const, icon: "ti-stethoscope",  iconClass: "si-info",     barColor: "var(--info)"    },
+  { key: "casual" as const, label: "Casual Leave", icon: "ti-circle-check", iconClass: "si-success", barColor: "var(--success)" },
+  { key: "sick"   as const, label: "Sick Leave",   icon: "ti-stethoscope",  iconClass: "si-info",     barColor: "var(--info)"    },
+  { key: "earned" as const, label: "Earned Leave", icon: "ti-calendar",     iconClass: "si-primary",  barColor: "var(--primary)" },
 ];
 
-export default function LeaveDashboard({ onApply, branch }: Props) {
+// Everyone — employee, manager, or HR — sees the same thing here: their own
+// balances and their own leave requests. Approving other people's requests
+// (manager or HR) happens exclusively in the Approvals module now.
+export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
   const { showToast } = useToast();
-  const currentUser    = useCurrentUser();
-  const canApproveLeave = usePermission("leave.approve");
-  // Whether to render the approver queue (other employees' requests + actions)
-  // vs. the plain own-requests view is a permission decision, not a role-name
-  // one — leave.approve (HR) and can_manage_team (managers, L1) are the two
-  // ways a user can be an approver; anyone without either is a plain employee.
-  const isEmployee = !canApproveLeave && !currentUser?.can_manage_team;
-
-  const [rejectTarget, setRejectTarget] = useState<{ id: string; employee: string; type: string } | null>(null);
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
-  const [page, setPage] = useState(1);
-  const [tab, setTab] = useState<"pending" | "mine" | "approved">("pending");
-
-  // Branch filter changed — the current page no longer means the same thing.
-  useEffect(() => { setPage(1); }, [branch]);
 
   const currentYear = getLeaveYear();
 
   const { data: balances } = useFetch<LeaveBalance[]>(
     API.leave.balance + `?year=${currentYear}`
   );
-
-  // Employee: all their own requests, no scope/status/branch/page — this list
-  // is never paginated in the UI today and is always small (one person's own
-  // requests). Approver: the queue — one URL for every approver role; backend
-  // returns pending for managers and l2_pending for HR automatically. Never
-  // hardcode a status filter here. branch/page are system_admin-only (branch
-  // is always "" for manager/hr_admin, who are already branch-scoped server-side).
-  const requestsUrl = isEmployee
-    ? API.leave.requests
-    : API.leave.requests
-      + "?scope=team&status=pending,l2_pending"
-      + (branch ? `&branch=${encodeURIComponent(branch)}` : "")
-      + `&page=${page}`;
-
-  const { data: requests, refetch: refetchRequests, loading } = useFetch<PaginatedResponse<LeaveRequest>>(requestsUrl);
-
-  // Approver's own leave requests — a separate "My Leave Requests" tab. Never
-  // mixed into requestsUrl above: scope=team explicitly excludes the approver's
-  // own rows, so this is always the bare endpoint (no scope param = own requests).
-  const { data: myRequests, refetch: refetchMine, loading: loadingMine } = useFetch<PaginatedResponse<LeaveRequest>>(
-    isEmployee ? null : API.leave.requests
+  const { data: requests, refetch: refetchRequests, loading } = useFetch<PaginatedResponse<LeaveRequest>>(
+    API.leave.requests
   );
-  const myRequestList = myRequests?.results ?? [];
-
-  // Leaves approved by this user (manager / HR) — fetch only when the tab is
-  // open so the request fires exactly once on first click (avoids StrictMode
-  // double-mount cancellation that silently drops the response).
-  const approvedByMeUrl = (!isEmployee && tab === "approved")
-    ? `${API.leave.requests}?scope=team&status=approved${branch ? `&branch=${encodeURIComponent(branch)}` : ""}`
-    : null;
-  const { data: approvedData, loading: loadingApproved } = useFetch<PaginatedResponse<LeaveRequest>>(approvedByMeUrl);
-  const approvedList = approvedData?.results ?? [];
-
-  const statsUrl = isEmployee
-    ? API.leave.stats + `?year=${currentYear}&scope=own`
-    : API.leave.stats + `?year=${currentYear}&scope=team`;
-
-  const { data: stats, refetch: refetchStats } = useFetch<LeaveStats>(statsUrl);
+  const { data: stats } = useFetch<LeaveStats>(
+    API.leave.stats + `?year=${currentYear}&scope=own`
+  );
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
-
   const requestList = requests?.results ?? [];
-
-  async function approve(id: string) {
-    try {
-      await clientApi.post(API.leave.approve(id), { action: "approve" });
-      refetchRequests();
-      refetchStats();
-    } catch {
-      // silently handled
-    }
-  }
-
-  async function handleReject(reason: string) {
-    if (!rejectTarget) return;
-    try {
-      await clientApi.post(API.leave.approve(rejectTarget.id), { action: "reject", remarks: reason });
-      refetchRequests();
-      refetchStats();
-    } catch {
-      // silently handled
-    } finally {
-      setRejectTarget(null);
-    }
-  }
+  const recentRequests = requestList.slice(0, RECENT_COUNT);
+  const lopBalance = balanceMap["lwp"];
 
   async function cancelMine(id: string) {
     try {
       const res = await clientApi.patch<{ message: string }>(API.leave.requestDetail(id));
       showToast(res.data.message, "success");
       refetchRequests();
-      refetchMine();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       showToast(msg || "Failed to cancel leave request.", "error");
     }
   }
 
-  // ── Employee layout ────────────────────────────────────────────────────────
-  if (isEmployee) {
-    const ownPending = requestList.filter(
-      r => r.status === "pending" || r.status === "l2_pending"
-    ).length;
-
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-        <div className="stats-grid" style={{ marginBottom: 0 }}>
-          {BALANCE_DISPLAY.map(({ key, icon, iconClass, barColor }) => {
-            const b     = balanceMap[key];
-            const total = b ? Number(b.total_days) : 0;
-            const used  = b ? Number(b.used_days)  : 0;
-            const left  = total - used;
-            const pct   = total > 0 ? Math.round((used / total) * 100) : 0;
-            return (
-              <div key={key} className="stat-card">
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-                  <div>
-                    <div className="stat-label">{LEAVE_TYPE_CONFIG[key].label}</div>
-                    <div className="stat-value">{left}</div>
-                    <div className="stat-sub">of {total} days left</div>
-                  </div>
-                  <div className={`stat-icon ${iconClass}`} style={{ float: "none", margin: 0 }}>
-                    <i className={`ti ${icon}`} />
-                  </div>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />
-                </div>
-                {/* Only worth surfacing once something has actually been carried forward. */}
-                {b && b.carried_forward > 0 && (
-                  <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 6 }}>
-                    {b.carry_forward_expiry_date ? `Carry-forward expires ${fmtShortDate(b.carry_forward_expiry_date)}` : "Carry-forward: no expiry"}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">My Pending</div>
-                <div className="stat-value">{ownPending}</div>
-                <div className="stat-sub">Awaiting approval</div>
-              </div>
-              <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
-                <i className="ti ti-clock" />
-              </div>
-            </div>
-            <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
-          </div>
-
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">Loss of Pay (LOP)</div>
-                <div className="stat-value" style={{ color: "var(--warn)" }}>{stats?.lop_days ?? 0}</div>
-                <div className="stat-sub">{stats?.lop_requests ?? 0} request{(stats?.lop_requests ?? 0) !== 1 ? "s" : ""} in {currentYear}</div>
-              </div>
-              <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
-                <i className="ti ti-coin-off" />
-              </div>
-            </div>
-            <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
-              <i className="ti ti-list-details" /> My Leave Requests
-            </div>
-            <button className="btn btn-filled btn-sm" onClick={onApply}>
-              <i className="ti ti-plus" /> Apply Leave
-            </button>
-          </div>
-          <div className="table-wrap">
-            {loading ? (
-              <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
-              </div>
-            ) : requestList.length === 0 ? (
-              <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                No leave requests yet. Click <strong>Apply Leave</strong> to get started.
-              </div>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Leave Type</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th style={{ textAlign: "center" }}>Days</th>
-                    <th>Applied On</th>
-                    <th>Approver</th>
-                    <th style={{ textAlign: "center" }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requestList.map(r => (
-                    <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
-                      <td>{r.leave_type_display}</td>
-                      <td>{fmtShortDate(r.start_date)}</td>
-                      <td>{fmtShortDate(r.end_date)}</td>
-                      <td style={{ textAlign: "center", fontWeight: 700 }}>
-                        {r.total_days}
-                        <LopBadge request={r} />
-                      </td>
-                      <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
-                      <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
-                        {r.approved_by || "—"}
-                        {r.approved_at
-                          ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
-                          : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <StatusCell request={r} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        {detailRequest && (
-          <LeaveRequestDetailModal
-            requestId={detailRequest.id}
-            initialData={detailRequest}
-            onClose={() => setDetailRequest(null)}
-            onCancelRequest={() => cancelMine(detailRequest.id)}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // ── Approver layout (manager / hr / system_admin) ─────────────────────────
-  const pendingCount = stats?.pending ?? 0;
-  const scopeLabel = currentUser?.can_manage_team   ? "Your team's requests"
-                   : canApproveLeave               ? "Your branch requests"
-                   : "Organisation-wide requests";
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
+      {/* Leave Balance Cards — Available / Used / Total */}
       <div className="stats-grid" style={{ marginBottom: 0 }}>
-        <div className="stat-card">
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-            <div>
-              <div className="stat-label">Pending Approvals</div>
-              <div className="stat-value">{pendingCount}</div>
-              <div className="stat-sub">{scopeLabel}</div>
-            </div>
-            <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
-              <i className="ti ti-checks" />
-            </div>
-          </div>
-          <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
-        </div>
-
-        <div className="stat-card">
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-            <div>
-              <div className="stat-label">Loss of Pay (LOP)</div>
-              <div className="stat-value" style={{ color: "var(--warn)" }}>{stats?.lop_days ?? 0}</div>
-              <div className="stat-sub">{stats?.lop_requests ?? 0} request{(stats?.lop_requests ?? 0) !== 1 ? "s" : ""} · {scopeLabel}</div>
-            </div>
-            <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
-              <i className="ti ti-coin-off" />
-            </div>
-          </div>
-          <div className="progress-bar"><div className="progress-fill" style={{ width: 0 }} /></div>
-        </div>
-
-        {BALANCE_DISPLAY.map(({ key, icon, iconClass, barColor }) => {
-          const b     = balanceMap[key];
-          const total = b ? Number(b.total_days) : 0;
-          const used  = b ? Number(b.used_days)  : 0;
-          const left  = total - used;
-          const pct   = total > 0 ? Math.round((used / total) * 100) : 0;
+        {BALANCE_DISPLAY.map(({ key, label, icon, iconClass, barColor }) => {
+          const b         = balanceMap[key];
+          const total     = b ? Number(b.total_days) : 0;
+          const used      = b ? Number(b.used_days)  : 0;
+          const available = total - used;
+          const pct       = total > 0 ? Math.round((used / total) * 100) : 0;
           return (
             <div key={key} className="stat-card">
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
                 <div>
-                  <div className="stat-label">My {LEAVE_TYPE_CONFIG[key].shortLabel}</div>
-                  <div className="stat-value">{left}</div>
-                  <div className="stat-sub">of {total} days left</div>
+                  <div className="stat-label">{label}</div>
+                  <div className="stat-value">{available}</div>
+                  <div className="stat-sub">Available</div>
                 </div>
                 <div className={`stat-icon ${iconClass}`} style={{ float: "none", margin: 0 }}>
                   <i className={`ti ${icon}`} />
@@ -330,205 +88,111 @@ export default function LeaveDashboard({ onApply, branch }: Props) {
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${pct}%`, background: barColor }} />
               </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "var(--on-variant)" }}>
+                <span>Used: {used}</span>
+                <span>Total: {total}</span>
+              </div>
             </div>
           );
         })}
+
+        {/* Loss of Pay — shown the same shape as the accrued balances; most
+            policies don't cap LWP, so fall back to the running LOP-days-taken
+            count when the balance endpoint has no fixed total for it. */}
+        <div className="stat-card">
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <div className="stat-label">Loss of Pay (LOP)</div>
+              <div className="stat-value" style={{ color: "var(--warn)" }}>
+                {lopBalance ? Number(lopBalance.total_days) - Number(lopBalance.used_days) : "—"}
+              </div>
+              <div className="stat-sub">Available</div>
+            </div>
+            <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
+              <i className="ti ti-coin-off" />
+            </div>
+          </div>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: lopBalance && Number(lopBalance.total_days) > 0 ? `${Math.round((Number(lopBalance.used_days) / Number(lopBalance.total_days)) * 100)}%` : "0%", background: "var(--warn)" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "var(--on-variant)" }}>
+            <span>Used: {lopBalance ? Number(lopBalance.used_days) : (stats?.lop_days ?? 0)}</span>
+            <span>Total: {lopBalance ? Number(lopBalance.total_days) : "No cap"}</span>
+          </div>
+        </div>
       </div>
 
+      {/* Recent Leave Requests — latest 5 only; full history lives in My Requests */}
       <div className="card">
-        <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              className={`btn btn-sm ${tab === "pending" ? "btn-filled" : "btn-ghost"}`}
-              onClick={() => setTab("pending")}
-            >
-              <i className="ti ti-list-details" /> Pending Approvals
-              {requests && requests.count > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>· {requests.count}</span>
-              )}
-            </button>
-            <button
-              className={`btn btn-sm ${tab === "mine" ? "btn-filled" : "btn-ghost"}`}
-              onClick={() => setTab("mine")}
-            >
-              <i className="ti ti-user" /> My Leave Requests
-            </button>
-            <button
-              className={`btn btn-sm ${tab === "approved" ? "btn-filled" : "btn-ghost"}`}
-              onClick={() => setTab("approved")}
-            >
-              <i className="ti ti-circle-check" /> Approved
-            </button>
+        <div className="card-header">
+          <div className="card-title">
+            <i className="ti ti-list-details" /> Recent Leave Requests
           </div>
-          <button className="btn btn-filled btn-sm" onClick={onApply}>
-            <i className="ti ti-plus" /> Apply My Leave
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={onViewCalendar} suppressHydrationWarning>
+              <i className="ti ti-calendar" /> Leave Calendar
+            </button>
+            <button className="btn btn-filled btn-sm" onClick={onApply} suppressHydrationWarning>
+              <i className="ti ti-plus" /> Apply Leave
+            </button>
+            <a href="/dashboard/my-requests?tab=leave" className="btn btn-ghost btn-sm">
+              View All <i className="ti ti-arrow-right" />
+            </a>
+          </div>
         </div>
-
         <div className="table-wrap">
-          {(tab === "pending" ? loading : tab === "mine" ? loadingMine : loadingApproved) ? (
+          {loading ? (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
             </div>
-          ) : tab === "pending" ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Branch</th>
-                  <th>Leave Type</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th style={{ textAlign: "center" }}>Days</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requestList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
-                      <i className="ti ti-building" style={{ fontSize: 28, display: "block", marginBottom: 8, color: "var(--outline-v)" }} />
-                      <span style={{ color: "var(--on-variant)", fontSize: 13 }}>
-                        {branch ? "No requests for the selected branch." : "No pending leave requests."}
-                      </span>
-                    </td>
-                  </tr>
-                ) : requestList.map(r => (
-                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
-                    <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
-                    <td><span className="badge badge-neutral">{r.employee_branch || "—"}</span></td>
-                    <td>{r.leave_type_display}</td>
-                    <td>{fmtShortDate(r.start_date)}</td>
-                    <td>{fmtShortDate(r.end_date)}</td>
-                    <td style={{ textAlign: "center", fontWeight: 700 }}>
-                      {r.total_days}
-                      <LopBadge request={r} />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <StatusCell request={r} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : tab === "mine" ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>Leave Type</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th style={{ textAlign: "center" }}>Days</th>
-                  <th>Applied On</th>
-                  <th>Approver</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myRequestList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
-                      <span style={{ color: "var(--on-variant)", fontSize: 13 }}>
-                        You have not applied for any leave yet.
-                      </span>
-                    </td>
-                  </tr>
-                ) : myRequestList.map(r => (
-                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
-                    <td>{r.leave_type_display}</td>
-                    <td>{fmtShortDate(r.start_date)}</td>
-                    <td>{fmtShortDate(r.end_date)}</td>
-                    <td style={{ textAlign: "center", fontWeight: 700 }}>
-                      {r.total_days}
-                      <LopBadge request={r} />
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
-                    <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
-                      {r.approved_by || "—"}
-                      {r.approved_at
-                        ? <div style={{ fontSize: 11, color: "var(--outline)" }}>{fmtShortDate(r.approved_at.slice(0, 10))}</div>
-                        : <div style={{ fontSize: 11, color: "var(--outline)" }}>Not yet actioned</div>}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <StatusCell request={r} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            /* ── Approved by me ── */
-            <table>
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Branch</th>
-                  <th>Leave Type</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th style={{ textAlign: "center" }}>Days</th>
-                  <th>Applied On</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvedList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "40px 20px" }}>
-                      <i className="ti ti-circle-check" style={{ fontSize: 28, display: "block", marginBottom: 8, color: "var(--outline-v)" }} />
-                      <span style={{ color: "var(--on-variant)", fontSize: 13 }}>No approved leave requests yet.</span>
-                    </td>
-                  </tr>
-                ) : approvedList.map(r => (
-                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
-                    <td style={{ fontWeight: 600 }}>{r.employee_name}</td>
-                    <td><span className="badge badge-neutral">{r.employee_branch || "—"}</span></td>
-                    <td>{r.leave_type_display}</td>
-                    <td>{fmtShortDate(r.start_date)}</td>
-                    <td>{fmtShortDate(r.end_date)}</td>
-                    <td style={{ textAlign: "center", fontWeight: 700 }}>
-                      {r.total_days}
-                      <LopBadge request={r} />
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--on-variant)" }}>{fmtShortDate(r.created_at?.slice(0, 10))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {tab === "pending" && requests && requests.total_pages > 1 && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--outline-v)" }}>
-              <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Page {requests.page} of {requests.total_pages}</span>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(p - 1, 1))}>
-                  <i className="ti ti-chevron-left" /> Prev
-                </button>
-                <button className="btn btn-ghost btn-sm" disabled={page >= requests.total_pages} onClick={() => setPage(p => Math.min(p + 1, requests.total_pages))}>
-                  Next <i className="ti ti-chevron-right" />
-                </button>
-              </div>
+          ) : recentRequests.length === 0 ? (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
+              No leave requests yet. Click <strong>Apply Leave</strong> to get started.
             </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Leave Type</th>
+                  <th>From Date</th>
+                  <th>To Date</th>
+                  <th style={{ textAlign: "center" }}>Days</th>
+                  <th style={{ textAlign: "center" }}>Status</th>
+                  <th style={{ textAlign: "right" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRequests.map(r => (
+                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
+                    <td>{r.leave_type_display}</td>
+                    <td>{fmtShortDate(r.start_date)}</td>
+                    <td>{fmtShortDate(r.end_date)}</td>
+                    <td style={{ textAlign: "center", fontWeight: 700 }}>
+                      {r.total_days}
+                      <LopBadge request={r} />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <StatusCell request={r} />
+                    </td>
+                    <td style={{ textAlign: "right" }} onClick={e => e.stopPropagation()}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setDetailRequest(r)} suppressHydrationWarning>
+                        <i className="ti ti-eye" /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
-
-      {rejectTarget && (
-        <RejectModal
-          employee={rejectTarget.employee}
-          leaveType={rejectTarget.type}
-          onCancel={() => setRejectTarget(null)}
-          onConfirm={handleReject}
-        />
-      )}
 
       {detailRequest && (
         <LeaveRequestDetailModal
           requestId={detailRequest.id}
           initialData={detailRequest}
           onClose={() => setDetailRequest(null)}
-          onApprove={tab === "pending" ? () => approve(detailRequest.id) : undefined}
-          onReject={tab === "pending" ? () => setRejectTarget({ id: detailRequest.id, employee: detailRequest.employee_name, type: detailRequest.leave_type_display }) : undefined}
-          onCancelRequest={tab === "mine" ? () => cancelMine(detailRequest.id) : undefined}
+          onCancelRequest={() => cancelMine(detailRequest.id)}
         />
       )}
     </div>

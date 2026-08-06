@@ -1221,6 +1221,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
     assessment_status  = serializers.SerializerMethodField()
     reporting_manager  = serializers.SerializerMethodField()
     hr                 = serializers.SerializerMethodField()
+    profile_photo_url  = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -1230,8 +1231,14 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
             'onboarding_status', 'assessment_status',
             'reporting_manager', 'hr',
-            'profile',
+            'profile', 'profile_photo_url',
         ]
+
+    def get_profile_photo_url(self, obj: User) -> str | None:
+        if not obj.profile_photo:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.profile_photo.url) if request else obj.profile_photo.url
 
     def get_reporting_manager(self, obj):
         # Managers are the reporting manager for others — they have none of their own to show.

@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ('recruitment', '0011_welcome_employee_email_template'),
+        ('recruitment', '0013_interview_email_templates_with_location'),
     ]
 
     operations = [

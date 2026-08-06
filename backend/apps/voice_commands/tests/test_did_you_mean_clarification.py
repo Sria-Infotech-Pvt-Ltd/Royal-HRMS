@@ -157,6 +157,20 @@ class ClarificationConfirmationTests(SimpleTestCase):
             success=True, message='Your query has been submitted to HR.',
         )
 
+        # test_confident_new_command_mid_clarification_abandons_it below
+        # abandons into clock_in, which dispatches through
+        # conversation_clock_in_face.py rather than execute_intent above —
+        # see that module.
+        mandatory_patcher = patch(
+            'apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False,
+        )
+        mandatory_patcher.start()
+        self.addCleanup(mandatory_patcher.stop)
+        clock_in_patcher = patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+        self.mock_execute_clock_in = clock_in_patcher.start()
+        self.addCleanup(clock_in_patcher.stop)
+        self.mock_execute_clock_in.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
+
         self.request = _fake_request()
 
     def test_yes_confirms_and_dispatches_the_candidate_intent(self):

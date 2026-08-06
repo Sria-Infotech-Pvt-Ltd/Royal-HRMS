@@ -1,6 +1,30 @@
+from django.conf import settings
 from rest_framework.permissions import BasePermission
 
 _SAFE_METHODS = frozenset(('GET', 'HEAD', 'OPTIONS'))
+
+
+class RequiresSecureTransport(BasePermission):
+    """
+    Rejects any request not carrying request.is_secure() == True — for
+    endpoints where EVERY request inherently carries a raw biometric face
+    descriptor (face registration submit/HR-register; punch verification's
+    own embedding leg is conditional per-request, so it checks this itself
+    inside FaceVerificationService rather than using this blanket permission).
+
+    Exempt in local/test environments (settings.IS_LOCAL_OR_TEST_ENV — NOT
+    settings.DEBUG itself, which Django's test runner force-overrides to
+    False for every test run; see that setting's own comment in
+    config/settings.py), mirroring the project's own
+    `secure=not settings.DEBUG` cookie convention — local development runs
+    over plain HTTP and must keep working; SECURE_SSL_REDIRECT already forces
+    HTTPS site-wide in a real deployment (config/settings.py), so this is a
+    second, explicit, per-endpoint guard rather than the only line of defense.
+    """
+    message = 'This action requires a secure (HTTPS) connection.'
+
+    def has_permission(self, request, view) -> bool:
+        return request.is_secure() or settings.IS_LOCAL_OR_TEST_ENV
 
 class HasSettingsPermission(BasePermission):
     """

@@ -20,6 +20,17 @@ environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
+# Snapshotted separately from DEBUG, at the SAME .env-derived value, because
+# Django's test runner force-overrides the live settings.DEBUG attribute to
+# False for every `manage.py test` run — documented, intentional Django
+# behaviour (so debug-only code paths, e.g. verbose error pages, never mask a
+# production bug) — which makes DEBUG unusable as a "not a real production
+# deployment" signal from inside a test. Checks that must still behave like
+# local dev even under `manage.py test` — core.permissions.
+# RequiresSecureTransport and services_face_matching's TLS precondition,
+# both gating on an inherently HTTP-only local/test environment rather than
+# genuinely wanting to enforce HTTPS in CI — read this instead of DEBUG.
+IS_LOCAL_OR_TEST_ENV = DEBUG
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 INSTALLED_APPS = [

@@ -33,6 +33,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
 
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=17.385044, longitude=78.486671,
+            face_embedding=None, liveness_passed=None, liveness_score=None, capture_session_id='',
         )
 
     @patch('apps.voice_commands.views.handle_transcript')
@@ -44,6 +45,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
 
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=None, longitude=None,
+            face_embedding=None, liveness_passed=None, liveness_score=None, capture_session_id='',
         )
 
     @patch('apps.voice_commands.views.handle_transcript')

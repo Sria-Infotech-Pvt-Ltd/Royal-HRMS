@@ -129,6 +129,9 @@ class AttendancePunchView(APIView):
 
         punch_data = serializer.validated_data.copy()
         punch_data['ip_address'] = get_client_ip(request)
+        # Confirms TLS on this leg before FaceVerificationService ever touches
+        # a submitted embedding — see that service's own precondition check.
+        punch_data['is_secure']  = request.is_secure()
 
         try:
             PunchService.record_punch(request.user, punch_data)

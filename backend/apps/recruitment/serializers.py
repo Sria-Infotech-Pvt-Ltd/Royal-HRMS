@@ -46,7 +46,8 @@ class CandidateListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'email', 'phone', 'position_applied',
             'branch', 'branch_name',
-            'interview_date', 'interviewer', 'interviewer_name', 'interview_mode',
+            'interview_date', 'interview_time', 'interviewer', 'interviewer_name',
+            'interview_mode', 'meeting_link',
             'notes', 'status', 'referral_by', 'referral_by_name',
             'details_filled', 'hr_approved', 'portal_credentials_sent',
             'added_by_name', 'created_at', 'updated_at',
@@ -85,7 +86,8 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
         model  = Candidate
         fields = [
             'name', 'email', 'phone', 'position_applied',
-            'branch', 'interview_date', 'interviewer', 'interview_mode', 'notes',
+            'branch', 'interview_date', 'interview_time', 'interviewer',
+            'interview_mode', 'meeting_link', 'notes',
         ]
         extra_kwargs = {
             'name':             {'required': True},
@@ -304,7 +306,8 @@ class CandidateUpdateSerializer(serializers.ModelSerializer):
         model  = Candidate
         fields = [
             'name', 'phone', 'position_applied',
-            'branch', 'interview_date', 'interviewer', 'interview_mode', 'notes',
+            'branch', 'interview_date', 'interview_time', 'interviewer',
+            'interview_mode', 'meeting_link', 'notes',
             'referral_by',
         ]
         extra_kwargs = {
@@ -313,11 +316,13 @@ class CandidateUpdateSerializer(serializers.ModelSerializer):
             # FK and date fields are optional — allow explicit null to clear
             'branch':         {'required': False, 'allow_null': True},
             'interview_date': {'required': False, 'allow_null': True},
+            'interview_time': {'required': False, 'allow_null': True},
             'interviewer':    {'required': False, 'allow_null': True},
             'referral_by':    {'required': False, 'allow_null': True},
             # Text fields are optional — allow blank to clear
             'phone':          {'required': False, 'allow_blank': True},
             'interview_mode': {'required': False, 'allow_blank': True},
+            'meeting_link':   {'required': False, 'allow_blank': True},
             'notes':          {'required': False, 'allow_blank': True},
         }
 
