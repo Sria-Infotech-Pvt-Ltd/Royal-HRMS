@@ -1,10 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
-import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { getStoredUser } from "@/lib/auth";
 import type { PayrollCycle, PayrollSettings, ManagerApprovalStatus } from "@/types/payroll";
 
 interface Props {
@@ -29,12 +26,6 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
   const { data: mgrs, loading: mgrsLoading, refetch: refetchMgrs } =
     useFetch<ManagerApprovalStatus>(API.payroll.managerApprovals(cycleId));
 
-  const [busy, setBusy]       = useState(false);
-  const [comment, setComment] = useState("");
-  const [err, setErr]         = useState<string | null>(null);
-
-  const currentUser = getStoredUser();
-
   const approvalLevels = settings?.approval_levels ?? "L1";
   const isL1L2         = approvalLevels === "L1_L2";
 
@@ -48,25 +39,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
   const myRowPending      = mgrs?.current_user_pending ?? false;
   const noManagersSeeded  = totalCount === 0;
 
-  const canApproveL2 = isL1Done && !isL2Done && isL1L2;
-
   function refetchAll() { refetchCycle(); refetchMgrs(); }
-
-  async function approve(level: "L1" | "L2") {
-    setBusy(true);
-    setErr(null);
-    try {
-      await clientApi.post(API.payroll.approveAttendance(cycleId), { level, comment });
-      setComment("");
-      refetchAll();
-    } catch (error: unknown) {
-      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? "Failed to approve. Check your permissions.";
-      setErr(msg);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (cycleLoading || mgrsLoading) {
     return (
@@ -93,12 +66,6 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
       </div>
 
       <div className="card-body">
-
-        {err && (
-          <div className="alert alert-error" style={{ marginBottom: 16 }}>
-            <i className="ti ti-alert-circle" /><span>{err}</span>
-          </div>
-        )}
 
         {isApproved && (
           <div className="alert alert-success" style={{ marginBottom: 20 }}>
@@ -168,25 +135,11 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                   Approved by <strong>{cycle?.l1_approver_name}</strong> on {fmt(cycle?.attendance_l1_approved_at)}
                 </div>
               ) : (
-                <>
-                  {currentUser && (
-                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                      Approving as: <strong>{currentUser.name}</strong>
-                    </div>
-                  )}
-                  <textarea
-                    className="field-input"
-                    placeholder="Add note (optional)…"
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    style={{ resize: "none", height: 60, fontSize: 13, marginBottom: 10 }}
-                  />
-                  <button className="btn btn-success btn-sm" onClick={() => approve("L1")} disabled={busy}>
-                    {busy
-                      ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
-                      : <><i className="ti ti-check" /> Approve Attendance (L1)</>}
-                  </button>
-                </>
+                <div style={{ fontSize: 13, color: "var(--on-variant)" }}>
+                  <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
+                  Approval happens on the Team Approvals page, not here — go to{" "}
+                  <strong>HR Ops → Approvals → Attendance Approval</strong> to sign off.
+                </div>
               )}
             </div>
           ) : (
@@ -232,29 +185,18 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                 );
               })}
 
-              {/* Current user's approve button if their row is still pending */}
+              {/* Current user's row still pending — direct them to Team Approvals, not here */}
               {myRowPending && !isL1Done && (
                 <div style={{
                   padding: "14px 16px", borderRadius: "var(--radius)",
                   border: "1.5px solid var(--primary)", background: "rgba(30,78,140,0.06)",
                   marginTop: 4,
                 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>
                     <i className="ti ti-user-check" style={{ marginRight: 6 }} />
-                    Your approval is required
+                    Your sign-off is required — approve it from{" "}
+                    <strong>HR Ops → Approvals → Attendance Approval</strong>.
                   </div>
-                  <textarea
-                    className="field-input"
-                    placeholder="Add note (optional)…"
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    style={{ resize: "none", height: 60, fontSize: 13, marginBottom: 10 }}
-                  />
-                  <button className="btn btn-success btn-sm" onClick={() => approve("L1")} disabled={busy}>
-                    {busy
-                      ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
-                      : <><i className="ti ti-check" /> Approve Attendance (L1)</>}
-                  </button>
                 </div>
               )}
 
@@ -319,33 +261,13 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                     All {totalCount > 0 ? totalCount : ""} manager(s) have approved.
                     HR sign-off is the final step before payroll can be processed.
                   </div>
-                  {canApproveL2 && currentUser && (
-                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                      Approving as: <strong>{currentUser.name}</strong>
-                    </div>
-                  )}
-                  {canApproveL2 && (
-                    <>
-                      <textarea
-                        className="field-input"
-                        placeholder="Add note (optional)…"
-                        value={comment}
-                        onChange={e => setComment(e.target.value)}
-                        style={{ resize: "none", height: 60, fontSize: 13, marginBottom: 10 }}
-                      />
-                      <button className="btn btn-success btn-sm" onClick={() => approve("L2")} disabled={busy}>
-                        {busy
-                          ? <><i className="ti ti-loader-2 animate-spin" /> Approving…</>
-                          : <><i className="ti ti-check" /> Approve Attendance (L2)</>}
-                      </button>
-                    </>
-                  )}
-                  {!canApproveL2 && (
-                    <div className="alert alert-info" style={{ marginTop: 0 }}>
-                      <i className="ti ti-info-circle" />
-                      <span>Waiting for HR to complete L2 approval.</span>
-                    </div>
-                  )}
+                  <div className="alert alert-info" style={{ marginTop: 0 }}>
+                    <i className="ti ti-info-circle" />
+                    <span>
+                      Waiting for HR to sign off from{" "}
+                      <strong>HR Ops → Approvals → Attendance Approval</strong> — not done here.
+                    </span>
+                  </div>
                 </>
               )}
             </div>

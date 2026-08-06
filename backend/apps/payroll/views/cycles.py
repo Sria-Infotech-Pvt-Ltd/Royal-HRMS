@@ -40,6 +40,7 @@ _PF_DEFAULT_CEILING = Decimal('15000.00')
 # as bulk_update's field list so re-processing an existing payslip touches
 # exactly the same columns as before.
 _PAYSLIP_FIELDS = [
+    'salary_structure',
     'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
     'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
     'lop_deduction', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
@@ -54,7 +55,7 @@ class PayrollAlreadyProcessing(Exception):
 
 
 def _compute_employee_payslip(
-    salary_config, components, branch_config, statutory, adjustments,
+    salary_config, components, branch_config, statutory, adjustments, structure,
     lop_days=Decimal('0'), total_working_days=26,
 ) -> dict:
     """
@@ -137,6 +138,7 @@ def _compute_employee_payslip(
     net_pay = gross + adj_earning - total_deductions
 
     return {
+        'salary_structure':      structure,
         'annual_ctc':            salary_config.annual_ctc,
         'monthly_ctc':           monthly_ctc,
         'basic':                 basic,
@@ -361,7 +363,7 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
         # Use actual working days from attendance records; fall back to settings default if no records
         emp_working_days = working_days_by_emp.get(employee.id) or 26
         computed[employee.id] = _compute_employee_payslip(
-            salary_config, components, branch_config, statutory, adjustments,
+            salary_config, components, branch_config, statutory, adjustments, structure,
             lop_days=emp_lop,
             total_working_days=emp_working_days,
         )
@@ -640,6 +642,7 @@ class AttendanceApprovalView(APIView):
         settings_obj = PayrollSettings.objects.first()
         level = request.data.get('level', '').upper()
         note = request.data.get('comment', '').strip()
+        self_approve = bool(request.data.get('self_approve', False))
 
         if level == 'L1':
             manager_row = ManagerAttendanceApproval.objects.filter(
@@ -651,7 +654,11 @@ class AttendanceApprovalView(APIView):
                     return error('You have already approved attendance for this cycle.')
                 manager_row.approved_at = timezone.now()
                 manager_row.note = note
-                manager_row.save(update_fields=['approved_at', 'note', 'updated_at'])
+                update_fields = ['approved_at', 'note', 'updated_at']
+                if self_approve:
+                    manager_row.self_approved_at = timezone.now()
+                    update_fields.append('self_approved_at')
+                manager_row.save(update_fields=update_fields)
                 logger.info('Cycle %s: manager %s approved L1', pk, request.user.email)
             else:
                 # Fallback path: HR/sysadmin can approve L1 when no manager rows exist
@@ -714,9 +721,11 @@ class AttendanceApprovalView(APIView):
             cycle.attendance_approved_by_l2 = request.user
             cycle.attendance_l2_approved_at = timezone.now()
             cycle.status = PayrollCycle.STATUS_ATTENDANCE_APPROVED
-            cycle.save(update_fields=[
-                'attendance_approved_by_l2', 'attendance_l2_approved_at', 'status', 'updated_at',
-            ])
+            update_fields = ['attendance_approved_by_l2', 'attendance_l2_approved_at', 'status', 'updated_at']
+            if self_approve:
+                cycle.hr_self_approved_at = timezone.now()
+                update_fields.append('hr_self_approved_at')
+            cycle.save(update_fields=update_fields)
             logger.info('Cycle %s L2 attendance approved by %s', pk, request.user.email)
             return success('L2 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
