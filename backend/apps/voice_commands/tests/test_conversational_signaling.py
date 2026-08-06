@@ -141,11 +141,23 @@ class ApplyLeaveConversationalSignalingTests(SimpleTestCase):
 
 
 class ImmediateActionIntentSignalingTests(SimpleTestCase):
-    """A non-apply_leave intent must always report conversational: false, awaiting_input: false."""
+    """
+    A non-apply_leave intent must always report conversational: false,
+    awaiting_input: false. clock_in/clock_out dispatch through
+    conversation_clock_in_face.start_voice_clock_punch rather than
+    conversation.py's own execute_intent (see that module) — every test here
+    patches its is_face_verification_mandatory + execute_clock_in instead,
+    reflecting the fast path taken when the org toggle is off (the default,
+    and the only case that keeps this class's "immediate, non-conversational"
+    premise true — a mandatory-on clock_in instead awaits a facial-proof
+    turn, covered by apps.attendance.tests_face_verification.py's punch-level
+    tests, not here).
+    """
 
-    @patch('apps.voice_commands.conversation.execute_intent')
+    @patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+    @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False)
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_clock_in_is_never_conversational(self, mock_get_pending, mock_execute):
+    def test_clock_in_is_never_conversational(self, mock_get_pending, mock_mandatory, mock_execute):
         mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
         request = _fake_request()
 
@@ -155,9 +167,10 @@ class ImmediateActionIntentSignalingTests(SimpleTestCase):
         self.assertFalse(result['conversational'])
         self.assertFalse(result['awaiting_input'])
 
-    @patch('apps.voice_commands.conversation.execute_intent')
+    @patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+    @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False)
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_successful_clock_in_reports_success_true(self, mock_get_pending, mock_execute):
+    def test_successful_clock_in_reports_success_true(self, mock_get_pending, mock_mandatory, mock_execute):
         mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
         request = _fake_request()
 
@@ -165,9 +178,10 @@ class ImmediateActionIntentSignalingTests(SimpleTestCase):
 
         self.assertTrue(result['success'])
 
-    @patch('apps.voice_commands.conversation.execute_intent')
+    @patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+    @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False)
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_geofencing_rejected_clock_in_reports_success_false(self, mock_get_pending, mock_execute):
+    def test_geofencing_rejected_clock_in_reports_success_false(self, mock_get_pending, mock_mandatory, mock_execute):
         # This is the exact signal VoiceCommandButton's retry flow keys off:
         # a real ExecutionResult failure (e.g. GeofencingService's "GPS is
         # mandatory" PermissionError, caught in executor_attendance._execute_punch) must
@@ -186,9 +200,10 @@ class ImmediateActionIntentSignalingTests(SimpleTestCase):
         self.assertFalse(result['success'])
         self.assertEqual(result['intent'], INTENT_CLOCK_IN)
 
-    @patch('apps.voice_commands.conversation.execute_intent')
+    @patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+    @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False)
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_clock_in_forwards_latitude_and_longitude_to_execute_intent(self, mock_get_pending, mock_execute):
+    def test_clock_in_forwards_latitude_and_longitude_to_execute_intent(self, mock_get_pending, mock_mandatory, mock_execute):
         mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
         request = _fake_request()
 
@@ -198,9 +213,10 @@ class ImmediateActionIntentSignalingTests(SimpleTestCase):
         self.assertEqual(call_kwargs['latitude'], 17.385044)
         self.assertEqual(call_kwargs['longitude'], 78.486671)
 
-    @patch('apps.voice_commands.conversation.execute_intent')
+    @patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+    @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False)
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_clock_in_with_no_coordinates_forwards_none(self, mock_get_pending, mock_execute):
+    def test_clock_in_with_no_coordinates_forwards_none(self, mock_get_pending, mock_mandatory, mock_execute):
         mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
         request = _fake_request()
 

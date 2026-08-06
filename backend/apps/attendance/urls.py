@@ -1,3 +1,4 @@
+
 from django.urls import path
 
 from apps.attendance.views import (
@@ -46,6 +47,15 @@ from apps.attendance.views import (
     HRInvalidPunchAssignView,
     HRInvalidPunchDiscardView,
     HRInvalidPunchConvertView,
+    # Face Registration
+    FaceRegistrationSubmitView,
+    FaceRegistrationMyStatusView,
+    FaceRegistrationPendingListView,
+    FaceRegistrationReviewView,
+    FaceVerificationStatusView,
+    FaceRegistrationEmployeePickerView,
+    FaceRegistrationEmployeeStatusView,
+    FaceRegistrationHRRegisterView,
 )
 
 urlpatterns = [
@@ -113,4 +123,18 @@ urlpatterns = [
     path('invalid-punches/<uuid:pk>/assign/',  HRInvalidPunchAssignView.as_view(),  name='hr-invalid-punch-assign'),
     path('invalid-punches/<uuid:pk>/discard/', HRInvalidPunchDiscardView.as_view(), name='hr-invalid-punch-discard'),
     path('invalid-punches/<uuid:pk>/convert/', HRInvalidPunchConvertView.as_view(), name='hr-invalid-punch-convert'),
+
+    # ── Face Registration ─────────────────────────────────────────────────────
+    path('face-registration/',                  FaceRegistrationSubmitView.as_view(),      name='face-registration-submit'),
+    path('face-registration/me/',               FaceRegistrationMyStatusView.as_view(),    name='face-registration-me'),
+    path('face-registration/pending/',           FaceRegistrationPendingListView.as_view(), name='face-registration-pending'),
+    path('face-registration/<uuid:pk>/review/', FaceRegistrationReviewView.as_view(),      name='face-registration-review'),
+
+    # ── Face Verification — org-wide toggle status (Attendance Settings) ────────
+    path('face-verification/status/', FaceVerificationStatusView.as_view(), name='face-verification-status'),
+
+    # ── Face Registration — HR-initiated (register/update on someone's behalf) ─
+    path('face-registration/register/',                              FaceRegistrationHRRegisterView.as_view(),    name='face-registration-hr-register'),
+    path('face-registration/employees/',                             FaceRegistrationEmployeePickerView.as_view(), name='face-registration-employee-picker'),
+    path('face-registration/employees/<uuid:employee_uuid>/status/', FaceRegistrationEmployeeStatusView.as_view(), name='face-registration-employee-status'),
 ]

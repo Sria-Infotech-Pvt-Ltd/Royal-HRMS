@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
 import CorrectionModal from "@/app/dashboard/my-attendance/_components/CorrectionModal";
+import FaceVerificationModal from "@/components/FaceVerificationModal";
 
 function todayString() {
   const d = new Date();
@@ -16,14 +17,25 @@ interface Props {
 }
 
 export default function ClockInButton({ onPunchSuccess }: Props) {
-  const { session, isLoading, isPunching, punch } = useClockWidget();
+  const { session, isLoading, isPunching, faceVerificationRequired, punch } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
+  const [showFaceModal, setShowFaceModal] = useState(false);
 
   const isClockedIn = session?.is_clocked_in ?? false;
   const isBusy      = isLoading || isPunching;
 
   async function handlePunch() {
+    if (faceVerificationRequired) {
+      setShowFaceModal(true);
+      return;
+    }
     const ok = await punch(isClockedIn ? "OUT" : "IN");
+    if (ok) onPunchSuccess?.();
+  }
+
+  async function handleFaceCaptured(embedding: number[], livenessScore: number, captureSessionId: string) {
+    setShowFaceModal(false);
+    const ok = await punch(isClockedIn ? "OUT" : "IN", "office", embedding, livenessScore, captureSessionId);
     if (ok) onPunchSuccess?.();
   }
 
@@ -90,6 +102,12 @@ export default function ClockInButton({ onPunchSuccess }: Props) {
         date={todayString()}
         onClose={() => setShowModal(false)}
         onSuccess={() => setShowModal(false)}
+      />
+
+      <FaceVerificationModal
+        isOpen={showFaceModal}
+        onCaptured={handleFaceCaptured}
+        onClose={() => setShowFaceModal(false)}
       />
     </>
   );

@@ -107,6 +107,9 @@ export default function BranchManagement() {
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [hqConfirm,     setHqConfirm]     = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Branch | null>(null);
+  const [deleteError,   setDeleteError]   = useState<string | null>(null);
+  const [deleting,      setDeleting]      = useState(false);
 
   const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
 
@@ -298,14 +301,19 @@ export default function BranchManagement() {
     doSave();
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm("Are you sure you want to delete this branch?")) return;
+  const doDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      await clientApi.delete(API.branches.detail(id));
+      await clientApi.delete(API.branches.detail(deleteConfirm.id));
+      setDeleteConfirm(null);
       fetchData();
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setError(e.message ?? "Failed to delete branch.");
+      setDeleteError(e.message ?? "Failed to delete branch.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -460,7 +468,7 @@ export default function BranchManagement() {
                     <button
                       className="btn btn-ghost"
                       style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
-                      onClick={() => handleDelete(branch.id)}
+                      onClick={() => { setDeleteError(null); setDeleteConfirm(branch); }}
                     >
                       <i className="ti ti-trash" style={{ fontSize: "16px" }} />
                     </button>
@@ -788,6 +796,45 @@ export default function BranchManagement() {
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setHqConfirm(false)}>Cancel</button>
               <button className="btn btn-filled" onClick={doSave}>Yes, Change HQ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="modal-overlay open" style={{ zIndex: 1010 }}>
+          <div className="modal" style={{ maxWidth: "420px" }}>
+            <div className="modal-header">
+              <div className="modal-title">
+                <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
+                Delete Branch?
+              </div>
+              <button className="modal-close" onClick={() => setDeleteConfirm(null)} disabled={deleting}>
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {deleteError && (
+                <div className="alert alert-error mb-16">
+                  <i className="ti ti-alert-circle" /> {deleteError}
+                </div>
+              )}
+              <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+                Are you sure you want to delete <strong>{deleteConfirm.branch_name}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancel</button>
+              <button
+                className="btn btn-filled"
+                style={{ background: "var(--error)" }}
+                onClick={doDelete}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Deleting…</>
+                  : "Yes, Delete"}
+              </button>
             </div>
           </div>
         </div>

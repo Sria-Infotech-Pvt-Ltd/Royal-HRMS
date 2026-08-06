@@ -15,8 +15,22 @@ from core.responses import error, first_error, get_client_ip, success
 from apps.accounts.models import AuditLog
 from apps.announcements.models import Announcement, AnnouncementReaction
 from apps.announcements.serializers import AnnouncementSerializer, AnnouncementWriteSerializer
+from apps.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
+
+
+def _mark_announcement_notification_read(user, announcement_id: int) -> None:
+    """
+    _on_announcement_save (apps/notifications/signals.py) creates one bell
+    notification per visible user when an announcement is posted, linked back
+    via module='announcement' + reference_id=<announcement.id>. Nothing
+    previously resolved that link when the announcement was actually opened,
+    so it stayed "unread" in the bell dropdown forever even after reading it.
+    """
+    Notification.objects.filter(
+        user=user, module='announcement', reference_id=str(announcement_id), is_read=False,
+    ).update(is_read=True)
 
 
 def _has_perm(user, codename: str) -> bool:
@@ -174,7 +188,16 @@ class AnnouncementListCreateView(APIView):
                 # Queuing failure (e.g. broker down) is logged, not raised —
                 # the announcement itself has already been saved successfully.
                 try:
-                    send_announcement_email_task.delay(ann_id)
+                    # retry=False + ignore_result=True — see the identical
+                    # fix on the referral-submission dispatch in
+                    # apps/recruitment/views.py for why: apply_async()
+                    # otherwise subscribes to a Redis pub/sub result channel
+                    # nothing here reads, retrying up to 20 times against the
+                    # result backend if Redis is unreachable and blocking
+                    # this request for well past any frontend timeout.
+                    send_announcement_email_task.apply_async(
+                        args=[ann_id], retry=False, ignore_result=True,
+                    )
                 except Exception as exc:
                     logger.error(
                         'Failed to queue announcement email for %s: %s',
@@ -202,6 +225,7 @@ class AnnouncementDetailView(APIView):
         if ann.posted_by_id != request.user.id:
             Announcement.objects.filter(pk=pk).update(views_count=F('views_count') + 1)
             ann.views_count += 1
+        _mark_announcement_notification_read(request.user, pk)
         serializer = AnnouncementSerializer(ann, context={'request': request})
         return success('Announcement fetched.', serializer.data)
 
@@ -284,7 +308,7 @@ class AnnouncementDetailView(APIView):
             ip_address = get_client_ip(request),
         )
 
-        return success('Announcement deleted.', http_status=status.HTTP_204_NO_CONTENT)
+        return success('Announcement deleted.')
 
 
 class AnnouncementReactView(APIView):
@@ -332,4 +356,5 @@ class AnnouncementViewTrackView(APIView):
         Announcement.objects.filter(pk=pk).exclude(
             posted_by=request.user
         ).update(views_count=F('views_count') + 1)
+        _mark_announcement_notification_read(request.user, pk)
         return success('View recorded.')

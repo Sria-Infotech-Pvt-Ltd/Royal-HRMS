@@ -20,6 +20,17 @@ environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
+# Snapshotted separately from DEBUG, at the SAME .env-derived value, because
+# Django's test runner force-overrides the live settings.DEBUG attribute to
+# False for every `manage.py test` run — documented, intentional Django
+# behaviour (so debug-only code paths, e.g. verbose error pages, never mask a
+# production bug) — which makes DEBUG unusable as a "not a real production
+# deployment" signal from inside a test. Checks that must still behave like
+# local dev even under `manage.py test` — core.permissions.
+# RequiresSecureTransport and services_face_matching's TLS precondition,
+# both gating on an inherently HTTP-only local/test environment rather than
+# genuinely wanting to enforce HTTPS in CI — read this instead of DEBUG.
+IS_LOCAL_OR_TEST_ENV = DEBUG
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 INSTALLED_APPS = [
@@ -189,6 +200,26 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT    = ['json']
 
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# Caps how long a single broker connection attempt can hang when Redis is
+# unreachable. Without this, a dead/unreachable broker leaves request-path
+# task dispatch (.delay()/.apply_async() calls made during a view) blocked
+# on OS-level TCP timeouts far longer than any frontend request timeout.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'socket_connect_timeout': 0.2,
+    'socket_timeout': 0.2,
+}
+
+# broker_connection_max_retries governs *acquiring* a broker connection
+# (separate from the per-call `retry=` flag, which only governs retrying
+# the publish once a connection exists) and backs off with a 1s sleep
+# between attempts by default — that backoff, not the socket timeout
+# above, is what actually blocked request-path dispatch calls for several
+# seconds when the broker was unreachable. 0 is treated as falsy by
+# Kombu's retry_over_time and falls back to its default retry count, so
+# use 1 (the smallest value that actually takes effect: one retry, one
+# 1s backoff sleep) to bound a dead broker to a single retry.
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 1
 
 from celery.schedules import crontab
 

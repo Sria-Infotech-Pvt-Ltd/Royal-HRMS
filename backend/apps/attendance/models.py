@@ -943,6 +943,40 @@ class AttendanceAbsenceAlert(models.Model):
         return f'AbsenceAlert for {self.settings_id}'
 
 
+class AttendanceFaceVerificationRules(models.Model):
+    """
+    Org-wide face ID verification toggle (Attendance Settings -> Face ID
+    Verification card).
+
+    is_mandatory is the single source of truth for the whole feature, not
+    just a stricter mode of it:
+      - True  — every employee must register a face ID (see
+        FaceRegistrationRequest) and every web-sourced clock-in/out requires
+        a live face match against their approved registration before the
+        punch is accepted (FaceVerificationService.verify_for_punch).
+      - False — the feature is switched off organisation-wide: employees
+        cannot submit new registrations (they're shown a "contact admin"
+        message instead) and punches never require a face match, even for
+        someone who registered while this was previously True.
+    """
+
+    settings     = models.OneToOneField(
+        AttendanceSettings,
+        on_delete=models.CASCADE,
+        related_name='face_verification',
+    )
+    is_mandatory = models.BooleanField(
+        default=False,
+        help_text='When on, face ID registration is mandatory for every employee and is enforced at web clock-in/out.',
+    )
+
+    class Meta:
+        db_table = 'attendance_settings_face_verification'
+
+    def __str__(self) -> str:
+        return f'FaceVerificationRules for {self.settings_id}'
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  Attendance Transactions — Punch, Record, Correction
 #
@@ -963,6 +997,15 @@ class AttendancePunch(models.Model):
     source = 'biometric' → hardware biometric device push
     source = 'manual'    → HR/admin created manually
     source = 'system'    → auto-checkout by the attendance processor
+    source = 'voice'     → clocked through a voice command. Still issued from
+                            the same browser tab as 'web' though, so it DOES
+                            have camera access — the voice-initiated clock-in
+                            conversation (apps.voice_commands.
+                            conversation_clock_in_face) opens it for a
+                            "taking facial proof" step when face verification
+                            is mandatory, same as the manual ClockWidget does.
+                            Only 'mobile'/'biometric'/'manual'/'system' are
+                            genuinely camera-less and stay exempt below.
 
     attendance_mode = 'office'          → validated against branch geofence
     attendance_mode = 'wfh'             → work from home, no geofence check
@@ -983,12 +1026,14 @@ class AttendancePunch(models.Model):
     SOURCE_BIOMETRIC = 'biometric'
     SOURCE_MANUAL    = 'manual'
     SOURCE_SYSTEM    = 'system'
+    SOURCE_VOICE     = 'voice'
     SOURCE_CHOICES   = [
         (SOURCE_WEB,       'Web'),
         (SOURCE_MOBILE,    'Mobile'),
         (SOURCE_BIOMETRIC, 'Biometric'),
         (SOURCE_MANUAL,    'Manual'),
         (SOURCE_SYSTEM,    'System'),
+        (SOURCE_VOICE,     'Voice Command'),
     ]
 
     MODE_OFFICE          = 'office'
@@ -1069,6 +1114,18 @@ class AttendancePunch(models.Model):
     device_id        = models.CharField(
         max_length=255, blank=True, default='',
         help_text='Persistent device fingerprint or browser fingerprint ID.',
+    )
+
+    # ── Face verification ─────────────────────────────────────────────────────
+    face_verified       = models.BooleanField(
+        default=False,
+        help_text='True only when the employee has an approved face registration '
+                   'and their submitted face matched it at punch time.',
+    )
+    face_match_distance = models.FloatField(
+        null=True, blank=True,
+        help_text='Euclidean distance between submitted and registered face '
+                   'descriptors. Null when face verification did not apply.',
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1617,3 +1674,158 @@ class InvalidPunch(models.Model):
 
     def __str__(self) -> str:
         return f'InvalidPunch {self.punch_id} [{self.status}]'
+
+
+# ─── Face Registration ─────────────────────────────────────────────────────────
+
+# Identifies the embedding-generating model whose vector space stored
+# embeddings belong to — distinct from whatever model detects/locates the
+# face or runs the landmark-based liveness check, which can change
+# independently without affecting stored-embedding compatibility.
+FACE_RECOGNITION_MODEL_VERSION = 'face-api.js-faceRecognitionNet-v1'
+
+
+class FaceRegistrationRequest(models.Model):
+    STATUS_PENDING  = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES  = [
+        (STATUS_PENDING,  'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_REJECTED, 'Rejected'),
+    ]
+
+    id                      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee                = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='face_registration_requests',
+    )
+    branch                  = models.ForeignKey(
+        'branch.Branch',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='face_registration_requests',
+    )
+
+    face_embedding          = models.JSONField()
+    embedding_model_version = models.CharField(max_length=50, default=FACE_RECOGNITION_MODEL_VERSION)
+
+    liveness_passed         = models.BooleanField(default=False)
+    liveness_score          = models.FloatField(null=True, blank=True)
+
+    status                  = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True,
+    )
+    approved_by             = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='face_registrations_approved',
+    )
+    approved_at             = models.DateTimeField(null=True, blank=True)
+    notes                   = models.TextField(blank=True, default='')
+
+    created_at              = models.DateTimeField(auto_now_add=True)
+    updated_at              = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_face_registration_request'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — face registration ({self.status})'
+
+
+# ─── Face Verification Attempt (punch-time audit + anti-spoofing) ─────────────
+
+class FaceVerificationAttempt(models.Model):
+    """
+    Immutable audit row for every face-match attempt at punch time (web or
+    voice clock-in/out) — distinct from FaceRegistrationRequest, which is a
+    one-time enrollment record, not a per-punch attempt log.
+
+    Backs two independent defenses in services_face_matching.py, both scoped
+    to punch-time verification only (registration submissions are a single
+    HR-reviewed event and are out of scope for either):
+
+      1. Attempt cap — MAX_FAILED_ATTEMPTS failed rows for the same employee
+         within ATTEMPT_CAP_WINDOW_SECONDS blocks further tries. Deliberately
+         separate from any conversational retry count (e.g. the voice clock-in
+         flow's own "3 tries then suggest manual clock-in" — see
+         apps.voice_commands.conversation_clock_in_face): that counter resets
+         every time a NEW voice command starts a fresh conversation, so on its
+         own it could never stop someone from just starting over repeatedly.
+         This table's window is keyed on the employee alone, across both
+         source channels, so switching channels can't reset it either.
+
+      2. Replay detection — a byte-identical embedding (compared via
+         embedding_fingerprint, a SHA-256 digest, so the raw vector itself
+         is never persisted a second time outside FaceRegistrationRequest)
+         submitted again within REPLAY_WINDOW_SECONDS from a DIFFERENT
+         capture_session_id is rejected as a replayed capture rather than a
+         fresh live one. capture_session_id is a client-generated UUID minted
+         once per camera session (useFaceLivenessCapture.start()) — multiple
+         internal retries within the SAME open camera are one session and
+         never flagged; a genuinely separate capture (new modal open, new
+         device, a recorded-and-resent payload) gets a new id.
+
+    Never deleted — kept for HR/security audit the same way AttendanceAuditLog
+    is (see that model's own docstring for the same reasoning).
+    """
+
+    id                    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee              = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='face_verification_attempts',
+    )
+    source                = models.CharField(
+        max_length=10,
+        choices=[('web', 'Web'), ('voice', 'Voice Command')],
+        help_text='Which clock-in channel produced this attempt.',
+    )
+    capture_session_id    = models.CharField(
+        max_length=64, blank=True, default='',
+        help_text='Client-generated UUID for the camera session this capture came from.',
+    )
+    embedding_fingerprint = models.CharField(
+        max_length=64,
+        help_text='SHA-256 hex digest of the submitted embedding — never the raw vector.',
+    )
+    liveness_passed       = models.BooleanField(default=False)
+    liveness_score        = models.FloatField(null=True, blank=True)
+    is_match               = models.BooleanField(default=False)
+    distance               = models.FloatField(
+        null=True, blank=True,
+        help_text='Euclidean distance to the approved registration. Null when '
+                   'rejected before a distance could be computed (e.g. blocked by the cap).',
+    )
+    REJECTION_MISMATCH   = 'mismatch'
+    REJECTION_REPLAY     = 'replay_detected'
+    REJECTION_CAP        = 'attempt_cap_exceeded'
+    REJECTION_INSECURE   = 'insecure_transport'
+    REJECTION_CHOICES    = [
+        ('',                 'Matched'),
+        (REJECTION_MISMATCH, 'Face Mismatch'),
+        (REJECTION_REPLAY,   'Replay Detected'),
+        (REJECTION_CAP,      'Attempt Cap Exceeded'),
+        (REJECTION_INSECURE, 'Insecure Transport'),
+    ]
+    rejection_reason     = models.CharField(max_length=20, choices=REJECTION_CHOICES, blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'attendance_face_verification_attempt'
+        ordering = ['-created_at']
+        indexes  = [
+            models.Index(fields=['employee', 'created_at'], name='fva_emp_time_idx'),
+            models.Index(fields=['employee', 'is_match', 'created_at'], name='fva_emp_match_time_idx'),
+            models.Index(fields=['embedding_fingerprint', 'created_at'], name='fva_fingerprint_time_idx'),
+        ]
+
+    def __str__(self) -> str:
+        outcome = 'matched' if self.is_match else (self.rejection_reason or 'mismatch')
+        return f'{self.employee_id} — {self.source} face attempt ({outcome})'

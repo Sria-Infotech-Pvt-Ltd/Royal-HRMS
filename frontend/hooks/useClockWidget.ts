@@ -5,7 +5,16 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
+import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
 import type { TodaySession, AttendanceMode } from "@/types/attendance";
+import type { FaceRegistrationRequest } from "@/types/faceRegistration";
+
+const _REGISTRATION_MESSAGES: Record<string, string> = {
+  pending:  "Your face ID registration is pending HR approval. You can clock in once it's approved.",
+  rejected: "Your face ID registration was rejected. Please register again from your Profile page.",
+};
+const _REGISTRATION_MISSING_MESSAGE =
+  "Face ID registration is mandatory. Please register your face ID from your Profile page before clocking in.";
 
 type NormalisedError = { message?: string };
 
@@ -35,6 +44,17 @@ function parseOS(): string {
 export function useClockWidget() {
   const { showToast } = useToast();
   const { data: todayData, loading: fetchLoading, refetch } = useFetch<TodaySession>(API.attendance.today);
+  // Backend returns {} (not an actual registration) when the employee has
+  // never submitted one — .status only ever matches "approved" for a real one.
+  const { data: faceStatus } = useFetch<Partial<FaceRegistrationRequest>>(API.attendance.faceRegistration.me);
+  const { isMandatory } = useFaceVerificationStatus();
+  const isApproved = faceStatus?.status === "approved";
+  // Org toggle is the single source of truth (see AttendanceFaceVerificationRules
+  // on the backend) — when it's off, nobody is asked to verify, even someone
+  // approved from before; when it's on, an approved employee must verify and
+  // everyone else is blocked from punching until they register (see punch() below).
+  const faceVerificationRequired = isMandatory && isApproved;
+  const faceRegistrationMissing  = isMandatory && !isApproved;
   const [session, setSession] = useState<TodaySession | null>(null);
   const [isPunching, setIsPunching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -64,7 +84,20 @@ export function useClockWidget() {
   }, [isClockedIn]);
 
   const punch = useCallback(
-    async (punchType: "IN" | "OUT", attendanceMode: AttendanceMode = "office"): Promise<boolean> => {
+    async (
+      punchType: "IN" | "OUT",
+      attendanceMode: AttendanceMode = "office",
+      faceEmbedding?: number[],
+      livenessScore?: number,
+      captureSessionId?: string,
+    ): Promise<boolean> => {
+      if (faceRegistrationMissing) {
+        const message = (faceStatus?.status && _REGISTRATION_MESSAGES[faceStatus.status])
+          ?? _REGISTRATION_MISSING_MESSAGE;
+        showToast(message, "error");
+        return false;
+      }
+
       setIsPunching(true);
       let latitude: number | null = null;
       let longitude: number | null = null;
@@ -111,6 +144,12 @@ export function useClockWidget() {
           device_time:      new Date().toISOString(),
           browser:          parseBrowser(),
           operating_system: parseOS(),
+          face_embedding:      faceEmbedding ?? null,
+          // Only meaningful alongside face_embedding — see
+          // FaceVerificationService.verify_for_punch's anti-replay check.
+          liveness_passed:     faceEmbedding ? true : null,
+          liveness_score:      livenessScore ?? null,
+          capture_session_id:  captureSessionId ?? "",
         });
         const envelope = res.data as { message?: string; data?: TodaySession };
         if (envelope.data) setSession(envelope.data);
@@ -127,8 +166,11 @@ export function useClockWidget() {
         setIsPunching(false);
       }
     },
-    [showToast]
+    [showToast, faceRegistrationMissing, faceStatus]
   );
 
-  return { session, isLoading: fetchLoading && !session, isPunching, isLocating, punch };
+  return {
+    session, isLoading: fetchLoading && !session, isPunching, isLocating,
+    faceVerificationRequired, faceRegistrationMissing, punch,
+  };
 }

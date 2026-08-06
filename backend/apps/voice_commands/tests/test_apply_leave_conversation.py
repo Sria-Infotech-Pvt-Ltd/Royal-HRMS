@@ -195,6 +195,19 @@ class AbandonAndStartFreshTests(SimpleTestCase):
         self.addCleanup(execute_patcher.stop)
         self.mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
 
+        # The abandoned-and-replaced command below is clock_in, which (unlike
+        # every other one-shot intent) no longer dispatches through
+        # conversation.py's own execute_intent — see conversation_clock_in_face.py.
+        mandatory_patcher = patch(
+            'apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False,
+        )
+        mandatory_patcher.start()
+        self.addCleanup(mandatory_patcher.stop)
+        clock_in_patcher = patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+        self.mock_execute_clock_in = clock_in_patcher.start()
+        self.addCleanup(clock_in_patcher.stop)
+        self.mock_execute_clock_in.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
+
         self.request = _fake_request()
         self.store.set(42, INTENT_APPLY_LEAVE, {'leave_type': 'sick'})
 
@@ -203,8 +216,7 @@ class AbandonAndStartFreshTests(SimpleTestCase):
 
         self.assertIsNone(self.store.get(42))
         self.assertEqual(result['intent'], 'clock_in')
-        self.mock_execute.assert_called_once()
-        self.assertEqual(self.mock_execute.call_args.args[0], 'clock_in')
+        self.mock_execute_clock_in.assert_called_once()
 
     def test_nonsense_transcript_while_pending_is_treated_as_a_clarification_answer_not_abandoned(self):
         # "asdkjhasd" doesn't match any real intent, so it's NOT a "clearly
@@ -229,10 +241,13 @@ class CacheExpiryTests(SimpleTestCase):
     """
 
     @patch('apps.voice_commands.conversation.set_pending')
-    @patch('apps.voice_commands.conversation.execute_intent')
+    @patch('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False)
+    @patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
-    def test_expired_pending_state_is_treated_as_a_fresh_command(self, mock_get_pending, mock_execute, mock_set_pending):
-        mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
+    def test_expired_pending_state_is_treated_as_a_fresh_command(
+        self, mock_get_pending, mock_execute_clock_in, mock_mandatory, mock_set_pending,
+    ):
+        mock_execute_clock_in.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
         request = _fake_request()
 
         # If the expired apply_leave clarification were still honored, "clock
@@ -240,8 +255,7 @@ class CacheExpiryTests(SimpleTestCase):
         result = handle_transcript(request, 'clock in')
 
         self.assertEqual(result['intent'], 'clock_in')
-        mock_execute.assert_called_once()
-        self.assertEqual(mock_execute.call_args.args[0], 'clock_in')
+        mock_execute_clock_in.assert_called_once()
 
 
 class ExpiredClarificationHeuristicTests(SimpleTestCase):

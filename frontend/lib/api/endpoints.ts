@@ -41,6 +41,7 @@ export const API = {
     hrList: "/employees/hrs/",
     managerList: "/employees/managers/",
     me: "/employees/me/",
+    myPhoto: "/employees/me/photo/",
     detail: (id: string) => `/employees/${id}/`,
     profile: (id: string) => `/employees/${id}/profile/`,
     reportingManager: (id: string) => `/employees/${id}/reporting-manager/`,
@@ -203,6 +204,25 @@ export const API = {
     correctionReview: (id: string) => `/attendance/corrections/${id}/review/`,
     myCorrections: "/attendance/corrections/my/",
     employeeCalendar: (employeeId: string, month: string) => `/attendance/employee-calendar/?employee_id=${employeeId}&month=${month}`,
+
+    faceRegistration: {
+      submit:  "/attendance/face-registration/",
+      me:      "/attendance/face-registration/me/",
+      pending: "/attendance/face-registration/pending/",
+      review:  (id: string) => `/attendance/face-registration/${id}/review/`,
+
+      // HR-initiated registration (register/update on someone's behalf, in person)
+      register: "/attendance/face-registration/register/",
+      employees: (search?: string) =>
+        `/attendance/face-registration/employees/${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+      employeeStatus: (employeeUuid: string) => `/attendance/face-registration/employees/${employeeUuid}/status/`,
+    },
+
+    // Org-wide toggle (Attendance Settings -> Face ID Verification) — whether
+    // face ID registration is mandatory and enforced at web clock-in/out.
+    faceVerification: {
+      status: "/attendance/face-verification/status/",
+    },
 
     // Weekly Off Patterns (Settings) — existing backend CRUD, newly exposed to the frontend
     weeklyDayPolicies: "/attendance/weekly-days/",

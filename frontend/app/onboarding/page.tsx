@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import FaceRegistrationModal from "@/components/FaceRegistrationModal";
+import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +45,12 @@ const STEPS = [
   { label: "Documents",              shortLabel: "Documents",  icon: "ti-files"         },
 ];
 
+// Appended only when the admin's org-wide Face ID Verification toggle
+// (Attendance Settings) is mandatory — see the faceMandatory fetch below.
+// Always the LAST step so steps 0-4's indices (and all the tab === N checks
+// throughout this file) never shift.
+const FACE_STEP = { label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id" };
+
 const DOC_TYPES = [
   { value: "pan_card",           label: "PAN Card" },
   { value: "aadhaar_card",       label: "Aadhaar Card" },
@@ -71,10 +79,29 @@ export default function OnboardingPage() {
   const [highestSaved, setHighestSaved] = useState(-1);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  const [faceMandatory, setFaceMandatory] = useState(false);
+  const [faceRegistration, setFaceRegistration] = useState<Partial<FaceRegistrationRequest> | null>(null);
+  const [showFaceCapture, setShowFaceCapture] = useState(false);
+
+  const steps = useMemo(() => (faceMandatory ? [...STEPS, FACE_STEP] : STEPS), [faceMandatory]);
+
   useEffect(() => {
     const user = getStoredUser();
     if (user?.onboarding_status === "submitted") setIsAlreadySubmitted(true);
   }, []);
+
+  const refetchFaceRegistration = useCallback(() => {
+    clientApi.get(API.attendance.faceRegistration.me).then(r => {
+      setFaceRegistration(r.data?.data ?? null);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    clientApi.get(API.attendance.faceVerification.status).then(r => {
+      setFaceMandatory(Boolean(r.data?.data?.is_mandatory));
+    }).catch(() => {});
+    refetchFaceRegistration();
+  }, [refetchFaceRegistration]);
 
   // When on the "waiting for approval" screen, poll assessments API.
   // If HR has approved and assigned assessments, redirect the candidate there.
@@ -151,10 +178,11 @@ export default function OnboardingPage() {
       return false;
     }
 
-    // Tab 4 (documents) has no profile data to save — documents are uploaded
-    // individually via handleUpload. Skip the API call and let handleSubmit
-    // fire the single submit request.
-    if (tab === 4) return true;
+    // Tab 4 (documents) and tab 5 (face ID, when present) have no profile
+    // data to save — documents are uploaded via handleUpload, face ID is
+    // submitted via the FaceRegistrationModal. Skip the API call and let
+    // handleSubmit fire the single submit request.
+    if (tab >= 4) return true;
 
     setSaving(true);
     try {
@@ -176,7 +204,7 @@ export default function OnboardingPage() {
 
   async function next() {
     const ok = await saveSection();
-    if (ok && tab < STEPS.length - 1) {
+    if (ok && tab < steps.length - 1) {
       setHighestSaved(prev => Math.max(prev, tab));
       setTab(t => t + 1);
     }
@@ -209,7 +237,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       await clientApi.post(API.onboarding.submit, {}, { timeout: 60000 });
-      setHighestSaved(STEPS.length - 1);
+      setHighestSaved(steps.length - 1);
       setOnboardingStatus("submitted");
       setSubmitted(true);
     } catch (err: unknown) {
@@ -324,7 +352,7 @@ export default function OnboardingPage() {
 
         {/* ── Step Indicator ── */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", marginBottom: "2.5rem", overflowX: "auto", padding: "0 .5rem" }}>
-          {STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const isDone   = i <= highestSaved;
             const isActive = i === tab;
             return (
@@ -358,7 +386,7 @@ export default function OnboardingPage() {
                   </div>
                 </button>
 
-                {i < STEPS.length - 1 && (
+                {i < steps.length - 1 && (
                   <div style={{ display: "flex", alignItems: "center", paddingTop: 29, margin: "0 -4px" }}>
                     <div style={{ width: 28, height: 2, background: i <= highestSaved ? "var(--success)" : "var(--outline-v)", borderRadius: 2, transition: "background 0.3s" }} />
                     <i className="ti ti-chevron-right" style={{ fontSize: 14, color: i <= highestSaved ? "var(--success)" : "var(--outline-v)", margin: "0 -2px", transition: "color 0.3s" }} />
@@ -374,16 +402,16 @@ export default function OnboardingPage() {
         <div style={CARD_STYLE}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--outline-v)" }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(30,78,140,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <i className={`ti ${STEPS[tab].icon}`} style={{ fontSize: 18, color: "var(--primary)" }} />
+              <i className={`ti ${steps[tab].icon}`} style={{ fontSize: 18, color: "var(--primary)" }} />
             </div>
             <div>
-              <div style={{ fontSize: ".7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--outline)", marginBottom: 2 }}>Step {tab + 1} of {STEPS.length}</div>
-              <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>{STEPS[tab].label}</div>
+              <div style={{ fontSize: ".7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--outline)", marginBottom: 2 }}>Step {tab + 1} of {steps.length}</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>{steps[tab].label}</div>
             </div>
             <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginBottom: 4 }}>{Math.round(((highestSaved + 1) / STEPS.length) * 100)}% complete</div>
+              <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginBottom: 4 }}>{Math.round(((highestSaved + 1) / steps.length) * 100)}% complete</div>
               <div style={{ width: 100, height: 5, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${((highestSaved + 1) / STEPS.length) * 100}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.4s ease" }} />
+                <div style={{ height: "100%", width: `${((highestSaved + 1) / steps.length) * 100}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.4s ease" }} />
               </div>
             </div>
           </div>
@@ -404,12 +432,18 @@ export default function OnboardingPage() {
               onUpload={handleUpload}
             />
           )}
+          {tab === 5 && faceMandatory && (
+            <TabFaceId
+              registration={faceRegistration}
+              onRegister={() => setShowFaceCapture(true)}
+            />
+          )}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2rem", paddingTop: "1.25rem", borderTop: "1px solid var(--outline-v)" }}>
             <button className="btn btn-ghost" onClick={() => setTab(t => t - 1)} disabled={tab === 0 || saving} type="button">
               <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Previous
             </button>
-            {tab < STEPS.length - 1 ? (
+            {tab < steps.length - 1 ? (
               <button className="btn btn-filled" onClick={next} disabled={saving} type="button">
                 {saving
                   ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Saving…</>
@@ -455,6 +489,13 @@ export default function OnboardingPage() {
           : <><i className="ti ti-logout" style={{ fontSize: 15 }} /> Logout</>
         }
       </button>
+
+      {showFaceCapture && (
+        <FaceRegistrationModal
+          mode="register"
+          onClose={() => { setShowFaceCapture(false); refetchFaceRegistration(); }}
+        />
+      )}
     </div>
   );
 }
@@ -759,5 +800,58 @@ function TabDocuments({
         </div>
       </div>
     </>
+  );
+}
+
+// ── Tab: Face ID ──────────────────────────────────────────────────────────────
+// Only rendered when the admin's org-wide Face ID Verification toggle
+// (Attendance Settings) is mandatory — see faceMandatory above. Capture goes
+// through the same FaceRegistrationModal/useFaceRegistrationCapture flow used
+// on the Profile page; "registered" here just means submitted — HR approval
+// happens afterwards, same bar as the Documents step above.
+
+function TabFaceId({
+  registration, onRegister,
+}: {
+  registration: Partial<FaceRegistrationRequest> | null;
+  onRegister: () => void;
+}) {
+  const status = registration?.status;
+
+  return (
+    <div>
+      <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
+        Your organisation requires a registered face ID for web clock-in/out. Register once here —
+        we run a quick liveness check to confirm it&apos;s really you, then send it to HR for approval.
+      </p>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
+        padding: "1rem 1.25rem", borderRadius: 12,
+        border: `1.5px solid ${status ? "var(--success)" : "var(--outline-v)"}`,
+        background: status ? "var(--success-c)" : "#fff",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: status ? "var(--success)" : "var(--bg-high)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <i className="ti ti-face-id" style={{ color: status ? "#fff" : "var(--on-variant)", fontSize: 18 }} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>
+              {status === "approved" && "Face ID approved"}
+              {status === "pending" && "Face ID submitted — pending HR approval"}
+              {status === "rejected" && "Face ID rejected — please register again"}
+              {!status && "Face ID not yet registered"}
+            </div>
+          </div>
+        </div>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: ".83rem", borderColor: status ? "var(--success)" : undefined, color: status ? "var(--success)" : undefined }}
+          onClick={onRegister}
+          type="button"
+        >
+          {status === "approved" ? "Update" : status ? "Register Again" : "Register Face ID"}
+        </button>
+      </div>
+    </div>
   );
 }

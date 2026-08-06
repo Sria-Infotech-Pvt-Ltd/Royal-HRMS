@@ -187,8 +187,14 @@ def import_attendance_csv(file, imported_by) -> dict:
 
     if total > _SYNC_THRESHOLD:
         from apps.attendance.tasks import process_attendance_import
-        task = process_attendance_import.delay(
-            str(import_log.id), str(imported_by.pk), content,
+        # retry=False + ignore_result=True — bounds broker/backend retries
+        # so a down Redis can't block this request; see the
+        # referral-submission dispatch in recruitment/views.py. Progress is
+        # tracked via AttendanceImportLog fields, not Celery's result
+        # backend, so ignore_result doesn't affect status polling.
+        task = process_attendance_import.apply_async(
+            args=[str(import_log.id), str(imported_by.pk), content],
+            retry=False, ignore_result=True,
         )
         import_log.task_id = task.id
         import_log.save(update_fields=['task_id', 'updated_at'])

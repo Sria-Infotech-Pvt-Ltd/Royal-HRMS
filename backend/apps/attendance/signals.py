@@ -46,3 +46,10 @@ def on_attendance_punch_rules_change(sender, instance, **kwargs):
 def on_attendance_overtime_rules_change(sender, instance, **kwargs):
     from core.cache_service import AttendanceSettingsCacheService
     AttendanceSettingsCacheService.invalidate()
+
+
+@receiver(post_save, sender='attendance.AttendanceFaceVerificationRules')
+@receiver(post_delete, sender='attendance.AttendanceFaceVerificationRules')
+def on_attendance_face_verification_rules_change(sender, instance, **kwargs):
+    from core.cache_service import AttendanceSettingsCacheService
+    AttendanceSettingsCacheService.invalidate()

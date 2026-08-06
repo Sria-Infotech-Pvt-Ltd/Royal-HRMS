@@ -51,9 +51,11 @@ export interface Candidate {
   branch:                   number | null;
   branch_name:              string;
   interview_date:           string | null;
-  interviewer:              number | null;
+  interview_time:           string | null;
+  interviewer:              string | null;
   interviewer_name:         string;
   interview_mode:           InterviewMode;
+  meeting_link:             string;
   notes:                    string;
   status:                   CandidateStatus;
   referral_by:              number | null;
@@ -154,7 +156,7 @@ export const RECRUITMENT_API = {
     clientApi.post<{ message: string }>(API.recruitment.sendPortalLogin(id)),
   sendEmail: (id: number, body: { template_name: string; extra_context?: Record<string, string> }) =>
     clientApi.post<{ success: boolean; message: string; data: null }>(API.recruitment.sendEmail(id), body),
-  update: (id: number, body: Partial<Pick<Candidate, "name" | "branch" | "interview_date" | "interview_mode" | "position_applied" | "notes">> & { extra_context?: Record<string, string> }) =>
+  update: (id: number, body: Partial<Pick<Candidate, "name" | "branch" | "interview_date" | "interview_time" | "interview_mode" | "meeting_link" | "interviewer" | "position_applied" | "notes">> & { extra_context?: Record<string, string> }) =>
     clientApi.patch<{ data: Candidate }>(API.recruitment.detail(id), body),
 };
 

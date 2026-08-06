@@ -179,15 +179,24 @@ class DidYouMeanYesMatrixTests(SimpleTestCase):
             return second, mock_execute
 
     def test_clock_in(self):
-        second, mock = self._run('clock_in', BORDERLINE['clock_in'], 'apps.voice_commands.conversation.execute_intent')
+        # clock_in/clock_out dispatch through conversation_clock_in_face.py,
+        # not conversation.py's own execute_intent — see that module. Its
+        # is_face_verification_mandatory=False fast path is what keeps this a
+        # one-shot dispatch (the mandatory-on path awaits a facial-proof turn
+        # instead, covered separately in apps.attendance.tests_face_verification.py).
+        second, mock = self._run(
+            'clock_in', BORDERLINE['clock_in'], 'apps.voice_commands.conversation_clock_in_face.execute_clock_in',
+            extra_patches=[('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', False)],
+        )
         mock.assert_called_once()
-        self.assertEqual(mock.call_args.args[0], 'clock_in')
         self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE)
 
     def test_clock_out(self):
-        second, mock = self._run('clock_out', BORDERLINE['clock_out'], 'apps.voice_commands.conversation.execute_intent')
+        second, mock = self._run(
+            'clock_out', BORDERLINE['clock_out'], 'apps.voice_commands.conversation_clock_in_face.execute_clock_out',
+            extra_patches=[('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', False)],
+        )
         mock.assert_called_once()
-        self.assertEqual(mock.call_args.args[0], 'clock_out')
         self.assertNotEqual(second['message'], _NO_MATCH_MESSAGE)
 
     def test_check_leave_balance(self):
@@ -382,7 +391,10 @@ class RealCacheRoundTripTests(SimpleTestCase):
         self.assertIsNone(clarification.get_pending(self._user_id))
 
     def test_clock_in_yes_and_no_over_the_real_cache(self):
-        self._yes_then_no('clock_in', BORDERLINE['clock_in'], 'apps.voice_commands.conversation.execute_intent')
+        self._yes_then_no(
+            'clock_in', BORDERLINE['clock_in'], 'apps.voice_commands.conversation_clock_in_face.execute_clock_in',
+            extra_patches=[('apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', False)],
+        )
 
     def test_check_leave_balance_yes_and_no_over_the_real_cache(self):
         self._yes_then_no('check_leave_balance', BORDERLINE['check_leave_balance'], 'apps.voice_commands.conversation.execute_intent')
@@ -473,13 +485,22 @@ class GeofencingRetryDuringClarificationTests(SimpleTestCase):
         for p in patchers:
             p.start()
             self.addCleanup(p.stop)
+        # clock_in dispatches through conversation_clock_in_face.py, not
+        # conversation.py's own execute_intent — see that module. Its
+        # is_face_verification_mandatory=False fast path is what keeps this
+        # geofence-retry mechanic identical to before that module existed.
+        mandatory_patcher = patch(
+            'apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False,
+        )
+        mandatory_patcher.start()
+        self.addCleanup(mandatory_patcher.stop)
         self.request = _fake_request()
 
     def test_yes_rejected_for_missing_gps_stays_pending_then_succeeds_on_located_retry(self):
         first = handle_transcript(self.request, BORDERLINE['clock_in'])
         self.assertTrue(first['awaiting_input'])
 
-        with patch('apps.voice_commands.conversation.execute_intent') as mock_execute:
+        with patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in') as mock_execute:
             mock_execute.return_value = ExecutionResult(
                 success=False,
                 message=(
@@ -497,7 +518,7 @@ class GeofencingRetryDuringClarificationTests(SimpleTestCase):
         self.assertIn(42, self.store._store)
         self.assertEqual(self.store._store[42]['intent'], 'clock_in')
 
-        with patch('apps.voice_commands.conversation.execute_intent') as mock_execute_located:
+        with patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in') as mock_execute_located:
             mock_execute_located.return_value = ExecutionResult(
                 success=True, message='You have been clocked in successfully.',
             )
@@ -515,7 +536,7 @@ class GeofencingRetryDuringClarificationTests(SimpleTestCase):
         as retryable -- only the specific missing-GPS message re-arms."""
         handle_transcript(self.request, BORDERLINE['clock_in'])
 
-        with patch('apps.voice_commands.conversation.execute_intent') as mock_execute:
+        with patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in') as mock_execute:
             mock_execute.return_value = ExecutionResult(success=False, message='You have already clocked in today.')
             result = handle_transcript(self.request, 'yes')
 
@@ -539,7 +560,14 @@ class ReportedBugLiteralTranscriptTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
-        execute_patcher = patch('apps.voice_commands.conversation.execute_intent')
+        # clock_in dispatches through conversation_clock_in_face.py, not
+        # conversation.py's own execute_intent — see that module.
+        mandatory_patcher = patch(
+            'apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False,
+        )
+        mandatory_patcher.start()
+        self.addCleanup(mandatory_patcher.stop)
+        execute_patcher = patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
         self.mock_execute = execute_patcher.start()
         self.addCleanup(execute_patcher.stop)
         self.mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
@@ -570,7 +598,6 @@ class ReportedBugLiteralTranscriptTests(SimpleTestCase):
         result = handle_transcript(self.request, 'I need to clock myself in')
 
         self.mock_execute.assert_called_once()
-        self.assertEqual(self.mock_execute.call_args.args[0], 'clock_in')
         self.assertEqual(result['message'], 'You have been clocked in successfully.')
         self.assertFalse(result['awaiting_input'])
         self.assertTrue(result['success'])

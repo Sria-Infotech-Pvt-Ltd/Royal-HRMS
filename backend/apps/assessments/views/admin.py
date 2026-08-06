@@ -58,7 +58,12 @@ def _queue_assignment_emails(assignment_ids: list, template_name: str) -> None:
 
     def _dispatch(ids=list(assignment_ids), tpl=template_name):
         try:
-            send_assessment_assignment_emails_task.delay(ids, tpl)
+            # retry=False + ignore_result=True — bounds broker/backend
+            # retries so a down Redis can't block this request; see the
+            # referral-submission dispatch in recruitment/views.py.
+            send_assessment_assignment_emails_task.apply_async(
+                args=[ids, tpl], retry=False, ignore_result=True,
+            )
         except Exception as exc:
             logger.error(
                 'Failed to queue assessment assignment email(s) for %s: %s',

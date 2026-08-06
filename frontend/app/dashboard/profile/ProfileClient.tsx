@@ -6,7 +6,11 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
 import { PROFILE_SECTIONS, type DocEntry } from "@/app/dashboard/employees/_data";
+import { useFaceRegistrationCard } from "@/hooks/useFaceRegistrationCard";
+import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ChangePasswordForm from "./ChangePasswordForm";
+import FaceRegistrationModal from "@/components/FaceRegistrationModal";
+import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 
 interface ProfileSub {
   date_of_birth:          string | null;
@@ -57,6 +61,7 @@ interface ProfileData {
   reporting_manager: AssignedPerson | null;
   hr:                AssignedPerson | null;
   profile:           ProfileSub | null;
+  profile_photo_url: string | null;
 }
 
 interface DocumentItem {
@@ -143,6 +148,15 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
   const docEntries = buildDocEntries(docs ?? []);
+
+  const [showFaceRegistration, setShowFaceRegistration] = useState(false);
+  const { state: faceCardState, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
+
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [photoOverride,  setPhotoOverride]  = useState<string | null | undefined>(undefined);
+  // undefined = "no local change yet, trust the fetched profile"; null/string = optimistic
+  // override after an upload/remove, shown immediately without waiting for a refetch.
+  const photoUrl = photoOverride !== undefined ? photoOverride : (profile?.profile_photo_url ?? null);
 
   async function handleUploadDocument(documentType: string, file: File) {
     if (!profile?.employee_id) return;
@@ -236,12 +250,24 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
       {/* ── Avatar + name banner ── */}
       <div className="card mb-16" style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
-        <div style={{
-          width: 72, height: 72, borderRadius: "50%", flexShrink: 0,
-          background: "var(--primary)", color: "white",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 26, fontWeight: 700,
-        }}>{ini}</div>
+        <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
+          <Avatar text={ini} size={72} photoUrl={photoUrl} />
+          <button
+            type="button"
+            onClick={() => setShowPhotoModal(true)}
+            suppressHydrationWarning
+            title="Change profile photo"
+            style={{
+              position: "absolute", bottom: -2, right: -2,
+              width: 26, height: 26, borderRadius: "50%",
+              background: "var(--primary)", color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "2px solid #fff", cursor: "pointer",
+            }}
+          >
+            <i className="ti ti-camera" style={{ fontSize: 12 }} />
+          </button>
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-bg)" }}>
             {loading ? "—" : (profile?.full_name ?? session.name)}
@@ -556,7 +582,76 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             </div>
           </div>
 
+          {/* Face Registration */}
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title"><i className="ti ti-face-id" />Face Registration</span>
+            </div>
+            <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
+              <i className="ti ti-face-id" style={{ fontSize: 22, color: "var(--on-variant)" }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {faceCardState === "disabled" && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID verification is currently disabled</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Contact admin to use this feature.</div>
+                  </>
+                )}
+                {faceCardState === "approved" && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--success)" }}>
+                      <i className="ti ti-circle-check" style={{ marginRight: 4 }} />Face ID registered
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Required for web clock-in/out — already verified.</div>
+                  </>
+                )}
+                {faceCardState === "pending" && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID pending HR approval</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>You&apos;ll be able to clock in with it once it&apos;s approved.</div>
+                  </>
+                )}
+                {faceCardState === "rejected" && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--error)" }}>Face ID registration was rejected</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{faceRejectionNotes || "Please update and resubmit."}</div>
+                  </>
+                )}
+                {faceCardState === "not_registered" && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID not yet registered</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                      Face ID is registered during onboarding. Contact HR to register your face ID.
+                    </div>
+                  </>
+                )}
+              </div>
+              {(faceCardState === "approved" || faceCardState === "rejected") && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  suppressHydrationWarning
+                  onClick={() => setShowFaceRegistration(true)}
+                >
+                  <i className="ti ti-camera" /> Update My Face
+                </button>
+              )}
+            </div>
+          </div>
+
         </div>
+
+        {showFaceRegistration && (
+          <FaceRegistrationModal mode="update" onClose={() => { setShowFaceRegistration(false); refetchFaceStatus(); }} />
+        )}
+
+        {showPhotoModal && (
+          <ProfilePhotoModal
+            hasExistingPhoto={Boolean(photoUrl)}
+            onClose={() => setShowPhotoModal(false)}
+            onUploaded={url => { setPhotoOverride(url); setShowPhotoModal(false); }}
+            onRemoved={() => { setPhotoOverride(null); setShowPhotoModal(false); }}
+          />
+        )}
       </div>
     </div>
   );

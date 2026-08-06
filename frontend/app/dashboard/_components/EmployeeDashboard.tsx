@@ -3,10 +3,10 @@
 import EmpConsole          from "@/components/dashboard/employee/EmpConsole";
 import EmpBirthdayAnnouncement from "@/components/dashboard/employee/EmpBirthdayAnnouncement";
 import EmpLeaveBalances    from "@/components/dashboard/employee/EmpLeaveBalances";
-import EmpAttendanceSummary from "@/components/dashboard/employee/EmpAttendanceSummary";
+import EmpUpcomingHolidays from "@/components/dashboard/employee/EmpUpcomingHolidays";
 import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems";
 import EmpRecentRequests   from "@/components/dashboard/employee/EmpRecentRequests";
-import EmpAnnouncement     from "@/components/dashboard/employee/EmpAnnouncement";
+import EmpUpdatesCard      from "@/components/dashboard/employee/EmpUpdatesCard";
 import type { SessionPayload } from "@/lib/session";
 
 interface Props { session: SessionPayload }
@@ -32,8 +32,8 @@ export default function EmployeeDashboard({ session }: Props) {
       {/* Row 1 + 2 — Console banner (KPIs + attendance status strip) */}
       <EmpConsole firstName={firstName} />
 
-      {/* Row 2.5 — Announcement banner (renders nothing when null or dismissed) */}
-      <EmpAnnouncement />
+      {/* Row 2.5 — Announcement + today's birthdays, one combined card (renders nothing when both are empty/dismissed) */}
+      <EmpUpdatesCard />
 
       {/* Quick Actions */}
       <div className="card mb-20">
@@ -54,13 +54,13 @@ export default function EmployeeDashboard({ session }: Props) {
         </div>
       </div>
 
-      {/* Row 3 — Leave Balances | Attendance Summary */}
+      {/* Row 3 — Leave Balance | Upcoming Holidays */}
       <div className="grid-2 mb-16">
         <EmpLeaveBalances />
-        <EmpAttendanceSummary />
+        <EmpUpcomingHolidays />
       </div>
 
-      {/* Row 4 — Action Items | Recent Requests */}
+      {/* Row 4 — Pending Requests | Recent Activity */}
       <div className="grid-2 mb-16">
         <EmpActionItems />
         <EmpRecentRequests />
