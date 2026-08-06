@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { PaginatedResponse } from "@/types/attendance";
@@ -11,7 +11,6 @@ import ExpenseDetailModal from "./ExpenseDetailModal";
 
 type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
 type ExpenseStatus   = "pending" | "approved" | "rejected";
-type FilterTab       = "all" | ExpenseCategory;
 
 export interface ExpenseReceipt {
   id:  string;
@@ -48,33 +47,11 @@ interface ExpenseStats {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FILTER_TABS: { value: FilterTab; label: string; icon: string }[] = [
-  { value: "all",       label: "All Claims", icon: "ti-list"                   },
-  { value: "travel",    label: "Travel",     icon: "ti-plane-departure"        },
-  { value: "meals",     label: "Meals",      icon: "ti-tools-kitchen-2"        },
-  { value: "equipment", label: "Equipment",  icon: "ti-device-desktop"         },
-  { value: "other",     label: "Other",      icon: "ti-dots-circle-horizontal" },
-];
-
 export const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
   travel:    "Travel",
   meals:     "Meals",
   equipment: "Equipment",
   other:     "Other",
-};
-
-const CATEGORY_ICON: Record<ExpenseCategory, string> = {
-  travel:    "ti-plane-departure",
-  meals:     "ti-tools-kitchen-2",
-  equipment: "ti-device-desktop",
-  other:     "ti-dots-circle-horizontal",
-};
-
-const CATEGORY_STYLE: Record<ExpenseCategory, { bg: string; color: string }> = {
-  travel:    { bg: "rgba(30,78,140,0.10)",   color: "var(--primary)"    },
-  meals:     { bg: "rgba(181,101,29,0.10)",  color: "var(--warn)"       },
-  equipment: { bg: "rgba(14,124,134,0.10)",  color: "var(--info)"       },
-  other:     { bg: "var(--bg-high)",         color: "var(--on-variant)" },
 };
 
 export const STATUS_BADGE: Record<ExpenseStatus, { cls: string; label: string }> = {
@@ -98,23 +75,24 @@ export function formatDate(iso: string): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ExpenseClaims() {
-  const [activeFilter,    setActiveFilter]    = useState<FilterTab>("all");
-  const [showNewExpense,  setShowNewExpense]  = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+const RECENT_COUNT = 5;
 
-  const listUrl = useMemo(() => {
-    if (activeFilter === "all") return API.expenses.list;
-    return `${API.expenses.list}?category=${activeFilter}`;
-  }, [activeFilter]);
+interface Props {
+  autoOpenNew?: boolean;
+}
+
+export default function ExpenseClaims({ autoOpenNew = false }: Props) {
+  const [showNewExpense,  setShowNewExpense]  = useState(autoOpenNew);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   // /expenses/ returns a paginated envelope ({ results, count, ... }), not a
   // bare array — fetching it as Expense[] made Array.isArray() always false,
   // which silently rendered the empty state no matter how many claims existed.
-  const { data: expensesPage, loading, error, refetch } = useFetch<PaginatedResponse<Expense>>(listUrl);
+  const { data: expensesPage, loading, error, refetch } = useFetch<PaginatedResponse<Expense>>(API.expenses.list);
   const { data: stats,        refetch: refetchStats }   = useFetch<ExpenseStats>(API.expenses.stats);
 
   const expenseList = expensesPage?.results ?? [];
+  const recentClaims = expenseList.slice(0, RECENT_COUNT);
 
   function handleSaved() {
     setShowNewExpense(false);
@@ -129,17 +107,17 @@ export default function ExpenseClaims() {
       {/* Header */}
       <div className="page-header">
         <div>
-          <div className="page-title">Expense Claims</div>
-          <div className="page-sub">Submit and track your reimbursement requests</div>
+          <div className="page-title">Expenses</div>
+          <div className="page-sub">Submit and track your reimbursement claims</div>
         </div>
         <div className="page-actions">
-          <button className="btn btn-filled" onClick={() => setShowNewExpense(true)}>
-            <i className="ti ti-plus" /> New Expense
+          <button className="btn btn-filled" onClick={() => setShowNewExpense(true)} suppressHydrationWarning>
+            <i className="ti ti-plus" /> Submit Expense
           </button>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Summary cards */}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon si-primary"><i className="ti ti-file-invoice" /></div>
@@ -163,23 +141,15 @@ export default function ExpenseClaims() {
           )}
         </div>
         <div className="stat-card">
+          <div className="stat-icon si-error"><i className="ti ti-x" /></div>
+          <div className="stat-label">Rejected</div>
+          <div className="stat-value">{stats?.rejected ?? "—"}</div>
+        </div>
+        <div className="stat-card">
           <div className="stat-icon si-info"><i className="ti ti-cash" /></div>
-          <div className="stat-label">Total Amount</div>
+          <div className="stat-label">Total Claimed Amount</div>
           <div className="stat-value">{formatAmount(totalAmount)}</div>
         </div>
-      </div>
-
-      {/* Category filter tabs */}
-      <div className="filter-bar filter-scroll mb-16">
-        {FILTER_TABS.map(tab => (
-          <button
-            key={tab.value}
-            className={`btn ${activeFilter === tab.value ? "btn-filled" : "btn-ghost"}`}
-            onClick={() => setActiveFilter(tab.value)}
-          >
-            <i className={`ti ${tab.icon}`} /> {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Error */}
@@ -189,82 +159,61 @@ export default function ExpenseClaims() {
         </div>
       )}
 
-      {/* Expense list */}
+      {/* Recent Expense Claims — latest 5 only; full history lives in My Requests */}
       <div className="card">
-        {loading ? (
-          <div className="text-center py-10">
-            <i className="ti ti-loader-2 spin text-3xl" />
-          </div>
-        ) : expenseList.length === 0 ? (
-          <div className="empty-state">
-            <i className="ti ti-wallet" />
-            <h3>No expense claims yet</h3>
-            <p>Submit a new expense to get started. Attach your receipt for faster approval.</p>
-          </div>
-        ) : (
-          expenseList.map((expense, idx) => {
-            const catStyle     = CATEGORY_STYLE[expense.category] ?? CATEGORY_STYLE.other;
-            const catIcon      = CATEGORY_ICON[expense.category]  ?? "ti-dots-circle-horizontal";
-            const catLabel     = CATEGORY_LABEL[expense.category] ?? expense.category;
-            const { cls, label } = STATUS_BADGE[expense.status]   ?? STATUS_BADGE.pending;
-            const receiptCount = expense.receipts?.length ?? 0;
-
-            return (
-              <div
-                key={expense.expense_number}
-                onClick={() => setSelectedExpense(expense)}
-                className={`flex items-center gap-3.5 px-5 py-4 flex-wrap cursor-pointer hover:bg-[var(--bg-low)] transition-colors ${idx < expenseList.length - 1 ? "border-b border-[var(--outline-v)]" : ""}`}
-              >
-                {/* Category icon */}
-                <div
-                  className="w-11 h-11 rounded-[10px] flex items-center justify-center text-xl flex-shrink-0"
-                  style={{ background: catStyle.bg, color: catStyle.color }}
-                >
-                  <i className={`ti ${catIcon}`} />
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-[160px]">
-                  <div className="font-semibold text-sm text-[var(--on-bg)] mb-1">
-                    {expense.title}
-                  </div>
-                  <div className="flex items-center gap-2.5 flex-wrap text-xs text-[var(--on-variant)]">
-                    <span className="text-[var(--outline)]">{expense.expense_ref}</span>
-                    {expense.employee_name && (
-                      <span className="flex items-center gap-1">
-                        <i className="ti ti-user text-[13px]" /> {expense.employee_name}
-                      </span>
-                    )}
-                    {expense.branch_name && (
-                      <span className="flex items-center gap-1">
-                        <i className="ti ti-building text-[13px]" /> {expense.branch_name}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <i className="ti ti-calendar text-[13px]" /> {formatDate(expense.expense_date)}
-                    </span>
-                    {receiptCount > 0 && (
-                      <span className="flex items-center gap-1">
-                        <i className="ti ti-paperclip text-[13px]" /> {receiptCount} receipt{receiptCount !== 1 ? "s" : ""}
-                      </span>
-                    )}
-                    <span className="badge badge-neutral text-[10px]">
-                      {catLabel}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Amount + status */}
-                <div className="flex items-center gap-2.5 flex-shrink-0">
-                  <span className="text-base font-bold text-[var(--on-bg)]">
-                    ₹{parseFloat(String(expense.amount)).toLocaleString("en-IN")}
-                  </span>
-                  <span className={`badge ${cls}`}>{label}</span>
-                </div>
-              </div>
-            );
-          })
-        )}
+        <div className="card-header">
+          <div className="card-title"><i className="ti ti-receipt" /> Recent Expense Claims</div>
+          <a href="/dashboard/my-requests?tab=expense" className="btn btn-ghost btn-sm">
+            View All Expense Claims <i className="ti ti-arrow-right" />
+          </a>
+        </div>
+        <div className="table-wrap">
+          {loading ? (
+            <div className="text-center py-10">
+              <i className="ti ti-loader-2 spin text-3xl" />
+            </div>
+          ) : recentClaims.length === 0 ? (
+            <div className="empty-state">
+              <i className="ti ti-wallet" />
+              <h3>No expense claims yet</h3>
+              <p>Submit a new expense to get started. Attach your receipt for faster approval.</p>
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Expense Type</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th style={{ textAlign: "center" }}>Status</th>
+                  <th style={{ textAlign: "right" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentClaims.map(expense => {
+                  const catLabel      = CATEGORY_LABEL[expense.category] ?? expense.category;
+                  const { cls, label } = STATUS_BADGE[expense.status]    ?? STATUS_BADGE.pending;
+                  return (
+                    <tr key={expense.expense_number} onClick={() => setSelectedExpense(expense)} style={{ cursor: "pointer" }}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{catLabel}</div>
+                        <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{expense.title}</div>
+                      </td>
+                      <td>{formatDate(expense.expense_date)}</td>
+                      <td style={{ fontWeight: 700 }}>₹{parseFloat(String(expense.amount)).toLocaleString("en-IN")}</td>
+                      <td style={{ textAlign: "center" }}><span className={`badge ${cls}`}>{label}</span></td>
+                      <td style={{ textAlign: "right" }} onClick={e => e.stopPropagation()}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedExpense(expense)} suppressHydrationWarning>
+                          <i className="ti ti-eye" /> View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* New Expense modal */}
