@@ -3758,3 +3758,67 @@ Twice this session, a detailed-sounding endpoint spec was handed over as "verifi
 - **Default-assessment auto-assignment on employee creation has no role check** (§7) — the actual fix belongs in `apps/accounts/views.py`'s employee-creation handler (skip auto-assigning default assessments to `can_manage_team` roles) or in whatever decides `is_default` assignment. What's here is a frontend workaround at the two places that force the redirect, not a fix at the source — a newly created manager will still show `assessment_status: "pending"` in the database indefinitely, with only the redirect suppressed on the frontend.
 - **`Department` has no `branch` relationship in the schema at all** (§8) — if branch-scoped departments become a real requirement, it needs a model change (either a direct FK, or defining "belongs to branch" via department members' branches, which is a product decision, not just a migration).
 - **`ManagerListView` still ignores the `department` query param entirely** — the frontend now sends it (§8) but it has zero effect on results until the backend view is updated to actually filter on it. Today's behavior is still branch-only in practice.
+
+---
+
+## Session — G.Durga Prasad (06 August 2026)
+
+**Branch:** `Backend/06/08/2026`
+
+---
+
+### 1. "Add New Employee" — Manual HR / Reporting Manager Assignment
+
+Added two optional dropdowns to the Add Employee modal ("Assign HR", "Assign Reporting Manager"), populated from `hrList`/`managerList` scoped to the selected branch, defaulting to "— Auto-assign —" so the existing auto-assignment fallback still runs when left blank. While wiring this up, found that **`POST /api/employees/` had no `post()` method at all** — the entire employee-creation logic (user creation, auto-assign, leave-balance allocation, default-assessment assignment, welcome email) had been misplaced inside `EmployeeStatsView` (a class meant only for dashboard header counts) by an apparent botched merge, proven by a stray `self._DENIED` reference on that class that doesn't belong to it. **Add Employee was completely broken (`405 Method Not Allowed`) for every user** until this was found — moved the method back to `EmployeeListCreateView` where it belongs, then added the manual `hr_id`/`reporting_manager_id` handling on top: validates each resolves to a real active user, rejects a reporting manager for manager-role hires, and passes both straight into `User.objects.create_user()` so `_auto_assign_managers()` only fills in what's still unset.
+
+Verified live: manual HR+manager pick works; manager-role + reporting_manager_id 400s as expected; leaving both blank still auto-assigns exactly as before.
+
+---
+
+### 2. Interview-Scheduling Emails — Brought Up to Production Standard
+
+Asked to review how the candidate interview-scheduled email compared to real-world practice, then explicitly asked to implement it "as per production standards as per permission-based architecture only." The existing email only had Date/Mode/Branch — no time, no interviewer, no actual location/link. Added:
+
+- `Candidate.interview_time` and `Candidate.meeting_link` fields (migration `0012`), exposed on the Add/Edit Candidate forms (a Time field always, a URL field only when the mode is Video Call).
+- `core/template_context.py` gained `candidate_interview_location()` and an expanded `candidate_context()` — interviewer name, formatted time, and a mode-aware location string (meeting link for video, `Branch.address` for in-person, a phone note for phone interviews) — kept in the one shared context module instead of duplicating dict-building at each call site (the exact pattern that caused an earlier "variables don't auto-fill" bug).
+- A hand-built `.ics` calendar invite (RFC 5545, IST→UTC conversion) is now attached to every candidate-facing interview email. `send_template_email()` (`accounts/utils.py`) gained an `extra_attachments` parameter to support this without a second email-sending path.
+- The "fire email on schedule/reschedule" trigger now fires on a change to date **or** time **or** meeting link, not date alone.
+
+**Found and fixed along the way, not reported by anyone:**
+- All three interview/referral email templates (`interview_scheduled_candidate` and both referral variants) were **completely absent from the live database** — their original seeding migrations show as applied, but the rows themselves don't exist, so every interview-scheduled email has been silently failing (`LookupError`, caught and logged, never surfaced) for an unknown period. Re-seeded via a new `update_or_create`-based migration (`0013`) so it self-heals regardless of the DB's actual current state.
+- `EditCandidateModal.tsx` was manually re-sending the exact same "interview scheduled" email the backend now sends automatically on save — deleted the redundant frontend call to stop candidates getting the notification twice.
+
+**Reported, not a code fix:** a live "candidate didn't get the email" report traced all the way to zero active `SMTPSettings` rows in the database — every email in the whole system is currently failing at the SMTP-connection step, unrelated to anything above. This needs a real SMTP account configured via Settings → SMTP; I can't create one myself since it requires real credentials.
+
+---
+
+### 3. Branches Page Crashing on Load (`isHrAdmin is not defined`)
+
+Reported as a live runtime `ReferenceError` crashing `/dashboard/branches` for the user. `BranchManagement.tsx` referenced `isHrAdmin` in JSX (line 325, deciding between "Your branch details" and "Manage all company branch locations") but never declared it anywhere — a pre-existing bug flagged repeatedly by `tsc --noEmit` across earlier sessions as out-of-scope, now confirmed to be a genuine crash rather than just a type error. Fixed by declaring `isHrAdmin` using the exact same permission-based condition the file already uses to scope `visibleBranches` (`!user?.is_superuser && !!user?.branch`) rather than inventing a new check — keeps the label text and the branch-list filtering driven by one source of truth.
+
+---
+
+### Key Files Changed (06 August 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/views.py` | Moved employee-creation `post()` from `EmployeeStatsView` to `EmployeeListCreateView`; added manual `hr_id`/`reporting_manager_id` handling |
+| `frontend/app/dashboard/employees/_components/AddEmployeeModal.tsx` | New "Assign HR" / "Assign Reporting Manager" dropdowns, branch-scoped |
+| `backend/apps/recruitment/models.py` | New `Candidate.interview_time`, `Candidate.meeting_link` |
+| `backend/apps/recruitment/migrations/0012`, `0013` | New fields; self-healing re-seed of the 3 missing interview/referral email templates |
+| `backend/apps/recruitment/serializers.py` | `interview_time`/`meeting_link` added to create/update/list serializers |
+| `backend/core/template_context.py` | `candidate_interview_location()`; expanded `candidate_context()` |
+| `backend/apps/accounts/utils.py` | `send_template_email()` gained `extra_attachments` |
+| `backend/apps/recruitment/views.py` | Shared-context interview emails + `.ics` attachment; reschedule trigger now covers time/link too |
+| `frontend/app/dashboard/interview-list/_data.ts`, `AddCandidateModal.tsx`, `EditCandidateModal.tsx` | Interview time / meeting link fields wired in; removed duplicate email-send call |
+| `frontend/app/dashboard/branches/_components/BranchManagement.tsx` | Declared the missing `isHrAdmin`, fixing a live crash on `/dashboard/branches` |
+
+---
+
+### Notes for Next Developer
+
+- **No active SMTP configuration exists in the database as of this session** — every system email (not just interview scheduling) will fail at send time until an admin adds and activates one via Settings → SMTP. Don't mistake this for a code bug if email reports keep coming in.
+- **Interview/referral email templates were found completely missing from the DB despite their seeding migrations showing as applied** — if other "silently missing" template reports surface, check `EmailTemplate.objects.filter(name=...)` directly rather than trusting `showmigrations`.
+- Several other migrations appear in the working tree (`accounts/migrations/0053`–`0060`, `attendance/migrations/0020`–`0022`, `hrms/migrations/0018`) that were **not** authored in this session — they carry their own descriptive docstrings (DB-drift fixes: payroll/recruitment permission grants, column widening, ghost-table FK fixes, leave-balance backfill). Whoever wrote them should add their own dated entry here so this log stays complete.
+
+**Merge note (demo, 2026-08-06):** `accounts/migrations/0058`–`0060` were dropped during the merge into `demo` — they revert `ApprovalWorkflowRule.l1_approver_role`/`l2_approver_role` from a `Role` ForeignKey back to plain CharFields, undoing a conversion (`accounts/0049_approval_workflow_role_fk`) that `demo` had already committed to and that other code on `demo` depends on. The other numbering collisions (`accounts/0053`–`0057`, `attendance/0020`–`0022`, `hrms/0018`) were renumbered to land after `demo`'s existing heads with their `dependencies` updated accordingly — their actual fixes were kept, only the numbers changed.

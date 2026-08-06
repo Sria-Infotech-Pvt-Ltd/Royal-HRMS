@@ -318,6 +318,21 @@ export default function AssessmentsPage() {
 
   const selectedAssignment = selectedPanel ? assignments.find(a => a.id === selectedPanel.assignmentId) : null;
   const selectedItemResponse = selectedAssignment?.responses.find(r => r.item_id === selectedPanel?.item.id);
+  // The "Submit Assessment" action otherwise only ever appeared in the sidebar,
+  // below the item list — after answering the LAST item, the main panel showed
+  // just the result card with no button at all (Next Item hides itself once
+  // there's nothing left), so finishing required noticing a button elsewhere
+  // on the screen. Mirror that same completion check here so the main panel
+  // can offer it directly.
+  const selectedSortedItems = selectedAssignment ? [...selectedAssignment.items].sort((a, b) => a.order - b.order) : [];
+  const selectedAllAnswered = selectedAssignment
+    ? selectedSortedItems.filter(i => isItemDone(i, selectedAssignment.responses)).length === selectedSortedItems.length
+      && selectedSortedItems.length > 0
+    : false;
+  const selectedIsDone = selectedAssignment
+    ? selectedAssignment.status === "complete" || !!finalResults[selectedAssignment.id]
+    : false;
+  const isLastItemInPanel = !!selectedPanel && selectedPanel.itemIndex >= selectedPanel.totalItems;
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#f0f4f8" }}>
@@ -728,6 +743,12 @@ export default function AssessmentsPage() {
                             Next Item <i className="ti ti-arrow-right" />
                           </button>
                         )}
+                        {(panelResult || alreadyDone) && isLastItemInPanel && selectedAllAnswered && !selectedIsDone && (
+                          <button suppressHydrationWarning onClick={() => handleComplete(selectedPanel.assignmentId)} disabled={completing === selectedPanel.assignmentId}
+                            style={{ padding: "12px 28px", borderRadius: 10, background: completing === selectedPanel.assignmentId ? "#94a3b8" : "#16a34a", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: completing === selectedPanel.assignmentId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>
+                            {completing === selectedPanel.assignmentId ? <><i className="ti ti-loader-2 spin" />Submitting…</> : <><i className="ti ti-send" />Submit Assessment</>}
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -812,6 +833,12 @@ export default function AssessmentsPage() {
                           <button suppressHydrationWarning onClick={goToNextItem}
                             style={{ padding: "12px 28px", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
                             Next Item <i className="ti ti-arrow-right" />
+                          </button>
+                        )}
+                        {(panelResult || alreadyDone) && isLastItemInPanel && selectedAllAnswered && !selectedIsDone && (
+                          <button suppressHydrationWarning onClick={() => handleComplete(selectedPanel.assignmentId)} disabled={completing === selectedPanel.assignmentId}
+                            style={{ padding: "12px 28px", borderRadius: 10, background: completing === selectedPanel.assignmentId ? "#94a3b8" : "#16a34a", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: completing === selectedPanel.assignmentId ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(22,163,74,0.3)" }}>
+                            {completing === selectedPanel.assignmentId ? <><i className="ti ti-loader-2 spin" />Submitting…</> : <><i className="ti ti-send" />Submit Assessment</>}
                           </button>
                         )}
                       </div>

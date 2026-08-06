@@ -265,19 +265,14 @@ class HRBirthdayUpcomingView(APIView):
 
 
 # ─── Employee Dashboard — Birthday Announcement ──────────────────────────────
+# Unlike HRBirthdayTodayView/SystemAdminBirthdayTodayView above (which gate on
+# employees.view / HR-admin so reviewers can browse the whole company), this
+# is open to any authenticated, onboarded employee — seeing who's having a
+# birthday today is not sensitive HR data. Reuses the same cached
+# _today_birthdays_data() helper, so there's no duplicate query or
+# cache-invalidation logic to maintain.
 
 class EmployeeBirthdayTodayView(APIView):
-    """
-    GET /api/dashboard/employee/birthdays/today/
-
-    Birthday announcement widget for the Employee Dashboard. Unlike
-    HRBirthdayTodayView/SystemAdminBirthdayTodayView above (which gate on
-    employees.view / HR-admin so reviewers can browse the whole company),
-    this is open to any authenticated, onboarded employee — seeing who's
-    having a birthday today is not sensitive HR data. Reuses the same
-    cached _today_birthdays_data() helper, so there's no duplicate query
-    or cache-invalidation logic to maintain.
-    """
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):

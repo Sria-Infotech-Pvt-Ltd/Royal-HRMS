@@ -155,6 +155,16 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   }
 
   function handleAssessmentConfirm() {
+    // The Department/Designation/UAN inputs stay visible (and editable) after
+    // the Confirm click that advances to this step, so re-check here too —
+    // without this, clearing a dropdown or the UAN field after passing that
+    // first check would silently submit a bad value and the backend would
+    // reject it.
+    if (!selDept || !selDesig) {
+      setAssignErr("Please select both Department and Designation before confirming.");
+      setShowAssessment(false);
+      return;
+    }
     if (uanNumber && uanNumber.length !== 12) {
       setAssignErr("UAN must be exactly 12 digits, or leave it blank.");
       return;

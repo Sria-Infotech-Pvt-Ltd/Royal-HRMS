@@ -2617,52 +2617,6 @@ class EmployeeListCreateView(APIView):
             'results':     [_employee_dict(u) for u in page_obj.object_list],
         })
 
-
-
-class EmployeeStatsView(APIView):
-    """
-    Dashboard counts for the Employees page header cards.
-
-    Computed directly from the full queryset (not a single page) — the
-    frontend used to derive these from the currently loaded page of results,
-    which under-counted everything once there was more than one page.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if not _has_perm(request.user, 'employees.view'):
-            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
-
-        base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
-
-        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
-            base_qs = base_qs.filter(branch=request.user.branch)
-
-        # branch_names/department_names always come from base_qs (ignores the
-        # branch filter below) so the branch dropdown never shrinks to just
-        # the currently-selected branch once one is picked.
-        branch_names = list(
-            base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
-        )
-        department_names = list(
-            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
-        )
-
-        qs = base_qs
-        branch_filter = request.query_params.get('branch', '').strip()
-        if branch_filter and branch_filter != 'all':
-            qs = qs.filter(branch=branch_filter)
-
-        return success('Employee statistics retrieved.', data={
-            'total':             qs.count(),
-            'active':            qs.filter(is_active=True, must_change_password=False).count(),
-            'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
-            'departments':       qs.exclude(department='').values('department').distinct().count(),
-            'branch_names':      branch_names,
-            'department_names':  department_names,
-        })
-
-
     def post(self, request):
         if not _has_perm(request.user, 'employees.create'):
             return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
@@ -2677,8 +2631,8 @@ class EmployeeStatsView(APIView):
         employee_type   = (request.data.get('employee_type')   or 'Permanent').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
-        hr_id                 = request.data.get('hr_id')
-        reporting_manager_id  = request.data.get('reporting_manager_id')
+        hr_id                 = (request.data.get('hr_id')                 or '').strip()
+        reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
@@ -2771,7 +2725,7 @@ class EmployeeStatsView(APIView):
         if hr_id:
             try:
                 selected_hr = User.objects.get(pk=hr_id, is_active=True)
-            except (User.DoesNotExist, ValueError, TypeError):
+            except (User.DoesNotExist, ValueError, ValidationError):
                 return error('HR user not found or is inactive.', data={'hr_id': 'Invalid HR selected.'})
 
         selected_manager = None
@@ -2783,7 +2737,7 @@ class EmployeeStatsView(APIView):
                 )
             try:
                 selected_manager = User.objects.get(pk=reporting_manager_id, is_active=True)
-            except (User.DoesNotExist, ValueError, TypeError):
+            except (User.DoesNotExist, ValueError, ValidationError):
                 return error(
                     'Reporting manager not found or is inactive.',
                     data={'reporting_manager_id': 'Invalid manager selected.'},
@@ -2961,33 +2915,6 @@ class EmployeeStatsView(APIView):
             'branch_names':      branch_names,
             'department_names':  department_names,
         })
-
-
-def _get_employee(identifier: str):
-    """Look up an employee by employee_id code (e.g. EMP001)."""
-    try:
-        return (
-            User.objects
-            .select_related('role', 'profile', 'reporting_manager', 'hr')
-            .prefetch_related('employee_documents')
-            .get(employee_id=identifier)
-        )
-    except User.DoesNotExist:
-        return None
-
-
-def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
-    """
-    Non-system-admin users are always scoped to their own branch — mirrors the
-    scoping already applied to EmployeeListCreateView.get(). Returns True when
-    the employee should be treated as not found for this requester.
-    """
-    return (
-        not _has_perm(requesting_user, 'settings.edit')
-        and bool(requesting_user.branch)
-        and employee.branch != requesting_user.branch
-    )
-
 
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -3969,7 +3896,7 @@ class EmployeeDocumentView(APIView):
         with transaction.atomic():
             doc = serializer.save(
                 user=request.user,
-                file_name=file_obj.name,
+                file_name=file_obj.name[:255],
                 file_size=file_obj.size,
             )
             ED.objects.filter(

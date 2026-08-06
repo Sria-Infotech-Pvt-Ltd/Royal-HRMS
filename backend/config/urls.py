@@ -9,7 +9,7 @@ urlpatterns = [
     path('api/branch/', include('apps.branch.urls')),
     path('api/announcements/', include('apps.announcements.urls')),
     path('api/recruitment/',   include('apps.recruitment.urls')),
-    path('api/',          include('apps.hrms.urls')),
+    path('api/',               include('apps.hrms.urls')),
     path('api/attendance/',    include('apps.attendance.urls')),
     path('api/assessments/',   include('apps.assessments.urls')),
     path('api/notifications/', include('apps.notifications.urls')),
@@ -17,7 +17,8 @@ urlpatterns = [
     path('api/payroll/',       include('apps.payroll.urls')),
     path('api/voice/',         include('apps.voice_commands.urls')),
 ]
-
+ 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
+ 

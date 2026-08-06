@@ -836,7 +836,10 @@ class EmployeeDocument(models.Model):
 
     user          = models.ForeignKey(User, on_delete=models.CASCADE, related_name='employee_documents')
     document_type = models.CharField(max_length=30, choices=TYPE_CHOICES)
-    file          = models.FileField(upload_to=_employee_doc_path)
+    # Django's FileField max_length defaults to 100 — _employee_doc_path() embeds
+    # the original filename into the stored path, so anything beyond a short name
+    # overflows that default (matches file_name's own width for the same reason).
+    file          = models.FileField(upload_to=_employee_doc_path, max_length=255)
     file_name     = models.CharField(max_length=255)
     file_size     = models.PositiveBigIntegerField()
     uploaded_at   = models.DateTimeField(auto_now_add=True)

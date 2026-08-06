@@ -48,6 +48,29 @@ def universal_context() -> dict:
     return {**lower, **upper}
 
 
+def candidate_interview_location(candidate) -> str:
+    """
+    Human-readable "how to actually attend" line, resolved from the one
+    real fact available for each interview_mode — never a bare mode label
+    with no way to act on it (the exact gap that made the old interview
+    email say "Video Call" with no link, or "In-Person" with no address).
+    """
+    from apps.recruitment.models import Candidate
+
+    mode = candidate.interview_mode
+    if mode == Candidate.MODE_VIDEO_CALL:
+        return candidate.meeting_link or 'The meeting link will be shared with you closer to the interview.'
+    if mode == Candidate.MODE_IN_PERSON:
+        branch = candidate.branch
+        if branch and (branch.address or '').strip():
+            city = getattr(branch.city, 'name', '') if getattr(branch, 'city_id', None) else ''
+            return f'{branch.address}' + (f', {city}' if city else '')
+        return 'The exact location will be shared with you closer to the interview.'
+    if mode == Candidate.MODE_PHONE:
+        return 'We will call you on your registered phone number at the scheduled time.'
+    return ''
+
+
 def candidate_context(candidate, actor=None) -> dict:
     from apps.accounts.models import Company
 
@@ -57,6 +80,13 @@ def candidate_context(candidate, actor=None) -> dict:
     branch_name = candidate.branch.branch_name if candidate.branch else ''
     mode_display = candidate.get_interview_mode_display() if candidate.interview_mode else ''
     interview_date = candidate.interview_date.isoformat() if candidate.interview_date else ''
+    # Display-friendly variants for candidate-facing interview emails — kept
+    # separate from the ISO `interview_date` above so existing templates
+    # relying on that exact format are unaffected.
+    interview_date_display = candidate.interview_date.strftime('%d %b %Y') if candidate.interview_date else ''
+    interview_time_display = candidate.interview_time.strftime('%I:%M %p').lstrip('0') if candidate.interview_time else ''
+    interviewer = candidate.interviewer
+    interviewer_name = interviewer.full_name if interviewer else ''
 
     # Once a candidate converts to a real employee (portal_user), the
     # onboarding_* templates' variables live on that User instead of the
@@ -82,8 +112,14 @@ def candidate_context(candidate, actor=None) -> dict:
         'branch':            branch_name,
         'branch_name':       branch_name,
         'interview_date':    interview_date,
+        'interview_date_display': interview_date_display,
+        'interview_time':    interview_time_display,
+        'interview_time_display': interview_time_display,
         'interview_mode':    candidate.interview_mode or '',
         'interview_mode_display': mode_display,
+        'interviewer_name':  interviewer_name,
+        'meeting_link':      candidate.meeting_link or '',
+        'location_details':  candidate_interview_location(candidate),
         'company_name':      company_name(),
         'employee_name':     employee.full_name if employee else candidate.name,
         'employee_id':       employee.employee_id if employee else '',
@@ -100,6 +136,9 @@ def candidate_context(candidate, actor=None) -> dict:
         'EMAIL': lower['email'], 'POSITION': lower['position'], 'COMPANY': lower['company_name'],
         'EMPLOYEE_ID': lower['employee_id'], 'DEPARTMENT': lower['department'],
         'DESIGNATION': lower['designation'],
+        'INTERVIEW_DATE': interview_date_display, 'INTERVIEW_TIME': interview_time_display,
+        'INTERVIEWER_NAME': interviewer_name, 'MEETING_LINK': lower['meeting_link'],
+        'LOCATION_DETAILS': lower['location_details'],
     }
     return {**lower, **upper}
 

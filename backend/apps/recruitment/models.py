@@ -44,6 +44,7 @@ class Candidate(models.Model):
                            related_name='candidates',
                        )
     interview_date   = models.DateField(null=True, blank=True)
+    interview_time   = models.TimeField(null=True, blank=True)
     interviewer      = models.ForeignKey(
                            settings.AUTH_USER_MODEL,
                            on_delete=models.SET_NULL,
@@ -51,6 +52,7 @@ class Candidate(models.Model):
                            related_name='interviews_as_interviewer',
                        )
     interview_mode   = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_IN_PERSON)
+    meeting_link     = models.URLField(max_length=500, blank=True, help_text='Video call link — shown to the candidate when interview_mode is Video Call.')
     notes            = models.TextField(blank=True)
     status           = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     referral_by      = models.ForeignKey(
