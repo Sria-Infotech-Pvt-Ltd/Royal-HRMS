@@ -15,6 +15,11 @@ from apps.voice_commands.conversation_clarification import (
     continue_clarification,
     start_clarification,
 )
+from apps.voice_commands.conversation_clock_in_face import (
+    AWAITING_FACE_PROOF_STAGE,
+    continue_voice_clock_punch,
+    start_voice_clock_punch,
+)
 from apps.voice_commands.conversation_leave_approval import (
     LEAVE_APPROVAL_INTENTS,
     continue_leave_approval,
@@ -28,6 +33,8 @@ from apps.voice_commands.conversation_payroll import (
 from apps.voice_commands.correction_slot_extractor import strip_correction_slot_phrases
 from apps.voice_commands.executor import (
     INTENT_APPLY_LEAVE,
+    INTENT_CLOCK_IN,
+    INTENT_CLOCK_OUT,
     INTENT_REQUEST_ATTENDANCE_CORRECTION,
     execute_intent,
 )
@@ -60,6 +67,8 @@ _EXPIRED_CLARIFICATION_MESSAGE = "Your request timed out — let's start over."
 def handle_transcript(
     request, transcript: str, lang: str = DEFAULT_LANG,
     latitude: Optional[float] = None, longitude: Optional[float] = None,
+    face_embedding: Optional[list] = None, liveness_passed: Optional[bool] = None,
+    liveness_score: Optional[float] = None, capture_session_id: str = '',
 ) -> dict:
     """
     Single entry point VoiceParseView.post() calls for every transcript.
@@ -86,6 +95,10 @@ def handle_transcript(
     (see VoiceCommandButton's retry flow). Only clock_in/clock_out ever do
     anything with them (see execute_intent); every other intent ignores
     them, same as attendance_mode.
+
+    face_embedding/liveness_passed/liveness_score/capture_session_id: same
+    silent-resubmit shape, for clock_in/clock_out's "taking facial proof"
+    turn (conversation_clock_in_face.py) — every other intent ignores them.
     """
     user = request.user
     pending = get_pending(user.id)
@@ -114,18 +127,10 @@ def handle_transcript(
         pending = None
 
     if pending:
-        if pending['slots'].get('stage') == CLARIFICATION_STAGE:
-            return continue_clarification(
-                request, pending, normalized, _dispatch_matched_intent,
-                latitude=latitude, longitude=longitude,
-            )
-        if pending['intent'] in LEAVE_APPROVAL_INTENTS:
-            return continue_leave_approval(request, pending, normalized)
-        if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
-            return continue_payroll_conversation(request, pending, normalized)
-        if pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION:
-            return continue_request_attendance_correction(request, pending, normalized)
-        return _continue_apply_leave(request, pending, normalized)
+        return _dispatch_pending(
+            request, pending, normalized, latitude, longitude,
+            face_embedding, liveness_passed, liveness_score, capture_session_id,
+        )
 
     if fresh_match.intent == NO_MATCH_INTENT:
         # Every path through this branch — a "did you mean" candidate, an
@@ -167,6 +172,32 @@ def handle_transcript(
     )
 
 
+def _dispatch_pending(
+    request, pending: dict, normalized: str, latitude: Optional[float], longitude: Optional[float],
+    face_embedding: Optional[list], liveness_passed: Optional[bool],
+    liveness_score: Optional[float], capture_session_id: str,
+) -> dict:
+    """Routes an existing pending conversation to whichever flow owns it —
+    extracted out of handle_transcript to keep that function under this
+    project's 50-line convention as the number of conversational flows grew."""
+    if pending['slots'].get('stage') == CLARIFICATION_STAGE:
+        return continue_clarification(
+            request, pending, normalized, _dispatch_matched_intent,
+            latitude=latitude, longitude=longitude,
+        )
+    if pending['slots'].get('stage') == AWAITING_FACE_PROOF_STAGE:
+        return continue_voice_clock_punch(
+            request, pending, face_embedding, liveness_passed, liveness_score, capture_session_id,
+        )
+    if pending['intent'] in LEAVE_APPROVAL_INTENTS:
+        return continue_leave_approval(request, pending, normalized)
+    if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
+        return continue_payroll_conversation(request, pending, normalized)
+    if pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION:
+        return continue_request_attendance_correction(request, pending, normalized)
+    return _continue_apply_leave(request, pending, normalized)
+
+
 def _dispatch_matched_intent(
     request, intent: str, intent_text: str, confidence: Optional[float],
     attendance_mode: Optional[str] = None, lang: str = DEFAULT_LANG,
@@ -193,6 +224,9 @@ def _dispatch_matched_intent(
 
     if intent == INTENT_REQUEST_ATTENDANCE_CORRECTION:
         return start_request_attendance_correction(request, intent_text, confidence)
+
+    if intent in (INTENT_CLOCK_IN, INTENT_CLOCK_OUT):
+        return start_voice_clock_punch(request, intent, attendance_mode, confidence, latitude, longitude)
 
     outcome = execute_intent(
         intent, request, attendance_mode=attendance_mode, lang=lang,

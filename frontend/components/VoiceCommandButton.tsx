@@ -6,6 +6,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 import { useVoiceMutePreference } from "@/hooks/useVoiceMutePreference";
 import VoiceConversationPanel from "@/components/VoiceConversationPanel";
+import FaceVerificationModal from "@/components/FaceVerificationModal";
 
 const FAB_SIZE = 56;
 const MUTE_TOGGLE_SIZE = 32;
@@ -41,7 +42,7 @@ export default function VoiceCommandButton() {
   const isAuthenticated = user !== null;
   const {
     status, interimTranscript, isDisabled, startListening, stopListening,
-    submitTranscript, conversation, closeConversation,
+    submitTranscript, submitFaceProof, conversation, closeConversation,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
   // Lets a user open a chat-style box to type the very first command instead
@@ -173,23 +174,37 @@ export default function VoiceCommandButton() {
   // before falling back to a toast).
   if (conversation && !isDisabled) {
     return (
-      <VoiceConversationPanel
-        transcript={conversation.transcript}
-        message={conversation.message}
-        phase={conversation.phase}
-        conversational={conversation.conversational}
-        awaitingInput={conversation.awaitingInput}
-        resultStatus={conversation.resultStatus}
-        isListening={isListening}
-        isProcessing={isProcessing}
-        interimTranscript={interimTranscript}
-        onStartListening={startListening}
-        onStopListening={stopListening}
-        onSubmitText={submitTranscript}
-        onClose={() => { setIsHovered(false); closeConversation(); }}
-        isMuted={isMuted}
-        onToggleMute={toggleMuted}
-      />
+      <>
+        <VoiceConversationPanel
+          transcript={conversation.transcript}
+          message={conversation.message}
+          phase={conversation.phase}
+          conversational={conversation.conversational}
+          awaitingInput={conversation.awaitingInput}
+          resultStatus={conversation.resultStatus}
+          isListening={isListening}
+          isProcessing={isProcessing}
+          interimTranscript={interimTranscript}
+          onStartListening={startListening}
+          onStopListening={stopListening}
+          onSubmitText={submitTranscript}
+          onClose={() => { setIsHovered(false); closeConversation(); }}
+          isMuted={isMuted}
+          onToggleMute={toggleMuted}
+        />
+        {/* Opens on top of the panel above for clock_in/clock_out's "taking
+            facial proof" turn (see conversation_clock_in_face.py) — same
+            modal the manual ClockWidget/ClockInButton use, so registering/
+            capturing looks identical regardless of how the punch started.
+            onClose has nowhere useful to fall back to (declining leaves the
+            punch mid-dialogue), so it just closes the whole conversation —
+            the pending state on the backend expires on its own (120s TTL). */}
+        <FaceVerificationModal
+          isOpen={conversation.awaitingFaceProof}
+          onCaptured={submitFaceProof}
+          onClose={() => { setIsHovered(false); closeConversation(); }}
+        />
+      </>
     );
   }
 

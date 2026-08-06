@@ -251,13 +251,19 @@ class AbandonAndStartFreshTests(SimpleTestCase):
             self.addCleanup(p.stop)
 
         # The abandoned-and-replaced command (clock_in) is a one-shot intent
-        # dispatched straight from conversation.py's own _dispatch_matched_intent,
-        # not through conversation_attendance_correction.py — this is the one
-        # test in this file that patches conversation.py's own execute_intent.
-        execute_patcher = patch('apps.voice_commands.conversation.execute_intent')
-        self.mock_execute = execute_patcher.start()
-        self.addCleanup(execute_patcher.stop)
-        self.mock_execute.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
+        # dispatched straight from conversation.py's own _dispatch_matched_intent
+        # — not through conversation_attendance_correction.py, and (since
+        # face verification doesn't apply) not through execute_intent either
+        # any more — see conversation_clock_in_face.py.
+        mandatory_patcher = patch(
+            'apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False,
+        )
+        mandatory_patcher.start()
+        self.addCleanup(mandatory_patcher.stop)
+        clock_in_patcher = patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+        self.mock_execute_clock_in = clock_in_patcher.start()
+        self.addCleanup(clock_in_patcher.stop)
+        self.mock_execute_clock_in.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
 
         self.request = _fake_request()
         self.store.set(42, INTENT_REQUEST_ATTENDANCE_CORRECTION, {'date': date(2026, 7, 20)})
@@ -267,3 +273,4 @@ class AbandonAndStartFreshTests(SimpleTestCase):
 
         self.assertEqual(result['intent'], 'clock_in')
         self.assertIsNone(self.store.get(42))
+        self.mock_execute_clock_in.assert_called_once()
