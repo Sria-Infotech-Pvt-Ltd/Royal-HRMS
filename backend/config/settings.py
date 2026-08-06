@@ -201,6 +201,26 @@ CELERY_ACCEPT_CONTENT    = ['json']
 
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
+# Caps how long a single broker connection attempt can hang when Redis is
+# unreachable. Without this, a dead/unreachable broker leaves request-path
+# task dispatch (.delay()/.apply_async() calls made during a view) blocked
+# on OS-level TCP timeouts far longer than any frontend request timeout.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'socket_connect_timeout': 0.2,
+    'socket_timeout': 0.2,
+}
+
+# broker_connection_max_retries governs *acquiring* a broker connection
+# (separate from the per-call `retry=` flag, which only governs retrying
+# the publish once a connection exists) and backs off with a 1s sleep
+# between attempts by default — that backoff, not the socket timeout
+# above, is what actually blocked request-path dispatch calls for several
+# seconds when the broker was unreachable. 0 is treated as falsy by
+# Kombu's retry_over_time and falls back to its default retry count, so
+# use 1 (the smallest value that actually takes effect: one retry, one
+# 1s backoff sleep) to bound a dead broker to a single retry.
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 1
+
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {

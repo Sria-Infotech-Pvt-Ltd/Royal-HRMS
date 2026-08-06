@@ -3666,7 +3666,12 @@ class OnboardingView(APIView):
 
         def _queue_hr_notification(user_id=request.user.pk):
             try:
-                send_onboarding_submitted_notification_task.delay(user_id)
+                # retry=False + ignore_result=True — bounds broker/backend
+                # retries so a down Redis can't block this request; see the
+                # referral-submission dispatch in recruitment/views.py.
+                send_onboarding_submitted_notification_task.apply_async(
+                    args=[user_id], retry=False, ignore_result=True,
+                )
             except Exception as exc:
                 logger.error(
                     'Failed to queue onboarding_submitted notification for user %s: %s',

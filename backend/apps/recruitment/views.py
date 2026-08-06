@@ -2,6 +2,7 @@ import csv
 import io
 import logging
 import secrets
+import smtplib
 import string
 from decimal import Decimal, InvalidOperation
 
@@ -302,7 +303,13 @@ def _fire_interview_date_emails_if_needed(candidate, old_interview_date, old_int
 
     def _dispatch(candidate_id=candidate.pk):
         try:
-            send_interview_scheduled_emails_task.delay(candidate_id)
+            # retry=False + ignore_result=True — see the referral-submission
+            # dispatch above for why: apply_async() otherwise subscribes to
+            # a Redis pub/sub result channel nothing here reads, retrying up
+            # to 20 times against the result backend if Redis is unreachable.
+            send_interview_scheduled_emails_task.apply_async(
+                args=[candidate_id], retry=False, ignore_result=True,
+            )
         except Exception as exc:
             logger.error(
                 'Failed to queue interview-scheduled email for candidate %s: %s',
@@ -1144,6 +1151,20 @@ class SendCandidateEmailView(APIView):
             )
         except LookupError as exc:
             return error(str(exc), http_status=status.HTTP_404_NOT_FOUND)
+        except smtplib.SMTPResponseException as exc:
+            logger.exception(
+                'Manual email "%s" failed for pk=%s', template_name, pk,
+            )
+            # 550/452-style responses from the provider mean the sending
+            # account hit its own rate/quota limit — a transient capacity
+            # issue, not a config problem. Surfacing it distinctly stops HR
+            # from chasing SMTP settings that are actually fine.
+            if exc.smtp_code in (450, 451, 452, 550) and b'limit' in exc.smtp_error.lower():
+                return error(
+                    'The sending mailbox has hit its daily email limit. '
+                    'Try again later or contact your administrator.'
+                )
+            return error('Failed to send email. Check SMTP configuration.')
         except Exception:
             logger.exception(
                 'Manual email "%s" failed for pk=%s', template_name, pk,
@@ -1539,7 +1560,21 @@ class ReferralListCreateView(APIView):
 
         def _dispatch(candidate_id=candidate.pk):
             try:
-                send_referral_submission_emails_task.delay(candidate_id)
+                # ignore_result=True — nothing here ever calls .get() on the
+                # returned AsyncResult, but apply_async() still subscribes to
+                # a Redis pub/sub channel for the result by default (so a
+                # later .get() would work), and retries that subscription up
+                # to 20 times against the *result backend* if Redis is
+                # unreachable — a completely separate retry loop from the
+                # broker-connection one that retry=False/CELERY_BROKER_*
+                # below bound. ignore_result=True skips it entirely.
+                # retry=False — a single, capped-timeout attempt (see
+                # CELERY_BROKER_TRANSPORT_OPTIONS) so a down/unreachable
+                # broker fails in ~1s instead of blocking this request for
+                # up to 20s on Kombu's default connection retry loop.
+                send_referral_submission_emails_task.apply_async(
+                    args=[candidate_id], retry=False, ignore_result=True,
+                )
             except Exception as exc:
                 logger.error(
                     'Failed to queue referral-submission email for candidate %s: %s',

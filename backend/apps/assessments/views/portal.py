@@ -84,9 +84,34 @@ def _resolve_assignment(user, assignment_id):
         return None, error('Assignment not found.', http_status=status.HTTP_404_NOT_FOUND)
 
 
+def _autocomplete_empty_assignments(user) -> None:
+    """
+    Auto-complete any pending/in-progress assignment whose assessment has zero
+    items. CompleteAssessmentView.post() refuses to complete a 0-item
+    assessment (nothing to grade), but a pending assignment for one is a dead
+    end for the user — there's nothing in the UI to click, and it permanently
+    blocks assessment_status from ever reaching COMPLETE. Self-heals every
+    time _sync_user_assessment_status runs, for anyone already stuck on one.
+    """
+    pending_statuses = [CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS]
+    stuck = CandidateAssignment.objects.filter(
+        Q(candidate=_get_candidate(user)) | Q(employee=user),
+        status__in=pending_statuses,
+        assessment__items__isnull=True,
+    ).distinct()
+    for assignment in stuck:
+        assignment.status       = CandidateAssignment.STATUS_COMPLETE
+        assignment.completed_at = timezone.now()
+        assignment.score        = 0
+        assignment.max_score    = 0
+        assignment.save(update_fields=['status', 'score', 'max_score', 'completed_at', 'updated_at'])
+        logger.info('Assignment %s auto-completed for %s — assessment has no items', assignment.id, user.email)
+
+
 def _sync_user_assessment_status(user) -> None:
     """Recompute and persist assessment_status for user (candidate or employee path)."""
     from apps.accounts.models import User
+    _autocomplete_empty_assignments(user)
     pending_statuses = [CandidateAssignment.STATUS_PENDING, CandidateAssignment.STATUS_IN_PROGRESS]
     candidate = _get_candidate(user)
     if candidate:
@@ -246,6 +271,11 @@ class CompleteAssessmentView(APIView):
         if err:
             return err
         if assignment.status == CandidateAssignment.STATUS_COMPLETE:
+            # Re-sync before bailing out — if this user is also stuck on a
+            # different, separate assignment that has since become
+            # auto-completable (e.g. a 0-item assessment), retrying this
+            # already-done one is the trigger that unblocks them.
+            _sync_user_assessment_status(request.user)
             return error('Assignment already completed.', http_status=status.HTTP_409_CONFLICT)
         if assignment.deadline and timezone.now() > assignment.deadline:
             return error('The deadline for this assessment has passed.', http_status=status.HTTP_403_FORBIDDEN)
@@ -262,7 +292,19 @@ class CompleteAssessmentView(APIView):
         )
         total = len(video_item_ids) + len(quiz_item_ids)
         if total == 0:
-            return error('This assessment has no items and cannot be completed.')
+            # Nothing to grade — this assignment can never be completed the
+            # normal way, so treat it as auto-passed rather than leaving the
+            # user permanently stuck with no items to click in the UI.
+            assignment.status       = CandidateAssignment.STATUS_COMPLETE
+            assignment.completed_at = timezone.now()
+            assignment.score        = 0
+            assignment.max_score    = 0
+            assignment.save(update_fields=['status', 'score', 'max_score', 'completed_at', 'updated_at'])
+            _sync_user_assessment_status(request.user)
+            return success('Assessment submitted.', {
+                'score': 0, 'max_score': 0, 'score_percentage': 100,
+                'pass_percentage': assignment.assessment.pass_percentage, 'passed': True,
+            })
 
         watched  = assignment.responses.filter(item_id__in=video_item_ids, is_watched=True).count() if video_item_ids else 0
         answered = assignment.responses.filter(item_id__in=quiz_item_ids).exclude(selected_option='').count() if quiz_item_ids else 0

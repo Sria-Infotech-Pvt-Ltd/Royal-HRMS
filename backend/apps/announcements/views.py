@@ -188,7 +188,16 @@ class AnnouncementListCreateView(APIView):
                 # Queuing failure (e.g. broker down) is logged, not raised —
                 # the announcement itself has already been saved successfully.
                 try:
-                    send_announcement_email_task.delay(ann_id)
+                    # retry=False + ignore_result=True — see the identical
+                    # fix on the referral-submission dispatch in
+                    # apps/recruitment/views.py for why: apply_async()
+                    # otherwise subscribes to a Redis pub/sub result channel
+                    # nothing here reads, retrying up to 20 times against the
+                    # result backend if Redis is unreachable and blocking
+                    # this request for well past any frontend timeout.
+                    send_announcement_email_task.apply_async(
+                        args=[ann_id], retry=False, ignore_result=True,
+                    )
                 except Exception as exc:
                     logger.error(
                         'Failed to queue announcement email for %s: %s',
