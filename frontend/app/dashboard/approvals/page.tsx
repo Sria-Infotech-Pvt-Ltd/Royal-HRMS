@@ -12,6 +12,7 @@ import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModa
 import { LeaveRequest } from "../leave/_data";
 import AttendanceApprovalTab from "./_components/AttendanceApprovalTab";
 import CorrectionsTab from "../attendance/_components/CorrectionsTab";
+import FaceRegistrationApprovalsTab from "./_components/FaceRegistrationApprovalsTab";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ type LeaveListResponse   = PaginatedResponse<LeaveRequest>;
 type ExpenseListResponse = PaginatedResponse<ExpenseRequest>;
 
 type Section = "approvals" | "attendance";
-type RequestType = "leave" | "expense" | "attendance_correction";
+type RequestType = "leave" | "expense" | "attendance_correction" | "face_registration";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -151,6 +152,7 @@ function TypeDropdown({ value, onChange }: { value: RequestType; onChange: (v: R
       <option value="leave">Leave</option>
       <option value="expense">Expense</option>
       <option value="attendance_correction">Attendance Correction</option>
+      <option value="face_registration">Face Registration</option>
     </select>
   );
 }
@@ -329,6 +331,8 @@ function TeamApprovalsSection() {
 
       {type === "attendance_correction" && <CorrectionsTab />}
 
+      {type === "face_registration" && <FaceRegistrationApprovalsTab />}
+
       {modal && (
         <ApprovalModal
           action={modal.action}
@@ -352,7 +356,7 @@ function TeamApprovalsSection() {
 export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
-  const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
+  const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "facial_recognition.approve");
   const hasPayrollView  = usePermission("payroll.view");
   const hasLeaveApprove = usePermission("leave.approve");
   // Managers always get this tab. Payroll admins (payroll.view but not leave.approve) also get it.

@@ -3717,6 +3717,20 @@ class OnboardingView(APIView):
                 f'{", ".join(missing_docs)}.'
             )
 
+        # Face ID registration — only required when the admin's org-wide
+        # "Face ID Verification" toggle (Attendance Settings) is mandatory.
+        # Approval isn't required at this point, only that a request was
+        # submitted — same "uploaded, not yet approved, is enough" bar as
+        # the documents check above.
+        from apps.attendance.services_face_matching import is_face_verification_mandatory
+        if is_face_verification_mandatory():
+            from apps.attendance.models import FaceRegistrationRequest
+            has_face_registration = FaceRegistrationRequest.objects.filter(employee=request.user).exists()
+            if not has_face_registration:
+                return error(
+                    'Please complete Face ID registration before submitting your onboarding profile.'
+                )
+
         User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
