@@ -212,7 +212,7 @@ def _cloudinary_signed_url(file_field) -> str:
 
 def _document_dict(doc) -> dict:
     """Shared shape for a single EmployeeDocument, used by _employee_dict() and
-    EmployeeDocumentAdminView so the profile page and the upload response always
+    EmployeeProfileDocumentView so the profile page and the upload response always
     match the ApiDocument shape the frontend expects."""
     try:
         file_url = _cloudinary_signed_url(doc.file) if doc.file else ''
@@ -4536,7 +4536,7 @@ class MyProfileView(APIView):
         from apps.accounts.serializers import MyProfileSerializer
         EmployeeProfile.objects.get_or_create(user=request.user)
         user = User.objects.select_related('role', 'profile').get(pk=request.user.pk)
-        return success('Profile retrieved.', MyProfileSerializer(user).data)
+        return success('Profile retrieved.', MyProfileSerializer(user, context={'request': request}).data)
 
     def patch(self, request):
         from apps.accounts.models import EmployeeProfile
