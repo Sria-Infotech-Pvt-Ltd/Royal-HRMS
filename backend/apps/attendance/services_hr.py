@@ -444,7 +444,7 @@ def build_weekly_off_assignment_queryset(filters: dict):
     employee_ids = filters.get('employee_ids')
 
     today = datetime.date.today()
-    qs = User.objects.filter(is_active=True)
+    qs = User.objects.filter(is_active=True).exclude(employee_id='')  # portal candidates have no employee_id until onboarding is approved
     if employee_ids is not None:
         qs = qs.filter(id__in=employee_ids)
     elif branch:
