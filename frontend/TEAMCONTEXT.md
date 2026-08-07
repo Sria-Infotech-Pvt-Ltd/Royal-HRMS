@@ -3903,3 +3903,102 @@ Reported as a live runtime `ReferenceError` crashing `/dashboard/branches` for t
 - **"By Department" visibility still reaches every branch, not just the poster's own** (§4/§5) — this is a backend limitation (`_visible_qs()`'s department filter has no branch check), not something the frontend form can close. If branch-scoped department targeting becomes a real requirement, it needs a backend change to that recipient query, not another frontend workaround.
 - **Branch-locking on the Post form is frontend-only, not enforced server-side** — nothing stops a branch-scoped user from calling the API directly with a different `target_branch`. Accepted as-is per explicit user direction (small org, trust-based), but worth remembering if this ever needs to hold up under less-trusted conditions.
 - **The `POST /api/announcements/` timeout is still an open, unconfirmed root cause** — evidence (empty response headers, a second unrelated endpoint failing identically at the same moment) points at the backend being unresponsive at that moment rather than anything in this request's shape or the frontend's handling of it. Needs someone with backend/infra access to check whether the server process was actually up and responsive at the time, ideally by hitting the backend directly (bypassing the Next.js `/api/*` rewrite) with the same request.
+
+---
+
+## Session — G.Durga Prasad (07 August 2026)
+
+**Branch:** `Backend/07/08/2026`
+
+---
+
+### 1. Two Functions Silently Deleted by the `demo` Merge — Employee Detail Was 500ing For Everyone
+
+Reported as `NameError: name '_get_employee' is not defined` on every `GET/PUT/PATCH/DELETE /api/employees/<id>/`. Traced via `git log -S` to two functions (`_get_employee`, `_employee_out_of_branch_scope`) that existed in prior commits but were entirely absent from `apps/accounts/views.py` after the big `demo` merge — their ~10 call sites survived, the definitions didn't. Restored both from history, then ran a full-backend `pyflakes` sweep for the same failure signature (used-but-never-defined names) to check for other casualties — found none beyond two harmless string-quoted type annotations.
+
+### 2. Duplicate-Email Error Now Names the Conflicting Branch
+
+`EmployeeListCreateView.post()`'s existing "email already registered" check was generic. Now compares the new hire's branch against the existing account's: same branch → unchanged generic message; different branch → `"This email is already registered in the {Branch} branch."`
+
+### 3. Onboarding-Approval Emails Moved Off the Request Path (False "Save Failed" on a Real Success)
+
+Reported: "Confirm & Activate" during onboarding review sent the approval email but never showed success or closed the modal. Root cause: `OnboardingApprovalView.post()` sent 1–3 emails **synchronously** (onboarding-approved + one per assigned assessment) inside the request; on a slow SMTP round-trip this exceeded the frontend's 15s axios timeout, so the browser saw a timeout error even though the server finished the approval and sent the email. New `send_onboarding_approved_notification_task` (`apps/accounts/tasks.py`) moves this to Celery, dispatched via `transaction.on_commit`, matching the existing `send_onboarding_submitted_notification_task` pattern one step earlier in the same flow.
+
+### 4. PAN Duplicate Validation — Captured at Upload Time, Not After the Fact
+
+Implemented per explicit request: PAN wasn't captured as data anywhere before this (only an uploaded document image, `EmployeeDocument.TYPE_PAN`, no number). Added `EmployeeProfile.pan_number` (migration `0062`) plus shared `normalize_and_validate_pan()`/`find_conflicting_pan_profile()` helpers (`apps/accounts/models.py`) — global uniqueness check (not branch-scoped, since a PAN match always means the same real person, unlike email). Wired into **two** entry points sharing the same validation: HR's onboarding-approval EPF section, and — the actual ask — the candidate's own onboarding Documents step, where entering the PAN number and validating it (format + duplicate check) now happens immediately before the PAN Card file upload is allowed to proceed, not later at HR review. Also deduped `uan_number`/`name_as_per_aadhar`, which had been declared twice on `EmployeeProfile` (another merge casualty).
+
+### 5. System Admin Was Branch-Restricted Due to a Frontend `is_superuser`-Only Check
+
+Reported: "System Admin only getting Hyderabad branch data." Root cause: `lib/auth.ts`'s `isUnrestrictedUser()` — the shared "sees everything" helper used across Branches/Employees/Interview List/Add Employee — checked only Django's raw `is_superuser` flag. Real `system_admin`-role accounts are created through the normal employee flow and never get that flag set (`createsuperuser` only), so they carry a `branch` like any other employee and were being wrongly scoped. Fixed by also checking `settings.edit` in permissions, matching how the backend already treats that permission everywhere. `BranchManagement.tsx` also had its own local, duplicate (and buggy) copy of this exact logic — switched it to the shared helper.
+
+### 6. Reporting Manager / HR Assignment Silently Broken on Every Re-save
+
+Reported 400 `"Reporting manager not found or is inactive."` saving an employee's profile *without even touching that field*. Root cause: `_employee_dict()`'s `hr`/`reporting_manager` nested objects returned `id` as the **display employee code** (e.g. `"RSS000183"`), not a real UUID. The Employee Profile edit page loaded that value straight into its form and echoed it back on save as `reporting_manager_id`/`hr_id`, which the backend expects to be an actual primary key — so saving any employee who already had a manager/HR assigned failed this way, unless the admin happened to re-pick them from the dropdown first. Fixed by adding a `uuid` field alongside the existing `id` in both nested objects, and switching the frontend to read `.uuid`. Live-verified: old field → 400, new field → 200, byte-for-byte reproduction of the reported bug.
+
+Separately fixed while in the same file: the page's save handler had `catch { setSaveError(true) }` — a boolean, discarding the real backend message and always showing a hardcoded "Failed to save changes." This is *why* the actual cause above took extra rounds to pin down; now the real message renders.
+
+### 7. Superuser Accounts No Longer Forced Through the Onboarding Wizard
+
+`demohrms6@gmail.com` (a genuine Django superuser) was redirected to the 5-step onboarding wizard on every login — `onboarding_status`/`assessment_status` default to `"pending"` for any account `create_superuser()` produces, and the login redirect had no exemption. Fixed in both places that gate this: `login/page.tsx` (post-login redirect) and `proxy.ts` (the actual enforcement point — runs on every navigation, so the login-page fix alone wasn't sufficient; added a `getIsSuperuser()` cookie reader mirroring the existing `getCanManageTeam()` pattern). Caught and fixed the same gap in the assessments-portal branch of both files too, not just the main onboarding branch.
+
+### 8. Branch Admin / System Admin Hierarchy Actually Set Up (Not Just Built)
+
+The `branch_admin` role existed and worked from an earlier session but had zero accounts using it, and the intended sole-superuser account had no role at all. Discovered `demohrms6@gmail.com` (real `is_superuser=True`) had `role: None` — meaning it failed almost every `_has_perm()` check in the app despite being a Django superuser, since this app's authorization is entirely custom (Role → Permission → RolePermission), not Django's built-in system. Assigned it the `system_admin` role. Per explicit decision, demoted `sysadmin@royal.com` (previously `system_admin`, branch already `Hyderabad`) to `branch_admin` — satisfying "one branch admin per branch" for Hyderabad in the same move. Mumbai/TASK branch admins left for direct creation via Add Employee (role = Branch Admin), verified end-to-end that role to work correctly there first.
+
+**Caught live**: `settings.edit` was granted to `branch_admin` via the Roles & Permissions UI mid-session — verified this silently made every branch admin org-wide (branch_admin/Hyderabad could suddenly see Mumbai's employees), since `settings.edit` is this codebase's literal "bypass all scoping" master switch, checked everywhere. Reverted immediately; branch scoping confirmed restored.
+
+### 9. Branch Admin Given Real Control Over Their Own Branch's Record
+
+Branch Admin already had full CRUD across every operational module (employees, recruitment, leave, expenses, attendance, payroll, documents, etc.) — unconditional within their branch, confirmed by dumping the role's full permission set grouped by module. What was actually missing, per explicit follow-up: editing their own branch's record (address, geofencing). Granting the existing `branches.edit` permission alone would have let them edit *any* branch (no per-branch check existed on `BranchDetailView`) — added a new `_branch_out_of_scope()` helper (`apps/branch/views.py`, mirrors `_employee_out_of_branch_scope`) applied to `BranchDetailView.put/patch` and `BranchGeofencingView.put`, then granted `branches.edit`. `branches.create`/`branches.delete` deliberately withheld per explicit decision (org-wide, hard-to-reverse actions stay Superuser-only). Live-verified all four combinations: own-branch edit succeeds, other-branch edit blocked (403), superuser edits anything, branch admin delete still blocked.
+
+### 10. Audit Logs Wrongly Gated Behind `settings.edit`, and Not Branch-Scoped At All
+
+Branch Admin got "you don't have permission" opening Audit Logs despite holding `audit.view` — `AuditLogListView` required `CanManageRoles` (`settings.edit`) for its `GET`, mismatched from what the frontend's own `navConfig.ts` assumes gates this page (`audit.view`). Fixed to check `audit.view` instead (matches `RoleListCreateView`'s established "open GET, gated POST" pattern). Also found the query had **zero branch scoping** — every viewer with access saw the entire org's audit trail. Added the same unconditional-within-branch scoping used everywhere else. Live-verified against raw DB counts: branch admin now sees exactly their branch's 1,041 entries (of 2,050 org-wide), superuser still sees all 2,050.
+
+### 11. Full Sweep: Hardcoded `role.name == 'system_admin'` Checks Replaced With `settings.edit` Permission Checks
+
+Explicit ask: "everything permission based only." Found the pattern in **17 locations across 14 files** — not just the audit-log issue above:
+- The core `_has_perm()` helper itself, duplicated per-app, in 13 files (`leave.py`, `expenses.py`, `holidays.py`, `announcements/views.py`, `announcements/serializers.py`, `services_hr_corrections.py`, `face_registration.py`, `hr_attendance.py`, `hr_audit_actions.py`, `my_attendance.py`, `manager.py`, `overview.py`, `accounts/views.py`) — each hardcoded `role.name == 'system_admin'` as a permission-check bypass. Replaced with a role-permissions lookup that includes `settings.edit` as an implicit master key — any role actually granted `settings.edit` gets the bypass; revoking it from `system_admin` now actually revokes it.
+- Login response's `is_superuser` field — now `user.is_superuser or 'settings.edit' in permissions`.
+- Three "cannot self-service-assign this role" guards (Add Employee, Edit Employee, Bulk Import) and two "cannot deactivate/delete the last admin" guards — generalized to check for `settings.edit` on the target role, so a *future* org-wide role would be protected too, not just one specific name — and the error messages now show the role's display name instead of a raw codename.
+- Three role-exclusion queries (onboarding queue stats, approvals list, branch-HR-contact picker) — excluded by permission instead of literal name.
+
+**Deliberately left alone**: `_hr_dashboard_branch()` in `dashboard/views/overview.py` — its hardcoded check exists *because* `settings.edit` has drifted onto a role it shouldn't have (HR, historically — see 31 July's entry) exactly once before, which is precisely what happened again with `branch_admin` in §8 above. That one hardcoded name check is a deliberate safeguard against permission drift, not an architecture violation. Also left `_SYSTEM_ROLES` (role-deletion protection in `RoleDetailView.delete()`) untouched — those role names are structurally load-bearing elsewhere in the code (e.g. `Role.objects.get(name='employee')` during onboarding conversion), not a scoping decision.
+
+Every change in this section verified live: superuser still org-wide, branch admin still Hyderabad-only, audit log counts unchanged, role-assignment protections still block (now with cleaner messages), `manage.py check` clean throughout.
+
+---
+
+### Key Files Changed (07 August 2026)
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/views.py` | Restored `_get_employee`/`_employee_out_of_branch_scope`; branch-aware duplicate-email message; PAN validation wired into onboarding approval; onboarding-approval emails moved to Celery dispatch; `hr`/`reporting_manager` nested objects gained a `uuid` field; ~13 hardcoded `system_admin` checks converted to `settings.edit`-based |
+| `backend/apps/accounts/tasks.py` | New `send_onboarding_approved_notification_task` |
+| `backend/apps/accounts/models.py` | New `EmployeeProfile.pan_number`; new `normalize_and_validate_pan()`/`find_conflicting_pan_profile()`; deduped `uan_number`/`name_as_per_aadhar` |
+| `backend/apps/accounts/migrations/0062` | `pan_number` field |
+| `backend/apps/accounts/serializers.py` | `EmployeeProfileSerializer` gained `pan_number` with format + uniqueness validation |
+| `backend/core/permissions.py` | `HasSettingsPermission`/`HasCompletedOnboarding` hardcoded role-name bypasses removed, permission-based only |
+| `backend/apps/branch/views.py` | New `_branch_out_of_scope()`; applied to `BranchDetailView.put/patch`, `BranchGeofencingView.put` |
+| `backend/apps/hrms/views/leave.py`, `expenses.py`, `holidays.py` | `_has_perm()` converted to `settings.edit`-based bypass |
+| `backend/apps/dashboard/views/manager.py`, `overview.py` | `_has_perm()` converted (`_hr_dashboard_branch()` deliberately left as-is) |
+| `backend/apps/announcements/views.py`, `serializers.py` | `_has_perm()` converted |
+| `backend/apps/attendance/services_hr_corrections.py`, `views/face_registration.py`, `views/hr_attendance.py`, `views/hr_audit_actions.py`, `views/my_attendance.py` | `_has_perm()` converted |
+| `frontend/lib/auth.ts` | `isUnrestrictedUser()` now also checks `settings.edit` |
+| `frontend/app/dashboard/branches/_components/BranchManagement.tsx` | Switched to shared `isUnrestrictedUser()` instead of local duplicate logic |
+| `frontend/app/dashboard/employees/[id]/page.tsx` | Reads `.uuid` not `.id` for `hrId`/`reportingManagerId`; save-error handler now shows the real backend message |
+| `frontend/app/login/page.tsx`, `proxy.ts` | Superusers exempted from onboarding-wizard and assessments-portal redirects |
+| `frontend/app/onboarding/page.tsx` | PAN number capture + live validation on the Documents step, tied to the PAN Card upload action |
+| *(data, not code)* | `demohrms6@gmail.com` → `system_admin` role; `sysadmin@royal.com` → `branch_admin` role (Hyderabad); `branch_admin` granted then had `settings.edit` reverted, granted `branches.edit` |
+
+---
+
+### Notes for Next Developer
+
+- **This codebase's authorization is entirely custom** (Role → Permission → RolePermission) — Django's built-in `is_superuser`/`is_staff` flags do almost nothing on their own. A real Django superuser with no `Role` assigned will fail nearly every `_has_perm()` check in the app. Always assign `system_admin` (or an equivalent role holding `settings.edit`) to any account that needs real superuser behavior here.
+- **`settings.edit` is the single most consequential permission in this codebase** — every scope filter everywhere treats it as "bypass all branch/assignment scoping, see and do everything." Think twice before granting it to any role via the Roles & Permissions UI; it is not scoped to the Settings page and has now caused the same accidental-org-wide-access bug twice (HR, 31 July; Branch Admin, this session).
+- **`_has_perm()` is duplicated per-app** (13+ separate copies as of this session), not shared — if this ever gets consolidated into `core/`, make sure the consolidated version keeps checking `settings.edit` as an implicit bypass, matching what every call site currently expects.
+- **JWT claims (role, permissions, branch) are frozen at login time** — `TokenRefreshAPIView`'s silent 15-minute refresh reuses the existing refresh token's claims via SimpleJWT's default serializer; it does **not** re-query the database. Any role/permission change requires the affected user to log out and back in — it will not self-heal, even after days.
+- **`_get_employee`/`_employee_out_of_branch_scope` were silently dropped by the `demo` merge once already** (§1) — if more `NameError: name '_X_' is not defined` reports surface on branches that went through that merge, run a `pyflakes` sweep across the whole backend before assuming it's a new bug; there may be more casualties not yet triggered by any code path.
+- **PAN uniqueness is not yet enforced in the bulk-employee-import path** — deliberately out of scope this session (separate CSV header-mapping logic in `EmployeeBulkImportRowSerializer`); two new rows in the same import batch colliding with each other on PAN wouldn't be caught until save-time per row.

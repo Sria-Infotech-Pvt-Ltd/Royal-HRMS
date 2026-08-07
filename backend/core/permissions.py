@@ -30,15 +30,15 @@ class HasSettingsPermission(BasePermission):
     """
     Codename-based gate for settings endpoints.
     Safe methods require settings.view; mutating methods require settings.edit.
-    system_admin bypasses both checks.
+    system_admin holds both codenames directly (seeded that way) — no
+    role-name special case needed or wanted; a hardcoded bypass here would
+    silently stop tracking whatever role actually carries settings.edit.
     """
     message = 'You do not have permission to manage settings.'
 
     def has_permission(self, request, view) -> bool:
         if not (request.user and request.user.is_authenticated and request.user.role):
             return False
-        if request.user.is_superuser or (request.user.role and request.user.role.name == 'system_admin'):
-            return True
         codename = 'settings.view' if request.method in _SAFE_METHODS else 'settings.edit'
         return request.user.role.role_permissions.filter(
             permission__codename=codename
@@ -60,8 +60,10 @@ class HasCompletedOnboarding(BasePermission):
         user = request.user
         if not (user and user.is_authenticated):
             return False
-        # Superusers and users with employees.view permission (e.g. system_admin) are exempt from onboarding.
-        if user.is_superuser or (user.role and (user.role.name == 'system_admin' or user.role.role_permissions.filter(permission__codename='employees.view').exists())):
+        # Superusers and anyone holding employees.view (system_admin, branch_admin,
+        # HR — every admin-tier role) are exempt from onboarding: they're never
+        # a new hire going through this flow themselves.
+        if user.is_superuser or (user.role and user.role.role_permissions.filter(permission__codename='employees.view').exists()):
             return True
         if user.role and getattr(user.role, 'can_manage_team', False):
             return True

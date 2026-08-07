@@ -112,9 +112,15 @@ logger = logging.getLogger(__name__)
 def _has_perm(user, codename: str) -> bool:
     if not user or not user.role:
         return False
-    if user.role.name == 'system_admin':
+    if getattr(user, 'is_superuser', False):
         return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
+    # settings.edit is this codebase's universal "sees/does everything"
+    # signal — checking it here (permission-based) instead of a hardcoded
+    # role name means any role actually granted settings.edit gets the same
+    # bypass, and revoking it from system_admin would actually revoke it.
+    return user.role.role_permissions.filter(
+        permission__codename__in={codename, 'settings.edit'}
+    ).exists()
 
 
 def _auto_assign_managers(employee: 'User') -> list:
@@ -309,6 +315,7 @@ def _employee_dict(user: User) -> dict:
         'status':         emp_status,
         'hr': {
             'id':   _hr.employee_id if _hr else None,
+            'uuid': str(_hr.id)     if _hr else None,
             'name': _hr.full_name   if _hr else None,
         },
         'profile':            profile_data,
@@ -320,6 +327,7 @@ def _employee_dict(user: User) -> dict:
     if not (user.role and user.role.can_manage_team):
         result['reporting_manager'] = {
             'id':   mgr.employee_id if mgr else None,
+            'uuid': str(mgr.id)     if mgr else None,
             'name': mgr.full_name   if mgr else None,
         }
 
@@ -443,7 +451,7 @@ class LoginView(APIView):
                 'permissions':         permissions,
                 'can_manage_team':     user.role.can_manage_team if user.role else False,
                 'can_manage_branch':   user.role.can_manage_branch if user.role else False,
-                'is_superuser':        user.is_superuser or (user.role and user.role.name == 'system_admin'),
+                'is_superuser':        user.is_superuser or 'settings.edit' in permissions,
             },
         })
         resp.set_cookie(
@@ -883,7 +891,13 @@ class RoleDetailView(APIView):
 # ─── Permission CRUD ──────────────────────────────────────────────────────────
 
 class PermissionListView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    # GET is open to any authenticated user — same reasoning as
+    # RoleListCreateView.get() above: viewing the permission catalog is what
+    # lets the Roles & Permissions page render at all (it fetches roles and
+    # permissions together), and read-only visibility into what a role *can*
+    # be granted isn't itself a privilege. POST (creating a new permission
+    # codename) still requires CanManageRoles, checked explicitly below.
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = Permission.objects.all().order_by('module', 'action')
@@ -895,6 +909,8 @@ class PermissionListView(APIView):
         return success('Permissions retrieved successfully.', data=paginated_data(paginator, page_obj, dict(grouped)))
 
     def post(self, request):
+        if not CanManageRoles().has_permission(request, self):
+            return error('You do not have permission to create permissions.', http_status=status.HTTP_403_FORBIDDEN)
         serializer = PermissionSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -2707,10 +2723,16 @@ class EmployeeListCreateView(APIView):
         branch     = branch_obj.branch_name
         department = dept_obj.name
 
-        if User.objects.filter(email__iexact=email).exists():
+        existing_user = User.objects.filter(email__iexact=email).first()
+        if existing_user:
+            field_msg = (
+                f'This email is already registered in the {existing_user.branch} branch.'
+                if existing_user.branch and existing_user.branch != branch
+                else 'Email already registered.'
+            )
             return error(
                 'An account with this email already exists.',
-                data={'email': 'Email already registered.'},
+                data={'email': field_msg},
             )
 
         try:
@@ -2718,8 +2740,8 @@ class EmployeeListCreateView(APIView):
         except (Role.DoesNotExist, ValueError, TypeError):
             return error('Invalid role.', data={'role': 'Role not found.'})
 
-        if role.name == 'system_admin':
-            return error('system_admin cannot be assigned via employee creation.')
+        if role.role_permissions.filter(permission__codename='settings.edit').exists():
+            return error(f'"{role.display_name}" cannot be assigned via employee creation.')
 
         selected_hr = None
         if hr_id:
@@ -2886,10 +2908,9 @@ class EmployeeStatsView(APIView):
         base_qs = User.objects.filter(is_active__in=[True, False]).exclude(employee_id='')
 
         role = request.user.role
-        role_name = role.name if role else ''
         if role and role.can_manage_team:
             base_qs = base_qs.filter(reporting_manager=request.user)
-        elif role_name != 'system_admin' and request.user.branch:
+        elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
             base_qs = base_qs.filter(branch=request.user.branch)
 
         # branch_names/department_names always come from base_qs (ignores the
@@ -2916,10 +2937,30 @@ class EmployeeStatsView(APIView):
             'department_names':  department_names,
         })
 
+def _get_employee(identifier: str):
+    """Look up an employee by employee_id code (e.g. EMP001)."""
+    try:
+        return User.objects.select_related('role', 'profile').get(employee_id=identifier)
+    except User.DoesNotExist:
+        return None
+
+
+def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
+    """
+    Non-org-wide users are always scoped to their own branch — mirrors the
+    scoping already applied to EmployeeStatsView.get(). Returns True when
+    the employee should be treated as not found for this requester.
+    """
+    if _has_perm(requesting_user, 'settings.edit'):
+        return False
+    return (
+        bool(requesting_user.branch)
+        and employee.branch != requesting_user.branch
+    )
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
-    
-    
 
     def get(self, request, employee_id: str):
         if not _has_perm(request.user, 'employees.view'):
@@ -2945,12 +2986,12 @@ class EmployeeDetailView(APIView):
 
         role_name = (data.get('role') or '').strip()
         if role_name:
-            if role_name == 'system_admin':
-                return error('system_admin cannot be assigned via employee edit.')
             try:
                 new_role = Role.objects.get(name=role_name)
             except Role.DoesNotExist:
                 return error(f'Role "{role_name}" does not exist.')
+            if new_role.role_permissions.filter(permission__codename='settings.edit').exists():
+                return error(f'"{new_role.display_name}" cannot be assigned via employee edit.')
             old_role = employee.role.name if employee.role else None
             if old_role != new_role.name:
                 changes['role'] = {'from': old_role, 'to': new_role.name}
@@ -3087,13 +3128,13 @@ class EmployeeDetailView(APIView):
             return error('You cannot deactivate your own account.')
 
         if not new_status:
-            role_name = employee.role.name if employee.role else ''
-            if role_name == 'system_admin':
+            if employee.role and employee.role.role_permissions.filter(permission__codename='settings.edit').exists():
                 active_admins = User.objects.filter(
-                    role__name='system_admin', is_active=True
-                ).count()
+                    role__role_permissions__permission__codename='settings.edit',
+                    is_active=True,
+                ).distinct().count()
                 if active_admins <= 1:
-                    return error('Cannot deactivate the only active system administrator.')
+                    return error('Cannot deactivate the only active administrator with full org-wide access.')
 
         old_status = employee.is_active
         if old_status == new_status:
@@ -3130,11 +3171,13 @@ class EmployeeDetailView(APIView):
         if employee.id == request.user.id:
             return error('You cannot delete your own account.')
 
-        role_name = employee.role.name if employee.role else ''
-        if role_name == 'system_admin':
-            active_admins = User.objects.filter(role__name='system_admin', is_active=True).count()
+        if employee.role and employee.role.role_permissions.filter(permission__codename='settings.edit').exists():
+            active_admins = User.objects.filter(
+                role__role_permissions__permission__codename='settings.edit',
+                is_active=True,
+            ).distinct().count()
             if active_admins <= 1:
-                return error('Cannot delete the only active system administrator.')
+                return error('Cannot delete the only active administrator with full org-wide access.')
 
         full_name    = employee.full_name
         emp_id_str   = employee.employee_id
@@ -3158,10 +3201,25 @@ class EmployeeDetailView(APIView):
 
 
 class AuditLogListView(APIView):
-    permission_classes = [IsAuthenticated, CanManageRoles]
+    # audit.view, not settings.edit — this was requiring CanManageRoles
+    # (settings.edit), but audit logs are read-only for every viewer (no
+    # create/edit/delete path exists here or anywhere else — that's the
+    # point of an audit trail), and the frontend's own nav config
+    # (navConfig.ts) already assumes audit.view is what gates this page.
+    # settings.edit holders (system_admin) still see everything via the
+    # scope filter below regardless.
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'audit.view'):
+            return error('You do not have permission to view audit logs.', http_status=status.HTTP_403_FORBIDDEN)
         qs = AuditLog.objects.select_related('user', 'user__role').order_by('-created_at')
+
+        # Branch Admin (no settings.edit) only sees activity from their own
+        # branch's users — same unconditional-within-branch scoping used
+        # everywhere else for this role. system_admin sees everything.
+        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
+            qs = qs.filter(user__branch__iexact=request.user.branch)
 
         module    = request.query_params.get('module', '').strip()
         action    = request.query_params.get('action', '').strip()
@@ -3293,7 +3351,12 @@ _STEP_ALL_FIELDS: dict = {
     3: frozenset({
         'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
     }),
-    4: frozenset(),
+    # Step 4 — Documents. pan_number is the one exception to "documents are
+    # handled separately via EmployeeDocument records" above: real-world
+    # onboarding captures the PAN *number* at the moment the PAN card proof
+    # is uploaded, not later — so the frontend saves it here, right before
+    # the upload request for that specific document.
+    4: frozenset({'pan_number'}),
 }
 
 # Profile fields that are nullable in the DB (null=True).
@@ -3708,8 +3771,38 @@ def _save_profile_step(request, step: int):
             http_status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ── Step 4 — document verification only (no profile fields to write) ───────
+    # ── Step 4 — document verification, plus PAN capture ───────────────────────
     if step == 4:
+        # A request carrying pan_number is the frontend saving/validating the
+        # number right before it uploads the PAN card file — a distinct action
+        # from the "have all documents been uploaded" check below, so it's
+        # handled and returned on its own rather than falling into that check
+        # (which would otherwise demand the file already be uploaded first).
+        if 'pan_number' in request.data:
+            from apps.accounts.models import (
+                EmployeeProfile as _EP,
+                find_conflicting_pan_profile,
+                normalize_and_validate_pan,
+            )
+            raw_pan = (request.data.get('pan_number') or '').strip()
+            if not raw_pan:
+                return error('PAN number is required.', http_status=status.HTTP_400_BAD_REQUEST)
+            try:
+                pan_value = normalize_and_validate_pan(raw_pan)
+            except ValueError as exc:
+                return error(str(exc), http_status=status.HTTP_400_BAD_REQUEST)
+            profile, _ = _EP.objects.get_or_create(user=request.user)
+            conflict = find_conflicting_pan_profile(pan_value, exclude_profile_pk=profile.pk)
+            if conflict:
+                return error(
+                    f'This PAN is already registered to {conflict.user.full_name} '
+                    f'({conflict.user.employee_id or conflict.user.email}).',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
+            profile.pan_number = pan_value
+            profile.save(update_fields=['pan_number', 'updated_at'])
+            return success('PAN number saved.', data={'pan_number': pan_value})
+
         from apps.accounts.models import EmployeeDocument as ED
         try:
             uploaded = set(
@@ -3942,7 +4035,7 @@ def _can_manage_employee_documents(user, employee) -> bool:
         return True
     if not _has_perm(user, 'documents.create'):
         return False
-    if user.role and user.role.name == 'system_admin':
+    if _has_perm(user, 'settings.edit'):
         return True
     if user.role and getattr(user.role, 'can_manage_branch', False):
         branch = (getattr(user, 'branch', '') or '').strip()
@@ -4082,6 +4175,7 @@ class OnboardingApprovalView(APIView):
         annual_ctc_raw         = (request.data.get('annual_ctc')          or '').strip()
         req_uan_number         = (request.data.get('uan_number')          or '').strip()
         req_name_as_per_aadhar = (request.data.get('name_as_per_aadhar')  or '').strip()
+        req_pan_number         = (request.data.get('pan_number')          or '').strip()
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
         if decision == 'approve':
@@ -4089,6 +4183,24 @@ class OnboardingApprovalView(APIView):
                 return error('Department is required to approve onboarding.')
             if not req_designation:
                 return error('Designation is required to approve onboarding.')
+            if req_pan_number:
+                # Validated before any state changes below — an invalid/duplicate
+                # PAN must reject the whole approval, not just skip saving it.
+                from apps.accounts.models import find_conflicting_pan_profile, normalize_and_validate_pan
+                try:
+                    req_pan_number = normalize_and_validate_pan(req_pan_number)
+                except ValueError as exc:
+                    return error(str(exc))
+                existing_profile = getattr(target, 'profile', None)
+                conflict = find_conflicting_pan_profile(
+                    req_pan_number,
+                    exclude_profile_pk=existing_profile.pk if existing_profile else None,
+                )
+                if conflict:
+                    return error(
+                        f'This PAN is already registered to {conflict.user.full_name} '
+                        f'({conflict.user.employee_id or conflict.user.email}).'
+                    )
 
         company      = Company.objects.first()
         company_name = company.company_name if company else ''
@@ -4152,8 +4264,8 @@ class OnboardingApprovalView(APIView):
                 *auto_fields,
             ])))
 
-            # Save UAN / Aadhar name provided by HR at approval time.
-            if req_uan_number or req_name_as_per_aadhar:
+            # Save UAN / Aadhar name / PAN provided by HR at approval time.
+            if req_uan_number or req_name_as_per_aadhar or req_pan_number:
                 from apps.accounts.models import EmployeeProfile as _Profile
                 profile, _ = _Profile.objects.get_or_create(user=target)
                 profile_fields = []
@@ -4163,6 +4275,9 @@ class OnboardingApprovalView(APIView):
                 if req_name_as_per_aadhar:
                     profile.name_as_per_aadhar = req_name_as_per_aadhar
                     profile_fields.append('name_as_per_aadhar')
+                if req_pan_number:
+                    profile.pan_number = req_pan_number
+                    profile_fields.append('pan_number')
                 if profile_fields:
                     profile_fields.append('updated_at')
                     profile.save(update_fields=profile_fields)
@@ -4270,43 +4385,27 @@ class OnboardingApprovalView(APIView):
             )
             logger.info('Onboarding approved for %s by %s', target.email, request.user.email)
 
-            try:
-                send_template_email(
-                    recipient_email=target.email,
-                    template_name='onboarding_approved',
-                    context={
-                        'employee_name':    target.full_name,
-                        'company_name':     company_name,
-                        'employee_id':      target.employee_id or '',
-                        'designation':      target.designation or '',
-                        'department':       target.department  or '',
-                        'date_of_joining':  str(target.date_of_joining) if target.date_of_joining else '',
-                        'portal_url':       assessments_portal_url if has_pending else portal_url,
-                        'has_assessments':  'true' if has_pending else 'false',
-                        'assessment_count': str(len(assigned_assessments)),
-                    },
-                )
-            except Exception:
-                logger.exception('Failed to send onboarding approval email to %s', target.email)
+            # Dispatch via Celery so 1-3 sequential SMTP round-trips never sit in
+            # this request's response path — see send_onboarding_submitted_notification_task's
+            # dispatch (onboarding wizard submission, above) for the same rationale.
+            from apps.accounts.tasks import send_onboarding_approved_notification_task
 
-            # Send individual assessment emails so the candidate knows exactly what to complete
-            for assessment in assigned_assessments:
+            def _queue_approval_notification(
+                user_id=target.pk,
+                assessment_ids=[a.id for a in assigned_assessments],
+                has_pending_=has_pending,
+            ):
                 try:
-                    send_template_email(
-                        recipient_email=target.email,
-                        template_name='assessment_assigned',
-                        context={
-                            'candidate_name':   target.full_name,
-                            'assessment_title': assessment.title,
-                            'company_name':     company_name,
-                            'portal_url':       assessments_portal_url or portal_url,
-                        },
+                    send_onboarding_approved_notification_task.apply_async(
+                        args=[user_id, assessment_ids, has_pending_], retry=False, ignore_result=True,
                     )
-                except Exception:
-                    logger.exception(
-                        'Failed to send assessment_assigned email for "%s" to %s',
-                        assessment.title, target.email,
+                except Exception as exc:
+                    logger.error(
+                        'Failed to queue onboarding_approved notification for user %s: %s',
+                        user_id, exc, exc_info=True,
                     )
+
+            transaction.on_commit(_queue_approval_notification)
 
             return success(f'{target.full_name} onboarding approved.')
 
@@ -4359,7 +4458,7 @@ class OnboardingApprovalView(APIView):
             .order_by('-date_joined')
         )
         if not _has_perm(request.user, 'settings.edit'):
-            base_qs = base_qs.exclude(role__name__in=['system_admin'])
+            base_qs = base_qs.exclude(role__role_permissions__permission__codename='settings.edit')
 
         stats = {
             'pending':   base_qs.filter(onboarding_status=User.ONBOARDING_PENDING).count(),
@@ -4394,7 +4493,6 @@ class OnboardingApprovalView(APIView):
         from apps.accounts.serializers import OnboardingApprovalSerializer
         from apps.recruitment.models import Candidate
 
-        role_name = request.user.role.name if request.user.role else ''
         qs = (
             User.objects
             .filter(onboarding_status__in=[User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED])
@@ -4403,7 +4501,7 @@ class OnboardingApprovalView(APIView):
             .order_by('date_joined')
         )
         if not _has_perm(request.user, 'settings.edit'):
-            qs = qs.exclude(role__name__in=['system_admin'])
+            qs = qs.exclude(role__role_permissions__permission__codename='settings.edit')
 
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         user_ids = [u.pk for u in page_obj.object_list]
@@ -4513,16 +4611,18 @@ class HRListView(APIView):
         if not branch:
             return error('branch query parameter is required.')
         # Filter by permission so any role named hr/hr_admin/etc. is included.
-        # system_admin is explicitly excluded — that role is seeded with every
-        # permission (including onboarding.approve) so it would otherwise match
-        # here too, even though a system admin isn't a branch's actual HR contact.
+        # Org-wide (settings.edit) roles are explicitly excluded — system_admin
+        # is seeded with every permission (including onboarding.approve) so it
+        # would otherwise match here too, even though an org-wide admin isn't
+        # a branch's actual HR contact. Permission-based so this correctly
+        # excludes any future role granted settings.edit, not just this name.
         hrs = (
             User.objects
             .filter(
                 role__role_permissions__permission__codename='onboarding.approve',
                 is_active=True,
             )
-            .exclude(role__name='system_admin')
+            .exclude(role__role_permissions__permission__codename='settings.edit')
             .filter(Q(branch__iexact=branch) | Q(managed_branches__branch_name__iexact=branch))
             .select_related('role')
             .distinct()
@@ -5132,12 +5232,12 @@ class EmployeeBulkImportView(APIView):
                     'message':    f'Role "{role_raw}" not found.',
                 })
                 continue
-            if role_obj.name == 'system_admin':
+            if role_obj.role_permissions.filter(permission__codename='settings.edit').exists():
                 row_errors.append({
                     'row':        idx,
                     'field':      'role',
                     'identifier': email,
-                    'message':    'system_admin cannot be assigned via bulk import.',
+                    'message':    f'"{role_obj.display_name}" cannot be assigned via bulk import.',
                 })
                 continue
 

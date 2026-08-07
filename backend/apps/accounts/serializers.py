@@ -847,10 +847,28 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
             'account_holder_name', 'account_type',
             'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
-            'uan_number', 'name_as_per_aadhar',
+            'uan_number', 'name_as_per_aadhar', 'pan_number',
             'updated_at',
         ]
         read_only_fields = ('updated_at',)
+
+    def validate_pan_number(self, value: str) -> str:
+        if not value:
+            return value
+        from apps.accounts.models import find_conflicting_pan_profile, normalize_and_validate_pan
+        try:
+            value = normalize_and_validate_pan(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
+        conflict = find_conflicting_pan_profile(
+            value, exclude_profile_pk=self.instance.pk if self.instance else None,
+        )
+        if conflict:
+            raise serializers.ValidationError(
+                f'This PAN is already registered to {conflict.user.full_name} '
+                f'({conflict.user.employee_id or conflict.user.email}).'
+            )
+        return value
 
     def validate_date_of_birth(self, value):
         if value is None:
