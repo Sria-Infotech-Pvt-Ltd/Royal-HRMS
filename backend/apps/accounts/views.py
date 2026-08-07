@@ -2916,6 +2916,33 @@ class EmployeeStatsView(APIView):
             'department_names':  department_names,
         })
 
+
+def _get_employee(identifier: str):
+    """Look up an employee by employee_id code (e.g. EMP001)."""
+    try:
+        return (
+            User.objects
+            .select_related('role', 'profile', 'reporting_manager', 'hr')
+            .prefetch_related('employee_documents')
+            .get(employee_id=identifier)
+        )
+    except User.DoesNotExist:
+        return None
+
+
+def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
+    """
+    Non-system-admin users are always scoped to their own branch — mirrors the
+    scoping already applied to EmployeeListCreateView.get(). Returns True when
+    the employee should be treated as not found for this requester.
+    """
+    return (
+        not _has_perm(requesting_user, 'settings.edit')
+        and bool(requesting_user.branch)
+        and employee.branch != requesting_user.branch
+    )
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
     
