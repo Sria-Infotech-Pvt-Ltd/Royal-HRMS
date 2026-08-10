@@ -2594,9 +2594,9 @@ body.dark-mode {
 .ta-root {
   --ta-bg: #F8FAFC;
   --ta-surface: #ffffff;
-  --ta-primary: #2563EB;
-  --ta-primary-hover: #1D4ED8;
-  --ta-primary-soft: rgba(37, 99, 235, 0.10);
+  --ta-primary: var(--primary);
+  --ta-primary-hover: #163e73;
+  --ta-primary-soft: rgba(30, 78, 140, 0.10);
   --ta-success: #22C55E;
   --ta-success-soft: rgba(34, 197, 94, 0.12);
   --ta-warning: #F59E0B;

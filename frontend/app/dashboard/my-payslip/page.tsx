@@ -84,18 +84,21 @@ function initials(name: string) {
   return name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  paid:        { label: "Paid",        cls: "bg-emerald-100 text-emerald-700" },
-  sent:        { label: "Received",    cls: "bg-blue-100 text-blue-700"       },
-  acknowledged:{ label: "Acknowledged",cls: "bg-violet-100 text-violet-700"  },
-  draft:       { label: "Processing",  cls: "bg-gray-100 text-gray-500"      },
-  closed:      { label: "Closed",      cls: "bg-gray-100 text-gray-500"      },
+const STATUS_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  paid:        { label: "Paid",         bg: "var(--success-c)",        color: "var(--success)"     },
+  sent:        { label: "Received",     bg: "rgba(30, 78, 140, 0.12)", color: "var(--primary)"     },
+  acknowledged:{ label: "Acknowledged", bg: "rgba(173, 149, 207, 0.15)", color: "var(--purple)"    },
+  draft:       { label: "Processing",   bg: "var(--bg-high)",          color: "var(--on-variant)"  },
+  closed:      { label: "Closed",       bg: "var(--bg-high)",          color: "var(--on-variant)"  },
 };
 
 function statusBadge(status: string) {
-  const b = STATUS_BADGE[status] ?? { label: status, cls: "bg-gray-100 text-gray-500" };
+  const b = STATUS_BADGE[status] ?? { label: status, bg: "var(--bg-high)", color: "var(--on-variant)" };
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>
+    <span
+      className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+      style={{ background: b.bg, color: b.color }}
+    >
       {b.label}
     </span>
   );
@@ -107,9 +110,9 @@ function EarningRow({ label, value }: { label: string; value: string | number })
   const n = Number(value);
   if (n === 0) return null;
   return (
-    <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-600">{label}</span>
-      <span className="text-sm font-semibold text-gray-800">{INR(n)}</span>
+    <div className="flex justify-between items-center py-2 border-b border-[var(--outline-v)] last:border-0">
+      <span className="text-sm" style={{ color: "var(--on-variant)" }}>{label}</span>
+      <span className="text-sm font-semibold" style={{ color: "var(--on-bg)" }}>{INR(n)}</span>
     </div>
   );
 }
@@ -118,9 +121,9 @@ function DeductionRow({ label, value, highlight }: { label: string; value: strin
   const n = Number(value);
   if (n === 0) return null;
   return (
-    <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-600">{label}</span>
-      <span className={`text-sm font-semibold ${highlight ? "text-red-600" : "text-red-500"}`}>{INR(n)}</span>
+    <div className="flex justify-between items-center py-2 border-b border-[var(--outline-v)] last:border-0">
+      <span className="text-sm" style={{ color: "var(--on-variant)" }}>{label}</span>
+      <span className="text-sm font-semibold" style={{ color: "var(--error)", opacity: highlight ? 1 : 0.85 }}>{INR(n)}</span>
     </div>
   );
 }
@@ -174,7 +177,7 @@ export default function MyPayslipPage() {
   if (slipsLoading) {
     return (
       <div className="empty-state">
-        <i className="ti ti-loader-2 animate-spin text-2xl text-gray-400" />
+        <i className="ti ti-loader-2 animate-spin text-2xl" />
         <div className="empty-state-desc mt-2">Loading your payslips…</div>
       </div>
     );
@@ -188,8 +191,8 @@ export default function MyPayslipPage() {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Payslips</h1>
-          <p className="text-sm text-gray-500 mt-1">View and download your monthly salary statements</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--on-bg)" }}>My Payslips</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--on-variant)" }}>View and download your monthly salary statements</p>
         </div>
         <div className="empty-state">
           <div className="empty-state-icon">📄</div>
@@ -206,15 +209,15 @@ export default function MyPayslipPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Payslips</h1>
-          <p className="text-sm text-gray-500 mt-1">View and download your monthly salary statements</p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--on-bg)" }}>My Payslips</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--on-variant)" }}>View and download your monthly salary statements</p>
         </div>
         <div className="flex items-center gap-2">
           {slip?.status === "sent" && (
             <button
               onClick={acknowledge}
               disabled={acknowledging}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+              className="btn btn-outline disabled:opacity-50"
             >
               <i className="ti ti-check text-sm" />
               {acknowledging ? "Acknowledging…" : "Acknowledge"}
@@ -225,12 +228,16 @@ export default function MyPayslipPage() {
               href={slip.payslip_pdf}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 transition-colors"
+              className="btn btn-filled"
             >
               <i className="ti ti-download text-sm" /> Download PDF
             </a>
           ) : (
-            <button disabled className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg opacity-50 cursor-not-allowed">
+            <button
+              disabled
+              className="btn btn-filled disabled:opacity-50 disabled:cursor-not-allowed"
+              title="PDF not yet available for this payslip"
+            >
               <i className="ti ti-download text-sm" /> Download PDF
             </button>
           )}
@@ -239,38 +246,38 @@ export default function MyPayslipPage() {
 
       {ackMsg && <div className="alert alert-success">{ackMsg}</div>}
 
-      <div className="flex gap-6 items-start">
+      <div className="payslip-layout flex gap-6 items-start">
 
         {/* ── Sidebar ── */}
-        <div className="flex flex-col gap-4 w-56 shrink-0">
+        <div className="payslip-sidebar flex flex-col gap-4 w-56 shrink-0">
 
           {/* Employee card */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="bg-gradient-to-br from-blue-900 to-blue-700 p-4 text-center">
-              <div className="w-14 h-14 rounded-full bg-white/20 border-2 border-white/40 text-white font-bold text-xl flex items-center justify-center mx-auto mb-2">
+          <div className="card">
+            <div className="p-4 text-center" style={{ background: "linear-gradient(to bottom right, var(--primary), var(--primary-c))" }}>
+              <div className="w-14 h-14 rounded-full border-2 text-white font-bold text-xl flex items-center justify-center mx-auto mb-2" style={{ background: "rgba(255,255,255,0.2)", borderColor: "rgba(255,255,255,0.4)" }}>
                 {me ? initials(me.full_name) : "—"}
               </div>
               <div className="text-white font-semibold text-sm">{me?.full_name ?? "—"}</div>
-              <div className="text-blue-200 text-xs mt-0.5">{me?.designation ?? "—"}</div>
-              <div className="text-blue-300 text-[11px] mt-0.5">{me?.employee_id ?? "—"}</div>
+              <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.75)" }}>{me?.designation ?? "—"}</div>
+              <div className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>{me?.employee_id ?? "—"}</div>
             </div>
-            <div className="p-3 divide-y divide-gray-100">
+            <div className="p-3">
               {([
                 ["Department", me?.department],
                 ["Date of Join", me?.date_of_joining ? fmtDate(me.date_of_joining) : null],
               ] as [string, string | null | undefined][]).map(([k, v]) => (
-                <div key={k} className="flex flex-col py-2">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wider">{k}</span>
-                  <span className="text-xs font-semibold text-gray-800 mt-0.5">{v || "—"}</span>
+                <div key={k} className="flex flex-col py-2 border-b border-[var(--outline-v)] last:border-0">
+                  <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--outline)" }}>{k}</span>
+                  <span className="text-xs font-semibold mt-0.5" style={{ color: "var(--on-bg)" }}>{v || "—"}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Month selector */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100">
-              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Select Month</span>
+          <div className="card">
+            <div className="px-4 py-3 border-b border-[var(--outline-v)]">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--on-variant)" }}>Select Month</span>
             </div>
             <div className="py-1 max-h-80 overflow-y-auto">
               {payslips.map(p => {
@@ -280,14 +287,14 @@ export default function MyPayslipPage() {
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
                     className={`w-full text-left px-4 py-2.5 flex items-center justify-between border-l-2 transition-colors ${
-                      active ? "border-blue-800 bg-blue-50" : "border-transparent hover:bg-gray-50"
+                      active ? "border-[var(--primary)] bg-[rgba(30,78,140,0.08)]" : "border-transparent hover:bg-[var(--bg-low)]"
                     }`}
                   >
                     <div>
-                      <div className={`text-sm font-semibold ${active ? "text-blue-800" : "text-gray-700"}`}>
+                      <div className="text-sm font-semibold" style={{ color: active ? "var(--primary)" : "var(--on-bg)" }}>
                         {fmtMonth(p.cycle_start)}
                       </div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">{fmtDate(p.pay_date)}</div>
+                      <div className="text-[10px] mt-0.5" style={{ color: "var(--outline)" }}>{fmtDate(p.pay_date)}</div>
                     </div>
                     {statusBadge(p.status)}
                   </button>
@@ -299,10 +306,10 @@ export default function MyPayslipPage() {
 
         {/* ── Payslip document ── */}
         {slip && (
-          <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="payslip-doc card flex-1 min-w-0" style={{ boxShadow: "var(--shadow)" }}>
 
             {/* Company letterhead */}
-            <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-700 px-7 py-6">
+            <div className="px-7 py-6" style={{ background: "linear-gradient(to right, var(--primary), var(--primary), var(--primary-c))" }}>
               <div className="flex items-start justify-between">
                 <div>
                   {(company?.logo_url || company?.logo) && (
@@ -315,72 +322,72 @@ export default function MyPayslipPage() {
                   <div className="text-white font-bold text-lg leading-tight">
                     {company?.company_name ?? "—"}
                   </div>
-                  <div className="text-blue-200 text-xs mt-1">{companyAddress}</div>
+                  <div className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.75)" }}>{companyAddress}</div>
                   {company?.cin && (
-                    <div className="text-blue-300 text-[11px] mt-0.5">CIN: {company.cin}</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>CIN: {company.cin}</div>
                   )}
                 </div>
                 <div className="text-right">
                   <div className="text-white font-extrabold text-2xl tracking-wide">PAYSLIP</div>
-                  <div className="text-blue-200 text-sm mt-1 font-medium">{fmtMonth(slip.cycle_start)}</div>
-                  <div className="text-blue-300 text-xs mt-0.5">Salary Date: {fmtDate(slip.pay_date)}</div>
+                  <div className="text-sm mt-1 font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>{fmtMonth(slip.cycle_start)}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>Salary Date: {fmtDate(slip.pay_date)}</div>
                 </div>
               </div>
             </div>
 
             {/* Employee details strip */}
-            <div className="grid grid-cols-4 divide-x divide-gray-100 bg-gray-50 border-b border-gray-200">
+            <div className="payslip-detail-strip grid grid-cols-4 border-b" style={{ background: "var(--bg-low)", borderColor: "var(--outline-v)" }}>
               {([
                 ["Employee ID",  slip.employee_id_code || "—"],
                 ["Bank",        me?.profile?.bank_name || "—"],
                 ["Account No.", bankMasked],
                 ["IFSC Code",   me?.profile?.ifsc_code || "—"],
-              ] as [string, string][]).map(([label, value]) => (
-                <div key={label} className="px-5 py-3">
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">{label}</div>
-                  <div className="text-xs font-semibold text-gray-800 font-mono">{value}</div>
+              ] as [string, string][]).map(([label, value], idx) => (
+                <div key={label} className="px-5 py-3 border-[var(--outline-v)]" style={{ borderLeftWidth: idx > 0 ? 1 : 0, borderLeftStyle: "solid" }}>
+                  <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "var(--outline)" }}>{label}</div>
+                  <div className="text-xs font-semibold font-mono" style={{ color: "var(--on-bg)" }}>{value}</div>
                 </div>
               ))}
             </div>
 
             {/* Attendance summary */}
-            <div className="flex items-center mx-6 mt-5 mb-5 rounded-xl overflow-hidden border border-gray-200">
+            <div className="flex items-center mx-6 mt-5 mb-5 rounded-xl overflow-hidden border" style={{ borderColor: "var(--outline-v)" }}>
               {[
                 {
                   label: "Working Days",
                   value: slip.total_working_days,
-                  color: "text-gray-900",
+                  color: "var(--on-bg)",
                   sub: fmtMonth(slip.cycle_start),
                 },
                 {
                   label: "Paid Days",
                   value: slip.total_working_days - lopDays,
-                  color: "text-emerald-700",
+                  color: "var(--success)",
                   sub: "days credited",
                 },
                 {
                   label: "Loss of Pay",
                   value: lopDays > 0 ? lopDays : 0,
-                  color: lopDays > 0 ? "text-red-600" : "text-gray-400",
+                  color: lopDays > 0 ? "var(--error)" : "var(--outline)",
                   sub: lopDays > 0 ? `${INR(lopAmt)} deducted` : "no LOP",
                 },
               ].map((item, i) => (
-                <div key={i} className={`flex-1 text-center py-3 bg-white ${i < 2 ? "border-r border-gray-200" : ""}`}>
-                  <div className={`text-2xl font-extrabold ${item.color}`}>{item.value}</div>
-                  <div className="text-[11px] font-medium text-gray-600 mt-0.5">{item.label}</div>
-                  <div className="text-[10px] text-gray-400">{item.sub}</div>
+                <div key={i} className="flex-1 text-center py-3 border-[var(--outline-v)]" style={{ background: "#fff", borderRightWidth: i < 2 ? 1 : 0, borderRightStyle: "solid" }}>
+                  <div className="text-2xl font-extrabold" style={{ color: item.color }}>{item.value}</div>
+                  <div className="text-[11px] font-medium mt-0.5" style={{ color: "var(--on-variant)" }}>{item.label}</div>
+                  <div className="text-[10px]" style={{ color: "var(--outline)" }}>{item.sub}</div>
                 </div>
               ))}
             </div>
 
             {/* Earnings + Deductions */}
-            <div className="grid grid-cols-2 gap-0 mx-6 mb-5 rounded-xl overflow-hidden border border-gray-200">
+            <div className="payslip-earn-ded grid grid-cols-2 gap-0 mx-6 mb-5 rounded-xl overflow-hidden border" style={{ borderColor: "var(--outline-v)" }}>
 
               {/* Earnings */}
-              <div className="border-r border-gray-200">
-                <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border-b border-emerald-100">
-                  <div className="w-1 h-4 rounded-full bg-emerald-600" />
-                  <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Earnings</span>
+              <div className="border-r" style={{ borderColor: "var(--outline-v)" }}>
+                <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ background: "var(--success-c)", borderColor: "var(--success-c)" }}>
+                  <div className="w-1 h-4 rounded-full" style={{ background: "var(--success)" }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--success)" }}>Earnings</span>
                 </div>
                 <div className="px-4 py-2">
                   <EarningRow label="Basic Salary"               value={slip.basic} />
@@ -391,17 +398,17 @@ export default function MyPayslipPage() {
                     <EarningRow key={name} label={name} value={amt} />
                   ))}
                 </div>
-                <div className="flex justify-between items-center px-4 py-3 bg-emerald-50 border-t border-emerald-100 mt-1">
-                  <span className="text-sm font-bold text-emerald-900">Gross Earnings</span>
-                  <span className="text-base font-extrabold text-emerald-700">{INR(gross)}</span>
+                <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--success-c)", borderColor: "var(--success-c)" }}>
+                  <span className="text-sm font-bold" style={{ color: "var(--success)" }}>Gross Earnings</span>
+                  <span className="text-base font-extrabold" style={{ color: "var(--success)" }}>{INR(gross)}</span>
                 </div>
               </div>
 
               {/* Deductions */}
               <div>
-                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border-b border-red-100">
-                  <div className="w-1 h-4 rounded-full bg-red-500" />
-                  <span className="text-xs font-bold text-red-800 uppercase tracking-wider">Deductions</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ background: "var(--error-c)", borderColor: "var(--error-c)" }}>
+                  <div className="w-1 h-4 rounded-full" style={{ background: "var(--error)" }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--error)" }}>Deductions</span>
                 </div>
                 <div className="px-4 py-2">
                   <DeductionRow label="Provident Fund (PF)"  value={slip.pf_employee} />
@@ -410,40 +417,40 @@ export default function MyPayslipPage() {
                   <DeductionRow label="Labour Welfare Fund"   value={slip.lwf_employee} />
                   <DeductionRow label="Loss of Pay (LOP)"     value={slip.lop_deduction} highlight />
                 </div>
-                <div className="flex justify-between items-center px-4 py-3 bg-red-50 border-t border-red-100 mt-1">
-                  <span className="text-sm font-bold text-red-900">Total Deductions</span>
-                  <span className="text-base font-extrabold text-red-600">{INR(ded)}</span>
+                <div className="flex justify-between items-center px-4 py-3 border-t mt-1" style={{ background: "var(--error-c)", borderColor: "var(--error-c)" }}>
+                  <span className="text-sm font-bold" style={{ color: "var(--error)" }}>Total Deductions</span>
+                  <span className="text-base font-extrabold" style={{ color: "var(--error)" }}>{INR(ded)}</span>
                 </div>
               </div>
             </div>
 
             {/* Reimbursements — shown only if non-zero */}
             {reimb > 0 && (
-              <div className="mx-6 mb-5 rounded-xl border border-blue-100 bg-blue-50 overflow-hidden">
+              <div className="mx-6 mb-5 rounded-xl border overflow-hidden" style={{ borderColor: "var(--info-c)", background: "var(--info-c)" }}>
                 <div className="flex items-center gap-2 px-4 py-3">
-                  <i className="ti ti-receipt text-blue-700 text-sm" />
-                  <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Reimbursements</span>
-                  <span className="ml-auto text-sm font-bold text-blue-700">{INR(reimb)}</span>
+                  <i className="ti ti-receipt text-sm" style={{ color: "var(--info)" }} />
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--info)" }}>Reimbursements</span>
+                  <span className="ml-auto text-sm font-bold" style={{ color: "var(--info)" }}>{INR(reimb)}</span>
                 </div>
               </div>
             )}
 
             {/* Net salary banner */}
-            <div className="mx-6 mb-6 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 overflow-hidden">
+            <div className="mx-6 mb-6 rounded-xl overflow-hidden" style={{ background: "var(--success)" }}>
               <div className="flex items-center justify-between px-6 py-4">
                 <div>
-                  <div className="text-emerald-100 text-sm font-medium">Net Salary Credited</div>
+                  <div className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>Net Salary Credited</div>
                   <div className="text-white text-xs mt-1 opacity-80">
                     Paid on {fmtDate(slip.pay_date)}
                     {me?.profile?.bank_name ? ` · ${me.profile.bank_name} ${bankMasked}` : ""}
                   </div>
-                  <div className="flex items-center gap-3 mt-3 text-xs text-emerald-200">
+                  <div className="flex items-center gap-3 mt-3 text-xs" style={{ color: "rgba(255,255,255,0.75)" }}>
                     <span>Gross {INR(gross)}</span>
-                    <span className="text-emerald-400">−</span>
+                    <span style={{ color: "rgba(255,255,255,0.5)" }}>−</span>
                     <span>Ded. {INR(ded)}</span>
                     {reimb > 0 && (
                       <>
-                        <span className="text-emerald-400">+</span>
+                        <span style={{ color: "rgba(255,255,255,0.5)" }}>+</span>
                         <span>Reimb. {INR(reimb)}</span>
                       </>
                     )}
@@ -451,25 +458,44 @@ export default function MyPayslipPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-extrabold text-white tracking-tight">{INR(net)}</div>
-                  <div className="text-emerald-200 text-xs mt-1">In Hand</div>
+                  <div className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.75)" }}>In Hand</div>
                 </div>
               </div>
               <div className="h-1.5 flex">
-                <div className="bg-white/30" style={{ width: `${gross + ded > 0 ? Math.round((gross / (gross + ded)) * 100) : 50}%` }} />
-                <div className="bg-red-400/60 flex-1" />
+                <div style={{ background: "rgba(255,255,255,0.3)", width: `${gross + ded > 0 ? Math.round((gross / (gross + ded)) * 100) : 50}%` }} />
+                <div className="flex-1" style={{ background: "var(--error)", opacity: 0.6 }} />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="text-center text-[11px] text-gray-400 pb-5">
+            <div className="text-center text-[11px] pb-5" style={{ color: "var(--outline)" }}>
               This is a computer-generated payslip and does not require a signature.
               {company?.official_phone && (
-                <> For queries contact HR at <span className="text-blue-600">{company.official_phone}</span>.</>
+                <> For queries contact HR at <span style={{ color: "var(--primary)" }}>{company.official_phone}</span>.</>
               )}
             </div>
           </div>
         )}
       </div>
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .payslip-layout {
+            flex-direction: column;
+          }
+          .payslip-sidebar {
+            width: 100%;
+          }
+        }
+        @media (max-width: 560px) {
+          .payslip-detail-strip {
+            grid-template-columns: 1fr 1fr;
+          }
+          .payslip-earn-ded {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
 }

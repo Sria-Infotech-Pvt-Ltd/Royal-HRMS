@@ -112,7 +112,7 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
             <i className="ti ti-wallet" style={{ marginRight: 8 }} />
             Submit New Expense
           </div>
-          <button className="modal-close" onClick={onClose}>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
             <i className="ti ti-x" />
           </button>
         </div>
@@ -225,6 +225,7 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
                     <button
                       type="button"
                       onClick={() => removeReceipt(idx)}
+                      aria-label={`Remove receipt ${file.name}`}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "var(--error)", padding: 2 }}
                     >
                       <i className="ti ti-x" />

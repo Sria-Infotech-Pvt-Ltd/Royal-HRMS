@@ -49,7 +49,7 @@ export default function AttendanceTab() {
   return (
     <div>
       {/* Top row: ClockWidget + 4 stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 16, marginBottom: 16 }}>
+      <div className="attendance-top-row" style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 16, marginBottom: 16 }}>
         <ClockWidget />
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 12 }}>
@@ -117,7 +117,7 @@ export default function AttendanceTab() {
           <div className="card-title"><i className="ti ti-calendar-stats" /> Monthly Summary</div>
         </div>
         <div className="card-body">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 0 }}>
             {[
               { label: "Working Days", value: summary?.working_days ?? "—", color: "var(--on-bg)"   },
               { label: "Days Present", value: summary?.days_present ?? "—", color: "var(--success)" },
@@ -159,6 +159,14 @@ export default function AttendanceTab() {
         onClose={() => setCorrectionDate(null)}
         onSuccess={() => { setCorrectionDate(null); refetch(); }}
       />
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .attendance-top-row {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

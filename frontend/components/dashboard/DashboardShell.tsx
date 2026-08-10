@@ -73,6 +73,14 @@ export default function DashboardShell({
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "Royal HRMS");
   const visibleNav = buildNav(session.permissions ?? []);
 
+  // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
+  // item's path prefix (both "audit" and its parent "settings"). Only the
+  // item with the longest — i.e. most specific — matching path should light up.
+  const activeNavId = visibleNav
+    .filter((entry): entry is NavItem => !isSection(entry) && !entry.comingSoon)
+    .filter(item => pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/")))
+    .sort((a, b) => b.path.length - a.path.length)[0]?.id;
+
   function toggleTheme() {
     document.body.classList.toggle("dark-mode");
     setDarkMode(v => !v);
@@ -164,7 +172,7 @@ export default function DashboardShell({
               );
             }
             const item = entry as NavItem;
-            const isActive = !item.comingSoon && (pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/")));
+            const isActive = !item.comingSoon && item.id === activeNavId;
             if (item.comingSoon) {
               return (
                 <div key={item.id} className="px-2 mb-px">
@@ -248,6 +256,8 @@ export default function DashboardShell({
           <button
             className="md:hidden flex items-center justify-center w-8 h-8 bg-transparent border-none text-[var(--on-variant)] text-xl cursor-pointer rounded-lg hover:bg-[var(--bg-mid)]"
             onClick={() => setMobileOpen(v => !v)}
+            title={mobileOpen ? "Close menu" : "Open menu"}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
             suppressHydrationWarning
           >
             <i className="ti ti-menu-2" />

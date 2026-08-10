@@ -53,7 +53,7 @@ function DeptCol({ dept, isFirst, isLast }: DeptColProps) {
 
       {/* Dept head card */}
       <div style={{
-        background: "#fff",
+        background: "var(--surface)",
         border: "1px solid var(--outline-v)",
         borderRadius: "var(--radius-lg)",
         padding: "16px 18px",
@@ -128,7 +128,7 @@ export default function OrgChartClient() {
 
             {/* Root node */}
             <div style={{
-              background: "#fff",
+              background: "var(--surface)",
               border: "1.5px solid var(--outline-v)",
               borderRadius: "var(--radius-lg)",
               padding: "16px 40px",
@@ -164,7 +164,7 @@ export default function OrgChartClient() {
 
       {/* Mobile-only: vertical card list */}
       <style>{`
-        @media (max-width: 639px) {
+        @media (max-width: 768px) {
           .org-mobile-hint { display: flex !important; }
         }
       `}</style>

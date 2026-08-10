@@ -79,15 +79,13 @@ export default function ApprovalRulesPage() {
     <div>
       <div className="page-header">
         <div>
-          <button
-            className="btn btn-ghost"
-            style={{ marginBottom: 8, fontSize: 13, padding: "4px 10px" }}
-            onClick={() => router.push("/dashboard/settings")}
-          >
-            <i className="ti ti-arrow-left" /> Settings
-          </button>
           <div className="page-title">Approval Rules</div>
           <div className="page-sub">Configure which role approves each workflow — globally, with per-employee overrides on the employee profile.</div>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
+            <i className="ti ti-arrow-left" /> Back
+          </button>
         </div>
       </div>
 

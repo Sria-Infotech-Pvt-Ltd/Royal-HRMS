@@ -100,7 +100,7 @@ export default function PayrollReports() {
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
             {section.category}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="grid-2">
             {section.items.map(report => (
               <div key={report.key} className="card">
                 <div style={{ padding: "16px 20px" }}>

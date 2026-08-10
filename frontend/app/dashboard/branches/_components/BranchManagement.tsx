@@ -470,6 +470,8 @@ export default function BranchManagement() {
                       className="btn btn-ghost"
                       style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
                       onClick={() => { setDeleteError(null); setDeleteConfirm(branch); }}
+                      title={`Delete ${branch.branch_name}`}
+                      aria-label={`Delete ${branch.branch_name}`}
                     >
                       <i className="ti ti-trash" style={{ fontSize: "16px" }} />
                     </button>

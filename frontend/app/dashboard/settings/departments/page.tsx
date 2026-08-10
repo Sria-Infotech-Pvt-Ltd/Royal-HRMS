@@ -61,6 +61,11 @@ export default function DepartmentsPage() {
   const [editingDesig, setEditingDesig] = useState<Designation | null>(null);
   const [desigErrors,  setDesigErrors]  = useState<Record<string, string>>({});
 
+  const [deleteDeptTarget,  setDeleteDeptTarget]  = useState<Department | null>(null);
+  const [deletingDept,      setDeletingDept]      = useState(false);
+  const [deleteDesigTarget, setDeleteDesigTarget] = useState<Designation | null>(null);
+  const [deletingDesig,     setDeletingDesig]     = useState(false);
+
   // ── Data ───────────────────────────────────────────────────────────────────
 
   async function loadDepartments() {
@@ -123,14 +128,21 @@ export default function DepartmentsPage() {
       setSaveError((e as { message?: string }).message ?? "Failed to save.");
     } finally { setSaving(false); }
   }
-  async function deleteDept(d: Department) {
-    if (!window.confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
+  function deleteDept(d: Department) {
+    setDeleteDeptTarget(d);
+  }
+  async function confirmDeleteDept() {
+    if (!deleteDeptTarget) return;
+    setDeletingDept(true);
     try {
-      await clientApi.delete(API.departments.detail(d.id));
-      if (selected?.id === d.id) setSelected(null);
+      await clientApi.delete(API.departments.detail(deleteDeptTarget.id));
+      if (selected?.id === deleteDeptTarget.id) setSelected(null);
+      setDeleteDeptTarget(null);
       await loadDepartments();
     } catch (e: unknown) {
       setPageError((e as { message?: string }).message ?? "Failed to delete.");
+    } finally {
+      setDeletingDept(false);
     }
   }
 
@@ -161,13 +173,20 @@ export default function DepartmentsPage() {
       setSaveError((e as { message?: string }).message ?? "Failed to save.");
     } finally { setSaving(false); }
   }
-  async function deleteDesig(d: Designation) {
-    if (!window.confirm(`Delete designation "${d.name}"?`)) return;
+  function deleteDesig(d: Designation) {
+    setDeleteDesigTarget(d);
+  }
+  async function confirmDeleteDesig() {
+    if (!deleteDesigTarget) return;
+    setDeletingDesig(true);
     try {
-      await clientApi.delete(API.designations.detail(d.id));
+      await clientApi.delete(API.designations.detail(deleteDesigTarget.id));
+      setDeleteDesigTarget(null);
       await Promise.all([loadDesignations(selected!.id), loadDepartments()]);
     } catch (e: unknown) {
       setPageError((e as { message?: string }).message ?? "Failed to delete.");
+    } finally {
+      setDeletingDesig(false);
     }
   }
 
@@ -591,6 +610,72 @@ export default function DepartmentsPage() {
               <button className="btn btn-ghost" onClick={() => setDesigModal(null)}>Cancel</button>
               <button className="btn btn-filled" onClick={saveDesig} disabled={saving}>
                 {saving ? <><Spin />&nbsp;{desigModal === "add" ? "Adding…" : "Saving…"}</> : desigModal === "add" ? "Add Designation" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete department confirm ── */}
+      {deleteDeptTarget && (
+        <div className="modal-overlay open" style={{ zIndex: 1010 }}>
+          <div className="modal" style={{ maxWidth: "420px" }}>
+            <div className="modal-header">
+              <div className="modal-title">
+                <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
+                Delete Department?
+              </div>
+              <button className="modal-close" onClick={() => setDeleteDeptTarget(null)} disabled={deletingDept}>
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+                Are you sure you want to delete <strong>{deleteDeptTarget.name}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDeleteDeptTarget(null)} disabled={deletingDept}>Cancel</button>
+              <button
+                className="btn btn-filled"
+                style={{ background: "var(--error)" }}
+                onClick={confirmDeleteDept}
+                disabled={deletingDept}
+              >
+                {deletingDept ? <><Spin />&nbsp;Deleting…</> : "Yes, Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete designation confirm ── */}
+      {deleteDesigTarget && (
+        <div className="modal-overlay open" style={{ zIndex: 1010 }}>
+          <div className="modal" style={{ maxWidth: "420px" }}>
+            <div className="modal-header">
+              <div className="modal-title">
+                <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
+                Delete Designation?
+              </div>
+              <button className="modal-close" onClick={() => setDeleteDesigTarget(null)} disabled={deletingDesig}>
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+                Are you sure you want to delete designation <strong>{deleteDesigTarget.name}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDeleteDesigTarget(null)} disabled={deletingDesig}>Cancel</button>
+              <button
+                className="btn btn-filled"
+                style={{ background: "var(--error)" }}
+                onClick={confirmDeleteDesig}
+                disabled={deletingDesig}
+              >
+                {deletingDesig ? <><Spin />&nbsp;Deleting…</> : "Yes, Delete"}
               </button>
             </div>
           </div>

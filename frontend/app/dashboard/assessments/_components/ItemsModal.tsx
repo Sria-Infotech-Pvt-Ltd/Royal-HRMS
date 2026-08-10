@@ -219,8 +219,8 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openEditSection(section)}><i className="ti ti-edit" /></button>
-                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteSection(section.id)}><i className="ti ti-trash" /></button>
+                        <button className="btn btn-ghost btn-sm" title="Edit section" onClick={() => openEditSection(section)}><i className="ti ti-edit" /></button>
+                        <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete section" onClick={() => deleteSection(section.id)}><i className="ti ti-trash" /></button>
                       </div>
                     </div>
 
@@ -240,8 +240,8 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                           {item.item_type === "video" && <VideoLink url={item.video_url} />}
                         </div>
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => openEditItem(item)}><i className="ti ti-edit" /></button>
-                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteItem(item.id)}><i className="ti ti-trash" /></button>
+                          <button className="btn btn-ghost btn-sm" title="Edit item" onClick={() => openEditItem(item)}><i className="ti ti-edit" /></button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete item" onClick={() => deleteItem(item.id)}><i className="ti ti-trash" /></button>
                         </div>
                       </div>
                     ))}
@@ -267,8 +267,8 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                     <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: ".84rem", borderBottom: "1px solid var(--outline-v)" }}>
                       <i className={`ti ${item.item_type === "video" ? "ti-player-play" : "ti-help-circle"}`} style={{ color: "var(--on-variant)", fontSize: 13, flexShrink: 0 }} />
                       <span style={{ flex: 1 }}>{item.title}</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => openEditItem(item)}><i className="ti ti-edit" /></button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteItem(item.id)}><i className="ti ti-trash" /></button>
+                      <button className="btn btn-ghost btn-sm" title="Edit item" onClick={() => openEditItem(item)}><i className="ti ti-edit" /></button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete item" onClick={() => deleteItem(item.id)}><i className="ti ti-trash" /></button>
                     </div>
                   ))}
                   <button className="btn btn-ghost btn-sm mt-8" style={{ color: "var(--primary)", fontSize: ".8rem" }} onClick={() => openAddItem(null)}>
@@ -300,7 +300,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
               </div>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button className="btn btn-ghost" onClick={closePanel} disabled={saving}>Cancel</button>
-                <button className="btn btn-primary" onClick={saveSection} disabled={saving}>
+                <button className="btn btn-filled" onClick={saveSection} disabled={saving}>
                   {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : editSectionId ? "Update" : "Save"}
                 </button>
               </div>
@@ -380,7 +380,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
 
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button className="btn btn-ghost" onClick={closePanel} disabled={saving}>Cancel</button>
-                <button className="btn btn-primary" onClick={saveItem} disabled={saving}>
+                <button className="btn btn-filled" onClick={saveItem} disabled={saving}>
                   {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : editItemId ? "Update" : "Save"}
                 </button>
               </div>
@@ -390,7 +390,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
 
         <div className="modal-footer">
           {!panelMode && (
-            <button className="btn btn-secondary" onClick={openAddSection}>
+            <button className="btn btn-ghost" onClick={openAddSection}>
               <i className="ti ti-plus" /> Add Section
             </button>
           )}

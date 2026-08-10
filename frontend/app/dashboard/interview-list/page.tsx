@@ -524,18 +524,32 @@ export default function InterviewListPage() {
               >
                 <i className="ti ti-chevron-left" /> Prev
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <button
-                  key={p}
-                  className={`btn btn-sm ${p === page ? "btn-filled" : "btn-ghost"}`}
-                  onClick={() => handlePageChange(p)}
-                  disabled={loading}
-                  suppressHydrationWarning
-                  style={{ minWidth: 34 }}
-                >
-                  {p}
-                </button>
-              ))}
+              {(() => {
+                const delta = 1;
+                const left  = Math.max(2, page - delta);
+                const right = Math.min(totalPages - 1, page + delta);
+                const items: (number | "ellipsis")[] = [1];
+                if (left > 2) items.push("ellipsis");
+                for (let p = left; p <= right; p++) items.push(p);
+                if (right < totalPages - 1) items.push("ellipsis");
+                if (totalPages > 1) items.push(totalPages);
+                return items.map((p, idx) =>
+                  p === "ellipsis" ? (
+                    <span key={`e${idx}`} style={{ padding: "0 6px", color: "var(--on-variant)" }}>…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      className={`btn btn-sm ${p === page ? "btn-filled" : "btn-ghost"}`}
+                      onClick={() => handlePageChange(p)}
+                      disabled={loading}
+                      suppressHydrationWarning
+                      style={{ minWidth: 34 }}
+                    >
+                      {p}
+                    </button>
+                  )
+                );
+              })()}
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => handlePageChange(page + 1)}

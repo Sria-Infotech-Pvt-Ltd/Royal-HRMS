@@ -37,23 +37,15 @@ export default function ApprovalsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 2, borderBottom: "2px solid var(--outline-v)", marginBottom: 24 }}>
+      <div className="tabs">
         {sections.map(s => (
           <button
             key={s.key}
             suppressHydrationWarning
             onClick={() => setSection(s.key)}
-            style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "10px 20px", fontSize: 13,
-              fontWeight: section === s.key ? 600 : 400,
-              color: section === s.key ? "var(--primary)" : "var(--on-variant)",
-              background: "none", border: "none", cursor: "pointer",
-              borderBottom: section === s.key ? "2px solid var(--primary)" : "2px solid transparent",
-              marginBottom: -2, transition: "all 0.12s",
-            }}
+            className={`tab${section === s.key ? " active" : ""}`}
           >
-            <i className={`ti ${s.icon}`} style={{ fontSize: 16 }} />
+            <i className={`ti ${s.icon}`} style={{ marginRight: 5 }} />
             {s.label}
           </button>
         ))}

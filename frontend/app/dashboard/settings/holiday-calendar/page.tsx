@@ -151,35 +151,36 @@ export default function HolidayCalendarPage() {
 
       {/* ── Year navigator + quick filters ───────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-2 py-1.5 shadow-sm">
-          <button onClick={() => { setYear(y => y - 1); setPage(1); }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+        <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--outline-v)] rounded-xl px-2 py-1.5 shadow-sm">
+          <button onClick={() => { setYear(y => y - 1); setPage(1); }} aria-label="Previous year"
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--on-variant)] transition-colors">
             <i className="ti ti-chevron-left text-sm" />
           </button>
           <select
             value={year} onChange={e => { setYear(Number(e.target.value)); setPage(1); }}
-            className="text-sm font-bold text-gray-800 bg-transparent border-none outline-none px-1 cursor-pointer"
+            className="text-sm font-bold text-[var(--on-bg)] bg-transparent border-none outline-none px-1 cursor-pointer"
           >
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          <button onClick={() => { setYear(y => y + 1); setPage(1); }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+          <button onClick={() => { setYear(y => y + 1); setPage(1); }} aria-label="Next year"
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--on-variant)] transition-colors">
             <i className="ti ti-chevron-right text-sm" />
           </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <select value={fBranch} onChange={e => { setFBranch(e.target.value); setPage(1); }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white outline-none focus:border-blue-500 text-gray-700 cursor-pointer">
+            className="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer">
             <option>All Branches</option>
             {branches.map(b => <option key={b.id}>{b.branch_name}</option>)}
           </select>
           <div className="relative">
-            <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm" />
             <input
               value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search holidays…"
-              className="pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:border-blue-500 w-48"
+              aria-label="Search holidays"
+              className="pl-8 pr-3 py-2 text-sm border border-[var(--outline-v)] rounded-lg bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] w-48"
             />
           </div>
         </div>
@@ -188,19 +189,19 @@ export default function HolidayCalendarPage() {
       {/* ── Stats cards ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
         {[
-          { icon: "ti-calendar-event", color: "text-blue-700",   bg: "bg-blue-50",   label: "Total Holidays",   value: stats.total    },
-          { icon: "ti-flag",           color: "text-blue-600",   bg: "bg-blue-50",   label: "National",         value: stats.national },
-          { icon: "ti-map-pin",        color: "text-teal-600",   bg: "bg-teal-50",   label: "Regional",         value: stats.regional },
-          { icon: "ti-building",       color: "text-amber-600",  bg: "bg-amber-50",  label: "Company",          value: stats.company  },
-          { icon: "ti-calendar-check", color: "text-purple-600", bg: "bg-purple-50", label: "Optional",         value: stats.optional },
+          { icon: "ti-calendar-event", si: "si-primary", label: "Total Holidays",   value: stats.total    },
+          { icon: "ti-flag",           si: "si-info",    label: "National",         value: stats.national },
+          { icon: "ti-map-pin",        si: "si-success", label: "Regional",         value: stats.regional },
+          { icon: "ti-building",       si: "si-warn",     label: "Company",          value: stats.company  },
+          { icon: "ti-calendar-check", si: "bg-[rgba(173,149,207,0.15)] text-[var(--purple)]", label: "Optional", value: stats.optional },
         ].map(s => (
-          <div key={s.label} className="bg-white rounded-2xl border border-gray-200 shadow-sm px-4 py-4 flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl ${s.bg} ${s.color} flex items-center justify-center flex-shrink-0`}>
+          <div key={s.label} className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm px-4 py-4 flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl ${s.si} flex items-center justify-center flex-shrink-0`}>
               <i className={`ti ${s.icon} text-lg`} />
             </div>
             <div>
-              <div className="text-2xl font-extrabold text-gray-800 leading-none">{s.value}</div>
-              <div className="text-xs text-gray-400 mt-0.5">{s.label}</div>
+              <div className="text-2xl font-extrabold text-[var(--on-bg)] leading-none">{s.value}</div>
+              <div className="text-xs text-[var(--on-variant)] mt-0.5">{s.label}</div>
             </div>
           </div>
         ))}
@@ -215,27 +216,27 @@ export default function HolidayCalendarPage() {
             className={[
               "px-4 py-1.5 rounded-full text-sm font-medium border transition-all",
               filterTab === t.id
-                ? "bg-blue-700 text-white border-blue-700"
-                : "bg-white text-gray-500 border-gray-200 hover:border-blue-600 hover:text-blue-600",
+                ? "bg-[var(--primary)] text-[var(--on-primary)] border-[var(--primary)]"
+                : "bg-[var(--surface)] text-[var(--on-variant)] border-[var(--outline-v)] hover:border-[var(--primary)] hover:text-[var(--primary)]",
             ].join(" ")}
           >
             {t.label}
             <span className={[
               "ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-xs font-bold px-1",
-              filterTab === t.id ? "bg-white text-blue-700" : "bg-gray-100 text-gray-500",
+              filterTab === t.id ? "bg-[var(--surface)] text-[var(--primary)]" : "bg-[var(--bg-mid)] text-[var(--on-variant)]",
             ].join(" ")}>
               {t.count}
             </span>
           </button>
         ))}
 
-        <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="ml-auto flex items-center gap-1 bg-[var(--bg-mid)] rounded-xl p-1">
           <button onClick={() => setView("list")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${view === "list" ? "bg-white shadow-sm text-blue-700" : "text-gray-500 hover:text-gray-700"}`}>
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${view === "list" ? "bg-[var(--surface)] shadow-sm text-[var(--primary)]" : "text-[var(--on-variant)] hover:text-[var(--on-bg)]"}`}>
             <i className="ti ti-list text-sm" /> List
           </button>
           <button onClick={() => setView("calendar")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${view === "calendar" ? "bg-white shadow-sm text-blue-700" : "text-gray-500 hover:text-gray-700"}`}>
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${view === "calendar" ? "bg-[var(--surface)] shadow-sm text-[var(--primary)]" : "text-[var(--on-variant)] hover:text-[var(--on-bg)]"}`}>
             <i className="ti ti-calendar-month text-sm" /> Calendar
           </button>
         </div>
@@ -244,24 +245,24 @@ export default function HolidayCalendarPage() {
       {/* ── Additional filters row ────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={fType} onChange={e => { setFType(e.target.value as HolidayType | "all"); setPage(1); }}
-          className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white outline-none focus:border-blue-500 text-gray-600 cursor-pointer">
+          className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer">
           <option value="all">All Types</option>
           <option value="national">National</option>
           <option value="regional">Regional</option>
           <option value="company">Company</option>
         </select>
         <select value={fMonth === "all" ? "all" : fMonth} onChange={e => changeFMonth(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-          className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white outline-none focus:border-blue-500 text-gray-600 cursor-pointer">
+          className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer">
           <option value="all">All Months</option>
           {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
         </select>
         {(search || fBranch !== "All Branches" || fType !== "all" || fMonth !== "all") && (
           <button onClick={() => { setSearch(""); setFBranch("All Branches"); setFType("all"); setFMonth("all"); setPage(1); }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1">
+            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--error)] text-[var(--error)] bg-[var(--error-c)] hover:opacity-80 transition-colors flex items-center gap-1">
             <i className="ti ti-x text-xs" /> Clear Filters
           </button>
         )}
-        <span className="ml-auto text-xs text-gray-400 self-center">
+        <span className="ml-auto text-xs text-[var(--on-variant)] self-center">
           {loading ? "Loading…" : `${filtered.length} holiday${filtered.length !== 1 ? "s" : ""}`}
         </span>
       </div>
@@ -284,13 +285,13 @@ export default function HolidayCalendarPage() {
       {/* ── Type legend ───────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-4 mt-4 px-1">
         {(["national","regional","company"] as HolidayType[]).map(t => (
-          <div key={t} className="flex items-center gap-1.5 text-xs text-gray-500">
+          <div key={t} className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
             <span className={`w-2.5 h-2.5 rounded-full ${TYPE_STYLES[t].dot}`} />
             <span className="capitalize font-medium">{t}</span>
           </div>
         ))}
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          <span className="w-2.5 h-2.5 rounded-full bg-purple-400" />
+        <div className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
+          <span className="w-2.5 h-2.5 rounded-full bg-[var(--purple)]" />
           <span className="font-medium">Optional</span>
         </div>
       </div>

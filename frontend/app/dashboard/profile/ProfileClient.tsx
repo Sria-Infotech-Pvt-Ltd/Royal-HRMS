@@ -139,7 +139,7 @@ function ReadField({ label, value }: { label: string; value: string | number | n
 }
 
 export default function ProfileClient({ session }: { session: SessionPayload }) {
-  const { data: profile, loading } = useFetch<ProfileData>(API.employees.me);
+  const { data: profile, loading, error: profileError } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
 
   const [form,   setForm]   = useState<EditableFields>(EMPTY);
@@ -247,6 +247,12 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           </button>
         </div>
       </div>
+
+      {profileError && (
+        <div className="alert alert-error mb-16">
+          <i className="ti ti-alert-circle" /> {profileError}
+        </div>
+      )}
 
       {/* ── Avatar + name banner ── */}
       <div className="card mb-16" style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>

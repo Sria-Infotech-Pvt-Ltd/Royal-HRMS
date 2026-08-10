@@ -21,6 +21,7 @@ export default function SmtpSettingsPage() {
   const [saving,      setSaving]      = useState(false);
   const [activating,  setActivating]  = useState<number | null>(null);
   const [deleting,    setDeleting]    = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ApiSmtpEntry | null>(null);
 
   const [testEntry,   setTestEntry]   = useState<ApiSmtpEntry | null>(null);
   const [testEmail,   setTestEmail]   = useState("");
@@ -103,13 +104,19 @@ export default function SmtpSettingsPage() {
 
   // ── Delete ───────────────────────────────────────────────────────────────────
 
-  async function handleDelete(entry: ApiSmtpEntry) {
-    if (!window.confirm(`Delete "${entry.name}"? This cannot be undone.`)) return;
+  function handleDelete(entry: ApiSmtpEntry) {
+    setDeleteTarget(entry);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const entry = deleteTarget;
     setDeleting(entry.id);
     try {
       await clientApi.delete(smtpDetail(entry.id));
       setEntries(prev => prev.filter(e => e.id !== entry.id));
       showToast(`"${entry.name}" deleted`);
+      setDeleteTarget(null);
     } catch (err: unknown) {
       showToast((err as { message?: string }).message ?? "Failed to delete", false);
     } finally {
@@ -335,6 +342,42 @@ export default function SmtpSettingsPage() {
                   ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Sending…</>
                   : <><i className="ti ti-send" /> Send Test</>
                 }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm */}
+      {deleteTarget && (
+        <div className="modal-overlay open" style={{ zIndex: 1010 }}>
+          <div className="modal" style={{ maxWidth: "420px" }}>
+            <div className="modal-header">
+              <div className="modal-title">
+                <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
+                Delete SMTP Configuration?
+              </div>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id}>
+                <i className="ti ti-x" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+                Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id}>Cancel</button>
+              <button
+                className="btn btn-filled"
+                style={{ background: "var(--error)" }}
+                onClick={confirmDelete}
+                disabled={deleting === deleteTarget.id}
+                suppressHydrationWarning
+              >
+                {deleting === deleteTarget.id
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Deleting…</>
+                  : "Yes, Delete"}
               </button>
             </div>
           </div>

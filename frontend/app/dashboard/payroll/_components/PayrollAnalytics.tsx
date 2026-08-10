@@ -88,7 +88,7 @@ export default function PayrollAnalytics() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
       {/* KPI row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+      <div className="stats-grid" style={{ marginBottom: 0 }}>
         {[
           {
             label: "Total Payslips Issued",
@@ -135,7 +135,7 @@ export default function PayrollAnalytics() {
       </div>
 
       {/* Monthly headcount + Status breakdown */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
+      <div className="payroll-chart-row" style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
         <div className="card">
           <div className="card-header">
             <div className="card-title"><i className="ti ti-chart-bar" /> Employees Processed per Payroll Run</div>
@@ -239,6 +239,14 @@ export default function PayrollAnalytics() {
         <i className="ti ti-info-circle" />
         <span>Gross/net payroll trends, department breakdowns, and overtime cost charts will be available once dedicated analytics endpoints are built. The data above is computed live from your payroll cycle records.</span>
       </div>
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .payroll-chart-row {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

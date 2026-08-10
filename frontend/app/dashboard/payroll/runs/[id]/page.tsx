@@ -108,7 +108,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
   const statusColor = STATUS_COLOR[cycle.status] ?? "var(--on-variant)";
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+    <div>
       {/* ── Back + Header ─────────────────────────────────────────────────── */}
       <button
         className="btn btn-ghost"
@@ -166,7 +166,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
 
       {/* ── Summary Cards ─────────────────────────────────────────────────── */}
       {!loadPs && payslips.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
           {[
             { label: "Total Gross",      value: fmt(totalGross),      icon: "ti-cash" },
             { label: "Total Deductions", value: fmt(totalDeductions), icon: "ti-minus" },

@@ -16,19 +16,19 @@ import type {
 
 /** Org-wide employee picker — re-fetches as `search` changes. */
 export function useFaceRegistrationEmployeePicker(search: string) {
-  const { data, loading } = useFetch<PaginatedFaceRegistrationEmployees>(
+  const { data, loading, error } = useFetch<PaginatedFaceRegistrationEmployees>(
     API.attendance.faceRegistration.employees(search)
   );
   const employees: FaceRegistrationEmployee[] = data?.results ?? [];
-  return { employees, loading };
+  return { employees, loading, error };
 }
 
 /** A specific employee's current face-registration status (none/pending/approved/rejected). */
 export function useEmployeeFaceStatus(employeeUuid: string | null) {
-  const { data, loading, refetch } = useFetch<Partial<FaceRegistrationRequest>>(
+  const { data, loading, error, refetch } = useFetch<Partial<FaceRegistrationRequest>>(
     employeeUuid ? API.attendance.faceRegistration.employeeStatus(employeeUuid) : null
   );
-  return { status: data, loading, refetch };
+  return { status: data, loading, error, refetch };
 }
 
 export type HRCapturePhase = LivenessCapturePhase | "submitting" | "submitted";

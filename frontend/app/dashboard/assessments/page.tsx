@@ -281,24 +281,26 @@ export default function AssessmentsPage() {
   if (!isAdminView) return <EmployeeMyAssessments />;
 
   return (
-    <div className="page-body">
+    <>
 
       {/* Page header */}
-      <div className="flex items-center justify-between mb-16">
+      <div className="page-header">
         <div>
           <h2 className="page-title">Assessment Management</h2>
-          <p className="page-subtitle">Build pre-onboarding assessments and assign them to candidates</p>
+          <p className="page-sub">Build pre-onboarding assessments and assign them to candidates</p>
         </div>
-        {canCreate && (
-          <button className="btn btn-primary" onClick={openCreate}>
-            <i className="ti ti-plus" /> New Assessment
-          </button>
-        )}
+        <div className="page-actions">
+          {canCreate && (
+            <button className="btn btn-filled" onClick={openCreate}>
+              <i className="ti ti-plus" /> New Assessment
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Overall stats */}
       {!loading && assessments.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+        <div className="stats-grid">
           {[
             { label: "Total Assigned",    value: totalAssigned,   icon: "ti-users",        color: "var(--primary)" },
             { label: "Pending",           value: totalPending,    icon: "ti-clock",        color: "#d97706" },
@@ -341,7 +343,7 @@ export default function AssessmentsPage() {
           <i className="ti ti-clipboard" />
           <h3>No assessments yet</h3>
           <p>Create your first assessment to assign to candidates during onboarding.</p>
-          {canCreate && <button className="btn btn-primary mt-12" onClick={openCreate}>Create Assessment</button>}
+          {canCreate && <button className="btn btn-filled mt-12" onClick={openCreate}>Create Assessment</button>}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -379,12 +381,12 @@ export default function AssessmentsPage() {
                       </button>
                     )}
                     {canEdit && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => openEdit(a)}>
+                      <button className="btn btn-ghost btn-sm" title="Edit assessment" onClick={() => openEdit(a)}>
                         <i className="ti ti-pencil" />
                       </button>
                     )}
                     {canDelete && (
-                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} onClick={() => deleteAssessment(a.id)}>
+                      <button className="btn btn-ghost btn-sm" style={{ color: "var(--error)" }} title="Delete assessment" onClick={() => deleteAssessment(a.id)}>
                         <i className="ti ti-trash" />
                       </button>
                     )}
@@ -395,7 +397,7 @@ export default function AssessmentsPage() {
                 {expandedId === a.id && (
                   <div style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 14 }}>
                     {/* Per-test stats */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 16 }}>
                       {[
                         { label: "Items",       value: a.item_count        ?? 0, icon: "ti-list",         color: "var(--on-variant)" },
                         { label: "Assigned",    value: a.assigned_count    ?? 0, icon: "ti-users",        color: "var(--primary)" },
@@ -575,7 +577,7 @@ export default function AssessmentsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setFormModal({ open: false, target: null })}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveAssessment} disabled={saving}>
+              <button className="btn btn-filled" onClick={saveAssessment} disabled={saving}>
                 {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
               </button>
             </div>
@@ -679,7 +681,7 @@ export default function AssessmentsPage() {
 
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setAssignFor(null)}>Close</button>
-              <button className="btn btn-primary" onClick={doAssign} disabled={assigning || assignCids.length === 0}>
+              <button className="btn btn-filled" onClick={doAssign} disabled={assigning || assignCids.length === 0}>
                 {assigning
                   ? <><i className="ti ti-loader-2 spin" /> Assigning…</>
                   : <><i className="ti ti-user-plus" /> Assign{assignCids.length > 1 ? ` (${assignCids.length})` : ""}</>}
@@ -696,6 +698,6 @@ export default function AssessmentsPage() {
           onClose={() => { setItemsFor(null); refetch(); }}
         />
       )}
-    </div>
+    </>
   );
 }

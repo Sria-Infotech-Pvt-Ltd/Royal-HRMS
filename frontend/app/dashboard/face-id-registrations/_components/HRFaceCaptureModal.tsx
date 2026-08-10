@@ -52,7 +52,7 @@ export default function HRFaceCaptureModal({
     >
       <div
         className="relative flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "#fff", width: "min(440px, 92vw)" }}
+        style={{ background: "var(--surface)", width: "min(440px, 92vw)" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0" style={{ background: "var(--primary)" }}>
@@ -65,6 +65,7 @@ export default function HRFaceCaptureModal({
           <button
             onClick={handleClose}
             suppressHydrationWarning
+            aria-label="Close"
             className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
           >
             <i className="ti ti-x text-[18px]" />
