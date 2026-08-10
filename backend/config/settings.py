@@ -125,6 +125,14 @@ MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Django 5.1+ dropped the implicit default for this setting entirely (no more
+# automatic fallback to StaticFilesStorage) — django-cloudinary-storage's
+# collectstatic override reads settings.STATICFILES_STORAGE as a raw attribute,
+# so leaving it unset 500s collectstatic with AttributeError on Django 5.2.
+# Static assets stay on local disk at STATIC_ROOT; only MEDIA (see
+# DEFAULT_FILE_STORAGE below) goes to Cloudinary.
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
 # ─── Cloudinary (all FileField / ImageField uploads) ─────────────────────────
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME':             env('CLOUDINARY_CLOUD_NAME'),
