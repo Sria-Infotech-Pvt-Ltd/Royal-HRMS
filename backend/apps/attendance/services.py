@@ -13,6 +13,8 @@ import logging
 
 from django.db import transaction
 
+from core.cache_service import AttendanceSettingsCacheService
+
 from apps.attendance.models import (
     AttendanceAbsenceAlert,
     AttendanceFaceVerificationRules,
@@ -132,6 +134,11 @@ class AttendanceSettingsService:
         AttendanceFaceVerificationRules.objects.create(settings=settings, **data['face_verification'])
 
         logger.info('AttendanceSettings created (pk=%s) by user %s', settings.pk, user.pk)
+        # Every reader (onboarding's face-verification/status check, punch-time
+        # verification, the Profile page) goes through AttendanceSettingsCacheService.get(),
+        # cached for 6h (CacheTTL.ATTENDANCE_SETTINGS) — without this, a freshly
+        # created settings row wouldn't take effect anywhere until the cache expired.
+        AttendanceSettingsCacheService.invalidate()
         return AttendanceSettings.objects.select_related(*_RELATED).get(pk=settings.pk)
 
     @classmethod
@@ -167,6 +174,11 @@ class AttendanceSettingsService:
         instance.save(update_fields=['updated_by', 'updated_at'])
 
         logger.info('AttendanceSettings updated (pk=%s) by user %s', instance.pk, user.pk)
+        # Without this, toggling e.g. Face ID Verification off/on in Attendance
+        # Settings would not take effect anywhere (onboarding, punch-time
+        # verification, Profile page) for up to 6h — see the matching comment
+        # in _create above.
+        AttendanceSettingsCacheService.invalidate()
         return AttendanceSettings.objects.select_related(*_RELATED).get(pk=instance.pk)
 
     @staticmethod

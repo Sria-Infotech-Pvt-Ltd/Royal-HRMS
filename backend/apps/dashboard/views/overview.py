@@ -23,9 +23,16 @@ _TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
 
 
 def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
+    if not user:
         return False
-    if user.role.name == 'system_admin' or getattr(user, 'is_superuser', False):
+    # Superuser bypass checked BEFORE the role check — a superuser account
+    # with no linked Role row must still pass; otherwise the missing-role
+    # guard below would deny it first and this bypass would never run.
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
+        return False
+    if user.role.name == 'system_admin':
         return True
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 

@@ -157,10 +157,23 @@ if _REDIS_URL:
                 'CLIENT_CLASS': 'django_redis.client.DefaultClient',
                 'SOCKET_CONNECT_TIMEOUT': 5,
                 'SOCKET_TIMEOUT': 5,
+                # Every custom cache service in core/cache_service.py already
+                # wraps cache.get/set in try/except and falls back to the DB
+                # on failure — cache is meant to be an optimization, never a
+                # hard dependency. DRF's built-in throttle classes don't
+                # follow that pattern; they hit the cache raw, so without
+                # this a Redis outage/misconfiguration 500s every throttled
+                # endpoint (e.g. login) instead of just degrading (throttling
+                # silently no-ops) like the rest of the app already does.
+                'IGNORE_EXCEPTIONS': True,
             },
             'KEY_PREFIX': 'hrms',
         }
     }
+    # Logs a WARNING (via the django_redis.cache logger) each time
+    # IGNORE_EXCEPTIONS above swallows a Redis error, so an outage stays
+    # visible in the logs instead of failing completely silently.
+    DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
 else:
     CACHES = {
         'default': {
@@ -187,12 +200,31 @@ else:
 
 # ─── Celery ──────────────────────────────────────────────────────────────────
 # Broker: reuse the same Redis URL used by the cache layer.
-# Falls back to localhost Redis in development when REDIS_URL is not set.
 def _celery_redis_url(default: str) -> str:
     return _with_ssl_cert_reqs(env('REDIS_URL', default=default))
 
-CELERY_BROKER_URL        = _celery_redis_url('redis://localhost:6379/1')
-CELERY_RESULT_BACKEND    = _celery_redis_url('redis://localhost:6379/1')
+if _REDIS_URL:
+    CELERY_BROKER_URL        = _celery_redis_url('redis://localhost:6379/1')
+    CELERY_RESULT_BACKEND    = _celery_redis_url('redis://localhost:6379/1')
+    CELERY_TASK_ALWAYS_EAGER = False
+else:
+    # No Redis configured at all (e.g. local dev with no Docker/WSL/native
+    # Redis) — mirrors the CACHES/CHANNEL_LAYERS fallback above, which this
+    # block previously didn't: it used to default to 'redis://localhost:6379/1'
+    # unconditionally, so every .apply_async()/.delay() call (e.g.
+    # apps/recruitment/views.py's interview-scheduled email dispatch) tried
+    # and failed to reach a broker that was never configured, producing a
+    # kombu.exceptions.OperationalError on every call. ALWAYS_EAGER runs
+    # tasks synchronously in-process instead — safe here since no
+    # @shared_task in this codebase depends on true async/fire-and-forget
+    # semantics for correctness (they're all fetch-record-and-send-email /
+    # compute-and-save style). EAGER_PROPAGATES=True keeps failures visible
+    # to the same try/except that already wraps every apply_async() call
+    # site, matching today's real-broker error-logging behavior.
+    CELERY_BROKER_URL            = 'memory://'
+    CELERY_RESULT_BACKEND        = 'cache+memory://'
+    CELERY_TASK_ALWAYS_EAGER     = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TIMEZONE          = 'Asia/Kolkata'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SERIALIZER   = 'json'

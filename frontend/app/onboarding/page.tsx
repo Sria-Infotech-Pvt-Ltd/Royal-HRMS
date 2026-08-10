@@ -46,9 +46,13 @@ const STEPS = [
 ];
 
 // Appended only when the admin's org-wide Face ID Verification toggle
-// (Attendance Settings) is mandatory — see the faceMandatory fetch below.
-// Always the LAST step so steps 0-4's indices (and all the tab === N checks
-// throughout this file) never shift.
+// (Attendance Settings) is mandatory — see the faceMandatory fetch below. When
+// off, the step doesn't exist at all: the employee never sees it, and
+// "Submit for Approval" appears directly after Documents. When on, it's
+// required — the submit button below stays disabled until a face
+// registration has actually been submitted (see canSubmit). Always the LAST
+// step so steps 0-4's indices (and all the tab === N checks throughout this
+// file) never shift.
 const FACE_STEP = { label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id" };
 
 const DOC_TYPES = [
@@ -84,6 +88,14 @@ export default function OnboardingPage() {
   const [showFaceCapture, setShowFaceCapture] = useState(false);
 
   const steps = useMemo(() => (faceMandatory ? [...STEPS, FACE_STEP] : STEPS), [faceMandatory]);
+
+  // Mirrors the backend's own gate (OnboardingView._submit,
+  // apps/accounts/views.py): submission requires a face registration to
+  // *exist* when mandatory — any status (pending/approved/rejected) counts,
+  // same "submitted is enough, approval is a separate later step" bar as
+  // Documents. Keeping this identical to the backend check avoids a frontend
+  // that blocks submission the backend would actually accept, or vice versa.
+  const canSubmit = !faceMandatory || Boolean(faceRegistration);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -451,16 +463,30 @@ export default function OnboardingPage() {
                 }
               </button>
             ) : (
-              <div style={{ display: "flex", gap: ".75rem" }}>
-                <button className="btn btn-ghost" onClick={saveSection} disabled={saving} type="button">
-                  {saving ? "Saving…" : "Save Draft"}
-                </button>
-                <button className="btn btn-filled" onClick={handleSubmit} disabled={saving} type="button" style={{ background: "var(--success)", borderColor: "var(--success)" }}>
-                  {saving
-                    ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Submitting…</>
-                    : <><i className="ti ti-check" style={{ fontSize: 14 }} /> Submit for Approval</>
-                  }
-                </button>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: ".5rem" }}>
+                <div style={{ display: "flex", gap: ".75rem" }}>
+                  <button className="btn btn-ghost" onClick={saveSection} disabled={saving} type="button">
+                    {saving ? "Saving…" : "Save Draft"}
+                  </button>
+                  <button
+                    className="btn btn-filled"
+                    onClick={handleSubmit}
+                    disabled={saving || !canSubmit}
+                    type="button"
+                    style={{ background: "var(--success)", borderColor: "var(--success)" }}
+                    title={canSubmit ? undefined : "Complete Face ID registration (Step 6) before submitting."}
+                  >
+                    {saving
+                      ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> Submitting…</>
+                      : <><i className="ti ti-check" style={{ fontSize: 14 }} /> Submit for Approval</>
+                    }
+                  </button>
+                </div>
+                {!canSubmit && (
+                  <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>
+                    Complete Face ID registration (Step 6) to enable submission.
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -805,10 +831,13 @@ function TabDocuments({
 
 // ── Tab: Face ID ──────────────────────────────────────────────────────────────
 // Only rendered when the admin's org-wide Face ID Verification toggle
-// (Attendance Settings) is mandatory — see faceMandatory above. Capture goes
-// through the same FaceRegistrationModal/useFaceRegistrationCapture flow used
-// on the Profile page; "registered" here just means submitted — HR approval
-// happens afterwards, same bar as the Documents step above.
+// (Attendance Settings) is mandatory — see faceMandatory above; when off, the
+// step doesn't exist and "Submit for Approval" is reachable directly after
+// Documents (see canSubmit/steps above). Capture goes through the same
+// FaceRegistrationModal/useFaceRegistrationCapture flow used on the Profile
+// page; "registered" here just means submitted — HR approval happens
+// afterwards, but submission is already unblocked at that point (canSubmit
+// above only checks that a registration exists, not its approval status).
 
 function TabFaceId({
   registration, onRegister,
@@ -823,6 +852,7 @@ function TabFaceId({
       <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
         Your organisation requires a registered face ID for web clock-in/out. Register once here —
         we run a quick liveness check to confirm it&apos;s really you, then send it to HR for approval.
+        You won&apos;t be able to submit your onboarding profile until this step is complete.
       </p>
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
