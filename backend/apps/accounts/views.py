@@ -326,7 +326,6 @@ def _employee_dict(user: User) -> dict:
     return result
 
 
-
 # ─── Custom permissions ────────────────────────────────────────────────────────
 
 class CanManageRoles(BasePermission):
@@ -2932,15 +2931,28 @@ def _get_employee(identifier: str):
 
 def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     """
-    Non-system-admin users are always scoped to their own branch — mirrors the
-    scoping already applied to EmployeeListCreateView.get(). Returns True when
-    the employee should be treated as not found for this requester.
+    Mirrors the scoping already applied to EmployeeListCreateView.get():
+    managers (role.can_manage_team) may only act on their own direct reports,
+    and everyone else without settings.edit is scoped to their own branch.
+    Returns True when the employee should be treated as not found for this
+    requester.
+
+    A submitted-but-not-yet-approved onboarding candidate has no
+    employee.branch yet (it's only copied over from the linked Candidate at
+    approval time) — fall back to the source candidate's branch so HR can
+    still see/act on their own branch's pending submissions.
     """
-    return (
-        not _has_perm(requesting_user, 'settings.edit')
-        and bool(requesting_user.branch)
-        and employee.branch != requesting_user.branch
-    )
+    role = requesting_user.role
+    if role and role.can_manage_team:
+        return employee.reporting_manager_id != requesting_user.id
+    if not _has_perm(requesting_user, 'settings.edit') and requesting_user.branch:
+        employee_branch = employee.branch
+        if not employee_branch:
+            candidate = employee.candidate_portal.first()
+            if candidate and candidate.branch:
+                employee_branch = candidate.branch.branch_name
+        return employee_branch != requesting_user.branch
+    return False
 
 
 class EmployeeDetailView(APIView):
@@ -4087,6 +4099,9 @@ class OnboardingApprovalView(APIView):
         except User.DoesNotExist:
             return error('User not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        if _employee_out_of_branch_scope(request.user, target):
+            return error('User not found.', http_status=status.HTTP_404_NOT_FOUND)
+
         if target.onboarding_status != User.ONBOARDING_SUBMITTED:
             return error('This user has not submitted their onboarding form.')
 
@@ -4421,7 +4436,6 @@ class OnboardingApprovalView(APIView):
         from apps.accounts.serializers import OnboardingApprovalSerializer
         from apps.recruitment.models import Candidate
 
-        role_name = request.user.role.name if request.user.role else ''
         qs = (
             User.objects
             .filter(onboarding_status__in=[User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED])
@@ -4429,8 +4443,23 @@ class OnboardingApprovalView(APIView):
             .prefetch_related('employee_documents')
             .order_by('date_joined')
         )
+        role = request.user.role
         if not _has_perm(request.user, 'settings.edit'):
             qs = qs.exclude(role__name__in=['system_admin'])
+            # Same scoping as EmployeeListCreateView.get(): managers only see
+            # their direct reports; everyone else is scoped to their own branch.
+            if role and role.can_manage_team:
+                qs = qs.filter(reporting_manager=request.user)
+            elif request.user.branch:
+                # A submitted candidate who hasn't been approved yet has no
+                # User.branch (that's only copied over from the linked
+                # Candidate at approval time) — fall back to the source
+                # candidate's branch so HR still sees their own branch's
+                # pending submissions.
+                qs = qs.filter(
+                    Q(branch=request.user.branch) |
+                    Q(branch='', candidate_portal__branch__branch_name=request.user.branch)
+                ).distinct()
 
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         user_ids = [u.pk for u in page_obj.object_list]
@@ -4462,6 +4491,9 @@ class OnboardingApprovalView(APIView):
                 .get(pk=user_id)
             )
         except User.DoesNotExist:
+            return error('User not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if _employee_out_of_branch_scope(request.user, target):
             return error('User not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         candidates_by_user = {
