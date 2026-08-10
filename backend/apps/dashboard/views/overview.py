@@ -32,9 +32,13 @@ def _has_perm(user, codename: str) -> bool:
         return True
     if not user.role:
         return False
-    if user.role.name == 'system_admin':
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
+    # settings.edit is this codebase's universal "sees/does everything"
+    # signal — checking it here (permission-based) instead of a hardcoded
+    # role name means any role actually granted settings.edit gets the same
+    # bypass, and revoking it from system_admin would actually revoke it.
+    return user.role.role_permissions.filter(
+        permission__codename__in={codename, 'settings.edit'}
+    ).exists()
 
 
 def _is_system_admin(user):

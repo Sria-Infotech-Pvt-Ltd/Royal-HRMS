@@ -16,10 +16,6 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/branches": "settings.view",
   "/dashboard/attendance": "attendance.view",
   "/dashboard/payroll": "payroll.view",
-  // /dashboard/my-payslip intentionally absent — self-service, same as
-  // /dashboard/my-attendance (also absent). Backend's MyPayslipsView is
-  // IsAuthenticated-only; gating the route behind payroll.view (the admin
-  // permission) would redirect away anyone who's never been granted it.
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",
   "/dashboard/approvals": ["leave.approve", "expenses.approve"],
@@ -45,11 +41,6 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 function getPermissions(request: NextRequest): string[] {
-  // Signed JWT only — royal_hrms_user is client-writable, so falling back to
-  // it here would let a user edit their own permissions in DevTools to
-  // unlock route access. RoleBasedRefreshToken always sets a `permissions`
-  // claim (an empty array when the user has no role), so failing closed on
-  // a missing/undecodable token never legitimately blocks a real session.
   const token = request.cookies.get(ACCESS_COOKIE)?.value;
   if (!token) return [];
   const payload = decodeJwtPayload(token);
@@ -84,6 +75,17 @@ function getCanManageTeam(request: NextRequest): boolean {
   try {
     const user = JSON.parse(decodeURIComponent(raw)) as { can_manage_team?: boolean };
     return user.can_manage_team === true;
+  } catch {
+    return false;
+  }
+}
+
+function getIsSuperuser(request: NextRequest): boolean {
+  const raw = request.cookies.get(USER_COOKIE)?.value;
+  if (!raw) return false;
+  try {
+    const user = JSON.parse(decodeURIComponent(raw)) as { is_superuser?: boolean };
+    return user.is_superuser === true;
   } catch {
     return false;
   }
@@ -130,17 +132,23 @@ export function proxy(request: NextRequest) {
     const onboardingStatus = getOnboardingStatus(request);
     const assessmentStatus = getAssessmentStatus(request);
     const canManageTeam    = getCanManageTeam(request);
+    const isSuperuser      = getIsSuperuser(request);
     const isAssessmentsPage = pathname.startsWith("/onboarding/assessments");
 
     // "approved" means HR has approved the onboarding form; only then can
     // the employee access the assessment portal.
-    const needsOnboarding = onboardingStatus !== "complete";
+    // Superusers are platform/IT-provisioned admin accounts, never hired
+    // through the candidate pipeline — the onboarding wizard never applies
+    // to them, regardless of their onboarding_status value (see login/page.tsx
+    // for the matching exemption at login time).
+    const needsOnboarding = onboardingStatus !== "complete" && !isSuperuser;
     // Default assessments get auto-assigned to every new employee record on
     // creation — including managers — with no role distinction, so a manager
     // can end up with assessment_status "pending" despite the pre-onboarding
     // assessment portal being meant for new-hire employees, not managers.
-    // Exempt can_manage_team here since the backend doesn't.
-    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending" && !canManageTeam;
+    // Exempt can_manage_team here since the backend doesn't. Superusers are
+    // exempt too, for the same reason as needsOnboarding above.
+    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending" && !canManageTeam && !isSuperuser;
 
     // Block /onboarding/assessments until HR has approved the onboarding form.
     // Without this explicit check the route slips through because isOnboarding

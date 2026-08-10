@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import timedelta
 
@@ -771,19 +772,22 @@ class EmployeeProfile(models.Model):
     account_holder_name = models.CharField(max_length=150, blank=True)
     account_type        = models.CharField(max_length=10, choices=ACCOUNT_CHOICES, blank=True)
 
-    # Statutory identity
+    # Statutory identity — PII requiring encryption at rest (see CLAUDE.md §3);
+    # stored as plain CharField today, matching this model's other sensitive
+    # fields (account_number, ifsc_code) — no field-level encryption exists
+    # yet anywhere in this codebase.
     name_as_per_aadhar = models.CharField(max_length=150, blank=True, help_text='Name exactly as printed on the Aadhaar card')
     uan_number         = models.CharField(max_length=12, blank=True, help_text='12-digit Universal Account Number issued by EPFO')
+    pan_number         = models.CharField(
+        max_length=10, blank=True,
+        help_text='10-character PAN (e.g. ABCDE1234F) — unique per person, PII requiring encryption at rest.',
+    )
 
     # Emergency Contact
     emergency_name         = models.CharField(max_length=150, blank=True)
     emergency_relationship = models.CharField(max_length=50, blank=True)
     emergency_phone        = models.CharField(max_length=20, blank=True)
     emergency_email        = models.EmailField(blank=True)
-
-    # Statutory / EPF
-    uan_number          = models.CharField(max_length=12, blank=True, help_text='12-digit Universal Account Number issued by EPFO')
-    name_as_per_aadhar  = models.CharField(max_length=150, blank=True, help_text='Name exactly as printed on the Aadhaar card')
 
     # Birthday wish tracking
     birthday_wish_sent_year = models.PositiveSmallIntegerField(
@@ -800,6 +804,39 @@ class EmployeeProfile(models.Model):
 
     def __str__(self) -> str:
         return f'Profile — {self.user.email}'
+
+
+PAN_RE = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]$')
+
+
+def normalize_and_validate_pan(value: str) -> str:
+    """
+    Uppercase/strip a PAN and check its format (5 letters, 4 digits, 1 letter
+    — e.g. ABCDE1234F). Raises ValueError with a user-facing message if
+    invalid. Shared by every entry point that can set pan_number (onboarding
+    approval, self-service profile, bulk import) so the format check can
+    never drift between them.
+    """
+    value = value.strip().upper()
+    if not PAN_RE.match(value):
+        raise ValueError('Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter.')
+    return value
+
+
+def find_conflicting_pan_profile(pan_number: str, exclude_profile_pk=None) -> 'EmployeeProfile | None':
+    """
+    Return the other EmployeeProfile already holding this PAN, if any.
+
+    PAN is a permanent government ID tied to one real person for life —
+    unlike email, it can't legitimately be re-entered differently, so a
+    match here always means the same person is being registered twice
+    (e.g. re-hired under a new email in a different branch), not a
+    coincidence. Global check, not branch-scoped, for exactly that reason.
+    """
+    qs = EmployeeProfile.objects.filter(pan_number=pan_number).select_related('user')
+    if exclude_profile_pk:
+        qs = qs.exclude(pk=exclude_profile_pk)
+    return qs.first()
 
 
 # ─── Employee Documents ───────────────────────────────────────────────────────

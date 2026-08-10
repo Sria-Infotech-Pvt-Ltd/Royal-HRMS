@@ -28,6 +28,19 @@ def _has_perm(user, codename):
 _PERM_DENIED = 'You do not have permission to perform this action.'
 
 
+def _branch_out_of_scope(user, branch) -> bool:
+    """
+    Non-org-wide users (no settings.edit — e.g. Branch Admin) may only edit
+    their own assigned branch's record, never another one. settings.edit
+    holders (system_admin) bypass this entirely, same as every other scope
+    check in this codebase. Mirrors _employee_out_of_branch_scope in
+    apps/accounts/views.py.
+    """
+    if _has_perm(user, 'settings.edit'):
+        return False
+    return (user.branch or '').strip().lower() != (branch.branch_name or '').strip().lower()
+
+
 # ─── State & City (cascading dropdowns) ──────────────────────────────────────
 
 class StateListView(APIView):
@@ -211,6 +224,8 @@ class BranchDetailView(APIView):
         branch = self._get_branch(pk)
         if not branch:
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _branch_out_of_scope(request.user, branch):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         old_hr_id = branch.hr_id
         serializer = BranchSerializer(branch, data=request.data)
         if not serializer.is_valid():
@@ -238,6 +253,8 @@ class BranchDetailView(APIView):
         branch = self._get_branch(pk)
         if not branch:
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _branch_out_of_scope(request.user, branch):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         old_hr_id = branch.hr_id
         serializer = BranchSerializer(branch, data=request.data, partial=True)
         if not serializer.is_valid():
@@ -340,6 +357,8 @@ class BranchGeofencingView(APIView):
         branch = self._get_branch(pk)
         if not branch:
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _branch_out_of_scope(request.user, branch):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         from rest_framework import serializers as drf_serializers
 

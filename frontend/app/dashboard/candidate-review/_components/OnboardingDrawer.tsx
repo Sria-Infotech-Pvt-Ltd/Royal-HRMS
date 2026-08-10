@@ -19,7 +19,7 @@ interface ProfileData {
   bank_branch_name?: string; account_holder_name?: string; account_type?: string;
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
-  uan_number?: string; name_as_per_aadhar?: string;
+  uan_number?: string; name_as_per_aadhar?: string; pan_number?: string;
 }
 
 export interface ApprovalUser {
@@ -42,9 +42,11 @@ interface Props {
   acting:          boolean;
   actionErr:       string | null;
   onRemarksChange: (v: string) => void;
-  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; assessmentId?: string; uanNumber?: string; aadharName?: string }) => void;
+  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; assessmentId?: string; uanNumber?: string; aadharName?: string; panNumber?: string }) => void;
   onClose:         () => void;
 }
+
+const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
 function Row({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
@@ -82,6 +84,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [selAssessment,  setSelAssessment]  = useState("");
   const [uanNumber,      setUanNumber]      = useState(user.profile?.uan_number      ?? "");
   const [aadharName,     setAadharName]     = useState(user.profile?.name_as_per_aadhar ?? "");
+  const [panNumber,      setPanNumber]      = useState(user.profile?.pan_number      ?? "");
 
   // Fetch departments the first time the assign section appears
   useEffect(() => {
@@ -137,13 +140,28 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     setAssignErr("");
   }
 
+  // Returns null when valid, else the message to show — kept separate from
+  // the dept/desig check so callers can decide whether a given failure
+  // should also collapse the assessment step (dept/desig do; UAN/PAN don't,
+  // matching this function's pre-existing behavior for UAN).
+  function fieldValidationError(): string | null {
+    if (uanNumber && uanNumber.length !== 12) {
+      return "UAN must be exactly 12 digits, or leave it blank.";
+    }
+    if (panNumber && !PAN_RE.test(panNumber)) {
+      return "Enter a valid PAN (e.g. ABCDE1234F), or leave it blank.";
+    }
+    return null;
+  }
+
   function handleConfirm() {
     if (!selDept || !selDesig) {
       setAssignErr("Please select both Department and Designation before confirming.");
       return;
     }
-    if (uanNumber && uanNumber.length !== 12) {
-      setAssignErr("UAN must be exactly 12 digits, or leave it blank.");
+    const fieldErr = fieldValidationError();
+    if (fieldErr) {
+      setAssignErr(fieldErr);
       return;
     }
     setAssignErr("");
@@ -151,13 +169,17 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setShowAssessment(true);
       return;
     }
-    onAction(user.id, "approve", { department: selDept, designation: selDesig, uanNumber: uanNumber || undefined, aadharName: aadharName || undefined });
+    onAction(user.id, "approve", {
+      department: selDept, designation: selDesig,
+      uanNumber: uanNumber || undefined, aadharName: aadharName || undefined,
+      panNumber: panNumber ? panNumber.toUpperCase() : undefined,
+    });
   }
 
   function handleAssessmentConfirm() {
-    // The Department/Designation/UAN inputs stay visible (and editable) after
-    // the Confirm click that advances to this step, so re-check here too —
-    // without this, clearing a dropdown or the UAN field after passing that
+    // The Department/Designation/UAN/PAN inputs stay visible (and editable)
+    // after the Confirm click that advances to this step, so re-check here
+    // too — without this, clearing a dropdown or a field after passing that
     // first check would silently submit a bad value and the backend would
     // reject it.
     if (!selDept || !selDesig) {
@@ -165,8 +187,9 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setShowAssessment(false);
       return;
     }
-    if (uanNumber && uanNumber.length !== 12) {
-      setAssignErr("UAN must be exactly 12 digits, or leave it blank.");
+    const fieldErr = fieldValidationError();
+    if (fieldErr) {
+      setAssignErr(fieldErr);
       return;
     }
     onAction(user.id, "approve", {
@@ -175,6 +198,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       assessmentId: selAssessment || undefined,
       uanNumber:    uanNumber    || undefined,
       aadharName:   aadharName   || undefined,
+      panNumber:    panNumber ? panNumber.toUpperCase() : undefined,
     });
   }
 
@@ -353,6 +377,21 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                       onChange={e => setAadharName(e.target.value)}
                       placeholder="Exactly as on Aadhar card"
                     />
+                  </div>
+                  <div className="field-group" style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
+                    <label className="field-label">PAN Number</label>
+                    <input
+                      className="field-input"
+                      maxLength={10}
+                      value={panNumber}
+                      onChange={e => setPanNumber(e.target.value.toUpperCase())}
+                      placeholder="e.g. ABCDE1234F"
+                    />
+                    {panNumber.length > 0 && !PAN_RE.test(panNumber) && (
+                      <div style={{ fontSize: ".72rem", color: "var(--warn)", marginTop: 3 }}>
+                        5 letters, 4 digits, 1 letter — e.g. ABCDE1234F
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
