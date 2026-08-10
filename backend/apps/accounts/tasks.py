@@ -89,3 +89,90 @@ def send_onboarding_submitted_notification_task(self, user_id):
     result = {'user_id': user_id, 'targets': len(hr_targets), 'sent': sent}
     logger.info('send_onboarding_submitted_notification_task completed: %s', result)
     return result
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def send_onboarding_approved_notification_task(self, user_id, assigned_assessment_ids=None, has_pending=False):
+    """
+    Background delivery for the "onboarding approved" email plus one
+    "assessment assigned" email per newly-assigned assessment.
+
+    Split out of OnboardingApprovalView.post() so 1-3 sequential SMTP
+    round-trips (one per email) never sit in the request/response path —
+    on a slow SMTP connection they could exceed the frontend's axios
+    timeout even though the approval (and the email) already succeeded,
+    making HR see a false failure while the employee is already active.
+
+    Retries (up to 3, 5 min apart) only cover the setup phase (fetching the
+    target/company); once the send loop starts, a failed recipient is
+    logged and skipped, same as send_onboarding_submitted_notification_task.
+    """
+    from apps.accounts.models import Company, User
+    from apps.accounts.utils import send_template_email
+    from apps.assessments.models import Assessment
+
+    try:
+        target       = User.objects.get(pk=user_id)
+        company      = Company.objects.first()
+        company_name = company.company_name if company else ''
+        portal_url   = (company.portal_url if company else '') or ''
+        assessments_portal_url = f'{portal_url.rstrip("/")}/onboarding/assessments' if portal_url else ''
+        assessments  = list(Assessment.objects.filter(pk__in=assigned_assessment_ids or []))
+    except User.DoesNotExist:
+        logger.warning(
+            'send_onboarding_approved_notification_task: user %s no longer exists — skipping.',
+            user_id,
+        )
+        return {'user_id': user_id, 'status': 'skipped_missing'}
+    except Exception as exc:
+        logger.error(
+            'send_onboarding_approved_notification_task setup failed for %s: %s',
+            user_id, exc, exc_info=True,
+        )
+        raise self.retry(exc=exc)
+
+    try:
+        send_template_email(
+            recipient_email=target.email,
+            template_name='onboarding_approved',
+            context={
+                'employee_name':    target.full_name,
+                'company_name':     company_name,
+                'employee_id':      target.employee_id or '',
+                'designation':      target.designation or '',
+                'department':       target.department  or '',
+                'date_of_joining':  str(target.date_of_joining) if target.date_of_joining else '',
+                'portal_url':       assessments_portal_url if has_pending else portal_url,
+                'has_assessments':  'true' if has_pending else 'false',
+                'assessment_count': str(len(assessments)),
+            },
+        )
+    except Exception as exc:
+        logger.error(
+            'Failed to send onboarding approval email to %s: %s',
+            target.email, exc, exc_info=True,
+        )
+
+    sent = 0
+    for assessment in assessments:
+        try:
+            send_template_email(
+                recipient_email=target.email,
+                template_name='assessment_assigned',
+                context={
+                    'candidate_name':   target.full_name,
+                    'assessment_title': assessment.title,
+                    'company_name':     company_name,
+                    'portal_url':       assessments_portal_url or portal_url,
+                },
+            )
+            sent += 1
+        except Exception as exc:
+            logger.error(
+                'Failed to send assessment_assigned email for "%s" to %s: %s',
+                assessment.title, target.email, exc, exc_info=True,
+            )
+
+    result = {'user_id': user_id, 'assessments': len(assessments), 'sent': sent}
+    logger.info('send_onboarding_approved_notification_task completed: %s', result)
+    return result

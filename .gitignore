@@ -59,3 +59,5 @@ eslint_output.txt
 lint_output.txt
 dist/
 build/
+backend/celerybeat-schedule.dat
+backend/celerybeat-schedule.dir

@@ -174,7 +174,13 @@ export function useFaceLivenessCapture(
     setPhase("loading_models");
     try {
       await loadFaceApiModels();
-    } catch {
+    } catch (err: unknown) {
+      // Logged (not just surfaced as a generic banner) because this failure
+      // mode has more than one real cause in practice — e.g. a proxy/rewrite
+      // rule intercepting /models/* and returning HTML instead of the actual
+      // weight files, not just a genuine network drop — and the console is
+      // the only place that distinction is visible.
+      console.error("[useFaceLivenessCapture] failed to load face-api models:", err);
       setErrorMessage("Could not load face-recognition models. Check your connection and try again.");
       setPhase("error");
       return;

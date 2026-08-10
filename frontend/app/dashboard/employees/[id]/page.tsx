@@ -52,8 +52,8 @@ interface ApiEmployee {
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   onboarding_status: string;
-  reporting_manager: { id: string; name: string } | null;
-  hr:                { id: string; name: string } | null;
+  reporting_manager: { id: string; uuid: string | null; name: string } | null;
+  hr:                { id: string; uuid: string | null; name: string } | null;
   profile?: ApiProfile;
   documents?: ApiDocument[];
 }
@@ -109,9 +109,14 @@ function apiToEmployee(u: ApiEmployee): Employee {
       designation:   u.designation || "",
       branch:              u.branch || "",
       reportingManager:    u.reporting_manager?.name ?? "",
-      reportingManagerId:  u.reporting_manager?.id   ?? "",
+      // .uuid, not .id — reporting_manager.id is the display employee code
+      // (e.g. "RSS000183"), not a real primary key. Echoing that back as
+      // reporting_manager_id on save fails UUID parsing on the backend and
+      // returns "Reporting manager not found or is inactive." even when a
+      // perfectly valid manager is already assigned. Same reasoning for hr below.
+      reportingManagerId:  u.reporting_manager?.uuid ?? "",
       hr:                  u.hr?.name ?? "",
-      hrId:                u.hr?.id   ?? "",
+      hrId:                u.hr?.uuid ?? "",
       category:          "General",
       esiLocation:   "Corporate",
       metroTds:      "Metro",
@@ -183,7 +188,7 @@ export default function EmployeeProfilePage({
   const [baseTables, setBaseTables] = useState<Record<string, TableRow[]>>({});
   const [justSaved,  setJustSaved]  = useState(false);
   const [saving,     setSaving]     = useState(false);
-  const [saveError,  setSaveError]  = useState(false);
+  const [saveError,  setSaveError]  = useState<string | null>(null);
   const [isEditing,  setIsEditing]  = useState(false);
 
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
@@ -316,7 +321,7 @@ export default function EmployeeProfilePage({
   }
   async function onSave() {
     setSaving(true);
-    setSaveError(false);
+    setSaveError(null);
     setJustSaved(false);
     try {
       const employeePayload = {
@@ -368,8 +373,8 @@ export default function EmployeeProfilePage({
       setBaseTables(tables);
       setJustSaved(true);
       setIsEditing(false);
-    } catch {
-      setSaveError(true);
+    } catch (err: unknown) {
+      setSaveError((err as { message?: string })?.message ?? "Failed to save changes. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -449,7 +454,7 @@ export default function EmployeeProfilePage({
           {saveError && (
             <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-[var(--error-c)] text-[var(--error)] text-[13px] font-medium">
               <i className="ti ti-alert-circle text-[16px]" />
-              Failed to save changes. Please try again.
+              {saveError}
             </div>
           )}
         </>

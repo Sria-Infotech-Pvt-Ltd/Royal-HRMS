@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isUnrestrictedUser } from "@/lib/auth";
 
 interface StateObj {
   id: number;
@@ -88,7 +89,7 @@ const CITY_NAME_RE   = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
 export default function BranchManagement() {
   const user      = useCurrentUser();
   const canEdit   = usePermission("settings.edit");
-  const isHrAdmin = !user?.is_superuser && !!user?.branch;
+  const isHrAdmin = !isUnrestrictedUser(user) && !!user?.branch;
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [stats, setStats] = useState<BranchStats>({ total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
