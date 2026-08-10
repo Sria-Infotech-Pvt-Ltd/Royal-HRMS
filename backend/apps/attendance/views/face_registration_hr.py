@@ -29,7 +29,11 @@ from core.pagination import paginate, paginated_data
 from core.permissions import RequiresSecureTransport
 from core.responses import error, first_error, success
 
-from apps.attendance.models import FACE_RECOGNITION_MODEL_VERSION, FaceRegistrationRequest
+from apps.attendance.models import (
+    FACE_CONSENT_TEXT_VERSION,
+    FACE_RECOGNITION_MODEL_VERSION,
+    FaceRegistrationRequest,
+)
 from apps.attendance.serializers_face_registration import (
     FaceRegistrationEmployeeSerializer,
     FaceRegistrationHRRegisterSerializer,
@@ -144,6 +148,9 @@ class FaceRegistrationHRRegisterView(APIView):
         except (User.DoesNotExist, ValueError, TypeError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        # consent_acknowledged (validated True-or-reject by the serializer)
+        # confirms HR obtained the employee's consent in person before this
+        # witnessed capture — stamped server-side, same as the self-service path.
         face_request = FaceRegistrationRequest.objects.create(
             employee=employee,
             branch=_resolve_branch(employee),
@@ -155,6 +162,8 @@ class FaceRegistrationHRRegisterView(APIView):
             approved_by=request.user,
             approved_at=timezone.now(),
             notes='Registered directly by HR.',
+            consent_given_at=timezone.now(),
+            consent_text_version=FACE_CONSENT_TEXT_VERSION,
         )
         logger.info('Face registration for %s captured and auto-approved by %s', employee.email, request.user.email)
 

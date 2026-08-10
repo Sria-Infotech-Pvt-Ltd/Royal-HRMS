@@ -3,11 +3,13 @@
 // Shared by the onboarding wizard (first-time capture) and the Profile page
 // (re-capture / update an existing registration) — same capture flow, only
 // the copy differs, via the `mode` prop.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFaceRegistrationCapture } from "@/hooks/useFaceRegistrationCapture";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
+import FaceConsentPanel from "@/components/FaceConsentPanel";
+import { FACE_CONSENT_NOTICE_EMPLOYEE } from "@/lib/faceApi/consentText";
 
 interface FaceRegistrationModalProps {
   onClose: () => void;
@@ -19,6 +21,11 @@ interface FaceRegistrationModalProps {
 
 export default function FaceRegistrationModal({ onClose, mode = "register" }: FaceRegistrationModalProps) {
   const { phase, errorMessage, submittedRequest, videoRef, canvasRef, start, retry, stop } = useFaceRegistrationCapture();
+  // Gates everything below — the camera never opens (start() is never
+  // called) until this is true. Reset per modal open (no persisted "don't
+  // ask again"), since mode="update" is a materially new capture, not a
+  // continuation of a previous consent.
+  const [consentAcknowledged, setConsentAcknowledged] = useState(false);
 
   function handleClose() {
     stop(); // always release the camera, whatever phase we're in
@@ -65,6 +72,16 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
         </div>
 
         <div className="p-6" style={{ minHeight: 260 }}>
+          {!consentAcknowledged && (
+            <FaceConsentPanel
+              noticeText={FACE_CONSENT_NOTICE_EMPLOYEE}
+              onAcknowledge={() => setConsentAcknowledged(true)}
+              onCancel={handleClose}
+            />
+          )}
+
+          {consentAcknowledged && (
+          <>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
             <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
           </div>
@@ -74,7 +91,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
               icon="ti-face-id" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)"
               title={idleTitle}
               message={idleMessage}
-              action={{ label: "Start", onClick: start }}
+              action={{ label: "Start", onClick: () => start(true) }}
             />
           )}
 
@@ -136,6 +153,8 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />
+          )}
+          </>
           )}
         </div>
       </div>

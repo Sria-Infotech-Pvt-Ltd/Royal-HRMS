@@ -241,6 +241,7 @@ class FaceRegistrationHRRegisterTests(TestCase):
             'face_embedding': REGISTERED_EMBEDDING,
             'liveness_passed': True,
             'liveness_score': 0.95,
+            'consent_acknowledged': True,
         }
         payload.update(overrides)
         return self.client.post(reverse('face-registration-hr-register'), payload, format='json')
@@ -266,7 +267,8 @@ class FaceRegistrationHRRegisterTests(TestCase):
         )
         self.assertEqual(
             client.post(reverse('face-registration-hr-register'), {
-                'employee_uuid': str(self.employee.pk), 'face_embedding': REGISTERED_EMBEDDING, 'liveness_passed': True,
+                'employee_uuid': str(self.employee.pk), 'face_embedding': REGISTERED_EMBEDDING,
+                'liveness_passed': True, 'consent_acknowledged': True,
             }, format='json').status_code,
             403,
         )
