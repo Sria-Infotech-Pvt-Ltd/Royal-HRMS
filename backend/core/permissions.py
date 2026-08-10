@@ -35,9 +35,18 @@ class HasSettingsPermission(BasePermission):
     message = 'You do not have permission to manage settings.'
 
     def has_permission(self, request, view) -> bool:
-        if not (request.user and request.user.is_authenticated and request.user.role):
+        if not (request.user and request.user.is_authenticated):
             return False
-        if request.user.is_superuser or (request.user.role and request.user.role.name == 'system_admin'):
+        # Superuser bypass checked BEFORE the role check — a superuser
+        # account with no linked Role row (e.g. created outside the normal
+        # create_superuser flow) must still pass; otherwise the missing-role
+        # guard below would deny it first and this bypass would never
+        # actually run for that account.
+        if request.user.is_superuser:
+            return True
+        if not request.user.role:
+            return False
+        if request.user.role.name == 'system_admin':
             return True
         codename = 'settings.view' if request.method in _SAFE_METHODS else 'settings.edit'
         return request.user.role.role_permissions.filter(

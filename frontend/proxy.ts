@@ -187,5 +187,11 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|mp4|pdf)$).*)"],
+  // "models/" is excluded so face-api.js can load its weight files (JSON
+  // manifests + extensionless shard binaries) under /public/models/ even
+  // when the current user still needs onboarding — otherwise this proxy's
+  // onboarding-gate redirect (below) intercepts those static asset requests
+  // and 307s them to /onboarding, and face-api.js silently fails trying to
+  // parse the returned HTML as model weights.
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|models/|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|mp4|pdf|json)$).*)"],
 };
