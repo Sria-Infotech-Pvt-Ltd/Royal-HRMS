@@ -61,3 +61,6 @@ dist/
 build/
 backend/celerybeat-schedule.dat
 backend/celerybeat-schedule.dir
+backend/celerybeat-schedule
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal

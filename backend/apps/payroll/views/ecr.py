@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.responses import error
+from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollCycle, EmployeePayslip, PayrollSettings
 
 logger = logging.getLogger(__name__)
@@ -17,14 +18,6 @@ _ZERO = Decimal('0')
 def _round_int(value: Decimal) -> int:
     """Round a Decimal to the nearest integer using standard half-up rounding."""
     return int(value.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _compute_ecr_rows(cycle: PayrollCycle, settings: PayrollSettings) -> list:

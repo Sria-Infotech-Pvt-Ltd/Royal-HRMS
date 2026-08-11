@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog
@@ -31,20 +32,6 @@ def _mark_announcement_notification_read(user, announcement_id: int) -> None:
     Notification.objects.filter(
         user=user, module='announcement', reference_id=str(announcement_id), is_read=False,
     ).update(is_read=True)
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means any role actually granted settings.edit gets the same
-    # bypass, and revoking it from system_admin would actually revoke it.
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
 
 
 # ─── Permission ───────────────────────────────────────────────────────────────

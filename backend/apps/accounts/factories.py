@@ -8,9 +8,15 @@ from __future__ import annotations
 from apps.accounts.models import Permission, Role, RolePermission, User
 
 
-def make_role(name: str, display_name: str | None = None, permission_codenames=None) -> Role:
+def make_role(
+    name: str, display_name: str | None = None, permission_codenames=None,
+    can_manage_team: bool = False,
+) -> Role:
     role, _ = Role.objects.get_or_create(
-        name=name, defaults={'display_name': display_name or name.replace('_', ' ').title()},
+        name=name, defaults={
+            'display_name': display_name or name.replace('_', ' ').title(),
+            'can_manage_team': can_manage_team,
+        },
     )
     for codename in (permission_codenames or []):
         module, _, action = codename.partition('.')

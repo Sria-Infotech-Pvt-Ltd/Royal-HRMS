@@ -99,7 +99,9 @@ class LeaveRequestFlowTests(TestCase):
         cache.clear()
         self.client = APIClient()
 
-        manager_role = make_role('manager__team_lead', permission_codenames=['leave.approve'])
+        manager_role = make_role(
+            'manager__team_lead', permission_codenames=['leave.approve'], can_manage_team=True,
+        )
         employee_role = make_role('employee')
         self.manager = make_user('leavemgr@test.com', role=manager_role, password='TestPass123!')
         self.employee = make_user(
@@ -112,8 +114,8 @@ class LeaveRequestFlowTests(TestCase):
         ApprovalWorkflowRule.objects.update_or_create(
             workflow_type=ApprovalWorkflowRule.WORKFLOW_LEAVE,
             defaults={
-                'l1_approver_role': ApprovalWorkflowRule.ROLE_REPORTING_MANAGER,
-                'l2_approver_role': '',
+                'l1_approver_role': manager_role,
+                'l2_approver_role': None,
             },
         )
         LeavePolicy.objects.update_or_create(

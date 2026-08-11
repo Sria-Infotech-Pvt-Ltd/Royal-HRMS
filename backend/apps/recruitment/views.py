@@ -14,6 +14,7 @@ from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, Company, User
@@ -34,16 +35,6 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _has_perm(user, codename):
-    if not user:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    if not user.role:
-        return False
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _can_access_candidate(user, candidate) -> bool:

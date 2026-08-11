@@ -15,6 +15,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import AttendanceRecord
+from apps.branch.models import Branch, City, State
 from apps.notifications.models import Notification
 from apps.payroll.models import EmployeePayslip, PayrollCycle, PayrollSettings
 
@@ -35,7 +36,9 @@ class CycleEmployeeDailyScopingTests(TestCase):
     def setUp(self):
         cache.clear()  # avoid cross-test-class login-throttle pollution
         self.client = APIClient()
-        manager_role = make_role('manager__team_lead', permission_codenames=['payroll.view'])
+        manager_role = make_role(
+            'manager__team_lead', permission_codenames=['payroll.view'], can_manage_team=True,
+        )
         employee_role = make_role('employee')
 
         self.manager = make_user('manager@test.com', role=manager_role, password='TestPass123!')
@@ -85,11 +88,23 @@ class PayrollCycleCreationNotifiesManagersTests(TestCase):
     def setUp(self):
         cache.clear()  # avoid cross-test-class login-throttle pollution
         self.client = APIClient()
+        state, _ = State.objects.get_or_create(code='TG', defaults={'name': 'Telangana'})
+        city, _ = City.objects.get_or_create(name='Hyderabad', state=state)
+        branch = Branch.objects.create(
+            branch_code='HYD02', branch_name='Notify Test Branch', address='Test Address',
+            state=state, city=city,
+            latitude=Decimal('17.4'), longitude=Decimal('78.4'),
+            allowed_radius_meters=150, geofencing_enabled=True,
+        )
         hr_role = make_role('hr', permission_codenames=['payroll.create', 'payroll.view'])
-        manager_role = make_role('manager__team_lead')
+        manager_role = make_role('manager__team_lead', can_manage_team=True)
 
-        self.hr_user = make_user('hr@test.com', role=hr_role, password='TestPass123!')
-        self.manager = make_user('manager2@test.com', role=manager_role, password='TestPass123!')
+        self.hr_user = make_user(
+            'hr@test.com', role=hr_role, password='TestPass123!', branch=branch.branch_name,
+        )
+        self.manager = make_user(
+            'manager2@test.com', role=manager_role, password='TestPass123!', branch=branch.branch_name,
+        )
 
         _login(self.client, 'hr@test.com')
 
