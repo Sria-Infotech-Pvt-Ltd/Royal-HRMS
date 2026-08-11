@@ -136,7 +136,7 @@ function ManagerDashboardInner({ session }: Props) {
         <div style={{ margin: "6px 16px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
 
         {/* Stats grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <div className="stats-grid">
           {[
             { icon: "ti-users",        val: ov ? String(ov.team_size)               : (loading ? "—" : "0"), lbl: "Team Size",         sub: "Active direct reports" },
             { icon: "ti-checks",       val: ov ? String(ov.pending_approvals)        : (loading ? "—" : "0"), lbl: "Pending Approvals", sub: "Awaiting review"       },

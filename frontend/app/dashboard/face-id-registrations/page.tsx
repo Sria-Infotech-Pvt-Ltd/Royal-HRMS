@@ -28,8 +28,8 @@ export default function FaceIdRegistrationsPage() {
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [showCapture, setShowCapture] = useState(false);
 
-  const { employees, loading: loadingEmployees } = useFaceRegistrationEmployeePicker(search);
-  const { status, loading: loadingStatus, refetch: refetchStatus } = useEmployeeFaceStatus(selected?.uuid ?? null);
+  const { employees, loading: loadingEmployees, error: employeesError } = useFaceRegistrationEmployeePicker(search);
+  const { status, loading: loadingStatus, error: statusError, refetch: refetchStatus } = useEmployeeFaceStatus(selected?.uuid ?? null);
 
   if (!canRegister) {
     return (
@@ -67,7 +67,7 @@ export default function FaceIdRegistrationsPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 360px) 1fr", gap: 16, alignItems: "start" }}>
+      <div className="grid-2" style={{ alignItems: "start" }}>
         {/* Employee picker */}
         <div className="card">
           <div className="card-header">
@@ -80,11 +80,18 @@ export default function FaceIdRegistrationsPage() {
                 className="field-input"
                 style={{ paddingLeft: 32 }}
                 placeholder="Search by name, email or ID…"
+                aria-label="Search employees by name, email or ID"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 suppressHydrationWarning
               />
             </div>
+
+            {employeesError && (
+              <div className="alert alert-error" style={{ marginBottom: 10 }}>
+                <i className="ti ti-alert-circle" /><div>{employeesError}</div>
+              </div>
+            )}
 
             <div style={{ maxHeight: 480, overflowY: "auto", border: "1px solid var(--outline-v)", borderRadius: 8 }}>
               {loadingEmployees && (
@@ -132,6 +139,12 @@ export default function FaceIdRegistrationsPage() {
 
             {selected && (
               <>
+                {statusError && (
+                  <div className="alert alert-error" style={{ marginBottom: 16 }}>
+                    <i className="ti ti-alert-circle" /><div>{statusError}</div>
+                  </div>
+                )}
+
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: "var(--on-bg)" }}>{selected.full_name}</div>

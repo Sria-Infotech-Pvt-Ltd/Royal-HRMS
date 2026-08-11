@@ -28,6 +28,7 @@ import { WishesTab } from "./_components/WishesTab";
 import { LeaveTab } from "./_components/LeaveTab";
 import { AttendanceTab } from "./_components/AttendanceTab";
 import SalaryTab from "./_components/SalaryTab";
+import PromotionTab from "./_components/PromotionTab";
 
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -379,6 +380,11 @@ export default function EmployeeProfilePage({
       setSaving(false);
     }
   }
+  function onPromotionUpdated(designation: string, role: string) {
+    setValues(v => ({ ...v, designation, ssRole: role }));
+    setBaseValues(v => ({ ...v, designation, ssRole: role }));
+    setEmployee(prev => (prev ? { ...prev, designation } : prev));
+  }
   async function onUploadDocument(documentType: string, file: File) {
     setDocUploadError("");
     setUploadingDocType(documentType);
@@ -566,6 +572,16 @@ export default function EmployeeProfilePage({
           defaultHrName={values.hr ?? ""}
           onManagerChanged={(id, name) => setValues(v => ({ ...v, reportingManager: name, reportingManagerId: id }))}
           onHrChanged={(id, name) => setValues(v => ({ ...v, hr: name, hrId: id }))}
+        />
+      ) : tab === "promotion" ? (
+        <PromotionTab
+          employeeId={id}
+          employeeName={employee.firstName + (employee.lastName ? " " + employee.lastName : "")}
+          currentDesignation={values.designation ?? ""}
+          currentRole={values.ssRole ?? "employee"}
+          desigOptions={desigOptions}
+          roleOptions={roleOptions}
+          onUpdated={onPromotionUpdated}
         />
       ) : tab === "wishes" ? (
         <WishesTab

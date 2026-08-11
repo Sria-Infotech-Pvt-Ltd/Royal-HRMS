@@ -38,11 +38,11 @@ export default function EmployeeMyAssessments() {
   const completed   = assignments.filter(a => a.status === "complete");
 
   return (
-    <div className="page-body">
-      <div className="flex items-center justify-between mb-16">
+    <>
+      <div className="page-header">
         <div>
           <h2 className="page-title">My Assessments</h2>
-          <p className="page-subtitle">Your assigned assessments and their completion status.</p>
+          <p className="page-sub">Your assigned assessments and their completion status.</p>
         </div>
       </div>
 
@@ -66,7 +66,7 @@ export default function EmployeeMyAssessments() {
       ) : (
         <>
           {/* ── Stat cards ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 24 }}>
             {[
               { label: "Total",     value: assignments.length, icon: "ti-clipboard",      color: "var(--primary)" },
               { label: "Pending",   value: pending.length,     icon: "ti-clock",          color: "#d97706" },
@@ -127,7 +127,7 @@ export default function EmployeeMyAssessments() {
                             ? <span className="badge badge-info">In Progress</span>
                             : <span className="badge" style={{ background: "var(--bg-mid)", color: "var(--on-variant)" }}>Pending</span>}
                           <button
-                            className="btn btn-primary btn-sm"
+                            className="btn btn-filled btn-sm"
                             onClick={() => router.push("/onboarding/assessments")}
                           >
                             <i className="ti ti-pencil" /> {a.status === "in_progress" ? "Continue" : "Start"}
@@ -187,6 +187,6 @@ export default function EmployeeMyAssessments() {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

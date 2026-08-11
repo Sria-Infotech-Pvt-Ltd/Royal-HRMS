@@ -87,7 +87,7 @@ export default function SalarySetupTab() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Summary row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+      <div className="stats-grid" style={{ marginBottom: 0 }}>
         <div className="stat-card">
           <div className="stat-label">Total Employees</div>
           <div className="stat-value">{totalEmployees}</div>

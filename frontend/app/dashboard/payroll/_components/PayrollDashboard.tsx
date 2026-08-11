@@ -143,7 +143,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
       {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16 }}>
+      <div className="stats-grid" style={{ marginBottom: 0 }}>
         {STATS.map(s => (
           <div key={s.label} className="stat-card">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
@@ -161,7 +161,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
       </div>
 
       {/* Calendar + Recent runs */}
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16 }}>
+      <div className="payroll-calendar-row" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16 }}>
 
         {/* Payroll Calendar */}
         <div className="card">
@@ -456,6 +456,14 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
           onClose={() => setCancelTarget(null)}
         />
       )}
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .payroll-calendar-row {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

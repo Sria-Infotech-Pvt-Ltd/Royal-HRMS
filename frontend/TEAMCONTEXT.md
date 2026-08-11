@@ -4002,3 +4002,162 @@ Every change in this section verified live: superuser still org-wide, branch adm
 - **JWT claims (role, permissions, branch) are frozen at login time** — `TokenRefreshAPIView`'s silent 15-minute refresh reuses the existing refresh token's claims via SimpleJWT's default serializer; it does **not** re-query the database. Any role/permission change requires the affected user to log out and back in — it will not self-heal, even after days.
 - **`_get_employee`/`_employee_out_of_branch_scope` were silently dropped by the `demo` merge once already** (§1) — if more `NameError: name '_X_' is not defined` reports surface on branches that went through that merge, run a `pyflakes` sweep across the whole backend before assuming it's a new bug; there may be more casualties not yet triggered by any code path.
 - **PAN uniqueness is not yet enforced in the bulk-employee-import path** — deliberately out of scope this session (separate CSV header-mapping logic in `EmployeeBulkImportRowSerializer`); two new rows in the same import batch colliding with each other on PAN wouldn't be caught until save-time per row.
+
+---
+
+## Session — Rithwika (10 August 2026)
+
+**Branch:** `Frontend/10-08`
+
+---
+
+### 1. Payroll Run Detail — Content Wasn't Filling the Screen on Wide Viewports
+
+**File:** `app/dashboard/payroll/runs/[id]/page.tsx`
+
+Reported via screenshot: on a wide monitor, the payslips table/card stopped well short of the right edge, leaving dead space, while sibling pages (`payroll/_components/PayrollDashboard.tsx`, etc.) fill the available width. Root cause: the page's root `<div>` was wrapped in `style={{ maxWidth: 1100, margin: "0 auto" }}` — no other page in this module does that. Removed the wrapper, and switched the 4-card summary-stats grid from a fixed `gridTemplateColumns: "repeat(4, 1fr)"` to `repeat(auto-fit, minmax(200px, 1fr))` so it also reflows properly on narrow screens instead of just being a fixed 4-up row.
+
+---
+
+### 2. Full-App UI/UX Audit — 4 Parallel Reviewers Across All 26 Dashboard Sections
+
+Asked to go through the whole application and flag any UI/UX issues, not just payroll. Split the sweep into 4 parallel review passes (core HR, payroll/finance, recruitment, admin/shared) covering every route under `app/dashboard/`. Findings grouped into recurring, systemic patterns rather than one-off nitpicks — the same handful of root causes kept reappearing across unrelated pages:
+
+- Non-reflowing fixed-column grids (`repeat(4, 1fr)` etc. with no responsive fallback) in place of the shared `.stats-grid`/`.grid-2` classes (`app/globals.css`) that most pages already use.
+- Icon-only buttons (modal close, edit/delete, hamburger toggle) with no `aria-label`/`title`.
+- Pages built with raw Tailwind gray/blue utilities and hardcoded hex instead of this app's `var(--*)` theme tokens — meaning they silently don't respond to dark mode while every sibling page does.
+- Inconsistent delete-confirmation UX (`window.confirm()` vs. a real modal vs. an inline swap, for the same action in different settings sub-pages).
+- `useFetch`'s `error` value silently dropped in a couple of places, so a failed request just renders as a blank panel instead of an error banner.
+- Two dead-clickable `.btn-primary`/`.btn-secondary`/`.page-body`/`.page-subtitle` class names used in `assessments/` that don't exist anywhere in `app/globals.css` — every primary button on that page was rendering with no fill at all.
+
+Full findings list (by file) was reported back inline, not saved as a separate doc.
+
+---
+
+### 3. UI/UX Fixes Applied From the Audit — ~30 Files, via Parallel Sub-Agents
+
+Fixed the findings from §2 in six parallel batches (grouped by disjoint file sets so nothing conflicted):
+
+- **`assessments/`** (`page.tsx`, `_components/ItemsModal.tsx`, `_components/EmployeeMyAssessments.tsx`) — `btn-primary`/`btn-secondary` → `btn-filled`/`btn-ghost`; `page-body`/`page-subtitle` → the real `page-header`/`page-sub` classes; fixed-column stat grids → `.stats-grid` or `auto-fit`; added `title` to icon-only edit/delete buttons.
+- **Payroll components** (`PayrollDashboard.tsx`, `PayrollAnalytics.tsx`, `PayrollReports.tsx`, `SalarySetupTab.tsx`) — same grid-reflow fix applied throughout (`.stats-grid`/`.grid-2` where the ratio fits, a scoped `<style jsx>` breakpoint where it doesn't).
+- **`my-attendance/_components/AttendanceTab.tsx`** — same grid fix (340px/1fr clock-widget row, 6-column monthly-summary row).
+- **`my-payslip/page.tsx`**, **`settings/payroll-config/page.tsx`** — full rewrite off raw Tailwind color utilities onto the theme's CSS variables (`var(--on-bg)`, `var(--primary)`, etc.), plus responsive stacking for the sidebar/grid layouts that had none.
+- **Leave tab components** (`ApplyLeaveForm.tsx`, `TeamCalendar.tsx`, `LeaveRequestDetailModal.tsx`) — same Tailwind/hex → theme-token sweep, so these tabs stop visually diverging from `LeaveDashboard.tsx`/`LeaveAnalytics.tsx` in the same tab bar; sidebar layout in `ApplyLeaveForm.tsx` now stacks on narrow viewports.
+- **Shared dashboard components** (`components/dashboard/DashboardShell.tsx`, `KpiConsole.tsx`, `AuditLogsWidget.tsx`, `app/dashboard/_components/ManagerDashboard.tsx`, `components/FaceRegistrationModal.tsx`/`FaceVerificationModal.tsx`/`ProfilePhotoModal.tsx`) — mobile hamburger toggle got an `aria-label`; KPI health dots got a text label alongside the color (colorblind-accessible); `.stats-grid` reuse in the two dashboard widgets; `AuditLogsWidget`'s fixed-pixel-column table wrapped in `.table-wrap` for horizontal scroll; all three face modals capped at `maxHeight: 88vh` with a scrolling body, matching `DocPreviewModal.tsx`'s existing pattern.
+- **`org-chart`, `settings/holiday-calendar`, `face-id-registrations` (+ its capture modal), `branches/_components/BranchManagement.tsx`, `documents/page.tsx`, `expenses/_components/ExpenseFormModal.tsx`** — hardcoded `#fff` card backgrounds (dark-mode contrast) → `var(--surface)`; a stray `639px` breakpoint → the app-wide `768px`; icon-only close/delete buttons got `aria-label`s; `face-id-registrations`' inline grid → `.grid-2`.
+- **`interview-list/page.tsx`, `settings/departments/page.tsx`, `settings/smtp/page.tsx`, `settings/approval-rules/page.tsx`, `settings/assessment-config/page.tsx`, `profile/ProfileClient.tsx`, `hooks/useHRFaceRegistration.ts`** — interview-list pagination now truncates with an ellipsis instead of one button per page; departments/smtp delete now goes through a real confirm modal (`BranchManagement.tsx`'s existing pattern) instead of `window.confirm()`; approval-rules/assessment-config's back button moved into `page-actions` on the right, relabeled "Back" to match every other settings sub-page; `ProfileClient.tsx` and `useHRFaceRegistration.ts` now actually render the `error` they were previously dropping from `useFetch`.
+
+---
+
+### 4. `.btn-primary`/`.btn-secondary` Turned Out to Be a Wider Bug Than Just `assessments/`
+
+After §3's assessments fix, grepped the whole frontend for the same undefined classes and found **10 more occurrences across 8 files** — `components/FaceStatusPanel.tsx`, `components/ProfilePhotoModal.tsx` (×2), `app/dashboard/employees/[id]/_components/ApprovalMatrixTab.tsx`, `app/dashboard/face-id-registrations/page.tsx` (×2), `app/dashboard/profile/ProfileClient.tsx`, `app/dashboard/settings/assessment-config/page.tsx`, `app/dashboard/settings/approval-rules/page.tsx`, `app/dashboard/payroll/runs/[id]/page.tsx` — all rendering unstyled for the same reason. Also caught, separately, that `referrals/page.tsx`'s Bonus Breakdown grid (`repeat(3, 1fr)`) had been missed by §3's grid sweep even though its own Referral Rules grid two sections above it in the same file already uses the correct `auto-fill` pattern.
+
+**Only 3 of these 10 landed and stayed** (`FaceStatusPanel.tsx`, and both occurrences in `ProfilePhotoModal.tsx`) before the user asked to undo this batch of direct edits — reverted back to `btn-primary`, along with the `referrals/page.tsx` grid fix. `face-id-registrations/page.tsx` and `profile/ProfileClient.tsx`'s occurrences were never touched (out of the 8, only the ones above were attempted). **`ApprovalMatrixTab.tsx`, `settings/assessment-config/page.tsx`'s Save button, and `payroll/runs/[id]/page.tsx`'s Download-ECR button were rejected before editing** and were never changed in the first place.
+
+Net effect: **this bug is still live in all 8 files as of end of session** — see Notes below.
+
+---
+
+### 5. Payroll Run Detail — Status/Deduction Colors Explicitly Reverted to Hardcoded Hex
+
+**File:** `app/dashboard/payroll/runs/[id]/page.tsx`
+
+As part of §3's payroll batch, this file's `STATUS_COLOR` map, the status badge, the Deductions column, and the payslip-row status badge were converted from hardcoded hex (`#16a34a`, `#dc2626`, etc.) to the theme's `var(--success)`/`var(--error)`/`var(--primary)` tokens (plus a new `STATUS_COLOR_BG` map, since the old `` `${statusColor}18` `` alpha-suffix trick doesn't work once the value is a `var(...)` string). The user then asked, twice, to undo this — reverted all of it back to the original hardcoded hex values and the original `` `${statusColor}18`/`${statusColor}40` `` alpha-suffix formula. **§1's full-width/grid fix on this same file was explicitly kept** — only the color-token part was rolled back.
+
+---
+
+### 6. Approvals Page — Section-Switcher Tabs Didn't Match the Rest of the App
+
+**File:** `app/dashboard/approvals/page.tsx`
+
+Reported: the "Team Approvals / Attendance Approval / Face Registration" switcher at the top of `/dashboard/approvals` looked subtly different from every other page's tabs. Root cause: it was hand-rolled with inline styles (`borderBottom`, manually computed active color, no hover state) instead of the shared `.tabs`/`.tab`/`.tab.active` classes (`app/globals.css:553`) that `payroll/page.tsx`, `leave/_client.tsx`, `attendance/page.tsx`, `my-attendance/_client.tsx`, and `my-requests/_client.tsx` all already use for this exact pattern. Swapped it to `className="tabs"` / `className={`tab${active ? " active" : ""}`}`, matching `payroll/page.tsx`'s exact icon markup (`<i className={`ti ${icon}`} style={{ marginRight: 5 }} />`).
+
+---
+
+### 7. Team Approvals Sub-Tabs — A Different Blue Than Every Button in the App
+
+**File:** `app/globals.css`
+
+Follow-up report, this time on the "All Requests / Leave / Expense / Attendance Correction" pill-tabs *inside* Team Approvals (`_components/TeamApprovalsSection.tsx`'s `.ta-tabs`/`.ta-tab`). This one wasn't a copy-paste-inline-styles bug like §6 — `.ta-root` (`app/globals.css:2589`) is a deliberately separate, self-contained "enterprise redesign" palette, per its own comment: *"Scoped under `.ta-root` so this page's distinct palette never leaks into the rest of the app's navy design system."* Its `--ta-primary` was hardcoded to `#2563EB` (a bright blue), while every other button in the app uses `var(--primary)` (`#1e4e8c`, a navy blue) — hence the visible mismatch.
+
+Per explicit direction to make it match, repointed `--ta-primary` to `var(--primary)`, and updated `--ta-primary-hover`/`--ta-primary-soft` to the same darkening/tinting convention already used elsewhere in the app (`.btn-filled:hover`'s `#163e73`; `.scope-banner`'s `rgba(30,78,140,0.05)`) instead of their own bright-blue-derived shades. This changes every `--ta-primary`-based element in Team Approvals at once (tabs, pagination, checkboxes, hover states), not just the reported tab.
+
+---
+
+### 8. Sidebar — Selecting "Audit Log" Also Lit Up "Settings"
+
+**File:** `components/dashboard/DashboardShell.tsx`
+
+Reported: opening Audit Log highlighted both "Audit Log" *and* "Settings" in the sidebar. Root cause (`navConfig.ts`): Audit Log's path is `/dashboard/settings/audit`, nested under Settings' own path (`/dashboard/settings`), and the nav's `isActive` check (line ~167) was computed **independently per item** via `pathname.startsWith(item.path + "/")` — so both items matched at once on that URL, since neither check knew about the other.
+
+Fixed by resolving the active item **once**, across the whole nav list: filter to every item whose path matches the current pathname (exact or prefix), then take whichever match has the longest — i.e. most specific — `path`. Only that single item's `id` is used for `isActive` now, so a nested route with its own dedicated nav entry (Audit Log) always wins over its parent (Settings).
+
+---
+
+### 9. Employee Profile — Removed the Unused "Benefit" Tab
+
+**File:** `app/dashboard/employees/_data.ts`
+
+Reported: the Employee Profile tab bar showed a "Benefit" tab with nothing behind it — like `payroll`, it was falling through to the generic `TabPlaceholder` in `[id]/page.tsx`, no dedicated component or backend field. Removed the `{ id: "benefit", ... }` entry from `PROFILE_TABS`; nothing else under `employees/` referenced `"benefit"`, so no further cleanup was needed.
+
+---
+
+### 10. Employee Profile — New "Promotion" Tab
+
+**Files:** `app/dashboard/employees/_data.ts` (new tab entry), `app/dashboard/employees/[id]/page.tsx` (wiring), `app/dashboard/employees/[id]/_components/PromotionTab.tsx` (new)
+
+Added a `Promotion` tab so a designation (and, when relevant, system role) change has a dedicated place instead of going through the general Profile edit form. First pass mocked a full approval workflow — reporting-manager vs. HR-Admin approver, pending/approved states — mirroring the Leave/Expense approval pattern. Per follow-up direction: Employee Profile is only reachable by Admin/HR/System Admin roles to begin with, so there's no one further up the chain to approve — a second sign-off step was buying nothing. Simplified accordingly: submitting now calls `clientApi.put(API.employees.detail(id), { designation, role })` directly, the same endpoint `page.tsx`'s own Save button already uses, so the change applies immediately with no pending state.
+
+One guard was kept deliberately: choosing a **System role** different from the employee's current one (e.g. Employee → Manager/HR) shows a warning — *"New permissions apply at the employee's next login"* — and requires an explicit confirmation checkbox before the button enables. This isn't an approval step, just a same-screen "are you sure," but it matters given the JWT-claims-frozen-at-login behavior already documented below (07 August session notes) — flipping the DB role does nothing to an already-issued token, so the UI has to say so rather than implying the change takes effect everywhere at once.
+
+Designation/role dropdowns reuse `desigOptions`/`roleOptions` — the same lists `page.tsx` already fetches from `API.designations.list`/`API.roles.list` for the Profile tab's own edit form — passed down as props instead of being re-fetched.
+
+An "Effective date" field was added to the form on request; it's recorded on the local history row shown under the tab, but has no effect on *when* the update actually applies — there's no backend field for a scheduled/future-dated designation change, so the real update still happens immediately on submit regardless of the date chosen. Flagged this explicitly rather than letting the field imply scheduling it doesn't do.
+
+---
+
+### 11. Promotion Tab — No Backend Support This Session, By Design
+
+Per explicit direction, no backend changes were made this session. Two consequences worth flagging:
+
+- **Promotion history is session-only.** There's no promotion-record table/endpoint on the backend, so `PromotionTab.tsx` keeps its history list in local component state — it resets to empty on every page reload. The designation/role change itself is real (goes through the real `PUT /accounts/employees/{id}/` endpoint); only the log of "what got promoted, by whom, when" is not persisted anywhere.
+- **The PUT call assumes partial-update semantics that weren't independently re-verified against a running backend this session.** `PromotionTab.tsx` sends only `{ designation, role }`, not the full employee payload `page.tsx`'s own `onSave()` sends — on the assumption the serializer treats omitted fields as "no change" rather than nulling them. `onSave()` itself always sends every field and never exercises this partial path, so this is the first caller actually relying on it.
+
+---
+
+### Key Files Changed (10 August 2026)
+
+| File | Change |
+|------|--------|
+| `app/dashboard/payroll/runs/[id]/page.tsx` | Removed `maxWidth`/centering wrapper; summary grid → `auto-fit`. Status/deduction colors were converted to theme tokens then explicitly reverted back to the original hardcoded hex per user request — only the layout fix from §1 stuck. |
+| `app/dashboard/assessments/page.tsx`, `_components/ItemsModal.tsx`, `_components/EmployeeMyAssessments.tsx` | `btn-primary`/`btn-secondary`/`page-body`/`page-subtitle` → real classes; grid reflow fixes; icon-button `title`s |
+| `app/dashboard/payroll/_components/PayrollDashboard.tsx`, `PayrollAnalytics.tsx`, `PayrollReports.tsx`, `SalarySetupTab.tsx` | Fixed-column grids → `.stats-grid`/`.grid-2`/scoped responsive breakpoints |
+| `app/dashboard/my-attendance/_components/AttendanceTab.tsx` | Same grid-reflow fix (clock-widget row, monthly-summary row) |
+| `app/dashboard/my-payslip/page.tsx`, `app/dashboard/settings/payroll-config/page.tsx` | Raw Tailwind/hardcoded colors → theme CSS variables; responsive stacking added |
+| `app/dashboard/leave/_components/ApplyLeaveForm.tsx`, `TeamCalendar.tsx`, `LeaveRequestDetailModal.tsx` | Same theme-token sweep, to match `LeaveDashboard.tsx`/`LeaveAnalytics.tsx` in the same tab bar |
+| `components/dashboard/DashboardShell.tsx` | Mobile hamburger `aria-label`; **later in the same session**, sidebar active-item resolution rewritten to pick the single longest-matching nav path (fixes Audit Log/Settings double-highlight) |
+| `components/dashboard/KpiConsole.tsx`, `AuditLogsWidget.tsx`, `app/dashboard/_components/ManagerDashboard.tsx` | Health-status text labels alongside color dots; `.stats-grid` reuse; `.table-wrap` scroll wrapper |
+| `components/FaceRegistrationModal.tsx`, `FaceVerificationModal.tsx`, `ProfilePhotoModal.tsx` | `maxHeight`/scrolling body added, matching `DocPreviewModal.tsx` |
+| `app/dashboard/org-chart/_components/OrgChartClient.tsx`, `app/dashboard/settings/holiday-calendar/page.tsx`, `app/dashboard/face-id-registrations/page.tsx` + `_components/HRFaceCaptureModal.tsx`, `app/dashboard/branches/_components/BranchManagement.tsx`, `app/dashboard/documents/page.tsx`, `app/dashboard/expenses/_components/ExpenseFormModal.tsx` | Hardcoded `#fff` → `var(--surface)`; `639px` → `768px`; icon-only buttons got `aria-label`s; inline grid → `.grid-2` |
+| `app/dashboard/interview-list/page.tsx` | Pagination now truncates with an ellipsis instead of one button per page |
+| `app/dashboard/settings/departments/page.tsx`, `smtp/page.tsx` | `window.confirm()` delete → real confirm modal, matching `BranchManagement.tsx` |
+| `app/dashboard/settings/approval-rules/page.tsx`, `assessment-config/page.tsx` | Back button moved into `page-actions`, relabeled "Back" |
+| `app/dashboard/profile/ProfileClient.tsx`, `hooks/useHRFaceRegistration.ts` | Now render the `error` value previously dropped from `useFetch` |
+| `app/dashboard/approvals/page.tsx` | Section-switcher tabs → shared `.tabs`/`.tab` classes instead of hand-rolled inline styles |
+| `app/globals.css` | `.ta-root`'s `--ta-primary`/`--ta-primary-hover`/`--ta-primary-soft` repointed from a self-contained bright blue to the app's real `var(--primary)` and its existing hover/tint conventions |
+| `app/dashboard/employees/_data.ts` | Removed unused `benefit` tab entry; added new `promotion` tab entry |
+| `app/dashboard/employees/[id]/page.tsx` | Wired up `PromotionTab`; added `onPromotionUpdated` to sync `values`/`baseValues`/`employee` after a promotion so the header and Profile tab reflect it without a refetch |
+| `app/dashboard/employees/[id]/_components/PromotionTab.tsx` (new) | Current designation/role, session-only promotion history, and a Promote modal that updates the employee directly — no approval step (see §10/§11) |
+
+---
+
+### Notes for Next Developer
+
+- **The `.btn-primary`/`.btn-secondary` undefined-class bug is still live in 8 files** as of end of session — §4's fix only landed in `FaceStatusPanel.tsx` and `ProfilePhotoModal.tsx`, then even those two were reverted on request. Still broken (renders with no button fill at all): `components/FaceStatusPanel.tsx`, `components/ProfilePhotoModal.tsx` (×2), `app/dashboard/employees/[id]/_components/ApprovalMatrixTab.tsx`, `app/dashboard/face-id-registrations/page.tsx` (×2), `app/dashboard/profile/ProfileClient.tsx`, `app/dashboard/settings/assessment-config/page.tsx`'s Save button, `app/dashboard/settings/approval-rules/page.tsx`'s Save button, `app/dashboard/payroll/runs/[id]/page.tsx`'s Download-ECR button. The correct replacement is `btn-filled` (confirmed defined in `app/globals.css:344`) — same fix already applied cleanly in `assessments/`.
+- **`referrals/page.tsx`'s Bonus Breakdown grid (`repeat(3, 1fr)`, ~line 386) is still non-reflowing** — a fix was applied and then reverted per an "undo the previous prompt" request that turned out to mean something broader than intended. Its own Referral Rules grid two sections above it in the same file already shows the correct `repeat(auto-fill, minmax(290px, 1fr))` pattern to copy from.
+- **`payroll/runs/[id]/page.tsx`'s status/deduction colors are hardcoded hex on purpose, not an oversight** — this was deliberately reverted back from theme tokens per explicit request (§5). It's a real, known inconsistency against the rest of the app (every other page's status badges use `var(--success)`/`var(--error)`/`var(--primary)`), left as-is because the user asked for it twice. Worth raising again before assuming it's just an unfixed bug.
+- **`--ta-primary` and the rest of the `.ta-root` palette (`--ta-success`, `--ta-warning`, `--ta-danger`, `--ta-info`, `--ta-text`, `--ta-surface`, etc.) are still hardcoded, light-mode-only hex** (§7 only touched the primary/blue tokens, per what was actually reported) — if Team Approvals is ever opened in dark mode, expect the same "different from the rest of the app" report again, just for a different color family.
+- **The full audit from §2 covered all 26 dashboard sections but §3 only fixed the batches listed above** — a few smaller items from the original findings (e.g. `settings/permissions/page.tsx`'s CSS-only tooltip not being exposed to assistive tech, `settings/employee-code/page.tsx`'s non-wrapping flex row) were reported but not yet actioned.
+- **Promotion tab's history is not persisted** (§11) — it resets on reload; needs a real backend model/endpoint if promotion history should survive a page refresh or be visible to anyone other than whoever made the change in that session.
+- **Promotion tab's partial PUT (`{ designation, role }` only) has not been end-to-end verified against a running backend this session** — `page.tsx`'s own save flow always sends the full payload, so this is the first caller relying on partial-update semantics for `EmployeeDetailView.put()`. Worth a real check before trusting it in production.

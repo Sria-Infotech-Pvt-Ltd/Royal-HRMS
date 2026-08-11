@@ -59,6 +59,7 @@ export default function KpiConsole({ firstName }: Props) {
             <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "rgba(255,255,255,0.55)" }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.ok ? "#4ade80" : "#f87171", flexShrink: 0 }} />
               {s.label}
+              <span style={{ color: s.ok ? "#4ade80" : "#f87171", fontWeight: 700 }}>{s.ok ? "Healthy" : "Down"}</span>
             </div>
           ))}
         </div>
@@ -67,7 +68,7 @@ export default function KpiConsole({ firstName }: Props) {
       <div style={{ margin: "6px 16px 0", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="stats-grid">
         {stats.map(stat => (
           <div key={stat.lbl} style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

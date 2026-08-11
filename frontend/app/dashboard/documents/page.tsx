@@ -409,7 +409,7 @@ export default function DocumentCenterPage() {
                   {selected.title}
                 </div>
               </div>
-              <button className="modal-close" onClick={() => setSelected(null)} suppressHydrationWarning>
+              <button className="modal-close" onClick={() => setSelected(null)} aria-label="Close" suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -504,7 +504,7 @@ export default function DocumentCenterPage() {
                   </div>
                 </div>
               </div>
-              <button className="modal-close" onClick={closePreview} suppressHydrationWarning>
+              <button className="modal-close" onClick={closePreview} aria-label="Close preview" suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>
@@ -548,7 +548,7 @@ export default function DocumentCenterPage() {
                 <div className="modal-title">Upload Document</div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>PDF, Word, Excel, PPT, images, TXT, CSV — up to 25 MB</div>
               </div>
-              <button className="modal-close" onClick={closeUpload} suppressHydrationWarning>
+              <button className="modal-close" onClick={closeUpload} aria-label="Close upload" suppressHydrationWarning>
                 <i className="ti ti-x" />
               </button>
             </div>

@@ -98,15 +98,13 @@ export default function AssessmentConfigPage() {
     <div>
       <div className="page-header">
         <div>
-          <button
-            className="btn btn-ghost"
-            style={{ marginBottom: 8, fontSize: 13, padding: "4px 10px" }}
-            onClick={() => router.push("/dashboard/settings")}
-          >
-            <i className="ti ti-arrow-left" /> Settings
-          </button>
           <div className="page-title">Assessment Config</div>
           <div className="page-sub">Global defaults for all assessments — override per-assessment in the assessment form.</div>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
+            <i className="ti ti-arrow-left" /> Back
+          </button>
         </div>
       </div>
 

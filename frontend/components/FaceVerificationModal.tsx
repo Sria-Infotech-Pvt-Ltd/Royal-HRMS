@@ -65,7 +65,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
     >
       <div
         className="relative flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "#fff", width: "min(440px, 92vw)" }}
+        style={{ background: "#fff", width: "min(440px, 92vw)", maxHeight: "88vh" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0" style={{ background: "var(--primary)" }}>
@@ -82,7 +82,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
           </button>
         </div>
 
-        <div className="p-6" style={{ minHeight: 260 }}>
+        <div className="p-6" style={{ minHeight: 260, overflowY: "auto" }}>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
             <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
           </div>
