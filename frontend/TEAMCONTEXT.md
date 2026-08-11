@@ -4095,6 +4095,37 @@ Fixed by resolving the active item **once**, across the whole nav list: filter t
 
 ---
 
+### 9. Employee Profile — Removed the Unused "Benefit" Tab
+
+**File:** `app/dashboard/employees/_data.ts`
+
+Reported: the Employee Profile tab bar showed a "Benefit" tab with nothing behind it — like `payroll`, it was falling through to the generic `TabPlaceholder` in `[id]/page.tsx`, no dedicated component or backend field. Removed the `{ id: "benefit", ... }` entry from `PROFILE_TABS`; nothing else under `employees/` referenced `"benefit"`, so no further cleanup was needed.
+
+---
+
+### 10. Employee Profile — New "Promotion" Tab
+
+**Files:** `app/dashboard/employees/_data.ts` (new tab entry), `app/dashboard/employees/[id]/page.tsx` (wiring), `app/dashboard/employees/[id]/_components/PromotionTab.tsx` (new)
+
+Added a `Promotion` tab so a designation (and, when relevant, system role) change has a dedicated place instead of going through the general Profile edit form. First pass mocked a full approval workflow — reporting-manager vs. HR-Admin approver, pending/approved states — mirroring the Leave/Expense approval pattern. Per follow-up direction: Employee Profile is only reachable by Admin/HR/System Admin roles to begin with, so there's no one further up the chain to approve — a second sign-off step was buying nothing. Simplified accordingly: submitting now calls `clientApi.put(API.employees.detail(id), { designation, role })` directly, the same endpoint `page.tsx`'s own Save button already uses, so the change applies immediately with no pending state.
+
+One guard was kept deliberately: choosing a **System role** different from the employee's current one (e.g. Employee → Manager/HR) shows a warning — *"New permissions apply at the employee's next login"* — and requires an explicit confirmation checkbox before the button enables. This isn't an approval step, just a same-screen "are you sure," but it matters given the JWT-claims-frozen-at-login behavior already documented below (07 August session notes) — flipping the DB role does nothing to an already-issued token, so the UI has to say so rather than implying the change takes effect everywhere at once.
+
+Designation/role dropdowns reuse `desigOptions`/`roleOptions` — the same lists `page.tsx` already fetches from `API.designations.list`/`API.roles.list` for the Profile tab's own edit form — passed down as props instead of being re-fetched.
+
+An "Effective date" field was added to the form on request; it's recorded on the local history row shown under the tab, but has no effect on *when* the update actually applies — there's no backend field for a scheduled/future-dated designation change, so the real update still happens immediately on submit regardless of the date chosen. Flagged this explicitly rather than letting the field imply scheduling it doesn't do.
+
+---
+
+### 11. Promotion Tab — No Backend Support This Session, By Design
+
+Per explicit direction, no backend changes were made this session. Two consequences worth flagging:
+
+- **Promotion history is session-only.** There's no promotion-record table/endpoint on the backend, so `PromotionTab.tsx` keeps its history list in local component state — it resets to empty on every page reload. The designation/role change itself is real (goes through the real `PUT /accounts/employees/{id}/` endpoint); only the log of "what got promoted, by whom, when" is not persisted anywhere.
+- **The PUT call assumes partial-update semantics that weren't independently re-verified against a running backend this session.** `PromotionTab.tsx` sends only `{ designation, role }`, not the full employee payload `page.tsx`'s own `onSave()` sends — on the assumption the serializer treats omitted fields as "no change" rather than nulling them. `onSave()` itself always sends every field and never exercises this partial path, so this is the first caller actually relying on it.
+
+---
+
 ### Key Files Changed (10 August 2026)
 
 | File | Change |
@@ -4115,6 +4146,9 @@ Fixed by resolving the active item **once**, across the whole nav list: filter t
 | `app/dashboard/profile/ProfileClient.tsx`, `hooks/useHRFaceRegistration.ts` | Now render the `error` value previously dropped from `useFetch` |
 | `app/dashboard/approvals/page.tsx` | Section-switcher tabs → shared `.tabs`/`.tab` classes instead of hand-rolled inline styles |
 | `app/globals.css` | `.ta-root`'s `--ta-primary`/`--ta-primary-hover`/`--ta-primary-soft` repointed from a self-contained bright blue to the app's real `var(--primary)` and its existing hover/tint conventions |
+| `app/dashboard/employees/_data.ts` | Removed unused `benefit` tab entry; added new `promotion` tab entry |
+| `app/dashboard/employees/[id]/page.tsx` | Wired up `PromotionTab`; added `onPromotionUpdated` to sync `values`/`baseValues`/`employee` after a promotion so the header and Profile tab reflect it without a refetch |
+| `app/dashboard/employees/[id]/_components/PromotionTab.tsx` (new) | Current designation/role, session-only promotion history, and a Promote modal that updates the employee directly — no approval step (see §10/§11) |
 
 ---
 
@@ -4125,3 +4159,5 @@ Fixed by resolving the active item **once**, across the whole nav list: filter t
 - **`payroll/runs/[id]/page.tsx`'s status/deduction colors are hardcoded hex on purpose, not an oversight** — this was deliberately reverted back from theme tokens per explicit request (§5). It's a real, known inconsistency against the rest of the app (every other page's status badges use `var(--success)`/`var(--error)`/`var(--primary)`), left as-is because the user asked for it twice. Worth raising again before assuming it's just an unfixed bug.
 - **`--ta-primary` and the rest of the `.ta-root` palette (`--ta-success`, `--ta-warning`, `--ta-danger`, `--ta-info`, `--ta-text`, `--ta-surface`, etc.) are still hardcoded, light-mode-only hex** (§7 only touched the primary/blue tokens, per what was actually reported) — if Team Approvals is ever opened in dark mode, expect the same "different from the rest of the app" report again, just for a different color family.
 - **The full audit from §2 covered all 26 dashboard sections but §3 only fixed the batches listed above** — a few smaller items from the original findings (e.g. `settings/permissions/page.tsx`'s CSS-only tooltip not being exposed to assistive tech, `settings/employee-code/page.tsx`'s non-wrapping flex row) were reported but not yet actioned.
+- **Promotion tab's history is not persisted** (§11) — it resets on reload; needs a real backend model/endpoint if promotion history should survive a page refresh or be visible to anyone other than whoever made the change in that session.
+- **Promotion tab's partial PUT (`{ designation, role }` only) has not been end-to-end verified against a running backend this session** — `page.tsx`'s own save flow always sends the full payload, so this is the first caller relying on partial-update semantics for `EmployeeDetailView.put()`. Worth a real check before trusting it in production.
