@@ -3283,3 +3283,50 @@ hrms_approval_workflow_rules: l2_approver_role corrected to the 'hr' Role for al
 - Three orphan `django_migrations` records (`0058`/`0059`/`0060_refix_approval_workflow_rule_columns*`) with no matching files — confirmed harmless, not cleaned up.
 - Frontend implementation of the Announcements Branch+Visibility+Department form redesign (backend confirmed ready, contract given above) — not started.
 - Gmail SMTP daily send limit will keep tripping until it resets or a higher-volume provider/account is configured for real usage.
+
+---
+
+## Session Log — 2026-08-11
+**Author: G.Durga Prasad**
+**Branch: Backend/11/08/2026**
+
+### Bug Fixes Shipped
+
+**1. Duplicate candidate records — same email could be added repeatedly**
+- Root cause: `Candidate.email` has no `unique=True`, and `CandidateCreateSerializer.validate_email()` did no duplicate lookup at all — confirmed live via two real rows for the same email (one "Interview Scheduled", one "Converted to Employee") showing up twice in the Hyderabad Interview List.
+- Fix: `validate_email()` now rejects a create when `Candidate.objects.filter(email__iexact=value).exists()`, naming the existing candidate's name/status/position in the error.
+- Verified live via the real serializer with the exact duplicate email (rejected with a clear message) and a fresh email (still passes).
+- File: `backend/apps/recruitment/serializers.py`
+- Cleaned up the pre-existing stale duplicate row (id=140, "Interview Scheduled") per explicit confirmation — kept id=141 (the real converted-to-employee outcome).
+
+**2. Payroll seed migration crashes on a from-scratch `migrate`**
+- Root cause: `hrms/0013_seed_leave_approval_workflow.py` assigns raw strings (`'reporting_manager'`/`'hr_manager'`) to `ApprovalWorkflowRule.l1_approver_role`/`l2_approver_role`, fields that `accounts/0049_approval_workflow_role_fk` later converts to `ForeignKey(Role)`. `0013` only declared a dependency on `accounts/0042`, so Django's planner was free to run `0049` first on a fresh install — confirmed via `MigrationExecutor` simulation (`accounts.0049` at plan position 69, `hrms.0013` at 161) before touching anything. Every real environment was unaffected only because it migrated incrementally in original chronological order.
+- Fix: added `run_before = [('accounts', '0049_approval_workflow_role_fk')]` to the already-applied `hrms/0013` file — additive only, no change to its `operations`, so zero effect on databases where it already ran. Explicit, documented exception to the "never edit an applied migration" rule (approved this session) since no new-migration approach could work without breaking `InconsistentMigrationHistory` on every already-migrated environment.
+- Verified: `makemigrations --check` clean against the live dev DB (nothing broke), and the fresh-install plan simulation now shows `hrms.0013` before `accounts.0049`.
+- File: `backend/apps/hrms/migrations/0013_seed_leave_approval_workflow.py`
+
+**3. Four real test-suite bugs, all traced to the same `l1/l2_approver_role` FK conversion**
+- `apps/hrms/tests.py` — referenced the removed `ApprovalWorkflowRule.ROLE_REPORTING_MANAGER` string constant; fixed to assign an actual `Role` instance (`l2_approver_role: None` for the single-level test flow).
+- `apps/accounts/factories.py` `make_role()` — had no way to set `can_manage_team`, so every "manager" role built by tests defaulted to `False`, silently breaking `_is_manager()`/`_resolve_approver()` checks. Added an explicit `can_manage_team: bool = False` param; updated the 3 call sites that represent real manager roles.
+- `apps/payroll/tests.py` `PayrollCycleCreationNotifiesManagersTests` — `hr_user`/`manager` fixtures had no `branch`, but cycle creation and the manager-notification query both require one. Added a real `Branch`/`State`/`City` fixture.
+- `apps/voice_commands/tests/test_approve_reject_leave.py` — 3 `SimpleTestCase` methods crashed with `DatabaseOperationForbidden` because the real approval flow calls `push_leave_update()` (an unmocked `User.objects.filter(...)` query). Mocked it at its source (`apps.dashboard.views.overview.push_leave_update`) rather than switching to a real `TestCase`, to avoid also exercising unrelated cache/channel-layer code.
+- All 11 previously-failing tests verified passing; a 555-test regression sweep across `hrms`/`payroll`/`accounts`/`voice_commands` surfaced one unrelated stale-test-database schema-drift failure (`consent_text_version` column missing its default on `test_neondb` only — confirmed the real runtime `neondb` already has the default, so no live user impact; left alone per explicit decision).
+
+### Code Quality — `_has_perm` centralized (major refactor)
+
+- Found `_has_perm(user, codename)` — the core role/permission-codename check — copy-pasted independently across **36 files**. Verified precisely (not just trusted a summary): exact ordering/behavior extracted and tabulated for every copy.
+- Confirmed two real, live security inconsistencies from the drift:
+  - **33 of 36** copies check `if not user.role: return False` *before* the superuser bypass (11 of those have no superuser bypass at all), vs. 3 copies that correctly check superuser first. Proved a live divergence: `apps/dashboard/views/overview.py` returns `True` for a superuser with no linked `Role` row; `apps/dashboard/views/manager.py` returned `False` for the exact same account.
+  - The documented "`settings.edit` overrides every specific codename" rule (comment present verbatim in several files) was only actually implemented in **13 of 36** copies — every single payroll `_has_perm`, plus `branch`, `recruitment`, and 3 `assessments` files, did a strict codename-only check with no fallback.
+- Fix: added one `has_perm(user, codename)` to `backend/core/permissions.py` (correct superuser-first ordering + the `settings.edit` bypass), then updated all 36 call sites to `from core.permissions import has_perm as _has_perm` instead of redefining it. `apps/attendance/views/face_registration_hr.py` needed no change — it already imported `_has_perm` from `face_registration.py`.
+- Also deduplicated three near-identical "today's clock-in status" blocks inside `apps/dashboard/views/overview.py` (`HRKPIView`, `EmployeeKPIView`, `EmployeeAttendanceStatusView`) into one shared `_todays_attendance(employee, today)` helper, following the file's existing `_headcount_data()` shared-helper pattern.
+- Verified: `manage.py check` clean; full test suite re-run in progress at time of writing.
+
+### Repo Cleanup
+
+- `.gitignore` — added `backend/celerybeat-schedule`, `-shm`, `-wal` (Celery Beat's newer SQLite-backed runtime state, same category as the already-ignored `.dat`/`.dir`).
+- Removed `royal-hrms (7).html` — a 452KB standalone static mockup that had been committed at the repo root (CDN-loaded fonts/icons, unrelated to the real `frontend/` Next.js app); violated the no-files-in-root rule.
+
+### Nothing committed
+
+All of the above is still local working-tree changes (per this session's standing rule: never commit/push without an explicit request) — ready for review before staging.

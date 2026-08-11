@@ -3,18 +3,13 @@ import logging
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
 from ..models import AssessmentSettings
 from ..serializers import AssessmentSettingsSerializer
 
 logger = logging.getLogger(__name__)
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class AssessmentSettingsView(APIView):

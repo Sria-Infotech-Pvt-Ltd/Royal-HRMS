@@ -110,6 +110,12 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
         value = value.strip().lower()
         if not value:
             raise serializers.ValidationError('Email address is required.')
+        existing = Candidate.objects.filter(email__iexact=value).first()
+        if existing:
+            raise serializers.ValidationError(
+                f'A candidate with this email already exists: {existing.name} '
+                f'({existing.get_status_display()} for {existing.position_applied}).'
+            )
         return value
 
     def validate_phone(self, value: str) -> str:

@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from ..models import (
@@ -76,20 +77,6 @@ def _resolve_approval_chain(employee):
     l1 = _resolve_approver(rule.l1_approver_role, employee) if rule.l1_approver_role else None
     l2 = _resolve_approver(rule.l2_approver_role, employee) if rule.l2_approver_role else None
     return l1, l2
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means any role actually granted settings.edit gets the same
-    # bypass, and revoking it from system_admin would actually revoke it.
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
 
 
 def _user_branch(user) -> str:

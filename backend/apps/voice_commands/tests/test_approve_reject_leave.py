@@ -229,10 +229,13 @@ class SingleMatchThenYesFullFlowTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
+    @patch('apps.dashboard.views.overview.push_leave_update')
     @patch('apps.voice_commands.executor_approval.force_authenticate')
     @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
     @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
-    def test_yes_triggers_the_real_approval_call(self, mock_list_view, mock_approval_view, mock_force_authenticate):
+    def test_yes_triggers_the_real_approval_call(
+        self, mock_list_view, mock_approval_view, mock_force_authenticate, mock_push_leave_update,
+    ):
         mock_list_view.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-1', 'Sarah Khan', leave_type_display='Sick Leave')],
         )
@@ -260,10 +263,13 @@ class SingleMatchThenYesFullFlowTests(SimpleTestCase):
         sent_body = json.loads(call_args.args[0].body)
         self.assertEqual(sent_body['action'], 'approve')
 
+    @patch('apps.dashboard.views.overview.push_leave_update')
     @patch('apps.voice_commands.executor_approval.force_authenticate')
     @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
     @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
-    def test_reject_leave_sends_action_reject(self, mock_list_view, mock_approval_view, mock_force_authenticate):
+    def test_reject_leave_sends_action_reject(
+        self, mock_list_view, mock_approval_view, mock_force_authenticate, mock_push_leave_update,
+    ):
         mock_list_view.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-9', 'Sarah Khan')],
         )
@@ -321,11 +327,12 @@ class AmbiguousConfirmationAnswerTests(SimpleTestCase):
             p.start()
             self.addCleanup(p.stop)
 
+    @patch('apps.dashboard.views.overview.push_leave_update')
     @patch('apps.voice_commands.executor_approval.LeaveApprovalView')
     @patch('apps.voice_commands.executor_approval.force_authenticate')
     @patch('apps.voice_commands.executor_approval.LeaveRequestListCreateView')
     def test_unclear_answer_reasks_and_keeps_the_pending_request_id(
-        self, mock_list_view, mock_force_authenticate, mock_approval_view,
+        self, mock_list_view, mock_force_authenticate, mock_approval_view, mock_push_leave_update,
     ):
         mock_list_view.as_view.return_value.return_value = _team_queue_response(
             [_pending_row('req-1', 'Sarah Khan')],

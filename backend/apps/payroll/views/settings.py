@@ -3,18 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error, first_error
+from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollSettings
 from apps.payroll.serializers import PayrollSettingsSerializer
 
 logger = logging.getLogger(__name__)
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class PayrollSettingsView(APIView):

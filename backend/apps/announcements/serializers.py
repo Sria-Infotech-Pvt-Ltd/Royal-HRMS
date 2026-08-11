@@ -2,24 +2,12 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from core.permissions import has_perm as _has_perm
+
 from apps.accounts.models import Department
 from apps.branch.models import Branch
 
 from .models import Announcement, AnnouncementReaction
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means any role actually granted settings.edit gets the same
-    # bypass, and revoking it from system_admin would actually revoke it.
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):

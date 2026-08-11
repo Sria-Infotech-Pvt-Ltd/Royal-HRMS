@@ -4,6 +4,35 @@ from rest_framework.permissions import BasePermission
 _SAFE_METHODS = frozenset(('GET', 'HEAD', 'OPTIONS'))
 
 
+def has_perm(user, codename: str) -> bool:
+    """
+    True if user's role carries the given permission codename.
+
+    Single shared implementation — this used to be copy-pasted independently
+    across 36 view/serializer files and had drifted into three incompatible
+    behaviors: superuser-bypass checked before vs. after the role-null guard
+    (so a superuser with no linked Role row passed in some views and was
+    denied in others), and some copies missing the superuser bypass
+    entirely. Always use this instead of redefining _has_perm locally.
+    """
+    if not user:
+        return False
+    # Superuser bypass checked BEFORE the role check — a superuser account
+    # with no linked Role row must still pass; otherwise the missing-role
+    # guard below would deny it first and this bypass would never run.
+    if getattr(user, 'is_superuser', False):
+        return True
+    if not user.role:
+        return False
+    # settings.edit is this codebase's universal "sees/does everything"
+    # signal — checking it here (permission-based) instead of a hardcoded
+    # role name means any role actually granted settings.edit gets the same
+    # bypass, and revoking it from system_admin would actually revoke it.
+    return user.role.role_permissions.filter(
+        permission__codename__in={codename, 'settings.edit'}
+    ).exists()
+
+
 class RequiresSecureTransport(BasePermission):
     """
     Rejects any request not carrying request.is_secure() == True — for

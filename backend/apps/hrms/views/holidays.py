@@ -4,26 +4,13 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
 from ..models import Holiday
 from ..serializers import HolidayCreateSerializer, HolidaySerializer
 
 logger = logging.getLogger(__name__)
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means any role actually granted settings.edit gets the same
-    # bypass, and revoking it from system_admin would actually revoke it.
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
 
 
 def _is_unrestricted(user) -> bool:

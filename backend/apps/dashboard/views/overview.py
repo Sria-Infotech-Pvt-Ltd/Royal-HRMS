@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import HasCompletedOnboarding
+from core.permissions import HasCompletedOnboarding, has_perm as _has_perm
 from core.responses import error, success
 
 logger = logging.getLogger(__name__)
@@ -19,26 +19,6 @@ _TTL_HEADCOUNT     = 12 * 3600   # 12 h
 _TTL_FUNNEL        = 10 * 60     # 10 min
 _TTL_ACTION_QUEUE  = 45          # seconds — action-queue counts, short TTL to stay near-real-time
 _TTL_ATTENDANCE    = 3  * 60     # today's attendance breakdown
-
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user:
-        return False
-    # Superuser bypass checked BEFORE the role check — a superuser account
-    # with no linked Role row must still pass; otherwise the missing-role
-    # guard below would deny it first and this bypass would never run.
-    if getattr(user, 'is_superuser', False):
-        return True
-    if not user.role:
-        return False
-    # settings.edit is this codebase's universal "sees/does everything"
-    # signal — checking it here (permission-based) instead of a hardcoded
-    # role name means any role actually granted settings.edit gets the same
-    # bypass, and revoking it from system_admin would actually revoke it.
-    return user.role.role_permissions.filter(
-        permission__codename__in={codename, 'settings.edit'}
-    ).exists()
 
 
 def _is_system_admin(user):
@@ -65,6 +45,27 @@ def _hr_dashboard_branch(user):
     if getattr(user, 'is_superuser', False):
         return None
     return user.branch or None
+
+
+def _todays_attendance(employee, today):
+    """
+    Shared 'today's attendance' lookup — used by HRKPIView, EmployeeKPIView,
+    and EmployeeAttendanceStatusView. Returns (today_attendance, is_clocked_in);
+    today_attendance is None when there's no record for today yet.
+    """
+    from apps.attendance.models import AttendanceRecord
+
+    record = AttendanceRecord.objects.filter(employee=employee, date=today).first()
+    if not record:
+        return None, False
+    today_attendance = {
+        'status':                record.status,
+        'first_punch_in':        str(record.first_punch_in) if record.first_punch_in else None,
+        'last_punch_out':        str(record.last_punch_out) if record.last_punch_out else None,
+        'total_working_minutes': record.total_working_minutes,
+    }
+    is_clocked_in = bool(record.first_punch_in and not record.last_punch_out)
+    return today_attendance, is_clocked_in
 
 
 def _headcount_data():
@@ -281,20 +282,7 @@ class HRKPIView(APIView):
         pending_actions = leave_pending + expense_pending + onboarding_pending
 
         # Requesting user's own attendance today
-        record = AttendanceRecord.objects.filter(employee=request.user, date=today).first()
-        today_attendance = None
-        if record:
-            today_attendance = {
-                'status':                record.status,
-                'first_punch_in':        str(record.first_punch_in) if record.first_punch_in else None,
-                'last_punch_out':        str(record.last_punch_out) if record.last_punch_out else None,
-                'total_working_minutes': record.total_working_minutes,
-            }
-        clocked_in = bool(
-            today_attendance and
-            today_attendance['first_punch_in'] and
-            not today_attendance['last_punch_out']
-        )
+        today_attendance, clocked_in = _todays_attendance(request.user, today)
 
         return success('HR dashboard KPIs fetched successfully.', data={
             'total_workforce':               total_workforce,
@@ -571,20 +559,7 @@ class EmployeeKPIView(APIView):
         pending_action_items = profile_incomplete + pending_corrections
 
         # Today's attendance
-        record = AttendanceRecord.objects.filter(employee=employee, date=today).first()
-        today_attendance = None
-        if record:
-            today_attendance = {
-                'status':                record.status,
-                'first_punch_in':        str(record.first_punch_in) if record.first_punch_in else None,
-                'last_punch_out':        str(record.last_punch_out) if record.last_punch_out else None,
-                'total_working_minutes': record.total_working_minutes,
-            }
-        is_clocked_in = bool(
-            today_attendance and
-            today_attendance['first_punch_in'] and
-            not today_attendance['last_punch_out']
-        )
+        today_attendance, is_clocked_in = _todays_attendance(employee, today)
 
         return success('Employee dashboard KPIs fetched successfully.', data={
             'days_present':           summary.get('days_present', 0),
@@ -683,19 +658,16 @@ class EmployeeAttendanceStatusView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
-        from apps.attendance.models import AttendanceRecord
-
         today    = timezone.localdate()
         employee = request.user
-        record   = AttendanceRecord.objects.filter(employee=employee, date=today).first()
+        today_attendance, is_clocked_in = _todays_attendance(employee, today)
 
-        if record:
-            clock_in_time   = str(record.first_punch_in)[:5]  if record.first_punch_in  else None
-            clock_out_time  = str(record.last_punch_out)[:5]  if record.last_punch_out   else None
-            working_minutes = record.total_working_minutes or 0
-            is_clocked_in   = bool(record.first_punch_in and not record.last_punch_out)
+        if today_attendance:
+            clock_in_time   = today_attendance['first_punch_in'][:5] if today_attendance['first_punch_in'] else None
+            clock_out_time  = today_attendance['last_punch_out'][:5] if today_attendance['last_punch_out'] else None
+            working_minutes = today_attendance['total_working_minutes'] or 0
         else:
-            clock_in_time, clock_out_time, working_minutes, is_clocked_in = None, None, 0, False
+            clock_in_time, clock_out_time, working_minutes = None, None, 0
 
         hours, minutes = divmod(working_minutes, 60)
 

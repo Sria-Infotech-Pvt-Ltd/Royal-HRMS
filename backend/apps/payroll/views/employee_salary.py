@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 from apps.payroll.models import EmployeeSalaryConfig
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
@@ -23,14 +24,6 @@ def _resolve_employee(identifier):
         return User.objects.filter(employee_id=identifier, is_active=True).first()
 
 logger = logging.getLogger(__name__)
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 class EmployeeSalaryConfigListView(APIView):

@@ -6,20 +6,13 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error
+from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollCycle, ManagerAttendanceApproval
 from apps.payroll.serializers import PayrollCycleSerializer, ManagerAttendanceApprovalSerializer
 
 logger = logging.getLogger(__name__)
 
 HR_PERMISSION = 'payroll.edit'
-
-
-def _has_perm(user, codename):
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _is_manager(user):

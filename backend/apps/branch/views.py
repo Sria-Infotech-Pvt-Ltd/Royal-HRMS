@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, User
@@ -16,14 +17,6 @@ from apps.branch.serializers import BranchSerializer, CitySerializer, StateSeria
 from apps.branch.utils import generate_branch_code
 
 logger = logging.getLogger(__name__)
-
-
-def _has_perm(user, codename):
-    """Return True if the authenticated user's role carries the given permission codename."""
-    if not user or not user.role:
-        return False
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
-
 
 _PERM_DENIED = 'You do not have permission to perform this action.'
 

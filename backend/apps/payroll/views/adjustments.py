@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error, first_error
 from core.pagination import paginate, paginated_data
+from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollAdjustment
 from apps.payroll.serializers import PayrollAdjustmentSerializer
 from apps.accounts.models import User
@@ -16,14 +17,6 @@ from apps.accounts.models import User
 logger = logging.getLogger(__name__)
 
 _ALLOWED_TYPES = {PayrollAdjustment.ADDITION, PayrollAdjustment.DEDUCTION, PayrollAdjustment.ARREAR}
-
-
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
 def _parse_month(value) -> date | None:

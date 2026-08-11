@@ -5,12 +5,14 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error, first_error
 from core.pagination import paginate, paginated_data
+from core.permissions import has_perm as _has_perm
 from apps.payroll.models import (
     PayrollCycle,
     PayrollSettings,
@@ -397,14 +399,6 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
     return {'created_count': len(computed), 'skipped': skipped}
 
 
-def _has_perm(user, codename: str) -> bool:
-    if not user or not user.role:
-        return False
-    if getattr(user, 'is_superuser', False):
-        return True
-    return user.role.role_permissions.filter(permission__codename=codename).exists()
-
-
 def _can_l1_approve(user):
     """True for any user whose role has can_manage_team, plus HR/sysadmin as fallback."""
     if not user or not user.role:
@@ -468,12 +462,18 @@ class PayrollCycleListView(APIView):
         if not _has_perm(request.user, 'payroll.create'):
             return error('Only HR admin can create payroll cycles.', http_status=403)
 
-        cycle_start = request.data.get('cycle_start')
-        cycle_end   = request.data.get('cycle_end')
-        pay_date    = request.data.get('pay_date')
+        # parse_date() (not raw strings) — PayrollCycle.objects.create() below
+        # doesn't run full_clean(), so an unparsed string would sit on the
+        # in-memory `cycle.cycle_start` as a plain str; notify_l1_approval_required()
+        # immediately after calls .strftime() on it and crashes (silently, since
+        # the seeding block below is wrapped in a broad except) — every real
+        # cycle created through this endpoint has failed to notify its manager.
+        cycle_start = parse_date(request.data.get('cycle_start') or '')
+        cycle_end   = parse_date(request.data.get('cycle_end') or '')
+        pay_date    = parse_date(request.data.get('pay_date') or '')
 
         if not all([cycle_start, cycle_end, pay_date]):
-            return error('cycle_start, cycle_end, and pay_date are required.')
+            return error('cycle_start, cycle_end, and pay_date are required and must be valid YYYY-MM-DD dates.')
 
         # Resolve branch: admin may pass branch_id, HR uses their own branch
         if _is_admin(request.user):
