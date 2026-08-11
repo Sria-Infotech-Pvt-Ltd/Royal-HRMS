@@ -32,7 +32,11 @@ from core.pagination import paginate, paginated_data
 from core.permissions import RequiresSecureTransport, has_perm as _has_perm
 from core.responses import error, first_error, success
 
-from apps.attendance.models import FACE_RECOGNITION_MODEL_VERSION, FaceRegistrationRequest
+from apps.attendance.models import (
+    FACE_CONSENT_TEXT_VERSION,
+    FACE_RECOGNITION_MODEL_VERSION,
+    FaceRegistrationRequest,
+)
 from apps.attendance.serializers_face_registration import (
     FaceRegistrationDecisionSerializer,
     FaceRegistrationReadSerializer,
@@ -78,6 +82,10 @@ class FaceRegistrationSubmitView(APIView):
             )
 
         data = serializer.validated_data
+        # consent_acknowledged is validated True-or-reject by the serializer;
+        # the timestamp/version actually persisted are stamped here, server-side
+        # — never taken from the client — so the recorded consent moment can't
+        # be backdated or forged.
         face_request = FaceRegistrationRequest.objects.create(
             employee=request.user,
             branch=_resolve_branch(request.user),
@@ -85,6 +93,8 @@ class FaceRegistrationSubmitView(APIView):
             embedding_model_version=FACE_RECOGNITION_MODEL_VERSION,
             liveness_passed=data['liveness_passed'],
             liveness_score=data.get('liveness_score'),
+            consent_given_at=timezone.now(),
+            consent_text_version=FACE_CONSENT_TEXT_VERSION,
         )
         logger.info('Face registration submitted by %s', request.user.email)
 

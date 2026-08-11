@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
 import CorrectionModal from "@/app/dashboard/my-attendance/_components/CorrectionModal";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
+import type { AttendanceMode, PunchLocation } from "@/types/attendance";
+
+const MODE: AttendanceMode = "office";
 
 function todayString() {
   const d = new Date();
@@ -17,25 +20,32 @@ interface Props {
 }
 
 export default function ClockInButton({ onPunchSuccess }: Props) {
-  const { session, isLoading, isPunching, faceVerificationRequired, punch } = useClockWidget();
+  const { session, isLoading, isPunching, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
   const [showModal, setShowModal] = useState(false);
   const [showFaceModal, setShowFaceModal] = useState(false);
+  const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
   const isBusy      = isLoading || isPunching;
 
   async function handlePunch() {
+    // Location is fetched and geofence-validated BEFORE face verification —
+    // same order the voice clock-in/out flow enforces.
+    const { ok, location } = await prepareLocation(MODE);
+    if (!ok) return;
+
     if (faceVerificationRequired) {
+      setPendingLocation(location);
       setShowFaceModal(true);
       return;
     }
-    const ok = await punch(isClockedIn ? "OUT" : "IN");
-    if (ok) onPunchSuccess?.();
+    const punchOk = await punch(isClockedIn ? "OUT" : "IN", MODE, location);
+    if (punchOk) onPunchSuccess?.();
   }
 
   async function handleFaceCaptured(embedding: number[], livenessScore: number, captureSessionId: string) {
     setShowFaceModal(false);
-    const ok = await punch(isClockedIn ? "OUT" : "IN", "office", embedding, livenessScore, captureSessionId);
+    const ok = await punch(isClockedIn ? "OUT" : "IN", MODE, pendingLocation, embedding, livenessScore, captureSessionId);
     if (ok) onPunchSuccess?.();
   }
 

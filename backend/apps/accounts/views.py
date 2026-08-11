@@ -3147,6 +3147,14 @@ class EmployeeDetailView(APIView):
         employee.is_active = new_status
         employee.save(update_fields=['is_active', 'updated_at'])
 
+        if not new_status:
+            # Deactivation is the closest thing this codebase has to
+            # "employee separated" today (no dedicated separation/offboarding
+            # model exists yet) — purge their stored face biometric data here
+            # rather than retaining it indefinitely for someone no longer employed.
+            from apps.attendance.services_face_lifecycle import purge_face_data_for_employee
+            purge_face_data_for_employee(employee)
+
         action_label = 'employee_activated' if new_status else 'employee_deactivated'
         AuditLog.objects.create(
             user       = request.user,
@@ -3187,6 +3195,10 @@ class EmployeeDetailView(APIView):
 
         employee.is_active = False
         employee.save(update_fields=['is_active', 'updated_at'])
+
+        # Same reasoning as EmployeeDetailView.patch's deactivation path above.
+        from apps.attendance.services_face_lifecycle import purge_face_data_for_employee
+        purge_face_data_for_employee(employee)
 
         AuditLog.objects.create(
             user       = request.user,

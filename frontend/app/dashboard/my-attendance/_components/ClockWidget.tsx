@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
-import type { AttendanceMode } from "@/types/attendance";
+import type { AttendanceMode, PunchLocation } from "@/types/attendance";
 
 const MODE: AttendanceMode = "office";
 
@@ -27,22 +27,29 @@ function geofenceDot(isInside: boolean | null) {
 }
 
 export default function ClockWidget() {
-  const { session, isLoading, isPunching, isLocating, faceVerificationRequired, punch } = useClockWidget();
+  const { session, isLoading, isPunching, isLocating, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
   const [showFaceModal, setShowFaceModal] = useState(false);
+  const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
 
   const isClockedIn = session?.is_clocked_in ?? false;
 
   async function handlePunch() {
+    // Location is fetched and geofence-validated BEFORE face verification —
+    // same order the voice clock-in/out flow enforces.
+    const { ok, location } = await prepareLocation(MODE);
+    if (!ok) return;
+
     if (faceVerificationRequired) {
+      setPendingLocation(location);
       setShowFaceModal(true);
       return;
     }
-    await punch(isClockedIn ? "OUT" : "IN", MODE);
+    await punch(isClockedIn ? "OUT" : "IN", MODE, location);
   }
 
   async function handleFaceCaptured(embedding: number[], livenessScore: number, captureSessionId: string) {
     setShowFaceModal(false);
-    await punch(isClockedIn ? "OUT" : "IN", MODE, embedding, livenessScore, captureSessionId);
+    await punch(isClockedIn ? "OUT" : "IN", MODE, pendingLocation, embedding, livenessScore, captureSessionId);
   }
 
   const punches    = session?.punches ?? [];

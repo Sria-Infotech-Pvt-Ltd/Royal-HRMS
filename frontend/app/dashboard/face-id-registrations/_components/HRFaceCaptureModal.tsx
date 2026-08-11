@@ -5,11 +5,13 @@
 // FaceRegistrationModal.tsx, driven by useHRFaceCapture instead of
 // useFaceRegistrationCapture (posts to a different, HR-only endpoint with a
 // target employee instead of the caller's own identity).
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHRFaceCapture } from "@/hooks/useHRFaceRegistration";
 import FaceStatusPanel from "@/components/FaceStatusPanel";
 import FaceCaptureStage from "@/components/FaceCaptureStage";
+import FaceConsentPanel from "@/components/FaceConsentPanel";
+import { FACE_CONSENT_NOTICE_HR } from "@/lib/faceApi/consentText";
 
 interface HRFaceCaptureModalProps {
   employeeUuid: string;
@@ -24,6 +26,7 @@ export default function HRFaceCaptureModal({
 }: HRFaceCaptureModalProps) {
   const { phase, errorMessage, registeredRequest, videoRef, canvasRef, start, retry, stop } =
     useHRFaceCapture(employeeUuid);
+  const [consentAcknowledged, setConsentAcknowledged] = useState(false);
 
   function handleClose() {
     stop(); // always release the camera, whatever phase we're in
@@ -73,6 +76,16 @@ export default function HRFaceCaptureModal({
         </div>
 
         <div className="p-6" style={{ minHeight: 260 }}>
+          {!consentAcknowledged && (
+            <FaceConsentPanel
+              noticeText={FACE_CONSENT_NOTICE_HR}
+              onAcknowledge={() => setConsentAcknowledged(true)}
+              onCancel={handleClose}
+            />
+          )}
+
+          {consentAcknowledged && (
+          <>
           <div style={{ display: showCameraPreview ? "block" : "none" }}>
             <FaceCaptureStage videoRef={videoRef} canvasRef={canvasRef} phase={phase} />
           </div>
@@ -86,7 +99,7 @@ export default function HRFaceCaptureModal({
                   ? "This will replace their currently registered face ID. Position them in front of the camera and start when ready."
                   : "Have the employee sit in front of this camera, then start — a quick liveness check confirms it's really them before it's saved."
               }
-              action={{ label: "Start", onClick: start }}
+              action={{ label: "Start", onClick: () => start(true) }}
             />
           )}
 
@@ -148,6 +161,8 @@ export default function HRFaceCaptureModal({
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />
+          )}
+          </>
           )}
         </div>
       </div>

@@ -199,3 +199,67 @@ class GeofencingPunchTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
         self.assertIn('location is required', resp.data['message'].lower())
+
+
+class AttendanceGeofenceCheckViewTests(TestCase):
+    """
+    /attendance/geofence-check/ — the web ClockWidget/ClockInButton call this
+    BEFORE opening the face verification modal (see useClockWidget.
+    prepareLocation), so the geofence rejection has to arrive independent of
+    ever submitting a punch. Reuses the exact same GeofencingService.validate
+    GeofencingPunchTests already exercises through the punch endpoint — this
+    just confirms the read-only pre-check wraps it correctly and writes
+    nothing.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        state, _ = State.objects.get_or_create(code='TG', defaults={'name': 'Telangana'})
+        city, _ = City.objects.get_or_create(name='Hyderabad', state=state)
+        self.branch = Branch.objects.create(
+            branch_code='HYD02', branch_name='Geofence Check Office', address='Test Address',
+            state=state, city=city,
+            latitude=OFFICE_LAT, longitude=OFFICE_LON,
+            allowed_radius_meters=150, geofencing_enabled=True,
+        )
+        role = make_role('employee')
+        self.employee = make_user(
+            'geocheck@test.com', role=role, password='TestPass123!',
+            branch='Geofence Check Office',
+        )
+        _login(self.client, 'geocheck@test.com')
+
+    def _check(self, lat=None, lon=None):
+        payload = {'attendance_mode': 'office'}
+        if lat is not None:
+            payload['latitude'] = lat
+        if lon is not None:
+            payload['longitude'] = lon
+        return self.client.post(reverse('attendance-geofence-check'), payload, format='json')
+
+    def test_inside_geofence_is_allowed_and_writes_no_punch(self):
+        resp = self._check(OFFICE_LAT, OFFICE_LON)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(resp.data['data']['is_allowed'])
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+    def test_outside_geofence_is_rejected_before_any_punch_exists(self):
+        resp = self._check(FAR_LAT, FAR_LON)
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn('outside your assigned office location', resp.data['message'])
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+    def test_missing_gps_is_rejected_the_same_as_the_punch_endpoint(self):
+        resp = self._check()
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn('location is required', resp.data['message'].lower())
+
+    def test_wfh_mode_does_not_require_gps(self):
+        resp = self.client.post(
+            reverse('attendance-geofence-check'),
+            {'attendance_mode': 'wfh'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(resp.data['data']['is_allowed'])

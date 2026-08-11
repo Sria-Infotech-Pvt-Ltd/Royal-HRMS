@@ -67,6 +67,15 @@ export type PunchType       = "IN" | "OUT" | "BOTH";
 export type CorrectionReason = "biometric_error" | "forgot_to_punch" | "field_work" | "system_downtime" | "other";
 export type AttendanceMode   = "office" | "wfh" | "field" | "client_location" | "remote_office";
 
+// GPS reading captured by useClockWidget.prepareLocation, already validated
+// against the employee's geofence via the /attendance/geofence-check/
+// endpoint before a face verification modal is ever shown.
+export interface PunchLocation {
+  latitude:  number;
+  longitude: number;
+  accuracy:  number;
+}
+
 // ── HR Management ──────────────────────────────────────────────────────────
 
 export interface StatCards {

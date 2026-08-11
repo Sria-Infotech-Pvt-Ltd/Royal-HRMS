@@ -25,9 +25,12 @@ export interface FaceRegistrationRequest {
 
 /** Body for POST /api/attendance/face-registration/ — never a raw image. */
 export interface FaceRegistrationSubmitPayload {
-  face_embedding:  number[];
-  liveness_passed: boolean;
-  liveness_score:  number | null;
+  face_embedding:       number[];
+  liveness_passed:      boolean;
+  liveness_score:       number | null;
+  /** Must be true — the backend rejects the request otherwise. Confirms the
+   *  employee ticked the consent notice shown before capture started. */
+  consent_acknowledged: boolean;
 }
 
 /** Body for PATCH /api/attendance/face-registration/<id>/review/ */
@@ -67,8 +70,11 @@ export interface PaginatedFaceRegistrationEmployees {
 
 /** Body for POST /api/attendance/face-registration/register/ */
 export interface FaceRegistrationHRRegisterPayload {
-  employee_uuid:   string;
-  face_embedding:  number[];
-  liveness_passed: boolean;
-  liveness_score:  number | null;
+  employee_uuid:        string;
+  face_embedding:       number[];
+  liveness_passed:      boolean;
+  liveness_score:       number | null;
+  /** Must be true — the backend rejects the request otherwise. Confirms HR
+   *  obtained the employee's consent in person before this witnessed capture. */
+  consent_acknowledged: boolean;
 }

@@ -1684,6 +1684,16 @@ class InvalidPunch(models.Model):
 # independently without affecting stored-embedding compatibility.
 FACE_RECOGNITION_MODEL_VERSION = 'face-api.js-faceRecognitionNet-v1'
 
+# Identifies which wording of the biometric consent notice the employee (or,
+# for an HR-witnessed capture, HR on the employee's behalf) agreed to before
+# this capture happened. Bump this whenever the consent copy shown in
+# frontend/lib/faceApi/consentText.ts changes, so existing rows keep
+# recording exactly what was actually agreed to at the time, rather than
+# silently being reinterpreted under newer wording. Keep this value in sync
+# with that file's own FACE_CONSENT_TEXT_VERSION — there's no shared source
+# of truth across the Python/TS boundary, so this is maintained by convention.
+FACE_CONSENT_TEXT_VERSION = 'v1'
+
 
 class FaceRegistrationRequest(models.Model):
     STATUS_PENDING  = 'pending'
@@ -1713,6 +1723,17 @@ class FaceRegistrationRequest(models.Model):
 
     liveness_passed         = models.BooleanField(default=False)
     liveness_score          = models.FloatField(null=True, blank=True)
+
+    # Biometric consent — stamped server-side (never from client-supplied
+    # data) at the moment this row is created, whether that's a self-service
+    # submission (employee ticked the consent checkbox in FaceRegistrationModal)
+    # or an HR-witnessed capture (HR confirms the employee consented in person,
+    # HRFaceCaptureModal). Nullable only for rows created before this field
+    # existed — every new row must set both together, see
+    # FaceRegistrationSubmitSerializer/FaceRegistrationHRRegisterSerializer's
+    # consent_acknowledged validation.
+    consent_given_at        = models.DateTimeField(null=True, blank=True)
+    consent_text_version    = models.CharField(max_length=20, blank=True, default='')
 
     status                  = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True,

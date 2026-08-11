@@ -18,16 +18,35 @@ User = get_user_model()
 #  Write serializers
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _validate_consent_acknowledged(value: bool) -> bool:
+    """
+    Shared validator for both submit serializers below — must be explicitly
+    True, not just "present". A missing/False value means the consent
+    checkbox was never actually ticked, so the request must be rejected
+    rather than silently defaulting consent to given.
+    """
+    if not value:
+        raise serializers.ValidationError(
+            'You must acknowledge the biometric consent notice before submitting a face capture.'
+        )
+    return value
+
+
 class FaceRegistrationSubmitSerializer(serializers.Serializer):
     """
     POST /api/attendance/face-registration/
 
     Accepts only the already-computed embedding vector and liveness-check
-    result the frontend produced — never a raw image.
+    result the frontend produced — never a raw image. consent_acknowledged
+    confirms the employee ticked the consent notice shown before capture
+    started (FaceRegistrationModal) — the view stamps the actual
+    consent_given_at timestamp and consent_text_version server-side from
+    this boolean, never trusting a client-supplied timestamp.
     """
-    face_embedding  = serializers.ListField(child=serializers.FloatField(), allow_empty=False)
-    liveness_passed = serializers.BooleanField()
-    liveness_score  = serializers.FloatField(required=False, allow_null=True, default=None)
+    face_embedding       = serializers.ListField(child=serializers.FloatField(), allow_empty=False)
+    liveness_passed      = serializers.BooleanField()
+    liveness_score       = serializers.FloatField(required=False, allow_null=True, default=None)
+    consent_acknowledged = serializers.BooleanField(validators=[_validate_consent_acknowledged])
 
 
 class FaceRegistrationHRRegisterSerializer(serializers.Serializer):
@@ -37,11 +56,15 @@ class FaceRegistrationHRRegisterSerializer(serializers.Serializer):
     Same capture fields as FaceRegistrationSubmitSerializer, plus which
     employee this capture is for — the view resolves employee_uuid and
     checks it's a real, active user before anything is created.
+    consent_acknowledged here confirms HR obtained the employee's consent in
+    person before this witnessed capture (HRFaceCaptureModal) — same
+    server-side timestamp handling as the self-service path.
     """
-    employee_uuid   = serializers.CharField()
-    face_embedding  = serializers.ListField(child=serializers.FloatField(), allow_empty=False)
-    liveness_passed = serializers.BooleanField()
-    liveness_score  = serializers.FloatField(required=False, allow_null=True, default=None)
+    employee_uuid        = serializers.CharField()
+    face_embedding       = serializers.ListField(child=serializers.FloatField(), allow_empty=False)
+    liveness_passed      = serializers.BooleanField()
+    liveness_score       = serializers.FloatField(required=False, allow_null=True, default=None)
+    consent_acknowledged = serializers.BooleanField(validators=[_validate_consent_acknowledged])
 
 
 class FaceRegistrationDecisionSerializer(serializers.Serializer):

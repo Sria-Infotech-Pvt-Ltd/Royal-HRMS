@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import (
+    FACE_CONSENT_TEXT_VERSION,
     FACE_RECOGNITION_MODEL_VERSION,
     AttendanceFaceVerificationRules,
     AttendanceSettings,
@@ -59,7 +60,12 @@ class FaceRegistrationSubmissionTests(TestCase):
     def test_submit_creates_correctly_shaped_pending_request(self):
         resp = self.client.post(
             reverse('face-registration-submit'),
-            {'face_embedding': [0.1, 0.2, 0.3, 0.4], 'liveness_passed': True, 'liveness_score': 0.95},
+            {
+                'face_embedding': [0.1, 0.2, 0.3, 0.4],
+                'liveness_passed': True,
+                'liveness_score': 0.95,
+                'consent_acknowledged': True,
+            },
             format='json',
         )
         self.assertEqual(resp.status_code, 201, resp.data)
@@ -72,11 +78,15 @@ class FaceRegistrationSubmissionTests(TestCase):
         self.assertEqual(face_request.embedding_model_version, FACE_RECOGNITION_MODEL_VERSION)
         self.assertIsNone(face_request.approved_by)
         self.assertIsNone(face_request.approved_at)
+        # Consent is stamped server-side from consent_acknowledged, never
+        # taken as a client-supplied timestamp.
+        self.assertIsNotNone(face_request.consent_given_at)
+        self.assertEqual(face_request.consent_text_version, FACE_CONSENT_TEXT_VERSION)
 
     def test_submit_rejects_missing_face_embedding(self):
         resp = self.client.post(
             reverse('face-registration-submit'),
-            {'liveness_passed': True},
+            {'liveness_passed': True, 'consent_acknowledged': True},
             format='json',
         )
         self.assertEqual(resp.status_code, 422)
@@ -87,10 +97,33 @@ class FaceRegistrationSubmissionTests(TestCase):
         # simply fails FloatField coercion instead of being stored anywhere.
         resp = self.client.post(
             reverse('face-registration-submit'),
-            {'face_embedding': ['not-a-float'], 'liveness_passed': True},
+            {'face_embedding': ['not-a-float'], 'liveness_passed': True, 'consent_acknowledged': True},
             format='json',
         )
         self.assertEqual(resp.status_code, 422)
+        self.assertFalse(FaceRegistrationRequest.objects.filter(employee=self.employee).exists())
+
+    def test_submit_rejects_missing_consent(self):
+        resp = self.client.post(
+            reverse('face-registration-submit'),
+            {'face_embedding': [0.1, 0.2, 0.3, 0.4], 'liveness_passed': True, 'liveness_score': 0.95},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 422, resp.data)
+        self.assertFalse(FaceRegistrationRequest.objects.filter(employee=self.employee).exists())
+
+    def test_submit_rejects_consent_explicitly_false(self):
+        resp = self.client.post(
+            reverse('face-registration-submit'),
+            {
+                'face_embedding': [0.1, 0.2, 0.3, 0.4],
+                'liveness_passed': True,
+                'liveness_score': 0.95,
+                'consent_acknowledged': False,
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 422, resp.data)
         self.assertFalse(FaceRegistrationRequest.objects.filter(employee=self.employee).exists())
 
 
@@ -223,3 +256,57 @@ class FaceRegistrationPendingListTests(TestCase):
         result_ids = {row['id'] for row in resp.data['data']['results']}
         self.assertIn(str(pending.pk), result_ids)
         self.assertNotIn(str(approved.pk), result_ids)
+
+
+class FaceRegistrationHRRegisterConsentTests(TestCase):
+    """consent_acknowledged is required on the HR-witnessed capture path too
+    — HR confirms the employee consented in person before this request."""
+
+    def setUp(self):
+        cache.clear()
+        _set_face_verification_mandatory(True)
+        self.client   = APIClient()
+        self.hr_role  = make_role('hr', permission_codenames=['facial_recognition.approve'])
+        self.hr_user  = make_user('facereg-hr-register@test.com', role=self.hr_role)
+        self.employee = make_user('facereg-hr-target@test.com')
+        _login(self.client, 'facereg-hr-register@test.com')
+
+    def _register(self, **overrides):
+        payload = {
+            'employee_uuid':   str(self.employee.pk),
+            'face_embedding':  [0.1, 0.2, 0.3, 0.4],
+            'liveness_passed': True,
+            'liveness_score':  0.95,
+            'consent_acknowledged': True,
+        }
+        payload.update(overrides)
+        return self.client.post(reverse('face-registration-hr-register'), payload, format='json')
+
+    def test_register_with_consent_succeeds_and_stamps_consent(self):
+        resp = self._register()
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        face_request = FaceRegistrationRequest.objects.get(employee=self.employee)
+        self.assertEqual(face_request.status, FaceRegistrationRequest.STATUS_APPROVED)
+        self.assertIsNotNone(face_request.consent_given_at)
+        self.assertEqual(face_request.consent_text_version, FACE_CONSENT_TEXT_VERSION)
+
+    def test_register_rejects_missing_consent(self):
+        resp = self.client.post(
+            reverse('face-registration-hr-register'),
+            {
+                'employee_uuid':   str(self.employee.pk),
+                'face_embedding':  [0.1, 0.2, 0.3, 0.4],
+                'liveness_passed': True,
+                'liveness_score':  0.95,
+                # consent_acknowledged omitted entirely
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 422, resp.data)
+        self.assertFalse(FaceRegistrationRequest.objects.filter(employee=self.employee).exists())
+
+    def test_register_rejects_consent_explicitly_false(self):
+        resp = self._register(consent_acknowledged=False)
+        self.assertEqual(resp.status_code, 422, resp.data)
+        self.assertFalse(FaceRegistrationRequest.objects.filter(employee=self.employee).exists())

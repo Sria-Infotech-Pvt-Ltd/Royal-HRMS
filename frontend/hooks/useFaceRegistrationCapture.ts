@@ -18,7 +18,12 @@ interface UseFaceRegistrationCapture {
   submittedRequest: FaceRegistrationRequest | null;
   videoRef:         ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:        ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
-  start:            () => void;
+  /** No-ops (does not open the camera) if consentAcknowledged is false —
+   *  the caller (FaceRegistrationModal) is expected to gate the "Start"
+   *  action behind its own consent screen, but this guard exists so the
+   *  hook can never submit a capture without consent even if that gating
+   *  is ever bypassed by a future caller. */
+  start:            (consentAcknowledged: boolean) => void;
   retry:            () => void;
   stop:             () => void;
 }
@@ -28,6 +33,10 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
   const [submitError, setSubmitError]   = useState<string | null>(null);
   const [submittedRequest, setSubmittedRequest] = useState<FaceRegistrationRequest | null>(null);
   const stopCaptureRef = useRef<() => void>(() => {});
+  // Set once per session by start(consentAcknowledged) below, read only when
+  // a capture actually completes (handleCaptured) — by construction that's
+  // always after start() already ran, so this is never stale/unset at read time.
+  const consentAcknowledgedRef = useRef(false);
 
   const submit = useCallback(async (payload: FaceRegistrationSubmitPayload) => {
     setSubmitPhase("submitting");
@@ -47,13 +56,28 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
   }, []);
 
   const handleCaptured = useCallback((descriptor: number[], livenessScore: number) => {
-    void submit({ face_embedding: descriptor, liveness_passed: true, liveness_score: livenessScore });
+    void submit({
+      face_embedding: descriptor,
+      liveness_passed: true,
+      liveness_score: livenessScore,
+      consent_acknowledged: consentAcknowledgedRef.current,
+    });
   }, [submit]);
 
   const capture = useFaceLivenessCapture({ onCaptured: handleCaptured });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
-  const start = useCallback(() => {
+  const start = useCallback((consentAcknowledged: boolean) => {
+    if (!consentAcknowledged) {
+      // Should be unreachable — FaceRegistrationModal only renders the
+      // "Start" action after its own consent screen is acknowledged. Logged
+      // rather than silently ignored so a future caller that skips the
+      // consent screen fails loudly in the console, not just mysteriously
+      // never opens the camera.
+      console.error("[useFaceRegistrationCapture] start() called without consent acknowledged — refusing to open the camera.");
+      return;
+    }
+    consentAcknowledgedRef.current = true;
     setSubmitPhase("idle");
     setSubmitError(null);
     setSubmittedRequest(null);

@@ -6,7 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { useFaceVerificationStatus } from "@/hooks/useFaceVerificationStatus";
-import type { TodaySession, AttendanceMode } from "@/types/attendance";
+import type { TodaySession, AttendanceMode, PunchLocation } from "@/types/attendance";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 
 const _REGISTRATION_MESSAGES: Record<string, string> = {
@@ -83,10 +83,66 @@ export function useClockWidget() {
     return () => clearInterval(id);
   }, [isClockedIn]);
 
+  // Fetches GPS and validates it against the employee's geofence via a
+  // read-only backend check — BEFORE any face verification modal opens.
+  // Mirrors the order the voice flow enforces in conversation_clock_in_face.
+  // start_voice_clock_punch (geofence check, then facial proof): callers
+  // must call this first and only proceed to the face step (or straight to
+  // punch()) once `ok` comes back true. Modes other than "office" don't
+  // carry a geofence, so they pass through with no location captured.
+  const prepareLocation = useCallback(
+    async (attendanceMode: AttendanceMode): Promise<{ ok: boolean; location: PunchLocation | null }> => {
+      if (attendanceMode !== "office") return { ok: true, location: null };
+
+      if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+        showToast("Your browser does not support location access.", "error");
+        return { ok: false, location: null };
+      }
+
+      setIsLocating(true);
+      let location: PunchLocation;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+        });
+        location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
+      } catch (geoErr: unknown) {
+        const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;
+        showToast(
+          isPermissionDenied
+            ? "Location access is required for office clock-in. Please allow location in your browser settings."
+            : "Unable to determine your location. Please check your device's location settings and try again.",
+          "error"
+        );
+        setIsLocating(false);
+        return { ok: false, location: null };
+      }
+
+      try {
+        await clientApi.post(API.attendance.geofenceCheck, {
+          attendance_mode: attendanceMode,
+          latitude:  location.latitude,
+          longitude: location.longitude,
+          accuracy:  location.accuracy,
+        });
+      } catch (err: unknown) {
+        const e = err as NormalisedError;
+        showToast(e?.message ?? "You are outside the allowed location for this branch.", "error");
+        setIsLocating(false);
+        return { ok: false, location: null };
+      }
+
+      setIsLocating(false);
+      return { ok: true, location };
+    },
+    [showToast]
+  );
+
   const punch = useCallback(
     async (
       punchType: "IN" | "OUT",
       attendanceMode: AttendanceMode = "office",
+      location: PunchLocation | null = null,
       faceEmbedding?: number[],
       livenessScore?: number,
       captureSessionId?: string,
@@ -99,48 +155,14 @@ export function useClockWidget() {
       }
 
       setIsPunching(true);
-      let latitude: number | null = null;
-      let longitude: number | null = null;
-      let accuracy: number | null = null;
-
-      if (attendanceMode === "office") {
-        if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
-          showToast("Your browser does not support location access.", "error");
-          setIsPunching(false);
-          return false;
-        }
-
-        setIsLocating(true);
-        try {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-          });
-          latitude  = pos.coords.latitude;
-          longitude = pos.coords.longitude;
-          accuracy  = pos.coords.accuracy;
-        } catch (geoErr: unknown) {
-          const isPermissionDenied = (geoErr as GeolocationPositionError).code === 1;
-          showToast(
-            isPermissionDenied
-              ? "Location access is required for office clock-in. Please allow location in your browser settings."
-              : "Unable to determine your location. Please check your device's location settings and try again.",
-            "error"
-          );
-          setIsLocating(false);
-          setIsPunching(false);
-          return false;
-        }
-        setIsLocating(false);
-      }
-
       try {
         const res = await clientApi.post(API.attendance.punch, {
           punch_type:      punchType,
           attendance_mode: attendanceMode,
           source:          "web",
-          latitude,
-          longitude,
-          accuracy,
+          latitude:  location?.latitude  ?? null,
+          longitude: location?.longitude ?? null,
+          accuracy:  location?.accuracy  ?? null,
           device_time:      new Date().toISOString(),
           browser:          parseBrowser(),
           operating_system: parseOS(),
@@ -171,6 +193,6 @@ export function useClockWidget() {
 
   return {
     session, isLoading: fetchLoading && !session, isPunching, isLocating,
-    faceVerificationRequired, faceRegistrationMissing, punch,
+    faceVerificationRequired, faceRegistrationMissing, prepareLocation, punch,
   };
 }

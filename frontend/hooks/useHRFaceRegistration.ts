@@ -39,7 +39,9 @@ interface UseHRFaceCapture {
   registeredRequest: FaceRegistrationRequest | null;
   videoRef:          ReturnType<typeof useFaceLivenessCapture>["videoRef"];
   canvasRef:         ReturnType<typeof useFaceLivenessCapture>["canvasRef"];
-  start:             () => void;
+  /** No-op (does not open the camera) if consentAcknowledged is false — see
+   *  useFaceRegistrationCapture's identical guard for the reasoning. */
+  start:             (consentAcknowledged: boolean) => void;
   retry:             () => void;
   stop:              () => void;
 }
@@ -56,16 +58,18 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [registeredRequest, setRegisteredRequest] = useState<FaceRegistrationRequest | null>(null);
   const stopCaptureRef = useRef<() => void>(() => {});
+  const consentAcknowledgedRef = useRef(false);
 
   const submit = useCallback(async (descriptor: number[], livenessScore: number) => {
     if (!employeeUuid) return;
     setSubmitPhase("submitting");
     try {
       const res = await clientApi.post<{ data: FaceRegistrationRequest }>(API.attendance.faceRegistration.register, {
-        employee_uuid:   employeeUuid,
-        face_embedding:  descriptor,
-        liveness_passed: true,
-        liveness_score:  livenessScore,
+        employee_uuid:        employeeUuid,
+        face_embedding:       descriptor,
+        liveness_passed:      true,
+        liveness_score:       livenessScore,
+        consent_acknowledged: consentAcknowledgedRef.current,
       });
       stopCaptureRef.current();
       setRegisteredRequest(res.data.data);
@@ -87,7 +91,12 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
   const capture = useFaceLivenessCapture({ onCaptured: handleCaptured });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
-  const start = useCallback(() => {
+  const start = useCallback((consentAcknowledged: boolean) => {
+    if (!consentAcknowledged) {
+      console.error("[useHRFaceCapture] start() called without consent acknowledged — refusing to open the camera.");
+      return;
+    }
+    consentAcknowledgedRef.current = true;
     setSubmitPhase("idle");
     setSubmitError(null);
     setRegisteredRequest(null);
