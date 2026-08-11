@@ -40,7 +40,7 @@ function DecisionRow({
         </div>
         <p className="text-xs text-[var(--on-variant)] mt-0.5">{approverName || "Not yet assigned"}</p>
         {remarks && (
-          <p className="text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-lg px-2.5 py-1.5 mt-1.5">"{remarks}"</p>
+          <p className="text-xs text-[var(--on-variant)] bg-[var(--bg-low)] rounded-lg px-2.5 py-1.5 mt-1.5">“{remarks}”</p>
         )}
         {actionedAt && (
           <p className="text-xs text-[var(--on-variant)] mt-1">{fmtDate(actionedAt.slice(0, 10))}</p>
