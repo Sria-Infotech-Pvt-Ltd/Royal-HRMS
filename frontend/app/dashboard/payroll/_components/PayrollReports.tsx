@@ -1,37 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import clientApi from "@/lib/clientApi";
 import type { PayrollCycle } from "@/types/payroll";
 
 interface PagedResponse<T> { results: T[]; count: number; }
 interface Branch { id: string; branch_name: string; branch_code: string; }
 
-const REPORTS = [
-  {
-    category: "Statutory Reports",
-    items: [
-      { key: "pf",   icon: "ti-building-bank",    title: "PF Report",               desc: "Employee & employer PF contribution summary with UAN mapping" },
-      { key: "esi",  icon: "ti-stethoscope",       title: "ESI Report",              desc: "ESI deductions for eligible employees below the statutory threshold" },
-      { key: "pt",   icon: "ti-receipt",           title: "PT Report",               desc: "Professional Tax deductions by state and salary slab" },
-      { key: "tds",  icon: "ti-file-certificate",  title: "TDS (Form 16)",           desc: "Monthly TDS deducted per employee with annual projected liability" },
-    ],
-  },
-  {
-    category: "Payroll Summary",
-    items: [
-      { key: "register", icon: "ti-table",          title: "Salary Register",        desc: "Detailed salary register with all earnings and deductions" },
-      { key: "summary",  icon: "ti-chart-bar",      title: "Payroll Summary",        desc: "High-level payroll cost summary by department and employee type" },
-      { key: "bank",     icon: "ti-credit-card",    title: "Bank Advice",            desc: "Bank transfer file for NEFT/RTGS bulk salary disbursement" },
-      { key: "monthly",  icon: "ti-calendar-stats", title: "Monthly Payroll Report", desc: "Complete monthly payroll report with variance analysis vs prior month" },
-    ],
-  },
-];
+// Same eligibility rule the existing ECR download (payroll/runs/[id]) already
+// enforces server-side — mirrored here only to enable/disable the button and
+// show a clear reason, not to duplicate any business logic.
+const ECR_READY_STATUSES = ["payslips_generated", "query_window_open", "paid", "closed"];
+
+type EcrFormat = "xlsx" | "pdf";
 
 export default function PayrollReports() {
   const [selectedCycle, setSelectedCycle] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [downloadingFormat, setDownloadingFormat] = useState<EcrFormat | null>(null);
+  const [dlError, setDlError] = useState<string | null>(null);
 
   const { data: cyclesPage } = useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
   const { data: branchPage  } = useFetch<PagedResponse<Branch>>(API.branches.list);
@@ -39,7 +28,38 @@ export default function PayrollReports() {
   const cycles   = cyclesPage?.results ?? [];
   const branches = branchPage?.results ?? [];
 
-  const paidCycles = cycles.filter(c => ["paid", "closed", "payslips_generated", "query_window_open"].includes(c.status));
+  const paidCycles = cycles.filter(c => ECR_READY_STATUSES.includes(c.status));
+  const cycle = cycles.find(c => c.id === selectedCycle);
+  const canDownloadEcr = !!cycle && ECR_READY_STATUSES.includes(cycle.status);
+
+  // Same download mechanics as the existing ECR button on the payroll run
+  // detail page (payroll/runs/[id]/page.tsx) — same blob handling, same
+  // filename pattern — now shared by both formats, since the backend
+  // exposes the Excel and PDF ECR files as two sibling endpoints returning
+  // the same kind of file blob.
+  const downloadEcr = useCallback(async (format: EcrFormat) => {
+    if (!cycle) return;
+    setDownloadingFormat(format);
+    setDlError(null);
+    try {
+      const url = format === "pdf" ? API.payroll.cycleEcrPdf(cycle.id) : API.payroll.cycleEcr(cycle.id);
+      const response = await clientApi.get(url, { responseType: "blob" });
+      const blobUrl = URL.createObjectURL(response.data as Blob);
+      const link = document.createElement("a");
+      link.href  = blobUrl;
+      const per    = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" }).replace(" ", "_");
+      const branch = (cycle.branch_name ?? "All").replace(/ /g, "_");
+      link.download = `ECR_${per}_${branch}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      setDlError(`Failed to download ECR ${format === "pdf" ? "PDF" : "Excel"}. Please try again.`);
+    } finally {
+      setDownloadingFormat(null);
+    }
+  }, [cycle]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -83,50 +103,70 @@ export default function PayrollReports() {
       {paidCycles.length === 0 && cycles.length > 0 && (
         <div className="alert alert-warn">
           <i className="ti ti-alert-triangle" />
-          <span>Reports are available after a payroll cycle is completed and payslips are dispatched. Complete a payroll run first.</span>
+          <span>ECR export is available after a payroll cycle is completed and payslips are dispatched. Complete a payroll run first.</span>
         </div>
       )}
 
       {cycles.length === 0 && (
         <div className="alert alert-info">
           <i className="ti ti-info-circle" />
-          <span>No payroll cycles yet. Run your first payroll to generate reports.</span>
+          <span>No payroll cycles yet. Run your first payroll to enable ECR export.</span>
         </div>
       )}
 
-      {/* Report sections */}
-      {REPORTS.map(section => (
-        <div key={section.category}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
-            {section.category}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            {section.items.map(report => (
-              <div key={report.key} className="card">
-                <div style={{ padding: "16px 20px" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "var(--radius)", background: "rgba(30,78,140,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <i className={`ti ${report.icon}`} style={{ fontSize: 20, color: "var(--primary)" }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{report.title}</div>
-                      <div style={{ fontSize: 12, color: "var(--on-variant)", lineHeight: 1.5, marginBottom: 12 }}>{report.desc}</div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button className="btn btn-filled btn-sm" disabled>
-                          <i className="ti ti-file-type-pdf" /> Export PDF
-                        </button>
-                        <button className="btn btn-ghost btn-sm" disabled>
-                          <i className="ti ti-table-export" /> Export Excel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+      {dlError && (
+        <div className="alert alert-error">
+          <i className="ti ti-alert-circle" />
+          <span>{dlError}</span>
+        </div>
+      )}
+
+      {/* ECR Export */}
+      <div className="card" style={{ maxWidth: 560 }}>
+        <div style={{ padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "var(--radius)", background: "rgba(30,78,140,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <i className="ti ti-building-bank" style={{ fontSize: 20, color: "var(--primary)" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>ECR (Electronic Challan-cum-Return)</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", lineHeight: 1.5, marginBottom: 12 }}>
+                Export ECR file for EPFO submission
               </div>
-            ))}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!canDownloadEcr || downloadingFormat !== null}
+                  onClick={() => downloadEcr("pdf")}
+                  title={
+                    !cycle ? "Select a period to export."
+                    : !canDownloadEcr ? "ECR is only available once payslips have been generated for this period."
+                    : undefined
+                  }
+                >
+                  {downloadingFormat === "pdf"
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
+                    : <><i className="ti ti-file-type-pdf" /> Export PDF</>}
+                </button>
+                <button
+                  className="btn btn-filled btn-sm"
+                  disabled={!canDownloadEcr || downloadingFormat !== null}
+                  onClick={() => downloadEcr("xlsx")}
+                  title={
+                    !cycle ? "Select a period to export."
+                    : !canDownloadEcr ? "ECR is only available once payslips have been generated for this period."
+                    : undefined
+                  }
+                >
+                  {downloadingFormat === "xlsx"
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
+                    : <><i className="ti ti-table-export" /> Export Excel</>}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      ))}
+      </div>
 
     </div>
   );

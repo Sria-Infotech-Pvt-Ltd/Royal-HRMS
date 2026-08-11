@@ -114,6 +114,17 @@ class StatutoryConfig(models.Model):
         choices=LWF_FREQUENCY_CHOICES,
         default=LWF_MONTHLY,
     )
+    lwf_due_months = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            'Calendar months (1-12) in which the configured LWF amount is actually '
+            'deducted. Ignored when lwf_frequency=monthly (charged every cycle). '
+            'Required: exactly 1 month for annual, exactly 2 distinct months for '
+            'halfyearly. Interpreted against the payroll cycle\'s start-month (same '
+            'convention PayrollAdjustment.month already uses). Left empty for '
+            'annual/halfyearly means LWF is not charged until configured.'
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

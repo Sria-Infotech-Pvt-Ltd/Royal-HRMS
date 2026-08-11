@@ -86,10 +86,34 @@ class StatutoryConfigSerializer(serializers.ModelSerializer):
             'lwf_employee_amount',
             'lwf_employer_amount',
             'lwf_frequency',
+            'lwf_due_months',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'state_name', 'state_code', 'created_at', 'updated_at']
+
+    def validate_lwf_due_months(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('lwf_due_months must be a list of month numbers.')
+        for month in value:
+            if not isinstance(month, int) or isinstance(month, bool) or not (1 <= month <= 12):
+                raise serializers.ValidationError('Each due month must be an integer between 1 and 12.')
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError('Due months must not contain duplicates.')
+        return value
+
+    def validate(self, data):
+        frequency = data.get('lwf_frequency', getattr(self.instance, 'lwf_frequency', StatutoryConfig.LWF_MONTHLY))
+        due_months = data.get('lwf_due_months', getattr(self.instance, 'lwf_due_months', None) or [])
+        if frequency == StatutoryConfig.LWF_ANNUAL and len(due_months) != 1:
+            raise serializers.ValidationError({
+                'lwf_due_months': 'Annual LWF requires exactly one due month.',
+            })
+        if frequency == StatutoryConfig.LWF_HALFYEARLY and len(set(due_months)) != 2:
+            raise serializers.ValidationError({
+                'lwf_due_months': 'Half-yearly LWF requires exactly two distinct due months.',
+            })
+        return data
 
 
 class SalaryComponentSerializer(serializers.ModelSerializer):

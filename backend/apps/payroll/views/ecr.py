@@ -27,6 +27,50 @@ def _has_perm(user, codename: str) -> bool:
     return user.role.role_permissions.filter(permission__codename=codename).exists()
 
 
+def _get_authorized_cycle(request, cycle_pk):
+    """
+    Resolve + authorize a payroll cycle for ECR export — the permission,
+    existence, branch-scoping, and status checks shared by every ECR export
+    format (Excel, PDF), extracted so they can't drift between formats.
+
+    Returns (cycle, None) on success, or (None, error_response) if access
+    should be denied — same checks, same order, same messages the Excel
+    download already used before this was extracted.
+    """
+    if not (_has_perm(request.user, 'payroll.view') or _has_perm(request.user, 'payroll.edit')):
+        return None, error('You do not have permission to download the ECR file.', http_status=403)
+
+    try:
+        cycle = PayrollCycle.objects.select_related('branch').get(pk=cycle_pk)
+    except PayrollCycle.DoesNotExist:
+        return None, error('Payroll cycle not found.', http_status=404)
+
+    # Branch-scoped access: a non-superuser can only download ECR for their own branch.
+    # Users with no branch assigned (global admins) may access any cycle.
+    if not getattr(request.user, 'is_superuser', False):
+        user_branch_id = getattr(request.user, 'branch_id', None)
+        if cycle.branch_id and user_branch_id and cycle.branch_id != user_branch_id:
+            return None, error('You do not have access to this payroll cycle.', http_status=403)
+
+    if cycle.status not in ('payslips_generated', 'query_window_open', 'paid', 'closed'):
+        return None, error(
+            'ECR is only available after payslips have been generated.',
+            http_status=400,
+        )
+
+    return cycle, None
+
+
+def _ecr_filename(cycle: PayrollCycle, extension: str) -> str:
+    period = cycle.cycle_start.strftime('%b_%Y') if cycle.cycle_start else 'cycle'
+    try:
+        branch_name = cycle.branch.branch_name if cycle.branch_id else 'All'
+    except Exception:
+        branch_name = 'All'
+    branch = branch_name.replace(' ', '_')
+    return f'ECR_{period}_{branch}.{extension}'
+
+
 def _compute_ecr_rows(cycle: PayrollCycle, settings: PayrollSettings) -> list:
     """Return one dict per employee payslip, with all ECR columns computed."""
     eps_rate        = settings.eps_rate        / 100
@@ -152,32 +196,86 @@ def _build_ecr_xlsx(cycle: PayrollCycle, rows: list) -> bytes:
     return buf.getvalue()
 
 
+def _build_ecr_pdf(cycle: PayrollCycle, rows: list) -> bytes:
+    """Same ECR columns/totals as _build_ecr_xlsx above, laid out as a PDF table."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    period_label = cycle.cycle_start.strftime('%B %Y') if cycle.cycle_start else ''
+    try:
+        branch_label = cycle.branch.branch_name if cycle.branch_id else 'All Branches'
+    except Exception:
+        branch_label = 'All Branches'
+
+    headers = [
+        'Sr No', 'Employee Name', 'UAN', 'Employee Name\nas per Aadhar',
+        'Gross\nWages', 'Basic\nWages', 'Pension\nWages', 'EDLI\nWages',
+        'EPF\nContribution', 'EPS\nContribution', 'EPF-EPS\nDifference', 'NCP',
+    ]
+    table_data = [headers]
+
+    totals = {k: 0 for k in [
+        'gross_wages', 'basic_wages', 'pension_wages', 'edli_wages',
+        'epf_contribution', 'eps_contribution', 'epf_eps_difference', 'ncp_days',
+    ]}
+    for row in rows:
+        table_data.append([
+            row['sr_no'], row['employee_name'], row['uan'], row['name_as_per_aadhar'],
+            row['gross_wages'], row['basic_wages'], row['pension_wages'], row['edli_wages'],
+            row['epf_contribution'], row['eps_contribution'], row['epf_eps_difference'], row['ncp_days'],
+        ])
+        for key in totals:
+            totals[key] += row[key]
+
+    table_data.append([
+        '', 'TOTAL', '', '',
+        totals['gross_wages'], totals['basic_wages'], totals['pension_wages'], totals['edli_wages'],
+        totals['epf_contribution'], totals['eps_contribution'], totals['epf_eps_difference'], totals['ncp_days'],
+    ])
+
+    table = Table(table_data, repeatRows=1)
+    last_row = len(table_data) - 1
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1A3A6E')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, last_row), (-1, last_row), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, last_row), (-1, last_row), colors.HexColor('#FFF9C4')),
+        ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+        ('ALIGN', (4, 0), (-1, -1), 'RIGHT'),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#CCCCCC')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, last_row - 1), [colors.white, colors.HexColor('#F7F9FC')]),
+    ]))
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=12 * mm, rightMargin=12 * mm, topMargin=14 * mm, bottomMargin=12 * mm,
+    )
+    doc.build([
+        Paragraph(f'ECR (Electronic Challan-cum-Return) — {period_label}', styles['Heading2']),
+        Paragraph(f'Branch: {branch_label}', styles['Normal']),
+        Spacer(1, 10),
+        table,
+    ])
+    return buf.getvalue()
+
+
 class CycleECRDownloadView(APIView):
     """GET /payroll/cycles/<pk>/ecr/  — download ECR Excel for a payroll cycle."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, cycle_pk):
-        if not (_has_perm(request.user, 'payroll.view') or _has_perm(request.user, 'payroll.edit')):
-            return error('You do not have permission to download the ECR file.', http_status=403)
-
-        try:
-            cycle = PayrollCycle.objects.select_related('branch').get(pk=cycle_pk)
-        except PayrollCycle.DoesNotExist:
-            return error('Payroll cycle not found.', http_status=404)
-
-        # Branch-scoped access: a non-superuser can only download ECR for their own branch.
-        # Users with no branch assigned (global admins) may access any cycle.
-        if not getattr(request.user, 'is_superuser', False):
-            user_branch_id = getattr(request.user, 'branch_id', None)
-            if cycle.branch_id and user_branch_id and cycle.branch_id != user_branch_id:
-                return error('You do not have access to this payroll cycle.', http_status=403)
-
-        if cycle.status not in ('payslips_generated', 'query_window_open', 'paid', 'closed'):
-            return error(
-                'ECR is only available after payslips have been generated.',
-                http_status=400,
-            )
+        cycle, err = _get_authorized_cycle(request, cycle_pk)
+        if err:
+            return err
 
         settings_obj = PayrollSettings.objects.first()
         if settings_obj is None:
@@ -193,18 +291,42 @@ class CycleECRDownloadView(APIView):
             logger.error('ECR xlsx generation failed for cycle %s: %s', cycle_pk, exc)
             return error('Failed to generate ECR file. Please try again.', http_status=500)
 
-        period = cycle.cycle_start.strftime('%b_%Y') if cycle.cycle_start else 'cycle'
-        try:
-            branch_name = cycle.branch.branch_name if cycle.branch_id else 'All'
-        except Exception:
-            branch_name = 'All'
-        branch = branch_name.replace(' ', '_')
-        filename = f'ECR_{period}_{branch}.xlsx'
-
+        filename = _ecr_filename(cycle, 'xlsx')
         response = HttpResponse(
             xlsx_bytes,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         logger.info('ECR downloaded for cycle %s by %s', cycle_pk, request.user.email)
+        return response
+
+
+class CycleECRPdfDownloadView(APIView):
+    """GET /payroll/cycles/<pk>/ecr/pdf/  — download ECR as PDF for a payroll cycle."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, cycle_pk):
+        cycle, err = _get_authorized_cycle(request, cycle_pk)
+        if err:
+            return err
+
+        settings_obj = PayrollSettings.objects.first()
+        if settings_obj is None:
+            settings_obj = PayrollSettings()
+
+        rows = _compute_ecr_rows(cycle, settings_obj)
+        if not rows:
+            return error('No payslips found for this cycle.', http_status=404)
+
+        try:
+            pdf_bytes = _build_ecr_pdf(cycle, rows)
+        except Exception as exc:
+            logger.error('ECR pdf generation failed for cycle %s: %s', cycle_pk, exc)
+            return error('Failed to generate ECR PDF file. Please try again.', http_status=500)
+
+        filename = _ecr_filename(cycle, 'pdf')
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        logger.info('ECR PDF downloaded for cycle %s by %s', cycle_pk, request.user.email)
         return response

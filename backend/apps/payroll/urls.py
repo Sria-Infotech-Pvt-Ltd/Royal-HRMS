@@ -54,7 +54,7 @@ from apps.payroll.views.adjustments import (
     PayrollAdjustmentDeleteView,
     PayrollAdjustmentBulkImportView,
 )
-from apps.payroll.views.ecr import CycleECRDownloadView
+from apps.payroll.views.ecr import CycleECRDownloadView, CycleECRPdfDownloadView
 
 urlpatterns = [
     # ── Payroll global settings ──────────────────────────────────────────────
@@ -98,6 +98,7 @@ urlpatterns = [
     path('cycles/<uuid:pk>/mark-paid/', MarkCyclePaidView.as_view(), name='payroll-mark-paid'),
     path('cycles/<uuid:pk>/cancel/', CancelPayrollCycleView.as_view(), name='payroll-cancel-cycle'),
     path('cycles/<uuid:cycle_pk>/ecr/', CycleECRDownloadView.as_view(), name='payroll-cycle-ecr'),
+    path('cycles/<uuid:cycle_pk>/ecr/pdf/', CycleECRPdfDownloadView.as_view(), name='payroll-cycle-ecr-pdf'),
 
     # ── Payslips (HR) ────────────────────────────────────────────────────────
     path('cycles/<uuid:cycle_pk>/payslips/', CyclePayslipListView.as_view(), name='cycle-payslip-list'),
