@@ -64,6 +64,7 @@ export interface StatutoryConfig {
   lwf_employee_amount: string;
   lwf_employer_amount: string;
   lwf_frequency: "monthly" | "halfyearly" | "annual";
+  lwf_due_months: number[];
   created_at: string;
   updated_at: string;
 }

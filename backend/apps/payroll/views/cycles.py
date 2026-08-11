@@ -56,9 +56,27 @@ class PayrollAlreadyProcessing(Exception):
     already processed, or a concurrent request already claimed it."""
 
 
+def _lwf_due_this_cycle(statutory, cycle_month) -> bool:
+    """Whether the configured LWF amount should be charged in a cycle whose
+    payroll month is `cycle_month` (1-12, cycle.cycle_start's month — the
+    same "which month is this cycle" convention PayrollAdjustment.month
+    already uses elsewhere in this module).
+
+    monthly    -> every cycle.
+    annual/halfyearly -> only in the configured due month(s); an empty
+    lwf_due_months means "not charged" (Option A — never overcharges while
+    a state's due month(s) haven't been configured yet).
+    """
+    if not statutory or not statutory.lwf_applicable:
+        return False
+    if statutory.lwf_frequency == StatutoryConfig.LWF_MONTHLY:
+        return True
+    return cycle_month in (statutory.lwf_due_months or [])
+
+
 def _compute_employee_payslip(
     salary_config, components, branch_config, statutory, adjustments, structure,
-    lop_days=Decimal('0'), total_working_days=26,
+    lop_days=Decimal('0'), total_working_days=26, cycle_month=None,
 ) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
@@ -121,9 +139,10 @@ def _compute_employee_payslip(
     # PT
     pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
 
-    # LWF
-    lwf_employee = statutory.lwf_employee_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
-    lwf_employer = statutory.lwf_employer_amount if (statutory and statutory.lwf_applicable) else Decimal('0')
+    # LWF — only charged in the state's configured due cycle(s); see _lwf_due_this_cycle().
+    lwf_due = _lwf_due_this_cycle(statutory, cycle_month)
+    lwf_employee = statutory.lwf_employee_amount if lwf_due else Decimal('0')
+    lwf_employer = statutory.lwf_employer_amount if lwf_due else Decimal('0')
 
     adj_earning = sum(
         (a.amount for a in adjustments if a.type in (PayrollAdjustment.ADDITION, PayrollAdjustment.ARREAR)),
@@ -368,6 +387,7 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
             salary_config, components, branch_config, statutory, adjustments, structure,
             lop_days=emp_lop,
             total_working_days=emp_working_days,
+            cycle_month=cycle.cycle_start.month,
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──

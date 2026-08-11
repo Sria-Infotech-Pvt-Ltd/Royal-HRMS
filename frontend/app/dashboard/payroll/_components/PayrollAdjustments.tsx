@@ -20,13 +20,19 @@ interface Adjustment {
 }
 
 interface AdjustmentListResponse {
-  results: Adjustment[];
-  count: number;
+  results:          Adjustment[];
+  count:            number;
+  page:             number;
+  page_size:        number;
+  total_pages:      number;
+  total_additions:  number | string;
+  total_deductions: number | string;
 }
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const TYPE_LABELS: Record<string, string> = { addition: "Addition", deduction: "Deduction", arrear: "Arrear" };
 const TYPE_BADGE: Record<string, string> = { addition: "badge-success", deduction: "badge-error", arrear: "badge-warning" };
+const PAGE_SIZE = 10;
 
 function currentMonthParam() {
   const now = new Date();
@@ -38,12 +44,24 @@ function monthParam(month: string, year: string) {
   return `${year}-${String(idx).padStart(2, "0")}`;
 }
 
+// Compact page-number list with "…" for long ranges — e.g. [1, "…", 4, 5, 6, "…", 12]
+function getPageNumbers(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | "…")[] = [1];
+  if (current > 3) pages.push("…");
+  for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) pages.push(p);
+  if (current < total - 2) pages.push("…");
+  pages.push(total);
+  return pages;
+}
+
 export default function PayrollAdjustments() {
   const canEdit = usePermission("payroll.edit");
   const today   = new Date();
 
   const [month,     setMonth]     = useState(MONTHS[today.getMonth()]);
   const [year,      setYear]      = useState(String(today.getFullYear()));
+  const [page,      setPage]      = useState(1);
   const [showAdd,   setShowAdd]   = useState(false);
   const [saving,    setSaving]    = useState(false);
   const [saveMsg,   setSaveMsg]   = useState("");
@@ -54,16 +72,38 @@ export default function PayrollAdjustments() {
 
   const param = monthParam(month, year);
   const { data, loading, refetch } = useFetch<AdjustmentListResponse>(
-    `${API.payroll.adjustments}?month=${param}`,
+    `${API.payroll.adjustments}?month=${param}&page=${page}&page_size=${PAGE_SIZE}`,
   );
   const rows = data?.results ?? [];
+
+  // Changing month/year should always land back on page 1 — otherwise a
+  // page number valid for one month's row count can be out of range for
+  // another and silently render nothing.
+  function changeMonth(m: string) { setMonth(m); setPage(1); }
+  function changeYear(y: string)  { setYear(y);  setPage(1); }
+
+  // Add / Bulk Import both need to land back on page 1 and show fresh data.
+  // If we're already on page 1, changing `page` to 1 is a no-op (same
+  // state, no URL change, no automatic refetch) — refetch explicitly in
+  // that case; otherwise setPage(1) itself changes the fetch URL and
+  // triggers the refetch, so we don't double-fetch.
+  function reloadFromPageOne() {
+    if (page === 1) refetch();
+    else setPage(1);
+  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this adjustment?")) return;
     setErrMsg("");
     try {
       await clientApi.delete(API.payroll.adjustmentDetail(id));
-      refetch();
+      // If that was the last row on a page beyond the first, step back a
+      // page instead of landing on a now-empty page.
+      if (rows.length === 1 && page > 1) {
+        setPage(p => p - 1);
+      } else {
+        refetch();
+      }
       setSaveMsg("Adjustment deleted.");
     } catch {
       setErrMsg("Failed to delete adjustment.");
@@ -83,7 +123,7 @@ export default function PayrollAdjustments() {
       );
       const imported = res.data?.data?.imported ?? 0;
       const rowErrors = res.data?.data?.row_errors ?? [];
-      refetch();
+      reloadFromPageOne();
       if (rowErrors.length > 0) {
         setErrMsg(`${imported} imported. ${rowErrors.length} row(s) had errors:\n` +
           rowErrors.slice(0, 5).map((e: { row: number; error: string }) => `Row ${e.row}: ${e.error}`).join("\n"));
@@ -127,10 +167,10 @@ export default function PayrollAdjustments() {
       {/* Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8 }}>
-          <select className="field-input" style={{ width: 130 }} value={month} onChange={e => setMonth(e.target.value)}>
+          <select className="field-input" style={{ width: 130 }} value={month} onChange={e => changeMonth(e.target.value)}>
             {MONTHS.map(m => <option key={m}>{m}</option>)}
           </select>
-          <select className="field-input" style={{ width: 90 }} value={year} onChange={e => setYear(e.target.value)}>
+          <select className="field-input" style={{ width: 90 }} value={year} onChange={e => changeYear(e.target.value)}>
             {["2024","2025","2026","2027"].map(y => <option key={y}>{y}</option>)}
           </select>
         </div>
@@ -165,8 +205,8 @@ export default function PayrollAdjustments() {
       ) : rows.length === 0 ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--on-variant)", border: "1.5px dashed var(--outline-v)", borderRadius: "var(--radius)" }}>
           <i className="ti ti-adjustments-alt" style={{ fontSize: 32, display: "block", marginBottom: 8 }} />
-          No adjustments for {month} {year}.<br />
-          <span style={{ fontSize: 13 }}>Add individual adjustments or bulk import via Excel.</span>
+          No adjustments found.<br />
+          <span style={{ fontSize: 13 }}>No adjustments for {month} {year} — add individual adjustments or bulk import via Excel.</span>
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
@@ -205,16 +245,49 @@ export default function PayrollAdjustments() {
             </tbody>
           </table>
           <div style={{ marginTop: 8, fontSize: 12, color: "var(--on-variant)" }}>
-            {rows.length} adjustment(s) — Total additions: ₹{
-              rows.filter(r => r.type !== "deduction")
-                  .reduce((s, r) => s + Number(r.amount), 0)
-                  .toLocaleString("en-IN")
-            } · Total deductions: ₹{
-              rows.filter(r => r.type === "deduction")
-                  .reduce((s, r) => s + Number(r.amount), 0)
-                  .toLocaleString("en-IN")
-            }
+            {data && (
+              <>
+                Showing {(data.page - 1) * data.page_size + 1}–{Math.min(data.page * data.page_size, data.count)} of {data.count} adjustments
+                {" · "}Total additions: ₹{Number(data.total_additions).toLocaleString("en-IN")}
+                {" · "}Total deductions: ₹{Number(data.total_deductions).toLocaleString("en-IN")}
+              </>
+            )}
           </div>
+
+          {/* Pagination — reuses the existing backend page/page_size envelope */}
+          {data && data.total_pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 14, flexWrap: "wrap" }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={page <= 1}
+                onClick={() => setPage(p => Math.max(p - 1, 1))}
+              >
+                <i className="ti ti-chevron-left" /> Previous
+              </button>
+              {getPageNumbers(data.page, data.total_pages).map((p, i) =>
+                p === "…" ? (
+                  <span key={`ellipsis-${i}`} style={{ padding: "0 6px", color: "var(--on-variant)", fontSize: 12 }}>…</span>
+                ) : (
+                  <button
+                    key={p}
+                    className={`btn btn-sm ${p === data.page ? "btn-filled" : "btn-ghost"}`}
+                    style={{ minWidth: 32 }}
+                    disabled={p === data.page}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={page >= data.total_pages}
+                onClick={() => setPage(p => Math.min(p + 1, data.total_pages))}
+              >
+                Next <i className="ti ti-chevron-right" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -229,7 +302,7 @@ export default function PayrollAdjustments() {
             setAddErr("");
             try {
               await clientApi.post(API.payroll.adjustments, form);
-              refetch();
+              reloadFromPageOne();
               setShowAdd(false);
               setSaveMsg("Adjustment added.");
             } catch (err: unknown) {

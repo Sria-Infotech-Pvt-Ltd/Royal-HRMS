@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -46,14 +47,59 @@ class PayrollAdjustmentListCreateView(APIView):
         )
         if month:
             qs = qs.filter(month=month)
-        page_obj, paginator = paginate(qs, request)
+
+        # Month-level totals across ALL matching rows (not just the current
+        # page) — one DB-side aggregate query, not a Python sum over fetched
+        # rows, so it stays correct and cheap regardless of how many
+        # adjustments exist for the month.
+        totals = qs.aggregate(
+            total_additions=Sum(
+                'amount',
+                filter=Q(type__in=[PayrollAdjustment.ADDITION, PayrollAdjustment.ARREAR]),
+            ),
+            total_deductions=Sum('amount', filter=Q(type=PayrollAdjustment.DEDUCTION)),
+        )
+
+        # 10/page default for this screen specifically — core.pagination's
+        # own default (20) is untouched for every other endpoint using it.
+        page_obj, paginator = paginate(qs, request, default_page_size=10)
         serializer = PayrollAdjustmentSerializer(page_obj.object_list, many=True)
-        return success('Adjustments retrieved.', paginated_data(paginator, page_obj, serializer.data))
+
+        data = paginated_data(paginator, page_obj, serializer.data)
+        data['total_additions'] = totals['total_additions'] or Decimal('0')
+        data['total_deductions'] = totals['total_deductions'] or Decimal('0')
+        return success('Adjustments retrieved.', data)
 
     def post(self, request):
         if not _has_perm(request.user, 'payroll.edit'):
             return error('Only HR admin can add payroll adjustments.', http_status=403)
-        serializer = PayrollAdjustmentSerializer(data=request.data)
+
+        data = request.data.copy()
+        employee_code = data.get('employee_code')
+        if employee_code and not data.get('employee'):
+            # Same resolution the bulk-import path already uses — the
+            # "Add Adjustment" UI form only collects an employee code
+            # (like the bulk-import CSV), not a raw employee id.
+            try:
+                employee = User.objects.get(employee_id__iexact=str(employee_code).strip(), is_active=True)
+            except User.DoesNotExist:
+                return error(f'No active employee found with code "{employee_code}".')
+            except User.MultipleObjectsReturned:
+                return error(f'Multiple employees matched code "{employee_code}".')
+            data['employee'] = str(employee.id)
+
+        # The "Add Adjustment" UI form sends month as "YYYY-MM" (same shape
+        # the GET list/bulk-import query param already accepts via
+        # _parse_month() below) — DRF's plain DateField only accepts strict
+        # YYYY-MM-DD, so normalise here before validation using the same
+        # helper rather than duplicating date-parsing logic.
+        month_raw = data.get('month')
+        if month_raw:
+            parsed_month = _parse_month(month_raw)
+            if parsed_month:
+                data['month'] = parsed_month.isoformat()
+
+        serializer = PayrollAdjustmentSerializer(data=data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
         adjustment = serializer.save(created_by=request.user)

@@ -293,6 +293,7 @@ export const API = {
     markPaid: (id: string) => `/payroll/cycles/${id}/mark-paid/`,
     cancelCycle: (id: string) => `/payroll/cycles/${id}/cancel/`,
     cycleEcr:    (id: string) => `/payroll/cycles/${id}/ecr/`,
+    cycleEcrPdf: (id: string) => `/payroll/cycles/${id}/ecr/pdf/`,
 
     // Payslips (HR)
     cyclePayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/`,

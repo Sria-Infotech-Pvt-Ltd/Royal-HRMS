@@ -3330,3 +3330,65 @@ hrms_approval_workflow_rules: l2_approver_role corrected to the 'hr' Role for al
 ### Nothing committed
 
 All of the above is still local working-tree changes (per this session's standing rule: never commit/push without an explicit request) — ready for review before staging.
+
+---
+
+## Session Log — 2026-08-11
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Payroll → Reports page — ECR Export card + real PDF export**
+
+Earlier UI-cleanup request replaced the Reports page's 8 report cards with a single "ECR (Electronic Challan-cum-Return)" card (Export PDF / Export Excel buttons, existing Period+Branch filters). PDF was initially shipped disabled (no backend existed for it) — later authorized to build for real:
+
+- New `CycleECRPdfDownloadView` — `GET /payroll/cycles/<cycle_pk>/ecr/pdf/` (`backend/apps/payroll/views/ecr.py`, `urls.py`). Uses `reportlab` (pinned `reportlab==4.4.10` in `requirements.txt` — was already installed but undeclared) to render a landscape-A4 table matching the existing Excel export's columns/totals/colors.
+- Refactored the pre-existing Excel `CycleECRDownloadView` to share a new `_get_authorized_cycle()` + `_ecr_filename()` helper with the PDF view, so both formats enforce identical permission/branch/eligibility rules — verified byte-identical error messages on an ineligible cycle.
+- Frontend: `API.payroll.cycleEcrPdf(id)` added to `endpoints.ts`; `PayrollReports.tsx`'s Export PDF button now enabled and wired through the same blob-download flow as Export Excel.
+- Live-tested via Playwright against the real running app (not simulated): both buttons produce genuine downloads — `ECR_Aug_2026_Hyderabad.pdf` (3339 bytes, `%PDF-` magic bytes) and `.xlsx` (6042 bytes, zip magic) — no regressions to the Excel path.
+
+**2. LWF (Labour Welfare Fund) frequency bug — investigated, designed, and fixed**
+
+Surfaced as a byproduct of a full payroll-processing verification audit (see Investigation below). `StatutoryConfig.lwf_frequency` (monthly/halfyearly/annual) was stored and editable in Settings but **never read** by payroll calculation — `_compute_employee_payslip()` charged the full `lwf_employee_amount`/`lwf_employer_amount` every single cycle regardless of frequency, i.e. every state configured as `annual`/`halfyearly` was overcharged 12x/6x per year. Confirmed via cited external research (Karnataka, Maharashtra, Telangana LWF law) that the configured amount is a genuine *per-period* fixed levy due in one specific month(s), not a value meant to be divided across the year.
+
+Fix ("Option A" — approved after a design-review round):
+- New field `StatutoryConfig.lwf_due_months` (`JSONField`, default `[]`) — calendar months (1–12) in which the amount is actually due. Migration: `backend/apps/payroll/migrations/0013_statutoryconfig_lwf_due_months.py` (additive-only, no data touched).
+- `cycles.py`: new `_lwf_due_this_cycle(statutory, cycle_month)` — `monthly` → always due; `annual`/`halfyearly` → due only if `cycle.cycle_start.month` (same "which month is this cycle" convention `PayrollAdjustment.month` already uses) is in `lwf_due_months`; **empty `lwf_due_months` → never due** (Option A — a state can never be silently overcharged just because nobody's configured its due month yet). `_compute_employee_payslip()` now takes a `cycle_month` param; `_run_payroll_processing()` passes `cycle.cycle_start.month`.
+- `StatutoryConfigSerializer` (`serializers.py`): `lwf_due_months` exposed; validation enforces exactly 1 month for `annual`, exactly 2 distinct months for `halfyearly`, months must be ints 1–12, no duplicates; `monthly` ignores the count rule entirely.
+- Frontend (`StatutoryConfigTab.tsx`): due-month picker(s) shown conditionally on the selected frequency (1 selector for annual, 2 for half-yearly, none for monthly) + new `MonthSelect` helper + inline help text ("charged in full only in the due month(s) below — never divided across the year") to close a real documentation gap (the field previously had zero explanation anywhere in the app).
+- Tested with 35 checks, all passing, via `transaction.atomic()` + sentinel-exception rollback (no bare savepoints) against real Hyderabad/Telangana employee + statutory data: unit tests of `_lwf_due_this_cycle()`, serializer validation (valid/invalid month counts, duplicates, out-of-range, non-int), and a 6-variation reprocess integration test through the real `ProcessPayrollView` API confirming PF/ESI/PT/gross/basic/HRA stay byte-identical while only LWF (and net pay by exactly the LWF delta) changes, no duplicate payslips across reprocesses, and a real **paid** cycle's payslips are provably untouched (`updated_at` unchanged) since `ProcessPayrollView` already refuses non-`attendance_approved`/`payslips_generated` statuses. `manage.py check` and `makemigrations --check` both clean.
+- **Not yet done — needs approval before applying to real data**: `lwf_due_months` is `[]` for every real state (migration default). Proposed (sourced): Telangana → `[12]` (the only state with real, live employees today — Hyderabad branch), Karnataka → `[12]`, Maharashtra → `[6, 12]`. Gujarat and Andhra Pradesh (also `annual`, real amounts configured) have no verified due-month source yet — left unconfigured rather than guessed. Waiting on sign-off to actually write these into the DB.
+
+### Investigation (informational, no code changed unless noted above)
+
+**3. Full payroll-processing verification audit**
+
+Read-only audit of Process Payroll / payslip generation / adjustments / reprocessing / branch+employee isolation against real Hyderabad/Mumbai branch and employee data, using `transaction.atomic()` + sentinel-exception rollback throughout (established pattern after an earlier-session incident where a bare `savepoint()`/`savepoint_rollback()` — not wrapped in `atomic()` — silently failed to roll back and leaked real rows; see that incident's cleanup in an earlier log if this ever recurs). 33 checks, all passed:
+- Employee scope correctly filters to the cycle's branch (verified a Mumbai employee — even given a temporary valid salary config specifically so the check wasn't trivial — got zero payslips from a Hyderabad cycle); employees with no `EmployeeSalaryConfig` are correctly skipped, not silently defaulted.
+- Payslip fields (Basic/HRA/Special/Gross/PF/ESI/PT/LWF/Net) independently re-derived from raw `SalaryStructure`/`StatutoryConfig` rows (a separate calculation path, not calling the production function) matched exactly, including a specifically-constructed low-CTC case to exercise the ESI-wage-ceiling branch.
+- Addition/Deduction/Arrear adjustments moved net pay by exactly their amount in the correct direction; reprocessing after each never created a duplicate `EmployeePayslip` (`unique_together=(cycle, employee)` holds); a second employee's payslip was provably byte-identical before/after another employee's adjustments+reprocesses.
+- API responses (`CyclePayslipListView`, `PayslipDetailView`, adjustments list) correctly scoped/filtered per employee and branch.
+- This audit is what surfaced the LWF frequency issue above — flagged rather than fixed on the spot, per instruction to investigate business intent before changing statutory calculations.
+
+### Files Changed
+
+```
+backend/apps/payroll/views/ecr.py                          — _get_authorized_cycle(), _ecr_filename(), _build_ecr_pdf(), CycleECRPdfDownloadView (new)
+backend/apps/payroll/urls.py                                — payroll-cycle-ecr-pdf route
+backend/requirements.txt                                    — reportlab==4.4.10 pinned
+frontend/lib/api/endpoints.ts                                — cycleEcrPdf endpoint
+frontend/app/dashboard/payroll/_components/PayrollReports.tsx — Export PDF enabled + wired
+
+backend/apps/payroll/models.py                               — StatutoryConfig.lwf_due_months (new field)
+backend/apps/payroll/migrations/0013_statutoryconfig_lwf_due_months.py — NEW
+backend/apps/payroll/serializers.py                          — lwf_due_months exposed + validated on StatutoryConfigSerializer
+backend/apps/payroll/views/cycles.py                         — _lwf_due_this_cycle() (new); _compute_employee_payslip() takes cycle_month; caller updated
+frontend/types/payroll.ts                                    — lwf_due_months: number[] added to StatutoryConfig type
+frontend/app/dashboard/settings/payroll-config/_components/StatutoryConfigTab.tsx — due-month picker(s) + MonthSelect helper + help text
+```
+
+### Pending
+
+- **Awaiting approval**: write the proposed `lwf_due_months` values above (Telangana/Karnataka/Maharashtra) into the real `StatutoryConfig` rows — no code change needed for this, just data, once approved.
+- Gujarat / Andhra Pradesh LWF due month: unverified, needs a real source before configuring (both currently have zero real employees, so no urgency).
+- Carried over from an earlier session: Payroll Adjustments pagination (10/page, numbered controls, month-level totals) was implemented and backend-verified but its own live-browser confirmation was never completed — still outstanding.

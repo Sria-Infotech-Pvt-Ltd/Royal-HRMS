@@ -282,30 +282,65 @@ export default function StatutoryConfigTab() {
                   onChange={v => setField("lwf_applicable", v)}
                 />
                 {current.lwf_applicable && (
-                  <div className="grid grid-cols-3 gap-3 mt-3">
-                    <NumField
-                      label="Employee Amount (₹)"
-                      value={String(current.lwf_employee_amount ?? "")}
-                      onChange={v => setField("lwf_employee_amount", v)}
-                    />
-                    <NumField
-                      label="Employer Amount (₹)"
-                      value={String(current.lwf_employer_amount ?? "")}
-                      onChange={v => setField("lwf_employer_amount", v)}
-                    />
-                    <div>
-                      <label className="block text-[12px] font-semibold text-gray-700 mb-1">Frequency</label>
-                      <select
-                        value={current.lwf_frequency ?? "monthly"}
-                        onChange={e => setField("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      >
-                        <option value="monthly">Monthly</option>
-                        <option value="halfyearly">Half-yearly</option>
-                        <option value="annual">Annual</option>
-                      </select>
+                  <>
+                    <div className="grid grid-cols-3 gap-3 mt-3">
+                      <NumField
+                        label="Employee Amount (₹)"
+                        value={String(current.lwf_employee_amount ?? "")}
+                        onChange={v => setField("lwf_employee_amount", v)}
+                      />
+                      <NumField
+                        label="Employer Amount (₹)"
+                        value={String(current.lwf_employer_amount ?? "")}
+                        onChange={v => setField("lwf_employer_amount", v)}
+                      />
+                      <div>
+                        <label className="block text-[12px] font-semibold text-gray-700 mb-1">Frequency</label>
+                        <select
+                          value={current.lwf_frequency ?? "monthly"}
+                          onChange={e => setField("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
+                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        >
+                          <option value="monthly">Monthly</option>
+                          <option value="halfyearly">Half-yearly</option>
+                          <option value="annual">Annual</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
+                    <p className="text-[11px] text-gray-500 mt-2">
+                      The amount above is charged in full only in the due month(s) below — it is never divided across the year.
+                    </p>
+                    {current.lwf_frequency === "annual" && (
+                      <div className="grid grid-cols-3 gap-3 mt-3">
+                        <MonthSelect
+                          label="Due Month"
+                          value={current.lwf_due_months?.[0]}
+                          onChange={m => setField("lwf_due_months", m ? [m] : [])}
+                        />
+                      </div>
+                    )}
+                    {current.lwf_frequency === "halfyearly" && (
+                      <div className="grid grid-cols-3 gap-3 mt-3">
+                        <MonthSelect
+                          label="Due Month 1"
+                          value={current.lwf_due_months?.[0]}
+                          onChange={m => {
+                            const second = current.lwf_due_months?.[1];
+                            setField("lwf_due_months", [m, second === m ? undefined : second].filter((x): x is number => typeof x === "number"));
+                          }}
+                        />
+                        <MonthSelect
+                          label="Due Month 2"
+                          value={current.lwf_due_months?.[1]}
+                          onChange={m => {
+                            const first = current.lwf_due_months?.[0];
+                            setField("lwf_due_months", [first, m].filter((x): x is number => typeof x === "number"));
+                          }}
+                          disabledMonth={current.lwf_due_months?.[0]}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </Section>
             </div>
@@ -368,6 +403,36 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
       >
         <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
       </button>
+    </div>
+  );
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function MonthSelect({
+  label, value, onChange, disabledMonth,
+}: {
+  label: string;
+  value: number | undefined;
+  onChange: (month: number | undefined) => void;
+  disabledMonth?: number;
+}) {
+  return (
+    <div>
+      <label className="block text-[12px] font-semibold text-gray-700 mb-1">{label}</label>
+      <select
+        value={value ?? ""}
+        onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+      >
+        <option value="">Select month</option>
+        {MONTH_NAMES.map((name, i) => (
+          <option key={name} value={i + 1} disabled={disabledMonth === i + 1}>{name}</option>
+        ))}
+      </select>
     </div>
   );
 }
