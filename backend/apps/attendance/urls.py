@@ -6,6 +6,7 @@ from apps.attendance.views import (
     AbsenceAlertPolicyListCreateView,
     AttendanceCalendarView,
     AttendanceCorrectionView,
+    AttendanceGeofenceCheckView,
     AttendancePunchView,
     AttendanceSettingsAPIView,
     AttendanceStatsView,
@@ -88,6 +89,7 @@ urlpatterns = [
 
     # ── My Attendance ─────────────────────────────────────────────────────────
     path('punch/',      AttendancePunchView.as_view(),    name='attendance-punch'),
+    path('geofence-check/', AttendanceGeofenceCheckView.as_view(), name='attendance-geofence-check'),
     path('today/',      TodayAttendanceView.as_view(),    name='attendance-today'),
     path('stats/',      AttendanceStatsView.as_view(),    name='attendance-stats'),
     path('summary/',    AttendanceSummaryView.as_view(),  name='attendance-summary'),

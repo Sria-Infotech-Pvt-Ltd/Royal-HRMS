@@ -83,6 +83,26 @@ class PunchWriteSerializer(serializers.Serializer):
         return attrs
 
 
+class GeofenceCheckSerializer(serializers.Serializer):
+    """
+    POST /api/attendance/geofence-check/
+
+    A pre-punch, read-only geofence validation the web client calls with the
+    freshly-captured GPS reading BEFORE opening the face verification modal —
+    same ordering the voice flow already gives via GeofencingService.validate
+    inside conversation_clock_in_face.start_voice_clock_punch. Records
+    nothing; PunchService.record_punch runs the exact same check again,
+    authoritatively, when the punch is actually submitted.
+    """
+    attendance_mode = serializers.ChoiceField(
+        choices=['office', 'wfh', 'field', 'client_location', 'remote_office'],
+        default='office',
+    )
+    latitude  = serializers.FloatField(required=False, allow_null=True, default=None)
+    longitude = serializers.FloatField(required=False, allow_null=True, default=None)
+    accuracy  = serializers.FloatField(required=False, allow_null=True, default=None)
+
+
 class CorrectionWriteSerializer(serializers.Serializer):
     """POST /api/attendance/correction/"""
 

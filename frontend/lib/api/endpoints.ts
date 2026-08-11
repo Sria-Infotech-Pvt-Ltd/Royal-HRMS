@@ -177,6 +177,7 @@ export const API = {
   attendance: {
     settings: "/attendance/settings/",
     punch: "/attendance/punch/",
+    geofenceCheck: "/attendance/geofence-check/",
     today: "/attendance/today/",
     stats: "/attendance/stats/",
     summary: "/attendance/summary/",
