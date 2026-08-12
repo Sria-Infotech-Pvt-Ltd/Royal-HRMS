@@ -40,3 +40,18 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
             'action_queue':    event.get('action_queue'),
             'pending_actions': event.get('pending_actions'),
         })
+
+
+class NotFoundConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Catch-all for any WebSocket path that doesn't match a real route (see the
+    trailing pattern in routing.py) — closes immediately instead of letting
+    Channels' URLRouter raise an unhandled ValueError per connection attempt,
+    which otherwise dumps a full traceback to the server log for every stray
+    or outdated client (e.g. a stale cached page hitting the old '/notifications/'
+    path instead of '/ws/notifications/').
+    """
+
+    async def connect(self):
+        logger.warning('WebSocket connection to unknown path %r rejected.', self.scope.get('path'))
+        await self.close(code=4004)

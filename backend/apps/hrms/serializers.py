@@ -4,11 +4,18 @@ import re
 from rest_framework import serializers
 
 from .models import (
+    APPROVAL_PENDING,
     CarryForwardLog,
     Expense, ExpenseReceipt,
     Holiday, HOLIDAY_TYPE_CHOICES,
     LeaveBalance, LeavePolicy, LeaveRequest,
     LEAVE_LWP, LEAVE_TYPE_CHOICES, DURATION_CHOICES,
+    SeparationRequest, SEPARATION_TYPE_CHOICES, SEPARATION_REASON_CHOICES,
+    SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_CANCELLED,
+    SEP_STAGE_HR, SEP_STAGE_MANAGER, SEP_STAGE_BRANCH_ADMIN,
+    SEP_CLEARANCE_MANAGER,
+    SeparationApprovalStage, SeparationHandoverTask, SeparationClearance,
+    SeparationDocument, SeparationActivity,
 )
 
 logger = logging.getLogger(__name__)
@@ -537,3 +544,311 @@ class CarryForwardLogSerializer(serializers.ModelSerializer):
 
     def get_executed_by_name(self, obj):
         return obj.executed_by.full_name if obj.executed_by_id else 'System'
+
+
+# ─── Separation — shared permission helper ────────────────────────────────────
+# Read-only mirror of the enforcement gate in views/separation_workflow.py —
+# drives the can_action/can_approve display flags. The view remains the
+# authoritative check; this only has to be a faithful approximation, same as
+# LeaveRequestSerializer.get_can_approve vs. leave.py's _can_approve_at_stage.
+
+def _stage_actionable(user, sep_request, stage) -> bool:
+    if not user or sep_request.employee_id == user.id or stage.status != APPROVAL_PENDING:
+        return False
+    earlier_pending = SeparationApprovalStage.objects.filter(
+        request_id=sep_request.id, sequence__lt=stage.sequence, status=APPROVAL_PENDING,
+    ).exists()
+    if earlier_pending:
+        return False
+    if user.role and user.role.role_permissions.filter(permission__codename='settings.edit').exists():
+        return True
+    if stage.stage == SEP_STAGE_MANAGER:
+        return stage.approver_id == user.id
+    if stage.stage == SEP_STAGE_BRANCH_ADMIN:
+        return bool(
+            user.role and user.role.can_manage_branch
+            and (user.branch or '') == (sep_request.employee.branch or '')
+        )
+    if stage.stage == SEP_STAGE_HR:
+        if stage.approver_id:
+            return stage.approver_id == user.id
+        has_perm = bool(
+            user.role and user.role.role_permissions.filter(
+                permission__codename__in={'separation.approve', 'settings.edit'}
+            ).exists()
+        )
+        return has_perm and (not user.branch or user.branch == sep_request.employee.branch)
+    return False
+
+
+def _authed_user(context):
+    request = context.get('request')
+    if not request or not request.user or not request.user.is_authenticated:
+        return None
+    return request.user
+
+
+# ─── Separation — Approval Stage serializer ───────────────────────────────────
+
+class SeparationApprovalStageSerializer(serializers.ModelSerializer):
+    stage_display  = serializers.CharField(source='get_stage_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    approver_name  = serializers.SerializerMethodField()
+    can_action     = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationApprovalStage
+        fields = [
+            'id', 'stage', 'stage_display', 'sequence', 'status', 'status_display',
+            'approver_name', 'remarks', 'actioned_at', 'can_action',
+        ]
+
+    def get_approver_name(self, obj):
+        return obj.approver.full_name if obj.approver_id else ''
+
+    def get_can_action(self, obj):
+        user = _authed_user(self.context)
+        return bool(user) and _stage_actionable(user, obj.request, obj)
+
+
+# ─── Separation Request serializers ───────────────────────────────────────────
+
+class SeparationRequestSerializer(serializers.ModelSerializer):
+    request_ref             = serializers.SerializerMethodField()
+    employee_name           = serializers.SerializerMethodField()
+    employee_code           = serializers.SerializerMethodField()
+    employee_department     = serializers.SerializerMethodField()
+    employee_designation    = serializers.SerializerMethodField()
+    reporting_manager       = serializers.SerializerMethodField()
+    created_by_name          = serializers.SerializerMethodField()
+    separation_type_display = serializers.CharField(source='get_separation_type_display', read_only=True)
+    reason_display           = serializers.CharField(source='get_reason_display', read_only=True)
+    status_display           = serializers.SerializerMethodField()
+    document_url             = serializers.SerializerMethodField()
+    approval_stages           = SeparationApprovalStageSerializer(many=True, read_only=True)
+    can_approve               = serializers.SerializerMethodField()
+    can_cancel                = serializers.SerializerMethodField()
+    can_edit                  = serializers.SerializerMethodField()
+    can_delete                = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationRequest
+        fields = [
+            'id', 'request_ref', 'separation_type', 'separation_type_display', 'reason', 'reason_display',
+            'request_date', 'proposed_last_working_day', 'notice_period_days', 'comments',
+            'status', 'status_display',
+            'employee_name', 'employee_code', 'employee_department', 'employee_designation', 'reporting_manager',
+            'document_url', 'created_by_name', 'approval_stages',
+            'can_approve', 'can_cancel', 'can_edit', 'can_delete', 'created_at',
+        ]
+
+    def get_request_ref(self, obj):
+        return f'SEP-{obj.request_number}' if obj.request_number else ''
+
+    def get_employee_name(self, obj):
+        return obj.employee.full_name if obj.employee_id else ''
+
+    def get_employee_code(self, obj):
+        return obj.employee.employee_id if obj.employee_id else ''
+
+    def get_employee_department(self, obj):
+        return obj.employee.department if obj.employee_id else ''
+
+    def get_employee_designation(self, obj):
+        return obj.employee.designation if obj.employee_id else ''
+
+    def get_reporting_manager(self, obj):
+        mgr = obj.employee.reporting_manager if obj.employee_id else None
+        if not mgr:
+            return None
+        return {'id': mgr.employee_id, 'name': mgr.full_name}
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by_id else ''
+
+    def get_document_url(self, obj):
+        if not obj.document:
+            return None
+        request = self.context.get('request')
+        url = obj.document.url
+        return request.build_absolute_uri(url) if request else url
+
+    def get_status_display(self, obj):
+        if obj.status in (SEP_APPROVED, SEP_REJECTED, SEP_CANCELLED):
+            return obj.get_status_display()
+        stage = next((s for s in sorted(obj.approval_stages.all(), key=lambda s: s.sequence) if s.status == APPROVAL_PENDING), None)
+        if stage:
+            return f'{stage.get_stage_display().replace(" Approval", "")} Review'
+        return obj.get_status_display()
+
+    def get_can_approve(self, obj):
+        user = _authed_user(self.context)
+        if not user or obj.status not in (SEP_PENDING, SEP_STAGE2_PENDING):
+            return False
+        return any(_stage_actionable(user, obj, s) for s in obj.approval_stages.all())
+
+    def get_can_cancel(self, obj):
+        user = _authed_user(self.context)
+        return bool(user and obj.employee_id == user.id and obj.status in (SEP_PENDING, SEP_STAGE2_PENDING))
+
+    def get_can_edit(self, obj):
+        return self.get_can_cancel(obj)
+
+    def get_can_delete(self, obj):
+        user = _authed_user(self.context)
+        if not user or obj.employee_id == user.id or obj.status == SEP_APPROVED:
+            return False
+        return bool(
+            user.role and user.role.role_permissions.filter(
+                permission__codename__in={'separation.approve', 'settings.edit'}
+            ).exists()
+        )
+
+
+MAX_SEPARATION_DOC_SIZE   = 5 * 1024 * 1024
+ALLOWED_SEPARATION_DOC_TYPES = {'image/jpeg', 'image/png', 'application/pdf'}
+
+
+class SeparationRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = SeparationRequest
+        fields = [
+            'separation_type', 'reason', 'request_date', 'proposed_last_working_day',
+            'notice_period_days', 'comments', 'document',
+        ]
+
+    def validate_notice_period_days(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Notice period cannot be negative.')
+        return value
+
+    def validate_document(self, value):
+        if value is None:
+            return value
+        if value.size > MAX_SEPARATION_DOC_SIZE:
+            raise serializers.ValidationError('Document must be under 5 MB.')
+        content_type = getattr(value, 'content_type', '')
+        if content_type not in ALLOWED_SEPARATION_DOC_TYPES:
+            raise serializers.ValidationError('Only PDF, JPG, and PNG documents are accepted.')
+        return value
+
+    def validate(self, data):
+        request_date = data.get('request_date', self.instance.request_date if self.instance else None)
+        last_day     = data.get('proposed_last_working_day', self.instance.proposed_last_working_day if self.instance else None)
+        if request_date and last_day and last_day < request_date:
+            raise serializers.ValidationError(
+                {'proposed_last_working_day': 'Proposed last working day must be on or after the request date.'}
+            )
+        return data
+
+
+# ─── Separation — KT / Handover Task serializers ──────────────────────────────
+
+class SeparationHandoverTaskSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name   = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationHandoverTask
+        fields = [
+            'id', 'task', 'description', 'assigned_to', 'assigned_to_name',
+            'due_date', 'is_completed', 'completed_at', 'created_by_name', 'created_at',
+        ]
+
+    def get_assigned_to_name(self, obj):
+        return obj.assigned_to.full_name if obj.assigned_to_id else ''
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by_id else ''
+
+
+class SeparationHandoverTaskCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = SeparationHandoverTask
+        fields = ['task', 'description', 'assigned_to', 'due_date']
+
+    def validate_task(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Task name is required.')
+        return value
+
+
+# ─── Separation — Clearance serializer ─────────────────────────────────────────
+
+class SeparationClearanceSerializer(serializers.ModelSerializer):
+    clearance_type_display = serializers.CharField(source='get_clearance_type_display', read_only=True)
+    status_display          = serializers.CharField(source='get_status_display', read_only=True)
+    cleared_by_name          = serializers.SerializerMethodField()
+    can_action               = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationClearance
+        fields = [
+            'id', 'clearance_type', 'clearance_type_display', 'status', 'status_display',
+            'cleared_by_name', 'remarks', 'actioned_at', 'can_action',
+        ]
+
+    def get_cleared_by_name(self, obj):
+        return obj.cleared_by.full_name if obj.cleared_by_id else ''
+
+    def get_can_action(self, obj):
+        user = _authed_user(self.context)
+        if not user or obj.request.employee_id == user.id or obj.status != APPROVAL_PENDING:
+            return False
+        if user.role and user.role.role_permissions.filter(
+            permission__codename__in={'separation.approve', 'settings.edit'}
+        ).exists():
+            return True
+        if obj.clearance_type == SEP_CLEARANCE_MANAGER:
+            from apps.accounts.models import Department
+            dept = Department.objects.filter(name=obj.request.employee.department).first()
+            return bool(dept and dept.manager_id == user.id)
+        return False
+
+
+# ─── Separation — Document serializer ──────────────────────────────────────────
+
+class SeparationDocumentSerializer(serializers.ModelSerializer):
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    uploaded_by_name        = serializers.SerializerMethodField()
+    file_url                = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationDocument
+        fields = ['id', 'document_type', 'document_type_display', 'file_url', 'uploaded_by_name', 'created_at']
+
+    def get_uploaded_by_name(self, obj):
+        return obj.uploaded_by.full_name if obj.uploaded_by_id else ''
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        url = obj.file.url
+        return request.build_absolute_uri(url) if request else url
+
+
+class SeparationDocumentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = SeparationDocument
+        fields = ['document_type', 'file']
+
+    def validate_file(self, value):
+        if value.size > MAX_SEPARATION_DOC_SIZE:
+            raise serializers.ValidationError('Document must be under 5 MB.')
+        content_type = getattr(value, 'content_type', '')
+        if content_type not in ALLOWED_SEPARATION_DOC_TYPES:
+            raise serializers.ValidationError('Only PDF, JPG, and PNG documents are accepted.')
+        return value
+
+
+# ─── Separation — Activity serializer ──────────────────────────────────────────
+
+class SeparationActivitySerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationActivity
+        fields = ['id', 'message', 'actor_name', 'created_at']
+
+    def get_actor_name(self, obj):
+        return obj.actor.full_name if obj.actor_id else 'System'

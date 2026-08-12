@@ -304,6 +304,247 @@ class CarryForwardLog(models.Model):
         return f'CarryForward {self.from_year}→{self.to_year} by {by}'
 
 
+# ─── Separation Request ───────────────────────────────────────────────────────
+
+SEPARATION_RESIGNATION  = 'resignation'
+SEPARATION_RETIREMENT   = 'retirement'
+SEPARATION_OTHER        = 'other'
+
+SEPARATION_TYPE_CHOICES = [
+    (SEPARATION_RESIGNATION,  'Resignation'),
+    (SEPARATION_RETIREMENT,   'Retirement'),
+    (SEPARATION_OTHER,        'Other'),
+]
+
+SEPARATION_REASON_CHOICES = [
+    ('better_career_opportunity', 'Better Career Opportunity'),
+    ('personal_reason',           'Personal Reason'),
+    ('higher_education',          'Higher Education'),
+    ('relocation',                'Relocation'),
+    ('compensation',              'Compensation'),
+    ('health_family',             'Health / Family'),
+    ('other',                     'Other'),
+]
+
+SEP_PENDING        = 'pending'         # awaiting stage 1 (HR)
+SEP_STAGE2_PENDING = 'stage2_pending'  # HR approved, awaiting stage 2 (manager/branch admin)
+SEP_APPROVED       = 'approved'
+SEP_REJECTED       = 'rejected'
+SEP_CANCELLED      = 'cancelled'
+
+SEPARATION_STATUS_CHOICES = [
+    (SEP_PENDING,        'Pending'),
+    (SEP_STAGE2_PENDING, 'Stage 2 Pending'),
+    (SEP_APPROVED,       'Approved'),
+    (SEP_REJECTED,       'Rejected'),
+    (SEP_CANCELLED,      'Cancelled'),
+]
+
+
+class SeparationRequest(models.Model):
+    id                        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request_number            = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
+    employee                  = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='separation_requests')
+    separation_type           = models.CharField(max_length=20, choices=SEPARATION_TYPE_CHOICES)
+    reason                    = models.CharField(max_length=30, choices=SEPARATION_REASON_CHOICES)
+    request_date              = models.DateField()
+    proposed_last_working_day = models.DateField()
+    notice_period_days        = models.PositiveIntegerField(default=30)
+    comments                  = models.TextField(blank=True, default='')
+    document                  = models.FileField(upload_to='separation_documents/', null=True, blank=True)
+    status                    = models.CharField(max_length=20, choices=SEPARATION_STATUS_CHOICES, default=SEP_PENDING, db_index=True)
+
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_requests_filed',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_separation_requests'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.separation_type} ({self.proposed_last_working_day})'
+
+
+# ─── Separation — Approval Stages ─────────────────────────────────────────────
+# Two-stage chain, always in this order:
+#   1. HR Approval        — the employee's assigned HR (User.hr); falls back to
+#                            any separation.approve holder in the employee's
+#                            branch when no HR is assigned (unresolved approver).
+#   2. Manager Approval    — the employee's Department.manager — OR, when the
+#      / Branch Admin Approval  department has no manager or the employee IS
+#                            that department's manager (can't approve their own
+#                            exit), escalates to Branch Admin (role.can_manage_branch,
+#                            same branch) instead — unresolved approver, any
+#                            matching branch admin may act.
+
+SEP_STAGE_HR           = 'hr'
+SEP_STAGE_MANAGER      = 'manager'
+SEP_STAGE_BRANCH_ADMIN = 'branch_admin'
+
+SEP_STAGE_CHOICES = [
+    (SEP_STAGE_HR,           'HR Approval'),
+    (SEP_STAGE_MANAGER,      'Manager Approval'),
+    (SEP_STAGE_BRANCH_ADMIN, 'Branch Admin Approval'),
+]
+
+
+class SeparationApprovalStage(models.Model):
+    id       = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request  = models.ForeignKey(SeparationRequest, on_delete=models.CASCADE, related_name='approval_stages')
+    stage    = models.CharField(max_length=20, choices=SEP_STAGE_CHOICES)
+    sequence = models.PositiveSmallIntegerField()  # 1, 2 — action order
+
+    # Left null when the stage resolves to a role/branch rather than one
+    # specific person (e.g. an unassigned HR, or the branch-admin fallback).
+    approver = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_approval_stages',
+    )
+    status      = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default=APPROVAL_PENDING)
+    remarks     = models.TextField(blank=True, default='')
+    actioned_at = models.DateTimeField(null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'hrms_separation_approval_stages'
+        ordering        = ['request', 'sequence']
+        unique_together = ('request', 'sequence')
+
+    def __str__(self) -> str:
+        return f'{self.request_id} — {self.stage} ({self.status})'
+
+
+# ─── Separation — KT / Handover Tasks ─────────────────────────────────────────
+
+class SeparationHandoverTask(models.Model):
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request      = models.ForeignKey(SeparationRequest, on_delete=models.CASCADE, related_name='handover_tasks')
+    task         = models.CharField(max_length=200)
+    description  = models.TextField(blank=True, default='')
+    assigned_to  = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_handover_tasks',
+    )
+    due_date      = models.DateField(null=True, blank=True)
+    is_completed  = models.BooleanField(default=False)
+    completed_at  = models.DateTimeField(null=True, blank=True)
+    created_by    = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_handover_tasks_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_separation_handover_tasks'
+        ordering = ['is_completed', 'due_date', 'created_at']
+
+    def __str__(self) -> str:
+        return f'{self.task} ({self.request_id})'
+
+
+# ─── Separation — Clearances ───────────────────────────────────────────────────
+# Fixed set of 4, auto-created alongside the SeparationRequest.
+
+SEP_CLEARANCE_MANAGER = 'manager'
+SEP_CLEARANCE_IT       = 'it'
+SEP_CLEARANCE_FINANCE  = 'finance'
+SEP_CLEARANCE_HR       = 'hr'
+
+SEP_CLEARANCE_TYPE_CHOICES = [
+    (SEP_CLEARANCE_MANAGER, 'Manager Clearance'),
+    (SEP_CLEARANCE_IT,      'IT Clearance'),
+    (SEP_CLEARANCE_FINANCE, 'Finance Clearance'),
+    (SEP_CLEARANCE_HR,      'HR Clearance'),
+]
+
+
+class SeparationClearance(models.Model):
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request         = models.ForeignKey(SeparationRequest, on_delete=models.CASCADE, related_name='clearances')
+    clearance_type  = models.CharField(max_length=20, choices=SEP_CLEARANCE_TYPE_CHOICES)
+    status          = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default=APPROVAL_PENDING)
+    cleared_by      = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_clearances_given',
+    )
+    remarks     = models.TextField(blank=True, default='')
+    actioned_at = models.DateTimeField(null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'hrms_separation_clearances'
+        ordering        = ['clearance_type']
+        unique_together = ('request', 'clearance_type')
+
+    def __str__(self) -> str:
+        return f'{self.request_id} — {self.clearance_type} ({self.status})'
+
+
+# ─── Separation — Documents ────────────────────────────────────────────────────
+
+SEP_DOC_RESIGNATION_LETTER  = 'resignation_letter'
+SEP_DOC_RELIEVING_LETTER    = 'relieving_letter'
+SEP_DOC_EXPERIENCE_LETTER   = 'experience_letter'
+SEP_DOC_FULL_FINAL_STATEMENT = 'full_final_statement'
+SEP_DOC_NDA                  = 'nda'
+SEP_DOC_OTHER                = 'other'
+
+SEP_DOCUMENT_TYPE_CHOICES = [
+    (SEP_DOC_RESIGNATION_LETTER,   'Resignation Letter'),
+    (SEP_DOC_RELIEVING_LETTER,     'Relieving Letter'),
+    (SEP_DOC_EXPERIENCE_LETTER,    'Experience Letter'),
+    (SEP_DOC_FULL_FINAL_STATEMENT, 'Full & Final Statement'),
+    (SEP_DOC_NDA,                  'NDA / Undertaking'),
+    (SEP_DOC_OTHER,                'Other'),
+]
+
+
+class SeparationDocument(models.Model):
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request        = models.ForeignKey(SeparationRequest, on_delete=models.CASCADE, related_name='documents')
+    document_type  = models.CharField(max_length=30, choices=SEP_DOCUMENT_TYPE_CHOICES, default=SEP_DOC_OTHER)
+    file           = models.FileField(upload_to='separation_documents/')
+    uploaded_by    = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_documents_uploaded',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'hrms_separation_documents'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.get_document_type_display()} ({self.request_id})'
+
+
+# ─── Separation — Activity Log ─────────────────────────────────────────────────
+
+class SeparationActivity(models.Model):
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request    = models.ForeignKey(SeparationRequest, on_delete=models.CASCADE, related_name='activities')
+    actor      = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_activities',
+    )
+    message    = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'hrms_separation_activities'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return self.message
+
+
 # ─── Leave Request ────────────────────────────────────────────────────────────
 
 class LeaveRequest(models.Model):
