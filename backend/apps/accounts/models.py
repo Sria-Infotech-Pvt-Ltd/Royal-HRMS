@@ -159,6 +159,18 @@ class User(AbstractBaseUser, PermissionsMixin):
              blank=True,
              related_name='hr_employees',
          )
+    # Manager-role users have no reporting_manager (they ARE the manager for
+    # others — see _auto_assign_managers) and HR-role users often auto-assign
+    # to their branch's manager but may end up with none either. This gives
+    # Manager/HR profiles a designated approver for their own requests (e.g.
+    # separation) instead of leaving that stage permanently unreachable.
+    reporting_approver = models.ForeignKey(
+                              'self',
+                              on_delete=models.SET_NULL,
+                              null=True,
+                              blank=True,
+                              related_name='approver_for',
+                          )
     is_active       = models.BooleanField(default=True)
     is_staff      = models.BooleanField(default=False)
     must_change_password    = models.BooleanField(default=True)
@@ -638,6 +650,54 @@ class EmployeeCodeSettings(models.Model):
             cfg.next_sequence += 1
             cfg.save(update_fields=['next_sequence', 'updated_at'])
         return emp_id
+
+
+# ─── Birthday Settings (singleton) ───────────────────────────────────────────
+
+class BirthdaySettings(models.Model):
+    """Singleton row (pk=1) that governs the automatic birthday wishes feature.
+
+    The birthday email's subject/body is intentionally NOT duplicated here —
+    it's already admin-editable via the 'birthday_wish' EmailTemplate row
+    (Settings → Email Templates). This model only covers what that page
+    doesn't: the master on/off switch and the dashboard/notification copy.
+    """
+    is_enabled = models.BooleanField(default=True)
+    banner_message_template = models.TextField(
+        default='We wish you a wonderful year filled with happiness, good '
+                'health, success, and prosperity. Have an amazing birthday! 🎂',
+    )
+    employee_notification_template = models.TextField(
+        default='We wish you a wonderful birthday and a successful year ahead.',
+    )
+    team_notification_template = models.TextField(
+        default="Today is {employee_name}'s birthday. Take a moment to wish "
+                'your teammate a wonderful birthday.',
+    )
+    manager_notification_template = models.TextField(
+        default="Today is {employee_name}'s birthday. Your team member is "
+                'celebrating their birthday today.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='birthday_settings_updates',
+    )
+
+    class Meta:
+        db_table = 'hrms_birthday_settings'
+
+    def __str__(self) -> str:
+        return 'Birthday Settings (enabled)' if self.is_enabled else 'Birthday Settings (disabled)'
+
+    @classmethod
+    def get(cls) -> 'BirthdaySettings':
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
 
 
 # ─── Document Center ──────────────────────────────────────────────────────────

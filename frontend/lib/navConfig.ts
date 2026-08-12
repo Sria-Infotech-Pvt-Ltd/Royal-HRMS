@@ -25,7 +25,6 @@ const ALL_NAV: NavEntry[] = [
   { id: "interview-list", icon: "ti-users", label: "Interview List", path: "/dashboard/interview-list", permission: "recruitment.view" },
   { id: "candidate-review", icon: "ti-user-check", label: "Review & Onboarding", path: "/dashboard/candidate-review", permission: "recruitment.view" },
   { id: "assessments", icon: "ti-clipboard-check", label: "Assessments", path: "/dashboard/assessments", permission: "assessments.view" },
-  { id: "email-logs", icon: "ti-mail", label: "Email Logs", path: "/dashboard/email-logs", permission: "recruitment.view" },
   { id: "face-id-registrations", icon: "ti-face-id", label: "Face ID Registrations", path: "/dashboard/face-id-registrations", permission: "facial_recognition.approve" },
 
   { section: "Workforce" },
@@ -41,7 +40,9 @@ const ALL_NAV: NavEntry[] = [
 
   { section: "HR Ops" },
   { id: "approvals", icon: "ti-checks", label: "Approvals", path: "/dashboard/approvals", permission: ["leave.approve", "expenses.approve"] },
-  { id: "separation", icon: "ti-logout", label: "Separation & FnF", path: "/dashboard/separation", permission: "employees.view", comingSoon: true },
+  // permission: null — every employee can create/view their own request here,
+  // not just Manager/HR; the page itself scopes what each viewer sees.
+  { id: "separation", icon: "ti-logout", label: "Separation & Exit", path: "/dashboard/separation", permission: null },
   { id: "documents", icon: "ti-folder", label: "Document Center", path: "/dashboard/documents", permission: "documents.view" },
 
   { section: "My" },
@@ -56,7 +57,6 @@ const ALL_NAV: NavEntry[] = [
   { id: "profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 
   { section: "System" },
-  { id: "reports", icon: "ti-chart-bar", label: "Reports", path: "/dashboard/reports", permission: "reports.view", comingSoon: true },
   { id: "audit", icon: "ti-shield-check", label: "Audit Log", path: "/dashboard/settings/audit", permission: "audit.view" },
   { id: "settings", icon: "ti-settings", label: "Settings", path: "/dashboard/settings", permission: "settings.view" },
 ];

@@ -15,6 +15,7 @@ NOTIFICATION_TYPE_CHOICES = [
     ('permission',             'Permission'),
     ('holiday',                'Holiday'),
     ('announcement',           'Announcement'),
+    ('birthday',               'Birthday'),
 ]
 
 MODULE_CHOICES = [
@@ -24,6 +25,7 @@ MODULE_CHOICES = [
     ('permission',     'Permission'),
     ('holiday',        'Holiday'),
     ('announcement',   'Announcement'),
+    ('birthday',       'Birthday'),
 ]
 
 

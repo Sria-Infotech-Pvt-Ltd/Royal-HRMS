@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
@@ -35,6 +35,7 @@ const MODULES = [
   { value: 'company',  label: 'Company'  },
   { value: 'branch',        label: 'Branch'        },
   { value: 'announcements', label: 'Announcements' },
+  { value: 'birthday',      label: 'Birthday'      },
 ];
 
 function actionClass(action: string): string {
@@ -55,6 +56,7 @@ function moduleClass(module: string): string {
     case 'company':  return 'badge-info';
     case 'branch':        return 'badge-success';
     case 'announcements': return 'badge-error';
+    case 'birthday':      return 'badge-primary';
     default:              return 'badge-neutral';
   }
 }
@@ -84,14 +86,27 @@ function fmtDateTime(iso: string): { date: string; time: string } {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AuditLogPage() {
-  const router = useRouter();
+  return (
+    <Suspense fallback={null}>
+      <AuditLogPageInner />
+    </Suspense>
+  );
+}
+
+// useSearchParams (reads ?module= for deep links, e.g. from Settings ->
+// Birthday Wishes) requires a Suspense boundary around it for the
+// production build — see AGENTS.md, this Next.js build is stricter here.
+function AuditLogPageInner() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
 
   const [pageData,  setPageData]  = useState<PageData | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [apiError,  setApiError]  = useState<string | null>(null);
 
-  // Filters
-  const [module,    setModule]    = useState('');
+  // Filters — module can be pre-set via ?module= in the URL (e.g. a deep
+  // link from Settings -> Birthday Wishes to view delivery logs).
+  const [module,    setModule]    = useState(searchParams.get('module') ?? '');
   const [search,    setSearch]    = useState('');
   const [dateFrom,  setDateFrom]  = useState(iso30DaysAgo());
   const [dateTo,    setDateTo]    = useState(isoToday());

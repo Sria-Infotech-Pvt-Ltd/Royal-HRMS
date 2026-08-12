@@ -276,8 +276,11 @@ class EmployeeBirthdayTodayView(APIView):
     permission_classes = [IsAuthenticated, HasCompletedOnboarding]
 
     def get(self, request):
+        from apps.accounts.models import BirthdaySettings
+
+        banner_message = BirthdaySettings.get().banner_message_template
         birthdays = [
-            {**b, 'message': f"Happy Birthday, {b['full_name']}!"}
+            {**b, 'message': banner_message}
             for b in _today_birthdays_data()
         ]
         return success("Today's birthdays retrieved.", data={

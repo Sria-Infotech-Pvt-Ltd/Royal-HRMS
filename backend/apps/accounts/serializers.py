@@ -1238,6 +1238,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
     profile         = EmployeeProfileSerializer(read_only=True)
     assessment_status  = serializers.SerializerMethodField()
     reporting_manager  = serializers.SerializerMethodField()
+    reporting_approver = serializers.SerializerMethodField()
     hr                 = serializers.SerializerMethodField()
     profile_photo_url  = serializers.SerializerMethodField()
 
@@ -1248,7 +1249,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'department', 'designation', 'branch',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
             'onboarding_status', 'assessment_status',
-            'reporting_manager', 'hr',
+            'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',
         ]
 
@@ -1266,6 +1267,12 @@ class MyProfileSerializer(serializers.ModelSerializer):
         if not mgr:
             return None
         return {'id': mgr.employee_id, 'name': mgr.full_name}
+
+    def get_reporting_approver(self, obj):
+        approver = obj.reporting_approver
+        if not approver:
+            return None
+        return {'id': approver.employee_id, 'name': approver.full_name}
 
     def get_hr(self, obj):
         assigned_hr = obj.hr

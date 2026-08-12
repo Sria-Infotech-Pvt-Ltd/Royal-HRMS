@@ -9,6 +9,7 @@ import type {
   AttendanceStatus,
   Announcement,
   BirthdaysTodayResponse,
+  MyBirthdayWidgets,
 } from "@/types/employeeDashboard";
 
 export const useEmployeeKPIs = () =>
@@ -46,3 +47,6 @@ export const useSharedAnnouncement = () =>
 
 export const useBirthdaysToday = () =>
   useFetch<BirthdaysTodayResponse>(API.employeeDashboard.birthdaysToday);
+
+export const useMyBirthdayWidgets = () =>
+  useFetch<MyBirthdayWidgets>(API.employeeDashboard.myBirthdayWidgets);

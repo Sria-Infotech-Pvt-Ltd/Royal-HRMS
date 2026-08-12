@@ -44,7 +44,7 @@ export default function EmpBirthdayAnnouncement() {
 
         {isSingle ? (
           <div style={{ fontSize: 12, color: "var(--on-variant)", marginLeft: 28 }}>
-            Wishing you a wonderful year ahead. 🎂
+            {birthdays[0].message}
           </div>
         ) : (
           <>

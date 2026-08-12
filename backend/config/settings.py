@@ -274,10 +274,12 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.attendance.tasks.check_absence_alerts',
         'schedule': crontab(hour=9, minute=0),
     },
-    # Runs daily at 9:00 AM IST — sends birthday wish emails to employees.
+    # Runs daily at 00:05 IST — sends birthday wishes (email + in-app
+    # notifications) to employees. Offset 5 min past midnight rather than
+    # exactly 00:00 so it doesn't collide with other midnight-triggered jobs.
     'send-birthday-wishes': {
         'task':     'apps.hrms.tasks.send_birthday_wishes',
-        'schedule': crontab(hour=9, minute=0),
+        'schedule': crontab(hour=0, minute=5),
     },
     # Runs once a year on 1st Jan at 00:01 IST — resets leave balances for the new year
     # and applies carry-forward from the previous year.

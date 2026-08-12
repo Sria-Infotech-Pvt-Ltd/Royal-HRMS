@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    BirthdaySettingsView,
     BirthdayView,
     CarryForwardHistoryView,
     CarryForwardPreviewView,
@@ -40,7 +41,8 @@ from .views import (
 
 urlpatterns = [
     # Birthdays
-    path('birthdays/', BirthdayView.as_view(), name='birthday-list'),
+    path('birthdays/',          BirthdayView.as_view(),         name='birthday-list'),
+    path('birthdays/settings/', BirthdaySettingsView.as_view(), name='birthday-settings'),
 
     # Expenses
     path('expenses/',                                ExpenseListCreateView.as_view(),   name='expense-list-create'),

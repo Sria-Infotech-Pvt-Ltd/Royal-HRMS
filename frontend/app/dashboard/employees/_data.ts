@@ -169,8 +169,9 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "designation", label: "Designation", type: "select", required: true, options: [] },
       { key: "ssRole",      label: "Role",        type: "select", required: true, options: [] },
       { key: "branch",            label: "Branch",           type: "select",   options: [] },
-      { key: "reportingManager", label: "Reporting Manager", type: "readonly" },
-      { key: "hr",               label: "Branch HR",         type: "readonly" },
+      { key: "reportingManager",  label: "Reporting Manager",  type: "readonly" },
+      { key: "reportingApprover", label: "Reporting Approver", type: "readonly" },
+      { key: "hr",                label: "Branch HR",          type: "readonly" },
       // ── personal details ─────────────────────────────────────────
       { key: "dateOfBirth",    label: "Date of Birth",   type: "date",     required: true },
       {

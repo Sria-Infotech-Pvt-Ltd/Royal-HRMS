@@ -53,8 +53,9 @@ interface ApiEmployee {
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   onboarding_status: string;
-  reporting_manager: { id: string; uuid: string | null; name: string } | null;
-  hr:                { id: string; uuid: string | null; name: string } | null;
+  reporting_manager:  { id: string; uuid: string | null; name: string } | null;
+  reporting_approver: { id: string; uuid: string | null; name: string } | null;
+  hr:                 { id: string; uuid: string | null; name: string } | null;
   profile?: ApiProfile;
   documents?: ApiDocument[];
 }
@@ -114,8 +115,11 @@ function apiToEmployee(u: ApiEmployee): Employee {
       // (e.g. "RSS000183"), not a real primary key. Echoing that back as
       // reporting_manager_id on save fails UUID parsing on the backend and
       // returns "Reporting manager not found or is inactive." even when a
-      // perfectly valid manager is already assigned. Same reasoning for hr below.
+      // perfectly valid manager is already assigned. Same reasoning for hr
+      // and reporting_approver below.
       reportingManagerId:  u.reporting_manager?.uuid ?? "",
+      reportingApprover:   u.reporting_approver?.name ?? "",
+      reportingApproverId: u.reporting_approver?.uuid ?? "",
       hr:                  u.hr?.name ?? "",
       hrId:                u.hr?.uuid ?? "",
       category:          "General",
@@ -333,6 +337,7 @@ export default function EmployeeProfilePage({
         role:                   values.ssRole                || null,
         is_active:              employee?.status !== "inactive",
         reporting_manager_id:   values.reportingManagerId   || null,
+        reporting_approver_id:  values.reportingApproverId  || null,
         hr_id:                  values.hrId                  || null,
         // Personal fields
         date_of_birth:          values.dateOfBirth          || null,
@@ -525,6 +530,22 @@ export default function EmployeeProfilePage({
                       listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
+                      }
+                    />
+                  );
+                }
+                if (key === "reportingApprover") {
+                  // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
+                  if (disabled) return null;
+                  return (
+                    <EmployeePickerInline
+                      label="Reporting Approver"
+                      value={values.reportingApprover ?? ""}
+                      selectedId={values.reportingApproverId ?? ""}
+                      disabled={false}
+                      listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
+                      onSelect={(uuid, name) =>
+                        setValues(v => ({ ...v, reportingApprover: name ?? "", reportingApproverId: uuid ?? "" }))
                       }
                     />
                   );

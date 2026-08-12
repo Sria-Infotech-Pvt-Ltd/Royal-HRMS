@@ -1,3 +1,4 @@
+from apps.dashboard.views.birthday_widgets import MyBirthdayWidgetsView
 from apps.dashboard.views.manager import ManagerDashboardView
 from apps.dashboard.views.overview import (
     SystemAdminKPIView,
@@ -28,6 +29,7 @@ from apps.dashboard.views.people import (
     EmployeeRecentRequestsView,
 )
 __all__ = [
+    'MyBirthdayWidgetsView',
     'ManagerDashboardView',
     'SystemAdminKPIView',
     'SystemAdminAnnouncementView',

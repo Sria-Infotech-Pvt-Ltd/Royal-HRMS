@@ -31,7 +31,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/leave": "Leave Management",
   "/dashboard/expenses": "Expense Claims",
   "/dashboard/documents": "Document Center",
-  "/dashboard/separation": "Separation & FnF",
+  "/dashboard/separation": "Separation & Exit",
   "/dashboard/interview-list": "Interview List",
   "/dashboard/candidate-review": "Candidate Review & Onboarding",
   "/dashboard/assessments":      "Assessment Management",
@@ -70,7 +70,9 @@ export default function DashboardShell({
   const [searchVal, setSearchVal] = useState("");
 
   const pageTitle = PAGE_TITLES[pathname]
-    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "Royal HRMS");
+    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
+    : pathname.startsWith("/dashboard/separation/") ? "Separation Request"
+    : "Royal HRMS");
   const visibleNav = buildNav(session.permissions ?? []);
 
   // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
