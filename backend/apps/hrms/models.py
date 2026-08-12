@@ -326,8 +326,8 @@ SEPARATION_REASON_CHOICES = [
     ('other',                     'Other'),
 ]
 
-SEP_PENDING        = 'pending'         # awaiting stage 1 (HR)
-SEP_STAGE2_PENDING = 'stage2_pending'  # HR approved, awaiting stage 2 (manager/branch admin)
+SEP_PENDING        = 'pending'         # awaiting the chain's 1st stage (see _resolve_separation_chain)
+SEP_STAGE2_PENDING = 'stage2_pending'  # 1st stage approved, awaiting the 2nd (never reached for a 1-stage chain)
 SEP_APPROVED       = 'approved'
 SEP_REJECTED       = 'rejected'
 SEP_CANCELLED      = 'cancelled'

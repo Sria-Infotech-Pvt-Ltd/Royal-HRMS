@@ -563,7 +563,14 @@ def _stage_actionable(user, sep_request, stage) -> bool:
     if user.role and user.role.role_permissions.filter(permission__codename='settings.edit').exists():
         return True
     if stage.stage == SEP_STAGE_MANAGER:
-        return stage.approver_id == user.id
+        if stage.approver_id:
+            return stage.approver_id == user.id
+        has_perm = bool(
+            user.role and user.role.role_permissions.filter(
+                permission__codename__in={'separation.approve', 'settings.edit'}
+            ).exists()
+        )
+        return has_perm and (not user.branch or user.branch == sep_request.employee.branch)
     if stage.stage == SEP_STAGE_BRANCH_ADMIN:
         return bool(
             user.role and user.role.can_manage_branch

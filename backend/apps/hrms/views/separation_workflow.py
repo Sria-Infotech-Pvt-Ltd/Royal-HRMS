@@ -43,7 +43,10 @@ def _can_action_stage(user, sep_request, stage) -> bool:
     if _has_perm(user, 'settings.edit'):
         return True
     if stage.stage == SEP_STAGE_MANAGER:
-        return stage.approver_id == user.id
+        if stage.approver_id:
+            return stage.approver_id == user.id
+        branch = _user_branch(user)
+        return _has_perm(user, 'separation.approve') and (not branch or branch == _user_branch(sep_request.employee))
     if stage.stage == SEP_STAGE_BRANCH_ADMIN:
         return bool(
             user.role and user.role.can_manage_branch
