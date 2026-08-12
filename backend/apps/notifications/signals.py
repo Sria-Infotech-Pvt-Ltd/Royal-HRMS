@@ -336,3 +336,42 @@ def _on_announcement_save(sender, instance, created, **kwargs):
     Notification.objects.bulk_create(notifications, ignore_conflicts=True)
     for notification in notifications:
         _push_live(notification)
+
+
+# ─── Promotion ──────────────────────────────────────────────────────────────────
+
+@receiver(post_save, sender='accounts.PromotionRecord')
+def _on_promotion_record_created(sender, instance, created, **kwargs):
+    if not created or instance.previous_designation == instance.new_designation:
+        # Role-only changes (no designation change) aren't a "promotion" in
+        # the sense this notification is about — only notify when the
+        # designation itself actually moved.
+        return
+
+    effective = instance.effective_date.strftime('%d %B %Y')
+    message = f'Congratulations! You have been promoted to {instance.new_designation}. Your new designation is effective from {effective}.'
+    if instance.remarks:
+        message += f' {instance.remarks}'
+
+    # Deferred to transaction.on_commit: PromotionRecord.objects.create()
+    # runs inside EmployeeDetailView.put()'s own transaction.atomic() block —
+    # queuing the notification only after that transaction actually commits
+    # means a promotion that later rolls back (for any reason) can never
+    # have already notified the employee about a change that didn't happen.
+    employee, promoted_by = instance.employee, instance.promoted_by
+    reference_id = str(instance.id)
+
+    def _send():
+        # _notify() already swallows its own exceptions internally — this
+        # extra try/except is defense-in-depth so that even a broken/mocked
+        # notification path can never surface past the promotion transaction,
+        # which has already committed successfully by the time this runs.
+        try:
+            _notify(
+                employee, 'Congratulations on Your Promotion!', message,
+                'promotion', 'promotion', reference_id, promoted_by,
+            )
+        except Exception:
+            logger.exception('Failed to send promotion notification for employee %s', employee.id)
+
+    transaction.on_commit(_send)

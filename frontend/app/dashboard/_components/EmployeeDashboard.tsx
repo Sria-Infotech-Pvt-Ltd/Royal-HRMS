@@ -2,6 +2,7 @@
 
 import EmpConsole          from "@/components/dashboard/employee/EmpConsole";
 import EmpBirthdayAnnouncement from "@/components/dashboard/employee/EmpBirthdayAnnouncement";
+import EmpPromotionCelebration from "@/components/dashboard/employee/EmpPromotionCelebration";
 import TeamBirthdayCard    from "@/components/dashboard/employee/TeamBirthdayCard";
 import ManagerBirthdayCard from "@/components/dashboard/employee/ManagerBirthdayCard";
 import EmpLeaveBalances    from "@/components/dashboard/employee/EmpLeaveBalances";
@@ -30,6 +31,11 @@ export default function EmployeeDashboard({ session }: Props) {
       {/* Birthday Announcement — highest priority; renders nothing when nobody
           has a birthday today, so this is a no-op on every non-birthday day */}
       <EmpBirthdayAnnouncement />
+
+      {/* Promotion celebration — reads the persisted, unread promotion
+          Notification from the existing /api/notifications/ endpoint; renders
+          nothing when there isn't one. Dismiss marks it read server-side. */}
+      <EmpPromotionCelebration />
 
       {/* Team/manager cards — strictly scoped to the logged-in user's own
           reporting hierarchy (unlike the company-wide announcement above).

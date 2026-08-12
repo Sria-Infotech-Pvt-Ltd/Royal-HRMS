@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { EmployeePayslip, ProcessPayrollResult } from "@/types/payroll";
+import type { EligibleEmployee, EmployeePayslip, ProcessPayrollResult } from "@/types/payroll";
 
 interface Props {
   cycleId: string;
@@ -32,11 +32,52 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
   // Show results view if user just computed OR if payslips already existed from a prior run
   const showResults = processed || (payslipPage !== null && payslips.length > 0);
 
+  // Eligible-employee selection — only relevant before the first compute; the
+  // Recompute button on the results view below is unchanged (always a full
+  // reprocess, exactly as before this feature existed).
+  const { data: eligibleData } = useFetch<{ results: EligibleEmployee[]; count: number }>(
+    showResults ? null : API.payroll.eligibleEmployees(cycleId)
+  );
+  const eligible = eligibleData?.results ?? [];
+  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
+
+  // Default: everyone selected, the moment the eligible list arrives —
+  // matches "HR opens payroll processing → all eligible employees are
+  // already selected" exactly.
+  useEffect(() => {
+    if (eligibleData && selectedIds === null) {
+      setSelectedIds(new Set(eligibleData.results.map(e => e.employee_id)));
+    }
+  }, [eligibleData, selectedIds]);
+
+  const selectedCount = selectedIds?.size ?? 0;
+  const allSelected = selectedIds !== null && eligible.length > 0 && selectedCount === eligible.length;
+
+  function toggleEmployee(code: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev ?? []);
+      if (next.has(code)) next.delete(code); else next.add(code);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? new Set() : new Set(eligible.map(e => e.employee_id)));
+  }
+
   async function runProcess() {
     setProcessing(true);
     setProcessErr(null);
     try {
-      const res = await clientApi.post<{ data: ProcessPayrollResult }>(API.payroll.processCycle(cycleId));
+      // Send an explicit employee_ids list only when HR has deliberately
+      // narrowed the selection — "everyone selected" (including before the
+      // eligible list has even loaded, e.g. Recompute) omits the field
+      // entirely, preserving the exact original all-eligible-employees
+      // backend behavior rather than freezing a possibly-stale employee list.
+      const body = selectedIds !== null && !allSelected
+        ? { employee_ids: Array.from(selectedIds) }
+        : undefined;
+      const res = await clientApi.post<{ data: ProcessPayrollResult }>(API.payroll.processCycle(cycleId), body);
       setSkipped(res.data.data.skipped ?? []);
       setProcessed(true);
       refetch();
@@ -66,6 +107,36 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
               This will calculate salaries for all eligible employees using their CTC, salary structure, and statutory rules for each branch.
             </p>
 
+            {eligible.length > 0 && (
+              <div style={{ textAlign: "left", maxWidth: 440, margin: "0 auto 20px", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--outline-v)" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+                    Select All
+                  </label>
+                  <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                    Selected: {selectedCount} of {eligible.length} employees
+                  </span>
+                </div>
+                <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                  {eligible.map(emp => (
+                    <label
+                      key={emp.employee_id}
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid var(--outline-v)" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds?.has(emp.employee_id) ?? false}
+                        onChange={() => toggleEmployee(emp.employee_id)}
+                      />
+                      <span style={{ flex: 1 }}>{emp.full_name}</span>
+                      <span style={{ color: "var(--on-variant)", fontSize: 12 }}>{emp.department}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {processErr && (
               <div className="alert alert-error" style={{ marginBottom: 16, textAlign: "left" }}>
                 <i className="ti ti-alert-circle" />
@@ -73,10 +144,21 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
               </div>
             )}
 
+            {eligible.length > 0 && selectedCount === 0 && (
+              <div className="alert alert-warn" style={{ marginBottom: 16, textAlign: "left" }}>
+                <i className="ti ti-alert-triangle" />
+                <span>Select at least one employee to process.</span>
+              </div>
+            )}
+
             <button
               className="btn btn-filled"
               onClick={runProcess}
-              disabled={processing}
+              // The "must select someone" guard only applies once we actually
+              // have a non-empty eligible list to select from — an empty/not-
+              // yet-loaded list falls back to the original disabled={processing}
+              // behavior rather than a permanently-disabled button.
+              disabled={processing || (eligible.length > 0 && selectedCount === 0)}
               style={{ minWidth: 180 }}
             >
               {processing

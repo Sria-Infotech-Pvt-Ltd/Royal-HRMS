@@ -3389,6 +3389,65 @@ frontend/app/dashboard/settings/payroll-config/_components/StatutoryConfigTab.ts
 
 ### Pending
 
-- **Awaiting approval**: write the proposed `lwf_due_months` values above (Telangana/Karnataka/Maharashtra) into the real `StatutoryConfig` rows — no code change needed for this, just data, once approved.
+- **Awaiting approval**: write the proposed `lwf_due_months` values above (Telangana/Karnataka/Maharashtra) into the real `StatutoryConfig` rows — no code change needed for this, just data, once approved. Still not applied as of the 2026-08-12 session below (re-confirmed via regression test — Telangana's `lwf_due_months` is still `[]`).
 - Gujarat / Andhra Pradesh LWF due month: unverified, needs a real source before configuring (both currently have zero real employees, so no urgency).
 - Carried over from an earlier session: Payroll Adjustments pagination (10/page, numbered controls, month-level totals) was implemented and backend-verified but its own live-browser confirmation was never completed — still outstanding.
+
+---
+
+## Session Log — 2026-08-12
+**Author: Teerdaveni**
+
+### Features Shipped
+
+**1. Employee Promotion — backend, hierarchy validation, notification, dashboard celebration**
+
+Built across several iterations in this session, on top of the pre-existing `PromotionTab.tsx` UI (form/history table already existed; nothing there was actually wired to a real backend yet).
+
+- **Backend, minimal-footprint by design**: rather than a new dedicated promotion endpoint, extended the existing `PUT /employees/<employee_id>/` (`EmployeeDetailView.put()`, `backend/apps/accounts/views.py`) — the endpoint the frontend already calls — to also create a `PromotionRecord` row (new model, `hrms_promotion_records`) whenever `designation` and/or `role` actually change. Chose this path explicitly over building the originally-briefed `{new_designation, system_role, effective_date, remarks}` endpoint after inspection showed the real frontend only ever sends `{designation, role}` — building the "correct per spec" endpoint would have left it disconnected from the live UI.
+- **Promotion history**: `PromotionRecord` is an immutable, append-only audit trail (previous/new designation, previous/new role, effective_date, remarks, promoted_by, created_at) — never updated or deleted. New read-only `GET /employees/<employee_id>/promotions/` added afterward (only once confirmed the frontend's history table needed real data, not local-only React state).
+- **Designation hierarchy validation** ("Software Engineer → Senior Software Engineer" allowed, reverse rejected): `Designation` had no level/rank field anywhere in the codebase — confirmed by inspection before adding one (per explicit instruction not to guess). Added `Designation.level` (int, default 0 = "unconfigured", validation skipped until assigned). Real levels proposed and approved before being written: Software Engineer=1, Senior Software Engineer=2, Engineering Manager=3, Finance Executive=1, HR Executive=1, HR Manager=2, Sales Administrator=1. **Important fix applied before writing that data**: the first version of the level comparison was global (would have let a level-3 Engineering designation "outrank" a level-1 Finance one) — corrected so levels are only ever compared within the same department; a cross-department designation change skips the level check entirely (same treatment as level=0).
+- **Promotion notification**: reused the existing `Notification` model/signal architecture (`apps/notifications/signals.py`) rather than building anything new — added a `('promotion', 'Promotion')` choice pair and a `post_save` receiver on `PromotionRecord`, deferred via `transaction.on_commit()` so a promotion that later rolls back can never have already notified the employee. Message format: *"Congratulations! You have been promoted to {designation}. Your new designation is effective from {date}. {remarks}"*.
+- **Dashboard celebration — the actual bug this session fixed**: the notification was being created correctly the whole time, but nothing on the Employee Dashboard page surfaced it — only the global bell (which needs a manual click to open) reads `/api/notifications/`. Added one small, isolated widget, `EmpPromotionCelebration.tsx`, mirroring the existing `EmpBirthdayAnnouncement` card pattern exactly (same visual style, mounted in the same slot) — reads unread `notification_type=promotion` rows from the existing API, dismiss calls the existing mark-read endpoint (verified the DB row's `is_read` actually flips — not just hidden client-side). No new notification system, no dashboard redesign.
+- Tests: 28 + 5 + 12 = 45 atomic-rollback checks across the several iterations (hierarchy up/same/lower/unconfigured/cross-department, notification created/not-created-for-role-only-change, notification-failure-never-corrupts-promotion, cross-branch/unauthorized/self-promotion, dashboard API retrieval/refresh/logout-login/other-employee-cannot-see-it). Live Playwright-verified: promotion → banner appears without reload → survives a real page reload → dismiss persists across another reload (confirmed via direct DB query, not just UI state).
+- Known gap, reported not invented: no existing rule blocks an employee from promoting themselves — tested and confirmed absent, not fixed.
+
+**2. Payroll Processing — optional employee selection**
+
+HR can now uncheck specific employees before clicking "Process Payroll" so only the remaining selected ones get processed — existing formulas/permissions/idempotency untouched.
+
+- Inspected first: no existing employee-list API returned the right population (attendance-summary is attendance-record-driven; the generic employee list doesn't know about cycle branch-scoping) — so `_eligible_employees_qs(cycle)` was extracted out of `_run_payroll_processing()` into its own function and reused by both the real processing path and a new, minimal `GET /payroll/cycles/<pk>/eligible-employees/` preview endpoint, so the two can never drift apart.
+- `ProcessPayrollView.post()` (`backend/apps/payroll/views/cycles.py`) now optionally accepts `{"employee_ids": ["RSS000192", ...]}`. Omitted/null → original all-eligible-employees behavior, byte-for-byte (regression-tested). Empty list → 400 (explicit "select nobody" footgun rejected, never silently treated as "everyone"). Unknown employee code → 400. A real employee code outside the cycle's branch is silently excluded from processing (not an error — avoids leaking cross-branch employee existence, consistent with this codebase's existing branch-scope philosophy).
+- The selection itself is a single `.filter(employee_id__in=...)` added to the existing eligible queryset — adds exactly **one** extra query total (a bounded existence-check), confirmed by measurement: 21 queries (no selection) vs 22 (with selection).
+- Reprocessing with a partial selection only touches the selected employees' payslips — unselected employees' existing payslips are provably byte-identical (including `updated_at`) before/after, verified directly rather than assumed.
+- Frontend: added a "Select All" + per-employee checkbox list with a live "Selected: X of Y" count directly inside the existing "Compute Payroll" trigger card in `EarningsDeductionsStep.tsx` — no redesign. Sends no `employee_ids` field at all when everything is selected (including before the list has even loaded), so the wizard's "Recompute" path and the default flow are unaffected; only sends the explicit array once HR has deliberately unchecked someone.
+- 24 atomic-rollback checks, all passing; reran the pre-existing 33-check full payroll regression suite from earlier this session — 31 unchanged, 2 "failures" are the same already-documented LWF `lwf_due_months` pending-approval gap noted above, not a regression (PF/ESI/PT figures matched exactly).
+
+### Files Changed
+
+```
+backend/apps/accounts/models.py                    — PromotionRecord (new model), Designation.level (new field)
+backend/apps/accounts/views.py                      — EmployeeDetailView.put() extended; _check_promotion_hierarchy(), _resolve_designation(), EmployeePromotionHistoryView (new)
+backend/apps/accounts/serializers.py                — DesignationSerializer exposes level
+backend/apps/accounts/admin.py                       — PromotionRecord registered
+backend/apps/accounts/urls.py                        — employee-promotion-history route
+backend/apps/accounts/migrations/0065_promotionrecord.py, 0066_designation_level.py — NEW
+backend/apps/notifications/models.py                 — ('promotion','Promotion') choice pair
+backend/apps/notifications/signals.py                — _on_promotion_record_created() receiver, on_commit-deferred
+backend/apps/notifications/migrations/0004_alter_notification_module_and_more.py — NEW
+backend/apps/payroll/views/cycles.py                 — _eligible_employees_qs(), employee_ids param + validation, CycleEligibleEmployeesView (new)
+backend/apps/payroll/urls.py                          — payroll-cycle-eligible-employees route
+frontend/app/dashboard/employees/[id]/_components/PromotionTab.tsx — fetches/refreshes real persisted history instead of local-only state
+frontend/components/dashboard/employee/EmpPromotionCelebration.tsx — NEW
+frontend/app/dashboard/_components/EmployeeDashboard.tsx — mounts the celebration widget
+frontend/components/NotificationBell.tsx              — "promotion" module route
+frontend/types/notifications.ts                       — "promotion" module type
+frontend/app/dashboard/payroll/_components/EarningsDeductionsStep.tsx — employee-selection checklist
+frontend/lib/api/endpoints.ts, frontend/types/payroll.ts — eligibleEmployees endpoint + EligibleEmployee type
+```
+
+### Pending
+
+- Designation levels for Gujarat / Andhra Pradesh (see LWF section above — unrelated feature, same underlying "no real data yet" pattern) — still not needed since neither has real employees.
+- Self-promotion is still not blocked by any rule — flagged twice now (LWF-adjacent session and this one), not acted on; revisit if it ever matters operationally.
+- The "Recompute" button on the payroll results screen intentionally still does a full reprocess with no selection UI — a deliberate, minimal scope decision this session, not an oversight; can be extended later if HR needs partial-selection reprocessing from that screen too.

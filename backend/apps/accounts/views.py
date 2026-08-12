@@ -72,6 +72,7 @@ from apps.accounts.models import (
     OTPVerification,
     PasswordResetToken,
     Permission,
+    PromotionRecord,
     Role,
     RolePermission,
     SMTPSettings,
@@ -2968,6 +2969,59 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     return False
 
 
+def _resolve_designation(name: str, department_name: str):
+    """Best-effort lookup of a Designation row by name — Designation.name is
+    only unique per-department, so prefer a match in the given department
+    and fall back to any active match by name (mirrors the department-blind
+    string comparison User.designation already uses elsewhere in this view).
+    Returns None if the name doesn't resolve to any active Designation row
+    at all (e.g. legacy free-text data predating the Designation table)."""
+    if not name:
+        return None
+    return (
+        Designation.objects.filter(name=name, department__name=department_name, is_active=True).first()
+        or Designation.objects.filter(name=name, is_active=True).first()
+    )
+
+
+def _check_promotion_hierarchy(employee, old_designation: str, new_designation: str):
+    """
+    Reject a designation change that isn't a genuine promotion, using
+    Designation.level (higher = more senior). Returns an error Response, or
+    None if the change is allowed.
+
+    level=0 means "not yet configured" for that designation — the check is
+    skipped (not enforced) unless BOTH the old and new designation have a
+    real level assigned, so this validation can't brick every promotion the
+    moment the field is added, before anyone has had a chance to assign
+    real levels.
+
+    Levels are only comparable WITHIN the same department's hierarchy — a
+    level-3 Engineering designation is never treated as outranking a
+    level-1 Finance designation just because 3 > 1. A designation change
+    that crosses departments has no comparable ladder in this data model,
+    so the level check is skipped (not enforced) for it, same as the
+    level=0 "unconfigured" case above.
+    """
+    new_desig = _resolve_designation(new_designation, employee.department)
+    old_desig = _resolve_designation(old_designation, employee.department)
+    if not new_desig or not old_desig or new_desig.level == 0 or old_desig.level == 0:
+        return None
+    if new_desig.department_id != old_desig.department_id:
+        return None
+    if new_desig.level == old_desig.level:
+        return error(
+            f'"{new_designation}" is the same level as the employee\'s current designation '
+            f'"{old_designation}". Select a higher designation to promote this employee.',
+        )
+    if new_desig.level < old_desig.level:
+        return error(
+            f'"{new_designation}" is a lower designation than the employee\'s current designation '
+            f'"{old_designation}". Promotions must move to a higher designation.',
+        )
+    return None
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3011,6 +3065,13 @@ class EmployeeDetailView(APIView):
             val = (data.get(field) or '').strip()
             if field in data:
                 old_val = getattr(employee, field, '')
+                if field == 'designation' and val:
+                    if not Designation.objects.filter(name=val, is_active=True).exists():
+                        return error(f'Designation "{val}" does not exist.')
+                    if val != old_val:
+                        hierarchy_error = _check_promotion_hierarchy(employee, old_val, val)
+                        if hierarchy_error:
+                            return hierarchy_error
                 if old_val != val:
                     changes[field] = {'from': old_val, 'to': val}
                 setattr(employee, field, val)
@@ -3114,21 +3175,53 @@ class EmployeeDetailView(APIView):
         if len(update_fields) == 1:
             return error('No updatable fields provided.')
 
-        employee.save(update_fields=list(dict.fromkeys(update_fields)))
+        # Promotion (Employee > Promotion screen) piggybacks on this same
+        # generic PUT — it sends only {designation, role} today, same as any
+        # other employee edit, so effective_date/remarks are optional and
+        # default sensibly when absent rather than being required.
+        effective_date_raw = (data.get('effective_date') or '').strip()
+        if effective_date_raw:
+            try:
+                effective_date = datetime.strptime(effective_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                return error('effective_date must be in YYYY-MM-DD format.')
+        else:
+            effective_date = timezone.now().date()
+        remarks = (data.get('remarks') or '').strip()
 
-        if changes:
-            AuditLog.objects.create(
-                user       = request.user,
-                action     = 'employee_updated',
-                module     = 'employees',
-                object_id  = str(employee.id),
-                changes    = {
-                    'employee_id': employee.employee_id,
-                    'full_name':   employee.full_name,
-                    **changes,
-                },
-                ip_address = get_client_ip(request),
-            )
+        promotion_changed = 'designation' in changes or 'role' in changes
+
+        with transaction.atomic():
+            employee.save(update_fields=list(dict.fromkeys(update_fields)))
+
+            if changes:
+                AuditLog.objects.create(
+                    user       = request.user,
+                    action     = 'employee_updated',
+                    module     = 'employees',
+                    object_id  = str(employee.id),
+                    changes    = {
+                        'employee_id': employee.employee_id,
+                        'full_name':   employee.full_name,
+                        **changes,
+                    },
+                    ip_address = get_client_ip(request),
+                )
+
+            if promotion_changed:
+                desig_change  = changes.get('designation', {})
+                role_change   = changes.get('role', {})
+                current_role_name = employee.role.name if employee.role else ''
+                PromotionRecord.objects.create(
+                    employee              = employee,
+                    previous_designation  = desig_change.get('from', employee.designation) or '',
+                    new_designation       = desig_change.get('to', employee.designation) or '',
+                    previous_role         = role_change.get('from', current_role_name) or '',
+                    new_role              = role_change.get('to', current_role_name) or '',
+                    effective_date        = effective_date,
+                    remarks               = remarks,
+                    promoted_by           = request.user,
+                )
 
         employee = _get_employee(employee_id)
         return success('Employee updated successfully.', data=_employee_dict(employee))
@@ -3237,6 +3330,39 @@ class EmployeeDetailView(APIView):
 
     def post(self, request, employee_id: str):
         return self.put(request, employee_id)
+
+
+class EmployeePromotionHistoryView(APIView):
+    """GET /employees/<employee_id>/promotions/ — persisted promotion history
+    for one employee (Employee > Promotion tab's history table). Read-only;
+    PromotionRecord rows are created exclusively by EmployeeDetailView.put()."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, employee_id: str):
+        if not _has_perm(request.user, 'employees.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        records = PromotionRecord.objects.filter(employee=employee).select_related('promoted_by')
+        data = [
+            {
+                'id':                   str(r.id),
+                'previous_designation': r.previous_designation,
+                'new_designation':      r.new_designation,
+                'previous_role':        r.previous_role,
+                'new_role':             r.new_role,
+                'role_changed':         r.previous_role != r.new_role,
+                'effective_date':       str(r.effective_date),
+                'remarks':              r.remarks,
+                'promoted_by':          r.promoted_by.full_name if r.promoted_by_id else '—',
+                'created_at':           r.created_at.isoformat(),
+            }
+            for r in records
+        ]
+        return success('Promotion history retrieved.', data=data)
 
 
 class AuditLogListView(APIView):
