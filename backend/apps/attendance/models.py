@@ -1721,6 +1721,24 @@ class FaceRegistrationRequest(models.Model):
     face_embedding          = models.JSONField()
     embedding_model_version = models.CharField(max_length=50, default=FACE_RECOGNITION_MODEL_VERSION)
 
+    # Multi-frame registration capture quality (see frontend lib/faceApi/
+    # multiFrameCapture.ts) — both null for any registration that didn't go
+    # through the multi-frame + quality-gate pipeline: legacy rows captured
+    # before this existed, and any future single-shot capture path that
+    # opts out of it. capture_frame_count is how many individual frames
+    # passed the per-frame quality gate (lighting/angle/distance/detector
+    # confidence) and were actually averaged into face_embedding — never the
+    # number of attempts, which can be higher when frames get rejected and
+    # retried. capture_variance is the mean pairwise Euclidean distance
+    # between those frames' individual descriptors before averaging — a
+    # LOWER value means the frames agreed with each other more closely
+    # (a tighter, more trustworthy reference), not a measure of match
+    # quality against anyone else. This is what lets a later audit tell a
+    # stricter-pipeline registration apart from an old single-frame one
+    # without needing a separate flag.
+    capture_frame_count     = models.PositiveSmallIntegerField(null=True, blank=True)
+    capture_variance        = models.FloatField(null=True, blank=True)
+
     liveness_passed         = models.BooleanField(default=False)
     liveness_score          = models.FloatField(null=True, blank=True)
 

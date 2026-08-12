@@ -45,7 +45,7 @@ export default function HRFaceCaptureModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleClose is stable enough for an Escape listener
   }, []);
 
-  const showCameraPreview = phase === "detecting" || phase === "liveness_checking";
+  const showCameraPreview = phase === "detecting" || phase === "liveness_checking" || phase === "capturing_multi";
 
   const overlay = (
     <div
@@ -132,6 +132,19 @@ export default function HRFaceCaptureModal({
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
               title="Couldn't confirm they're live"
               message="We didn't detect a natural blink or head turn in time. Make sure they're well-lit and centered, then try again."
+              action={{ label: "Try Again", onClick: retry }}
+              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+            />
+          )}
+
+          {phase === "quality_failed" && (
+            <FaceStatusPanel
+              icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
+              title="Capture wasn't clear enough"
+              message={
+                errorMessage
+                ?? "We couldn't get a reliably clear capture — this becomes their permanent face ID reference, so it's worth getting right. Try better lighting and have them hold steady."
+              }
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

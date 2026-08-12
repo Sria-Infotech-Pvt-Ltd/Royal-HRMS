@@ -33,6 +33,15 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
       stop();
       onCaptured(descriptor, livenessScore, captureSessionId);
     },
+    // Same CLAHE lighting normalization and per-frame quality gate
+    // (lib/faceApi/qualityGate.ts) as registration — the live capture being
+    // matched against a stored reference should be extracted the same way
+    // the reference itself was, not from a lower-quality raw frame.
+    // framesToCapture stays at its default of 1 so clock-in stays fast; see
+    // useFaceLivenessCapture.ts's docstring on framesToCapture for why a
+    // single quality-gated frame is still bounded to a few quick retries
+    // rather than averaging multiple frames like registration does.
+    normalizeLighting: true,
   });
 
   function handleClose() {
@@ -55,7 +64,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
 
   if (!isOpen) return null;
 
-  const showCameraPreview = phase === "detecting" || phase === "liveness_checking";
+  const showCameraPreview = phase === "detecting" || phase === "liveness_checking" || phase === "capturing_multi";
 
   const overlay = (
     <div
@@ -116,6 +125,19 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
               icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
               title="Couldn't confirm you're live"
               message="We didn't detect a natural blink or head turn in time. Make sure you're well-lit and centered, then try again."
+              action={{ label: "Try Again", onClick: retry }}
+              secondaryAction={{ label: "Cancel", onClick: handleClose }}
+            />
+          )}
+
+          {phase === "quality_failed" && (
+            <FaceStatusPanel
+              icon="ti-alert-triangle" iconColor="#b45309" iconBg="rgba(234,179,8,0.12)"
+              title="Capture wasn't clear enough"
+              message={
+                errorMessage
+                ?? "We couldn't get a reliably clear capture to verify against your registered face. Try better lighting and hold steady."
+              }
               action={{ label: "Try Again", onClick: retry }}
               secondaryAction={{ label: "Cancel", onClick: handleClose }}
             />

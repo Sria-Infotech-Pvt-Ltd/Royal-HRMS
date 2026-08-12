@@ -15,6 +15,11 @@ interface FaceCaptureStageProps {
 const INSTRUCTION: Partial<Record<string, string>> = {
   detecting:         "Center your face in the frame",
   liveness_checking: "Please blink naturally or turn your head slightly",
+  // Liveness already passed at this point — the instruction shifts from
+  // "prove you're live" to "stay put while we get a clean capture". Shared
+  // by registration's multi-frame sampling pass and punch-time's single
+  // quality-gated frame alike (useFaceLivenessCapture's framesToCapture).
+  capturing_multi:   "Hold still — capturing a clear frame",
 };
 
 // The <video>/<canvas> pair here is mounted for the whole lifetime of the

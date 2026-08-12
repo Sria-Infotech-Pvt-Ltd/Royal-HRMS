@@ -39,6 +39,7 @@ from apps.voice_commands.executor import (
     execute_intent,
 )
 from apps.voice_commands.expired_answer_detector import looks_like_expired_slot_answer as _looks_like_expired_slot_answer
+from apps.voice_commands.llm_fallback import try_llm_fallback
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational, match_intent
 from apps.voice_commands.mode_extractor import extract_attendance_mode
 from apps.voice_commands.normalizer import normalize_transcript
@@ -160,6 +161,26 @@ def handle_transcript(
                 'clarification answer — user=%s transcript=%r', user.pk, transcript,
             )
             return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, _EXPIRED_CLARIFICATION_MESSAGE, success=False)
+
+        # Genuine no-match, below the clarification floor — the ONE point
+        # where the hybrid architecture's LLM fallback tier gets a shot,
+        # after the rule engine (matcher.match_intent, the clarification
+        # band, and the expired-slot-answer heuristic above) has already
+        # declined the transcript outright. Classification only — see
+        # llm_fallback.py's own docstring: its output is dispatched through
+        # this exact same _dispatch_matched_intent every rule match uses, so
+        # permission gating and slot extraction are untouched either way.
+        # Fails soft to the plain message below on absolutely anything
+        # (no API key configured, a Sarvam outage, or the model itself
+        # answering no_match) — never a worse outcome than before this tier
+        # existed.
+        llm_outcome = try_llm_fallback(
+            request, transcript, intent_text, attendance_mode, lang,
+            _dispatch_matched_intent, latitude=latitude, longitude=longitude,
+        )
+        if llm_outcome is not None:
+            return llm_outcome
+
         logger.info(
             'Voice command no match: user=%s transcript=%r confidence=%s',
             user.pk, transcript, fresh_match.confidence,

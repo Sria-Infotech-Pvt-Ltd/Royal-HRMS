@@ -95,6 +95,8 @@ class FaceRegistrationSubmitView(APIView):
             liveness_score=data.get('liveness_score'),
             consent_given_at=timezone.now(),
             consent_text_version=FACE_CONSENT_TEXT_VERSION,
+            capture_frame_count=data.get('capture_frame_count'),
+            capture_variance=data.get('capture_variance'),
         )
         logger.info('Face registration submitted by %s', request.user.email)
 

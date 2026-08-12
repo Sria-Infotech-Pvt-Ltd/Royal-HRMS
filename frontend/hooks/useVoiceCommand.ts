@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
+import { captureAndTranscribeViaSarvam } from "@/lib/voiceSttFallback";
 import type { VoiceCommandStatus, VoiceParseResult } from "@/types/voice";
 
 type NormalisedError = { message?: string };
@@ -41,6 +42,13 @@ const TTS_END_BUFFER_MS = 400;
 // place that needs to change (plus however that language gets selected).
 const VOICE_LANG = "en";
 const VOICE_LOCALE = "en-US";
+
+// Mirrors backend apps/voice_commands/matcher.py's NO_MATCH_INTENT verbatim —
+// the one outcome that triggers the Sarvam-STT retry below, since it's the
+// single value the rule engine AND the sarvam-105b LLM fallback tier both
+// have to agree on before either gives up (see conversation.py's
+// handle_transcript).
+const NO_MATCH_INTENT = "no_match";
 
 // The two intents that ever hit PunchService.record_punch() server-side —
 // only these can come back with the geofencing rejection below.
@@ -315,7 +323,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   );
 
   const submitTranscript = useCallback(
-    async (transcript: string) => {
+    async (transcript: string, sourceIsVoice: boolean = false) => {
       setStatus("processing");
       clearAutoCloseTimer();
 
@@ -346,6 +354,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
       try {
         let outcome = await postVoiceParse(transcript, VOICE_LANG);
+        // What the result panel actually shows/acts on — starts as the raw
+        // browser transcript, replaced below only if the Sarvam-STT retry
+        // fires and comes back with something usable.
+        let displayTranscript = transcript;
 
         // Voice never collects GPS up front (unlike the manual ClockWidget,
         // which only asks when mode is office) — so an office-mode clock_in/
@@ -359,6 +371,26 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             outcome = { ...outcome, message: located.errorMessage };
           } else {
             outcome = await postVoiceParse(transcript, VOICE_LANG, located);
+          }
+        }
+
+        // Hindi-STT retry: only for a transcript that actually came from the
+        // mic (a typed answer is already exactly what the user meant — a
+        // surprise mic capture "retrying" it would help nothing) and only on
+        // a genuine, final no-match, meaning both the rule engine and the
+        // sarvam-105b classification tier already declined it server-side
+        // (see backend conversation.py's handle_transcript). The browser's
+        // Web Speech API is unreliable for Hindi; this is the one silent
+        // recovery attempt for "that transcript might have been garbled
+        // Hindi, not just an unmatched English phrase" before showing the
+        // normal failure. Exactly one retry — if Sarvam can't help either,
+        // or the resubmitted transcript still no-matches, everything below
+        // behaves exactly as if this retry had never been attempted.
+        if (sourceIsVoice && !outcome.success && outcome.intent === NO_MATCH_INTENT) {
+          const sarvamTranscript = await captureAndTranscribeViaSarvam();
+          if (sarvamTranscript) {
+            displayTranscript = sarvamTranscript;
+            outcome = await postVoiceParse(sarvamTranscript, VOICE_LANG);
           }
         }
 
@@ -388,7 +420,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           speak(spokenText);
         } else {
           setConversation({
-            transcript, message, phase: "result", conversational, awaitingInput,
+            transcript: displayTranscript, message, phase: "result", conversational, awaitingInput,
             resultStatus: isSuccess ? "success" : "error",
             awaitingFaceProof: awaitingInput && isAwaitingFaceProof(outcome.result),
           });
@@ -536,7 +568,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         recognitionRef.current = null;
         const transcript = (transcriptRef.current.final || transcriptRef.current.interim).trim();
         if (transcript) {
-          submitTranscript(transcript);
+          // sourceIsVoice=true — this transcript came from the mic, so a
+          // final no-match is eligible for the Sarvam-STT retry (see
+          // submitTranscript's own comment on that branch).
+          submitTranscript(transcript, true);
         } else {
           setStatus("idle");
           setInterimTranscript("");

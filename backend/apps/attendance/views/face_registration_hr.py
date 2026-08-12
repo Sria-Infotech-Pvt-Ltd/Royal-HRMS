@@ -158,6 +158,8 @@ class FaceRegistrationHRRegisterView(APIView):
             embedding_model_version=FACE_RECOGNITION_MODEL_VERSION,
             liveness_passed=data['liveness_passed'],
             liveness_score=data.get('liveness_score'),
+            capture_frame_count=data.get('capture_frame_count'),
+            capture_variance=data.get('capture_variance'),
             status=FaceRegistrationRequest.STATUS_APPROVED,
             approved_by=request.user,
             approved_at=timezone.now(),
