@@ -24,6 +24,18 @@ from .views import (
     LeaveRequestDetailView,
     LeaveRequestListCreateView,
     LeaveStatsView,
+    SeparationActivityListView,
+    SeparationApprovalStageActionView,
+    SeparationClearanceActionView,
+    SeparationClearanceListView,
+    SeparationDocumentDetailView,
+    SeparationDocumentListCreateView,
+    SeparationHandoverTaskDetailView,
+    SeparationHandoverTaskListCreateView,
+    SeparationReasonListView,
+    SeparationRequestDetailView,
+    SeparationRequestListCreateView,
+    SeparationTypeListView,
 )
 
 urlpatterns = [
@@ -67,4 +79,33 @@ urlpatterns = [
     # Holiday Calendar
     path('leave/holidays/',              HolidayListCreateView.as_view(), name='holiday-list'),
     path('leave/holidays/<str:holiday_id>/', HolidayDetailView.as_view(), name='holiday-detail'),
+
+    # Separation — field choices
+    path('separation/types/',   SeparationTypeListView.as_view(),   name='separation-type-list'),
+    path('separation/reasons/', SeparationReasonListView.as_view(), name='separation-reason-list'),
+
+    # Separation Requests
+    path('separation/requests/',                  SeparationRequestListCreateView.as_view(), name='separation-request-list'),
+    path('separation/requests/<str:request_id>/', SeparationRequestDetailView.as_view(),     name='separation-request-detail'),
+
+    # Separation — approval stages
+    path(
+        'separation/requests/<str:request_id>/stages/<str:stage_id>/action/',
+        SeparationApprovalStageActionView.as_view(), name='separation-stage-action',
+    ),
+
+    # Separation — KT / handover tasks
+    path('separation/requests/<str:request_id>/tasks/',               SeparationHandoverTaskListCreateView.as_view(), name='separation-task-list'),
+    path('separation/requests/<str:request_id>/tasks/<str:task_id>/', SeparationHandoverTaskDetailView.as_view(),     name='separation-task-detail'),
+
+    # Separation — clearances
+    path('separation/requests/<str:request_id>/clearances/',                            SeparationClearanceListView.as_view(),   name='separation-clearance-list'),
+    path('separation/requests/<str:request_id>/clearances/<str:clearance_id>/action/',  SeparationClearanceActionView.as_view(), name='separation-clearance-action'),
+
+    # Separation — documents
+    path('separation/requests/<str:request_id>/documents/',                   SeparationDocumentListCreateView.as_view(), name='separation-document-list'),
+    path('separation/requests/<str:request_id>/documents/<str:document_id>/', SeparationDocumentDetailView.as_view(),     name='separation-document-detail'),
+
+    # Separation — activity log
+    path('separation/requests/<str:request_id>/activities/', SeparationActivityListView.as_view(), name='separation-activity-list'),
 ]
