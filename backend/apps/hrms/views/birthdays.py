@@ -86,6 +86,73 @@ class BirthdayView(APIView):
         })
 
 
+class BirthdaySettingsView(APIView):
+    """
+    GET/PATCH /hrms/birthdays/settings/
+
+    Admin configuration for the automatic birthday wishes feature: the
+    master on/off switch plus the dashboard banner and notification copy
+    templates. The email subject/body itself is configured separately via
+    the 'birthday_wish' row on Settings -> Email Templates.
+    """
+    permission_classes = [IsAuthenticated]
+
+    _FIELDS = [
+        'is_enabled',
+        'banner_message_template',
+        'employee_notification_template',
+        'team_notification_template',
+        'manager_notification_template',
+    ]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'employees.view'):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import BirthdaySettings
+
+        settings_obj = BirthdaySettings.get()
+        return success('Birthday settings retrieved.', data=self._serialize(settings_obj))
+
+    def patch(self, request):
+        if not _has_perm(request.user, 'employees.view'):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import BirthdaySettings
+
+        settings_obj = BirthdaySettings.get()
+        updated_fields = []
+
+        if 'is_enabled' in request.data:
+            settings_obj.is_enabled = bool(request.data['is_enabled'])
+            updated_fields.append('is_enabled')
+
+        for field in self._FIELDS[1:]:
+            if field in request.data:
+                value = (request.data.get(field) or '').strip()
+                if not value:
+                    return error(f'{field} cannot be empty.', http_status=400)
+                setattr(settings_obj, field, value)
+                updated_fields.append(field)
+
+        if updated_fields:
+            settings_obj.updated_by = request.user
+            settings_obj.save(update_fields=[*updated_fields, 'updated_by', 'updated_at'])
+
+        return success('Birthday settings updated.', data=self._serialize(settings_obj))
+
+    @staticmethod
+    def _serialize(settings_obj):
+        return {
+            'is_enabled':                      settings_obj.is_enabled,
+            'banner_message_template':         settings_obj.banner_message_template,
+            'employee_notification_template':  settings_obj.employee_notification_template,
+            'team_notification_template':      settings_obj.team_notification_template,
+            'manager_notification_template':   settings_obj.manager_notification_template,
+            'updated_at':                      settings_obj.updated_at.isoformat(),
+        }
+
+
 def _serialize(profile, days_until, today_year):
     user = profile.user
     return {

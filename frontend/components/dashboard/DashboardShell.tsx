@@ -31,7 +31,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/leave": "Leave Management",
   "/dashboard/expenses": "Expense Claims",
   "/dashboard/documents": "Document Center",
-  "/dashboard/separation": "Separation & FnF",
+  "/dashboard/separation": "Separation & Exit",
   "/dashboard/interview-list": "Interview List",
   "/dashboard/candidate-review": "Candidate Review & Onboarding",
   "/dashboard/assessments":      "Assessment Management",
@@ -66,17 +66,13 @@ export default function DashboardShell({
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   const [searchVal, setSearchVal] = useState("");
 
   const pageTitle = PAGE_TITLES[pathname]
-    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile" : "Royal HRMS");
+    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
+    : pathname.startsWith("/dashboard/separation/") ? "Separation Request"
+    : "Royal HRMS");
   const visibleNav = buildNav(session.permissions ?? []);
-
-  function toggleTheme() {
-    document.body.classList.toggle("dark-mode");
-    setDarkMode(v => !v);
-  }
 
   async function handleLogout() {
     markIntentionalLogout(); // suppress session:expired overlay for in-flight 401s
@@ -269,16 +265,6 @@ export default function DashboardShell({
                 suppressHydrationWarning
               />
             </div>
-
-            {/* Theme toggle */}
-            <button
-              className="w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-transparent text-[var(--outline)] border-none cursor-pointer hover:bg-[var(--bg-mid)]"
-              onClick={toggleTheme}
-              title="Toggle theme"
-              suppressHydrationWarning
-            >
-              <i className={`ti ${darkMode ? "ti-sun" : "ti-moon"} text-[18px]`} />
-            </button>
 
             {/* Notifications */}
             <NotificationBell />

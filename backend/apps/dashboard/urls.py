@@ -16,6 +16,7 @@ urlpatterns = [
     # ── Shared ────────────────────────────────────────────────────────────────
     path('department-headcount/',              views.HRDepartmentHeadcountView.as_view()),
     path('announcement/',                      views.SharedAnnouncementView.as_view()),
+    path('birthdays/mine/',                    views.MyBirthdayWidgetsView.as_view()),
 
     # ── HR Dashboard ──────────────────────────────────────────────────────────
     path('hr/kpis/',                           views.HRKPIView.as_view()),

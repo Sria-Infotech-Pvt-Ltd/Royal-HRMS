@@ -288,6 +288,7 @@ def _employee_dict(user: User) -> dict:
     role_name = (user.role.name if user.role else '').lower()
     mgr = getattr(user, 'reporting_manager', None)
     _hr = getattr(user, 'hr', None)
+    approver = getattr(user, 'reporting_approver', None)
 
     result = {
         'id':             user.employee_id,
@@ -310,6 +311,10 @@ def _employee_dict(user: User) -> dict:
         'hr': {
             'id':   _hr.employee_id if _hr else None,
             'name': _hr.full_name   if _hr else None,
+        },
+        'reporting_approver': {
+            'id':   approver.employee_id if approver else None,
+            'name': approver.full_name   if approver else None,
         },
         'profile':            profile_data,
         'documents':          documents,
@@ -2916,10 +2921,32 @@ class EmployeeStatsView(APIView):
             'department_names':  department_names,
         })
 
+def _get_employee(identifier: str):
+    """Look up an employee by employee_id code (e.g. EMP001)."""
+    try:
+        return User.objects.select_related('role', 'profile').get(employee_id=identifier)
+    except User.DoesNotExist:
+        return None
+
+
+def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
+    """
+    Non-system-admin users are always scoped to their own branch — mirrors the
+    scoping already applied to EmployeeListCreateView.get(). Returns True when
+    the employee should be treated as not found for this requester.
+    """
+    role_name = requesting_user.role.name if requesting_user.role else ''
+    return (
+        role_name != 'system_admin'
+        and bool(requesting_user.branch)
+        and employee.branch != requesting_user.branch
+    )
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
-    
-    
+
+
 
     def get(self, request, employee_id: str):
         if not _has_perm(request.user, 'employees.view'):
@@ -2999,8 +3026,8 @@ class EmployeeDetailView(APIView):
             profile.save(update_fields=['date_of_birth', 'updated_at'])
 
         if len(update_fields) == 1:
-            # Check if hr_id or reporting_manager_id will be set before bailing
-            if 'hr_id' not in data and 'reporting_manager_id' not in data:
+            # Check if hr_id, reporting_manager_id, or reporting_approver_id will be set before bailing
+            if 'hr_id' not in data and 'reporting_manager_id' not in data and 'reporting_approver_id' not in data:
                 return error('No updatable fields provided.')
 
         # Auto-assign null fields first — manual overrides below will overwrite if needed
@@ -3042,6 +3069,24 @@ class EmployeeDetailView(APIView):
                 employee.reporting_manager = None
             if 'reporting_manager' not in update_fields:
                 update_fields.append('reporting_manager')
+
+        # Manual reporting approver assignment — the designated approver for a
+        # Manager/HR employee's own requests (e.g. separation) in place of a
+        # reporting_manager, which isn't applicable to those roles.
+        if 'reporting_approver_id' in data:
+            ra_val = data.get('reporting_approver_id')
+            if ra_val:
+                try:
+                    ra_user = User.objects.get(pk=ra_val, is_active=True)
+                except (User.DoesNotExist, Exception):
+                    return error('Reporting approver not found or is inactive.')
+                if ra_user.pk == employee.pk:
+                    return error('An employee cannot be their own reporting approver.')
+                employee.reporting_approver = ra_user
+            else:
+                employee.reporting_approver = None
+            if 'reporting_approver' not in update_fields:
+                update_fields.append('reporting_approver')
 
         if len(update_fields) == 1:
             return error('No updatable fields provided.')

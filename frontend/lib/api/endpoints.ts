@@ -75,6 +75,7 @@ export const API = {
 
   hrms: {
     birthdays: "/birthdays/",
+    birthdaySettings: "/birthdays/settings/",
   },
 
   referrals: {
@@ -129,6 +130,21 @@ export const API = {
     updateStatus: "/expenses/status/",
     detail: (id: string) => `/expenses/${id}/`,
     approve: (id: string) => `/expenses/${id}/approve/`,
+  },
+
+  separation: {
+    list:            "/separation/requests/",
+    detail:          (id: string) => `/separation/requests/${id}/`,
+    stageAction:     (id: string, stageId: string) => `/separation/requests/${id}/stages/${stageId}/action/`,
+    tasks:           (id: string) => `/separation/requests/${id}/tasks/`,
+    taskDetail:      (id: string, taskId: string) => `/separation/requests/${id}/tasks/${taskId}/`,
+    clearances:      (id: string) => `/separation/requests/${id}/clearances/`,
+    clearanceAction: (id: string, clearanceId: string) => `/separation/requests/${id}/clearances/${clearanceId}/action/`,
+    documents:       (id: string) => `/separation/requests/${id}/documents/`,
+    documentDetail:  (id: string, documentId: string) => `/separation/requests/${id}/documents/${documentId}/`,
+    activities:      (id: string) => `/separation/requests/${id}/activities/`,
+    types:           "/separation/types/",
+    reasons:         "/separation/reasons/",
   },
 
   assessments: {
@@ -254,6 +270,7 @@ export const API = {
     attendanceStatus:  "/dashboard/employee/attendance-status/",
     announcement:      "/dashboard/announcement/",
     birthdaysToday:    "/dashboard/employee/birthdays/today/",
+    myBirthdayWidgets: "/dashboard/birthdays/mine/",
   },
 
   payroll: {

@@ -114,3 +114,18 @@ export interface BirthdaysTodayResponse {
   count:     number;
   birthdays: BirthdayEmployee[];
 }
+
+export interface MyBirthdayPerson {
+  employee_id:   string;
+  full_name:     string;
+  email:         string;
+  department:    string;
+  designation:   string;
+  date_of_birth: string | null;
+  message:       string;
+}
+
+export interface MyBirthdayWidgets {
+  team:    MyBirthdayPerson[];
+  manager: MyBirthdayPerson | null;
+}

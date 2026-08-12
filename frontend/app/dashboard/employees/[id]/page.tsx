@@ -52,8 +52,9 @@ interface ApiEmployee {
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   onboarding_status: string;
-  reporting_manager: { id: string; name: string } | null;
-  hr:                { id: string; name: string } | null;
+  reporting_manager:  { id: string; name: string } | null;
+  reporting_approver: { id: string; name: string } | null;
+  hr:                 { id: string; name: string } | null;
   profile?: ApiProfile;
   documents?: ApiDocument[];
 }
@@ -110,6 +111,8 @@ function apiToEmployee(u: ApiEmployee): Employee {
       branch:              u.branch || "",
       reportingManager:    u.reporting_manager?.name ?? "",
       reportingManagerId:  u.reporting_manager?.id   ?? "",
+      reportingApprover:   u.reporting_approver?.name ?? "",
+      reportingApproverId: u.reporting_approver?.id   ?? "",
       hr:                  u.hr?.name ?? "",
       hrId:                u.hr?.id   ?? "",
       category:          "General",
@@ -327,6 +330,7 @@ export default function EmployeeProfilePage({
         role:                   values.ssRole                || null,
         is_active:              employee?.status !== "inactive",
         reporting_manager_id:   values.reportingManagerId   || null,
+        reporting_approver_id:  values.reportingApproverId  || null,
         hr_id:                  values.hrId                  || null,
         // Personal fields
         date_of_birth:          values.dateOfBirth          || null,
@@ -514,6 +518,22 @@ export default function EmployeeProfilePage({
                       listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, reportingManager: name ?? "", reportingManagerId: uuid ?? "" }))
+                      }
+                    />
+                  );
+                }
+                if (key === "reportingApprover") {
+                  // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
+                  if (disabled) return null;
+                  return (
+                    <EmployeePickerInline
+                      label="Reporting Approver"
+                      value={values.reportingApprover ?? ""}
+                      selectedId={values.reportingApproverId ?? ""}
+                      disabled={false}
+                      listEndpoint={values.branch ? `${API.employees.managerList}?branch=${encodeURIComponent(values.branch)}` : API.employees.managerList}
+                      onSelect={(uuid, name) =>
+                        setValues(v => ({ ...v, reportingApprover: name ?? "", reportingApproverId: uuid ?? "" }))
                       }
                     />
                   );

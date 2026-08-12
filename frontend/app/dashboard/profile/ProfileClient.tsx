@@ -11,6 +11,7 @@ import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ChangePasswordForm from "./ChangePasswordForm";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
+import SeparationCard from "./_components/SeparationCard";
 
 interface ProfileSub {
   date_of_birth:          string | null;
@@ -58,8 +59,9 @@ interface ProfileData {
   date_joined:       string | null;
   onboarding_status: string | null;
   assessment_status: string | null;
-  reporting_manager: AssignedPerson | null;
-  hr:                AssignedPerson | null;
+  reporting_manager:  AssignedPerson | null;
+  reporting_approver: AssignedPerson | null;
+  hr:                 AssignedPerson | null;
   profile:           ProfileSub | null;
   profile_photo_url: string | null;
 }
@@ -295,12 +297,18 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             )}
           </div>
 
-          {!loading && (profile?.reporting_manager?.name || profile?.hr?.name) && (
+          {!loading && (profile?.reporting_manager?.name || profile?.reporting_approver?.name || profile?.hr?.name) && (
             <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap", paddingTop: 8, borderTop: "1px solid var(--border)" }}>
               {profile?.reporting_manager?.name && (
                 <span style={{ fontSize: 12, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
                   <i className="ti ti-user-check" style={{ fontSize: 12, color: "var(--primary)" }} />
                   Reporting Manager: <strong style={{ color: "var(--on-bg)" }}>{profile.reporting_manager.name}</strong>
+                </span>
+              )}
+              {profile?.reporting_approver?.name && (
+                <span style={{ fontSize: 12, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <i className="ti ti-user-check" style={{ fontSize: 12, color: "var(--primary)" }} />
+                  Reporting Approver: <strong style={{ color: "var(--on-bg)" }}>{profile.reporting_approver.name}</strong>
                 </span>
               )}
               {profile?.hr?.name && (
@@ -455,6 +463,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               </div>
             </div>
           </div>
+
+          <SeparationCard />
 
           {/* Emergency Contact */}
           <div className="card mb-16">

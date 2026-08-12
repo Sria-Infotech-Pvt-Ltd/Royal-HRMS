@@ -23,7 +23,11 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/leave": "leave.view",
   "/dashboard/expenses": "expenses.view",
   "/dashboard/approvals": ["leave.approve", "expenses.approve"],
-  "/dashboard/separation": "employees.view",
+  // /dashboard/separation intentionally absent — every employee can create
+  // and view their own separation request, not just Manager/HR (same
+  // self-service reasoning as my-payslip/my-attendance above). The page
+  // itself scopes what each viewer sees and can do
+  // (see app/dashboard/separation/_access.ts).
   "/dashboard/documents": "documents.view",
   "/dashboard/reports": "reports.view",
   "/dashboard/audit": "audit.view",

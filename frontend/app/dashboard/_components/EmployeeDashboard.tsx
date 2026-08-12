@@ -2,6 +2,8 @@
 
 import EmpConsole          from "@/components/dashboard/employee/EmpConsole";
 import EmpBirthdayAnnouncement from "@/components/dashboard/employee/EmpBirthdayAnnouncement";
+import TeamBirthdayCard    from "@/components/dashboard/employee/TeamBirthdayCard";
+import ManagerBirthdayCard from "@/components/dashboard/employee/ManagerBirthdayCard";
 import EmpLeaveBalances    from "@/components/dashboard/employee/EmpLeaveBalances";
 import EmpUpcomingHolidays from "@/components/dashboard/employee/EmpUpcomingHolidays";
 import EmpActionItems      from "@/components/dashboard/employee/EmpActionItems";
@@ -28,6 +30,12 @@ export default function EmployeeDashboard({ session }: Props) {
       {/* Birthday Announcement — highest priority; renders nothing when nobody
           has a birthday today, so this is a no-op on every non-birthday day */}
       <EmpBirthdayAnnouncement />
+
+      {/* Team/manager cards — strictly scoped to the logged-in user's own
+          reporting hierarchy (unlike the company-wide announcement above).
+          Each renders nothing when not applicable to the current user. */}
+      <TeamBirthdayCard />
+      <ManagerBirthdayCard />
 
       {/* Row 1 + 2 — Console banner (KPIs + attendance status strip) */}
       <EmpConsole firstName={firstName} />

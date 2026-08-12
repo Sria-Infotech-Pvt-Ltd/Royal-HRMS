@@ -114,16 +114,32 @@ def reset_annual_leave_balances(self):
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_birthday_wishes(self):
     """
-    Daily task: send a birthday wish email to every active employee
-    whose birthday (month + day) matches today.
+    Daily task: for every active employee whose birthday (month + day)
+    matches today —
+      - send a birthday wish email (template 'birthday_wish', admin-editable
+        in Settings -> Email Templates)
+      - create an in-app Notification for the employee, their teammates
+        (same reporting manager), and their reporting manager
+      - record an AuditLog row (module='birthday') for delivery visibility
+        in Settings -> Audit Logs
 
-    Runs at 9:00 AM IST (configured in CELERY_BEAT_SCHEDULE).
+    Runs at 00:05 IST (configured in CELERY_BEAT_SCHEDULE).
+    Gated by BirthdaySettings.is_enabled — the whole feature is a no-op
+    when disabled.
     Idempotent — skips employees whose birthday_wish_sent_year already
-    equals the current year, so retries and duplicate runs are safe.
+    equals the current year, so retries and duplicate runs are safe. That
+    same guard also prevents duplicate notifications/audit rows on retry.
     """
     try:
-        from apps.accounts.models import Company, EmployeeProfile
+        from apps.accounts.models import BirthdaySettings, Company, EmployeeProfile
         from apps.accounts.utils import send_template_email
+        from apps.hrms.birthday_utils import get_peers, serialize_birthday_person
+        from apps.notifications.signals import _notify
+
+        birthday_settings = BirthdaySettings.get()
+        if not birthday_settings.is_enabled:
+            logger.info('send_birthday_wishes skipped: feature disabled in BirthdaySettings.')
+            return {'skipped_reason': 'disabled'}
 
         today        = timezone.localdate()
         company      = Company.objects.first()
@@ -169,9 +185,34 @@ def send_birthday_wishes(self):
                 profile.save(update_fields=['birthday_wish_sent_year'])
                 sent_count += 1
                 logger.info('Birthday wish sent to %s (%s)', name, email_addr)
-            except Exception:
+                _record_birthday_delivery(employee, 'birthday_email_sent', {'email': email_addr})
+            except Exception as exc:
                 failed_count += 1
                 logger.exception('Failed to send birthday wish to %s (%s)', name, email_addr)
+                _record_birthday_delivery(
+                    employee, 'birthday_email_failed', {'email': email_addr, 'error': str(exc)},
+                )
+                continue
+
+            _notify(
+                employee, '🎉 Happy Birthday!',
+                birthday_settings.employee_notification_template,
+                'birthday', 'birthday', str(employee.id), employee,
+            )
+
+            for peer in get_peers(employee):
+                _notify(
+                    peer, '🎂 Team Birthday Today',
+                    birthday_settings.team_notification_template.format(employee_name=name),
+                    'birthday', 'birthday', str(employee.id),
+                )
+
+            if employee.reporting_manager_id:
+                _notify(
+                    employee.reporting_manager, '🎂 Team Birthday Today',
+                    birthday_settings.manager_notification_template.format(employee_name=name),
+                    'birthday', 'birthday', str(employee.id),
+                )
 
         result = {
             'date':    today.isoformat(),
@@ -185,3 +226,17 @@ def send_birthday_wishes(self):
     except Exception as exc:
         logger.error('send_birthday_wishes task error: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
+
+
+def _record_birthday_delivery(employee, action: str, changes: dict) -> None:
+    """Log a birthday email delivery attempt to the shared AuditLog table so
+    it surfaces in the existing System Admin -> Audit Logs page (?module=birthday)
+    without needing a dedicated log model/UI."""
+    try:
+        from apps.accounts.models import AuditLog
+        AuditLog.objects.create(
+            user=employee, action=action, module='birthday',
+            object_id=str(employee.id), changes=changes,
+        )
+    except Exception:
+        logger.exception('Failed to record birthday delivery audit log for %s', employee.id)

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { useAnyPermission } from "@/hooks/usePermission";
+import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 
 const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; icon: string; href: string }[] = [
@@ -12,7 +14,7 @@ const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; ic
   { key: "attendance_corrections", label: "Attendance Corrections",  icon: "ti-clock-edit",   href: "/dashboard/attendance"      },
   { key: "expense_claims",         label: "Expense Claims",          icon: "ti-receipt",      href: "/dashboard/expenses"        },
   { key: "onboarding_reviews",     label: "Onboarding Reviews",      icon: "ti-id-badge",     href: "/dashboard/employees"       },
-  { key: "separation_requests",    label: "Separation Requests",     icon: "ti-user-minus",   href: "/dashboard/employees"       },
+  { key: "separation_requests",    label: "Separation Requests",     icon: "ti-user-minus",   href: "/dashboard/separation"       },
 ];
 
 export default function HrActionQueue() {
@@ -20,7 +22,20 @@ export default function HrActionQueue() {
   // Live data pushed by the backend over WebSocket — takes priority over the
   // HTTP-fetched copy so the counts update instantly without a round trip.
   const [liveData, setLiveData] = useState<HRActionQueue | null>(null);
-  const data = liveData ?? fetchedData;
+  const fetched = liveData ?? fetchedData;
+
+  // The dashboard action-queue endpoint doesn't include separation counts
+  // yet — read the count straight from the separation API's team scope
+  // (everyone else's requests this viewer can act on) instead.
+  const canApproveSeparation = useAnyPermission("separation.approve", "settings.edit");
+  const { data: separationPage } = useFetch<PaginatedResponse<SeparationRequest>>(
+    canApproveSeparation ? `${API.separation.list}?scope=team&page_size=1` : null,
+  );
+  const separationCount = separationPage?.count ?? 0;
+
+  const data = fetched
+    ? { ...fetched, separation_requests: separationCount, total_pending: fetched.total_pending + separationCount }
+    : fetched;
 
   useEffect(() => {
     function handleLeaveUpdate(event: Event) {
