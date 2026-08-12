@@ -9,7 +9,6 @@ import { useToast } from "@/components/ToastProvider";
 import type { SeparationRequest } from "@/types/separation";
 import { useSeparationAccess } from "../_access";
 import { statusBadgeClass } from "../_workflow";
-import SeparationFormModal from "../_components/SeparationFormModal";
 import DecisionModal from "../_components/DecisionModal";
 import ConfirmModal from "../_components/ConfirmModal";
 import EmployeeDetailsSection from "./_components/EmployeeDetailsSection";
@@ -27,7 +26,6 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
 
   const { data: r, loading, error, refetch } = useFetch<SeparationRequest>(API.separation.detail(id));
 
-  const [editing,    setEditing]    = useState(false);
   const [decision,   setDecision]   = useState<{ stageId: string; action: "approve" | "reject" } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
@@ -73,10 +71,10 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
     setWorking(true);
     try {
       await clientApi.delete(API.separation.detail(r.id));
-      showToast("Separation request deleted.", "success");
+      showToast("Separation request rejected.", "success");
       window.location.href = "/dashboard/separation";
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to delete the request."), "error");
+      showToast(extractError(err, "Failed to reject the request."), "error");
       setWorking(false);
       setDeleting(false);
     }
@@ -117,11 +115,6 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
           <div className="page-sub">{r.employee_code} · {r.employee_department} · {r.employee_designation}</div>
         </div>
         <div className="page-actions">
-          {r.can_edit && (
-            <button className="btn btn-outline" onClick={() => setEditing(true)} suppressHydrationWarning>
-              <i className="ti ti-edit" /> Edit
-            </button>
-          )}
           {r.can_cancel && (
             <button className="btn btn-ghost" onClick={() => setCancelling(true)} suppressHydrationWarning>
               <i className="ti ti-ban" /> Cancel Request
@@ -129,7 +122,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
           )}
           {r.can_delete && (
             <button className="btn btn-danger" onClick={() => setDeleting(true)} suppressHydrationWarning>
-              <i className="ti ti-trash" /> Delete
+              <i className="ti ti-x" /> Reject
             </button>
           )}
         </div>
@@ -142,16 +135,6 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
       <ClearanceSection r={r} />
       <DocumentsSection r={r} access={access} />
       <ActivitySection r={r} />
-
-      {editing && (
-        <SeparationFormModal
-          mode="edit"
-          existing={r}
-          canPickEmployee={access.canPickEmployee}
-          onClose={() => setEditing(false)}
-          onSaved={() => { setEditing(false); showToast("Separation request updated.", "success"); refetch(); }}
-        />
-      )}
 
       {decision && (
         <DecisionModal
@@ -177,9 +160,9 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
 
       {deleting && (
         <ConfirmModal
-          title="Delete Separation Request"
-          body={`This will permanently delete the separation request for ${r.employee_name}.`}
-          confirmLabel="Yes, Delete"
+          title="Reject Separation Request"
+          body={`This will reject the separation request for ${r.employee_name}.`}
+          confirmLabel="Yes, Reject"
           danger
           saving={working}
           onConfirm={handleDeleteConfirm}
