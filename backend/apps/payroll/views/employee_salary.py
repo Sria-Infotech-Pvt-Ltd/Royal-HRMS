@@ -11,6 +11,7 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 from apps.payroll.models import EmployeeSalaryConfig
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
+from apps.payroll.views.cycles import _is_admin
 
 User = get_user_model()
 
@@ -39,6 +40,20 @@ class EmployeeSalaryConfigListView(APIView):
             'employee', 'salary_structure',
         ).order_by('employee__full_name')
 
+        # Branch-scoped users (branch_admin, HR) must only see configs for
+        # employees in their own branch — matches the scoping already applied
+        # to the /employees/ list (EmployeeListCreateView), which this list is
+        # zipped against on the frontend. Without this, a branch_admin got
+        # every branch's configs while the employee list was already
+        # branch-scoped, so IDs never matched and every row read "Not set".
+        if not _is_admin(request.user):
+            if not request.user.branch:
+                return error(
+                    'Your account is not assigned to a branch. Contact an administrator.',
+                    http_status=400,
+                )
+            configs = configs.filter(employee__branch=request.user.branch)
+
         page_obj, paginator = paginate(configs, request)
         serializer = EmployeeSalaryConfigSerializer(page_obj.object_list, many=True)
         return success(
@@ -55,6 +70,8 @@ class EmployeeSalaryConfigListView(APIView):
         employee = _resolve_employee(employee_identifier)
         if not employee:
             return error('Employee not found or is inactive.')
+        if not _is_admin(request.user) and employee.branch != request.user.branch:
+            return error('Access denied.', http_status=403)
 
         data = request.data.copy()
         data['employee'] = str(employee.id)
@@ -89,6 +106,8 @@ class EmployeeSalaryConfigDetailView(APIView):
             return error('Only HR admin can view salary configurations.', http_status=403)
 
         config = get_object_or_404(EmployeeSalaryConfig, pk=pk)
+        if not _is_admin(request.user) and config.employee.branch != request.user.branch:
+            return error('Access denied.', http_status=403)
         return success('Salary config retrieved.', EmployeeSalaryConfigSerializer(config).data)
 
     def put(self, request, pk):
@@ -96,6 +115,8 @@ class EmployeeSalaryConfigDetailView(APIView):
             return error('Only HR admin can update salary configs.', http_status=403)
 
         config = get_object_or_404(EmployeeSalaryConfig, pk=pk)
+        if not _is_admin(request.user) and config.employee.branch != request.user.branch:
+            return error('Access denied.', http_status=403)
         serializer = EmployeeSalaryConfigSerializer(config, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
@@ -116,6 +137,8 @@ class EmployeeSalaryHistoryView(APIView):
         employee = _resolve_employee(employee_pk)
         if not employee:
             return error('Employee not found.', http_status=404)
+        if not _is_admin(request.user) and employee.branch != request.user.branch:
+            return error('Access denied.', http_status=403)
 
         configs = EmployeeSalaryConfig.objects.filter(
             employee=employee,

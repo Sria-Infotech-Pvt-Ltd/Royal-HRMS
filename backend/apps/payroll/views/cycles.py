@@ -636,7 +636,9 @@ class PayrollCycleDetailView(APIView):
 
 
 class BranchPayrollStatusView(APIView):
-    """Admin overview: every active branch with its latest non-cancelled cycle status."""
+    """Branch payroll overview: global admins see every active branch with its
+    latest non-cancelled cycle status; branch-scoped users (branch_admin, HR)
+    see only their own assigned branch."""
 
     permission_classes = [IsAuthenticated]
 
@@ -644,10 +646,17 @@ class BranchPayrollStatusView(APIView):
         if not _has_perm(request.user, 'payroll.view'):
             return error('Access denied.', http_status=403)
 
-        if not _is_admin(request.user):
-            return error('Admin access required for branch payroll overview.', http_status=403)
+        if _is_admin(request.user):
+            branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).order_by('branch_name')
+        else:
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None:
+                return error(
+                    'Your account is not assigned to a branch. Contact an administrator.',
+                    http_status=400,
+                )
+            branches = Branch.objects.filter(pk=branch_obj.pk)
 
-        branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE).order_by('branch_name')
         result = []
         for branch in branches:
             latest = (

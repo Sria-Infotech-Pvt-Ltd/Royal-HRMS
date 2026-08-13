@@ -7,7 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import type { EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
 
 interface PagedResponse<T> { results: T[]; count: number; }
-interface Employee { id: string; full_name: string; employee_id: string; department: string; branch: string; }
+interface Employee { id: string; uuid: string; full_name: string; employee_id: string; department: string; branch: string; }
 
 interface SalaryModalState {
   employee: Employee;
@@ -42,11 +42,11 @@ export default function SalarySetupTab() {
     emp.department.toLowerCase().includes(search.toLowerCase())
   );
 
-  const withCTC    = filteredEmployees.filter(e => configById.has(e.id));
-  const withoutCTC = filteredEmployees.filter(e => !configById.has(e.id));
+  const withCTC    = filteredEmployees.filter(e => configById.has(e.uuid));
+  const withoutCTC = filteredEmployees.filter(e => !configById.has(e.uuid));
 
   function openModal(employee: Employee) {
-    const current = configById.get(employee.id) ?? null;
+    const current = configById.get(employee.uuid) ?? null;
     setModal({
       employee,
       current,
@@ -66,7 +66,7 @@ export default function SalarySetupTab() {
     setSaving(true);
     try {
       await clientApi.post(API.payroll.employeeSalary, {
-        employee: modal.employee.id,
+        employee: modal.employee.uuid,
         annual_ctc: modal.annual_ctc,
         salary_structure: modal.salary_structure || null,
         effective_from: modal.effective_from,
@@ -298,7 +298,7 @@ function EmployeeTable({
         </thead>
         <tbody>
           {employees.map(emp => {
-            const config = configById.get(emp.id);
+            const config = configById.get(emp.uuid);
             return (
               <tr key={emp.id} style={highlight === "warn" ? { background: "var(--warn-c)" } : {}}>
                 <td>
