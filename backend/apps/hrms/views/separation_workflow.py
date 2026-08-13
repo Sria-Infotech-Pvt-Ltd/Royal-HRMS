@@ -43,7 +43,10 @@ def _can_action_stage(user, sep_request, stage) -> bool:
     if _has_perm(user, 'settings.edit'):
         return True
     if stage.stage == SEP_STAGE_MANAGER:
-        return stage.approver_id == user.id
+        if stage.approver_id:
+            return stage.approver_id == user.id
+        branch = _user_branch(user)
+        return _has_perm(user, 'separation.approve') and (not branch or branch == _user_branch(sep_request.employee))
     if stage.stage == SEP_STAGE_BRANCH_ADMIN:
         return bool(
             user.role and user.role.can_manage_branch
@@ -131,6 +134,17 @@ class SeparationHandoverTaskListCreateView(APIView):
         serializer = SeparationHandoverTaskCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
+
+        # A manager or HR handling their OWN separation can't offload their handover
+        # onto their own direct report — that's exactly the accountability the KT
+        # step exists to enforce. Assigning within their team must go through
+        # someone else (e.g. the approver) instead.
+        assigned_to = serializer.validated_data.get('assigned_to')
+        role = request.user.role
+        is_manager_or_hr = bool(role and (role.can_manage_team or role.name == 'hr'))
+        if is_own and is_manager_or_hr and assigned_to and assigned_to.reporting_manager_id == request.user.id:
+            return error('You cannot assign your own separation handover task to a member of your team.')
+
         task = SeparationHandoverTask.objects.create(
             request=sep_request, created_by=request.user, **serializer.validated_data,
         )
@@ -174,6 +188,14 @@ class SeparationHandoverTaskDetailView(APIView):
             serializer = SeparationHandoverTaskCreateSerializer(task, data=request.data, partial=True)
             if not serializer.is_valid():
                 return error(first_error(serializer.errors))
+
+            is_own = task.request.employee_id == user.id
+            role = user.role
+            is_manager_or_hr = bool(role and (role.can_manage_team or role.name == 'hr'))
+            assigned_to = serializer.validated_data.get('assigned_to')
+            if is_own and is_manager_or_hr and assigned_to and assigned_to.reporting_manager_id == user.id:
+                return error('You cannot assign your own separation handover task to a member of your team.')
+
             serializer.save()
 
         _log(task.request, user, f'Handover task "{task.task}" updated by {user.full_name}.')

@@ -443,6 +443,7 @@ class AuditLog(models.Model):
     object_id  = models.CharField(max_length=100, blank=True)
     changes    = models.JSONField(default=dict)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
+    branch     = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

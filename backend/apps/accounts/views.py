@@ -2578,11 +2578,28 @@ class EmployeeListCreateView(APIView):
         # Attendance, Expenses, and the Leave approval queues for the same role.
         # Everyone else without settings.edit is scoped to their own branch, and
         # cannot be overridden by query params.
+        #
+        # Exception: picking a KT handover assignee for the viewer's OWN
+        # separation request. A manager/HR can't assign their own handover to
+        # their own report (see SeparationHandoverTaskListCreateView.post), so
+        # locking this search to "your own team" would leave them with zero
+        # valid candidates. own_separation_request must name a request where
+        # they ARE the separating employee — can't be used to see someone
+        # else's team.
+        from apps.hrms.models import SEP_REJECTED, SeparationRequest
+
         role = request.user.role
-        if role and role.can_manage_team:
+        own_sep_request_id = request.query_params.get('own_separation_request', '').strip()
+        widen_for_own_separation = bool(own_sep_request_id) and SeparationRequest.objects.filter(
+            id=own_sep_request_id, employee=request.user,
+        ).exclude(status=SEP_REJECTED).exists()
+
+        if role and role.can_manage_team and not widen_for_own_separation:
             qs = qs.filter(reporting_manager=request.user)
         elif not _has_perm(request.user, 'settings.edit') and request.user.branch:
             qs = qs.filter(branch=request.user.branch)
+        if widen_for_own_separation:
+            qs = qs.exclude(reporting_manager=request.user)
 
         search       = request.query_params.get('search', '').strip()
         dept         = request.query_params.get('department', '').strip()

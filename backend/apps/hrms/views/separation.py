@@ -66,31 +66,51 @@ def _approval_scope_filter(user) -> Q:
 
 def _resolve_separation_chain(employee):
     """
-    Build the 2-stage approval chain for a separating employee, in action order:
+    Build the approval chain for a separating employee, in action order —
+    keyed off the SEPARATING employee's own role, not the requester's:
 
-    1. HR            — employee.hr. Left unresolved (None) if no HR is
-                        assigned; the HR stage then falls back to any
-                        separation.approve holder in the employee's branch
-                        (see _stage_actionable in serializers.py).
-    2. Manager        — the employee's Department.manager — UNLESS that
-       / Branch Admin   department has no manager set, or the employee IS
-                        that department's manager (can't approve their own
-                        exit), in which case this stage escalates to Branch
-                        Admin instead (unresolved — any can_manage_branch
-                        user in the same branch may act).
+    - Manager (role.can_manage_team):   [HR, Branch Admin]           — 2 stages
+    - HR-tier (see below):              [Branch Admin]               — 1 stage
+    - Everyone else (regular employee): [Department Manager, HR]     — 2 stages
 
-    Returns [(stage_key, approver_or_None), (stage_key, approver_or_None)].
+    "HR-tier" means the employee's own role holds separation.approve (or the
+    settings.edit bypass) — i.e. the employee IS someone who'd normally be
+    approving other people's separations (hr, branch_admin, system_admin).
+    This check must run AFTER the can_manage_team check above, because every
+    manager role is also granted separation.approve (accounts migration
+    0063) — checking permission first would misroute every manager into the
+    single-stage HR-tier branch instead of their own 2-stage one.
+
+    The Department-Manager and HR approver slots are left unresolved (None)
+    whenever they can't be pinned to one specific person (no department
+    manager set, employee IS that manager, no HR assigned, etc.) — an
+    unresolved stage then falls back to any separation.approve holder in the
+    employee's branch (see _stage_actionable in serializers.py and
+    _can_action_stage in views/separation_workflow.py). Branch Admin is
+    always left unresolved for the same reason — it's a role-wide stage, not
+    tied to one specific person.
+
+    Returns [(stage_key, approver_or_None), ...] — one or two entries.
     """
-    from apps.accounts.models import Department
-    from ..models import SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_MANAGER
+    from ..models import SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_HR, SEP_STAGE_MANAGER
 
+    role = employee.role
+    if role and role.can_manage_team:
+        return [(SEP_STAGE_HR, employee.hr), (SEP_STAGE_BRANCH_ADMIN, None)]
+
+    is_hr_tier = bool(
+        role and role.role_permissions.filter(
+            permission__codename__in={'separation.approve', 'settings.edit'}
+        ).exists()
+    )
+    if is_hr_tier:
+        return [(SEP_STAGE_BRANCH_ADMIN, None)]
+
+    from apps.accounts.models import Department
     dept = Department.objects.filter(name=employee.department).first()
     dept_manager = dept.manager if dept else None
-    if dept_manager and dept_manager.id != employee.id:
-        second = (SEP_STAGE_MANAGER, dept_manager)
-    else:
-        second = (SEP_STAGE_BRANCH_ADMIN, None)
-    return [(SEP_STAGE_HR, employee.hr), second]
+    manager_approver = dept_manager if (dept_manager and dept_manager.id != employee.id) else None
+    return [(SEP_STAGE_MANAGER, manager_approver), (SEP_STAGE_HR, employee.hr)]
 
 
 def _log(sep_request, user, message: str) -> None:

@@ -3451,3 +3451,41 @@ frontend/lib/api/endpoints.ts, frontend/types/payroll.ts — eligibleEmployees e
 - Designation levels for Gujarat / Andhra Pradesh (see LWF section above — unrelated feature, same underlying "no real data yet" pattern) — still not needed since neither has real employees.
 - Self-promotion is still not blocked by any rule — flagged twice now (LWF-adjacent session and this one), not acted on; revisit if it ever matters operationally.
 - The "Recompute" button on the payroll results screen intentionally still does a full reprocess with no selection UI — a deliberate, minimal scope decision this session, not an oversight; can be extended later if HR needs partial-selection reprocessing from that screen too.
+
+---
+
+## Session Log — 2026-08-12 (separation workflow documentation)
+
+### Features Shipped
+
+**1. Separation Request workflow (backend only, by explicit request)**
+
+Added a full separation/exit lifecycle to `apps.hrms` — not a new Django app; CLAUDE.md's domain grouping already lists `separation` under `hrms` alongside leave/expenses, and that's where it landed after flagging the conflict with the pre-existing empty `apps/offboarding/` stub (unregistered in `INSTALLED_APPS`, never wired into `urls.py` — left untouched).
+
+- `SeparationRequest` — employee, separation_type, reason, request_date, proposed_last_working_day, notice_period_days, comments, document, status, auto-incrementing `request_number` (exposed as `request_ref: "SEP-<n>"`), created_by.
+- `SeparationApprovalStage` — a **variable-length** approval chain (1 or 2 stages), resolved off the *separating employee's own role*, not the requester's:
+  - Regular employee → Department Manager (`Department.manager`) → HR (`User.hr`)
+  - Manager (`role.can_manage_team`) → HR → Branch Admin
+  - HR-tier (holds `separation.approve`/`settings.edit` themselves — hr/branch_admin/system_admin) → Branch Admin only, single stage
+  - Any unresolved approver slot (no department manager set, no HR assigned, employee IS that department's manager, etc.) falls back to any `separation.approve` holder in the employee's branch — mirrors the Leave module's existing L2-orphan-fallback pattern. This fallback was initially missing for the Manager-stage specifically (only the exact resolved manager could act, a dead end with no department managers configured) — fixed in both the enforcement check (`views/separation_workflow.py::_can_action_stage`) and its read-only display mirror (`serializers.py::_stage_actionable`).
+  - The status machine (`pending` → `stage2_pending` → `approved`/`rejected`, plus `cancelled`) and stage-sequencing/gating logic were already fully generic (never hardcoded "stage 1 = HR") — no changes needed there when the 3-way role rule was added on top.
+- `SeparationHandoverTask` (KT/handover checklist, assignable to any employee), `SeparationClearance` (fixed 4-row set — Manager/IT/Finance/HR — auto-created per request), `SeparationDocument` (ad-hoc multi-document upload, distinct from the original creation-time `document` field), `SeparationActivity` (append-only audit trail; every create/approve/reject/task/clearance/document action writes a line).
+- New permission `separation.approve` — migration `accounts/0063_seed_separation_approve_permission`, granted to whatever roles currently hold `leave.approve` rather than a hardcoded role-name list (role names have drifted from the original seed — e.g. real roles today are `manager__team_lead`/`hr`/`branch_admin`/`finance`/`system_admin`, not the original `hr_admin`/`manager`/`employee` seed names — same caution as `0043_seed_payroll_view_own_permission`).
+- Two dropdown-options endpoints, `GET /separation/types/` and `GET /separation/reasons/`, mirroring the existing `/expenses/categories/`/`/expenses/status/` pattern — added after being asked whether something like this existed, so the frontend never has to hardcode the enum values. `separation_type` was later trimmed to `resignation`/`retirement`/`other` and `reason` replaced entirely with a 7-value list, both per direct frontend-mock screenshots.
+- Files: `backend/apps/hrms/{models.py,serializers.py,admin.py,urls.py}`, `views/separation.py` (new), `views/separation_workflow.py` (new — stages/tasks/clearances/documents/activity endpoints), `views/__init__.py`; migrations `hrms/0020_separationrequest`, `hrms/0022_alter_separationrequest_reason_and_more`, `accounts/0063_seed_separation_approve_permission`.
+- **Frontend: built, then fully reverted.** First pass produced a working list page, create/edit modal (employee picker auto-filling department/designation/reporting-manager/employee ID), and a detail modal. All removed on explicit follow-up request ("remove frontend code changes for separation, only do backend, give endpoints/responses to the frontend team instead") — `git checkout` restored `frontend/app/dashboard/separation/page.tsx`, `lib/api/endpoints.ts`, `lib/navConfig.ts` to their prior committed state; the new `_data.ts`/`_components/` files were deleted. As of end of session this feature is genuinely backend-only in the repo — the frontend team is building their own UI from the API reference below.
+- Living API reference (endpoints, payloads, permissions, worked examples) published as a Claude artifact for the frontend team, kept in sync as the schema evolved through the session: `https://claude.ai/code/artifact/13d40716-c4f5-420d-aa97-dfbb781ebb81`
+
+**2. WebSocket routing — unhandled exception on unmatched path**
+
+Unrelated bug surfaced mid-session: any client connecting to `ws://.../notifications/` (missing the required `/ws/` prefix — the correct, unchanged path is `/ws/notifications/`) caused Channels' `URLRouter` to raise an unhandled `ValueError` and dump a full traceback per attempt. Source device was on the LAN; its actual client code was never identified — grepped the whole frontend and confirmed `useNotifications.ts` already builds the correct `/ws/notifications/` URL and no service worker exists in this repo, so the bad client is external (stale cached page, a separate mobile app, or manual testing). Fixed the log spam regardless: added a catch-all `NotFoundConsumer` (`apps/notifications/consumers.py`) plus a trailing `re_path(r'^.*$', ...)` in `apps/notifications/routing.py` — any unmatched path now closes cleanly with code `4004` and a one-line warning instead of a traceback. **Does not fix whatever the mystery client is** — only stops it from spamming the server log.
+
+### Operational note — Daphne does not autoreload
+
+Confirmed via `Get-CimInstance Win32_Process` that the backend runs as a raw `python -m daphne -b 0.0.0.0 -p 8000 config.asgi:application` process, not `manage.py runserver`. Daphne has zero file-watching. **Every backend code change this session needed a manual process restart before it actually took effect**, and this caused real confusion twice: a fix looked like it hadn't worked (identical WebSocket traceback; identical old approval-chain order in a real, screenshotted API response) purely because the long-running process predated the edit on disk. Restarted the process 3 times this session (`Stop-Process` + relaunch on the PID from `Get-CimInstance`). Worth a team decision: switch local dev to `manage.py runserver` (which does autoreload, and still runs through Daphne per `INSTALLED_APPS`'s `'daphne'` entry — see `config/settings.py:37`) or keep raw `daphne` and build a restart step into the normal workflow so this doesn't recur.
+
+### Pending / Not yet done
+
+- Frontend team needs to build the Separation & Exit screens (list, detail, approval, KT, clearances, documents, activity) against the published API reference — nothing exists on the frontend for this feature as of end of session, by design.
+- No `Department` currently has a `manager` set in dev data — every regular employee's first approval stage will show as unresolved (`approver_name: ""`) until that's configured via the Departments admin screen; it's still actionable via the branch-wide fallback in the meantime.
+- The device sending malformed WebSocket connections was never identified.
