@@ -6,7 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
-import type { PaginatedResponse, SeparationLookupOption, SeparationRequest } from "@/types/separation";
+import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import { useSeparationAccess } from "./_access";
 import { toQuery } from "./_workflow";
 import SeparationTable from "./_components/SeparationTable";
@@ -18,9 +18,6 @@ export default function SeparationPage() {
   const { showToast } = useToast();
   const access = useSeparationAccess();
 
-  const { data: types } = useFetch<SeparationLookupOption[]>(API.separation.types);
-
-  const [typeFilter, setTypeFilter] = useState("");
   const [scope,       setScope]     = useState<"" | "team">("");
   const [employeeId,  setEmployeeId] = useState("");
   const [page,         setPage]     = useState(1);
@@ -32,7 +29,7 @@ export default function SeparationPage() {
   const [working,    setWorking]    = useState(false);
 
   const listUrl = `${API.separation.list}${toQuery({
-    page, page_size: 20, separation_type: typeFilter, scope, employee_id: employeeId.trim(),
+    page, page_size: 20, scope, employee_id: employeeId.trim(),
   })}`;
   const { data, loading, error, refetch } = useFetch<PaginatedResponse<SeparationRequest>>(listUrl);
   const rows = data?.results ?? [];
@@ -62,11 +59,11 @@ export default function SeparationPage() {
     setWorking(true);
     try {
       await clientApi.delete(API.separation.detail(deleting.id));
-      showToast("Separation request deleted.", "success");
+      showToast("Separation request rejected.", "success");
       setDeleting(null);
       refetch();
     } catch (err: unknown) {
-      showToast(extractError(err, "Failed to delete the request."), "error");
+      showToast(extractError(err, "Failed to reject the request."), "error");
     } finally {
       setWorking(false);
     }
@@ -105,14 +102,6 @@ export default function SeparationPage() {
             </button>
           </div>
         )}
-
-        <select
-          className="field-input field-select" style={{ width: 180 }} value={typeFilter}
-          onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
-        >
-          <option value="">All Types</option>
-          {(types ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
 
         {(access.canPickEmployee || access.canApprove) && (
           <input
@@ -190,9 +179,9 @@ export default function SeparationPage() {
 
       {deleting && (
         <ConfirmModal
-          title="Delete Separation Request"
-          body={`This will permanently delete the separation request for ${deleting.employee_name}.`}
-          confirmLabel="Yes, Delete"
+          title="Reject Separation Request"
+          body={`This will reject the separation request for ${deleting.employee_name}.`}
+          confirmLabel="Yes, Reject"
           danger
           saving={working}
           onConfirm={handleDeleteConfirm}

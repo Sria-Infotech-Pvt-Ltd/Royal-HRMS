@@ -55,6 +55,7 @@ export interface SeparationRequest {
   can_cancel:                 boolean;
   can_edit:                   boolean;
   can_delete:                 boolean;
+  is_own:                     boolean; // true when the viewer is the employee this request is for
   created_at:                 string; // ISO datetime
 }
 
@@ -115,13 +116,16 @@ export interface SeparationDocumentItem {
   created_at?:      string;
 }
 
+// Matches SeparationActivitySerializer. `message` is the fully-formatted
+// sentence (e.g. "Manager Approval approved by Ravi Kumar.") — the backend
+// already builds it, so the frontend renders it as-is. `actor_role` is the
+// actor's Role.name ("employee" / "manager" / "hr_admin" / "system_admin" /
+// "branch_admin"), or "system" when no actor is attached — it drives the
+// Employee / Manager / HR grouping on the profile page.
 export interface SeparationActivityItem {
-  id:          string;
-  action?:     string;
-  description?: string;
-  note?:       string;
-  by_name?:    string;
-  actor_name?: string;
-  created_at?: string;
-  at?:         string;
+  id:         string;
+  message:    string;
+  actor_name: string;
+  actor_role: string;
+  created_at: string; // ISO datetime
 }

@@ -127,8 +127,12 @@ class SeparationHandoverTaskListCreateView(APIView):
         sep_request, err = _get_visible_request(request_id, request.user)
         if err:
             return err
-        is_own = sep_request.employee_id == request.user.id
-        if not (is_own or _has_perm(request.user, 'separation.approve')):
+        is_own      = sep_request.employee_id == request.user.id
+        has_approve = _has_perm(request.user, 'separation.approve')
+        # Self-service add is only for a plain employee documenting their own
+        # handover — an HR/Manager/Branch Admin approver loses that allowance
+        # on their OWN request, so they can't both raise and manage their exit.
+        if not (is_own != has_approve):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
         serializer = SeparationHandoverTaskCreateSerializer(data=request.data)
@@ -329,5 +333,5 @@ class SeparationActivityListView(APIView):
         sep_request, err = _get_visible_request(request_id, request.user)
         if err:
             return err
-        activities = sep_request.activities.select_related('actor').all()
+        activities = sep_request.activities.select_related('actor', 'actor__role').all()
         return success('Activity retrieved.', SeparationActivitySerializer(activities, many=True).data)

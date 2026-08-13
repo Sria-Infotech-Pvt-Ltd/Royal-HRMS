@@ -707,15 +707,15 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     def get_can_edit(self, obj):
         return self.get_can_cancel(obj)
 
+    def get_is_own(self, obj):
+        user = _authed_user(self.context)
+        return bool(user and obj.employee_id == user.id)
+
     def get_can_delete(self, obj):
         user = _authed_user(self.context)
-        if not user or obj.employee_id == user.id or obj.status == SEP_APPROVED:
+        if not user or obj.employee_id == user.id or obj.status not in (SEP_PENDING, SEP_STAGE2_PENDING):
             return False
-        return bool(
-            user.role and user.role.role_permissions.filter(
-                permission__codename__in={'separation.approve', 'settings.edit'}
-            ).exists()
-        )
+        return any(_stage_actionable(user, obj, s) for s in obj.approval_stages.all())
 
 
 MAX_SEPARATION_DOC_SIZE   = 5 * 1024 * 1024
@@ -858,10 +858,14 @@ class SeparationDocumentCreateSerializer(serializers.ModelSerializer):
 
 class SeparationActivitySerializer(serializers.ModelSerializer):
     actor_name = serializers.SerializerMethodField()
+    actor_role = serializers.SerializerMethodField()
 
     class Meta:
         model  = SeparationActivity
-        fields = ['id', 'message', 'actor_name', 'created_at']
+        fields = ['id', 'message', 'actor_name', 'actor_role', 'created_at']
 
     def get_actor_name(self, obj):
         return obj.actor.full_name if obj.actor_id else 'System'
+
+    def get_actor_role(self, obj):
+        return obj.actor.role.name if obj.actor_id and obj.actor.role_id else 'system'
