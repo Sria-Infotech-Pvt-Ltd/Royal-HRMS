@@ -1,4 +1,5 @@
 import { LeaveRequest, fmtDate as fmtDateOnly } from "../leave/_data";
+import type { SeparationRequest } from "@/types/separation";
 
 // ─── Kind-specific request shapes (as returned by their own list endpoints) ───
 
@@ -62,10 +63,11 @@ export interface PaginatedResponse<T> {
 export type LeaveListResponse      = PaginatedResponse<LeaveRequest>;
 export type ExpenseListResponse    = PaginatedResponse<ExpenseRequest>;
 export type CorrectionListResponse = PaginatedResponse<CorrectionRequest>;
+export type SeparationListResponse = PaginatedResponse<SeparationRequest>;
 
 // ─── Unified shape the table / drawer / toolbar actually work with ────────────
 
-export type ApprovalKind = "leave" | "expense" | "attendance_correction";
+export type ApprovalKind = "leave" | "expense" | "attendance_correction" | "separation";
 export type DisplayStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface ApprovalItem {
@@ -83,7 +85,7 @@ export interface ApprovalItem {
   detailSecondary: string;
   detailTertiary?: string;
   canAction:      boolean;
-  raw:            LeaveRequest | ExpenseRequest | CorrectionRequest;
+  raw:            LeaveRequest | ExpenseRequest | CorrectionRequest | SeparationRequest;
 }
 
 // ─── Tabs / badges / chips config ──────────────────────────────────────────────
@@ -93,12 +95,14 @@ export const TYPE_TABS: { key: "all" | ApprovalKind; label: string; icon: string
   { key: "leave",                  label: "Leave",                 icon: "ti-beach"            },
   { key: "expense",                label: "Expense",                icon: "ti-receipt"          },
   { key: "attendance_correction",  label: "Attendance Correction",  icon: "ti-calendar-time"    },
+  { key: "separation",             label: "Separation",             icon: "ti-logout"           },
 ];
 
 export const TYPE_BADGE: Record<ApprovalKind, { label: string; cls: string }> = {
   leave:                  { label: "Leave",                 cls: "ta-type-leave"                 },
   expense:                { label: "Expense",               cls: "ta-type-expense"               },
   attendance_correction:  { label: "Attendance Correction", cls: "ta-type-attendance_correction"  },
+  separation:             { label: "Separation",            cls: "ta-type-separation"            },
 };
 
 export const STATUS_CHIP: Record<DisplayStatus, { label: string; cls: string }> = {
@@ -151,7 +155,7 @@ function fmtTime12h(hhmm: string | null): string {
 }
 
 export function toDisplayStatus(status: string): DisplayStatus {
-  if (status === "pending" || status === "l2_pending") return "pending";
+  if (status === "pending" || status === "l2_pending" || status === "stage2_pending") return "pending";
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
   return "cancelled";
@@ -233,6 +237,25 @@ export function correctionToItem(r: CorrectionRequest): ApprovalItem {
     detailSecondary: arrows.join("  ·  "),
     detailTertiary: fmtDateOnly(r.date),
     canAction:      r.can_action,
+    raw:            r,
+  };
+}
+
+export function separationToItem(r: SeparationRequest): ApprovalItem {
+  return {
+    key:            `separation:${r.id}`,
+    kind:           "separation",
+    id:             r.id,
+    employeeName:   r.employee_name,
+    employeeCode:   r.employee_code || "—",
+    department:     r.employee_department,
+    status:         r.status,
+    displayStatus:  toDisplayStatus(r.status),
+    submittedAt:    r.created_at,
+    detailPrimary:  r.separation_type_display,
+    detailSecondary: `Last day: ${fmtDateOnly(r.proposed_last_working_day)}`,
+    detailTertiary: r.reason_display,
+    canAction:      r.can_approve,
     raw:            r,
   };
 }

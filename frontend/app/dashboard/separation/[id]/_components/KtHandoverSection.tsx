@@ -30,7 +30,7 @@ export default function KtHandoverSection({ r, access }: Props) {
   const [assignee, setAssignee] = useState<PickedEmployee | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const canManage = access.canApprove;
+  const canManage = access.canApprove && !r.is_own;
   const rows = tasks ?? [];
   const completed = rows.filter(t => t.is_completed).length;
 

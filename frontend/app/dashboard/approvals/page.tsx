@@ -12,7 +12,7 @@ type Section = "approvals" | "attendance" | "face_registration";
 export default function ApprovalsPage() {
   const user = useCurrentUser();
   const [section, setSection] = useState<Section>("approvals");
-  const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create");
+  const canApprove      = useAnyPermission("leave.approve", "expenses.approve", "attendance.create", "separation.approve");
   const canApproveFace  = usePermission("facial_recognition.approve");
   const hasPayrollView  = usePermission("payroll.view");
   // Managers, superusers, and anyone with payroll.view (payroll admins and HR

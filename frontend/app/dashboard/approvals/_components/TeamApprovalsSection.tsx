@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -9,8 +10,8 @@ import { ApprovalModal } from "../ApprovalModal";
 import { LeaveRequest } from "../../leave/_data";
 import {
   ApprovalItem, ApprovalKind, CorrectionListResponse,
-  DisplayStatus, ExpenseListResponse, ExpenseRequest, LeaveListResponse,
-  TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, toSortableTime,
+  DisplayStatus, ExpenseListResponse, ExpenseRequest, LeaveListResponse, SeparationListResponse,
+  TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, separationToItem, toSortableTime,
 } from "../_data";
 import SummaryCards from "./SummaryCards";
 import ApprovalsToolbar from "./ApprovalsToolbar";
@@ -29,6 +30,7 @@ interface ModalState {
 }
 
 export default function TeamApprovalsSection() {
+  const router = useRouter();
   const { showToast } = useToast();
 
   // ── Data: fetch every kind up front (page_size capped at 100 server-side) —
@@ -40,6 +42,8 @@ export default function TeamApprovalsSection() {
     useFetch<ExpenseListResponse>(`${API.approvals.expenseList}?page_size=100`);
   const { data: correctionRaw, loading: correctionLoading, error: correctionError, refetch: refetchCorrections } =
     useFetch<CorrectionListResponse>(`${API.attendance.corrections}?page_size=100`);
+  const { data: separationRaw, loading: separationLoading, error: separationError, refetch: refetchSeparation } =
+    useFetch<SeparationListResponse>(`${API.separation.list}?scope=team&page_size=100`);
 
   useEffect(() => {
     function handleLeaveUpdate() { refetchLeave(); }
@@ -47,20 +51,22 @@ export default function TeamApprovalsSection() {
     return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
   }, [refetchLeave]);
 
-  function refetchAll() { refetchLeave(); refetchExpense(); refetchCorrections(); }
+  function refetchAll() { refetchLeave(); refetchExpense(); refetchCorrections(); refetchSeparation(); }
 
   const allItems: ApprovalItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToItem),
     ...(expenseRaw?.results ?? []).map(expenseToItem),
     ...(correctionRaw?.results ?? []).map(correctionToItem),
-  ], [leaveRaw, expenseRaw, correctionRaw]);
+    ...(separationRaw?.results ?? []).map(separationToItem),
+  ], [leaveRaw, expenseRaw, correctionRaw, separationRaw]);
 
   const counts = useMemo(() => {
     const pendingOf = (kind: ApprovalKind) => allItems.filter(i => i.kind === kind && i.displayStatus === "pending").length;
     const leave = pendingOf("leave");
     const expense = pendingOf("expense");
     const correction = pendingOf("attendance_correction");
-    return { leave, expense, correction, pending: leave + expense + correction };
+    const separation = pendingOf("separation");
+    return { leave, expense, correction, separation, pending: leave + expense + correction + separation };
   }, [allItems]);
 
   const tabCounts = useMemo(() => ({
@@ -68,6 +74,7 @@ export default function TeamApprovalsSection() {
     leave: counts.leave,
     expense: counts.expense,
     attendance_correction: counts.correction,
+    separation: counts.separation,
   }), [counts]);
 
   // ── Tabs + toolbar filter state ──
@@ -98,8 +105,12 @@ export default function TeamApprovalsSection() {
 
   const resetKey = `${activeTab}|${typeFilter}|${statusFilter}|${search}|${dateFrom}|${dateTo}`;
 
-  // ── Selection ──
+  // ── Selection ── Separation is a multi-stage workflow (approving it means
+  // acting on one specific pending stage, not the request as a whole), so it
+  // doesn't fit the single-decision bulk approve/reject below — excluded from
+  // selection entirely; its rows are actioned individually via the detail page.
   function toggleSelect(key: string) {
+    if (allItems.find(i => i.key === key)?.kind === "separation") return;
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
@@ -107,15 +118,21 @@ export default function TeamApprovalsSection() {
     });
   }
   function toggleSelectMany(keys: string[], select: boolean) {
+    const selectable = keys.filter(k => allItems.find(i => i.key === k)?.kind !== "separation");
     setSelected(prev => {
       const next = new Set(prev);
-      keys.forEach(k => { if (select) next.add(k); else next.delete(k); });
+      selectable.forEach(k => { if (select) next.add(k); else next.delete(k); });
       return next;
     });
   }
 
-  // ── Drawer ──
+  // ── Drawer ── separation has its own detail page with the full stage/
+  // clearance/handover UI, so "View" goes there instead of this generic drawer.
   const [drawerItem, setDrawerItem] = useState<ApprovalItem | null>(null);
+  function handleView(item: ApprovalItem) {
+    if (item.kind === "separation") { router.push(`/dashboard/separation/${item.id}`); return; }
+    setDrawerItem(item);
+  }
 
   // ── Single-row approve/reject ──
   const [modal,  setModal]  = useState<ModalState | null>(null);
@@ -127,6 +144,13 @@ export default function TeamApprovalsSection() {
 
   function dispatchAction(item: ApprovalItem, action: "approve" | "reject") {
     setDrawerItem(null);
+    // Separation approval is per-stage (Manager, then HR/Branch Admin) rather
+    // than a single yes/no decision, so it's actioned on its own detail page
+    // (which already has the full stage/clearance UI) instead of this modal.
+    if (item.kind === "separation") {
+      router.push(`/dashboard/separation/${item.id}`);
+      return;
+    }
     if (item.kind === "attendance_correction") {
       runCorrectionAction(item.id, action);
       return;
@@ -221,9 +245,9 @@ export default function TeamApprovalsSection() {
     refetchAll();
   }
 
-  const initialLoading = (leaveLoading || expenseLoading || correctionLoading) && allItems.length === 0;
-  const refreshing     = leaveLoading || expenseLoading || correctionLoading;
-  const loadError      = leaveError || expenseError || correctionError;
+  const initialLoading = (leaveLoading || expenseLoading || correctionLoading || separationLoading) && allItems.length === 0;
+  const refreshing     = leaveLoading || expenseLoading || correctionLoading || separationLoading;
+  const loadError      = leaveError || expenseError || correctionError || separationError;
 
   return (
     <div className="ta-root">
@@ -266,7 +290,7 @@ export default function TeamApprovalsSection() {
         selected={selected}
         onToggleSelect={toggleSelect}
         onToggleSelectMany={toggleSelectMany}
-        onView={setDrawerItem}
+        onView={handleView}
         onApprove={handleApproveClick}
         onReject={handleRejectClick}
         onBulkApprove={() => setBulkAction("approve")}

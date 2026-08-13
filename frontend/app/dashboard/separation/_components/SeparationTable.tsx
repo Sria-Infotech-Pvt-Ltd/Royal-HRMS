@@ -71,8 +71,8 @@ export default function SeparationTable({ requests, onView, onEdit, onCancel, on
                     </button>
                   )}
                   {r.can_delete && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onDelete(r)} title="Delete" style={{ color: "var(--error)" }} suppressHydrationWarning>
-                      <i className="ti ti-trash" />
+                    <button className="btn btn-ghost btn-sm" onClick={() => onDelete(r)} title="Reject" style={{ color: "var(--error)" }} suppressHydrationWarning>
+                      <i className="ti ti-x" />
                     </button>
                   )}
                 </div>

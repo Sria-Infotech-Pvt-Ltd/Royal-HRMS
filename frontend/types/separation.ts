@@ -55,6 +55,7 @@ export interface SeparationRequest {
   can_cancel:                 boolean;
   can_edit:                   boolean;
   can_delete:                 boolean;
+  is_own:                     boolean; // true when the viewer is the employee this request is for
   created_at:                 string; // ISO datetime
 }
 
@@ -115,24 +116,16 @@ export interface SeparationDocumentItem {
   created_at?:      string;
 }
 
-// Matches the separation activity/audit record shape from the backend
-// service layer (separation_id/employee_id are implicit — the list is
-// already scoped to one request — so they're omitted here). `description`
-// is the fully-formatted sentence (e.g. "Test Manager approved the
-// separation request." or "Ravi Kumar (HR) approved the separation
-// request.") — the backend already applies the name/role display rule,
-// so the frontend renders it as-is rather than reconstructing it.
+// Matches SeparationActivitySerializer. `message` is the fully-formatted
+// sentence (e.g. "Manager Approval approved by Ravi Kumar.") — the backend
+// already builds it, so the frontend renders it as-is. `actor_role` is the
+// actor's Role.name ("employee" / "manager" / "hr_admin" / "system_admin" /
+// "branch_admin"), or "system" when no actor is attached — it drives the
+// Employee / Manager / HR grouping on the profile page.
 export interface SeparationActivityItem {
-  id:                  string;
-  performed_by_id:     string;
-  performed_by_name:   string;
-  user_role:           string;
-  action:              string | null; // not always present in the live payload
-  description:         string;
-  old_status:          string | null;
-  old_status_display?: string | null;
-  new_status:          string | null;
-  new_status_display?: string | null;
-  comment:             string | null;
-  created_at:          string; // ISO datetime
+  id:         string;
+  message:    string;
+  actor_name: string;
+  actor_role: string;
+  created_at: string; // ISO datetime
 }

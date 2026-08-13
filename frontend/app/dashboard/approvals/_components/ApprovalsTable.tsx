@@ -156,13 +156,15 @@ export default function ApprovalsTable({
                     pageItems.map(item => (
                       <tr key={item.key} className={selected.has(item.key) ? "selected" : ""} style={{ cursor: "pointer" }} onClick={() => onView(item)}>
                         <td onClick={e => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            className="ta-checkbox"
-                            checked={selected.has(item.key)}
-                            onChange={() => onToggleSelect(item.key)}
-                            suppressHydrationWarning
-                          />
+                          {item.kind !== "separation" && (
+                            <input
+                              type="checkbox"
+                              className="ta-checkbox"
+                              checked={selected.has(item.key)}
+                              onChange={() => onToggleSelect(item.key)}
+                              suppressHydrationWarning
+                            />
+                          )}
                         </td>
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
