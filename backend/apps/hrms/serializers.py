@@ -637,6 +637,7 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     can_cancel                = serializers.SerializerMethodField()
     can_edit                  = serializers.SerializerMethodField()
     can_delete                = serializers.SerializerMethodField()
+    is_own                    = serializers.SerializerMethodField()
 
     class Meta:
         model  = SeparationRequest
@@ -646,8 +647,13 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'employee_name', 'employee_code', 'employee_department', 'employee_designation', 'reporting_manager',
             'document_url', 'created_by_name', 'approval_stages',
-            'can_approve', 'can_cancel', 'can_edit', 'can_delete', 'created_at',
+            'can_approve', 'can_cancel', 'can_edit', 'can_delete', 'is_own', 'created_at',
         ]
+
+    def get_is_own(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        return bool(user and obj.employee_id == user.id)
 
     def get_request_ref(self, obj):
         return f'SEP-{obj.request_number}' if obj.request_number else ''
