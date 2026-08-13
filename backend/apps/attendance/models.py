@@ -1765,12 +1765,33 @@ class FaceRegistrationRequest(models.Model):
     approved_at             = models.DateTimeField(null=True, blank=True)
     notes                   = models.TextField(blank=True, default='')
 
+    # Whether THIS is the row punch-time matching compares against for its
+    # employee — orthogonal to status. status records the approval decision
+    # and never changes once made (an old registration really was approved,
+    # that stays true forever, for audit purposes); is_active records which
+    # single approved row is the current reference, and does change as newer
+    # registrations replace older ones. Before this field, _resolve_active_
+    # registration (services_face_matching.py) picked the "current" reference
+    # by ordering approved rows by -approved_at with nothing preventing more
+    # than one row from being approved at once — correctness depended
+    # entirely on approval timestamps happening to stay monotonic with
+    # intent. The partial unique constraint below is what actually enforces
+    # "at most one active reference per employee", not this field alone.
+    is_active               = models.BooleanField(default=False)
+
     created_at              = models.DateTimeField(auto_now_add=True)
     updated_at              = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'attendance_face_registration_request'
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['employee'],
+                condition=models.Q(is_active=True),
+                name='uniq_active_face_registration_per_employee',
+            ),
+        ]
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — face registration ({self.status})'
@@ -1844,14 +1865,27 @@ class FaceVerificationAttempt(models.Model):
     REJECTION_REPLAY     = 'replay_detected'
     REJECTION_CAP        = 'attempt_cap_exceeded'
     REJECTION_INSECURE   = 'insecure_transport'
+    # Distance was within FACE_MATCH_MAX_DISTANCE but close enough to the
+    # boundary (see services_face_matching.FACE_MATCH_LOW_CONFIDENCE_MARGIN)
+    # that it's rejected outright, is_match=False on this row, same as
+    # REJECTION_MISMATCH — kept as its own reason (not folded into
+    # REJECTION_MISMATCH) so this specific failure mode stays distinguishable
+    # in the audit trail. Originally an escalating "pending confirmation"
+    # state that accepted the punch once a second capture corroborated it;
+    # removed after a 2026-08-13 retest showed the same impostor reproducing
+    # a borderline distance on 4 of 5 captures — not independent coincidences,
+    # so a second draw didn't meaningfully lower the odds. No amount of
+    # retrying turns this rejection into an accept anymore.
+    REJECTION_LOW_CONFIDENCE_PENDING = 'low_confidence_pending'
     REJECTION_CHOICES    = [
-        ('',                 'Matched'),
-        (REJECTION_MISMATCH, 'Face Mismatch'),
-        (REJECTION_REPLAY,   'Replay Detected'),
-        (REJECTION_CAP,      'Attempt Cap Exceeded'),
-        (REJECTION_INSECURE, 'Insecure Transport'),
+        ('',                              'Matched'),
+        (REJECTION_MISMATCH,              'Face Mismatch'),
+        (REJECTION_REPLAY,                'Replay Detected'),
+        (REJECTION_CAP,                   'Attempt Cap Exceeded'),
+        (REJECTION_INSECURE,              'Insecure Transport'),
+        (REJECTION_LOW_CONFIDENCE_PENDING, 'Low-Confidence Match Rejected'),
     ]
-    rejection_reason     = models.CharField(max_length=20, choices=REJECTION_CHOICES, blank=True, default='')
+    rejection_reason     = models.CharField(max_length=30, choices=REJECTION_CHOICES, blank=True, default='')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

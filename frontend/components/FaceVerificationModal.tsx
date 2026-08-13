@@ -21,6 +21,18 @@ interface FaceVerificationModalProps {
   onClose:    () => void;
 }
 
+// A single quality-gated frame carries enough per-capture noise (motion
+// blur, momentary exposure shift, compression artifacts) that its distance
+// to the registered reference can drift by several hundredths either way —
+// margin that matters when a genuine self-match can itself land as high as
+// the mid-0.5s. Averaging a few frames here (fewer than registration's 4,
+// since clock-in/out happens far more often and needs to stay reasonably
+// quick) cuts that per-capture noise down without adding registration's
+// full multi-second capture time to every punch. See the false-accept
+// investigation that motivated this in useFaceLivenessCapture.ts's
+// framesToCapture docstring.
+const VERIFICATION_FRAMES_TO_CAPTURE = 3;
+
 export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: FaceVerificationModalProps) {
   const { phase, errorMessage, videoRef, canvasRef, start, retry, stop } = useFaceLivenessCapture({
     // Release the camera the instant we have a descriptor — don't wait for the
@@ -37,10 +49,7 @@ export default function FaceVerificationModal({ isOpen, onCaptured, onClose }: F
     // (lib/faceApi/qualityGate.ts) as registration — the live capture being
     // matched against a stored reference should be extracted the same way
     // the reference itself was, not from a lower-quality raw frame.
-    // framesToCapture stays at its default of 1 so clock-in stays fast; see
-    // useFaceLivenessCapture.ts's docstring on framesToCapture for why a
-    // single quality-gated frame is still bounded to a few quick retries
-    // rather than averaging multiple frames like registration does.
+    framesToCapture: VERIFICATION_FRAMES_TO_CAPTURE,
     normalizeLighting: true,
   });
 

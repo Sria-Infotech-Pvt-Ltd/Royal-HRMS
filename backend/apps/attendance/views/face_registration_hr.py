@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -39,7 +40,7 @@ from apps.attendance.serializers_face_registration import (
     FaceRegistrationHRRegisterSerializer,
     FaceRegistrationReadSerializer,
 )
-from apps.attendance.services_face_matching import is_face_verification_mandatory
+from apps.attendance.services_face_matching import activate_registration, is_face_verification_mandatory
 from apps.attendance.views.face_registration import (
     _FEATURE_DISABLED_MESSAGE,
     _has_perm,
@@ -120,10 +121,9 @@ class FaceRegistrationHRRegisterView(APIView):
     HR captures a face in person (e.g. during onboarding) and registers or
     replaces an employee's face ID directly — approved immediately since HR
     witnessed the capture themselves, unlike the self-submit flow which
-    always starts pending. A fresh row here naturally supersedes any older
-    one: both FaceVerificationService.verify_for_punch and
-    FaceRegistrationMyStatusView already pick the latest row, so "register
-    new" and "update existing" are the same action with no schema change.
+    always starts pending. activate_registration marks this fresh row as
+    the employee's sole active reference, so "register new" and "update
+    existing" are the same action with no schema change.
     """
 
     permission_classes = [IsAuthenticated, RequiresSecureTransport]
@@ -151,22 +151,24 @@ class FaceRegistrationHRRegisterView(APIView):
         # consent_acknowledged (validated True-or-reject by the serializer)
         # confirms HR obtained the employee's consent in person before this
         # witnessed capture — stamped server-side, same as the self-service path.
-        face_request = FaceRegistrationRequest.objects.create(
-            employee=employee,
-            branch=_resolve_branch(employee),
-            face_embedding=data['face_embedding'],
-            embedding_model_version=FACE_RECOGNITION_MODEL_VERSION,
-            liveness_passed=data['liveness_passed'],
-            liveness_score=data.get('liveness_score'),
-            capture_frame_count=data.get('capture_frame_count'),
-            capture_variance=data.get('capture_variance'),
-            status=FaceRegistrationRequest.STATUS_APPROVED,
-            approved_by=request.user,
-            approved_at=timezone.now(),
-            notes='Registered directly by HR.',
-            consent_given_at=timezone.now(),
-            consent_text_version=FACE_CONSENT_TEXT_VERSION,
-        )
+        with transaction.atomic():
+            face_request = FaceRegistrationRequest.objects.create(
+                employee=employee,
+                branch=_resolve_branch(employee),
+                face_embedding=data['face_embedding'],
+                embedding_model_version=FACE_RECOGNITION_MODEL_VERSION,
+                liveness_passed=data['liveness_passed'],
+                liveness_score=data.get('liveness_score'),
+                capture_frame_count=data.get('capture_frame_count'),
+                capture_variance=data.get('capture_variance'),
+                status=FaceRegistrationRequest.STATUS_APPROVED,
+                approved_by=request.user,
+                approved_at=timezone.now(),
+                notes='Registered directly by HR.',
+                consent_given_at=timezone.now(),
+                consent_text_version=FACE_CONSENT_TEXT_VERSION,
+            )
+            activate_registration(face_request)
         logger.info('Face registration for %s captured and auto-approved by %s', employee.email, request.user.email)
 
         return success(

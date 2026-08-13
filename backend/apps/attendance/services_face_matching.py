@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from django.conf import settings
+from django.db import transaction
 
 from apps.attendance.models import AttendancePunch, FaceRegistrationRequest, FaceVerificationAttempt
 from apps.attendance.services_face_antispoofing import FaceAntiSpoofingGuard, fingerprint_embedding
@@ -53,7 +54,27 @@ logger = logging.getLogger(__name__)
 # face-api.js's own recommended match threshold for its faceRecognitionNet
 # descriptors — euclidean distance <= this value is considered the same face.
 # Tied to FACE_RECOGNITION_MODEL_VERSION (models.py); revisit if that model changes.
+# NOT safely lowerable on its own: a 2026-08-13 false-accept incident matched a
+# different person at distance 0.578, then 0.556 after frontend multi-frame
+# averaging (frontend/components/FaceVerificationModal.tsx) reduced per-capture
+# noise — but this employee's own genuine distances already range up to 0.554,
+# a 0.002 gap from that impostor attempt. No threshold separates the two;
+# frame-averaging alone can't either, since it cancels per-capture noise, not a
+# genuine lack of separation between two specific people's embeddings. See
+# FACE_MATCH_LOW_CONFIDENCE_MARGIN below for the actual defense against that gap.
 FACE_MATCH_MAX_DISTANCE = 0.6
+
+# Width of the hard-reject band right below the threshold — see the
+# low-confidence-match log in _match_and_record. An earlier version of this
+# check let a match in this band through if a SECOND independent capture also
+# landed here ("corroboration"), on the theory that two low-confidence
+# coincidences in a row from an unrelated face would be rare. A real retest
+# disproved that: the same impostor reproduced a borderline distance on 4 of 5
+# captures (0.556-0.588) — a consistent near-threshold result for that specific
+# face against this reference, not independent noise, so requiring a second
+# draw barely lowered the odds. This band is now a hard reject with no
+# escalation path — retrying can never turn it into an accept.
+FACE_MATCH_LOW_CONFIDENCE_MARGIN = 0.05
 
 _EMBEDDING_REQUIRED_MESSAGE = (
     'Face verification is required for clock-in. Please allow camera access and try again.'
@@ -76,6 +97,28 @@ _REPLAY_MESSAGE = (
 _INSECURE_TRANSPORT_MESSAGE = (
     'Face verification requires a secure connection. Please reload the page and try again.'
 )
+
+
+@transaction.atomic
+def activate_registration(face_request: FaceRegistrationRequest) -> None:
+    """
+    Marks face_request as the sole active reference for its employee —
+    call this the moment a registration becomes approved (self-service
+    review approval, or HR's auto-approved direct register in
+    face_registration_hr.py). select_for_update stops two concurrent
+    approvals for the same employee both landing as active; the
+    UniqueConstraint on FaceRegistrationRequest.is_active is the actual
+    backstop if that ever raced anyway.
+    """
+    (
+        FaceRegistrationRequest.objects
+        .select_for_update()
+        .filter(employee_id=face_request.employee_id, is_active=True)
+        .exclude(pk=face_request.pk)
+        .update(is_active=False)
+    )
+    face_request.is_active = True
+    face_request.save(update_fields=['is_active', 'updated_at'])
 
 
 def is_face_verification_mandatory() -> bool:
@@ -225,6 +268,37 @@ class FaceVerificationService:
             )
 
         is_match = distance <= FACE_MATCH_MAX_DISTANCE
+        is_low_confidence = is_match and (FACE_MATCH_MAX_DISTANCE - distance) <= FACE_MATCH_LOW_CONFIDENCE_MARGIN
+
+        if is_low_confidence:
+            # A 2026-08-13 false-accept incident originally handled this by
+            # accepting once a SECOND independent capture also landed in this
+            # band ("corroboration"), on the assumption that two low-
+            # confidence coincidences in a row from an unrelated face would be
+            # rare. That assumption failed in practice: a real retest against
+            # the same impostor reproduced a borderline distance on 4 out of 5
+            # captures (0.556-0.588, plus one genuine reject at 0.621) — not
+            # independent random noise around a clear non-match, but a
+            # consistent near-threshold result for that specific face against
+            # this reference. Two draws from a biased coin aren't two draws
+            # from a fair one, so requiring a second draw didn't actually
+            # lower the odds much. There is no corroboration path anymore —
+            # this band is a hard reject, always, same as an outright
+            # mismatch; retrying can never turn it into an accept.
+            logger.warning(
+                'Low-confidence face match rejected: employee=%s source=%s distance=%.4f (threshold=%.2f)',
+                employee.pk, source, distance, FACE_MATCH_MAX_DISTANCE,
+            )
+            FaceAntiSpoofingGuard.record_attempt(
+                employee, source, capture_session_id, fingerprint, liveness_passed, liveness_score,
+                is_match=False, distance=distance,
+                rejection_reason=FaceVerificationAttempt.REJECTION_LOW_CONFIDENCE_PENDING,
+            )
+            return FaceVerificationOutcome(
+                required=True, embedding_provided=True, is_match=False,
+                distance=distance, rejection_message=_EMBEDDING_MISMATCH_MESSAGE,
+            )
+
         FaceAntiSpoofingGuard.record_attempt(
             employee, source, capture_session_id, fingerprint, liveness_passed, liveness_score,
             is_match=is_match, distance=distance,
@@ -245,9 +319,14 @@ class FaceVerificationService:
 
     @staticmethod
     def _resolve_active_registration(employee) -> Optional[FaceRegistrationRequest]:
+        # is_active + the UniqueConstraint in FaceRegistrationRequest.Meta
+        # guarantee at most one row ever matches this filter — no more
+        # picking "whichever approved row happens to have the latest
+        # approved_at", which had no cap on how many rows could be approved
+        # at once. See activate_registration, called at the two places a
+        # registration becomes approved.
         return (
             FaceRegistrationRequest.objects
-            .filter(employee=employee, status=FaceRegistrationRequest.STATUS_APPROVED)
-            .order_by('-approved_at')
+            .filter(employee=employee, status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True)
             .first()
         )

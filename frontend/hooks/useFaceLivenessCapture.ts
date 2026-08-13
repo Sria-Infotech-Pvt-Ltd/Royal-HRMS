@@ -26,9 +26,9 @@ export type LivenessCapturePhase =
   | "liveness_checking"
   | "liveness_failed"
   // Post-liveness quality-gated capture — every caller goes through this,
-  // registration (framesToCapture > 1, averaging several frames) and
-  // punch-time verification (framesToCapture === 1, a single quality-gated
-  // frame) alike.
+  // averaging framesToCapture quality-gated frames (registration and
+  // punch-time verification both use framesToCapture > 1, just different
+  // counts — see each caller for its own value).
   | "capturing_multi"
   // The liveness-passed frame(s) didn't clear the per-frame quality gate
   // (lighting/angle/distance/detector confidence), or — in multi-frame mode —
@@ -97,16 +97,21 @@ interface UseFaceLivenessCaptureOptions {
    *  Defaults to 1 — a single quality-gated frame, still subject to the same
    *  per-frame quality gate (lib/faceApi/qualityGate.ts) as a multi-frame
    *  capture, just with no cross-frame averaging/consistency check (nothing
-   *  to average). Punch-time verification (FaceVerificationModal) leaves this
-   *  at 1 to stay fast — a routine daily clock-in shouldn't take multiple
-   *  seconds longer than it does today — while still rejecting an
-   *  unusably-low-quality frame rather than matching against it (see
-   *  MULTI_FRAME_ATTEMPTS_PER_TARGET_FRAME above). Registration hooks
-   *  (useFaceRegistrationCapture, useHRFaceCapture) pass something higher —
-   *  a registered face is a long-lived reference, worth the extra few
+   *  to average) — only used where a caller explicitly opts into it (there
+   *  currently isn't one; every real caller passes framesToCapture > 1, see
+   *  below). Registration hooks (useFaceRegistrationCapture, useHRFaceCapture)
+   *  pass 4 — a registered face is a long-lived reference, worth a few extra
    *  seconds to get right the first time (see the mismatch investigation
    *  that motivated this: a single marginal frame becoming someone's
-   *  permanent reference left almost no margin against impostors). */
+   *  permanent reference left almost no margin against impostors). Punch-time
+   *  verification (FaceVerificationModal) passes 3 — fewer than registration
+   *  since clock-in/out happens far more often and needs to stay reasonably
+   *  quick, but no longer a single unaveraged frame either: a since-confirmed
+   *  false-accept incident traced a different person's live capture matching
+   *  a genuine reference at distance 0.578 (threshold 0.6) against a
+   *  single-frame probe, close enough to this employee's own genuine range
+   *  (which reached 0.554) that the single-frame noise band was the
+   *  deciding factor, not the identities involved. */
   framesToCapture?: number;
   /** Apply CLAHE lighting normalization (lib/faceApi/clahe.ts) to the frame
    *  before detection. Applies regardless of framesToCapture — both

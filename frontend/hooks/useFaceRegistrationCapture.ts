@@ -13,10 +13,10 @@ import type { FaceRegistrationRequest, FaceRegistrationSubmitPayload } from "@/t
 // A registered face is a long-lived reference every future clock-in gets
 // compared against — worth a few extra seconds up front to get right.
 // Punch-time verification (FaceVerificationModal) shares the same
-// normalizeLighting: true and the same per-frame quality gate, just with
-// framesToCapture left at its default of 1 (no multi-frame averaging) so a
-// routine daily clock-in stays fast — see useFaceLivenessCapture.ts's
-// docstring on framesToCapture for the full reasoning.
+// normalizeLighting: true and the same per-frame quality gate, just with a
+// lower framesToCapture (3) so a routine daily clock-in stays quicker than
+// enrollment — see useFaceLivenessCapture.ts's docstring on framesToCapture
+// for the full reasoning.
 const REGISTRATION_FRAMES_TO_CAPTURE = 4;
 const REGISTRATION_NORMALIZE_LIGHTING = true;
 

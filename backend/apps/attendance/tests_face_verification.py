@@ -44,6 +44,13 @@ def _set_face_verification_mandatory(is_mandatory: bool) -> None:
 REGISTERED_EMBEDDING = [0.01 * i for i in range(128)]
 MATCHING_EMBEDDING   = [v + 0.001 for v in REGISTERED_EMBEDDING]   # tiny distance, well under 0.6
 MISMATCHED_EMBEDDING = [v + 1.0 for v in REGISTERED_EMBEDDING]     # euclidean distance ~11.3, well over 0.6
+# Both land inside the low-confidence band (distance within
+# FACE_MATCH_LOW_CONFIDENCE_MARGIN of FACE_MATCH_MAX_DISTANCE=0.6) but are
+# distinct vectors — a different embedding_fingerprint each, so submitting
+# both in sequence exercises the step-up corroboration path without ever
+# tripping anti-replay (that check only fires on a byte-identical embedding).
+BORDERLINE_EMBEDDING_A = [v + 0.0503 for v in REGISTERED_EMBEDDING]  # distance ~0.569
+BORDERLINE_EMBEDDING_B = [v + 0.0507 for v in REGISTERED_EMBEDDING]  # distance ~0.574
 
 
 def _make_approved_request(employee) -> FaceRegistrationRequest:
@@ -53,6 +60,7 @@ def _make_approved_request(employee) -> FaceRegistrationRequest:
         liveness_passed=True,
         liveness_score=0.9,
         status=FaceRegistrationRequest.STATUS_APPROVED,
+        is_active=True,
     )
 
 
@@ -178,6 +186,60 @@ class FaceVerificationPunchTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.data)
         punch = AttendancePunch.objects.get(employee=self.employee)
         self.assertFalse(punch.face_verified)
+
+
+class FaceVerificationLowConfidenceFailClosedTests(TestCase):
+    """A borderline-distance match (within FACE_MATCH_LOW_CONFIDENCE_MARGIN of
+    FACE_MATCH_MAX_DISTANCE) is rejected outright, every time, with no way to
+    turn it into an accept by retrying — see FACE_MATCH_LOW_CONFIDENCE_MARGIN's
+    own docstring in services_face_matching.py for why an earlier version that
+    accepted on a second corroborating capture didn't hold up against a real
+    retest: the same impostor reproduced a borderline distance on 4 of 5
+    captures, so a second draw barely changed the odds."""
+
+    def setUp(self):
+        cache.clear()
+        self.client   = APIClient()
+        role          = make_role('employee_low_conf')
+        self.employee = make_user('lowconf@test.com', role=role, password='TestPass123!')
+        _login(self.client, 'lowconf@test.com')
+        _set_face_verification_mandatory(True)
+        _make_approved_request(self.employee)
+
+    def tearDown(self):
+        cache.clear()
+
+    def _punch(self, **overrides):
+        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        payload.update(overrides)
+        return self.client.post(reverse('attendance-punch'), payload, format='json')
+
+    def test_borderline_capture_is_rejected(self):
+        resp = self._punch(face_embedding=BORDERLINE_EMBEDDING_A, capture_session_id='session-a')
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+        from apps.attendance.models import FaceVerificationAttempt
+        attempt = FaceVerificationAttempt.objects.get(employee=self.employee)
+        # is_match=False on the row itself — this is a genuine rejection now,
+        # not a "pending" match, so it counts toward the failed-attempt cap
+        # like any other mismatch.
+        self.assertFalse(attempt.is_match)
+        self.assertEqual(attempt.rejection_reason, FaceVerificationAttempt.REJECTION_LOW_CONFIDENCE_PENDING)
+
+    def test_second_independent_borderline_capture_is_also_rejected(self):
+        # A second, different-session borderline capture used to corroborate
+        # the first into an accept — it no longer does. Both are rejected.
+        first = self._punch(face_embedding=BORDERLINE_EMBEDDING_A, capture_session_id='session-a')
+        self.assertEqual(first.status_code, 403, first.data)
+
+        second = self._punch(face_embedding=BORDERLINE_EMBEDDING_B, capture_session_id='session-b')
+        self.assertEqual(second.status_code, 403, second.data)
+        self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
+
+    def test_confident_match_is_unaffected(self):
+        resp = self._punch(face_embedding=MATCHING_EMBEDDING, capture_session_id='session-a')
+        self.assertEqual(resp.status_code, 200, resp.data)
 
 
 class FaceRegistrationMyStatusTests(TestCase):

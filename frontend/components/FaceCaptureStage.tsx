@@ -17,8 +17,8 @@ const INSTRUCTION: Partial<Record<string, string>> = {
   liveness_checking: "Please blink naturally or turn your head slightly",
   // Liveness already passed at this point — the instruction shifts from
   // "prove you're live" to "stay put while we get a clean capture". Shared
-  // by registration's multi-frame sampling pass and punch-time's single
-  // quality-gated frame alike (useFaceLivenessCapture's framesToCapture).
+  // by every caller's multi-frame sampling pass, registration and
+  // punch-time verification alike (useFaceLivenessCapture's framesToCapture).
   capturing_multi:   "Hold still — capturing a clear frame",
 };
 

@@ -200,6 +200,7 @@ export default function VoiceCommandButton() {
             punch mid-dialogue), so it just closes the whole conversation —
             the pending state on the backend expires on its own (120s TTL). */}
         <FaceVerificationModal
+          key={conversation.faceProofTurn}
           isOpen={conversation.awaitingFaceProof}
           onCaptured={submitFaceProof}
           onClose={() => { setIsHovered(false); closeConversation(); }}
