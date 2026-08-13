@@ -1060,6 +1060,20 @@ class LeaveApprovalView(APIView):
         leave_request.save()
         logger.info('Leave request %s %sd by %s', leave_request.id, action, request.user.email)
 
+        from apps.accounts.models import AuditLog
+        AuditLog.objects.create(
+            user=request.user, action=f'leave_{action}d', module='leave',
+            object_id=str(leave_request.id),
+            changes={
+                'employee':  leave_request.employee.full_name,
+                'leave_type': leave_request.leave_type,
+                'status':    leave_request.status,
+                'remarks':   remarks,
+            },
+            branch=leave_request.employee.branch,
+            ip_address=get_client_ip(request),
+        )
+
         from apps.dashboard.views.overview import push_leave_update
         push_leave_update(request.user.id)
 

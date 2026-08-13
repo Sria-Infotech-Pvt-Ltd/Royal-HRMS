@@ -3489,3 +3489,33 @@ Confirmed via `Get-CimInstance Win32_Process` that the backend runs as a raw `py
 - Frontend team needs to build the Separation & Exit screens (list, detail, approval, KT, clearances, documents, activity) against the published API reference — nothing exists on the frontend for this feature as of end of session, by design.
 - No `Department` currently has a `manager` set in dev data — every regular employee's first approval stage will show as unresolved (`approver_name: ""`) until that's configured via the Departments admin screen; it's still actionable via the branch-wide fallback in the meantime.
 - The device sending malformed WebSocket connections was never identified.
+
+---
+
+## Session Log — 2026-08-12 (audit log gaps)
+**Author: G.Durga Prasad**
+**Branch: Backend/12/08/2026**
+
+### Bug Fixes Shipped — Audit Logs
+
+Investigated a report that HR (tested against the real `rithwikaveera@gmail.com` / Rithwika Veera account, role `hr`, branch Mumbai) was only ever seeing `login`/`logout` in Audit Logs. Found and fixed **two distinct, real bugs**, verified against live data at every step — not just reasoning about the code.
+
+**1. Two whole action categories were never audit-logged at all**
+- Confirmed via a full call-site inventory (80+ existing `AuditLog.objects.create()` calls across `accounts`, `announcements`, `branch`, `recruitment`, `voice_commands`) plus a live DB query (2,297 rows, 11 modules, 40+ action types) that the *payroll* module had **zero** rows ever, and leave approve/reject only did `logger.info()`, never wrote to the audit table.
+- Fix: added `AuditLog.objects.create(...)` calls to `apps/hrms/views/leave.py`'s `LeaveApprovalView.post()` (`leave_approved`/`leave_rejected`) and to all relevant actions in `apps/payroll/views/cycles.py` — cycle creation, processing, marking paid, cancelling, and all 4 attendance-approval paths (L1 manager, L1 HR-direct fallback, L1-complete, L2).
+- Verified live (rolled-back transaction): `payroll` module went from 0 rows to a real row on cycle creation.
+
+**2. Branch-scoped HR only saw their OWN actions, not their branch's actions**
+- After fix #1, HR's Audit Log page was *still* showing only login/logout for Rithwika. Traced this to `AuditLogListView.get()` (`apps/accounts/views.py`) filtering by `user__branch__iexact=request.user.branch` — the ACTOR's branch, not which branch the action actually pertains to. Since Rithwika is the only user in the Mumbai branch, and she'd never personally performed any other logged action (confirmed: 0 candidates interviewed, 0 leave requests approved anywhere in the data), her branch-scoped view was mathematically guaranteed to show only her own login/logout — any action by a system_admin or anyone outside Mumbai on Mumbai's data was invisible to her, regardless of how much of it existed.
+- Fix: added a new `AuditLog.branch` field (migration `backend/apps/accounts/migrations/0063_auditlog_add_branch.py`, with a best-effort backfill from the acting user's branch for historical rows), changed `AuditLogListView`'s scoping filter to `branch__iexact=request.user.branch`, and wired up the correct **target** branch (not the actor's) at the high-value call sites: employee create/update/activate/deactivate/delete + onboarding approve/reject + document upload/update/delete (`apps/accounts/views.py`), all candidate/referral-bonus/portal actions (`apps/recruitment/views.py`), leave approve/reject (`apps/hrms/views/leave.py`), and all payroll cycle/attendance actions (`apps/payroll/views/cycles.py`). Login/logout/settings/role-management/announcements/branch-admin actions intentionally still default to the actor's branch (no other meaningful target) — full parity across all ~80 call sites was scoped out as a follow-up, not done this session.
+- Verified live (rolled-back transaction): simulated a branch-less system_admin ("Royalhrms") updating a Mumbai employee — the event now correctly appears with `branch: Mumbai` in Mumbai's scoped query, which is exactly the class of event that was invisible before.
+
+### Verification
+
+- `manage.py check` clean after every change.
+- Full 601-test suite run earlier in the day (before the branch-scoping fix) was 100% clean except the pre-existing, already-diagnosed `consent_text_version` stale-test-database issue (confirmed zero real-DB/production impact; left alone per explicit decision — see prior session's note).
+- A subsequent full-suite re-run to cover the branch-scoping changes was interrupted mid-run by session/background-task teardown before producing a final summary; partial output showed no new failures, but this needs a clean re-run before merging with full confidence.
+
+### Nothing committed
+
+All of today's changes (the earlier `_has_perm`/migration/test-bug work plus this audit-log work) are still local working-tree changes — nothing pushed from this session yet.
