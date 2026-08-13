@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePermission } from "@/hooks/usePermission";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { FieldOption } from "../../_data";
@@ -26,6 +25,25 @@ interface PromotionRecord {
   updatedBy: string;
 }
 
+// Shape returned by GET /employees/{id}/promotions/ (backend PromotionRecord model, snake_case).
+interface ApiPromotionRecord {
+  id: string;
+  previous_designation: string;
+  new_designation: string;
+  role_changed: boolean;
+  effective_date: string;
+  promoted_by: string;
+}
+
+const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
+  id: r.id,
+  fromDesignation: r.previous_designation || "—",
+  toDesignation: r.new_designation || "—",
+  roleChanged: r.role_changed,
+  effectiveDate: r.effective_date,
+  updatedBy: r.promoted_by || "—",
+});
+
 interface PromotionForm {
   designation: string;
   role: string;
@@ -44,9 +62,9 @@ export default function PromotionTab({
   employeeId, employeeName, currentDesignation, currentRole, desigOptions, roleOptions, onUpdated,
 }: Props) {
   const canEdit = usePermission("employees.edit");
-  const currentUser = useCurrentUser();
 
   const [history, setHistory] = useState<PromotionRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -57,6 +75,24 @@ export default function PromotionTab({
 
   const isElevated = form.role !== currentRole;
   const hasChange = form.designation !== currentDesignation || form.role !== currentRole;
+
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await clientApi.get(API.employees.promotions(employeeId));
+      const records = (res.data?.data ?? []) as ApiPromotionRecord[];
+      setHistory(records.map(toPromotionRecord));
+    } catch {
+      // History is supplementary to the rest of this tab — a failed fetch
+      // just leaves the table empty rather than blocking the page.
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [employeeId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   function openModal() {
     setForm({
@@ -90,17 +126,7 @@ export default function PromotionTab({
         designation: form.designation,
         role: form.role,
       });
-      setHistory(h => [
-        {
-          id: `${employeeId}-${Date.now()}`,
-          fromDesignation: currentDesignation || "—",
-          toDesignation: form.designation,
-          roleChanged: isElevated,
-          effectiveDate: form.effectiveDate,
-          updatedBy: currentUser?.name ?? "—",
-        },
-        ...h,
-      ]);
+      await fetchHistory();
       onUpdated(form.designation, form.role);
       setShowModal(false);
       setSuccessMsg(
@@ -145,11 +171,16 @@ export default function PromotionTab({
         <div className="card-header">
           <span className="card-title">Promotion History</span>
         </div>
-        {history.length === 0 ? (
+        {historyLoading ? (
+          <div className="empty-state">
+            <i className="ti ti-loader-2 spin" />
+            <h3>Loading history…</h3>
+          </div>
+        ) : history.length === 0 ? (
           <div className="empty-state">
             <i className="ti ti-award" />
             <h3>No promotions yet</h3>
-            <p>Changes made here will be listed for this session.</p>
+            <p>Designation and role changes for this employee will be listed here.</p>
           </div>
         ) : (
           <div className="table-wrap">

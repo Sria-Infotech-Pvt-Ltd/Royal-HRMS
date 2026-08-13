@@ -104,6 +104,14 @@ export interface ProcessPayrollResult {
   skipped: string[];
 }
 
+export interface EligibleEmployee {
+  id: string;
+  employee_id: string;
+  full_name: string;
+  department: string;
+  designation: string;
+}
+
 export interface PayrollCycle {
   id: string;
   cycle_start: string;

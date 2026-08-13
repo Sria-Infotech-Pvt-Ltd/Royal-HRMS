@@ -187,9 +187,11 @@ def _compute_employee_payslip(
     }
 
 
-def process_payroll_cycle(cycle: PayrollCycle) -> dict:
+def process_payroll_cycle(cycle: PayrollCycle, selected_employee_codes=None) -> dict:
     """
-    Compute and persist payslips for every eligible employee in `cycle`.
+    Compute and persist payslips for every eligible employee in `cycle`,
+    or (optionally) only a selected subset of them — see
+    _run_payroll_processing()'s docstring for selected_employee_codes.
 
     Same formulas/business rules as the original ProcessPayrollView loop —
     only the data-fetching and write strategy changed (Phase 2 performance
@@ -228,7 +230,7 @@ def process_payroll_cycle(cycle: PayrollCycle) -> dict:
     cycle.status = PayrollCycle.STATUS_PROCESSING
 
     try:
-        return _run_payroll_processing(cycle)
+        return _run_payroll_processing(cycle, selected_employee_codes=selected_employee_codes)
     except Exception:
         logger.error('process_payroll_cycle failed for cycle %s — reverting status.', cycle.pk, exc_info=True)
         PayrollCycle.objects.filter(
@@ -238,12 +240,14 @@ def process_payroll_cycle(cycle: PayrollCycle) -> dict:
         raise
 
 
-def _run_payroll_processing(cycle: PayrollCycle) -> dict:
-    """The actual fetch/compute/write work, split out of process_payroll_cycle()
-    only so the claim-revert-on-failure logic above can wrap it cleanly."""
-    settings_obj = PayrollSettings.objects.first()
-    default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
-
+def _eligible_employees_qs(cycle: PayrollCycle):
+    """The exact employee population Process Payroll considers for `cycle`,
+    before any optional employee-selection filter and before the
+    per-employee salary-config eligibility check (that part still requires
+    a bulk fetch, so it stays inside _run_payroll_processing). Shared by
+    _run_payroll_processing() and CycleEligibleEmployeesView so the
+    "who will this touch" preview the frontend shows can never drift from
+    what actually gets processed."""
     employees_qs = User.objects.filter(
         is_active=True,
     ).exclude(
@@ -252,6 +256,27 @@ def _run_payroll_processing(cycle: PayrollCycle) -> dict:
 
     if cycle.branch:
         employees_qs = employees_qs.filter(branch=cycle.branch.branch_name)
+
+    return employees_qs
+
+
+def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -> dict:
+    """The actual fetch/compute/write work, split out of process_payroll_cycle()
+    only so the claim-revert-on-failure logic above can wrap it cleanly.
+
+    selected_employee_codes: optional collection of `employee_id` code
+    strings. None (the default) preserves the original behavior exactly —
+    every eligible employee is processed. When provided, it's intersected
+    with the same eligible queryset below via a single extra .filter(),
+    so it adds no additional queries and can never widen the population
+    (an out-of-branch/inactive/system_admin code simply won't match and is
+    silently excluded, same as if it had never been selected)."""
+    settings_obj = PayrollSettings.objects.first()
+    default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
+
+    employees_qs = _eligible_employees_qs(cycle)
+    if selected_employee_codes is not None:
+        employees_qs = employees_qs.filter(employee_id__in=selected_employee_codes)
 
     employees = list(employees_qs)
     employee_ids = [e.id for e in employees]
@@ -844,8 +869,35 @@ class ProcessPayrollView(APIView):
         ):
             return error('Attendance must be approved before processing payroll.')
 
+        # Optional employee selection — omitted/null preserves the original
+        # behavior exactly (every eligible employee). An explicit empty list
+        # is rejected rather than silently treated as "everyone", since that
+        # would be an easy, dangerous footgun for a caller that meant to
+        # select nobody. An unknown employee code is rejected too; a real
+        # employee code that just doesn't fall in this cycle's eligible
+        # population (wrong branch, inactive, etc.) is silently excluded by
+        # _run_payroll_processing's own filter — same as if it were never sent.
+        selected_employee_codes = None
+        if 'employee_ids' in request.data and request.data.get('employee_ids') is not None:
+            raw_ids = request.data.get('employee_ids')
+            if not isinstance(raw_ids, list):
+                return error('employee_ids must be a list of employee codes.')
+            selected_employee_codes = list({str(x).strip() for x in raw_ids if str(x).strip()})
+            if not selected_employee_codes:
+                return error(
+                    'employee_ids cannot be empty. Select at least one employee, '
+                    'or omit this field to process all eligible employees.',
+                )
+            known_codes = set(
+                User.objects.filter(employee_id__in=selected_employee_codes)
+                .values_list('employee_id', flat=True)
+            )
+            unknown_codes = [c for c in selected_employee_codes if c not in known_codes]
+            if unknown_codes:
+                return error(f"Unknown employee code(s): {', '.join(unknown_codes)}.")
+
         try:
-            result = process_payroll_cycle(cycle)
+            result = process_payroll_cycle(cycle, selected_employee_codes=selected_employee_codes)
         except PayrollAlreadyProcessing:
             return error(
                 'This payroll cycle is already being processed or has already been processed.',
@@ -860,6 +912,35 @@ class ProcessPayrollView(APIView):
             f"Payroll processed. {result['created_count']} payslips generated.",
             {'payslip_count': result['created_count'], 'skipped': result['skipped']},
         )
+
+
+class CycleEligibleEmployeesView(APIView):
+    """GET /payroll/cycles/<pk>/eligible-employees/ — the employee population
+    Process Payroll would consider for this cycle (before any optional
+    selection), for the frontend's employee-selection checklist. Uses the
+    exact same _eligible_employees_qs() the real processing pipeline uses,
+    so this list can never drift out of sync with what "Process Payroll"
+    actually touches. Read-only — no employee-selection state is persisted."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view payroll cycles.', http_status=403)
+
+        cycle = get_object_or_404(PayrollCycle, pk=pk)
+
+        if not _is_admin(request.user):
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or cycle.branch_id != branch_obj.pk:
+                return error('You can only view payroll for your own branch.', http_status=403)
+
+        employees = list(
+            _eligible_employees_qs(cycle)
+            .order_by('full_name')
+            .values('id', 'employee_id', 'full_name', 'department', 'designation')
+        )
+        return success('Eligible employees retrieved.', {'results': employees, 'count': len(employees)})
 
 
 class MarkCyclePaidView(APIView):

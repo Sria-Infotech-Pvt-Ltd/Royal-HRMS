@@ -293,6 +293,14 @@ class Designation(models.Model):
     department  = models.ForeignKey(
                       Department, on_delete=models.CASCADE, related_name='designations'
                   )
+    level       = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            'Seniority level used to validate promotions (higher = more senior). '
+            '0 means "not yet configured" — promotion hierarchy validation is '
+            'skipped for a designation until it is given a real level > 0.'
+        ),
+    )
     is_active   = models.BooleanField(default=True)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
@@ -304,6 +312,41 @@ class Designation(models.Model):
 
     def __str__(self) -> str:
         return f'{self.name} ({self.department.name})'
+
+
+class PromotionRecord(models.Model):
+    """Immutable audit trail of designation/role changes made through
+    EmployeeDetailView.put(). One row per PUT call that actually changed
+    designation and/or role — never updated or deleted after creation.
+
+    Designation/role are snapshotted as plain strings (matching
+    User.designation, a bare CharField with no FK) rather than FKs, so a
+    later rename/deletion of a Designation/Role never rewrites history.
+    """
+    employee = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='promotion_records',
+    )
+    previous_designation = models.CharField(max_length=100, blank=True)
+    new_designation = models.CharField(max_length=100, blank=True)
+    previous_role = models.CharField(max_length=50, blank=True)
+    new_role = models.CharField(max_length=50, blank=True)
+    effective_date = models.DateField()
+    remarks = models.TextField(blank=True, default='')
+    promoted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='promotions_made',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'hrms_promotion_records'
+        ordering = ['-effective_date', '-created_at']
+        indexes = [
+            models.Index(fields=['employee', '-effective_date'], name='promo_employee_effdate_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name}: {self.previous_designation} -> {self.new_designation} ({self.effective_date})'
 
 
 # ─── OTP Verification ─────────────────────────────────────────────────────────

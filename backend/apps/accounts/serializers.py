@@ -438,7 +438,7 @@ class DesignationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Designation
-        fields = ('id', 'name', 'department', 'department_name', 'is_active', 'created_at', 'updated_at')
+        fields = ('id', 'name', 'department', 'department_name', 'level', 'is_active', 'created_at', 'updated_at')
         read_only_fields = ('id', 'department_name', 'created_at', 'updated_at')
 
     def validate_name(self, value: str) -> str:

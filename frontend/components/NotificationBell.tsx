@@ -12,6 +12,7 @@ const MODULE_ROUTES: Record<NotificationModule, string> = {
   announcement:   "/dashboard/announcements",
   holiday:        "/dashboard/attendance",
   permission:     "/dashboard/leave",
+  promotion:      "/dashboard/profile",
 };
 
 function relativeTime(iso: string): string {

@@ -18,6 +18,7 @@ from apps.accounts.models import (
     OTPVerification,
     PasswordResetToken,
     Permission,
+    PromotionRecord,
     Role,
     RolePermission,
     SMTPSettings,
@@ -90,6 +91,14 @@ class DesignationAdmin(admin.ModelAdmin):
     list_display  = ('name', 'department', 'is_active')
     list_filter   = ('is_active', 'department')
     search_fields = ('name',)
+
+
+@admin.register(PromotionRecord)
+class PromotionRecordAdmin(admin.ModelAdmin):
+    list_display  = ('employee', 'previous_designation', 'new_designation', 'previous_role', 'new_role', 'effective_date', 'promoted_by')
+    list_filter   = ('effective_date',)
+    search_fields = ('employee__full_name', 'employee__employee_id')
+    autocomplete_fields = ('employee', 'promoted_by')
 
 
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
