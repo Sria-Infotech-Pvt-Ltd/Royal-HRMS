@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.responses import success, error, first_error
+from core.responses import success, error, first_error, get_client_ip
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
 from apps.payroll.models import (
@@ -29,7 +29,7 @@ from apps.payroll.serializers import (
     EmployeePayslipSerializer,
     ManagerAttendanceApprovalSerializer,
 )
-from apps.accounts.models import User
+from apps.accounts.models import AuditLog, User
 from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
 
@@ -524,6 +524,16 @@ class PayrollCycleListView(APIView):
             cycle.id, request.user.email,
             branch_obj.branch_name if branch_obj else 'global',
         )
+        AuditLog.objects.create(
+            user=request.user, action='payroll_cycle_created', module='payroll',
+            object_id=str(cycle.id),
+            changes={
+                'cycle_start': str(cycle_start), 'cycle_end': str(cycle_end),
+                'branch': branch_obj.branch_name if branch_obj else 'global',
+            },
+            branch=branch_obj.branch_name if branch_obj else '',
+            ip_address=get_client_ip(request),
+        )
 
         # Seed one approval row per active manager in this branch (or all if global)
         try:
@@ -660,6 +670,12 @@ class AttendanceApprovalView(APIView):
                     update_fields.append('self_approved_at')
                 manager_row.save(update_fields=update_fields)
                 logger.info('Cycle %s: manager %s approved L1', pk, request.user.email)
+                AuditLog.objects.create(
+                    user=request.user, action='payroll_attendance_l1_approved', module='payroll',
+                    object_id=str(cycle.id), changes={'note': note},
+                    branch=cycle.branch.branch_name if cycle.branch else '',
+                    ip_address=get_client_ip(request),
+                )
             else:
                 # Fallback path: HR/sysadmin can approve L1 when no manager rows exist
                 has_manager_rows = ManagerAttendanceApproval.objects.filter(cycle=cycle).exists()
@@ -684,6 +700,12 @@ class AttendanceApprovalView(APIView):
                     'Cycle %s: HR direct L1 approval by %s (no managers configured)',
                     pk, request.user.email,
                 )
+                AuditLog.objects.create(
+                    user=request.user, action='payroll_attendance_l1_approved', module='payroll',
+                    object_id=str(cycle.id), changes={'note': note, 'method': 'hr_direct_no_managers'},
+                    branch=cycle.branch.branch_name if cycle.branch else '',
+                    ip_address=get_client_ip(request),
+                )
                 return success('L1 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
             # Check if all manager rows are now approved → complete L1
@@ -701,6 +723,11 @@ class AttendanceApprovalView(APIView):
                     'attendance_approved_by_l1', 'attendance_l1_approved_at', 'status', 'updated_at',
                 ])
                 logger.info('Cycle %s: all managers approved — L1 complete', pk)
+                AuditLog.objects.create(
+                    user=request.user, action='payroll_attendance_l1_complete', module='payroll',
+                    object_id=str(cycle.id), changes={'requires_l2': requires_l2},
+                    branch=cycle.branch.branch_name if cycle.branch else '',
+                )
                 if requires_l2:
                     try:
                         from apps.payroll.notifications import notify_l2_approval_required
@@ -727,6 +754,12 @@ class AttendanceApprovalView(APIView):
                 update_fields.append('hr_self_approved_at')
             cycle.save(update_fields=update_fields)
             logger.info('Cycle %s L2 attendance approved by %s', pk, request.user.email)
+            AuditLog.objects.create(
+                user=request.user, action='payroll_attendance_l2_approved', module='payroll',
+                object_id=str(cycle.id), changes={'note': note},
+                branch=cycle.branch.branch_name if cycle.branch else '',
+                ip_address=get_client_ip(request),
+            )
             return success('L2 attendance approval recorded.', PayrollCycleSerializer(cycle).data)
 
         return error('level must be "L1" or "L2".')
@@ -836,6 +869,16 @@ class ProcessPayrollView(APIView):
             'Payroll processed for cycle %s: %d payslips created, %d skipped by %s',
             pk, result['created_count'], len(result['skipped']), request.user.email,
         )
+        AuditLog.objects.create(
+            user=request.user, action='payroll_cycle_processed', module='payroll',
+            object_id=str(cycle.id),
+            changes={
+                'is_reprocess': is_reprocess, 'payslip_count': result['created_count'],
+                'skipped_count': len(result['skipped']),
+            },
+            branch=cycle.branch.branch_name if cycle.branch else '',
+            ip_address=get_client_ip(request),
+        )
         return success(
             f"Payroll processed. {result['created_count']} payslips generated.",
             {'payslip_count': result['created_count'], 'skipped': result['skipped']},
@@ -881,6 +924,12 @@ class MarkCyclePaidView(APIView):
         ).update(status=EmployeePayslip.STATUS_PAID, paid_at=now)
 
         logger.info('Cycle %s marked as paid by %s', pk, request.user.email)
+        AuditLog.objects.create(
+            user=request.user, action='payroll_cycle_marked_paid', module='payroll',
+            object_id=str(cycle.id),
+            branch=cycle.branch.branch_name if cycle.branch else '',
+            ip_address=get_client_ip(request),
+        )
         return success('Cycle marked as paid.', PayrollCycleSerializer(cycle).data)
 
 
@@ -936,4 +985,10 @@ class CancelPayrollCycleView(APIView):
             ])
 
         logger.info('Cycle %s cancelled by %s. Reason: %s', pk, request.user.email, reason)
+        AuditLog.objects.create(
+            user=request.user, action='payroll_cycle_cancelled', module='payroll',
+            object_id=str(cycle.id), changes={'reason': reason},
+            branch=cycle.branch.branch_name if cycle.branch else '',
+            ip_address=get_client_ip(request),
+        )
         return success('Payroll cycle cancelled.', PayrollCycleSerializer(cycle).data)

@@ -389,6 +389,15 @@ class AuditLog(models.Model):
     changes    = models.JSONField(default=dict)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    # The branch this event pertains to (the affected employee/candidate/
+    # document/cycle's branch) — NOT necessarily the acting user's own
+    # branch, e.g. a system_admin editing a Mumbai employee. Falls back to
+    # the actor's branch at call sites that haven't been updated to pass an
+    # explicit target branch, and for actions with no meaningful target
+    # (login/logout, settings, role management). Plain branch-name string,
+    # matching User.branch's convention, so it can be compared directly
+    # against request.user.branch for HR's branch-scoped audit view.
+    branch     = models.CharField(max_length=100, blank=True, default='')
 
     class Meta:
         db_table = 'hrms_audit_logs'

@@ -2173,6 +2173,7 @@ class DocumentListCreateView(APIView):
                 user=request.user, action='document_uploaded', module='documents',
                 object_id=str(doc.id),
                 changes={'title': doc.title, 'category': doc.category, 'file': doc.file_name},
+                branch=doc.branch.branch_name if doc.branch else '',
                 ip_address=get_client_ip(request),
             )
         except Exception:
@@ -2298,6 +2299,7 @@ class DocumentDetailView(APIView):
                 user=request.user, action='document_updated', module='documents',
                 object_id=str(updated.id),
                 changes={k: v for k, v in request.data.items() if not hasattr(v, 'read')},
+                branch=updated.branch.branch_name if updated.branch else '',
                 ip_address=get_client_ip(request),
             )
         except Exception:
@@ -2345,6 +2347,7 @@ class DocumentDetailView(APIView):
                 user=request.user, action='document_updated', module='documents',
                 object_id=str(updated.id),
                 changes={k: v for k, v in request.data.items() if not hasattr(v, 'read')},
+                branch=updated.branch.branch_name if updated.branch else '',
                 ip_address=get_client_ip(request),
             )
         except Exception:
@@ -2362,6 +2365,7 @@ class DocumentDetailView(APIView):
         if not doc:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
         title = doc.title
+        doc_branch = doc.branch.branch_name if doc.branch else ''
         try:
             doc.is_active = False
             doc.save(update_fields=['is_active', 'updated_at'])
@@ -2373,6 +2377,7 @@ class DocumentDetailView(APIView):
                 user=request.user, action='document_deleted', module='documents',
                 object_id=str(doc.id),
                 changes={'title': title},
+                branch=doc_branch,
                 ip_address=get_client_ip(request),
             )
         except Exception:
@@ -2829,6 +2834,7 @@ class EmployeeListCreateView(APIView):
                     'department': department, 'designation': designation,
                     'role': role.name, 'employee_id': employee_id,
                 },
+                branch=user.branch,
                 ip_address=get_client_ip(request),
             )
 
@@ -3103,6 +3109,7 @@ class EmployeeDetailView(APIView):
                     'full_name':   employee.full_name,
                     **changes,
                 },
+                branch     = employee.branch,
                 ip_address = get_client_ip(request),
             )
 
@@ -3158,6 +3165,7 @@ class EmployeeDetailView(APIView):
                 'full_name':   employee.full_name,
                 'is_active':   {'from': old_status, 'to': new_status},
             },
+            branch     = employee.branch,
             ip_address = get_client_ip(request),
         )
 
@@ -3184,6 +3192,7 @@ class EmployeeDetailView(APIView):
 
         full_name    = employee.full_name
         emp_id_str   = employee.employee_id
+        emp_branch   = employee.branch
 
         employee.is_active = False
         employee.save(update_fields=['is_active', 'updated_at'])
@@ -3194,6 +3203,7 @@ class EmployeeDetailView(APIView):
             module     = 'employees',
             object_id  = str(employee.id),
             changes    = {'employee_id': emp_id_str, 'full_name': full_name},
+            branch     = emp_branch,
             ip_address = get_client_ip(request),
         )
         logger.info('Employee "%s" deactivated (deleted) by %s', full_name, request.user.email)
@@ -3218,11 +3228,14 @@ class AuditLogListView(APIView):
             return error('You do not have permission to view audit logs.', http_status=status.HTTP_403_FORBIDDEN)
         qs = AuditLog.objects.select_related('user', 'user__role').order_by('-created_at')
 
-        # Branch Admin (no settings.edit) only sees activity from their own
-        # branch's users — same unconditional-within-branch scoping used
-        # everywhere else for this role. system_admin sees everything.
+        # HR/Branch Admin (no settings.edit) only sees events regarding their
+        # own branch — filtered on the event's target branch (AuditLog.branch),
+        # not the acting user's own branch. Those differ whenever someone
+        # outside the branch acts on it (e.g. a system_admin editing a
+        # branch's employee) — filtering on the actor's branch would hide
+        # that from the branch's own HR entirely. system_admin sees everything.
         if not _has_perm(request.user, 'settings.edit') and request.user.branch:
-            qs = qs.filter(user__branch__iexact=request.user.branch)
+            qs = qs.filter(branch__iexact=request.user.branch)
 
         module    = request.query_params.get('module', '').strip()
         action    = request.query_params.get('action', '').strip()
@@ -4097,6 +4110,7 @@ class EmployeeProfileDocumentView(APIView):
                 user=request.user, action='document_uploaded', module='documents',
                 object_id=str(doc.id),
                 changes={'employee': employee.employee_id, 'document_type': doc_type},
+                branch=employee.branch,
                 ip_address=get_client_ip(request),
             )
         except Exception:
@@ -4387,6 +4401,7 @@ class OnboardingApprovalView(APIView):
                 user=request.user, action='onboarding_approved', module='accounts',
                 object_id=str(target.pk),
                 changes={'target': target.email, 'remarks': remarks},
+                branch=target.branch,
                 ip_address=get_client_ip(request),
             )
             logger.info('Onboarding approved for %s by %s', target.email, request.user.email)
@@ -4422,6 +4437,7 @@ class OnboardingApprovalView(APIView):
                 user=request.user, action='onboarding_rejected', module='accounts',
                 object_id=str(target.pk),
                 changes={'target': target.email, 'remarks': remarks},
+                branch=target.branch,
                 ip_address=get_client_ip(request),
             )
             logger.info('Onboarding rejected for %s by %s', target.email, request.user.email)

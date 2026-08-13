@@ -385,6 +385,7 @@ class CandidateListCreateView(APIView):
                 user=request.user, action='candidate_created', module='recruitment',
                 object_id=str(candidate.pk),
                 changes={'name': candidate.name, 'position': candidate.position_applied},
+                branch=candidate.branch.branch_name if candidate.branch else '',
                 ip_address=get_client_ip(request),
             )
         _fire_interview_date_emails_if_needed(candidate, old_interview_date=None)
@@ -440,6 +441,7 @@ class CandidateListCreateView(APIView):
                 user=request.user, action='candidate_deleted', module='recruitment',
                 object_id=str(candidate.pk),
                 changes={'name': candidate.name},
+                branch=candidate.branch.branch_name if candidate.branch else '',
                 ip_address=get_client_ip(request),
             )
         count = deletable.count()
@@ -504,6 +506,7 @@ class CandidateDetailView(APIView):
             user=request.user, action='candidate_updated', module='recruitment',
             object_id=str(updated.pk),
             changes={k: v for k, v in request.data.items()},
+            branch=updated.branch.branch_name if updated.branch else '',
             ip_address=get_client_ip(request),
         )
         _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link)
@@ -539,6 +542,7 @@ class CandidateDetailView(APIView):
             user=request.user, action='candidate_updated', module='recruitment',
             object_id=str(updated.pk),
             changes={k: v for k, v in request.data.items()},
+            branch=updated.branch.branch_name if updated.branch else '',
             ip_address=get_client_ip(request),
         )
         _fire_interview_date_emails_if_needed(updated, old_interview_date, old_interview_time, old_meeting_link)
@@ -565,6 +569,7 @@ class CandidateDetailView(APIView):
                 http_status=status.HTTP_409_CONFLICT,
             )
         name = candidate.name
+        cand_branch = candidate.branch.branch_name if candidate.branch else ''
         try:
             candidate.delete()
         except Exception as exc:
@@ -575,6 +580,7 @@ class CandidateDetailView(APIView):
             user=request.user, action='candidate_deleted', module='recruitment',
             object_id=str(pk),
             changes={'name': name},
+            branch=cand_branch,
             ip_address=get_client_ip(request),
         )
         logger.info('Candidate "%s" (pk=%s) deleted by %s', name, pk, request.user.email)
@@ -680,6 +686,7 @@ class CandidateStatusView(APIView):
             user=request.user, action=f'candidate_{new_status}', module='recruitment',
             object_id=str(candidate.pk),
             changes={'name': candidate.name, 'status': new_status},
+            branch=candidate.branch.branch_name if candidate.branch else '',
             ip_address=get_client_ip(request),
         )
 
@@ -757,6 +764,7 @@ class CandidateStatusView(APIView):
             user=request.user, action='candidate_status_reset', module='recruitment',
             object_id=str(candidate.pk),
             changes={'from': old_status, 'to': Candidate.STATUS_PENDING},
+            branch=candidate.branch.branch_name if candidate.branch else '',
             ip_address=get_client_ip(request),
         )
         return success(f'{candidate.name} status reset to Pending.',
@@ -875,6 +883,7 @@ class CandidateHRDecisionView(APIView):
             user=request.user, action=f'candidate_hr_{decision}d', module='recruitment',
             object_id=str(candidate.pk),
             changes={'name': candidate.name, 'decision': decision},
+            branch=candidate.branch.branch_name if candidate.branch else '',
             ip_address=get_client_ip(request),
         )
 
@@ -924,6 +933,7 @@ class CandidateHRDecisionView(APIView):
             user=request.user, action='candidate_hr_decision_reset', module='recruitment',
             object_id=str(candidate.pk),
             changes={'hr_approved': False},
+            branch=candidate.branch.branch_name if candidate.branch else '',
             ip_address=get_client_ip(request),
         )
         logger.info('HR approval reset for candidate %s by %s', pk, request.user.email)
@@ -1178,6 +1188,7 @@ class SendCandidateEmailView(APIView):
             module='recruitment',
             object_id=str(candidate.pk) if candidate else str(pk),
             changes={'template_name': template_name, 'recipient': recipient_email},
+            branch=(candidate.branch.branch_name if candidate and candidate.branch else ''),
             ip_address=get_client_ip(request),
         )
         return success(f'Email sent to {recipient_email}.')
@@ -1266,6 +1277,7 @@ def _revoke_portal_access(request, pk):
                 user=request.user, action='portal_access_revoked', module='recruitment',
                 object_id=str(candidate.pk),
                 changes={'email': candidate.email},
+                branch=candidate.branch.branch_name if candidate.branch else '',
                 ip_address=get_client_ip(request),
             )
     except Candidate.DoesNotExist:
@@ -1390,6 +1402,7 @@ class SendPortalLoginView(APIView):
             user=request.user, action='portal_login_sent', module='recruitment',
             object_id=str(candidate.pk),
             changes={'email': candidate.email},
+            branch=candidate.branch.branch_name if candidate.branch else '',
             ip_address=get_client_ip(request),
         )
         return success('Portal login sent successfully.', data={'email': candidate.email})
@@ -1497,6 +1510,7 @@ class ResendPortalLoginView(APIView):
             user=request.user, action='portal_login_resent', module='recruitment',
             object_id=str(candidate.pk),
             changes={'email': candidate.email},
+            branch=candidate.branch.branch_name if candidate.branch else '',
             ip_address=get_client_ip(request),
         )
         return success('Portal credentials resent successfully.', data={'email': candidate.email})
@@ -1797,6 +1811,7 @@ class ReferralBonusApproveView(APIView):
             user=request.user, action='referral_bonus_approved', module='recruitment',
             object_id=str(bonus.pk),
             changes={'referrer': bonus.referrer.employee_id, 'amount': str(bonus.bonus_amount)},
+            branch=bonus.referrer.branch,
             ip_address=get_client_ip(request),
         )
         logger.info('Referral bonus %s approved by %s (amount: %s)', pk, request.user.email, bonus.bonus_amount)
@@ -1837,6 +1852,7 @@ class ReferralBonusPayView(APIView):
             user=request.user, action='referral_bonus_paid', module='recruitment',
             object_id=str(bonus.pk),
             changes={'referrer': bonus.referrer.employee_id, 'amount': str(bonus.bonus_amount)},
+            branch=bonus.referrer.branch,
             ip_address=get_client_ip(request),
         )
         logger.info('Referral bonus %s marked paid by %s', pk, request.user.email)
