@@ -14,11 +14,9 @@ const SETTINGS_ITEMS = [
   { id: "attendance-config",  cat: "modules", icon: "ti-clock",           iconClass: "sc-modules", label: "Attendance Rules",      desc: "Shift timings, late marks and overtime" },
   { id: "assessment-config",  cat: "modules", icon: "ti-clipboard-check", iconClass: "sc-modules", label: "Assessment Config",     desc: "Pass percentage, attempt limits and time settings" },
   { id: "referral-rules",     cat: "modules", icon: "ti-user-plus",       iconClass: "sc-modules", label: "Referral Rules",        desc: "Manage the rules and bonus details shown on the Referral page" },
-  { id: "recruitment-config", cat: "modules", icon: "ti-users",           iconClass: "sc-modules", label: "Recruitment Config",    desc: "Interview stages, evaluation criteria" },
-  { id: "email-templates",    cat: "comm",    icon: "ti-mail",            iconClass: "sc-comm",    label: "Email Templates",       desc: "Customize all transactional emails" },
+  { id: "email-templates",    cat: "comm",    icon: "ti-mail",            iconClass: "sc-comm",    label: "Email Templates",       desc: "Customize transactional emails and birthday wish settings" },
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
   { id: "notifications",      cat: "comm",    icon: "ti-bell",            iconClass: "sc-comm",    label: "Notifications",         desc: "In-app and email notification preferences" },
-  { id: "birthday-wishes",    cat: "comm",    icon: "ti-cake",            iconClass: "sc-comm",    label: "Birthday Wishes",       desc: "Enable/disable automatic birthday wishes and customize the copy" },
   { id: "employee-code",      cat: "company", icon: "ti-id-badge",        iconClass: "sc-company", label: "Employee ID Format",    desc: "Prefix, padding, and starting number for employee codes" },
   { id: "audit",              cat: "system",  icon: "ti-history",         iconClass: "sc-system",  label: "Audit Log",             desc: "View all system actions and changes" },
 ] as const;
@@ -48,12 +46,10 @@ const ITEM_ROUTES: Record<string, string> = {
   "payroll-config":       "/dashboard/settings/payroll-config",
   "assessment-config":    "/dashboard/settings/assessment-config",
   "referral-rules":       "/dashboard/settings/referral-rules",
-  "recruitment-config":   "/dashboard/settings/recruitment-config",
   "notifications":        "/dashboard/settings/notifications",
-  "birthday-wishes":      "/dashboard/settings/birthday-wishes",
 };
 
-const COMING_SOON_ITEMS = new Set(["recruitment-config", "notifications"]);
+const COMING_SOON_ITEMS = new Set(["notifications"]);
 
 export default function SettingsPage() {
   const router = useRouter();

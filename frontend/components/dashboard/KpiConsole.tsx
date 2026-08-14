@@ -6,22 +6,8 @@ import type { DashboardKPIs } from "@/types/dashboard";
 
 interface Props { firstName: string }
 
-function isHealthy(status: string | boolean | undefined): boolean {
-  if (status === undefined || status === null) return false;
-  if (typeof status === "boolean") return status;
-  const s = String(status).toLowerCase();
-  return s === "healthy" || s === "ok" || s === "true" || s === "up";
-}
-
 export default function KpiConsole({ firstName }: Props) {
   const { data: kpis, loading } = useFetch<DashboardKPIs>(API.dashboard.kpis);
-
-  const health = [
-    { label: "API",     ok: isHealthy(kpis?.api_status)      },
-    { label: "DB",      ok: isHealthy(kpis?.database_status) },
-    { label: "Mail",    ok: isHealthy(kpis?.mail_status)     },
-    { label: "Storage", ok: isHealthy(kpis?.storage_status)  },
-  ];
 
   const stats = [
     { icon: "ti-users",     val: loading ? "—" : String(kpis?.total_employees      ?? 0), lbl: "Total Employees",   sub: "Active headcount"     },
@@ -44,7 +30,7 @@ export default function KpiConsole({ firstName }: Props) {
       <div style={{ position: "absolute", top: -20, right: -20, width: 110, height: 110, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.04)", pointerEvents: "none" }} />
 
       {/* Top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 0", position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "10px 16px 0", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(255,255,255,0.10)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#fff", flexShrink: 0 }}>
             <i className="ti ti-terminal-2" />
@@ -53,15 +39,6 @@ export default function KpiConsole({ firstName }: Props) {
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", lineHeight: 1 }}>System Console</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>Welcome back, {firstName}</div>
           </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {health.map(s => (
-            <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "rgba(255,255,255,0.55)" }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.ok ? "#4ade80" : "#f87171", flexShrink: 0 }} />
-              {s.label}
-              <span style={{ color: s.ok ? "#4ade80" : "#f87171", fontWeight: 700 }}>{s.ok ? "Healthy" : "Down"}</span>
-            </div>
-          ))}
         </div>
       </div>
 

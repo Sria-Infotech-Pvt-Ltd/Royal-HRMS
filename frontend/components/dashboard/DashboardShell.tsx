@@ -11,6 +11,7 @@ import {
   type NavItem,
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
+import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import { useFetch } from "@/hooks/useFetch";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 
@@ -66,27 +67,21 @@ export default function DashboardShell({
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
-  const [searchVal, setSearchVal] = useState("");
 
   const pageTitle = PAGE_TITLES[pathname]
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
     : pathname.startsWith("/dashboard/separation/") ? "Separation Request"
     : "Royal HRMS");
   const visibleNav = buildNav(session.permissions ?? []);
+  const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry) && !entry.comingSoon);
+  const canSearchEmployees = (session.permissions ?? []).includes("employees.view");
 
   // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
   // item's path prefix (both "audit" and its parent "settings"). Only the
   // item with the longest — i.e. most specific — matching path should light up.
-  const activeNavId = visibleNav
-    .filter((entry): entry is NavItem => !isSection(entry) && !entry.comingSoon)
+  const activeNavId = navItems
     .filter(item => pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/")))
     .sort((a, b) => b.path.length - a.path.length)[0]?.id;
-
-  function toggleTheme() {
-    document.body.classList.toggle("dark-mode");
-    setDarkMode(v => !v);
-  }
 
   async function handleLogout() {
     markIntentionalLogout(); // suppress session:expired overlay for in-flight 401s
@@ -270,27 +265,7 @@ export default function DashboardShell({
 
           <div className="flex items-center gap-2">
             {/* Search bar */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-2 border-[1.5px] border-[var(--outline-v)] rounded-lg bg-[var(--bg)] min-w-[240px]">
-              <i className="ti ti-search text-base text-[var(--outline)]" />
-              <input
-                type="text"
-                placeholder="Search anything..."
-                className="border-none bg-transparent text-[var(--on-bg)] text-[13px] flex-1 outline-none"
-                value={searchVal}
-                onChange={e => setSearchVal(e.target.value)}
-                suppressHydrationWarning
-              />
-            </div>
-
-            {/* Theme toggle */}
-            <button
-              className="w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-transparent text-[var(--outline)] border-none cursor-pointer hover:bg-[var(--bg-mid)]"
-              onClick={toggleTheme}
-              title="Toggle theme"
-              suppressHydrationWarning
-            >
-              <i className={`ti ${darkMode ? "ti-sun" : "ti-moon"} text-[18px]`} />
-            </button>
+            <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
 
             {/* Notifications */}
             <NotificationBell />
