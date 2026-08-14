@@ -10,6 +10,12 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { faceapi, loadFaceApiModels } from "@/lib/faceApi/loadModels";
 import { LivenessTracker } from "@/lib/faceApi/liveness";
 import { syncCanvasSize, drawDetectionBox, clearOverlay, OVERLAY_COLOR } from "@/lib/faceApi/overlay";
+import { grabVideoFrame, putImageData, meanLuminanceOfBox } from "@/lib/faceApi/frameCapture";
+import { applyClahe } from "@/lib/faceApi/clahe";
+import {
+  assessFrameQuality, computeFrontality, assessCaptureConsistency, averageDescriptors,
+  type FrameQualityMetrics,
+} from "@/lib/faceApi/qualityGate";
 
 export type LivenessCapturePhase =
   | "idle"
@@ -19,6 +25,17 @@ export type LivenessCapturePhase =
   | "detecting"
   | "liveness_checking"
   | "liveness_failed"
+  // Post-liveness quality-gated capture — every caller goes through this,
+  // averaging framesToCapture quality-gated frames (registration and
+  // punch-time verification both use framesToCapture > 1, just different
+  // counts — see each caller for its own value).
+  | "capturing_multi"
+  // The liveness-passed frame(s) didn't clear the per-frame quality gate
+  // (lighting/angle/distance/detector confidence), or — in multi-frame mode —
+  // didn't agree with each other closely enough to trust an average of them.
+  // Distinct from "liveness_failed": liveness itself passed here, it's the
+  // CAPTURE quality that didn't.
+  | "quality_failed"
   | "captured"
   | "error";
 
@@ -28,7 +45,40 @@ const STABLE_FRAMES_TO_START_LIVENESS = 10;
 const LIVENESS_TIMEOUT_MS = 9000;
 const DETECTOR_OPTIONS = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
 
+// ─── Quality-gated capture (used by every caller, framesToCapture >= 1) ────
+// Spacing between captured frames — long enough that consecutive frames
+// aren't near-duplicates of each other (defeating the point of sampling
+// multiple moments), short enough that the whole capture still feels
+// instant to the person holding a pose. Irrelevant when framesToCapture is 1
+// (no sleep happens before the first, only, attempt).
+const MULTI_FRAME_INTERVAL_MS = 350;
+// Frames can fail the quality gate (blink, micro-movement, momentary
+// shadow) without the whole capture failing — this bounds how many EXTRA
+// attempts are allowed before giving up and asking for a full retry, rather
+// than looping forever against consistently bad conditions. At
+// framesToCapture === 1 (punch-time) this caps a bad capture at 4 quick
+// attempts before surfacing "quality_failed" and asking the employee to
+// recapture, instead of ever running a match against a low-quality frame.
+const MULTI_FRAME_ATTEMPTS_PER_TARGET_FRAME = 4;
+// How far apart (Euclidean distance, same units as FACE_MATCH_MAX_DISTANCE
+// on the backend) this capture's own frames are allowed to be from each
+// other before they're treated as an inconsistent session rather than
+// averaged — see qualityGate.ts's assessCaptureConsistency. Tighter than
+// FACE_MATCH_MAX_DISTANCE (0.6) on purpose: these are supposed to be several
+// near-identical moments of the SAME short capture, not independent
+// same-person verifications, so they should agree much more closely than
+// the punch-time match bar requires.
+const MAX_INTRA_CAPTURE_DISTANCE = 0.35;
+
 type DetectionWithLandmarks = faceapi.WithFaceLandmarks<faceapi.WithFaceDetection<object>>;
+
+/** Present only when framesToCapture > 1 and the composite descriptor is an
+ *  average of multiple quality-gated frames — see FaceRegistrationRequest's
+ *  capture_frame_count/capture_variance fields, which this maps directly onto. */
+export interface CaptureQualityMeta {
+  frameCount: number;
+  variance: number;
+}
 
 interface UseFaceLivenessCaptureOptions {
   /** Fired once with a live, liveness-passed face descriptor. The camera stays
@@ -38,8 +88,41 @@ interface UseFaceLivenessCaptureOptions {
    *  call (one per camera session) — the backend's anti-replay check
    *  (services_face_antispoofing.py) uses it to tell a genuinely fresh
    *  capture apart from a resubmitted one; multiple retries within the SAME
-   *  open camera (retry() below) reuse it since it's the same session. */
-  onCaptured: (descriptor: number[], livenessScore: number, captureSessionId: string) => void;
+   *  open camera (retry() below) reuse it since it's the same session.
+   *  captureQuality is set only in multi-frame mode — see CaptureQualityMeta. */
+  onCaptured: (
+    descriptor: number[], livenessScore: number, captureSessionId: string, captureQuality?: CaptureQualityMeta,
+  ) => void;
+  /** How many quality-gated frames to average into the final descriptor.
+   *  Defaults to 1 — a single quality-gated frame, still subject to the same
+   *  per-frame quality gate (lib/faceApi/qualityGate.ts) as a multi-frame
+   *  capture, just with no cross-frame averaging/consistency check (nothing
+   *  to average) — only used where a caller explicitly opts into it (there
+   *  currently isn't one; every real caller passes framesToCapture > 1, see
+   *  below). Registration hooks (useFaceRegistrationCapture, useHRFaceCapture)
+   *  pass 4 — a registered face is a long-lived reference, worth a few extra
+   *  seconds to get right the first time (see the mismatch investigation
+   *  that motivated this: a single marginal frame becoming someone's
+   *  permanent reference left almost no margin against impostors). Punch-time
+   *  verification (FaceVerificationModal) passes 3 — fewer than registration
+   *  since clock-in/out happens far more often and needs to stay reasonably
+   *  quick, but no longer a single unaveraged frame either: a since-confirmed
+   *  false-accept incident traced a different person's live capture matching
+   *  a genuine reference at distance 0.578 (threshold 0.6) against a
+   *  single-frame probe, close enough to this employee's own genuine range
+   *  (which reached 0.554) that the single-frame noise band was the
+   *  deciding factor, not the identities involved. */
+  framesToCapture?: number;
+  /** Apply CLAHE lighting normalization (lib/faceApi/clahe.ts) to the frame
+   *  before detection. Applies regardless of framesToCapture — both
+   *  registration and punch-time verification pass true, so the live capture
+   *  compared against a registered reference gets the same lighting
+   *  normalization the reference itself was built from. */
+  normalizeLighting?: boolean;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function generateCaptureSessionId(): string {
@@ -61,7 +144,7 @@ interface UseFaceLivenessCapture {
 }
 
 export function useFaceLivenessCapture(
-  { onCaptured }: UseFaceLivenessCaptureOptions,
+  { onCaptured, framesToCapture = 1, normalizeLighting = false }: UseFaceLivenessCaptureOptions,
 ): UseFaceLivenessCapture {
   const [phase, setPhase] = useState<LivenessCapturePhase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,6 +159,10 @@ export function useFaceLivenessCapture(
   const captureSessionIdRef = useRef(generateCaptureSessionId()); // re-minted in start() below, once per camera session
   const phaseRef            = useRef<LivenessCapturePhase>("idle"); // read fresh inside the raf loop, avoids stale closures
   const onCapturedRef       = useRef(onCaptured);                  // avoids restarting the loop when the caller's callback identity changes
+  // Offscreen canvas used by the quality-gated capture path (grabVideoFrame/
+  // applyClahe operate on this, never on the visible overlay canvasRef
+  // above) — created lazily on first use, one per hook instance.
+  const workingCanvasRef    = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { onCapturedRef.current = onCaptured; }, [onCaptured]);
@@ -88,19 +175,95 @@ export function useFaceLivenessCapture(
 
   useEffect(() => () => stopCamera(), [stopCamera]); // always release the camera on unmount
 
-  const captureAndFinish = useCallback(async (livenessScore: number) => {
+  // One quality-gated frame, used by every capture (registration's
+  // multi-frame average AND punch-time's single frame alike): grabs the
+  // video's current frame onto the offscreen working canvas, optionally
+  // CLAHE-normalizes it, runs detection+descriptor on THAT canvas (not the
+  // raw video — this is what makes the lighting normalization actually
+  // reach face-api.js instead of just existing for nothing), and scores it.
+  // Returns null for "no usable frame this attempt" (no face detected, or
+  // detected but rejected by the quality gate) — callers retry rather than
+  // treating this as fatal.
+  const captureOneQualityGatedFrame = useCallback(async (): Promise<number[] | null> => {
     const video = videoRef.current;
-    if (!video) return;
-    const result = await faceapi.detectSingleFace(video, DETECTOR_OPTIONS).withFaceLandmarks().withFaceDescriptor();
-    if (!result) {
-      // Face slipped out of frame at the exact moment of capture — a liveness
-      // retry, not a hard error; the challenge itself already succeeded.
-      setPhase("liveness_failed");
+    if (!video) return null;
+    if (!workingCanvasRef.current) workingCanvasRef.current = document.createElement("canvas");
+    const workingCanvas = workingCanvasRef.current;
+
+    let imageData: ImageData;
+    try {
+      imageData = grabVideoFrame(video, workingCanvas);
+    } catch {
+      return null; // video not ready this instant — try again next attempt
+    }
+    if (normalizeLighting) {
+      applyClahe(imageData);
+      putImageData(workingCanvas, imageData);
+    }
+
+    const result = await faceapi.detectSingleFace(workingCanvas, DETECTOR_OPTIONS).withFaceLandmarks().withFaceDescriptor();
+    if (!result) return null;
+
+    const nose = result.landmarks.getNose();
+    const metrics: FrameQualityMetrics = {
+      detectionScore: result.detection.score,
+      faceWidthRatio: result.detection.box.width / video.videoWidth,
+      frontality: computeFrontality(result.landmarks.getLeftEye(), result.landmarks.getRightEye(), nose[3]),
+      meanLuminance: meanLuminanceOfBox(imageData, result.detection.box),
+    };
+    if (!assessFrameQuality(metrics).passed) return null;
+
+    return Array.from(result.descriptor);
+  }, [normalizeLighting]);
+
+  // After liveness already passed once, collect `framesToCapture`
+  // quality-gated frame(s) and average them — see this file's module
+  // docstring and the qualityGate.ts/clahe.ts modules for why. At
+  // framesToCapture === 1 (punch-time) this is a single quality-gated frame
+  // with no averaging or cross-frame consistency check to fail (a lone
+  // frame trivially "agrees with itself" — see assessCaptureConsistency);
+  // at framesToCapture > 1 (registration) both the per-frame gate AND the
+  // cross-frame consistency check must pass. Never calls onCaptured with a
+  // capture that didn't clear the gate(s) that apply; phase moves to
+  // "quality_failed" instead, same retry shape as "liveness_failed".
+  const captureMultipleFrames = useCallback(async (livenessScore: number) => {
+    setPhase("capturing_multi");
+
+    const collected: number[][] = [];
+    const maxAttempts = framesToCapture * MULTI_FRAME_ATTEMPTS_PER_TARGET_FRAME;
+    for (let attempt = 0; attempt < maxAttempts && collected.length < framesToCapture; attempt++) {
+      if (attempt > 0) await sleep(MULTI_FRAME_INTERVAL_MS);
+      const descriptor = await captureOneQualityGatedFrame();
+      if (descriptor) collected.push(descriptor);
+    }
+
+    if (collected.length < framesToCapture) {
+      setErrorMessage(
+        framesToCapture > 1
+          ? "Couldn't get enough clear captures — make sure you're well-lit, centered, and holding still, then try again."
+          : "Couldn't get a clear capture — make sure you're well-lit, centered, and holding still, then try again.",
+      );
+      setPhase("quality_failed");
       return;
     }
+
+    const consistency = assessCaptureConsistency(collected, MAX_INTRA_CAPTURE_DISTANCE);
+    if (!consistency.passed) {
+      setErrorMessage("Your captures didn't quite agree with each other — hold still and try again.");
+      setPhase("quality_failed");
+      return;
+    }
+
     setPhase("captured");
-    onCapturedRef.current(Array.from(result.descriptor), livenessScore, captureSessionIdRef.current);
-  }, []);
+    onCapturedRef.current(averageDescriptors(collected), livenessScore, captureSessionIdRef.current, {
+      frameCount: collected.length,
+      variance: consistency.meanPairwiseDistance,
+    });
+  }, [framesToCapture, captureOneQualityGatedFrame]);
+
+  const captureAndFinish = useCallback(async (livenessScore: number) => {
+    await captureMultipleFrames(livenessScore);
+  }, [captureMultipleFrames]);
 
   const handleFrame = useCallback((
     result: DetectionWithLandmarks | undefined,

@@ -7,12 +7,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import { useFaceLivenessCapture, type LivenessCapturePhase } from "@/hooks/useFaceLivenessCapture";
+import { useFaceLivenessCapture, type LivenessCapturePhase, type CaptureQualityMeta } from "@/hooks/useFaceLivenessCapture";
 import type {
   FaceRegistrationEmployee,
   FaceRegistrationRequest,
   PaginatedFaceRegistrationEmployees,
 } from "@/types/faceRegistration";
+
+// Same reasoning as useFaceRegistrationCapture.ts's own constants — an
+// HR-captured face is just as much a permanent verification reference as a
+// self-submitted one, so it gets the same stricter capture bar.
+const REGISTRATION_FRAMES_TO_CAPTURE = 4;
+const REGISTRATION_NORMALIZE_LIGHTING = true;
 
 /** Org-wide employee picker — re-fetches as `search` changes. */
 export function useFaceRegistrationEmployeePicker(search: string) {
@@ -60,7 +66,7 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
   const stopCaptureRef = useRef<() => void>(() => {});
   const consentAcknowledgedRef = useRef(false);
 
-  const submit = useCallback(async (descriptor: number[], livenessScore: number) => {
+  const submit = useCallback(async (descriptor: number[], livenessScore: number, captureQuality?: CaptureQualityMeta) => {
     if (!employeeUuid) return;
     setSubmitPhase("submitting");
     try {
@@ -70,6 +76,8 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
         liveness_passed:      true,
         liveness_score:       livenessScore,
         consent_acknowledged: consentAcknowledgedRef.current,
+        capture_frame_count:  captureQuality?.frameCount,
+        capture_variance:     captureQuality?.variance,
       });
       stopCaptureRef.current();
       setRegisteredRequest(res.data.data);
@@ -84,11 +92,18 @@ export function useHRFaceCapture(employeeUuid: string | null): UseHRFaceCapture 
     }
   }, [employeeUuid]);
 
-  const handleCaptured = useCallback((descriptor: number[], livenessScore: number) => {
-    void submit(descriptor, livenessScore);
-  }, [submit]);
+  const handleCaptured = useCallback(
+    (descriptor: number[], livenessScore: number, _captureSessionId: string, captureQuality?: CaptureQualityMeta) => {
+      void submit(descriptor, livenessScore, captureQuality);
+    },
+    [submit],
+  );
 
-  const capture = useFaceLivenessCapture({ onCaptured: handleCaptured });
+  const capture = useFaceLivenessCapture({
+    onCaptured: handleCaptured,
+    framesToCapture: REGISTRATION_FRAMES_TO_CAPTURE,
+    normalizeLighting: REGISTRATION_NORMALIZE_LIGHTING,
+  });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
   const start = useCallback((consentAcknowledged: boolean) => {

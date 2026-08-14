@@ -141,6 +141,13 @@ CLOUDINARY_STORAGE = {
     'SECURE':                 True,   # always serve over HTTPS
     'DELETE_CLOUDINARY_MEDIA': True,  # delete from Cloudinary when model instance is deleted
 }
+
+# ─── Sarvam AI (voice_commands LLM fallback + Hindi STT) ─────────────────────
+# Server-side only — never exposed to the frontend, never a NEXT_PUBLIC_ var.
+# Empty by default so a missing key fails soft (see apps.voice_commands.
+# sarvam_client) rather than crashing settings import in environments that
+# haven't added it yet.
+SARVAM_API_KEY = env('SARVAM_API_KEY', default='')
 # RawMediaCloudinaryStorage handles PDFs, DOCs, XLS, images — every file type
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
 

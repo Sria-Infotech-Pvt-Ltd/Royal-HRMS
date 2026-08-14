@@ -14,11 +14,14 @@ of which of the ~17 intents it resolves to:
     on, whether or not a "did you mean" candidate was offered (see
     conversation.py's handle_transcript).
 
-No ML/anomaly-detection model — a straightforward count-based threshold,
-consistent with this project's no-AI constraint. AuditLog rows (not a cache
-counter) are the source of truth for the count, so it survives process
-restarts and naturally matches whatever the human reviewing /dashboard/audit
-would see if they counted the same rows by hand.
+No ML/anomaly-detection model for the anomaly check itself — a straightforward
+count-based threshold. (Separately, voice_commands/llm_fallback.py now does
+call out to an LLM, but only to classify an already-failed transcript into an
+existing intent — this anomaly counter has nothing to do with that and stays
+a plain threshold.) AuditLog rows (not a cache counter) are the source of
+truth for the count, so it survives process restarts and naturally matches
+whatever the human reviewing /dashboard/audit would see if they counted the
+same rows by hand.
 """
 from __future__ import annotations
 
@@ -37,6 +40,13 @@ MODULE = 'voice_commands'
 ACTION_PERMISSION_DENIED = 'voice_permission_denied'
 ACTION_NO_MATCH = 'voice_no_match'
 ACTION_UNUSUAL_ACTIVITY = 'voice_unusual_activity'
+# Recorded by llm_fallback.py on every attempt at the sarvam-105b classifier —
+# both a resolved intent and a rejected/no_match outcome — so actual Sarvam
+# usage is visible in /dashboard/audit without waiting on a bill. Distinct
+# from ACTION_NO_MATCH: that one fires once per transcript regardless of
+# whether the LLM tier is even reachable; this one only fires when it
+# actually ran.
+ACTION_LLM_FALLBACK_USED = 'voice_llm_fallback_used'
 
 # Straightforward count-based threshold: this many permission-denial/no-match
 # events from the SAME user inside this window is unusual enough to flag for
@@ -61,6 +71,21 @@ def log_no_match(
 ) -> None:
     _record(request, ACTION_NO_MATCH, {
         'transcript': transcript, 'confidence': confidence, 'candidate_intent': candidate_intent,
+    })
+
+
+def log_llm_fallback_used(request, transcript: str, resolved_intent: Optional[str]) -> None:
+    """
+    Called from llm_fallback.py.try_llm_fallback on every attempt at the
+    sarvam-105b classifier. resolved_intent is the intent it settled on, or
+    None when the call failed outright (no key configured, network/timeout
+    error, malformed response) or the model itself answered no_match/an
+    intent outside the allow-list — kept in one action type rather than two
+    so /dashboard/audit shows total Sarvam usage in one place; the changes
+    payload's resolved_intent field distinguishes a hit from a miss.
+    """
+    _record(request, ACTION_LLM_FALLBACK_USED, {
+        'transcript': transcript, 'resolved_intent': resolved_intent,
     })
 
 

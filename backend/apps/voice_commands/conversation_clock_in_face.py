@@ -121,8 +121,13 @@ def continue_voice_clock_punch(
     if not face_embedding:
         # Frontend never resubmits without a descriptor in the normal flow —
         # a defensive re-ask rather than a hard failure or wasted attempt.
+        # result must carry awaiting_face_proof (not None) — see the retry
+        # branch below for why.
         set_pending(request.user.id, intent, slots)
-        return _payload(intent, None, None, _TAKING_FACIAL_PROOF_MESSAGE, awaiting_input=True, conversational=True)
+        return _payload(
+            intent, None, {'awaiting_face_proof': True}, _TAKING_FACIAL_PROOF_MESSAGE,
+            awaiting_input=True, conversational=True,
+        )
 
     outcome = FaceVerificationService.verify_for_punch(
         request.user, 'voice', face_embedding,
@@ -153,7 +158,17 @@ def continue_voice_clock_punch(
 
     slots['attempt'] = attempt
     set_pending(request.user.id, intent, slots)
-    return _payload(intent, None, None, _RETRY_MESSAGE, awaiting_input=True, conversational=True)
+    # result must carry awaiting_face_proof=True, not None — useVoiceCommand.ts's
+    # isAwaitingFaceProof() keys on this to decide whether to reopen
+    # FaceVerificationModal for the retry. Passing None here (as this line
+    # used to) left awaiting_input=True but awaitingFaceProof computing to
+    # false on the frontend — the camera silently never reopened for a
+    # retry, surfaced when the 2026-08-13 step-up/threshold fixes produced
+    # the first genuine voice mismatch this flow had ever hit in practice.
+    return _payload(
+        intent, None, {'awaiting_face_proof': True}, _RETRY_MESSAGE,
+        awaiting_input=True, conversational=True,
+    )
 
 
 def _finish_punch(

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -42,7 +43,7 @@ from apps.attendance.serializers_face_registration import (
     FaceRegistrationReadSerializer,
     FaceRegistrationSubmitSerializer,
 )
-from apps.attendance.services_face_matching import is_face_verification_mandatory
+from apps.attendance.services_face_matching import activate_registration, is_face_verification_mandatory
 
 _FEATURE_DISABLED_MESSAGE = (
     'Face ID verification is currently disabled. Contact your administrator to use this feature.'
@@ -95,6 +96,8 @@ class FaceRegistrationSubmitView(APIView):
             liveness_score=data.get('liveness_score'),
             consent_given_at=timezone.now(),
             consent_text_version=FACE_CONSENT_TEXT_VERSION,
+            capture_frame_count=data.get('capture_frame_count'),
+            capture_variance=data.get('capture_variance'),
         )
         logger.info('Face registration submitted by %s', request.user.email)
 
@@ -198,7 +201,11 @@ class FaceRegistrationReviewView(APIView):
         face_request.approved_at = timezone.now()
         if data.get('notes'):
             face_request.notes = data['notes']
-        face_request.save(update_fields=['status', 'approved_by', 'approved_at', 'notes', 'updated_at'])
+
+        with transaction.atomic():
+            face_request.save(update_fields=['status', 'approved_by', 'approved_at', 'notes', 'updated_at'])
+            if data['status'] == FaceRegistrationRequest.STATUS_APPROVED:
+                activate_registration(face_request)
 
         logger.info('Face registration %s %s by %s', pk, data['status'], request.user.email)
 

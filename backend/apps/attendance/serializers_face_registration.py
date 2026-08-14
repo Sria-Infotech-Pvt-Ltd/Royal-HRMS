@@ -32,7 +32,23 @@ def _validate_consent_acknowledged(value: bool) -> bool:
     return value
 
 
-class FaceRegistrationSubmitSerializer(serializers.Serializer):
+class _CaptureQualityFieldsMixin(serializers.Serializer):
+    """
+    Optional multi-frame capture quality metadata (see frontend lib/faceApi/
+    multiFrameCapture.ts) — shared by both submit paths below. Both fields
+    are optional and independent of face_embedding's own validation: a
+    caller that hasn't adopted the multi-frame pipeline yet (or a future
+    single-shot path) simply omits them, and the stored registration ends
+    up with capture_frame_count/capture_variance = null, same as every
+    pre-existing row. Never trusted for anything security-relevant on their
+    own — they're audit/reporting metadata about HOW face_embedding was
+    produced, not a substitute for validating face_embedding itself.
+    """
+    capture_frame_count = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1)
+    capture_variance    = serializers.FloatField(required=False, allow_null=True, default=None, min_value=0)
+
+
+class FaceRegistrationSubmitSerializer(_CaptureQualityFieldsMixin):
     """
     POST /api/attendance/face-registration/
 
@@ -49,7 +65,7 @@ class FaceRegistrationSubmitSerializer(serializers.Serializer):
     consent_acknowledged = serializers.BooleanField(validators=[_validate_consent_acknowledged])
 
 
-class FaceRegistrationHRRegisterSerializer(serializers.Serializer):
+class FaceRegistrationHRRegisterSerializer(_CaptureQualityFieldsMixin):
     """
     POST /api/attendance/face-registration/register/
 
@@ -95,6 +111,7 @@ class FaceRegistrationReadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'employee_name', 'employee_email',
             'liveness_passed', 'liveness_score', 'embedding_model_version',
+            'capture_frame_count', 'capture_variance',
             'status', 'approved_by_name', 'approved_at', 'notes', 'created_at',
         ]
 

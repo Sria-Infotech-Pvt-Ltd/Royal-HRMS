@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
+import { captureAndTranscribeViaSarvam } from "@/lib/voiceSttFallback";
 import type { VoiceCommandStatus, VoiceParseResult } from "@/types/voice";
 
 type NormalisedError = { message?: string };
@@ -41,6 +42,13 @@ const TTS_END_BUFFER_MS = 400;
 // place that needs to change (plus however that language gets selected).
 const VOICE_LANG = "en";
 const VOICE_LOCALE = "en-US";
+
+// Mirrors backend apps/voice_commands/matcher.py's NO_MATCH_INTENT verbatim —
+// the one outcome that triggers the Sarvam-STT retry below, since it's the
+// single value the rule engine AND the sarvam-105b LLM fallback tier both
+// have to agree on before either gives up (see conversation.py's
+// handle_transcript).
+const NO_MATCH_INTENT = "no_match";
 
 // The two intents that ever hit PunchService.record_punch() server-side —
 // only these can come back with the geofencing rejection below.
@@ -185,6 +193,16 @@ export interface VoiceConversationState {
   // FaceVerificationModal on top of this panel when it sees this flip true,
   // and submitFaceProof (below) is how a captured descriptor gets back in.
   awaitingFaceProof: boolean;
+  // Bumped every time awaitingFaceProof turns true, including a RETRY turn
+  // right after a mismatch — VoiceCommandButton keys FaceVerificationModal on
+  // this so React fully remounts it (re-running its start-the-camera effect)
+  // even though awaitingFaceProof itself goes true -> true across a retry
+  // with no intervening false, which on its own wouldn't re-trigger a mount
+  // effect keyed on isOpen alone. Without this, a retry after a mismatch
+  // left the camera never reopening — surfaced once the 2026-08-13
+  // matching fixes produced the first genuine voice mismatch this flow had
+  // ever hit in practice.
+  faceProofTurn: number;
 }
 
 function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
@@ -211,6 +229,8 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   // replaced it, closing the panel almost immediately instead of waiting for
   // the new utterance to actually finish.
   const utteranceTokenRef = useRef(0);
+  // See VoiceConversationState.faceProofTurn's own docstring.
+  const faceProofTurnRef = useRef(0);
 
   const isSupported = getSpeechRecognitionConstructor() !== null;
   // Same condition VoiceCommandButton used to compute locally — centralized
@@ -315,7 +335,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   );
 
   const submitTranscript = useCallback(
-    async (transcript: string) => {
+    async (transcript: string, sourceIsVoice: boolean = false) => {
       setStatus("processing");
       clearAutoCloseTimer();
 
@@ -341,11 +361,16 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         setConversation({
           transcript, message: "", phase: "transcript",
           conversational: false, awaitingInput: false, resultStatus: null, awaitingFaceProof: false,
+          faceProofTurn: faceProofTurnRef.current,
         });
       }
 
       try {
         let outcome = await postVoiceParse(transcript, VOICE_LANG);
+        // What the result panel actually shows/acts on — starts as the raw
+        // browser transcript, replaced below only if the Sarvam-STT retry
+        // fires and comes back with something usable.
+        let displayTranscript = transcript;
 
         // Voice never collects GPS up front (unlike the manual ClockWidget,
         // which only asks when mode is office) — so an office-mode clock_in/
@@ -359,6 +384,26 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             outcome = { ...outcome, message: located.errorMessage };
           } else {
             outcome = await postVoiceParse(transcript, VOICE_LANG, located);
+          }
+        }
+
+        // Hindi-STT retry: only for a transcript that actually came from the
+        // mic (a typed answer is already exactly what the user meant — a
+        // surprise mic capture "retrying" it would help nothing) and only on
+        // a genuine, final no-match, meaning both the rule engine and the
+        // sarvam-105b classification tier already declined it server-side
+        // (see backend conversation.py's handle_transcript). The browser's
+        // Web Speech API is unreliable for Hindi; this is the one silent
+        // recovery attempt for "that transcript might have been garbled
+        // Hindi, not just an unmatched English phrase" before showing the
+        // normal failure. Exactly one retry — if Sarvam can't help either,
+        // or the resubmitted transcript still no-matches, everything below
+        // behaves exactly as if this retry had never been attempted.
+        if (sourceIsVoice && !outcome.success && outcome.intent === NO_MATCH_INTENT) {
+          const sarvamTranscript = await captureAndTranscribeViaSarvam();
+          if (sarvamTranscript) {
+            displayTranscript = sarvamTranscript;
+            outcome = await postVoiceParse(sarvamTranscript, VOICE_LANG);
           }
         }
 
@@ -387,10 +432,12 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           showToast(message, isSuccess ? "success" : "error");
           speak(spokenText);
         } else {
+          const awaitingFaceProof = awaitingInput && isAwaitingFaceProof(outcome.result);
+          if (awaitingFaceProof) faceProofTurnRef.current += 1;
           setConversation({
-            transcript, message, phase: "result", conversational, awaitingInput,
+            transcript: displayTranscript, message, phase: "result", conversational, awaitingInput,
             resultStatus: isSuccess ? "success" : "error",
-            awaitingFaceProof: awaitingInput && isAwaitingFaceProof(outcome.result),
+            awaitingFaceProof, faceProofTurn: faceProofTurnRef.current,
           });
           if (awaitingInput) {
             // Still mid-dialogue — the question is spoken, but the panel
@@ -414,6 +461,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           setConversation({
             transcript, message, phase: "result",
             conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
+            faceProofTurn: faceProofTurnRef.current,
           });
           speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS);
         }
@@ -424,6 +472,32 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     },
     [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled]
   );
+
+  // Browser SpeechRecognition is locked to VOICE_LOCALE ("en-US") — genuine
+  // non-English speech (Hindi included) often isn't garbled-transcribed into
+  // SOME (wrong) English text the way a near-miss English phrase would be;
+  // Chrome commonly recognizes it as no speech at all and fires a "no-speech"
+  // error, or ends with an empty final transcript, before submitTranscript is
+  // ever called. submitTranscript's own Sarvam-STT retry (the NO_MATCH_INTENT
+  // branch above) can only fire on a transcript that actually round-tripped
+  // through /voice/parse/ — it never gets a chance if nothing was ever
+  // submitted. This is the fallback for THAT case: browser recognition came
+  // back with literally nothing usable, so try Sarvam Saaras directly rather
+  // than silently giving up. sourceIsVoice=false on the resubmit — this
+  // already used the one Sarvam attempt; a no_match on its result shouldn't
+  // chain into opening the mic a third time.
+  const attemptSilentSpeechFallback = useCallback(async () => {
+    setStatus("processing");
+    showToast("Didn't catch that — trying once more…", "success");
+    const sarvamTranscript = await captureAndTranscribeViaSarvam();
+    if (sarvamTranscript) {
+      await submitTranscript(sarvamTranscript, false);
+    } else {
+      showToast("Voice recognition error. Please try again.", "error");
+      setStatus("idle");
+      setInterimTranscript("");
+    }
+  }, [showToast, submitTranscript]);
 
   // Second+ turn of the clock_in/clock_out facial-proof dialogue —
   // VoiceCommandButton calls this once FaceVerificationModal produces a
@@ -451,10 +525,12 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           window.dispatchEvent(new CustomEvent("attendance:updated"));
         }
 
+        const awaitingFaceProof = awaitingInput && isAwaitingFaceProof(outcome.result);
+        if (awaitingFaceProof) faceProofTurnRef.current += 1;
         setConversation({
           transcript, message, phase: "result", conversational, awaitingInput,
           resultStatus: isSuccess ? "success" : "error",
-          awaitingFaceProof: awaitingInput && isAwaitingFaceProof(outcome.result),
+          awaitingFaceProof, faceProofTurn: faceProofTurnRef.current,
         });
         if (awaitingInput) {
           speak(spokenText);
@@ -467,6 +543,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         setConversation({
           transcript, message, phase: "result",
           conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
+          faceProofTurn: faceProofTurnRef.current,
         });
         speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS);
       } finally {
@@ -521,7 +598,16 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       recognition.onerror = (event) => {
         clearSilenceTimer();
         recognitionRef.current = null;
-        if (event.error === "no-speech" || event.error === "aborted") {
+        if (event.error === "no-speech") {
+          // Browser detected literally no en-US-recognizable speech — the
+          // common case for genuine non-English audio (see
+          // attemptSilentSpeechFallback's own comment). "aborted" (below)
+          // stays a silent no-op: that's the user's own deliberate stop, not
+          // a failed recognition worth retrying.
+          void attemptSilentSpeechFallback();
+          return;
+        }
+        if (event.error === "aborted") {
           setStatus("idle");
           setInterimTranscript("");
           return;
@@ -536,10 +622,16 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         recognitionRef.current = null;
         const transcript = (transcriptRef.current.final || transcriptRef.current.interim).trim();
         if (transcript) {
-          submitTranscript(transcript);
+          // sourceIsVoice=true — this transcript came from the mic, so a
+          // final no-match is eligible for the Sarvam-STT retry (see
+          // submitTranscript's own comment on that branch).
+          submitTranscript(transcript, true);
         } else {
-          setStatus("idle");
-          setInterimTranscript("");
+          // Recognition ended (e.g. the silence timeout fired) with nothing
+          // usable ever recognized — same non-English-speech case onerror's
+          // "no-speech" branch handles, just surfacing through onend instead
+          // of onerror depending on the browser.
+          void attemptSilentSpeechFallback();
         }
       };
 
@@ -566,7 +658,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     } else {
       beginRecognition();
     }
-  }, [showToast, submitTranscript, resetSilenceTimer, clearSilenceTimer]);
+  }, [showToast, submitTranscript, attemptSilentSpeechFallback, resetSilenceTimer, clearSilenceTimer]);
 
   const stopListening = useCallback(() => {
     // Cancels a still-pending deferred start (see startListening) as well as

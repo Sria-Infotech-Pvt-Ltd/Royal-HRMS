@@ -177,6 +177,11 @@ class FacialProofTurnTests(SimpleTestCase):
 
         self.assertTrue(result['awaiting_input'])
         self.assertTrue(result['success'])  # mid-dialogue retry, not a terminal failure
+        # result must carry awaiting_face_proof=True (not None) — this is what
+        # useVoiceCommand.ts's isAwaitingFaceProof() keys on to reopen
+        # FaceVerificationModal for the retry; a None result here left the
+        # camera never reopening after a mismatch (found 2026-08-13).
+        self.assertTrue(result['result']['awaiting_face_proof'])
         pending = self.store.get(42)
         self.assertEqual(pending['slots']['attempt'], 1)
 
@@ -208,5 +213,6 @@ class FacialProofTurnTests(SimpleTestCase):
         result = handle_transcript(self.request, 'clock in')
 
         self.assertTrue(result['awaiting_input'])
+        self.assertTrue(result['result']['awaiting_face_proof'])
         pending = self.store.get(42)
         self.assertEqual(pending['slots']['attempt'], 0)

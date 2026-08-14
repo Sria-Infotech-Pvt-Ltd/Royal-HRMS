@@ -7,8 +7,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { useFaceLivenessCapture, type LivenessCapturePhase } from "@/hooks/useFaceLivenessCapture";
+import { useFaceLivenessCapture, type LivenessCapturePhase, type CaptureQualityMeta } from "@/hooks/useFaceLivenessCapture";
 import type { FaceRegistrationRequest, FaceRegistrationSubmitPayload } from "@/types/faceRegistration";
+
+// A registered face is a long-lived reference every future clock-in gets
+// compared against — worth a few extra seconds up front to get right.
+// Punch-time verification (FaceVerificationModal) shares the same
+// normalizeLighting: true and the same per-frame quality gate, just with a
+// lower framesToCapture (3) so a routine daily clock-in stays quicker than
+// enrollment — see useFaceLivenessCapture.ts's docstring on framesToCapture
+// for the full reasoning.
+const REGISTRATION_FRAMES_TO_CAPTURE = 4;
+const REGISTRATION_NORMALIZE_LIGHTING = true;
 
 export type CapturePhase = LivenessCapturePhase | "submitting" | "submitted";
 
@@ -55,16 +65,23 @@ export function useFaceRegistrationCapture(): UseFaceRegistrationCapture {
     }
   }, []);
 
-  const handleCaptured = useCallback((descriptor: number[], livenessScore: number) => {
-    void submit({
-      face_embedding: descriptor,
-      liveness_passed: true,
-      liveness_score: livenessScore,
-      consent_acknowledged: consentAcknowledgedRef.current,
-    });
-  }, [submit]);
+  const handleCaptured = useCallback(
+    (descriptor: number[], livenessScore: number, _captureSessionId: string, captureQuality?: CaptureQualityMeta) => {
+      void submit({
+        face_embedding: descriptor, liveness_passed: true, liveness_score: livenessScore,
+        consent_acknowledged: consentAcknowledgedRef.current,
+        capture_frame_count: captureQuality?.frameCount,
+        capture_variance: captureQuality?.variance,
+      });
+    },
+    [submit],
+  );
 
-  const capture = useFaceLivenessCapture({ onCaptured: handleCaptured });
+  const capture = useFaceLivenessCapture({
+    onCaptured: handleCaptured,
+    framesToCapture: REGISTRATION_FRAMES_TO_CAPTURE,
+    normalizeLighting: REGISTRATION_NORMALIZE_LIGHTING,
+  });
   useEffect(() => { stopCaptureRef.current = capture.stop; }, [capture.stop]);
 
   const start = useCallback((consentAcknowledged: boolean) => {
