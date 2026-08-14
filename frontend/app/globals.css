@@ -466,6 +466,28 @@ textarea.field-input {
   border-color: var(--error);
 }
 
+/* Read-only display value — used instead of a disabled <input> wherever a
+   field is shown but never editable (system-managed data, HR-locked data).
+   Matches .field-input's box height so the two still line up cleanly inside
+   a shared .form-row grid, but the flat tinted fill (no border, no focus
+   ring) reads immediately as "display", not "editable". */
+.field-static {
+  width: 100%;
+  min-height: 36px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-low);
+  color: var(--on-bg);
+  font-size: 13px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+.field-static.is-empty {
+  color: var(--on-variant);
+}
+
 .field-error-msg {
   font-size: 11px;
   color: var(--error);

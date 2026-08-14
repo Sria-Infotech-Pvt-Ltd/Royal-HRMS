@@ -132,17 +132,32 @@ function val(v: string | number | null | undefined): string {
 }
 
 function ReadField({ label, value }: { label: string; value: string | number | null | undefined }) {
+  const display = val(value);
   return (
     <div className="field-group">
       <label className="field-label">{label}</label>
-      <input className="field-input" value={val(value)} disabled suppressHydrationWarning />
+      <div className={`field-static${display === "—" ? " is-empty" : ""}`}>{display}</div>
     </div>
   );
 }
 
+type TabId = "personal" | "work" | "education" | "bank" | "documents" | "face" | "security";
+
+const TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: "personal",   label: "Personal",     icon: "ti-user-circle"      },
+  { id: "work",       label: "Work Info",    icon: "ti-briefcase"        },
+  { id: "education",  label: "Education",    icon: "ti-school"          },
+  { id: "bank",        label: "Bank Details", icon: "ti-building-bank"   },
+  { id: "documents",  label: "Documents",    icon: "ti-file-description" },
+  { id: "face",       label: "Face ID",      icon: "ti-face-id"          },
+  { id: "security",   label: "Security",     icon: "ti-lock"             },
+];
+
 export default function ProfileClient({ session }: { session: SessionPayload }) {
   const { data: profile, loading, error: profileError } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
+
+  const [active, setActive] = useState<TabId>("personal");
 
   const [form,   setForm]   = useState<EditableFields>(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -240,14 +255,16 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           <div className="page-title">My Profile</div>
           <div className="page-sub">View and update your personal information</div>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving || loading} suppressHydrationWarning>
-            {saving
-              ? <><i className="ti ti-loader-2 spin" /> Saving…</>
-              : <><i className="ti ti-device-floppy" /> Save Changes</>
-            }
-          </button>
-        </div>
+        {active === "personal" && (
+          <div className="page-actions">
+            <button className="btn btn-filled" onClick={handleSave} disabled={saving || loading} suppressHydrationWarning>
+              {saving
+                ? <><i className="ti ti-loader-2 spin" /> Saving…</>
+                : <><i className="ti ti-device-floppy" /> Save Changes</>
+              }
+            </button>
+          </div>
+        )}
       </div>
 
       {profileError && (
@@ -328,6 +345,20 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
         </div>
       </div>
 
+      <div className="tabs">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            className={`tab${active === tab.id ? " active" : ""}`}
+            onClick={() => setActive(tab.id)}
+            suppressHydrationWarning
+          >
+            <i className={`ti ${tab.icon}`} style={{ marginRight: 5 }} />{tab.label}
+          </button>
+        ))}
+      </div>
+
+      {active === "personal" && (
       <div className="grid-2">
 
         {/* ─── LEFT COLUMN ─── */}
@@ -382,45 +413,53 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             </div>
           </div>
 
-          {/* Education & Experience */}
-          <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-school" />Education &amp; Experience</span>
-            </div>
-            <div className="card-body">
-              <div className="form-row cols-2">
-                <ReadField label="Qualification"     value={p?.highest_qualification} />
-                <ReadField label="Institution"       value={p?.institution} />
-              </div>
-              <div className="form-row cols-2">
-                <ReadField label="Year of Passing"   value={p?.year_of_passing} />
-                <ReadField label="Specialization"    value={p?.specialization} />
-              </div>
-              <div className="form-row cols-2">
-                <ReadField label="Experience (yrs)"  value={p?.total_experience_years} />
-                <ReadField label="Previous Employer" value={p?.previous_employer} />
-              </div>
-              <div className="form-row cols-2">
-                <ReadField label="Previous Role"     value={p?.previous_designation} />
-                <ReadField label="Leaving Reason"    value={p?.leaving_reason} />
-              </div>
-            </div>
-          </div>
-
-          {/* Change Password */}
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-lock" />Change Password</span>
-            </div>
-            <div className="card-body">
-              <ChangePasswordForm />
-            </div>
-          </div>
         </div>
 
         {/* ─── RIGHT COLUMN ─── */}
         <div>
 
+          {/* Emergency Contact */}
+          <div className="card mb-16">
+            <div className="card-header">
+              <span className="card-title"><i className="ti ti-phone" />Emergency Contact</span>
+            </div>
+            <div className="card-body">
+              <div className="form-row cols-2">
+                <div className="field-group">
+                  <label className="field-label">Name</label>
+                  <input className="field-input" value={form.emergency_name}
+                    onChange={e => field("emergency_name", e.target.value)}
+                    placeholder="Contact name" suppressHydrationWarning />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Relationship</label>
+                  <input className="field-input" value={form.emergency_relationship}
+                    onChange={e => field("emergency_relationship", e.target.value)}
+                    placeholder="e.g. Spouse, Parent" suppressHydrationWarning />
+                </div>
+              </div>
+              <div className="form-row cols-2">
+                <div className="field-group">
+                  <label className="field-label">Phone</label>
+                  <input className="field-input" value={form.emergency_phone}
+                    onChange={e => field("emergency_phone", e.target.value)}
+                    placeholder="+91 98765 43210" suppressHydrationWarning />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Email</label>
+                  <input className="field-input" value={form.emergency_email}
+                    onChange={e => field("emergency_email", e.target.value)}
+                    placeholder="email@example.com" suppressHydrationWarning />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {active === "work" && (
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
           {/* Work Information */}
           <div className="card mb-16">
             <div className="card-header">
@@ -471,73 +510,65 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           </div>
 
           <SeparationCard />
+      </div>
+      )}
 
-          {/* Emergency Contact */}
-          <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-phone" />Emergency Contact</span>
-            </div>
-            <div className="card-body">
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Name</label>
-                  <input className="field-input" value={form.emergency_name}
-                    onChange={e => field("emergency_name", e.target.value)}
-                    placeholder="Contact name" suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Relationship</label>
-                  <input className="field-input" value={form.emergency_relationship}
-                    onChange={e => field("emergency_relationship", e.target.value)}
-                    placeholder="e.g. Spouse, Parent" suppressHydrationWarning />
-                </div>
-              </div>
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Phone</label>
-                  <input className="field-input" value={form.emergency_phone}
-                    onChange={e => field("emergency_phone", e.target.value)}
-                    placeholder="+91 98765 43210" suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input className="field-input" value={form.emergency_email}
-                    onChange={e => field("emergency_email", e.target.value)}
-                    placeholder="email@example.com" suppressHydrationWarning />
-                </div>
-              </div>
-            </div>
+      {active === "education" && (
+      <div className="card mb-16" style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div className="card-header">
+          <span className="card-title"><i className="ti ti-school" />Education &amp; Experience</span>
+        </div>
+        <div className="card-body">
+          <div className="form-row cols-2">
+            <ReadField label="Qualification"     value={p?.highest_qualification} />
+            <ReadField label="Institution"       value={p?.institution} />
           </div>
-
-          {/* Bank Details */}
-          <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-building-bank" />Bank Details</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--on-variant)" }}>
-                <i className="ti ti-lock" style={{ fontSize: 11 }} /> Contact HR to update
-              </div>
-            </div>
-            <div className="card-body">
-              <div className="form-row cols-2">
-                <ReadField label="Bank Name"       value={p?.bank_name} />
-                <ReadField label="Account Type"    value={p?.account_type} />
-              </div>
-              <div className="form-row cols-2">
-                <ReadField label="Account Holder"  value={p?.account_holder_name} />
-                <ReadField label="Account Number"  value={p?.account_number ? `••••${p.account_number.slice(-4)}` : null} />
-              </div>
-              <div className="form-row cols-2">
-                <ReadField label="IFSC Code"       value={p?.ifsc_code} />
-                <ReadField label="Bank Branch"     value={p?.bank_branch_name} />
-              </div>
-            </div>
+          <div className="form-row cols-2">
+            <ReadField label="Year of Passing"   value={p?.year_of_passing} />
+            <ReadField label="Specialization"    value={p?.specialization} />
           </div>
+          <div className="form-row cols-2">
+            <ReadField label="Experience (yrs)"  value={p?.total_experience_years} />
+            <ReadField label="Previous Employer" value={p?.previous_employer} />
+          </div>
+          <div className="form-row cols-2">
+            <ReadField label="Previous Role"     value={p?.previous_designation} />
+            <ReadField label="Leaving Reason"    value={p?.leaving_reason} />
+          </div>
+        </div>
+      </div>
+      )}
 
-          {/* Documents */}
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-file-description" />Documents</span>
-            </div>
+      {active === "bank" && (
+      <div className="card mb-16" style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div className="card-header">
+          <span className="card-title"><i className="ti ti-building-bank" />Bank Details</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--on-variant)" }}>
+            <i className="ti ti-lock" style={{ fontSize: 11 }} /> Contact HR to update
+          </div>
+        </div>
+        <div className="card-body">
+          <div className="form-row cols-2">
+            <ReadField label="Bank Name"       value={p?.bank_name} />
+            <ReadField label="Account Type"    value={p?.account_type} />
+          </div>
+          <div className="form-row cols-2">
+            <ReadField label="Account Holder"  value={p?.account_holder_name} />
+            <ReadField label="Account Number"  value={p?.account_number ? `••••${p.account_number.slice(-4)}` : null} />
+          </div>
+          <div className="form-row cols-2">
+            <ReadField label="IFSC Code"       value={p?.ifsc_code} />
+            <ReadField label="Bank Branch"     value={p?.bank_branch_name} />
+          </div>
+        </div>
+      </div>
+      )}
+
+      {active === "documents" && (
+      <div className="card" style={{ maxWidth: 700, margin: "0 auto" }}>
+        <div className="card-header">
+          <span className="card-title"><i className="ti ti-file-description" />Documents</span>
+        </div>
             <div className="card-body" style={{ padding: 0 }}>
               {docEntries.map((doc, i) => {
                 const uploaded  = !!doc.fileUrl;
@@ -596,13 +627,14 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                 );
               })}
             </div>
-          </div>
+      </div>
+      )}
 
-          {/* Face Registration */}
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-face-id" />Face Registration</span>
-            </div>
+      {active === "face" && (
+      <div className="card" style={{ maxWidth: 700, margin: "0 auto" }}>
+        <div className="card-header">
+          <span className="card-title"><i className="ti ti-face-id" />Face Registration</span>
+        </div>
             <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
               <i className="ti ti-face-id" style={{ fontSize: 22, color: "var(--on-variant)" }} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -652,9 +684,19 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                 </button>
               )}
             </div>
-          </div>
+      </div>
+      )}
 
+      {active === "security" && (
+      <div className="card" style={{ maxWidth: 500, margin: "0 auto" }}>
+        <div className="card-header">
+          <span className="card-title"><i className="ti ti-lock" />Change Password</span>
         </div>
+        <div className="card-body">
+          <ChangePasswordForm />
+        </div>
+      </div>
+      )}
 
         {showFaceRegistration && (
           <FaceRegistrationModal mode="update" onClose={() => { setShowFaceRegistration(false); refetchFaceStatus(); }} />
@@ -668,7 +710,6 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             onRemoved={() => { setPhotoOverride(null); setShowPhotoModal(false); }}
           />
         )}
-      </div>
     </div>
   );
 }
