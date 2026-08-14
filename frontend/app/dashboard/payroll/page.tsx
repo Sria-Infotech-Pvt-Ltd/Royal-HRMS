@@ -148,8 +148,9 @@ export default function PayrollPage() {
 
           {active === "dashboard" && (
             <>
-              {/* Admin sees all-branch status table above the cycle dashboard */}
-              {isAdmin && (
+              {/* Admin sees every branch; branch-scoped users (branch_admin, HR) see only
+                  their own branch — the backend scopes the response accordingly. */}
+              {(isAdmin || userBranch) && (
                 <BranchStatusOverview
                   onRunBranch={openForBranch}
                   onResumeBranch={openResume}

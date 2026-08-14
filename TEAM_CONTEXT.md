@@ -3519,3 +3519,29 @@ Investigated a report that HR (tested against the real `rithwikaveera@gmail.com`
 ### Nothing committed
 
 All of today's changes (the earlier `_has_perm`/migration/test-bug work plus this audit-log work) are still local working-tree changes — nothing pushed from this session yet.
+
+---
+
+## Session Log — 2026-08-13
+**Author: Swetha**
+
+### Bug Fixes Shipped — Payroll
+
+**1. Branch Payroll Status widget showed every branch to branch_admin, not just their own**
+
+Two separate, stacked causes — fixing the code alone did not fix the reporter's actual account, which led to finding the second one.
+
+- Code bug: `BranchPayrollStatusView.get()` (`apps/payroll/views/cycles.py`) was all-or-nothing — global admin (`_is_admin`) saw every branch, anyone else got a flat 403. No branch-scoped path existed, unlike `PayrollCycleListView` elsewhere in the same file. Fixed to mirror that existing pattern: non-admins now get only their own branch via the same `_resolve_user_branch()` helper, or a 400 if unassigned. Frontend gate in `app/dashboard/payroll/page.tsx` was `isAdmin && <BranchStatusOverview/>` (`isAdmin = user.is_superuser`) — changed to `isAdmin || userBranch` so branch-scoped users see the widget populated with just their branch instead of not seeing it at all.
+- Data bug (the actual reason the reporter's own account still saw all branches after the code fix): the `branch_admin` role in the live DB had the `settings.edit` permission attached — granted 2026-08-10 06:46 UTC via Settings → Roles in the UI, not by any migration. `settings.edit` is the codebase-wide "treat as global admin, bypass all branch scoping" flag (`_is_admin()`, and the equivalent checks in leave/expenses/attendance/recruitment/accounts) — the exact permission migration `0052_seed_branch_admin_role.py` explicitly documents withholding for this reason. Confirmed via direct DB query: both `branch_admin` accounts had `is_superuser=False`, so it was specifically this one over-granted permission, not a superuser flag. Fixed with a new migration, `accounts/0070_revoke_settings_edit_from_branch_admin.py` (reversible, same pattern as `0045`/`0053`) — **already applied** against the live Neon DB (`python manage.py migrate accounts 0070`), confirmed `branch_admin` no longer has `settings.edit` and still has `payroll.view`.
+- Files: `backend/apps/payroll/views/cycles.py`, `frontend/app/dashboard/payroll/page.tsx`, `backend/apps/accounts/migrations/0070_revoke_settings_edit_from_branch_admin.py` (migration applied; the two code files are still uncommitted, not yet deployed to `royalhrms.nxsys.in`).
+
+**2. Salary Setup — Employee Salary Configuration table showed every employee as "Not set" despite CTC being configured**
+
+Root cause was a field-shape mismatch, not a scoping issue (branch scoping was checked first and ruled out — all 11 active configs in the live data already belonged to the same branch as the employee list, so that theory didn't explain a 0/12 match). Confirmed by comparing the actual JSON shapes: `/employees/` (`_employee_dict()` in `apps/accounts/views.py`) returns `id` as the **employee code** (e.g. `RSS000200`), with the real UUID sent separately as `uuid`. `/payroll/employee-salary/` returns `employee` as the actual **UUID**. `SalarySetupTab.tsx` built its lookup map keyed by UUID (`c.employee`) but looked it up with `e.id` — comparing a UUID against an employee-code string, which can never match, for any employee, ever. Fixed by adding `uuid` to the frontend's local `Employee` interface and switching all the CTC-matching lookups (table render, edit-modal prefill, assign-CTC POST payload) from `.id` to `.uuid`. Verified against live data: UUID-based matching now correctly finds 11/12 matched, 1 unmatched — consistent with the "CTC Configured: 11 / CTC Missing: 1" stat cards that were already correct (computed independently of the broken table).
+
+- Also fixed, found while in the same file: `EmployeeSalaryConfigListView`/`Detail`/`History` (`apps/payroll/views/employee_salary.py`) had **zero** branch scoping — any branch_admin/HR with `payroll.view`/`payroll.edit` could see or edit another branch's employee CTC by pk, unlike every other payroll list/detail view. Added the same `_is_admin()` / `request.user.branch` check (imported `_is_admin` from `cycles.py`) to list, detail get/put, history get, and the assign-CTC post.
+- Files: `frontend/app/dashboard/payroll/_components/SalarySetupTab.tsx`, `backend/apps/payroll/views/employee_salary.py`. Both still uncommitted.
+
+### Nothing committed
+
+Both fixes above (4 files + 1 already-applied migration) are local working-tree changes on branch `separation`, not yet pushed. The `0070` migration is the one exception — it's already live against the shared Neon DB regardless of git state, since a role-permission migration takes effect on `migrate`, not on deploy.
