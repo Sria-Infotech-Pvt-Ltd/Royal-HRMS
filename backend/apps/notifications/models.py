@@ -68,3 +68,29 @@ class Notification(models.Model):
 
     def __str__(self) -> str:
         return f'{self.title} → {self.user_id}'
+
+
+class NotificationSettings(models.Model):
+    """Per-user opt-in/out toggles for each notification category. A missing
+    row (no settings saved yet) means every category defaults to enabled —
+    see `apps.notifications.signals._category_enabled`."""
+    id                     = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user                   = models.OneToOneField(
+        'accounts.User', on_delete=models.CASCADE, related_name='notification_settings',
+    )
+    is_leave_enabled       = models.BooleanField(default=True)
+    is_expense_enabled     = models.BooleanField(default=True)
+    is_separation_enabled  = models.BooleanField(default=True)
+    is_payroll_enabled     = models.BooleanField(default=True)
+    is_approval_enabled    = models.BooleanField(default=True)
+    is_document_enabled    = models.BooleanField(default=True)
+    is_attendance_enabled  = models.BooleanField(default=True)
+    is_system_enabled      = models.BooleanField(default=True)
+    created_at             = models.DateTimeField(auto_now_add=True)
+    updated_at             = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'notification_settings'
+
+    def __str__(self) -> str:
+        return f'NotificationSettings → {self.user_id}'

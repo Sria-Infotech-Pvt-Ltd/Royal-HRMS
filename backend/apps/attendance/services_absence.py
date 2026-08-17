@@ -135,6 +135,7 @@ def _alert_sent_today(employee, today: date) -> bool:
 def _fire_alert(employee, consecutive_days: int, notify_whom: str) -> None:
     """Create one Notification per configured recipient (manager, HR, or both)."""
     from apps.notifications.models import Notification
+    from apps.notifications.signals import _category_enabled
     message = (
         f'{employee.full_name} has been absent for {consecutive_days} consecutive '
         'working day(s) without an approved leave.'
@@ -150,6 +151,8 @@ def _fire_alert(employee, consecutive_days: int, notify_whom: str) -> None:
             recipients.append(hr)
 
     for recipient in recipients:
+        if not _category_enabled(recipient, 'attendance'):
+            continue
         Notification.objects.create(
             user=recipient,
             title='Absence Alert',

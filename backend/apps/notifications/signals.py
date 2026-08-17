@@ -20,11 +20,47 @@ def _leave_display(leave_type: str) -> str:
     return _LEAVE_LABELS.get(leave_type, leave_type.replace('_', ' ').title())
 
 
+# Maps a Notification.module value to the NotificationSettings category it's
+# gated by, when the recipient is the subject of the event (e.g. their own
+# leave request). Approver-facing notifications ("this needs your approval")
+# pass category='approval' explicitly at the call site instead, since the
+# same module/notification_type is reused for both the subject and the
+# approver today.
+_MODULE_DEFAULT_CATEGORY = {
+    'leave':          'leave',
+    'attendance':     'attendance',
+    'regularization': 'attendance',
+    'permission':     'attendance',
+}
+
+
+def _category_enabled(user, category: str | None) -> bool:
+    """True if `user` has this notification category enabled. Categories with
+    no mapping (e.g. birthday, promotion, announcement) are never gated —
+    they fall through as always-enabled. A user with no NotificationSettings
+    row yet also defaults to enabled, matching the model's field defaults."""
+    if not category:
+        return True
+    try:
+        from .models import NotificationSettings
+        field = f'is_{category}_enabled'
+        settings_row = NotificationSettings.objects.filter(user=user).only(field).first()
+        if settings_row is None:
+            return True
+        return getattr(settings_row, field)
+    except Exception:
+        return True
+
+
 def _notify(user, title: str, message: str, notification_type: str,
-            module: str, reference_id: str = '', created_by=None) -> None:
+            module: str, reference_id: str = '', created_by=None,
+            category: str | None = None) -> None:
     """Create a single Notification row. Swallows all exceptions so a notification
     failure never breaks the business transaction that triggered it."""
     if not user:
+        return
+    category = category or _MODULE_DEFAULT_CATEGORY.get(module)
+    if not _category_enabled(user, category):
         return
     try:
         from .models import Notification
@@ -139,7 +175,7 @@ def _on_leave_save(sender, instance, created, **kwargs):
         if approver:
             _notify(approver, 'New Leave Request',
                     f'{employee.full_name} has submitted a {label} request from {start} to {end}.',
-                    'leave_applied', 'leave', ref_id, employee)
+                    'leave_applied', 'leave', ref_id, employee, category='approval')
             _send_leave_email(approver, 'leave_request_pending_approval', {
                 'approver_name': approver.full_name or approver.email,
                 'employee_name': employee.full_name or employee.email,
@@ -176,7 +212,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         if instance.l2_approver:
             _notify(instance.l2_approver, 'Leave Awaiting Approval',
                     f'Leave request of {employee.full_name} is awaiting your approval.',
-                    'leave_manager_approved', 'leave', ref_id)
+                    'leave_manager_approved', 'leave', ref_id, category='approval')
             _send_leave_email(instance.l2_approver, 'leave_request_pending_approval', {
                 'approver_name': instance.l2_approver.full_name or instance.l2_approver.email,
                 'employee_name': employee.full_name or employee.email,
@@ -286,7 +322,7 @@ def _on_correction_save(sender, instance, created, **kwargs):
         if hr:
             _notify(hr, 'Regularization Request Pending',
                     f'Attendance regularization request from {employee.full_name} is pending approval.',
-                    'regularization', 'attendance', ref_id)
+                    'regularization', 'attendance', ref_id, category='approval')
         return
 
     old_status = getattr(instance, '_old_status', None)

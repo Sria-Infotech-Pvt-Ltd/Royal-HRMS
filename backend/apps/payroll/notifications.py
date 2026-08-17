@@ -25,7 +25,9 @@ def _notify(user, title: str, message: str, ref_id: str = '') -> None:
         return
     try:
         from apps.notifications.models import Notification
-        from apps.notifications.signals import _push_live
+        from apps.notifications.signals import _category_enabled, _push_live
+        if not _category_enabled(user, 'payroll'):
+            return
         notification = Notification.objects.create(
             user=user, title=title, message=message,
             notification_type='payroll_approval', module='payroll',

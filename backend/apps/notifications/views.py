@@ -5,10 +5,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from core.pagination import paginate, paginated_data
-from core.responses import error, success
+from core.responses import error, first_error, success
 
-from .models import Notification
-from .serializers import NotificationSerializer
+from .models import Notification, NotificationSettings
+from .serializers import NotificationSerializer, NotificationSettingsSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -70,3 +70,19 @@ class NotificationMarkAllReadView(APIView):
         updated = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         logger.info('Marked %d notifications as read for user %s', updated, request.user.id)
         return success('All notifications marked as read.')
+
+
+class NotificationSettingsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        settings_row, _ = NotificationSettings.objects.get_or_create(user=request.user)
+        return success('Notification settings retrieved.', NotificationSettingsSerializer(settings_row).data)
+
+    def patch(self, request):
+        settings_row, _ = NotificationSettings.objects.get_or_create(user=request.user)
+        serializer = NotificationSettingsSerializer(settings_row, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        serializer.save()
+        return success('Notification settings updated.', serializer.data)

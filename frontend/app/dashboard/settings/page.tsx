@@ -49,7 +49,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "notifications":        "/dashboard/settings/notifications",
 };
 
-const COMING_SOON_ITEMS = new Set(["notifications"]);
+const COMING_SOON_ITEMS = new Set<string>([]);
 
 export default function SettingsPage() {
   const router = useRouter();
