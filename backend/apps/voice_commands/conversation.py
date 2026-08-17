@@ -30,6 +30,11 @@ from apps.voice_commands.conversation_payroll import (
     continue_payroll_conversation,
     start_payroll_conversation,
 )
+from apps.voice_commands.conversation_stt_confirmation import (
+    STT_CONFIRMATION_STAGE,
+    continue_stt_confirmation,
+    start_stt_confirmation,
+)
 from apps.voice_commands.correction_slot_extractor import strip_correction_slot_phrases
 from apps.voice_commands.executor import (
     INTENT_APPLY_LEAVE,
@@ -57,12 +62,32 @@ from apps.voice_commands.slot_extractor import (
 
 logger = logging.getLogger(__name__)
 
-_NO_MATCH_MESSAGE = "Sorry, I didn't understand that command."
+# Shown when NOTHING at all was usable — no clarification candidate,
+# doesn't look like an expired slot answer, and the LLM tier also declined
+# (unavailable, or genuinely no_match with no candidate of its own).
+# Deliberately stateless — no new pending state, since there's no candidate
+# to confirm against, unlike the clarification branches above/below which DO
+# store pending state to interpret the next turn as an answer. Friendlier
+# than the flat "didn't understand" wording this constant used to hold —
+# same name kept so existing tests asserting against this constant (not a
+# hardcoded string) automatically track the improved wording.
+_NO_MATCH_MESSAGE = "Sorry, I didn't catch that — could you say it differently?"
 # Generic on purpose — apply_leave was the only conversational intent when
 # this was first written, but request_attendance_correction is conversational
 # now too (see _looks_like_expired_slot_answer below), and any future
 # multi-turn intent will hit this same branch.
 _EXPIRED_CLARIFICATION_MESSAGE = "Your request timed out — let's start over."
+
+# NOT YET CALIBRATED — starting point only, pending real data. Every genuine
+# failure observed this session (2026-08-17, including the same audio bytes
+# resubmitted 3x producing 3 different transcripts across 2 different
+# detected languages) had language_probability under 0.4; every value above
+# that threshold for a GOOD transcription is still unmeasured, since
+# sarvam_client.transcribe_audio only started logging this on success in
+# this same change. Sized with margin above the observed bad range, not
+# proven against the good range yet — same discipline as every other
+# threshold calibrated this session.
+STT_CONFIRM_THRESHOLD = 0.5
 
 
 def handle_transcript(
@@ -70,9 +95,24 @@ def handle_transcript(
     latitude: Optional[float] = None, longitude: Optional[float] = None,
     face_embedding: Optional[list] = None, liveness_passed: Optional[bool] = None,
     liveness_score: Optional[float] = None, capture_session_id: str = '',
+    stt_language_probability: Optional[float] = None,
 ) -> dict:
     """
     Single entry point VoiceParseView.post() calls for every transcript.
+
+    stt_language_probability: only ever set by the frontend on a transcript
+    that came back from the Sarvam-STT retry (captureAndTranscribeViaSarvam)
+    — None for browser SpeechRecognition output or typed input, which have
+    no comparable per-utterance confidence signal at all. Below
+    STT_CONFIRM_THRESHOLD, the transcript is confirmed with the user BEFORE
+    any matching/classification runs on it at all (see the gate just below)
+    — a confident intent match means nothing if the input text itself might
+    be wrong, which is a real, confirmed failure mode (see
+    conversation_stt_confirmation.py's own docstring). Deliberately checked
+    only when `pending` is None: the ANSWER to this very question (e.g. a
+    quiet "haan"/"nahi") is itself a Sarvam-STT transcript with its own low
+    language_probability sometimes — re-applying this gate to that answer
+    would loop the confirmation question on itself.
 
     Every intent except apply_leave goes straight through match_intent ->
     execute_intent, exactly as before this feature existed. apply_leave can
@@ -103,6 +143,13 @@ def handle_transcript(
     """
     user = request.user
     pending = get_pending(user.id)
+
+    if (
+        pending is None
+        and stt_language_probability is not None
+        and stt_language_probability < STT_CONFIRM_THRESHOLD
+    ):
+        return start_stt_confirmation(request, transcript, lang, stt_language_probability)
 
     normalized = normalize_transcript(transcript)
     attendance_mode, intent_text = extract_attendance_mode(normalized, lang=lang)
@@ -206,6 +253,12 @@ def _dispatch_pending(
             request, pending, normalized, _dispatch_matched_intent,
             latitude=latitude, longitude=longitude,
         )
+    if pending['slots'].get('stage') == STT_CONFIRMATION_STAGE:
+        # handle_transcript itself, passed as a callback — see
+        # conversation_stt_confirmation.py's own docstring for why (it must
+        # be able to re-run the normal match/classify flow on a confirmed
+        # transcript without importing this module directly).
+        return continue_stt_confirmation(request, pending, normalized, handle_transcript)
     if pending['slots'].get('stage') == AWAITING_FACE_PROOF_STAGE:
         return continue_voice_clock_punch(
             request, pending, face_embedding, liveness_passed, liveness_score, capture_session_id,

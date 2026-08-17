@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from apps.attendance.services_geofencing import GPS_REQUIRED_MESSAGE
 
 from apps.voice_commands.approval_extractor import parse_yes_no
+from apps.voice_commands.audit import log_clarification_outcome
 from apps.voice_commands.clarification import clear_pending, set_pending
 from apps.voice_commands.executor import INTENT_CLOCK_IN, INTENT_CLOCK_OUT
 from apps.voice_commands.matcher import DEFAULT_LANG, get_conversational
@@ -55,6 +56,7 @@ _DECLINED_MESSAGE = "Okay, is there anything else I can help you with?"
 def start_clarification(
     request, candidate_intent: str, matched_phrase: Optional[str], confidence: float,
     intent_text: str, attendance_mode: Optional[str], lang: str,
+    source: str = 'rule_engine',
 ) -> dict:
     """
     Instead of the generic no-match message, ask the user to confirm the
@@ -72,6 +74,12 @@ def start_clarification(
     location-less command that started the clarification. See
     continue_clarification below for how a clock_in/clock_out confirmation
     that itself gets geofence-rejected still ends up retried with location.
+
+    source distinguishes which tier is asking — the rule engine's own
+    middle-confidence band (the default, conversation.py's only caller), or
+    llm_fallback.py's low-confidence classification (source='llm') — stashed
+    in pending state so continue_clarification below can tag the outcome
+    with the right clarification_type for voice_review_report.
     """
     phrase = matched_phrase or candidate_intent
     set_pending(request.user.id, candidate_intent, {
@@ -80,6 +88,7 @@ def start_clarification(
         'original_text': intent_text,
         'attendance_mode': attendance_mode,
         'lang': lang,
+        'source': source,
     })
     logger.info(
         'Voice command clarification: user=%s transcript=%r candidate=%s confidence=%s',
@@ -111,6 +120,7 @@ def continue_clarification(
     candidate_intent = pending['intent']
     slots = pending['slots']
     matched_phrase = slots.get('matched_phrase') or candidate_intent
+    clarification_type = slots.get('source', 'rule_engine')
     decision = parse_yes_no(answer_text)
 
     if decision is None:
@@ -118,13 +128,17 @@ def continue_clarification(
         # Re-storing extends the clarification's 120s window, same pattern
         # as leave-approval confirmation's own not-yes-no re-ask.
         set_pending(request.user.id, candidate_intent, slots)
+        log_clarification_outcome(request, clarification_type, 're_asked')
         question = _REASK_MESSAGE.format(phrase=matched_phrase)
         return _payload(candidate_intent, None, None, question, awaiting_input=True, conversational=True)
 
     clear_pending(request.user.id)
 
     if not decision:
+        log_clarification_outcome(request, clarification_type, 'declined')
         return _payload(CLARIFICATION_DECLINED_INTENT, None, None, _DECLINED_MESSAGE, conversational=True)
+
+    log_clarification_outcome(request, clarification_type, 'confirmed')
 
     outcome = dispatch_matched_intent(
         request, candidate_intent, slots.get('original_text', ''), None,

@@ -64,12 +64,15 @@ class ValidClassificationTests(SimpleTestCase):
             request, INTENT_CLOCK_IN, 'yo punch the clock for me', None,
             attendance_mode='office', lang='en', latitude=None, longitude=None,
         )
-        mock_log.assert_called_once_with(request, 'yo punch the clock for me', INTENT_CLOCK_IN)
+        mock_log.assert_called_once_with(request, 'yo punch the clock for me', INTENT_CLOCK_IN, 0.91)
 
     @patch('apps.voice_commands.llm_fallback.log_llm_fallback_used')
     @patch('apps.voice_commands.llm_fallback.sarvam_client.chat_completion')
     def test_forwards_latitude_and_longitude_through_to_dispatch(self, mock_chat, mock_log, _mock_configured):
-        mock_chat.return_value = '{"intent": "clock_in"}'
+        # confidence must be >= _LLM_CLARIFICATION_THRESHOLD here — this test
+        # is specifically about a DIRECT dispatch's kwargs, not the
+        # low-confidence clarification path (see LowConfidenceTests below).
+        mock_chat.return_value = '{"intent": "clock_in", "confidence": 0.95}'
         dispatch = _fake_dispatch({'ok': True})
         request = _fake_request()
 
@@ -140,6 +143,57 @@ class RejectedClassificationTests(SimpleTestCase):
 
         self.assertIsNone(result)
         dispatch.assert_not_called()
+
+
+@patch('apps.voice_commands.llm_fallback.sarvam_client.is_configured', return_value=True)
+@patch('apps.voice_commands.llm_fallback.log_llm_fallback_used')
+class LowConfidenceTests(SimpleTestCase):
+    """
+    A valid, allow-listed intent below _LLM_CLARIFICATION_THRESHOLD must
+    ask before acting (via the same start_clarification 'did you mean X?'
+    mechanism the rule engine's middle confidence band uses), never
+    dispatch directly — this is the fix for a real, confirmed gap: this
+    tier used to dispatch ANY valid intent regardless of the confidence it
+    asked the model for and then discarded.
+    """
+
+    @patch('apps.voice_commands.llm_fallback.sarvam_client.chat_completion')
+    def test_low_confidence_valid_intent_asks_instead_of_dispatching(self, mock_chat, _mock_log, _mock_configured):
+        mock_chat.return_value = '{"intent": "clock_in", "confidence": 0.5}'
+        dispatch = _fake_dispatch({'should': 'never see this'})
+        request = _fake_request()
+
+        result = try_llm_fallback(request, 'maybe clock in i guess', 'maybe clock in i guess', None, 'en', dispatch)
+
+        dispatch.assert_not_called()
+        self.assertIsNotNone(result)
+        self.assertTrue(result['awaiting_input'])
+        self.assertEqual(result['intent'], INTENT_CLOCK_IN)
+
+    @patch('apps.voice_commands.llm_fallback.sarvam_client.chat_completion')
+    def test_missing_confidence_field_is_treated_as_low_confidence(self, mock_chat, _mock_log, _mock_configured):
+        # No benefit of the doubt for a response that doesn't comply with
+        # the requested shape — omission is not "no opinion, dispatch anyway."
+        mock_chat.return_value = '{"intent": "clock_in"}'
+        dispatch = _fake_dispatch({'should': 'never see this'})
+        request = _fake_request()
+
+        result = try_llm_fallback(request, 'clock in', 'clock in', None, 'en', dispatch)
+
+        dispatch.assert_not_called()
+        self.assertTrue(result['awaiting_input'])
+
+    @patch('apps.voice_commands.llm_fallback.sarvam_client.chat_completion')
+    def test_high_confidence_still_dispatches_directly(self, mock_chat, _mock_log, _mock_configured):
+        mock_chat.return_value = '{"intent": "clock_in", "confidence": 0.95}'
+        sentinel = {'intent': INTENT_CLOCK_IN}
+        dispatch = _fake_dispatch(sentinel)
+        request = _fake_request()
+
+        result = try_llm_fallback(request, 'clock me in', 'clock me in', None, 'en', dispatch)
+
+        dispatch.assert_called_once()
+        self.assertIs(result, sentinel)
 
 
 class PermissionGateStillAppliesTests(SimpleTestCase):
