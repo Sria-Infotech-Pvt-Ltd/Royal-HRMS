@@ -95,4 +95,4 @@ class AssessmentSectionDetailView(APIView):
         section.items.update(section=None)
         section.delete()
         logger.info('Section "%s" deleted by %s — items moved to unsectioned', title, request.user.email)
-        return success(f'Section deleted. Items moved to unsectioned.')
+        return success('Section deleted. Items moved to unsectioned.')

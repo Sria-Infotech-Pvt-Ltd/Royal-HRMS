@@ -4,11 +4,10 @@ import logging
 
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, Prefetch, Q, Sum
+from django.db.models import Count, F, Prefetch, Q, QuerySet, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import BasePermission, IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
@@ -173,9 +172,10 @@ class AnnouncementListCreateView(APIView):
         )
 
         if announcement.send_email:
+            from django.db import connection
             from apps.announcements.tasks import send_announcement_email_task
 
-            def _queue_announcement_email(ann_id=announcement.id):
+            def _queue_announcement_email(ann_id=announcement.id, schema_name=connection.schema_name):
                 # Runs after the transaction actually commits, so the worker
                 # (a separate DB connection) is guaranteed to find the row.
                 # Queuing failure (e.g. broker down) is logged, not raised —
@@ -189,7 +189,7 @@ class AnnouncementListCreateView(APIView):
                     # result backend if Redis is unreachable and blocking
                     # this request for well past any frontend timeout.
                     send_announcement_email_task.apply_async(
-                        args=[ann_id], retry=False, ignore_result=True,
+                        args=[schema_name, ann_id], retry=False, ignore_result=True,
                     )
                 except Exception as exc:
                     logger.error(

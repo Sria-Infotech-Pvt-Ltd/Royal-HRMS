@@ -92,7 +92,7 @@ def _resolve_separation_chain(employee):
 
     Returns [(stage_key, approver_or_None), ...] — one or two entries.
     """
-    from ..models import SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_HR, SEP_STAGE_MANAGER
+    from ..models import SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_MANAGER
 
     role = employee.role
     if role and role.can_manage_team:

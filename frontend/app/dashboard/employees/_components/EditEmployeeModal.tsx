@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { fullName, type Employee } from "../_data";
+import Modal from "@/components/Modal";
 
 interface Props {
   employee:      Employee;
@@ -78,20 +79,30 @@ export default function EditEmployeeModal({
   }
 
   return (
-    <div className="modal-overlay open" onClick={ev => { if (ev.target === ev.currentTarget) onClose(); }}>
-      <div className="modal" style={{ width: "min(560px, 95vw)" }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-edit" style={{ marginRight: 8 }} />
-            Edit {fullName(employee)}
-          </div>
-          <button className="modal-close" onClick={onClose}>
-            <i className="ti ti-x" />
+    <Modal
+      title={
+        <>
+          <i className="ti ti-edit" style={{ marginRight: 8 }} />
+          Edit {fullName(employee)}
+        </>
+      }
+      onClose={onClose}
+      maxWidth="min(560px, 95vw)"
+      footer={
+        <>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+            Cancel
           </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
+          <button type="submit" form="edit-employee-form" className="btn btn-filled" disabled={saving}>
+            {saving
+              ? <><i className="ti ti-loader-2 spin" /> Saving…</>
+              : <><i className="ti ti-check" /> Save Changes</>
+            }
+          </button>
+        </>
+      }
+    >
+        <form id="edit-employee-form" onSubmit={handleSubmit}>
             {apiErr && (
               <div className="alert alert-error" style={{ marginBottom: 16 }}>
                 <i className="ti ti-alert-circle" /><div>{apiErr}</div>
@@ -177,21 +188,7 @@ export default function EditEmployeeModal({
                 )}
               </div>
             </div>
-          </div>
-
-          <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-filled" disabled={saving}>
-              {saving
-                ? <><i className="ti ti-loader-2 spin" /> Saving…</>
-                : <><i className="ti ti-check" /> Save Changes</>
-              }
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

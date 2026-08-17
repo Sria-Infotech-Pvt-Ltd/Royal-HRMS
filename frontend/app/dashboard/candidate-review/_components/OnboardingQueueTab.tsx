@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import Modal from "@/components/Modal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,6 @@ export default function OnboardingQueueTab() {
     } finally {
       setActing(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remarks, selectedTemplateId, selectedAssessmentIds, approvalDept, approvalDesig, approvalManagerId, approvalCtc, refetch]);
 
   const results = data?.results ?? [];
@@ -337,19 +337,28 @@ export default function OnboardingQueueTab() {
 
       {/* ── Approval popup modal ── */}
       {showApprovalModal && selected && (
-        <div
-          className="modal-overlay open"
-          onClick={e => { if (e.target === e.currentTarget) closeApprovalModal(); }}
-        >
-          <div className="modal modal-lg">
-            <div className="modal-header">
-              <span className="modal-title">Approve — {selected.full_name}</span>
-              <button className="modal-close" onClick={closeApprovalModal}>
-                <i className="ti ti-x" />
+        <Modal
+          title={`Approve — ${selected.full_name}`}
+          onClose={closeApprovalModal}
+          size="lg"
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={closeApprovalModal} disabled={acting}>
+                Cancel
               </button>
-            </div>
-
-            <div className="modal-body">
+              <button
+                className="btn btn-filled"
+                onClick={() => act(selected.id, "approve")}
+                disabled={acting || !approvalDept || !approvalDesig || !approvalManagerId}
+              >
+                {acting
+                  ? <><i className="ti ti-loader-2 spin" /> Approving…</>
+                  : "Confirm Approval ✓"
+                }
+              </button>
+            </>
+          }
+        >
               {modalErr && (
                 <div className="alert alert-error" style={{ marginBottom: "1.25rem" }}>{modalErr}</div>
               )}
@@ -501,25 +510,7 @@ export default function OnboardingQueueTab() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={closeApprovalModal} disabled={acting}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-filled"
-                onClick={() => act(selected.id, "approve")}
-                disabled={acting || !approvalDept || !approvalDesig || !approvalManagerId}
-              >
-                {acting
-                  ? <><i className="ti ti-loader-2 spin" /> Approving…</>
-                  : "Confirm Approval ✓"
-                }
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

@@ -202,7 +202,6 @@ def _build_team_overview(manager, team_ids, team_size, today,
 
 
 def _build_quick_actions(manager, pending_count):
-    role = manager.role.name if manager.role else ''
     actions = [
         {
             'id':    'apply_leave',

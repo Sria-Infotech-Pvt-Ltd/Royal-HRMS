@@ -69,8 +69,7 @@ export default function AuditLogsWidget() {
   useEffect(() => {
     setPage(1);
     fetchPage(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moduleFilter]);
+  }, [moduleFilter, fetchPage]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

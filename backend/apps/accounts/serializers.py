@@ -132,8 +132,9 @@ class RoleSerializer(serializers.ModelSerializer):
 # ─── Auth serializers ─────────────────────────────────────────────────────────
 
 class LoginSerializer(serializers.Serializer):
-    email    = serializers.EmailField()
-    password = serializers.CharField(min_length=1, max_length=128)
+    company_code = serializers.CharField(max_length=50)
+    email        = serializers.EmailField()
+    password     = serializers.CharField(min_length=1, max_length=128)
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
@@ -847,7 +848,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
             'account_holder_name', 'account_type',
             'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
-            'uan_number', 'name_as_per_aadhar', 'pan_number',
+            'uan_number', 'esi_number', 'name_as_per_aadhar', 'pan_number',
             'updated_at',
         ]
         read_only_fields = ('updated_at',)

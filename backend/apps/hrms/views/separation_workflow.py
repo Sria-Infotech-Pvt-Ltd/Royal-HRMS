@@ -145,7 +145,7 @@ class SeparationHandoverTaskListCreateView(APIView):
         # someone else (e.g. the approver) instead.
         assigned_to = serializer.validated_data.get('assigned_to')
         role = request.user.role
-        is_manager_or_hr = bool(role and (role.can_manage_team or role.name == 'hr'))
+        is_manager_or_hr = bool(role and role.can_manage_team) or _has_perm(request.user, 'separation.approve')
         if is_own and is_manager_or_hr and assigned_to and assigned_to.reporting_manager_id == request.user.id:
             return error('You cannot assign your own separation handover task to a member of your team.')
 
@@ -195,7 +195,7 @@ class SeparationHandoverTaskDetailView(APIView):
 
             is_own = task.request.employee_id == user.id
             role = user.role
-            is_manager_or_hr = bool(role and (role.can_manage_team or role.name == 'hr'))
+            is_manager_or_hr = bool(role and role.can_manage_team) or _has_perm(user, 'separation.approve')
             assigned_to = serializer.validated_data.get('assigned_to')
             if is_own and is_manager_or_hr and assigned_to and assigned_to.reporting_manager_id == user.id:
                 return error('You cannot assign your own separation handover task to a member of your team.')

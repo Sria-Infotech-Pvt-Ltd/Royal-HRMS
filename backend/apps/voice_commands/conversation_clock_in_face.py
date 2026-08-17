@@ -33,7 +33,7 @@ from apps.attendance.services_face_matching import FaceVerificationService, is_f
 from apps.attendance.services_geofencing import GeofencingService
 
 from apps.voice_commands.clarification import clear_pending, set_pending
-from apps.voice_commands.executor import INTENT_CLOCK_IN, INTENT_CLOCK_OUT
+from apps.voice_commands.executor import INTENT_CLOCK_IN
 from apps.voice_commands.executor_attendance import execute_clock_in, execute_clock_out
 from apps.voice_commands.matcher import get_conversational
 

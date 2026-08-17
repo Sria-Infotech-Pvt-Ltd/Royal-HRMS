@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermission } from "@/hooks/usePermission";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
+import Modal from "@/components/Modal";
 
 /* ── Types ────────────────────────────────────────────────────── */
 interface ApiRole   { id: number; name: string; display_name: string }
@@ -260,26 +261,38 @@ export default function AddEmployeeModal({
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal modal-lg flex flex-col" style={{ maxHeight: "92vh" }}>
-
-        {/* ── Header ── */}
-        <div className="modal-header sticky top-0 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: "rgba(30,78,140,0.10)" }}>
-              <i className="ti ti-user-plus text-[16px]" style={{ color: "var(--primary)" }} />
-            </div>
-            <h2 className="modal-title">Add New Employee</h2>
+    <Modal
+      title={
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(30,78,140,0.10)" }}>
+            <i className="ti ti-user-plus text-[16px]" style={{ color: "var(--primary)" }} />
           </div>
-          <button onClick={onClose} suppressHydrationWarning className="modal-close">
-            <i className="ti ti-x text-[18px]" />
-          </button>
+          <h2 className="modal-title">Add New Employee</h2>
         </div>
-
+      }
+      onClose={onClose}
+      size="lg"
+      scrollBody
+      footer={!done && (
+        <>
+          <button onClick={onClose} disabled={saving} suppressHydrationWarning
+            className="px-5 py-2.5 rounded-lg text-[13px] font-medium border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:bg-[var(--bg-low)] transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={submit} disabled={saving || loading} suppressHydrationWarning
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-60"
+            style={{ background: "var(--primary)" }}>
+            {saving
+              ? <><i className="ti ti-loader-2 animate-spin text-[14px]" /> Adding…</>
+              : <><i className="ti ti-user-plus text-[14px]" /> Add Employee</>}
+          </button>
+        </>
+      )}
+    >
         {/* ── Success state ── */}
         {done ? (
-          <div className="modal-body flex flex-col items-center justify-center py-10 text-center">
+          <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
               style={{ background: "rgba(22,163,74,0.12)" }}>
               <i className="ti ti-circle-check text-[36px]" style={{ color: "var(--success)" }} />
@@ -295,7 +308,7 @@ export default function AddEmployeeModal({
         ) : (
           <>
             {/* ── Body ── */}
-            <div className="modal-body overflow-y-auto flex-1 space-y-5">
+            <div className="space-y-5">
 
               {loading && (
                 <div className="flex items-center justify-center py-8 gap-2 text-[13px] text-[var(--on-variant)]">
@@ -422,24 +435,8 @@ export default function AddEmployeeModal({
                 </>
               )}
             </div>
-
-            {/* ── Footer ── */}
-            <div className="modal-footer flex-shrink-0">
-              <button onClick={onClose} disabled={saving} suppressHydrationWarning
-                className="px-5 py-2.5 rounded-lg text-[13px] font-medium border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:bg-[var(--bg-low)] transition-colors disabled:opacity-50">
-                Cancel
-              </button>
-              <button onClick={submit} disabled={saving || loading} suppressHydrationWarning
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-60"
-                style={{ background: "var(--primary)" }}>
-                {saving
-                  ? <><i className="ti ti-loader-2 animate-spin text-[14px]" /> Adding…</>
-                  : <><i className="ti ti-user-plus text-[14px]" /> Add Employee</>}
-              </button>
-            </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

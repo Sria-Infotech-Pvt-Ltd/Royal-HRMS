@@ -256,7 +256,7 @@ export default function SalaryStructuresTab() {
                     ))}
                     {components.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No components yet — click "Add Component" above</td>
+                        <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">No components yet — click &quot;Add Component&quot; above</td>
                       </tr>
                     )}
                   </tbody>

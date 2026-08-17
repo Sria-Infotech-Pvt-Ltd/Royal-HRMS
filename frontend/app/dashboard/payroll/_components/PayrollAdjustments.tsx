@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Modal from "@/components/Modal";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
@@ -361,59 +362,54 @@ function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalP
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
-        <div className="modal-header">
-          <span className="modal-title">Add Adjustment</span>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-        <div className="modal-body">
-
-          {error && (
-            <div className="alert alert-error mb-16">
-              <i className="ti ti-alert-circle" />
-              <div>{error}</div>
-            </div>
-          )}
-
-          <div className="field-group mb-16">
-            <label className="field-label">Employee Code <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="field-input" placeholder="e.g. EMP001" value={form.employee_code}
-              onChange={e => { setForm(p => ({ ...p, employee_code: e.target.value })); setErrors(p => ({ ...p, employee_code: undefined })); }} />
-            {errors.employee_code && <span className="field-error">{errors.employee_code}</span>}
-          </div>
-
-          <div className="field-group mb-16">
-            <label className="field-label">Type <span style={{ color: "var(--error)" }}>*</span></label>
-            <select className="field-input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
-              <option value="addition">Addition</option>
-              <option value="deduction">Deduction</option>
-              <option value="arrear">Arrear</option>
-            </select>
-          </div>
-
-          <div className="field-group mb-16">
-            <label className="field-label">Label <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="field-input" placeholder="e.g. Festival Bonus, Loan Recovery" value={form.label}
-              onChange={e => { setForm(p => ({ ...p, label: e.target.value })); setErrors(p => ({ ...p, label: undefined })); }} />
-            {errors.label && <span className="field-error">{errors.label}</span>}
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Amount (₹) <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="field-input" type="number" min="1" placeholder="e.g. 5000" value={form.amount}
-              onChange={e => { setForm(p => ({ ...p, amount: e.target.value })); setErrors(p => ({ ...p, amount: undefined })); }} />
-            {errors.amount && <span className="field-error">{errors.amount}</span>}
-          </div>
-
-        </div>
-        <div className="modal-footer">
+    <Modal
+      title="Add Adjustment"
+      onClose={onClose}
+      footer={
+        <>
           <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={saving}>
             {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : <><i className="ti ti-check" /> Add</>}
           </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="alert alert-error mb-16">
+          <i className="ti ti-alert-circle" />
+          <div>{error}</div>
         </div>
+      )}
+
+      <div className="field-group mb-16">
+        <label className="field-label">Employee Code <span style={{ color: "var(--error)" }}>*</span></label>
+        <input className="field-input" placeholder="e.g. EMP001" value={form.employee_code}
+          onChange={e => { setForm(p => ({ ...p, employee_code: e.target.value })); setErrors(p => ({ ...p, employee_code: undefined })); }} />
+        {errors.employee_code && <span className="field-error">{errors.employee_code}</span>}
       </div>
-    </div>
+
+      <div className="field-group mb-16">
+        <label className="field-label">Type <span style={{ color: "var(--error)" }}>*</span></label>
+        <select className="field-input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
+          <option value="addition">Addition</option>
+          <option value="deduction">Deduction</option>
+          <option value="arrear">Arrear</option>
+        </select>
+      </div>
+
+      <div className="field-group mb-16">
+        <label className="field-label">Label <span style={{ color: "var(--error)" }}>*</span></label>
+        <input className="field-input" placeholder="e.g. Festival Bonus, Loan Recovery" value={form.label}
+          onChange={e => { setForm(p => ({ ...p, label: e.target.value })); setErrors(p => ({ ...p, label: undefined })); }} />
+        {errors.label && <span className="field-error">{errors.label}</span>}
+      </div>
+
+      <div className="field-group">
+        <label className="field-label">Amount (₹) <span style={{ color: "var(--error)" }}>*</span></label>
+        <input className="field-input" type="number" min="1" placeholder="e.g. 5000" value={form.amount}
+          onChange={e => { setForm(p => ({ ...p, amount: e.target.value })); setErrors(p => ({ ...p, amount: undefined })); }} />
+        {errors.amount && <span className="field-error">{errors.amount}</span>}
+      </div>
+    </Modal>
   );
 }

@@ -7,10 +7,10 @@ from .models import (
     APPROVAL_PENDING,
     CarryForwardLog,
     Expense, ExpenseReceipt,
-    Holiday, HOLIDAY_TYPE_CHOICES,
+    Holiday,
     LeaveBalance, LeavePolicy, LeaveRequest,
-    LEAVE_LWP, LEAVE_TYPE_CHOICES, DURATION_CHOICES,
-    SeparationRequest, SEPARATION_TYPE_CHOICES, SEPARATION_REASON_CHOICES,
+    LEAVE_TYPE_CHOICES, DURATION_CHOICES,
+    SeparationRequest,
     SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_CANCELLED,
     SEP_STAGE_HR, SEP_STAGE_MANAGER, SEP_STAGE_BRANCH_ADMIN,
     SEP_CLEARANCE_MANAGER,
@@ -99,7 +99,7 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
 
 def validate_receipt_file(file) -> None:
     if file.size > MAX_RECEIPT_SIZE:
-        raise serializers.ValidationError(f'Each receipt must be under 5 MB.')
+        raise serializers.ValidationError('Each receipt must be under 5 MB.')
     content_type = getattr(file, 'content_type', '')
     if content_type not in ALLOWED_MIME_TYPES:
         raise serializers.ValidationError('Only PDF, JPG, and PNG receipts are accepted.')
@@ -649,11 +649,6 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
             'document_url', 'created_by_name', 'approval_stages',
             'can_approve', 'can_cancel', 'can_edit', 'can_delete', 'is_own', 'created_at',
         ]
-
-    def get_is_own(self, obj):
-        request = self.context.get('request')
-        user = getattr(request, 'user', None) if request else None
-        return bool(user and obj.employee_id == user.id)
 
     def get_request_ref(self, obj):
         return f'SEP-{obj.request_number}' if obj.request_number else ''

@@ -6,6 +6,7 @@ import {
   type PermissionsMap, type RoleForm, type RoleFormErrors,
 } from "../_data";
 import RoleFormFields from "./RoleFormFields";
+import Modal from "@/components/Modal";
 
 interface Props {
   permissionsMap: PermissionsMap;
@@ -33,38 +34,13 @@ export default function AddRoleModal({ permissionsMap, saving, error, onClose, o
     await onAdd(form);
   }
 
-  function handleBackdrop(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.target === e.currentTarget) onClose();
-  }
-
   return (
-    <div className="modal-overlay open" onClick={handleBackdrop}>
-      <div className="modal modal-lg">
-
-        <div className="modal-header">
-          <span className="modal-title">Add New Role</span>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            <i className="ti ti-x" />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          {error && (
-            <div className="alert alert-error mb-16">
-              <i className="ti ti-alert-circle" />
-              <div>{error}</div>
-            </div>
-          )}
-          <RoleFormFields
-            form={form}
-            errors={errors}
-            permissionsMap={permissionsMap}
-            onChange={patch}
-            onClearError={clearError}
-          />
-        </div>
-
-        <div className="modal-footer">
+    <Modal
+      title="Add New Role"
+      onClose={onClose}
+      size="lg"
+      footer={
+        <>
           <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn btn-filled" onClick={handleSubmit} disabled={saving}>
             {saving
@@ -72,9 +48,22 @@ export default function AddRoleModal({ permissionsMap, saving, error, onClose, o
               : <><i className="ti ti-plus" /> Add Role</>
             }
           </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="alert alert-error mb-16">
+          <i className="ti ti-alert-circle" />
+          <div>{error}</div>
         </div>
-
-      </div>
-    </div>
+      )}
+      <RoleFormFields
+        form={form}
+        errors={errors}
+        permissionsMap={permissionsMap}
+        onChange={patch}
+        onClearError={clearError}
+      />
+    </Modal>
   );
 }

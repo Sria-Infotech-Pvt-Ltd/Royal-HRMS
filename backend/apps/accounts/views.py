@@ -43,7 +43,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
-from core.permissions import HasSettingsPermission, has_perm as _has_perm
+from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 from core.template_context import (
     candidate_context as _candidate_template_context,
@@ -94,7 +94,6 @@ from apps.accounts.serializers import (
     EmployeeCodeSettingsSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
-    LogoutSerializer,
     PermissionSerializer,
     ResetPasswordSerializer,
     RoleSerializer,
@@ -127,7 +126,6 @@ def _auto_assign_managers(employee: 'User') -> list:
 
     emp_branch = (employee.branch or '').strip()
     emp_dept   = (employee.department or '').strip()
-    role_name  = (employee.role.name if employee.role else '').lower()
 
     changed = []
 
@@ -278,7 +276,6 @@ def _employee_dict(user: User) -> dict:
         documents = [_document_dict(doc) for doc in user.employee_documents.all()]
     except Exception:
         documents = []
-    role_name = (user.role.name if user.role else '').lower()
     mgr = getattr(user, 'reporting_manager', None)
     _hr = getattr(user, 'hr', None)
     approver = getattr(user, 'reporting_approver', None)
@@ -375,9 +372,23 @@ class LoginView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        email    = serializer.validated_data['email']
-        password = serializer.validated_data['password']
+        company_code = serializer.validated_data['company_code']
+        email        = serializer.validated_data['email']
+        password     = serializer.validated_data['password']
 
+        from apps.tenants.models import Client
+        try:
+            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
+        except Client.DoesNotExist:
+            return error('Invalid company code, email, or password.', http_status=status.HTTP_401_UNAUTHORIZED)
+
+        # Everything from here on must run against THIS company's schema —
+        # activated for the rest of this view (user lookup, password check,
+        # audit log, token generation), reset automatically on the way out.
+        with client:
+            return self._authenticate(request, client, email, password)
+
+    def _authenticate(self, request, client, email, password):
         try:
             user = (
                 User.objects
@@ -386,7 +397,7 @@ class LoginView(APIView):
                     .get(email__iexact=email)
             )
         except User.DoesNotExist:
-            return error('Invalid email or password.', http_status=status.HTTP_401_UNAUTHORIZED)
+            return error('Invalid company code, email, or password.', http_status=status.HTTP_401_UNAUTHORIZED)
 
         if not user.is_active:
             return error(
@@ -409,12 +420,18 @@ class LoginView(APIView):
                 'Failed login attempt for %s from %s (attempt %d)',
                 email, get_client_ip(request), user.failed_login_attempts,
             )
-            return error('Invalid email or password.', http_status=status.HTTP_401_UNAUTHORIZED)
+            return error('Invalid company code, email, or password.', http_status=status.HTTP_401_UNAUTHORIZED)
 
         ip = get_client_ip(request)
         user.reset_failed_login(ip_address=ip)
 
         refresh = RoleBasedRefreshToken.for_user(user)
+        # Carried through to every access token derived from this refresh
+        # token (SimpleJWT copies custom claims on refresh) — this is what
+        # apps.tenants.middleware.TenantSchemaMiddleware reads to scope every
+        # later request to this company's schema.
+        refresh['company_schema'] = client.schema_name
+        refresh['company_code']   = client.company_code
 
         AuditLog.objects.create(
             user=user, action='login', module='accounts', ip_address=ip,
@@ -429,6 +446,8 @@ class LoginView(APIView):
         resp = success('Login successful.', data={
             'user': {
                 'id':                  str(user.id),
+                'company_code':        client.company_code,
+                'company_name':        client.company_name,
                 'email':               user.email,
                 'full_name':           user.full_name,
                 'role':                user.role.name if user.role else None,
@@ -2543,7 +2562,7 @@ class CompanyFinancialYearView(APIView):
                 old_month, new_month, request.user.email,
             )
 
-        from apps.accounts.utils import get_financial_years, get_fy_start_year
+        from apps.accounts.utils import get_financial_years
         from core.cache_service import FinancialYearCacheService
         from datetime import date as _date
         today = _date.today()
@@ -2658,7 +2677,6 @@ class EmployeeListCreateView(APIView):
         department      = (request.data.get('department')      or '').strip()
         designation     = (request.data.get('designation')     or '').strip()
         branch          = (request.data.get('branch')          or '').strip()
-        employee_type   = (request.data.get('employee_type')   or 'Permanent').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
@@ -2867,15 +2885,24 @@ class EmployeeListCreateView(APIView):
                 _get_smtp_connection, _build_message, _company_email_wrapper,
                 _get_company_branding,
             )
+            from apps.tenants.utils import get_current_company_code
 
             company_name, logo_url, website, address = _get_company_branding()
             company_name = company_name or 'Royal HRMS'
+            # Captured before `connection` below is reassigned to the SMTP
+            # connection object — get_current_company_code() needs the real
+            # (Django DB) `connection` name, not this local shadow of it.
+            company_code = get_current_company_code()
+            company_code_line = (
+                f'<strong>Company ID:</strong> {company_code}<br>' if company_code else ''
+            )
 
             body = (
                 f'<p>Hi <strong>{full_name}</strong>,</p>'
                 f'<p>Your Royal HRMS account has been created.'
                 f' Use the credentials below to log in:</p>'
                 f'<p>'
+                f'{company_code_line}'
                 f'<strong>Employee ID:</strong> {employee_id}<br>'
                 f'<strong>Login Email:</strong> {email}<br>'
                 f'<strong>Temporary Password:</strong> {temp_password}'
@@ -3653,6 +3680,7 @@ class EmployeeProfileView(APIView):
         serializer = EmployeeProfileSerializer(profile, data=filled_data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
+        profile._changed_by = request.user
         serializer.save()
         return success('Profile saved.', data=serializer.data)
 
@@ -3920,15 +3948,16 @@ class OnboardingView(APIView):
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
         # Notify HR via Celery so SMTP latency doesn't delay the response.
+        from django.db import connection
         from apps.accounts.tasks import send_onboarding_submitted_notification_task
 
-        def _queue_hr_notification(user_id=request.user.pk):
+        def _queue_hr_notification(user_id=request.user.pk, schema_name=connection.schema_name):
             try:
                 # retry=False + ignore_result=True — bounds broker/backend
                 # retries so a down Redis can't block this request; see the
                 # referral-submission dispatch in recruitment/views.py.
                 send_onboarding_submitted_notification_task.apply_async(
-                    args=[user_id], retry=False, ignore_result=True,
+                    args=[schema_name, user_id], retry=False, ignore_result=True,
                 )
             except Exception as exc:
                 logger.error(
@@ -4085,6 +4114,7 @@ def _save_profile_step(request, step: int):
         )
 
     try:
+        profile._changed_by = request.user
         serializer.save()
     except Exception as exc:
         logger.error('_save_profile_step serializer.save failed user=%s step=%d: %s',
@@ -4404,10 +4434,6 @@ class OnboardingApprovalView(APIView):
         company      = Company.objects.first()
         company_name = company.company_name if company else ''
         portal_url   = (company.portal_url if company else '') or ''
-        # The onboarding-approved and assessment-assigned emails must land the
-        # employee directly on the assessment page, not just the portal root —
-        # otherwise they have to manually find their way there after logging in.
-        assessments_portal_url = f'{portal_url.rstrip("/")}/onboarding/assessments' if portal_url else ''
 
         if decision == 'approve':
             from apps.recruitment.models import Candidate
@@ -4588,16 +4614,18 @@ class OnboardingApprovalView(APIView):
             # Dispatch via Celery so 1-3 sequential SMTP round-trips never sit in
             # this request's response path — see send_onboarding_submitted_notification_task's
             # dispatch (onboarding wizard submission, above) for the same rationale.
+            from django.db import connection
             from apps.accounts.tasks import send_onboarding_approved_notification_task
 
             def _queue_approval_notification(
                 user_id=target.pk,
                 assessment_ids=[a.id for a in assigned_assessments],
                 has_pending_=has_pending,
+                schema_name=connection.schema_name,
             ):
                 try:
                     send_onboarding_approved_notification_task.apply_async(
-                        args=[user_id, assessment_ids, has_pending_], retry=False, ignore_result=True,
+                        args=[schema_name, user_id, assessment_ids, has_pending_], retry=False, ignore_result=True,
                     )
                 except Exception as exc:
                     logger.error(
@@ -4643,7 +4671,6 @@ class OnboardingApprovalView(APIView):
         from apps.accounts.serializers import OnboardingPipelineSerializer
         from apps.recruitment.models import Candidate
 
-        role_name = request.user.role.name if request.user.role else ''
         base_qs = (
             User.objects
             .filter(

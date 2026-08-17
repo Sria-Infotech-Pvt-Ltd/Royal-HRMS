@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
+import Modal from "@/components/Modal";
 import type { InvalidPunch } from "@/types/attendance";
 
 interface Props {
@@ -40,19 +41,24 @@ export default function ConvertPunchModal({ punch, onClose, onConverted }: Props
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 420 }}>
-        <div className="modal-header">
-          <span className="modal-title">
-            <i className="ti ti-replace" style={{ marginRight: 8, color: "var(--primary)" }} />
-            Convert to Valid Punch
-          </span>
-          <button className="modal-close" onClick={onClose}>
-            <i className="ti ti-x" />
+    <Modal
+      title={
+        <>
+          <i className="ti ti-replace" style={{ marginRight: 8, color: "var(--primary)" }} />
+          Convert to Valid Punch
+        </>
+      }
+      onClose={onClose}
+      maxWidth={420}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? <><i className="ti ti-loader-2" /> Converting…</> : "Convert to Valid Punch"}
           </button>
-        </div>
-
-        <div className="modal-body">
+        </>
+      }
+    >
           {error && (
             <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> <span>{error}</span></div>
           )}
@@ -79,15 +85,6 @@ export default function ConvertPunchModal({ punch, onClose, onConverted }: Props
               />
             </div>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? <><i className="ti ti-loader-2" /> Converting…</> : "Convert to Valid Punch"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

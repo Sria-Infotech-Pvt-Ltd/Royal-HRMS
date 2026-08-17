@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
-from apps.branch.models import Branch, EmployeeBranchAccess
+from apps.branch.models import EmployeeBranchAccess
 from apps.branch.serializers import EmployeeBranchAccessSerializer
 
 logger = logging.getLogger(__name__)

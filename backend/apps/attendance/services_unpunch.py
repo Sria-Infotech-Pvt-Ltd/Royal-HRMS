@@ -83,7 +83,7 @@ def detect_and_mark_unpunches(
       - Employees on weekly_off / holiday / on_leave are excluded.
       - Already-incomplete records are excluded (idempotent re-runs).
     """
-    from apps.attendance.models import AttendanceRecord, MissingPunchNotification
+    from apps.attendance.models import AttendanceRecord
 
     cfg           = _get_settings()
     deadline      = _shift_end_deadline(cfg)
@@ -122,7 +122,6 @@ def detect_and_mark_unpunches(
         return {'marked': 0, 'notified': 0, 'skipped': 0, 'reason': 'none_found'}
 
     record_ids    = [r.pk for r in open_records]
-    employee_ids  = [r.employee_id for r in open_records]
 
     # ── Bulk mark incomplete ───────────────────────────────────────────────────
     with transaction.atomic():

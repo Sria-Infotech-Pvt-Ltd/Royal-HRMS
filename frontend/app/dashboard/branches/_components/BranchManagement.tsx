@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
+import Modal from "@/components/Modal";
 
 interface StateObj {
   id: number;
@@ -536,18 +537,32 @@ export default function BranchManagement() {
       )}
 
       {modalMode && (
-        <div className="modal-overlay open">
-          <div className="modal modal-lg">
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-building-skyscraper" style={{ marginRight: "8px" }} />
-                {modalMode === "add" ? "Add New Branch" : `Edit Branch: ${editForm.branch_name}`}
-              </div>
-              <button className="modal-close" onClick={() => setModalMode(null)}>
-                <i className="ti ti-x" />
+        <Modal
+          title={
+            <>
+              <i className="ti ti-building-skyscraper" style={{ marginRight: "8px" }} />
+              {modalMode === "add" ? "Add New Branch" : `Edit Branch: ${editForm.branch_name}`}
+            </>
+          }
+          onClose={() => setModalMode(null)}
+          size="lg"
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setModalMode(null)}>Cancel</button>
+              <button
+                className="btn btn-filled"
+                onClick={handleSave}
+                disabled={saving || codeLoading || citiesLoading}
+              >
+                {saving ? (
+                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{modalMode === "add" ? "Creating…" : "Saving…"}</>
+                ) : codeLoading || citiesLoading ? (
+                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Please wait…</>
+                ) : modalMode === "add" ? "Create Branch" : "Save Changes"}
               </button>
-            </div>
-            <div className="modal-body">
+            </>
+          }
+        >
               {saveError && (
                 <div className="alert alert-error mb-16">
                   <i className="ti ti-alert-circle" /> {saveError}
@@ -763,70 +778,47 @@ export default function BranchManagement() {
                   </div>
                 </>
               )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setModalMode(null)}>Cancel</button>
-              <button
-                className="btn btn-filled"
-                onClick={handleSave}
-                disabled={saving || codeLoading || citiesLoading}
-              >
-                {saving ? (
-                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{modalMode === "add" ? "Creating…" : "Saving…"}</>
-                ) : codeLoading || citiesLoading ? (
-                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Please wait…</>
-                ) : modalMode === "add" ? "Create Branch" : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {hqConfirm && (
-        <div className="modal-overlay open" style={{ zIndex: 1010 }}>
-          <div className="modal" style={{ maxWidth: "420px" }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--warn)" }} />
-                Change Headquarter?
-              </div>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-                Another branch is already marked as the headquarter. Setting this branch as HQ will remove the HQ status from the existing one. Do you want to continue?
-              </p>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={
+            <>
+              <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--warn)" }} />
+              Change Headquarter?
+            </>
+          }
+          onClose={() => setHqConfirm(false)}
+          maxWidth="420px"
+          zIndex={1010}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setHqConfirm(false)}>Cancel</button>
               <button className="btn btn-filled" onClick={doSave}>Yes, Change HQ</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+            Another branch is already marked as the headquarter. Setting this branch as HQ will remove the HQ status from the existing one. Do you want to continue?
+          </p>
+        </Modal>
       )}
 
       {deleteConfirm && (
-        <div className="modal-overlay open" style={{ zIndex: 1010 }}>
-          <div className="modal" style={{ maxWidth: "420px" }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
-                Delete Branch?
-              </div>
-              <button className="modal-close" onClick={() => setDeleteConfirm(null)} disabled={deleting}>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {deleteError && (
-                <div className="alert alert-error mb-16">
-                  <i className="ti ti-alert-circle" /> {deleteError}
-                </div>
-              )}
-              <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-                Are you sure you want to delete <strong>{deleteConfirm.branch_name}</strong>? This action cannot be undone.
-              </p>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={
+            <>
+              <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
+              Delete Branch?
+            </>
+          }
+          onClose={() => setDeleteConfirm(null)}
+          closeDisabled={deleting}
+          maxWidth="420px"
+          zIndex={1010}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancel</button>
               <button
                 className="btn btn-filled"
@@ -838,9 +830,18 @@ export default function BranchManagement() {
                   ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Deleting…</>
                   : "Yes, Delete"}
               </button>
+            </>
+          }
+        >
+          {deleteError && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" /> {deleteError}
             </div>
-          </div>
-        </div>
+          )}
+          <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+            Are you sure you want to delete <strong>{deleteConfirm.branch_name}</strong>? This action cannot be undone.
+          </p>
+        </Modal>
       )}
     </>
   );

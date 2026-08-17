@@ -12,7 +12,6 @@ from apps.voice_commands.correction_slot_extractor import (
     looks_like_correction_reason,
     next_missing_slot,
     parse_slot_answer,
-    question_for_slot,
     strip_correction_slot_phrases,
 )
 

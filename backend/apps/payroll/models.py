@@ -2,6 +2,8 @@ import uuid
 from django.db import models
 from django.conf import settings
 
+from core.encrypted_fields import EncryptedCharField
+
 
 class PayrollSettings(models.Model):
     """Company-wide payroll configuration. Only one active record should exist."""
@@ -240,12 +242,32 @@ class BranchPayrollConfig(models.Model):
     )
 
     # PF (Provident Fund — central, but branch may be exempt)
+    PF_WAGE_BASIC_ONLY = 'basic_only'
+    PF_WAGE_BASIC_PLUS_ALLOWANCES = 'basic_plus_allowances'
+    PF_WAGE_BASIS_CHOICES = [
+        (PF_WAGE_BASIC_ONLY, 'Basic salary only (legacy default)'),
+        (PF_WAGE_BASIC_PLUS_ALLOWANCES, 'Basic + all allowances except HRA (2019 EPFO ruling)'),
+    ]
+
     pf_applicable = models.BooleanField(default=True)
     pf_employee_rate = models.DecimalField(max_digits=5, decimal_places=2, default=12.00)
     pf_employer_rate = models.DecimalField(max_digits=5, decimal_places=2, default=12.00)
     pf_wage_ceiling = models.DecimalField(
         max_digits=10, decimal_places=2, default=15000.00,
-        help_text='PF is calculated on min(basic, this ceiling)',
+        help_text='PF is calculated on min(pf_wage_basis amount, this ceiling)',
+    )
+    pf_wage_basis = models.CharField(
+        max_length=25, choices=PF_WAGE_BASIS_CHOICES, default=PF_WAGE_BASIC_ONLY,
+        help_text=(
+            "'basic_only' matches this branch's existing behavior (PF wages = "
+            "basic salary alone). The Supreme Court's 2019 ruling on EPF "
+            "wages (and Razorpay's documented PF calculation) treats all "
+            "allowances except HRA as PF wages — select "
+            "'basic_plus_allowances' to opt into that stricter, more "
+            "compliant basis. Defaults to the legacy behavior so existing "
+            "branches are not silently recalculated; change this explicitly "
+            "per branch after confirming with your compliance team."
+        ),
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -473,6 +495,13 @@ class EmployeePayslip(models.Model):
     lop_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     # Statutory deductions
+    # The wage base PF was actually calculated on for this payslip (after
+    # BranchPayrollConfig.pf_wage_basis and the PF ceiling were applied) —
+    # stored so ECR generation can reproduce the exact figures used here
+    # without re-deriving them from config that may have since changed.
+    # Null on payslips computed before this field existed; ECR generation
+    # falls back to a best-effort recompute (and validates it) for those.
+    pf_wage_base = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     pf_employee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     pf_employer = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     esi_employee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -625,3 +654,121 @@ class PayrollAdjustment(models.Model):
 
     def __str__(self):
         return f'{self.get_type_display()} – {self.employee.full_name} – {self.month} – ₹{self.amount}'
+
+
+class SalaryTransferBatch(models.Model):
+    """
+    Dual-confirmation gate for releasing a payroll cycle's salaries for bank
+    transfer. "Employee confirmed" means every payslip in the cycle is
+    EmployeePayslip.STATUS_ACKNOWLEDGED or STATUS_RESOLVED (see
+    ready_for_confirmation() in views/salary_transfer.py) — no outstanding
+    STATUS_SENT (never acknowledged) or STATUS_QUERIED (disputed, unresolved)
+    payslip anywhere in the cycle. "Employer confirmed" is this row's own
+    confirmed_at/confirmed_by, set explicitly by HR, only once the employee
+    side is already satisfied.
+
+    Confirming snapshots every employee's CURRENT bank details into
+    SalaryTransferItem at that exact moment (see that model's docstring) —
+    the whole point being that a bank-detail change after this moment can
+    never silently redirect a transfer both sides already signed off on.
+    """
+    STATUS_PENDING   = 'pending'
+    STATUS_CONFIRMED = 'confirmed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PENDING,   'Pending Confirmation'),
+        (STATUS_CONFIRMED, 'Confirmed — Locked for Transfer'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cycle = models.OneToOneField(
+        PayrollCycle,
+        on_delete=models.PROTECT,
+        related_name='salary_transfer_batch',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='salary_transfer_batches_confirmed',
+    )
+
+    file_generated_at = models.DateTimeField(null=True, blank=True)
+    file_generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='salary_transfer_batches_downloaded',
+    )
+
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='salary_transfer_batches_cancelled',
+    )
+    cancellation_reason = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payroll_salary_transfer_batches'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'SalaryTransferBatch for {self.cycle} [{self.status}]'
+
+
+class SalaryTransferItem(models.Model):
+    """
+    One employee's locked transfer instruction within a SalaryTransferBatch —
+    bank details and amount snapshotted from EmployeeProfile/EmployeePayslip
+    at the exact moment of employer confirmation, and never updated again.
+
+    The bank-upload file is generated exclusively from these rows, never
+    from live EmployeeProfile data — this is the actual security control:
+    once both sides have confirmed, nothing (an account takeover, a
+    mis-click, a legitimate-looking support request) can change where this
+    specific transfer sends money without it showing up as a mismatch
+    against this immutable record.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    batch = models.ForeignKey(
+        SalaryTransferBatch,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    payslip = models.ForeignKey(
+        EmployeePayslip,
+        on_delete=models.PROTECT,
+        related_name='transfer_items',
+    )
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='salary_transfer_items',
+    )
+
+    # Locked snapshot — copied once from EmployeeProfile at confirmation time.
+    account_holder_name = models.CharField(max_length=150)
+    account_number       = EncryptedCharField(max_length=255)
+    ifsc_code            = EncryptedCharField(max_length=255)
+    bank_name            = models.CharField(max_length=200, blank=True)
+    amount               = models.DecimalField(max_digits=10, decimal_places=2)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'payroll_salary_transfer_items'
+        unique_together = [('batch', 'payslip')]
+        ordering = ['employee__full_name']
+
+    def __str__(self):
+        return f'{self.employee.full_name} — ₹{self.amount}'
+

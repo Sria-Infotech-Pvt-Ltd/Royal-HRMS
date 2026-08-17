@@ -385,7 +385,6 @@ class PayrollAdjustmentSerializer(serializers.ModelSerializer):
         return value
 
     def validate_month(self, value):
-        from datetime import date
         # Normalise to first of the month
         return value.replace(day=1)
 

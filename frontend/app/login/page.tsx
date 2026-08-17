@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import clientApi, { resetSessionExpired } from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
@@ -15,6 +15,8 @@ interface LoginApiResponse {
   data: {
     user: {
       id: string;
+      company_code: string;
+      company_name: string;
       email: string;
       full_name: string;
       role: string;
@@ -29,8 +31,25 @@ interface LoginApiResponse {
   };
 }
 
+const PORTAL_COPY: Record<string, { title: string; subtitle: string }> = {
+  hr:       { title: "HR & Admin Sign In", subtitle: "Access the HR administration portal" },
+  employee: { title: "Employee Sign In",   subtitle: "Access your personal employee portal" },
+};
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const portal = searchParams.get("portal");
+  const copy = (portal && PORTAL_COPY[portal]) || { title: "Welcome back", subtitle: "Sign in to your Royal HRMS account" };
+  const [companyCode, setCompanyCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,10 +63,14 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await clientApi.post<LoginApiResponse>(API.auth.login, { email, password });
+      const { data } = await clientApi.post<LoginApiResponse>(API.auth.login, {
+        company_code: companyCode, email, password,
+      });
       const d = data.data;
       const user: UserInfo = {
         userId: d.user.id,
+        companyCode: d.user.company_code,
+        companyName: d.user.company_name,
         email: d.user.email,
         name: d.user.full_name,
         role: d.user.role,
@@ -114,8 +137,8 @@ export default function LoginPage() {
               />
             </div>
 
-            <h2 className="login-title">Welcome back</h2>
-            <p className="login-subtitle">Sign in to your Royal HRMS account</p>
+            <h2 className="login-title">{copy.title}</h2>
+            <p className="login-subtitle">{copy.subtitle}</p>
 
             {/* Error banner */}
             {error && (
@@ -132,6 +155,25 @@ export default function LoginPage() {
               />
             ) : (
               <form onSubmit={handleSubmit} noValidate>
+
+                {/* Company code field */}
+                <div className="login-field">
+                  <label htmlFor="login-company-code" className="login-label">
+                    Company ID
+                  </label>
+                  <input
+                    id="login-company-code"
+                    type="text"
+                    className="login-input"
+                    placeholder="e.g. ROYALHRMS"
+                    value={companyCode}
+                    onChange={e => setCompanyCode(e.target.value)}
+                    onFocus={() => setError("")}
+                    required
+                    autoComplete="organization"
+                    suppressHydrationWarning
+                  />
+                </div>
 
                 {/* Email field */}
                 <div className="login-field">
@@ -205,6 +247,17 @@ export default function LoginPage() {
                 </button>
 
               </form>
+            )}
+
+            {portal && !showForgot && (
+              <button
+                type="button"
+                className="login-forgot-btn"
+                style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 4 }}
+                onClick={() => router.push("/portal")}
+              >
+                <i className="ti ti-arrow-left" /> Not you? Choose a different portal
+              </button>
             )}
 
             <p className="login-footer-text">

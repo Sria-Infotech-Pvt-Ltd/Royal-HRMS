@@ -79,15 +79,16 @@ def _send_leave_email(user, template_name: str, context: dict) -> None:
     """
     if not user or not getattr(user, 'email', ''):
         return
+    from django.db import connection
     from apps.notifications.tasks import send_lifecycle_email_task
 
-    def _dispatch(user_id=user.id, tpl=template_name, ctx=dict(context)):
+    def _dispatch(user_id=user.id, tpl=template_name, ctx=dict(context), schema_name=connection.schema_name):
         try:
             # retry=False + ignore_result=True — bounds broker/backend
             # retries so a down Redis can't block this request; see the
             # referral-submission dispatch in recruitment/views.py.
             send_lifecycle_email_task.apply_async(
-                args=[user_id, tpl, ctx], retry=False, ignore_result=True,
+                args=[schema_name, user_id, tpl, ctx], retry=False, ignore_result=True,
             )
         except Exception as exc:
             logger.error(

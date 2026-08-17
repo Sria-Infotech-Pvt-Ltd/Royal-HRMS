@@ -1,5 +1,6 @@
 "use client";
 
+import Modal from "@/components/Modal";
 import type { Assessment, AssessmentCandidate } from "../page";
 
 function fmt(iso: string | null) {
@@ -17,16 +18,13 @@ export default function AssessmentResultsModal({ assessment, onClose }: { assess
   const candidates = assessment.candidates ?? [];
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 780 }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-list-details mr-6" />Candidate Results — {assessment.title}
-          </div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body" style={{ padding: 0 }}>
+    <Modal
+      title={<><i className="ti ti-list-details mr-6" />Candidate Results — {assessment.title}</>}
+      onClose={onClose}
+      maxWidth={780}
+      bodyStyle={{ padding: 0 }}
+      footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}
+    >
           {candidates.length === 0 ? (
             <div className="text-center py-12 text-sm text-[var(--on-variant)]">
               <i className="ti ti-clipboard text-2xl block mb-2" />
@@ -72,12 +70,6 @@ export default function AssessmentResultsModal({ assessment, onClose }: { assess
               </table>
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

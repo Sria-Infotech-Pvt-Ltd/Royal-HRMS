@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import Modal from "@/components/Modal";
 
 interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
 
@@ -213,14 +214,45 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
         onClose={() => setPreviewDoc(null)}
       />
     )}
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">Review — {user.full_name}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
+    <Modal
+      title={`Review — ${user.full_name}`}
+      onClose={onClose}
+      maxWidth={560}
+      footer={
+        <>
+          <button
+            className="btn btn-ghost"
+            style={{ color: "var(--error)", borderColor: "var(--error)" }}
+            onClick={() => onAction(user.id, "reject")}
+            disabled={acting}
+          >
+            {acting ? "…" : "Send Back for Corrections"}
+          </button>
 
-        <div className="modal-body">
+          {showAssessment ? (
+            <button className="btn btn-filled" onClick={handleAssessmentConfirm} disabled={acting || loadAssess}>
+              {acting
+                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
+                : <><i className="ti ti-check" /> Confirm & Activate</>
+              }
+            </button>
+          ) : showAssign ? (
+            <button className="btn btn-filled" onClick={handleConfirm} disabled={acting}>
+              {acting
+                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
+                : user.candidate_id
+                  ? <><i className="ti ti-arrow-right" /> Continue</>
+                  : <><i className="ti ti-check" /> Confirm & Activate</>
+              }
+            </button>
+          ) : (
+            <button className="btn btn-filled" onClick={handleApproveClick} disabled={acting}>
+              Approve & Activate ✓
+            </button>
+          )}
+        </>
+      }
+    >
           {actionErr && <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{actionErr}</div>}
 
           <Section title="Basic Info">
@@ -423,42 +455,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               </div>
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          <button
-            className="btn btn-ghost"
-            style={{ color: "var(--error)", borderColor: "var(--error)" }}
-            onClick={() => onAction(user.id, "reject")}
-            disabled={acting}
-          >
-            {acting ? "…" : "Send Back for Corrections"}
-          </button>
-
-          {showAssessment ? (
-            <button className="btn btn-filled" onClick={handleAssessmentConfirm} disabled={acting || loadAssess}>
-              {acting
-                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
-                : <><i className="ti ti-check" /> Confirm & Activate</>
-              }
-            </button>
-          ) : showAssign ? (
-            <button className="btn btn-filled" onClick={handleConfirm} disabled={acting}>
-              {acting
-                ? <><i className="ti ti-loader-2 spin" /> Activating…</>
-                : user.candidate_id
-                  ? <><i className="ti ti-arrow-right" /> Continue</>
-                  : <><i className="ti ti-check" /> Confirm & Activate</>
-              }
-            </button>
-          ) : (
-            <button className="btn btn-filled" onClick={handleApproveClick} disabled={acting}>
-              Approve & Activate ✓
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
     </>
   );
 }

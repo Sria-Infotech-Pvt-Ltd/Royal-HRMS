@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
+import Modal from "@/components/Modal";
 import type {
   ImportPreviewRow,
   ImportValidateResult,
@@ -135,14 +136,44 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
   const validCount = preview?.valid_rows ?? 0;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && handleClose()}>
-      <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title"><i className="ti ti-file-upload mr-2" />Import Leave Balances &amp; History</div>
-          <button className="modal-close" onClick={handleClose}><i className="ti ti-x" /></button>
-        </div>
+    <Modal
+      title={<><i className="ti ti-file-upload mr-2" />Import Leave Balances &amp; History</>}
+      onClose={handleClose}
+      size="lg"
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={handleClose}>
+            {phase === "result" ? "Close" : "Cancel"}
+          </button>
 
-        <div className="modal-body">
+          {phase === "upload" && (
+            <button className="btn btn-filled" onClick={handleValidate} disabled={!file || validating} suppressHydrationWarning>
+              {validating
+                ? <><i className="ti ti-loader-2 spin" /> Validating…</>
+                : <><i className="ti ti-search" /> Validate File</>}
+            </button>
+          )}
+
+          {phase === "preview" && (
+            <>
+              <button className="btn btn-ghost" onClick={() => { setPhase("upload"); setPreview(null); setApiError(null); }}>
+                <i className="ti ti-arrow-left" /> Change File
+              </button>
+              <button
+                className="btn btn-filled"
+                onClick={handleImport}
+                disabled={validCount === 0 || importing}
+                suppressHydrationWarning
+              >
+                {importing
+                  ? <><i className="ti ti-loader-2 spin" /> Importing…</>
+                  : <><i className="ti ti-file-upload" /> Import {validCount} valid row{validCount !== 1 ? "s" : ""}</>}
+              </button>
+            </>
+          )}
+        </>
+      }
+    >
 
           {/* ── Phase: upload ── */}
           {phase === "upload" && (
@@ -314,40 +345,6 @@ export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props)
             </>
           )}
 
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={handleClose}>
-            {phase === "result" ? "Close" : "Cancel"}
-          </button>
-
-          {phase === "upload" && (
-            <button className="btn btn-filled" onClick={handleValidate} disabled={!file || validating} suppressHydrationWarning>
-              {validating
-                ? <><i className="ti ti-loader-2 spin" /> Validating…</>
-                : <><i className="ti ti-search" /> Validate File</>}
-            </button>
-          )}
-
-          {phase === "preview" && (
-            <>
-              <button className="btn btn-ghost" onClick={() => { setPhase("upload"); setPreview(null); setApiError(null); }}>
-                <i className="ti ti-arrow-left" /> Change File
-              </button>
-              <button
-                className="btn btn-filled"
-                onClick={handleImport}
-                disabled={validCount === 0 || importing}
-                suppressHydrationWarning
-              >
-                {importing
-                  ? <><i className="ti ti-loader-2 spin" /> Importing…</>
-                  : <><i className="ti ti-file-upload" /> Import {validCount} valid row{validCount !== 1 ? "s" : ""}</>}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

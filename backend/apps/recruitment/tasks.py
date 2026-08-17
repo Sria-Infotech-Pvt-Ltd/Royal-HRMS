@@ -21,9 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_interview_scheduled_emails_task(self, candidate_id):
+def send_interview_scheduled_emails_task(self, schema_name, candidate_id):
     """
     Background delivery for "interview scheduled" notification email(s).
+    `schema_name` is the dispatching company's schema (see
+    apps.tenants.utils.run_in_tenant).
 
     Retries (up to 3, 5 min apart) only cover fetching the candidate —
     nothing has been sent yet at that point. Once the existing send
@@ -33,15 +35,36 @@ def send_interview_scheduled_emails_task(self, candidate_id):
     retrying the whole function again could re-send those.
     """
     from apps.recruitment.models import Candidate
+    from apps.tenants.utils import run_in_tenant
+
+    def _do():
+        try:
+            candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
+        except Candidate.DoesNotExist:
+            logger.warning(
+                'send_interview_scheduled_emails_task: candidate %s no longer exists — skipping.',
+                candidate_id,
+            )
+            return {'candidate_id': candidate_id, 'status': 'skipped_missing'}
+
+        from apps.recruitment.views import _send_interview_scheduled_email_general, _send_interview_scheduled_emails
+
+        try:
+            if candidate.referral_by_id:
+                _send_interview_scheduled_emails(candidate)
+            else:
+                _send_interview_scheduled_email_general(candidate)
+        except Exception as exc:
+            logger.error(
+                'send_interview_scheduled_emails_task: error sending for candidate %s: %s',
+                candidate_id, exc, exc_info=True,
+            )
+            return {'candidate_id': candidate_id, 'status': 'error'}
+
+        return {'candidate_id': candidate_id, 'status': 'sent'}
 
     try:
-        candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
-    except Candidate.DoesNotExist:
-        logger.warning(
-            'send_interview_scheduled_emails_task: candidate %s no longer exists — skipping.',
-            candidate_id,
-        )
-        return {'candidate_id': candidate_id, 'status': 'skipped_missing'}
+        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_interview_scheduled_emails_task setup failed for %s: %s',
@@ -49,56 +72,46 @@ def send_interview_scheduled_emails_task(self, candidate_id):
         )
         raise self.retry(exc=exc)
 
-    from apps.recruitment.views import _send_interview_scheduled_email_general, _send_interview_scheduled_emails
-
-    try:
-        if candidate.referral_by_id:
-            _send_interview_scheduled_emails(candidate)
-        else:
-            _send_interview_scheduled_email_general(candidate)
-    except Exception as exc:
-        logger.error(
-            'send_interview_scheduled_emails_task: error sending for candidate %s: %s',
-            candidate_id, exc, exc_info=True,
-        )
-        return {'candidate_id': candidate_id, 'status': 'error'}
-
-    return {'candidate_id': candidate_id, 'status': 'sent'}
-
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_referral_submission_emails_task(self, candidate_id):
+def send_referral_submission_emails_task(self, schema_name, candidate_id):
     """
     Background delivery for the referral-submitted notification email(s)
-    (referrer + candidate). Same retry semantics as
+    (referrer + candidate). `schema_name` is the dispatching company's
+    schema (see apps.tenants.utils.run_in_tenant). Same retry semantics as
     send_interview_scheduled_emails_task above.
     """
     from apps.recruitment.models import Candidate
+    from apps.tenants.utils import run_in_tenant
+
+    def _do():
+        try:
+            candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
+        except Candidate.DoesNotExist:
+            logger.warning(
+                'send_referral_submission_emails_task: candidate %s no longer exists — skipping.',
+                candidate_id,
+            )
+            return {'candidate_id': candidate_id, 'status': 'skipped_missing'}
+
+        from apps.recruitment.views import _send_referral_submission_emails
+
+        try:
+            _send_referral_submission_emails(candidate)
+        except Exception as exc:
+            logger.error(
+                'send_referral_submission_emails_task: error sending for candidate %s: %s',
+                candidate_id, exc, exc_info=True,
+            )
+            return {'candidate_id': candidate_id, 'status': 'error'}
+
+        return {'candidate_id': candidate_id, 'status': 'sent'}
 
     try:
-        candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
-    except Candidate.DoesNotExist:
-        logger.warning(
-            'send_referral_submission_emails_task: candidate %s no longer exists — skipping.',
-            candidate_id,
-        )
-        return {'candidate_id': candidate_id, 'status': 'skipped_missing'}
+        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_referral_submission_emails_task setup failed for %s: %s',
             candidate_id, exc, exc_info=True,
         )
         raise self.retry(exc=exc)
-
-    from apps.recruitment.views import _send_referral_submission_emails
-
-    try:
-        _send_referral_submission_emails(candidate)
-    except Exception as exc:
-        logger.error(
-            'send_referral_submission_emails_task: error sending for candidate %s: %s',
-            candidate_id, exc, exc_info=True,
-        )
-        return {'candidate_id': candidate_id, 'status': 'error'}
-
-    return {'candidate_id': candidate_id, 'status': 'sent'}

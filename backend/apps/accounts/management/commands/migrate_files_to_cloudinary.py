@@ -111,7 +111,7 @@ class Command(BaseCommand):
                     field_file.save(basename, File(fh), save=True)
 
                 os.remove(local_path)
-                self.stdout.write(self.style.SUCCESS(f'         OK uploaded & local file removed'))
+                self.stdout.write(self.style.SUCCESS('         OK uploaded & local file removed'))
                 totals['migrated'] += 1
 
             except Exception as exc:

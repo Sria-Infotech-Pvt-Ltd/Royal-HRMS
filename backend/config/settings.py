@@ -20,6 +20,13 @@ environ.Env.read_env(BASE_DIR / '.env')
 
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
+
+# Field-level encryption for PII (bank account number, IFSC, PAN, UAN, Aadhaar
+# name) — see core/encrypted_fields.py. FIELD_INDEX_HMAC_KEY is a separate key
+# used only for deterministic blind-index hashing (exact-match lookups on
+# encrypted fields, e.g. PAN duplicate detection) — never for encryption.
+FIELD_ENCRYPTION_KEY = env('FIELD_ENCRYPTION_KEY')
+FIELD_INDEX_HMAC_KEY = env('FIELD_INDEX_HMAC_KEY')
 # Snapshotted separately from DEBUG, at the SAME .env-derived value, because
 # Django's test runner force-overrides the live settings.DEBUG attribute to
 # False for every `manage.py test` run — documented, intentional Django
@@ -33,10 +40,32 @@ DEBUG = env('DEBUG')
 IS_LOCAL_OR_TEST_ENV = DEBUG
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
-INSTALLED_APPS = [
-    'daphne',                      # first: replaces runserver with an ASGI-aware one
+# ─── Multi-tenancy (django-tenants, PostgreSQL schema-per-company) ───────────
+# SHARED_APPS live in the public schema — apps.tenants is the company
+# registry (which schema each company maps to, which modules it has
+# enabled); everything else is a TENANT_APP, meaning every company gets its
+# own complete, isolated copy of those tables in its own schema. Isolation
+# is enforced by which schema the DB connection is pointed at for a given
+# request (see apps/tenants/middleware.py), not by an application-level
+# `.filter(company=...)` added to every query — so none of the existing
+# business logic (payroll, attendance, encryption, permissions, ...) needed
+# to change for this. django.contrib.contenttypes/auth appear in BOTH lists
+# per django-tenants' own convention: their tables need to exist in every
+# tenant schema (TENANT_APPS, since AUTH_USER_MODEL is a tenant app) AND in
+# the public schema (SHARED_APPS, for objects created before any tenant
+# exists, e.g. during the very first `migrate_schemas --shared`).
+# django.contrib.admin and rest_framework_simplejwt.token_blacklist are
+# TENANT-ONLY (not shared): LogEntry and OutstandingToken/BlacklistedToken
+# each have a FK to AUTH_USER_MODEL (accounts.User, a tenant app), which
+# can't be satisfied in the public schema — each company gets its own admin
+# log and token blacklist alongside its own users, which is the right
+# behavior anyway (both are inherently per-company data).
+SHARED_APPS = (
+    'django_tenants',              # must be first
+    'apps.tenants',
+
+    'daphne',                      # first of the rest: replaces runserver with an ASGI-aware one
     'channels',
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -46,8 +75,15 @@ INSTALLED_APPS = [
     'cloudinary',
     'rest_framework',
     'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
+)
+
+TENANT_APPS = (
+    'django.contrib.admin',
+    'rest_framework_simplejwt.token_blacklist',
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
+
     'apps.accounts',
     'apps.branch',
     'apps.announcements',
@@ -59,10 +95,19 @@ INSTALLED_APPS = [
     'apps.dashboard',
     'apps.payroll',
     'apps.voice_commands',
-]
+)
+
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
+TENANT_MODEL = 'tenants.Client'
+TENANT_DOMAIN_MODEL = 'tenants.Domain'
+DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    # Resolves which company schema this request runs against — must run
+    # before anything else that touches the ORM (every app view included).
+    'apps.tenants.middleware.TenantSchemaMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -102,6 +147,11 @@ DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
 if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
     DATABASES['default'].setdefault('OPTIONS', {})
     DATABASES['default']['OPTIONS'].setdefault('sslmode', 'require')
+    # Multi-tenancy (see SHARED_APPS/TENANT_APPS above) is PostgreSQL-schema
+    # based — django-tenants needs its own backend, a thin wrapper around
+    # psycopg2 that sets the connection's search_path per request/tenant.
+    # There is no SQLite equivalent: multi-tenancy requires Postgres.
+    DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -268,8 +318,6 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 # 1s backoff sleep) to bound a dead broker to a single retry.
 CELERY_BROKER_CONNECTION_MAX_RETRIES = 1
 
-from celery.schedules import crontab
-
 CELERY_BEAT_SCHEDULE = {
     # Runs every 5 minutes — detects employees past shift_end + grace with no clock-out.
     'check-missing-clockouts': {
@@ -315,11 +363,12 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon':            '300/hour',
-        'user':            '3000/hour',
-        'login':           '20/hour',
-        'forgot_password': '5/hour',
-        'otp_verify':      '10/hour',
+        'anon':                 '300/hour',
+        'user':                 '3000/hour',
+        'login':                '20/hour',
+        'forgot_password':      '5/hour',
+        'otp_verify':           '10/hour',
+        'platform_admin_login': '20/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }

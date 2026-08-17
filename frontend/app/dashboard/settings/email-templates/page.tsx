@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { buildEmailPreview, type CompanyInfo } from "@/lib/emailPreview";
 import EditTemplateModal from "./_components/EditTemplateModal";
+import Modal from "@/components/Modal";
 import {
   EMAIL_TEMPLATES_BASE, EMAIL_TEMPLATE_CATEGORIES, emailTemplateDetail, emailTemplatePreview,
   flattenTemplates, TYPE_META, catValue,
@@ -664,39 +665,33 @@ export default function EmailTemplatesPage() {
 
       {/* Preview modal */}
       {viewing && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setViewing(null); }}>
-          <div className="modal" style={{ width: "min(680px, 96vw)", maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
-            <div className="modal-header" style={{ flexShrink: 0 }}>
-              <div>
-                <div className="modal-title">Preview — {viewing.display_name}</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  Subject: <strong>{viewing.subject}</strong>
-                </div>
-              </div>
-              <button className="modal-close" onClick={() => setViewing(null)} suppressHydrationWarning><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body" style={{ flex: 1, overflow: "auto" }}>
-              {previewLoading ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "24px 0", color: "var(--on-variant)", justifyContent: "center" }}>
-                  <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite" }} /> Loading preview…
-                </div>
-              ) : (
-                <iframe
-                  srcDoc={previewHtml ?? buildEmailPreview(viewing.body, company)}
-                  sandbox="allow-same-origin"
-                  style={{ width: "100%", height: 420, border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", display: "block" }}
-                  title="Email preview"
-                />
-              )}
-            </div>
-            <div className="modal-footer" style={{ flexShrink: 0 }}>
+        <Modal
+          title={<>Preview — {viewing.display_name}<div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2, fontWeight: 400 }}>Subject: <strong>{viewing.subject}</strong></div></>}
+          onClose={() => setViewing(null)}
+          size="lg"
+          maxWidth={680}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setViewing(null)} suppressHydrationWarning>Close</button>
               <button className="btn btn-filled" onClick={() => { setViewing(null); setEditing(viewing); }} suppressHydrationWarning>
                 <i className="ti ti-pencil" /> Edit Template
               </button>
+            </>
+          }
+        >
+          {previewLoading ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "24px 0", color: "var(--on-variant)", justifyContent: "center" }}>
+              <i className="ti ti-loader-2" style={{ fontSize: 20, animation: "spin 1s linear infinite" }} /> Loading preview…
             </div>
-          </div>
-        </div>
+          ) : (
+            <iframe
+              srcDoc={previewHtml ?? buildEmailPreview(viewing.body, company)}
+              sandbox="allow-same-origin"
+              style={{ width: "100%", height: 420, border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", display: "block" }}
+              title="Email preview"
+            />
+          )}
+        </Modal>
       )}
 
       <style>{`

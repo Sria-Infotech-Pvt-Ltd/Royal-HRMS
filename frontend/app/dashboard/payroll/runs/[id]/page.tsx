@@ -41,6 +41,8 @@ function period(cycle: PayrollCycle) {
 
 interface PaginatedPayslips { results: EmployeePayslip[]; count: number; }
 
+const ECR_ELIGIBLE_STATUSES = ["payslips_generated", "query_window_open", "paid", "closed"];
+
 export default function PayrollRunDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id }  = use(params);
   const router  = useRouter();
@@ -52,6 +54,8 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
     `${API.payroll.cyclePayslips(id)}?page_size=500`,
   );
 
+  const canDownloadEcr = !!cycle && ECR_ELIGIBLE_STATUSES.includes(cycle.status);
+
   const payslips = psData?.results ?? [];
   const payslipsTruncated = psData != null && psData.count > payslips.length;
 
@@ -59,8 +63,6 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
   const totalDeductions = payslips.reduce((s, p) => s + parseFloat(p.total_deductions || "0"), 0);
   const totalNet        = payslips.reduce((s, p) => s + parseFloat(p.net_pay          || "0"), 0);
   const totalPF         = payslips.reduce((s, p) => s + parseFloat(p.pf_employee     || "0"), 0);
-
-  const canDownloadEcr = cycle && ["payslips_generated", "query_window_open", "paid", "closed"].includes(cycle.status);
 
   const downloadEcr = useCallback(async () => {
     if (!cycle) return;

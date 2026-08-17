@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
 import { BulkImportResult } from "./_data";
+import Modal from "@/components/Modal";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"];
@@ -105,14 +106,31 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && handleClose()}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title"><i className="ti ti-file-upload" style={{ marginRight: 8 }} />Bulk Import Candidates</div>
-          <button className="modal-close" onClick={handleClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      title={<><i className="ti ti-file-upload" style={{ marginRight: 8 }} />Bulk Import Candidates</>}
+      onClose={handleClose}
+      maxWidth={520}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={handleClose}>
+            {result ? "Close" : "Cancel"}
+          </button>
+          {!result && (
+            <button
+              className="btn btn-filled"
+              onClick={handleUpload}
+              disabled={!file || uploading}
+              suppressHydrationWarning
+            >
+              {uploading
+                ? <><i className="ti ti-loader-2 spin" /> Uploading…</>
+                : <><i className="ti ti-file-upload" /> Upload & Import</>
+              }
+            </button>
+          )}
+        </>
+      }
+    >
           {/* Instructions */}
           <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(30,78,140,0.06)", border: "1px solid rgba(30,78,140,0.15)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 4, fontSize: 12 }}>
@@ -226,27 +244,6 @@ export function CandidateBulkImportModal({ onClose, onSuccess }: Props) {
               )}
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={handleClose}>
-            {result ? "Close" : "Cancel"}
-          </button>
-          {!result && (
-            <button
-              className="btn btn-filled"
-              onClick={handleUpload}
-              disabled={!file || uploading}
-              suppressHydrationWarning
-            >
-              {uploading
-                ? <><i className="ti ti-loader-2 spin" /> Uploading…</>
-                : <><i className="ti ti-file-upload" /> Upload & Import</>
-              }
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

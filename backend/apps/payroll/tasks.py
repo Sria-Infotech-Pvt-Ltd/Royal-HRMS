@@ -19,13 +19,17 @@ def send_payroll_approval_reminders(self):
     """
     Daily task: find payroll cycles stuck in ATTENDANCE_PENDING for more than
     REMINDER_HOURS and send a reminder bell + email to each manager who still
-    hasn't approved their row.
+    hasn't approved their row. Runs once per active company (see
+    apps.tenants.utils.run_for_all_tenants — this task has no single tenant
+    of its own, it's scheduled, not dispatched from a request).
 
     Idempotent — re-running sends another reminder, which is the intended
     behaviour for a daily nudge. Does not fire for cycles created less than
     REMINDER_HOURS ago (the initial notification covers those).
     """
-    try:
+    from apps.tenants.utils import run_for_all_tenants
+
+    def _run_for_one_tenant():
         from datetime import timedelta
 
         from django.utils import timezone
@@ -67,8 +71,14 @@ def send_payroll_approval_reminders(self):
                 })
                 reminded_count += 1
 
-        logger.info('send_payroll_approval_reminders: reminded %s managers', reminded_count)
         return {'reminded': reminded_count}
+
+    try:
+        result = run_for_all_tenants(_run_for_one_tenant, task_name='send_payroll_approval_reminders')
+        logger.info('send_payroll_approval_reminders: %s', result)
+        return result
     except Exception as exc:
         logger.error('send_payroll_approval_reminders failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
+
+

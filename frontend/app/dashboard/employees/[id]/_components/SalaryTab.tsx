@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import Modal from "@/components/Modal";
 import type { EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
 
 interface Props { employeeId: string; }
@@ -148,72 +149,11 @@ export default function SalaryTab({ employeeId }: Props) {
 
       {/* Assign / Revise modal */}
       {showModal && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className="modal">
-            <div className="modal-header">
-              <span className="modal-title">{hasConfig ? "Revise CTC" : "Assign CTC"}</span>
-              <button className="modal-close" onClick={() => setShowModal(false)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              {saveErr && (
-                <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{saveErr}</div>
-              )}
-
-              <div className="field-group" style={{ marginBottom: "1rem" }}>
-                <label className="field-label">
-                  Annual CTC (₹) <span style={{ color: "var(--error)" }}>*</span>
-                </label>
-                <input
-                  className="field-input"
-                  type="number"
-                  min={0}
-                  step={1000}
-                  placeholder="e.g. 600000"
-                  value={form.annual_ctc}
-                  onChange={e => setForm(f => ({ ...f, annual_ctc: e.target.value }))}
-                />
-                {form.annual_ctc && (
-                  <div style={{ fontSize: ".78rem", color: "var(--text-secondary)", marginTop: ".25rem" }}>
-                    Monthly: {INR(Math.round(Number(form.annual_ctc) / 12))}
-                  </div>
-                )}
-              </div>
-
-              <div className="field-group" style={{ marginBottom: "1rem" }}>
-                <label className="field-label">
-                  Effective From <span style={{ color: "var(--error)" }}>*</span>
-                </label>
-                <input
-                  className="field-input"
-                  type="date"
-                  value={form.effective_from}
-                  onChange={e => setForm(f => ({ ...f, effective_from: e.target.value }))}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">
-                  Salary Structure{" "}
-                  <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
-                    (optional)
-                  </span>
-                </label>
-                <select
-                  className="field-input field-select"
-                  value={form.salary_structure}
-                  onChange={e => setForm(f => ({ ...f, salary_structure: e.target.value }))}
-                >
-                  <option value="">— Use company default —</option>
-                  {(structures ?? []).filter(s => s.is_active).map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.is_default ? " (Default)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-footer">
+        <Modal
+          title={hasConfig ? "Revise CTC" : "Assign CTC"}
+          onClose={() => setShowModal(false)}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={saving}>
                 Cancel
               </button>
@@ -227,9 +167,66 @@ export default function SalaryTab({ employeeId }: Props) {
                   : hasConfig ? "Revise CTC" : "Assign CTC"
                 }
               </button>
-            </div>
+            </>
+          }
+        >
+          {saveErr && (
+            <div className="alert alert-error" style={{ marginBottom: "1rem" }}>{saveErr}</div>
+          )}
+
+          <div className="field-group" style={{ marginBottom: "1rem" }}>
+            <label className="field-label">
+              Annual CTC (₹) <span style={{ color: "var(--error)" }}>*</span>
+            </label>
+            <input
+              className="field-input"
+              type="number"
+              min={0}
+              step={1000}
+              placeholder="e.g. 600000"
+              value={form.annual_ctc}
+              onChange={e => setForm(f => ({ ...f, annual_ctc: e.target.value }))}
+            />
+            {form.annual_ctc && (
+              <div style={{ fontSize: ".78rem", color: "var(--text-secondary)", marginTop: ".25rem" }}>
+                Monthly: {INR(Math.round(Number(form.annual_ctc) / 12))}
+              </div>
+            )}
           </div>
-        </div>
+
+          <div className="field-group" style={{ marginBottom: "1rem" }}>
+            <label className="field-label">
+              Effective From <span style={{ color: "var(--error)" }}>*</span>
+            </label>
+            <input
+              className="field-input"
+              type="date"
+              value={form.effective_from}
+              onChange={e => setForm(f => ({ ...f, effective_from: e.target.value }))}
+            />
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">
+              Salary Structure{" "}
+              <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
+                (optional)
+              </span>
+            </label>
+            <select
+              className="field-input field-select"
+              value={form.salary_structure}
+              onChange={e => setForm(f => ({ ...f, salary_structure: e.target.value }))}
+            >
+              <option value="">— Use company default —</option>
+              {(structures ?? []).filter(s => s.is_active).map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.is_default ? " (Default)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        </Modal>
       )}
     </div>
   );

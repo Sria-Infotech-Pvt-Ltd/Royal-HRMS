@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Modal from "@/components/Modal";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -187,71 +188,17 @@ export default function SalarySetupTab() {
 
       {/* Assign / Edit CTC modal */}
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-currency-rupee" style={{ marginRight: 8 }} />
-                {modal.current ? "Update CTC" : "Assign CTC"} — {modal.employee.full_name}
-              </div>
-              <button className="modal-close" onClick={() => setModal(null)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ padding: "10px 14px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12, color: "var(--on-variant)" }}>
-                <strong>{modal.employee.employee_id}</strong> · {modal.employee.department} · {modal.employee.branch}
-              </div>
-
-              {modal.current && (
-                <div className="alert alert-info" style={{ marginBottom: 0 }}>
-                  <i className="ti ti-info-circle" />
-                  <span>Current CTC: <strong>{fmt(modal.current.annual_ctc)}/year</strong> (effective {modal.current.effective_from}). Saving will deactivate this and create a new record.</span>
-                </div>
-              )}
-
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Annual CTC (₹) *</label>
-                  <input
-                    type="number"
-                    className="field-input"
-                    min={0}
-                    step={1000}
-                    placeholder="e.g. 600000"
-                    value={modal.annual_ctc}
-                    onChange={e => setModal(m => m ? { ...m, annual_ctc: e.target.value } : m)}
-                  />
-                  {modal.annual_ctc && (
-                    <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>
-                      Monthly: {fmt(Number(modal.annual_ctc) / 12)}
-                    </span>
-                  )}
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Effective From *</label>
-                  <input
-                    type="date"
-                    className="field-input"
-                    value={modal.effective_from}
-                    onChange={e => setModal(m => m ? { ...m, effective_from: e.target.value } : m)}
-                  />
-                </div>
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Salary Structure Override</label>
-                <select
-                  className="field-input"
-                  value={modal.salary_structure}
-                  onChange={e => setModal(m => m ? { ...m, salary_structure: e.target.value } : m)}
-                >
-                  <option value="">— Use branch / company default —</option>
-                  {(structures ?? []).filter(s => s.is_active).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}{s.is_default ? " (Default)" : ""}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={
+            <>
+              <i className="ti ti-currency-rupee" style={{ marginRight: 8 }} />
+              {modal.current ? "Update CTC" : "Assign CTC"} — {modal.employee.full_name}
+            </>
+          }
+          onClose={() => setModal(null)}
+          maxWidth={480}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancel</button>
               <button
                 className="btn btn-filled"
@@ -260,9 +207,65 @@ export default function SalarySetupTab() {
               >
                 {saving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : <><i className="ti ti-check" /> Save CTC</>}
               </button>
+            </>
+          }
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "10px 14px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12, color: "var(--on-variant)" }}>
+              <strong>{modal.employee.employee_id}</strong> · {modal.employee.department} · {modal.employee.branch}
+            </div>
+
+            {modal.current && (
+              <div className="alert alert-info" style={{ marginBottom: 0 }}>
+                <i className="ti ti-info-circle" />
+                <span>Current CTC: <strong>{fmt(modal.current.annual_ctc)}/year</strong> (effective {modal.current.effective_from}). Saving will deactivate this and create a new record.</span>
+              </div>
+            )}
+
+            <div className="form-row cols-2">
+              <div className="field-group">
+                <label className="field-label">Annual CTC (₹) *</label>
+                <input
+                  type="number"
+                  className="field-input"
+                  min={0}
+                  step={1000}
+                  placeholder="e.g. 600000"
+                  value={modal.annual_ctc}
+                  onChange={e => setModal(m => m ? { ...m, annual_ctc: e.target.value } : m)}
+                />
+                {modal.annual_ctc && (
+                  <span style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4, display: "block" }}>
+                    Monthly: {fmt(Number(modal.annual_ctc) / 12)}
+                  </span>
+                )}
+              </div>
+              <div className="field-group">
+                <label className="field-label">Effective From *</label>
+                <input
+                  type="date"
+                  className="field-input"
+                  value={modal.effective_from}
+                  onChange={e => setModal(m => m ? { ...m, effective_from: e.target.value } : m)}
+                />
+              </div>
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">Salary Structure Override</label>
+              <select
+                className="field-input"
+                value={modal.salary_structure}
+                onChange={e => setModal(m => m ? { ...m, salary_structure: e.target.value } : m)}
+              >
+                <option value="">— Use branch / company default —</option>
+                {(structures ?? []).filter(s => s.is_active).map(s => (
+                  <option key={s.id} value={s.id}>{s.name}{s.is_default ? " (Default)" : ""}</option>
+                ))}
+              </select>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

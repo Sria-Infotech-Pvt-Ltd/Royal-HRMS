@@ -7,6 +7,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { NAME_RE, POSITION_RE, sanitizeName, sanitizePosition, todayDateString } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, MODE_LABELS, RECRUITMENT_API } from "./_data";
+import Modal from "@/components/Modal";
 
 interface Props {
   candidate: Candidate;
@@ -123,17 +124,26 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div>
-            <div className="modal-title">Edit Interview Details</div>
-            <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "2px 0 0" }}>{candidate.email}</p>
-          </div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+    <Modal
+      title={
+        <div>
+          <div className="modal-title">Edit Interview Details</div>
+          <p style={{ fontSize: 12, color: "var(--on-variant)", margin: "2px 0 0" }}>{candidate.email}</p>
         </div>
-
-        <div className="modal-body">
+      }
+      onClose={onClose}
+      maxWidth={520}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} suppressHydrationWarning>
+            Cancel
+          </button>
+          <button className="btn btn-filled" onClick={handleSave} disabled={saving || !branch || !name.trim() || !positionApplied.trim()} suppressHydrationWarning>
+            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-device-floppy" /> Save Changes</>}
+          </button>
+        </>
+      }
+    >
           {error && (
             <div className="alert alert-error mb-16">
               <i className="ti ti-alert-circle" /><div>{error}</div>
@@ -220,17 +230,6 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} suppressHydrationWarning>
-            Cancel
-          </button>
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving || !branch || !name.trim() || !positionApplied.trim()} suppressHydrationWarning>
-            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-device-floppy" /> Save Changes</>}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

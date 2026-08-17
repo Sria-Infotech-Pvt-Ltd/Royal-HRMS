@@ -17,6 +17,7 @@ NOTIFICATION_TYPE_CHOICES = [
     ('announcement',           'Announcement'),
     ('birthday',               'Birthday'),
     ('promotion',              'Promotion'),
+    ('security_alert',         'Security Alert'),
 ]
 
 MODULE_CHOICES = [
@@ -28,6 +29,7 @@ MODULE_CHOICES = [
     ('announcement',   'Announcement'),
     ('birthday',       'Birthday'),
     ('promotion',      'Promotion'),
+    ('security',       'Security'),
 ]
 
 

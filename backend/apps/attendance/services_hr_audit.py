@@ -13,7 +13,6 @@ import logging
 from collections import defaultdict
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 
 from apps.attendance.models import AttendancePunch
 

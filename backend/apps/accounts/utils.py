@@ -127,13 +127,15 @@ def _build_message(
 # ─── Public send functions ────────────────────────────────────────────────────
 
 def send_otp_email(email: str, otp: str, full_name: str) -> None:
-  
+
     connection, from_email = _get_smtp_connection()
-    expiry = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
+    expiry  = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
+    branding = _get_company_branding()
+    company_name = branding[0] or 'Royal HRMS'
 
     html_body = (
         f'<p>Hi <strong>{full_name}</strong>,</p>'
-        f'<p>Your OTP to reset your Royal Staffing HRMS password is:</p>'
+        f'<p>Your OTP to reset your {company_name} password is:</p>'
         f'<p style="font-size:32px;font-weight:bold;letter-spacing:8px;'
         f'color:#4f46e5;text-align:center;padding:20px 0;'
         f'border:2px dashed #c7d2fe;border-radius:8px;">{otp}</p>'
@@ -142,12 +144,12 @@ def send_otp_email(email: str, otp: str, full_name: str) -> None:
         f'<p>If you did not request this reset, please ignore this email or '
         f'contact your system administrator immediately.</p>'
         f'<p style="margin-top:32px;">Regards,<br>'
-        f'<strong>HR Team</strong><br>Royal Staffing Services</p>'
+        f'<strong>HR Team</strong><br>{company_name}</p>'
     )
-    html_body = _company_email_wrapper(html_body, *_get_company_branding())
+    html_body = _company_email_wrapper(html_body, *branding)
 
     msg = _build_message(
-        subject='Your Royal Staffing HRMS Password Reset OTP',
+        subject=f'Your {company_name} Password Reset OTP',
         html_body=html_body,
         from_email=from_email,
         to=[email],
@@ -172,13 +174,15 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
         fail_silently=False,
     )
 
+    branding = _get_company_branding()
+    company_name = branding[0] or 'Royal HRMS'
     html_body = (
-        '<p>This is a test email from <strong>Royal Staffing HRMS</strong>.</p>'
+        f'<p>This is a test email from <strong>{company_name}</strong>.</p>'
         '<p style="color:#16a34a;font-weight:bold;font-size:18px;">'
         '&#10003;&nbsp;Your SMTP configuration is working correctly.</p>'
-        '<p>Regards,<br><strong>Royal Staffing HRMS</strong></p>'
+        f'<p>Regards,<br><strong>{company_name}</strong></p>'
     )
-    html_body = _company_email_wrapper(html_body, *_get_company_branding())
+    html_body = _company_email_wrapper(html_body, *branding)
 
     msg = _build_message(
         subject='Royal HRMS — SMTP Configuration Test',

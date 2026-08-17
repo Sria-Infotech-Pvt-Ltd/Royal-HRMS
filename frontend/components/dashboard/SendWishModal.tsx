@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { buildEmailPreview, CompanyInfo, normalizeExtraContext, renderTemplateVars } from "@/lib/emailPreview";
+import Modal from "@/components/Modal";
 
 interface WishTemplate {
   name:         string;
@@ -133,19 +134,33 @@ export function SendWishModal({
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 640 }}>
-
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-confetti" style={{ marginRight: 6 }} />
-            Send Wish — {employeeName}
-          </div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body">
-          {apiError && (
+    <Modal
+      title={
+        <>
+          <i className="ti ti-confetti" style={{ marginRight: 6 }} />
+          Send Wish — {employeeName}
+        </>
+      }
+      onClose={onClose}
+      maxWidth={640}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-filled"
+            onClick={handleConfirm}
+            disabled={saving || loadingTemplates || !selectedTemplate}
+            suppressHydrationWarning
+          >
+            {saving
+              ? <><i className="ti ti-loader-2 spin" /> Sending…</>
+              : <><i className="ti ti-confetti" /> Confirm &amp; Send Wish</>
+            }
+          </button>
+        </>
+      }
+    >
+      {apiError && (
             <div className="alert alert-error mb-16">
               <i className="ti ti-alert-circle" /><div>{apiError}</div>
             </div>
@@ -218,24 +233,6 @@ export function SendWishModal({
               />
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className="btn btn-filled"
-            onClick={handleConfirm}
-            disabled={saving || loadingTemplates || !selectedTemplate}
-            suppressHydrationWarning
-          >
-            {saving
-              ? <><i className="ti ti-loader-2 spin" /> Sending…</>
-              : <><i className="ti ti-confetti" /> Confirm &amp; Send Wish</>
-            }
-          </button>
-        </div>
-
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -5,6 +5,7 @@ import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
+import Modal from "@/components/Modal";
 import type { WorkflowMatrixRow, ApprovalWorkflowType } from "@/types/approvalMatrix";
 
 interface PickerEmployee {
@@ -67,37 +68,12 @@ function RelationshipEditorModal({
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">{title}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-        <div className="modal-body">
-          {apiError && (
-            <div className="alert alert-error mb-16">
-              <i className="ti ti-alert-circle" /> {apiError}
-            </div>
-          )}
-          <div className="field-group">
-            <label className="field-label">Select person</label>
-            <select
-              value={selectedId}
-              onChange={e => setSelectedId(e.target.value)}
-              disabled={loading}
-              className={SELECT_CLS}
-              style={SELECT_STYLE}
-            >
-              <option value="">{loading ? "Loading…" : "— Select —"}</option>
-              {people.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} ({p.employee_id})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="modal-footer">
+    <Modal
+      title={title}
+      onClose={onClose}
+      maxWidth={440}
+      footer={
+        <>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn btn-filled"
@@ -106,9 +82,32 @@ function RelationshipEditorModal({
           >
             {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
           </button>
+        </>
+      }
+    >
+      {apiError && (
+        <div className="alert alert-error mb-16">
+          <i className="ti ti-alert-circle" /> {apiError}
         </div>
+      )}
+      <div className="field-group">
+        <label className="field-label">Select person</label>
+        <select
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value)}
+          disabled={loading}
+          className={SELECT_CLS}
+          style={SELECT_STYLE}
+        >
+          <option value="">{loading ? "Loading…" : "— Select —"}</option>
+          {people.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.full_name} ({p.employee_id})
+            </option>
+          ))}
+        </select>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -167,79 +166,77 @@ function OverrideEditor({ row, employeeCode, branch, defaultManagerId, defaultHr
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-header">
-          <div className="modal-title">Override Approvers — {row.workflow_label}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-        <div className="modal-body">
-          {apiError && (
-            <div className="alert alert-error mb-16">
-              <i className="ti ti-alert-circle" /> {apiError}
-            </div>
-          )}
-          <div className="alert alert-warn mb-16" style={{ fontSize: 13 }}>
-            <i className="ti ti-info-circle" />
-            <div>
-              Select a specific person to override, or leave as <strong>— Global default —</strong> to revert.
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div className="field-group">
-              <label className="field-label">
-                L1 Approver
-                <span style={{ fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
-                  (default: {row.l1_approver_label})
-                </span>
-              </label>
-              <select
-                value={l1Id}
-                onChange={e => setL1Id(e.target.value)}
-                disabled={loadingManagers}
-                className={SELECT_CLS}
-                style={SELECT_STYLE}
-              >
-                <option value="">{loadingManagers ? "Loading…" : "— Global default —"}</option>
-                {managers.map(m => (
-                  <option key={m.id} value={m.id}>{m.full_name} ({m.employee_id})</option>
-                ))}
-              </select>
-            </div>
-
-            {row.l2_approver_role && (
-              <div className="field-group">
-                <label className="field-label">
-                  L2 Approver
-                  <span style={{ fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
-                    (default: {row.l2_approver_label})
-                  </span>
-                </label>
-                <select
-                  value={l2Id}
-                  onChange={e => setL2Id(e.target.value)}
-                  disabled={loadingHrs}
-                  className={SELECT_CLS}
-                  style={SELECT_STYLE}
-                >
-                  <option value="">{loadingHrs ? "Loading…" : "— Global default —"}</option>
-                  {hrs.map(h => (
-                    <option key={h.id} value={h.id}>{h.full_name} ({h.employee_id})</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="modal-footer">
+    <Modal
+      title={<>Override Approvers — {row.workflow_label}</>}
+      onClose={onClose}
+      maxWidth={480}
+      footer={
+        <>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save Override"}
           </button>
+        </>
+      }
+    >
+      {apiError && (
+        <div className="alert alert-error mb-16">
+          <i className="ti ti-alert-circle" /> {apiError}
+        </div>
+      )}
+      <div className="alert alert-warn mb-16" style={{ fontSize: 13 }}>
+        <i className="ti ti-info-circle" />
+        <div>
+          Select a specific person to override, or leave as <strong>— Global default —</strong> to revert.
         </div>
       </div>
-    </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="field-group">
+          <label className="field-label">
+            L1 Approver
+            <span style={{ fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
+              (default: {row.l1_approver_label})
+            </span>
+          </label>
+          <select
+            value={l1Id}
+            onChange={e => setL1Id(e.target.value)}
+            disabled={loadingManagers}
+            className={SELECT_CLS}
+            style={SELECT_STYLE}
+          >
+            <option value="">{loadingManagers ? "Loading…" : "— Global default —"}</option>
+            {managers.map(m => (
+              <option key={m.id} value={m.id}>{m.full_name} ({m.employee_id})</option>
+            ))}
+          </select>
+        </div>
+
+        {row.l2_approver_role && (
+          <div className="field-group">
+            <label className="field-label">
+              L2 Approver
+              <span style={{ fontWeight: 400, color: "var(--on-variant)", marginLeft: 4 }}>
+                (default: {row.l2_approver_label})
+              </span>
+            </label>
+            <select
+              value={l2Id}
+              onChange={e => setL2Id(e.target.value)}
+              disabled={loadingHrs}
+              className={SELECT_CLS}
+              style={SELECT_STYLE}
+            >
+              <option value="">{loadingHrs ? "Loading…" : "— Global default —"}</option>
+              {hrs.map(h => (
+                <option key={h.id} value={h.id}>{h.full_name} ({h.employee_id})</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

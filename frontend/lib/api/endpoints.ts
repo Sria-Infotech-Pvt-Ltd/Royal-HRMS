@@ -8,6 +8,17 @@ export const API = {
     changePassword: "/change-password/",
   },
 
+  platformAdmin: {
+    login: "/platform-admin/login/",
+    logout: "/platform-admin/logout/",
+    refresh: "/platform-admin/token/refresh/",
+    me: "/platform-admin/me/",
+    companies: {
+      list: "/platform-admin/companies/",
+      detail: (id: string) => `/platform-admin/companies/${id}/`,
+    },
+  },
+
   announcements: {
     list: "/announcements/",
     detail: (id: string | number) => `/announcements/${id}/`,

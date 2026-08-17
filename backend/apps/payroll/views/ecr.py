@@ -8,11 +8,13 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.responses import error
 from core.permissions import has_perm as _has_perm
-from apps.payroll.models import PayrollCycle, EmployeePayslip, PayrollSettings
+from apps.payroll.models import PayrollCycle, EmployeePayslip, PayrollSettings, BranchPayrollConfig
+from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
 
 _ZERO = Decimal('0')
+_PF_FALLBACK_CEILING = Decimal('15000.00')
 
 
 def _round_int(value: Decimal) -> int:
@@ -64,18 +66,59 @@ def _ecr_filename(cycle: PayrollCycle, extension: str) -> str:
     return f'ECR_{period}_{branch}.{extension}'
 
 
+def _resolve_pf_wage_base(ps: EmployeePayslip, branch_config_by_name: dict) -> Decimal:
+    """
+    The wage base PF was actually calculated on for this payslip. Prefers
+    the value stored at processing time (pf_wage_base — exact, by
+    construction). Payslips computed before that field existed fall back to
+    recomputing from the employee's OWN branch config (not the unrelated
+    company-wide PayrollSettings.edli_wage_ceiling this function used to
+    read) — same basic_only / basic_plus_allowances rule, same ceiling,
+    that apps/payroll/views/cycles.py._compute_employee_payslip applied.
+    This is a best-effort reconstruction for legacy rows only; it's exactly
+    why validate_ecr() (services_ecr_filing.py) recomputes independently
+    and flags a mismatch rather than trusting this silently.
+    """
+    if ps.pf_wage_base is not None:
+        return ps.pf_wage_base
+
+    basic = ps.basic or _ZERO
+    branch_config = branch_config_by_name.get(getattr(ps.employee, 'branch', None))
+    if branch_config is None:
+        return min(basic, _PF_FALLBACK_CEILING)
+
+    if branch_config.pf_wage_basis == BranchPayrollConfig.PF_WAGE_BASIC_PLUS_ALLOWANCES:
+        uncapped = basic + (ps.special_allowance or _ZERO) + _other_earnings_total(ps)
+    else:
+        uncapped = basic
+    return min(uncapped, branch_config.pf_wage_ceiling)
+
+
+def _other_earnings_total(ps: EmployeePayslip) -> Decimal:
+    return sum((Decimal(str(v)) for v in (ps.other_earnings or {}).values()), _ZERO)
+
+
 def _compute_ecr_rows(cycle: PayrollCycle, settings: PayrollSettings) -> list:
     """Return one dict per employee payslip, with all ECR columns computed."""
-    eps_rate        = settings.eps_rate        / 100
-    edli_wage_ceil  = settings.edli_wage_ceiling
+    eps_rate = settings.eps_rate / 100
+    edli_wage_ceil = settings.edli_wage_ceiling
     rows = []
 
-    payslips = (
+    payslips = list(
         EmployeePayslip.objects
         .filter(cycle=cycle)
         .select_related('employee', 'employee__profile')
         .order_by('employee__full_name')
     )
+
+    # Only needed as a fallback for payslips predating pf_wage_base — see
+    # _resolve_pf_wage_base's docstring.
+    branch_names = {getattr(ps.employee, 'branch', None) for ps in payslips}
+    branch_config_by_name = {
+        b.branch_name: b.payroll_config
+        for b in Branch.objects.filter(branch_name__in=branch_names).select_related('payroll_config')
+        if hasattr(b, 'payroll_config')
+    }
 
     for idx, ps in enumerate(payslips, start=1):
         emp     = ps.employee
@@ -83,7 +126,7 @@ def _compute_ecr_rows(cycle: PayrollCycle, settings: PayrollSettings) -> list:
 
         basic        = ps.basic or _ZERO
         gross        = ps.gross_earnings or _ZERO
-        pf_wage      = min(basic, settings.edli_wage_ceiling)   # same ceiling for PF/EDLI/EPS
+        pf_wage      = _resolve_pf_wage_base(ps, branch_config_by_name)
         epf_contrib  = ps.pf_employee or _ZERO                   # employee 12%
         eps_contrib  = (pf_wage * eps_rate).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
         epf_diff     = max(_ZERO, epf_contrib - eps_contrib)
@@ -102,6 +145,10 @@ def _compute_ecr_rows(cycle: PayrollCycle, settings: PayrollSettings) -> list:
             'eps_contribution':   int(eps_contrib),
             'epf_eps_difference': _round_int(epf_diff),
             'ncp_days':           ncp_days,
+            # Carried through for validate_ecr()'s reconciliation checks —
+            # not part of the EPFO column layout, harmless extra dict key
+            # for the xlsx/pdf/text builders below (they only read named keys).
+            'pf_employer':        ps.pf_employer or _ZERO,
         })
 
     return rows
@@ -260,6 +307,36 @@ def _build_ecr_pdf(cycle: PayrollCycle, rows: list) -> bytes:
     return buf.getvalue()
 
 
+def _build_ecr_text(rows: list) -> str:
+    """
+    EPFO Unified Portal ECR text file — one '#~#'-delimited line per employee,
+    in the field order the portal's ECR upload expects: UAN, Member Name,
+    Gross Wages, EPF Wages, EPS Wages, EDLI Wages, EPF Contribution Remitted,
+    EPS Contribution Remitted, EPF-EPS Difference Remitted, NCP Days, Refund
+    of Advances. This is the publicly documented field layout; EPFO has
+    revised the exact spec before (this codebase's own ECR history — see
+    migration comments — already shows drift caused by manual DB patches
+    elsewhere), so validate the very first real upload against the current
+    Unified Portal spec before relying on it for a live filing.
+    """
+    lines = []
+    for row in rows:
+        lines.append('#~#'.join(str(v) for v in [
+            row['uan'],
+            row['employee_name'],
+            row['gross_wages'],
+            row['basic_wages'],
+            row['pension_wages'],
+            row['edli_wages'],
+            row['epf_contribution'],
+            row['eps_contribution'],
+            row['epf_eps_difference'],
+            row['ncp_days'],
+            0,  # Refund of Advances — not tracked in this system; always 0
+        ]) + '#~#')
+    return '\r\n'.join(lines)
+
+
 class CycleECRDownloadView(APIView):
     """GET /payroll/cycles/<pk>/ecr/  — download ECR Excel for a payroll cycle."""
 
@@ -322,4 +399,35 @@ class CycleECRPdfDownloadView(APIView):
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         logger.info('ECR PDF downloaded for cycle %s by %s', cycle_pk, request.user.email)
+        return response
+
+
+class CycleECRTextDownloadView(APIView):
+    """GET /payroll/cycles/<pk>/ecr-text/ — EPFO Unified Portal ECR upload text file."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, cycle_pk):
+        cycle, err = _get_authorized_cycle(request, cycle_pk)
+        if err:
+            return err
+
+        settings_obj = PayrollSettings.objects.first() or PayrollSettings()
+        rows = _compute_ecr_rows(cycle, settings_obj)
+        if not rows:
+            return error('No payslips found for this cycle.', http_status=404)
+
+        missing_uan = [r['employee_name'] for r in rows if not r['uan']]
+        if missing_uan:
+            return error(
+                'The following employees have no UAN on file — add it before filing: '
+                + ', '.join(missing_uan)
+            )
+
+        text = _build_ecr_text(rows)
+        filename = _ecr_filename(cycle, 'txt')
+
+        response = HttpResponse(text, content_type='text/plain')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        logger.info('ECR text file downloaded for cycle %s by %s', cycle_pk, request.user.email)
         return response
