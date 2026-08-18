@@ -43,7 +43,20 @@ _SPEECH_TO_TEXT_URL = 'https://api.sarvam.ai/speech-to-text'
 CHAT_MODEL = 'sarvam-105b'  # NOT sarvam-30b — deprecated, never use it here.
 STT_MODEL = 'saaras:v3'
 
-_CHAT_TIMEOUT_SECONDS = 6
+# sarvam-105b is a reasoning model: it can silently spend a large, variable
+# number of hidden "reasoning_content" tokens before ever emitting the
+# requested {"intent": ...} JSON. Measured directly against the real API
+# (2026-08-17): a "fast path" with no reasoning answers in ~1.2-1.4s using
+# ~20 completion tokens, but a "reasoning path" — which can trigger on the
+# exact same transcript on a different call, same temperature — took
+# 15-17s and consumed 987-1203 completion tokens on reasoning alone before
+# the final answer. The previous settings here (timeout=6, max_tokens=512)
+# guaranteed that path always failed: killed by the timeout before
+# finishing, and even if it hadn't, truncated by max_tokens (finish_reason
+# "length") with the actual `content` field left null — silently
+# indistinguishable from a genuine no_match/outage to every caller. Sized
+# with real headroom above both observed worst cases, not guessed.
+_CHAT_TIMEOUT_SECONDS = 20
 # STT uploads a short audio file on top of the round trip — a little more
 # headroom than the text-only chat call, still well under any UI patience.
 _STT_TIMEOUT_SECONDS = 10
@@ -60,7 +73,7 @@ def is_configured() -> bool:
 
 
 def chat_completion(
-    messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 512,
+    messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 2048,
 ) -> Optional[str]:
     """
     POST /v1/chat/completions with model=sarvam-105b, response_format=json_object
@@ -68,6 +81,11 @@ def chat_completion(
     llm_fallback.py for what it asks for). Returns the raw assistant message
     string (choices[0].message.content) on success, or None on any failure —
     see this module's docstring for the fail-soft contract.
+
+    max_tokens default sized at 2048, not the classification answer's own
+    ~20-token footprint — see _CHAT_TIMEOUT_SECONDS' comment above on why:
+    hidden reasoning tokens alone measured up to ~1200 on this model for a
+    single short classification prompt.
     """
     api_key = _api_key()
     if not api_key:
