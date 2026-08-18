@@ -96,6 +96,7 @@ def handle_transcript(
     face_embedding: Optional[list] = None, liveness_passed: Optional[bool] = None,
     liveness_score: Optional[float] = None, capture_session_id: str = '',
     stt_language_probability: Optional[float] = None,
+    stt_used_language_hint: bool = False,
 ) -> dict:
     """
     Single entry point VoiceParseView.post() calls for every transcript.
@@ -113,6 +114,15 @@ def handle_transcript(
     quiet "haan"/"nahi") is itself a Sarvam-STT transcript with its own low
     language_probability sometimes — re-applying this gate to that answer
     would loop the confirmation question on itself.
+
+    stt_used_language_hint: True only when the Sarvam-STT retry succeeded via
+    its explicit-Hindi-hint attempt (views_transcribe.py tries hi-IN before
+    falling back to auto-detect — see its own docstring). Confirmed against
+    real docs.sarvam.ai docs: a hinted call never gets a language_probability
+    back at all, so stt_language_probability is always None for these and the
+    usual threshold check above has nothing to test. Rather than treat "no
+    signal" as "trustworthy by default" — the opposite of this gate's whole
+    purpose — a hinted transcript always goes through confirmation.
 
     Every intent except apply_leave goes straight through match_intent ->
     execute_intent, exactly as before this feature existed. apply_leave can
@@ -144,10 +154,9 @@ def handle_transcript(
     user = request.user
     pending = get_pending(user.id)
 
-    if (
-        pending is None
-        and stt_language_probability is not None
-        and stt_language_probability < STT_CONFIRM_THRESHOLD
+    if pending is None and (
+        (stt_language_probability is not None and stt_language_probability < STT_CONFIRM_THRESHOLD)
+        or stt_used_language_hint
     ):
         return start_stt_confirmation(request, transcript, lang, stt_language_probability)
 

@@ -44,6 +44,18 @@ class VoiceParseView(APIView):
     apps.voice_commands.conversation_clock_in_face). Not re-validated here
     either — FaceVerificationService.verify_for_punch is the one place that
     actually checks them.
+
+    stt_language_probability is optional, sent only alongside a transcript
+    that came from the Sarvam-STT retry (see lib/voiceSttFallback.ts) —
+    Sarvam's own confidence in which language it heard, used by
+    handle_transcript as the best available proxy for "is this transcript
+    even trustworthy" before matching/classifying it at all.
+
+    stt_used_language_hint is optional, sent only alongside a transcript
+    from the Sarvam-STT retry's explicit-Hindi-hint attempt (see
+    views_transcribe.py) — that mode never gets a language_probability back
+    from Sarvam, so handle_transcript treats it as always needing
+    confirmation instead of trying to threshold a signal that doesn't exist.
     """
 
     permission_classes = [IsAuthenticated]
@@ -53,6 +65,21 @@ class VoiceParseView(APIView):
         if not transcript:
             return error('transcript is required.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
+        stt_language_probability = None
+        raw_probability = request.data.get('stt_language_probability')
+        if raw_probability is not None:
+            try:
+                stt_language_probability = float(raw_probability)
+            except (TypeError, ValueError):
+                stt_language_probability = None
+
+        # True only when this transcript came from the Sarvam-STT retry's
+        # explicit-language-hint attempt (see views_transcribe.py) — that
+        # mode gets no language_probability back from Sarvam at all, so
+        # handle_transcript can't use the usual confidence check for it and
+        # instead always confirms (see its own docstring).
+        stt_used_language_hint = bool(request.data.get('stt_used_language_hint'))
+
         lang = (request.data.get('lang') or 'en').strip() or 'en'
         payload = handle_transcript(
             request, transcript, lang=lang,
@@ -61,6 +88,8 @@ class VoiceParseView(APIView):
             liveness_passed=request.data.get('liveness_passed'),
             liveness_score=request.data.get('liveness_score'),
             capture_session_id=request.data.get('capture_session_id') or '',
+            stt_language_probability=stt_language_probability,
+            stt_used_language_hint=stt_used_language_hint,
         )
 
         return success(payload['message'], payload)
