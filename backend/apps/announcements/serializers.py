@@ -7,7 +7,7 @@ from core.permissions import has_perm as _has_perm
 from apps.accounts.models import Department
 from apps.branch.models import Branch
 
-from .models import Announcement, AnnouncementReaction
+from .models import Announcement
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):

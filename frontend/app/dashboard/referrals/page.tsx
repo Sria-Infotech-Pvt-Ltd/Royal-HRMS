@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermission } from "@/hooks/usePermission";
 import { Branch, Candidate, CandidateStatus, fmtDate, initials } from "@/app/dashboard/interview-list/_data";
+import Modal from "@/components/Modal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -403,24 +404,12 @@ export default function ReferralsPage() {
 
       {/* ── Refer Someone Modal ── */}
       {showModal && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className="modal" style={{ width: "min(680px, 95vw)" }}>
-
-            {/* Modal header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid var(--outline-v)" }}>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: 16, color: "var(--on-bg)", margin: 0 }}>Refer Someone</p>
-                <p style={{ fontSize: 12, color: "var(--on-variant)", margin: 0 }}>Share a great candidate and earn a referral bonus</p>
-              </div>
-              <button
-                style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: "var(--bg)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "var(--on-variant)" }}
-                onClick={() => setShowModal(false)} suppressHydrationWarning>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-
-            {/* Modal body */}
-            <div style={{ padding: "24px" }}>
+        <Modal
+          title={<>Refer Someone<div style={{ fontSize: 12, color: "var(--on-variant)", margin: 0, fontWeight: 400 }}>Share a great candidate and earn a referral bonus</div></>}
+          onClose={() => setShowModal(false)}
+          size="lg"
+          maxWidth={680}
+        >
               {formError && (
                 <div className="alert alert-error" style={{ marginBottom: 20 }}>
                   <i className="ti ti-alert-circle" /><div>{formError}</div>
@@ -506,10 +495,7 @@ export default function ReferralsPage() {
                   </button>
                 </div>
               </form>
-            </div>
-
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

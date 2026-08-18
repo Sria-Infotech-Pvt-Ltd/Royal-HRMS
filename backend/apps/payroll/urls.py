@@ -55,7 +55,14 @@ from apps.payroll.views.adjustments import (
     PayrollAdjustmentDeleteView,
     PayrollAdjustmentBulkImportView,
 )
-from apps.payroll.views.ecr import CycleECRDownloadView, CycleECRPdfDownloadView
+from apps.payroll.views.ecr import CycleECRDownloadView, CycleECRPdfDownloadView, CycleECRTextDownloadView
+from apps.payroll.views.esic import CycleESICDownloadView
+from apps.payroll.views.salary_transfer import (
+    SalaryTransferStatusView,
+    ConfirmSalaryTransferView,
+    CancelSalaryTransferView,
+    SalaryTransferFileDownloadView,
+)
 
 urlpatterns = [
     # ── Payroll global settings ──────────────────────────────────────────────
@@ -101,6 +108,14 @@ urlpatterns = [
     path('cycles/<uuid:pk>/cancel/', CancelPayrollCycleView.as_view(), name='payroll-cancel-cycle'),
     path('cycles/<uuid:cycle_pk>/ecr/', CycleECRDownloadView.as_view(), name='payroll-cycle-ecr'),
     path('cycles/<uuid:cycle_pk>/ecr/pdf/', CycleECRPdfDownloadView.as_view(), name='payroll-cycle-ecr-pdf'),
+    path('cycles/<uuid:cycle_pk>/ecr-text/', CycleECRTextDownloadView.as_view(), name='payroll-cycle-ecr-text'),
+    path('cycles/<uuid:cycle_pk>/esic/', CycleESICDownloadView.as_view(), name='payroll-cycle-esic'),
+
+    # ── Salary transfer (dual confirmation) ──────────────────────────────────
+    path('cycles/<uuid:cycle_pk>/salary-transfer/status/', SalaryTransferStatusView.as_view(), name='salary-transfer-status'),
+    path('cycles/<uuid:cycle_pk>/salary-transfer/confirm/', ConfirmSalaryTransferView.as_view(), name='salary-transfer-confirm'),
+    path('cycles/<uuid:cycle_pk>/salary-transfer/cancel/', CancelSalaryTransferView.as_view(), name='salary-transfer-cancel'),
+    path('cycles/<uuid:cycle_pk>/salary-transfer/download/', SalaryTransferFileDownloadView.as_view(), name='salary-transfer-download'),
 
     # ── Payslips (HR) ────────────────────────────────────────────────────────
     path('cycles/<uuid:cycle_pk>/payslips/', CyclePayslipListView.as_view(), name='cycle-payslip-list'),

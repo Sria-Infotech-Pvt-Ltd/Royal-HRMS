@@ -1261,7 +1261,6 @@ class _LateMarkLOPPolicyValidationMixin:
         # dependency here beyond the range check done at field level.
 
         # ── lop_deduction_unit is meaningless when lop is disabled ───────────
-        lop_unit = _get('lop_deduction_unit', LateMarkLOPPolicy.LOP_UNIT_FULL_DAY)
         if late_marks_per_lop == 0 and 'lop_deduction_unit' in attrs:
             # Accept the value but warn; we do not reject because storing the
             # preferred unit makes re-enabling later smoother.

@@ -239,7 +239,7 @@ class HRKPIView(APIView):
             return error(_DENIED, http_status=403)
 
         from apps.accounts.models import User
-        from apps.attendance.models import AttendanceRecord, AttendanceCorrection
+        from apps.attendance.models import AttendanceCorrection
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
         from apps.recruitment.models import Candidate
 
@@ -519,7 +519,7 @@ class EmployeeKPIView(APIView):
 
     def get(self, request):
         from apps.accounts.models import EmployeeProfile, EmployeeDocument
-        from apps.attendance.models import AttendanceRecord, AttendanceCorrection
+        from apps.attendance.models import AttendanceCorrection
         from apps.attendance.services_attendance import AttendanceDashboardService
         from apps.hrms.models import Expense
 

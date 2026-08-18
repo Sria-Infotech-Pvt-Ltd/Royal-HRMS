@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import Modal from "@/components/Modal";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
@@ -70,106 +71,18 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
   }
 
   return (
-    <div className="modal-overlay open" onClick={ev => { if (ev.target === ev.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-header">
-          <span className="modal-title">
+    <form onSubmit={handleSubmit}>
+      <Modal
+        title={
+          <>
             <i className="ti ti-file-description" style={{ marginRight: 8, color: "var(--warn)" }} />
             Attendance Correction Request
-          </span>
-          <button className="modal-close" onClick={onClose}>
-            <i className="ti ti-x" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <div className="alert alert-warn mb-16">
-              <i className="ti ti-alert-triangle" />
-              <span>
-                Submit a correction for a missed or incorrect punch. Your manager will review and approve
-                within the regularization cutoff window (7 days after month end).
-              </span>
-            </div>
-
-            <div className="form-row cols-2">
-              <div className="field-group">
-                <label className="field-label">Date</label>
-                <input
-                  type="date"
-                  className="field-input"
-                  value={formDate}
-                  onChange={e => setFormDate(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Punch Type</label>
-                <select
-                  className="field-input"
-                  value={punchType}
-                  onChange={e => setPunchType(e.target.value as CorrectionPunchType)}
-                >
-                  <option value="IN">Clock In (IN)</option>
-                  <option value="OUT">Clock Out (OUT)</option>
-                  <option value="BOTH">Both IN &amp; OUT</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-row cols-2">
-              {showIn && (
-                <div className="field-group">
-                  <label className="field-label">Correct In Time</label>
-                  <input
-                    type="time"
-                    className="field-input"
-                    value={correctInTime}
-                    onChange={e => setCorrectInTime(e.target.value)}
-                    required={showIn}
-                  />
-                </div>
-              )}
-              {showOut && (
-                <div className="field-group">
-                  <label className="field-label">Correct Out Time</label>
-                  <input
-                    type="time"
-                    className="field-input"
-                    value={correctOutTime}
-                    onChange={e => setCorrectOutTime(e.target.value)}
-                    required={showOut}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="field-group mb-16">
-              <label className="field-label">Reason</label>
-              <select
-                className="field-input"
-                value={reason}
-                onChange={e => setReason(e.target.value as CorrectionReason)}
-              >
-                {REASON_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="field-group">
-              <label className="field-label">Additional Notes (optional)</label>
-              <textarea
-                className="field-input"
-                style={{ minHeight: 72 }}
-                placeholder="Describe the situation…"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="modal-footer">
+          </>
+        }
+        onClose={onClose}
+        maxWidth={480}
+        footer={
+          <>
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>
               Cancel
             </button>
@@ -179,9 +92,93 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
                 : <><i className="ti ti-send" /> Submit Request</>
               }
             </button>
+          </>
+        }
+      >
+        <div className="alert alert-warn mb-16">
+          <i className="ti ti-alert-triangle" />
+          <span>
+            Submit a correction for a missed or incorrect punch. Your manager will review and approve
+            within the regularization cutoff window (7 days after month end).
+          </span>
+        </div>
+
+        <div className="form-row cols-2">
+          <div className="field-group">
+            <label className="field-label">Date</label>
+            <input
+              type="date"
+              className="field-input"
+              value={formDate}
+              onChange={e => setFormDate(e.target.value)}
+              required
+            />
           </div>
-        </form>
-      </div>
-    </div>
+          <div className="field-group">
+            <label className="field-label">Punch Type</label>
+            <select
+              className="field-input"
+              value={punchType}
+              onChange={e => setPunchType(e.target.value as CorrectionPunchType)}
+            >
+              <option value="IN">Clock In (IN)</option>
+              <option value="OUT">Clock Out (OUT)</option>
+              <option value="BOTH">Both IN &amp; OUT</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-row cols-2">
+          {showIn && (
+            <div className="field-group">
+              <label className="field-label">Correct In Time</label>
+              <input
+                type="time"
+                className="field-input"
+                value={correctInTime}
+                onChange={e => setCorrectInTime(e.target.value)}
+                required={showIn}
+              />
+            </div>
+          )}
+          {showOut && (
+            <div className="field-group">
+              <label className="field-label">Correct Out Time</label>
+              <input
+                type="time"
+                className="field-input"
+                value={correctOutTime}
+                onChange={e => setCorrectOutTime(e.target.value)}
+                required={showOut}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="field-group mb-16">
+          <label className="field-label">Reason</label>
+          <select
+            className="field-input"
+            value={reason}
+            onChange={e => setReason(e.target.value as CorrectionReason)}
+          >
+            {REASON_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Additional Notes (optional)</label>
+          <textarea
+            className="field-input"
+            style={{ minHeight: 72 }}
+            placeholder="Describe the situation…"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+          />
+        </div>
+      </Modal>
+    </form>
   );
 }

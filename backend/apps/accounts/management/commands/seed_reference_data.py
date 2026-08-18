@@ -236,6 +236,10 @@ EMAIL_TEMPLATES = [
             '    <td style="padding:6px 12px;">{portal_url}</td>\n'
             '  </tr>\n'
             '  <tr>\n'
+            '    <td style="padding:6px 12px;font-weight:600;color:#555;">Company ID</td>\n'
+            '    <td style="padding:6px 12px;">{company_code}</td>\n'
+            '  </tr>\n'
+            '  <tr>\n'
             '    <td style="padding:6px 12px;font-weight:600;color:#555;">Login Email</td>\n'
             '    <td style="padding:6px 12px;">{login_email}</td>\n'
             '  </tr>\n'
@@ -253,7 +257,7 @@ EMAIL_TEMPLATES = [
             '<p>Warm regards,<br/><strong>HR Team — {company_name}</strong></p>'
         ),
         'is_builtin': False,
-        'available_variables': ['candidate_name','position','company_name','login_email','temp_password','portal_url'],
+        'available_variables': ['candidate_name','position','company_name','company_code','login_email','temp_password','portal_url'],
     },
     {
         'name': 'onboarding_approved',

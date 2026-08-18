@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import Modal from "@/components/Modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -272,97 +273,88 @@ export default function WeeklyOffPatternsCard() {
 
       {/* ── Create/Edit modal ────────────────────────────────────────────── */}
       {showModal && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="modal" style={{ width: "min(560px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-calendar-cog" /> {editTarget ? "Edit Pattern" : "Add Weekly Off Pattern"}
-              </div>
-              <button className="modal-close" onClick={closeModal} suppressHydrationWarning>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {saveErr && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveErr}</div>}
-
-              <div className="field-group">
-                <label className="field-label">Pattern Name <span style={{ color: "var(--error)" }}>*</span></label>
-                <input
-                  className="field-input"
-                  placeholder="e.g. Sunday Off, Weekend Off"
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  suppressHydrationWarning
-                />
-              </div>
-
-              {/* policy_code (e.g. WD-004) is an internal identifier only — the backend
-                  auto-generates it; it's never shown or editable in this UI. */}
-
-              <div className="field-group">
-                <label className="field-label">Day Schedule</label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 8 }}>
-                  {DAYS.map(({ label, key }) => (
-                    <div key={key}>
-                      <label style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginBottom: 2 }}>{label}</label>
-                      <select
-                        className="field-input"
-                        value={form[key]}
-                        onChange={e => setForm(f => ({ ...f, [key]: e.target.value as DayType }))}
-                      >
-                        <option value="working">Working</option>
-                        <option value="off">Off</option>
-                        <option value="half_day">Half Day</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={form.is_default}
-                  onChange={e => setForm(f => ({ ...f, is_default: e.target.checked }))}
-                  suppressHydrationWarning
-                />
-                Make this the organization default pattern
-              </label>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-calendar-cog" /> {editTarget ? "Edit Pattern" : "Add Weekly Off Pattern"}</>}
+          onClose={closeModal}
+          maxWidth="min(560px, 96vw)"
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={closeModal} disabled={saving} suppressHydrationWarning>Cancel</button>
               <button className="btn btn-filled" onClick={handleSave} disabled={saving || !form.name} suppressHydrationWarning>
                 {saving ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</> : "Save Pattern"}
               </button>
+            </>
+          }
+        >
+          {saveErr && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveErr}</div>}
+
+          <div className="field-group">
+            <label className="field-label">Pattern Name <span style={{ color: "var(--error)" }}>*</span></label>
+            <input
+              className="field-input"
+              placeholder="e.g. Sunday Off, Weekend Off"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              suppressHydrationWarning
+            />
+          </div>
+
+          {/* policy_code (e.g. WD-004) is an internal identifier only — the backend
+              auto-generates it; it's never shown or editable in this UI. */}
+
+          <div className="field-group">
+            <label className="field-label">Day Schedule</label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 8 }}>
+              {DAYS.map(({ label, key }) => (
+                <div key={key}>
+                  <label style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginBottom: 2 }}>{label}</label>
+                  <select
+                    className="field-input"
+                    value={form[key]}
+                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value as DayType }))}
+                  >
+                    <option value="working">Working</option>
+                    <option value="off">Off</option>
+                    <option value="half_day">Half Day</option>
+                  </select>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={form.is_default}
+              onChange={e => setForm(f => ({ ...f, is_default: e.target.checked }))}
+              suppressHydrationWarning
+            />
+            Make this the organization default pattern
+          </label>
+        </Modal>
       )}
 
       {/* ── Delete confirm ───────────────────────────────────────────────── */}
       {deleteTarget && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget && !deleting) setDeleteTarget(null); }}>
-          <div className="modal" style={{ width: "min(420px, 94vw)" }}>
-            <div className="modal-header">
-              <div className="modal-title" style={{ color: "var(--error)" }}><i className="ti ti-trash" /> Deactivate Pattern</div>
-              <button className="modal-close" onClick={() => setDeleteTarget(null)} disabled={deleting} suppressHydrationWarning>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: 14, color: "var(--on-variant)" }}>
-                &quot;{deleteTarget.name}&quot; will be deactivated. Employees currently assigned this
-                pattern keep it until reassigned — history is preserved.
-              </p>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<span style={{ color: "var(--error)" }}><i className="ti ti-trash" /> Deactivate Pattern</span>}
+          onClose={() => setDeleteTarget(null)}
+          closeDisabled={deleting}
+          maxWidth="min(420px, 94vw)"
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={deleting} suppressHydrationWarning>Cancel</button>
               <button className="btn btn-filled" style={{ background: "var(--error)" }} onClick={handleDelete} disabled={deleting} suppressHydrationWarning>
                 {deleting ? "Deactivating…" : "Deactivate"}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p style={{ fontSize: 14, color: "var(--on-variant)" }}>
+            &quot;{deleteTarget.name}&quot; will be deactivated. Employees currently assigned this
+            pattern keep it until reassigned — history is preserved.
+          </p>
+        </Modal>
       )}
     </div>
   );

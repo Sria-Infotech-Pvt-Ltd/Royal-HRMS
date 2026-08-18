@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { CompanyInfo, normalizeExtraContext } from "@/lib/emailPreview";
 import type { BirthdayEntry } from "./BirthdayWidget";
+import Modal from "@/components/Modal";
 
 interface WishTemplate {
   name:         string;
@@ -109,19 +110,42 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
   const isDone = progress !== null && !sending;
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && !sending && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }}>
-
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-confetti" style={{ marginRight: 6 }} />
-            Send Birthday Wishes — All ({entries.length})
-          </div>
-          {!sending && <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>}
-        </div>
-
-        <div className="modal-body">
-          {apiError && (
+    <Modal
+      title={
+        <>
+          <i className="ti ti-confetti" style={{ marginRight: 6 }} />
+          Send Birthday Wishes — All ({entries.length})
+        </>
+      }
+      onClose={onClose}
+      closeDisabled={sending}
+      maxWidth={520}
+      footer={
+        isDone ? (
+          <button className="btn btn-filled" onClick={onClose} suppressHydrationWarning>
+            <i className="ti ti-check" /> Close
+          </button>
+        ) : (
+          <>
+            <button className="btn btn-ghost" onClick={onClose} disabled={sending} suppressHydrationWarning>
+              Cancel
+            </button>
+            <button
+              className="btn btn-filled"
+              onClick={handleSendAll}
+              disabled={sending || loadingTemplates || !selectedTemplate}
+              suppressHydrationWarning
+            >
+              {sending
+                ? <><i className="ti ti-loader-2 spin" /> Sending…</>
+                : <><i className="ti ti-confetti" /> Send to All {entries.length}</>
+              }
+            </button>
+          </>
+        )
+      }
+    >
+      {apiError && (
             <div className="alert alert-error mb-16">
               <i className="ti ti-alert-circle" /><div>{apiError}</div>
             </div>
@@ -204,34 +228,6 @@ export function SendAllBirthdayModal({ entries, onClose, onAllSent }: Props) {
               )}
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {isDone ? (
-            <button className="btn btn-filled" onClick={onClose} suppressHydrationWarning>
-              <i className="ti ti-check" /> Close
-            </button>
-          ) : (
-            <>
-              <button className="btn btn-ghost" onClick={onClose} disabled={sending} suppressHydrationWarning>
-                Cancel
-              </button>
-              <button
-                className="btn btn-filled"
-                onClick={handleSendAll}
-                disabled={sending || loadingTemplates || !selectedTemplate}
-                suppressHydrationWarning
-              >
-                {sending
-                  ? <><i className="ti ti-loader-2 spin" /> Sending…</>
-                  : <><i className="ti ti-confetti" /> Send to All {entries.length}</>
-                }
-              </button>
-            </>
-          )}
-        </div>
-
-      </div>
-    </div>
+    </Modal>
   );
 }

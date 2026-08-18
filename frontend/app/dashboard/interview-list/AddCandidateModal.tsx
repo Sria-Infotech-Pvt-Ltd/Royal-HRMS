@@ -10,6 +10,7 @@ import {
   sanitizeName, sanitizePosition, sanitizePhone, todayDateString,
 } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
+import Modal from "@/components/Modal";
 
 interface Props {
   onClose: () => void;
@@ -117,13 +118,19 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 560 }}>
-        <div className="modal-header">
-          <div className="modal-title">Add Candidate to Interview List</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-        <div className="modal-body">
+    <Modal
+      title="Add Candidate to Interview List"
+      onClose={onClose}
+      maxWidth={560}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
+            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-check" /> Add to List</>}
+          </button>
+        </>
+      }
+    >
           {error && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>}
 
           <div className="form-row cols-2">
@@ -211,14 +218,6 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
             <label className="field-label">Notes</label>
             <textarea className="field-input" rows={3} placeholder="Any notes about this candidate..." value={form.notes} onChange={e => set("notes", e.target.value)} />
           </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
-            {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : <><i className="ti ti-check" /> Add to List</>}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

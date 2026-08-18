@@ -5,6 +5,7 @@ import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
+import Modal from "@/components/Modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,72 +225,67 @@ export default function CreditTab() {
 
       {/* Modal */}
       {modal && (
-        <div className="modal-overlay open">
-          <div className="modal" style={{ maxWidth: 520 }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-coin" style={{ marginRight: 8 }} />
-                {modal === "add" ? "Add Credit Rule" : `Edit: ${editing?.leave_type}`}
-              </div>
-              <button className="modal-close" onClick={closeModal}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <div className="field-group mb-16" style={{ gridColumn: "1 / -1" }}>
-                  <label className="field-label">Leave Type *</label>
-                  <input className={`field-input${errors.leave_type ? " field-error" : ""}`} value={form.leave_type} onChange={e => field("leave_type", sanitizeLeaveName(e.target.value))} placeholder="e.g. Earned Leave" autoFocus />
-                  {errors.leave_type && <p className="field-error-msg">{errors.leave_type}</p>}
-                </div>
-                <div className="field-group mb-16">
-                  <label className="field-label">Accrual Days *</label>
-                  <input className={`field-input${errors.accrual_days ? " field-error" : ""}`} type="number" step="0.5" min={0.5} value={form.accrual_days} onChange={e => field("accrual_days", Number(e.target.value))} />
-                  {errors.accrual_days && <p className="field-error-msg">{errors.accrual_days}</p>}
-                </div>
-                <div className="field-group mb-16">
-                  <label className="field-label">Frequency</label>
-                  <select className="field-input" value={form.frequency} onChange={e => field("frequency", e.target.value)}>
-                    <option value="monthly">Monthly</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="annually">Annually</option>
-                    <option value="on_joining">On Joining</option>
-                  </select>
-                </div>
-                <div className="field-group mb-16">
-                  <label className="field-label">Max Balance (days) *</label>
-                  <input className={`field-input${errors.max_balance ? " field-error" : ""}`} type="number" min={1} value={form.max_balance} onChange={e => field("max_balance", Number(e.target.value))} />
-                  {errors.max_balance && <p className="field-error-msg">{errors.max_balance}</p>}
-                </div>
-                <div className="field-group mb-16">
-                  <label className="field-label">Min Service (months)</label>
-                  <input className="field-input" type="number" min={0} value={form.min_service_months} onChange={e => field("min_service_months", Number(e.target.value))} />
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
-                <label className="module-check" style={{ flex: 1 }}>
-                  <input type="checkbox" checked={form.encashable} onChange={e => field("encashable", e.target.checked)} />
-                  <span>Allow Encashment</span>
-                </label>
-                {form.encashable && (
-                  <div className="field-group" style={{ width: 160 }}>
-                    <label className="field-label">Encash Limit (days) *</label>
-                    <input className={`field-input${errors.encash_limit ? " field-error" : ""}`} type="number" min={1} value={form.encash_limit} onChange={e => field("encash_limit", Number(e.target.value))} />
-                    {errors.encash_limit && <p className="field-error-msg">{errors.encash_limit}</p>}
-                  </div>
-                )}
-                <label className="module-check">
-                  <input type="checkbox" checked={form.is_active} onChange={e => field("is_active", e.target.checked)} />
-                  <span>Active</span>
-                </label>
-              </div>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-coin" style={{ marginRight: 8 }} />{modal === "add" ? "Add Credit Rule" : `Edit: ${editing?.leave_type}`}</>}
+          onClose={closeModal}
+          maxWidth={520}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={closeModal}>Cancel</button>
               <button className="btn btn-filled" onClick={save} disabled={saving}>
                 {saving ? <><Spin />&nbsp;Saving…</> : modal === "add" ? "Add Rule" : "Save Changes"}
               </button>
+            </>
+          }
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+            <div className="field-group mb-16" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label">Leave Type *</label>
+              <input className={`field-input${errors.leave_type ? " field-error" : ""}`} value={form.leave_type} onChange={e => field("leave_type", sanitizeLeaveName(e.target.value))} placeholder="e.g. Earned Leave" autoFocus />
+              {errors.leave_type && <p className="field-error-msg">{errors.leave_type}</p>}
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Accrual Days *</label>
+              <input className={`field-input${errors.accrual_days ? " field-error" : ""}`} type="number" step="0.5" min={0.5} value={form.accrual_days} onChange={e => field("accrual_days", Number(e.target.value))} />
+              {errors.accrual_days && <p className="field-error-msg">{errors.accrual_days}</p>}
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Frequency</label>
+              <select className="field-input" value={form.frequency} onChange={e => field("frequency", e.target.value)}>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annually">Annually</option>
+                <option value="on_joining">On Joining</option>
+              </select>
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Max Balance (days) *</label>
+              <input className={`field-input${errors.max_balance ? " field-error" : ""}`} type="number" min={1} value={form.max_balance} onChange={e => field("max_balance", Number(e.target.value))} />
+              {errors.max_balance && <p className="field-error-msg">{errors.max_balance}</p>}
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Min Service (months)</label>
+              <input className="field-input" type="number" min={0} value={form.min_service_months} onChange={e => field("min_service_months", Number(e.target.value))} />
             </div>
           </div>
-        </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+            <label className="module-check" style={{ flex: 1 }}>
+              <input type="checkbox" checked={form.encashable} onChange={e => field("encashable", e.target.checked)} />
+              <span>Allow Encashment</span>
+            </label>
+            {form.encashable && (
+              <div className="field-group" style={{ width: 160 }}>
+                <label className="field-label">Encash Limit (days) *</label>
+                <input className={`field-input${errors.encash_limit ? " field-error" : ""}`} type="number" min={1} value={form.encash_limit} onChange={e => field("encash_limit", Number(e.target.value))} />
+                {errors.encash_limit && <p className="field-error-msg">{errors.encash_limit}</p>}
+              </div>
+            )}
+            <label className="module-check">
+              <input type="checkbox" checked={form.is_active} onChange={e => field("is_active", e.target.checked)} />
+              <span>Active</span>
+            </label>
+          </div>
+        </Modal>
       )}
     </>
   );

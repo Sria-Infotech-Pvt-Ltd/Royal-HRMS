@@ -5,6 +5,7 @@ import {
   EMPTY_SMTP_FORM, apiEntryToForm, validateSmtpForm,
   type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type SmtpType,
 } from "../_data";
+import Modal from "@/components/Modal";
 
 interface Props {
   entry:   ApiSmtpEntry | null;  // null = add mode
@@ -53,34 +54,40 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal modal-lg">
-
-        {/* Header */}
-        <div className="modal-header">
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div className="modal-title">
-                {isAddMode ? "Add SMTP Configuration" : `Edit — ${entry.name}`}
-              </div>
-              {!isAddMode && entry.is_active && (
-                <span className="badge badge-success" style={{ fontSize: 10 }}>
-                  <i className="ti ti-star-filled" style={{ fontSize: 9, marginRight: 3 }} />Active
-                </span>
-              )}
+    <Modal
+      title={
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div>
+              {isAddMode ? "Add SMTP Configuration" : `Edit — ${entry.name}`}
             </div>
-            {!isAddMode && (
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>
-                Last updated: {new Date(entry.updated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
-              </div>
+            {!isAddMode && entry.is_active && (
+              <span className="badge badge-success" style={{ fontSize: 10 }}>
+                <i className="ti ti-star-filled" style={{ fontSize: 9, marginRight: 3 }} />Active
+              </span>
             )}
           </div>
-          <button className="modal-close" onClick={onClose} aria-label="Close" suppressHydrationWarning>
-            <i className="ti ti-x" />
+          {!isAddMode && (
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>
+              Last updated: {new Date(entry.updated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+            </div>
+          )}
+        </>
+      }
+      onClose={onClose}
+      size="lg"
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
+          <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
+            {saving
+              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+              : <><i className="ti ti-device-floppy" /> {isAddMode ? "Add Configuration" : "Save Changes"}</>
+            }
           </button>
-        </div>
-
-        <div className="modal-body">
+        </>
+      }
+    >
 
           {/* ── Type switcher ─────────────────────────────────────────────── */}
           <div style={{ display: "flex", gap: 0, marginBottom: 20, borderRadius: 8, overflow: "hidden", border: "1px solid var(--outline-v)" }}>
@@ -297,20 +304,8 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
             </div>
 
           </div>
-        </div>
 
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-              : <><i className="ti ti-device-floppy" /> {isAddMode ? "Add Configuration" : "Save Changes"}</>
-            }
-          </button>
-        </div>
-
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </Modal>
   );
 }

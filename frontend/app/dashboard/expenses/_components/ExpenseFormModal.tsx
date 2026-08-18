@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import Modal from "@/components/Modal";
 
 type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
 
@@ -105,20 +106,29 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ width: "min(560px, 95vw)", maxHeight: "92vh", overflowY: "auto" }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-wallet" style={{ marginRight: 8 }} />
-            Submit New Expense
-          </div>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            <i className="ti ti-x" />
+    <Modal
+      title={
+        <>
+          <i className="ti ti-wallet" style={{ marginRight: 8 }} />
+          Submit New Expense
+        </>
+      }
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
+            Cancel
           </button>
-        </div>
-
-        <div className="modal-body">
-          {errors.submit && (
+          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
+            {submitting
+              ? <><i className="ti ti-loader-2 spin" /> Submitting…</>
+              : <><i className="ti ti-send" /> Submit Expense</>
+            }
+          </button>
+        </>
+      }
+    >
+      {errors.submit && (
             <div className="alert alert-error" style={{ marginBottom: 16 }}>
               <i className="ti ti-alert-circle" /><div>{errors.submit}</div>
             </div>
@@ -262,20 +272,6 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
               Your expense will be sent for approval. Approved expenses are reimbursed in the next payroll cycle.
             </span>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
-            Cancel
-          </button>
-          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-            {submitting
-              ? <><i className="ti ti-loader-2 spin" /> Submitting…</>
-              : <><i className="ti ti-send" /> Submit Expense</>
-            }
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

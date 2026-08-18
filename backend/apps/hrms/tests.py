@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import ApprovalWorkflowRule
-from apps.hrms.models import Expense, LeaveBalance, LeavePolicy, LeaveRequest
+from apps.hrms.models import Expense, LeaveBalance, LeavePolicy
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
@@ -198,7 +198,7 @@ class LeaveRequestFlowTests(TestCase):
         )
         request_id = create_resp.data['data']['id']
 
-        other_manager = make_user(
+        make_user(
             'othermgr@test.com', role=make_role('manager__team_lead'), password='TestPass123!',
         )
         other_client = APIClient()

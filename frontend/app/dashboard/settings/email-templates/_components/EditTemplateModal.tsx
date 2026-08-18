@@ -74,7 +74,10 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
   const editorRef = useRef<HTMLDivElement>(null);
 
-  // Seed the editor when switching back from source view
+  // Seed the editor when switching back from source view. Deliberately keyed
+  // only on viewSource, not form.body — the contentEditable div owns the body
+  // text while editing; re-seeding on every form.body change would overwrite
+  // the caret position and undo history mid-edit.
   useEffect(() => {
     if (!viewSource && editorRef.current) {
       editorRef.current.innerHTML = form.body;
@@ -82,7 +85,8 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewSource]);
 
-  // Seed on first mount
+  // Seed on first mount only — same reasoning as above, form.body is
+  // intentionally excluded so this doesn't re-run as the user types.
   useEffect(() => {
     if (editorRef.current) editorRef.current.innerHTML = form.body;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,7 +104,9 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
       .finally(() => setCatLoading(false));
   }, []);
 
-  // Fetch full template detail to get existing attachments (list API omits them)
+  // Fetch full template detail to get existing attachments (list API omits
+  // them). Deliberately runs once on mount — template.id is fixed for the
+  // lifetime of this modal instance (a different template reopens it fresh).
   useEffect(() => {
     if (isAddMode) return;
     clientApi.get(emailTemplateDetail(template.id))

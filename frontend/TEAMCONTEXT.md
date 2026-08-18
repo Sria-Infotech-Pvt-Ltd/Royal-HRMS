@@ -4161,3 +4161,98 @@ Per explicit direction, no backend changes were made this session. Two consequen
 - **The full audit from §2 covered all 26 dashboard sections but §3 only fixed the batches listed above** — a few smaller items from the original findings (e.g. `settings/permissions/page.tsx`'s CSS-only tooltip not being exposed to assistive tech, `settings/employee-code/page.tsx`'s non-wrapping flex row) were reported but not yet actioned.
 - **Promotion tab's history is not persisted** (§11) — it resets on reload; needs a real backend model/endpoint if promotion history should survive a page refresh or be visible to anyone other than whoever made the change in that session.
 - **Promotion tab's partial PUT (`{ designation, role }` only) has not been end-to-end verified against a running backend this session** — `page.tsx`'s own save flow always sends the full payload, so this is the first caller relying on partial-update semantics for `EmployeeDetailView.put()`. Worth a real check before trusting it in production.
+
+---
+
+# Team Context — Multi-Tenancy + Platform Admin
+
+**Author:** G.Durga Prasad
+**Date:** 17 August 2026
+**Branch:** Backend-Tenant
+
+---
+
+## Overview
+
+This session converted Royal HRMS from a single-tenant app into a schema-per-company multi-tenant SaaS (via `django-tenants`), and added a Platform Admin layer so companies can be created from a UI instead of a terminal command. Backend-heavy, with a small dedicated frontend surface for the new Platform Admin area. Also cleaned up a large batch of unrelated code-quality/complexity issues across the backend and frontend as a separate pass earlier in the session.
+
+---
+
+## 1. Multi-Tenancy Conversion
+
+Converted the live database to one PostgreSQL schema per company:
+
+- New `apps/tenants` app (SHARED_APPS-only): `Client` (one row per company — `company_code`, `company_name`, `enabled_modules`, `is_active`) and `Domain` (required by `django-tenants` internals, not used for real request routing).
+- `apps/tenants/middleware.py` — `TenantSchemaMiddleware` resolves the active schema from the `company_schema` claim on the `royal_access_token` JWT cookie on every request; defaults to `public` (fail-closed) otherwise.
+- `apps/tenants/feature_gate.py` — maps URL prefixes to optional module keys (`payroll`, `leave`, `attendance`, etc.) and blocks a request with 403 if the current company hasn't enabled that module.
+- Login (`apps/accounts/views.py LoginView`) now requires a `company_code` field, resolves the `Client`, and stamps `company_schema`/`company_code` onto the JWT so every later request (including silent refresh) stays scoped to the right company with no other code changes needed.
+- Celery tasks and one `threading.Thread` background email call all needed explicit tenant-context activation (`apps/tenants/utils.py`: `run_for_all_tenants`/`run_in_tenant`) — background workers don't go through the request middleware, so without this they silently ran against the empty `public` schema.
+- `/portal` chooser page added in front of `/login` (HR vs Employee framing only — same backend login either way).
+
+---
+
+## 2. Platform Admin (create/manage companies from the frontend)
+
+Company creation used to be a `manage.py create_company` terminal command only. Added a separate, fully isolated admin layer so it can be done from a browser:
+
+- **`PlatformAdmin` model** (`apps/tenants/models.py`) — lives only in the shared `public` schema, is not a tenant `User`, and is not the AUTH_USER_MODEL. Has its own password hashing, and its own lockout fields (`failed_login_attempts`/`locked_until`, mirrors `apps.accounts.models.User`'s lockout logic exactly).
+- **Own JWT cookie/claim namespace** — `platform_access_token`/`platform_refresh_token`, distinct from tenant logins' `royal_access_token`/`royal_refresh_token`, via `apps/tenants/authentication.py` (`PlatformAdminAuthentication`) and `apps/tenants/tokens.py` (`PlatformAdminRefreshToken`). A platform admin session can never be mistaken for, or grant, access to any company's data, and vice versa.
+- **Endpoints** (`apps/tenants/views.py` + `urls.py`, mounted at `/api/platform-admin/`): login, logout, token refresh, `me`, and company list/create/detail (toggle `is_active`/`enabled_modules`).
+- **`apps/tenants/services.py`** — `provision_company()` extracted from the original `create_company.py` management command so both the CLI command and the new API call the exact same provisioning logic (schema + migrations, `seed_reference_data`, first `system_admin` login).
+- **Frontend** — `app/platform-admin/login/page.tsx`, `app/platform-admin/page.tsx` (companies list + "Add Company" modal with a one-time password reveal), own axios instance (`lib/platformAdminApi.ts`, fully separate from `clientApi.ts`'s tenant-session refresh logic), and its own gate in `proxy.ts` (`platform_access_token` cookie, unrelated to the tenant `royal_hrms_auth`/`royal_access_token` cookies).
+- `useFetch` (`hooks/useFetch.ts`) was extended with an optional second `client` param (defaults to `clientApi`) rather than duplicating the whole hook, so the platform-admin pages could still use it against `platformAdminApi`.
+- Rate limiting (`apps/tenants/throttles.py`, own `platform_admin_login` scope, 20/hour) and account lockout (5 failed attempts → 30 min, same thresholds as tenant login) added to `PlatformAdminLoginView` — this is the highest-privilege account in the system and it shouldn't have weaker brute-force protection than an ordinary employee login.
+- Company creation's request timeout on the frontend needed to be raised to 6 minutes (`AddCompanyModal.tsx`) — provisioning a new company's schema is a full migration replay across every app and genuinely takes several minutes over this database's connection, not seconds; the platform-wide axios default (15s) was silently too short for this one call.
+- **Not done this session (flagged, not built):** audit logging of platform admin actions (create/disable a company), refresh-token revocation on logout (a stolen platform-admin refresh token is valid for its full 7-day life — the tenant side's `token_blacklist` app can't be reused as-is since it's TENANT_APPS-only and platform-admin requests never activate a tenant schema), moving company creation to a background job instead of blocking the request for minutes, and automated tests for any of the above.
+- First platform admin bootstrapped via `manage.py create_platform_admin <email> "<name>"` — there's no UI to create the *first* one (same as Django's own `createsuperuser`); adding a second platform admin still requires this same command today.
+
+---
+
+## 3. Real Bugs Found While Testing the Above (not introduced by this session, but blocking it)
+
+- **Cross-schema migration guard bug** — two already-committed migrations (`0063_auditlog_add_branch`, `0065_fix_audit_log_branch_not_null`) guarded their DDL with an `information_schema.columns` check that wasn't scoped to `table_schema`. Since that view lists every schema's tables system-wide, once any one company (`tenant_royalhrms`) had the `hrms_audit_logs.branch` column, the guard misfired for every *other* company being migrated — one migration thought the column already existed (skipped adding it), the next then crashed trying to alter a column that was never added. This broke provisioning of every new company, silently, since the demo-branch merge that introduced these migrations. Fixed with two new migrations (`0063_2_ensure_audit_log_branch_column_per_schema`, using Django's `run_before` to slot correctly into the existing history without editing the already-committed broken ones, and `0072_fix_audit_log_branch_column_cross_schema_guard` for schemas that already had the column but never got it made nullable).
+- **Hardcoded demo-account security issue** — `0003_seed_demo_users.py` seeds 4 accounts (`hradmin@royal.com`, `sysadmin@royal.com`, `manager@royal.com`, `employee@royal.com`, all password `Hrms@1234`) into every schema's migration replay, including a `system_admin`-role account. Fine for the original single-tenant demo setup; a real security hole once every newly provisioned customer company silently got the same shared, published password. New migration (`0073_remove_seeded_demo_users`) removes them everywhere, catching `ProtectedError` per-account rather than hard-failing — `tenant_royalhrms`'s own `sysadmin@royal.com` has real payslips/payroll cycles referencing it and was deliberately left in place (password unchanged) rather than force-deleted; the other 3 didn't exist there anymore and were already gone.
+- **Duplicate field definition** — `AuditLog.branch` was defined twice in the same class in `apps/accounts/models.py` (the second silently shadowed the first). Removed the dead one and added `null=True` to match the now-actually-nullable DB column (`0074_alter_auditlog_branch`).
+
+---
+
+## 4. Unrelated Code-Quality Cleanup (earlier in the same session, low-risk only)
+
+Separate from the above — a "check complexity/production-standards, remove unnecessary code" pass, scoped to quick/low-risk items only (file splits, the branch/announcements integer-PK-to-UUID migration, and the proxy.ts unsigned-cookie gap were explicitly deferred, not done):
+
+- 3 hardcoded role-name checks → permission-codename checks (`separation_workflow.py` ×2 converted to the `separation.approve` codename already used elsewhere in the same file; one in `dashboard/views/overview.py` was reviewed and left alone — it has a documented, deliberate reason for avoiding the shared permission).
+- Hardcoded "Royal Staffing HRMS"/"Royal Staffing Services" strings in `apps/accounts/utils.py`'s OTP/SMTP-test emails → real company name via `_get_company_branding()`.
+- ~35 confirmed-unused imports/variables and one dead duplicate serializer method removed across `accounts`, `payroll`, `hrms`, `branch`, `announcements`, `assessments`, `dashboard`, `attendance`, `voice_commands`, and `config/settings.py` (including a duplicate `crontab` import and a broken string type-hint).
+- 8 frontend `eslint-disable` lines fixed — either given a required explanation, corrected to the right line placement, or removed outright once verified genuinely unneeded; 3 `selected!.id` non-null assertions in `departments/page.tsx` replaced with explicit guards.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/tenants/models.py` | `PlatformAdmin` model added (lockout fields/methods, `is_authenticated`/`is_anonymous` set directly since it's not a Django auth user) |
+| `apps/tenants/services.py` (new) | `provision_company()` — shared by the CLI command and the new API |
+| `apps/tenants/authentication.py`, `tokens.py`, `permissions.py`, `throttles.py` (new) | Platform-admin auth, isolated from tenant auth |
+| `apps/tenants/views.py`, `urls.py` (new) | `/api/platform-admin/*` endpoints |
+| `apps/tenants/middleware.py` | Added an early-return for `/api/platform-admin/*` so it never activates a tenant schema, even defensively |
+| `apps/tenants/management/commands/create_company.py` | Rewritten as a thin wrapper around `provision_company()` |
+| `apps/tenants/management/commands/create_platform_admin.py` (new) | Bootstrap command for the first platform admin |
+| `apps/accounts/migrations/0063_2_...`, `0072_...`, `0073_...`, `0074_...` (new) | Cross-schema guard fix, demo-user removal, `AuditLog.branch` cleanup |
+| `apps/accounts/models.py` | Removed duplicate `AuditLog.branch` field definition; `null=True` added |
+| `frontend/app/platform-admin/**` (new) | Login page, companies dashboard, Add Company modal |
+| `frontend/lib/platformAdminApi.ts` (new) | Isolated axios instance for platform-admin calls |
+| `frontend/hooks/useFetch.ts` | Optional `client` param added (defaults to `clientApi`) |
+| `frontend/proxy.ts` | New isolated `/platform-admin` gate, checked before the tenant-auth logic |
+| `frontend/types/platformAdmin.ts` (new) | `Company`, `PlatformAdminInfo`, module key/label constants |
+
+---
+
+## Notes for Next Developer
+
+- **`sysadmin@royal.com` in `tenant_royalhrms` still has the original shared demo password (`Hrms@1234`)** — it wasn't deleted because real payslips/payroll cycles reference it, but the password was never rotated either. Worth rotating explicitly, or reassigning its payroll records to a real account, next time someone's in there.
+- **No audit trail for platform admin actions** — creating or disabling a company today leaves no record of who did it or when, unlike every tenant-side action which gets an `AuditLog` row.
+- **Platform-admin refresh tokens can't be revoked on logout** — logout just deletes cookies; a stolen refresh token is valid for its full 7-day life. Needs its own blacklist mechanism since `rest_framework_simplejwt.token_blacklist` is TENANT_APPS-only and platform-admin requests never activate a tenant schema.
+- **Company creation is still a synchronous request that takes several minutes** — works, and the frontend timeout was fixed to match, but this really wants the same "move slow work to a background job" treatment this codebase already gave to onboarding-approval emails, for the same reason (a slow synchronous call in the request path).
+- **No automated tests** were added for any of the platform-admin models/views/services, or for the three migration fixes above.
+- **Deferred from the earlier code-quality pass, not done:** splitting `accounts/views.py` (5,699 lines) and `recruitment/views.py` (2,186 lines) into domain files; converting `branch`/`announcements` models' integer PKs to UUID; fixing `proxy.ts`'s onboarding/assessment/superuser checks to read from the signed JWT instead of the unsigned `royal_hrms_user` cookie.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import Modal from "@/components/Modal";
 
 interface AssessmentConfig {
   default_pass_percentage: number;
@@ -179,16 +180,21 @@ export default function AssessmentConfigPage() {
       )}
 
       {editing && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setEditing(null)}>
-          <div className="modal" style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                Edit — {FIELD_META.find(f => f.key === editing.field)?.label}
-              </div>
-              <button className="modal-close" onClick={() => setEditing(null)}><i className="ti ti-x" /></button>
-            </div>
-
-            <div className="modal-body">
+        <Modal
+          title={<>Edit — {FIELD_META.find(f => f.key === editing.field)?.label}</>}
+          onClose={() => setEditing(null)}
+          maxWidth={440}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setEditing(null)} disabled={saving}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
+              </button>
+            </>
+          }
+        >
               {apiError && (
                 <div className="alert alert-error mb-16">
                   <i className="ti ti-alert-circle" /> {apiError}
@@ -269,18 +275,7 @@ export default function AssessmentConfigPage() {
                   )}
                 </>
               )}
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setEditing(null)} disabled={saving}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

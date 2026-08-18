@@ -11,7 +11,7 @@ import datetime
 
 from rest_framework import serializers
 
-from apps.attendance.models import AttendanceCorrection, AttendancePunch
+from apps.attendance.models import AttendanceCorrection
 
 
 # ══════════════════════════════════════════════════════════════════════════════

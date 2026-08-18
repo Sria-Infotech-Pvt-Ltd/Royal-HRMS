@@ -19,6 +19,7 @@ from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, Company, User
 from apps.accounts.utils import send_template_email
+from apps.tenants.utils import get_current_company_code
 from core.pagination import paginate, paginated_data
 from core.template_context import candidate_context, candidate_interview_location, company_name, universal_context
 from .models import Candidate, CandidateEmail, CandidateLog, ReferralBonus, ReferralRule
@@ -290,16 +291,17 @@ def _fire_interview_date_emails_if_needed(candidate, old_interview_date, old_int
     if unchanged:
         return
 
+    from django.db import connection
     from apps.recruitment.tasks import send_interview_scheduled_emails_task
 
-    def _dispatch(candidate_id=candidate.pk):
+    def _dispatch(candidate_id=candidate.pk, schema_name=connection.schema_name):
         try:
             # retry=False + ignore_result=True — see the referral-submission
             # dispatch above for why: apply_async() otherwise subscribes to
             # a Redis pub/sub result channel nothing here reads, retrying up
             # to 20 times against the result backend if Redis is unreachable.
             send_interview_scheduled_emails_task.apply_async(
-                args=[candidate_id], retry=False, ignore_result=True,
+                args=[schema_name, candidate_id], retry=False, ignore_result=True,
             )
         except Exception as exc:
             logger.error(
@@ -1371,6 +1373,7 @@ class SendPortalLoginView(APIView):
                     'candidate_name': candidate.name,
                     'position':       candidate.position_applied,
                     'company_name':   company_name,
+                    'company_code':   get_current_company_code(),
                     'login_email':    candidate.email,
                     'temp_password':  temp_password,
                     'portal_url':     portal_url,
@@ -1473,6 +1476,7 @@ class ResendPortalLoginView(APIView):
             'candidate_name': candidate.name,
             'position':       candidate.position_applied,
             'company_name':   company_name,
+            'company_code':   get_current_company_code(),
             'login_email':    candidate.email,
             'temp_password':  temp_password,
             'portal_url':     portal_url,
@@ -1561,9 +1565,10 @@ class ReferralListCreateView(APIView):
             added_by=request.user,
             status=Candidate.STATUS_PENDING,
         )
+        from django.db import connection
         from apps.recruitment.tasks import send_referral_submission_emails_task
 
-        def _dispatch(candidate_id=candidate.pk):
+        def _dispatch(candidate_id=candidate.pk, schema_name=connection.schema_name):
             try:
                 # ignore_result=True — nothing here ever calls .get() on the
                 # returned AsyncResult, but apply_async() still subscribes to
@@ -1578,7 +1583,7 @@ class ReferralListCreateView(APIView):
                 # broker fails in ~1s instead of blocking this request for
                 # up to 20s on Kombu's default connection retry loop.
                 send_referral_submission_emails_task.apply_async(
-                    args=[candidate_id], retry=False, ignore_result=True,
+                    args=[schema_name, candidate_id], retry=False, ignore_result=True,
                 )
             except Exception as exc:
                 logger.error(

@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
 import { LEAVE_NAME_RE, sanitizeLeaveName } from "@/lib/leaveValidation";
+import Modal from "@/components/Modal";
 
 interface LeavePolicy {
   id: number;
@@ -310,118 +311,114 @@ export default function PolicyTab() {
 
       {/* Edit Modal */}
       {editing && (
-        <div className="modal-overlay open">
-          <div className="modal" style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <div className="modal-title"><i className="ti ti-beach" style={{ marginRight: 8 }} />Edit: {editing.leave_type_display}</div>
-              <button className="modal-close" onClick={closeEdit}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              {saveError && (
-                <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{saveError}</div>
-              )}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <div className="field-group mb-16">
-                  <label className="field-label">Annual Days *</label>
-                  <input className={`field-input${errors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={form.annual_days} onChange={e => editField("annual_days", Number(e.target.value))} />
-                  {errors.annual_days && <p className="field-error-msg">{errors.annual_days}</p>}
-                </div>
-                <div className="field-group mb-16">
-                  <label className="field-label">Max Carry Fwd (days)</label>
-                  <input className={`field-input${errors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={form.max_carry_forward_days} onChange={e => editField("max_carry_forward_days", Number(e.target.value))} disabled={!form.can_carry_forward} />
-                  {errors.max_carry_forward_days && <p className="field-error-msg">{errors.max_carry_forward_days}</p>}
-                </div>
-              </div>
-              <div className="field-group mb-16">
-                <label className="field-label">Policy Note</label>
-                <textarea className="field-input" rows={3} value={form.policy_note} onChange={e => editField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
-              </div>
-              <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
-                <label className="module-check">
-                  <input type="checkbox" checked={form.can_carry_forward} onChange={e => editField("can_carry_forward", e.target.checked)} />
-                  <span>Allow Carry Forward</span>
-                </label>
-                <label className="module-check">
-                  <input type="checkbox" checked={form.is_active} onChange={e => editField("is_active", e.target.checked)} />
-                  <span>Active</span>
-                </label>
-              </div>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-beach" style={{ marginRight: 8 }} />Edit: {editing.leave_type_display}</>}
+          onClose={closeEdit}
+          maxWidth={480}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={closeEdit}>Cancel</button>
               <button className="btn btn-filled" onClick={saveEdit} disabled={isSaving}>
                 {isSaving ? <><Spin />&nbsp;Saving…</> : "Save Changes"}
               </button>
+            </>
+          }
+        >
+          {saveError && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{saveError}</div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+            <div className="field-group mb-16">
+              <label className="field-label">Annual Days *</label>
+              <input className={`field-input${errors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={form.annual_days} onChange={e => editField("annual_days", Number(e.target.value))} />
+              {errors.annual_days && <p className="field-error-msg">{errors.annual_days}</p>}
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Max Carry Fwd (days)</label>
+              <input className={`field-input${errors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={form.max_carry_forward_days} onChange={e => editField("max_carry_forward_days", Number(e.target.value))} disabled={!form.can_carry_forward} />
+              {errors.max_carry_forward_days && <p className="field-error-msg">{errors.max_carry_forward_days}</p>}
             </div>
           </div>
-        </div>
+          <div className="field-group mb-16">
+            <label className="field-label">Policy Note</label>
+            <textarea className="field-input" rows={3} value={form.policy_note} onChange={e => editField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
+          </div>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
+            <label className="module-check">
+              <input type="checkbox" checked={form.can_carry_forward} onChange={e => editField("can_carry_forward", e.target.checked)} />
+              <span>Allow Carry Forward</span>
+            </label>
+            <label className="module-check">
+              <input type="checkbox" checked={form.is_active} onChange={e => editField("is_active", e.target.checked)} />
+              <span>Active</span>
+            </label>
+          </div>
+        </Modal>
       )}
 
       {/* Create Modal */}
       {isCreating && (
-        <div className="modal-overlay open">
-          <div className="modal" style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <div className="modal-title"><i className="ti ti-plus" style={{ marginRight: 8 }} />Add Leave Type</div>
-              <button className="modal-close" onClick={closeCreate}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              {createError && (
-                <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{createError}</div>
-              )}
-              <div className="field-group mb-16">
-                <label className="field-label">Display Name *</label>
-                <input
-                  className={`field-input${createErrors.leave_type_label ? " field-error" : ""}`}
-                  type="text"
-                  placeholder="e.g. Compensatory Off"
-                  value={createForm.leave_type_label}
-                  onChange={e => createField("leave_type_label", sanitizeLeaveName(e.target.value))}
-                />
-                {createErrors.leave_type_label
-                  ? <p className="field-error-msg">{createErrors.leave_type_label}</p>
-                  : createForm.leave_type_label.trim() && (
-                    <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-                      Key: <code>{createForm.leave_type_label.trim().toLowerCase().replace(/[\s-]+/g, "_")}</code>
-                    </p>
-                  )
-                }
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-                <div className="field-group mb-16">
-                  <label className="field-label">Annual Days *</label>
-                  <input className={`field-input${createErrors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={createForm.annual_days} onChange={e => createField("annual_days", Number(e.target.value))} />
-                  {createErrors.annual_days && <p className="field-error-msg">{createErrors.annual_days}</p>}
-                </div>
-                <div className="field-group mb-16">
-                  <label className="field-label">Max Carry Fwd (days)</label>
-                  <input className={`field-input${createErrors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={createForm.max_carry_forward_days} onChange={e => createField("max_carry_forward_days", Number(e.target.value))} disabled={!createForm.can_carry_forward} />
-                  {createErrors.max_carry_forward_days && <p className="field-error-msg">{createErrors.max_carry_forward_days}</p>}
-                </div>
-              </div>
-              <div className="field-group mb-16">
-                <label className="field-label">Policy Note</label>
-                <textarea className="field-input" rows={3} value={createForm.policy_note} onChange={e => createField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
-              </div>
-              <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
-                <label className="module-check">
-                  <input type="checkbox" checked={createForm.can_carry_forward} onChange={e => createField("can_carry_forward", e.target.checked)} />
-                  <span>Allow Carry Forward</span>
-                </label>
-                <label className="module-check">
-                  <input type="checkbox" checked={createForm.is_active} onChange={e => createField("is_active", e.target.checked)} />
-                  <span>Active</span>
-                </label>
-              </div>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-plus" style={{ marginRight: 8 }} />Add Leave Type</>}
+          onClose={closeCreate}
+          maxWidth={480}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={closeCreate}>Cancel</button>
               <button className="btn btn-filled" onClick={submitCreate} disabled={isSubmitting}>
                 {isSubmitting ? <><Spin />&nbsp;Creating…</> : "Create Leave Type"}
               </button>
+            </>
+          }
+        >
+          {createError && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 8, color: "var(--error)", fontSize: 13 }}>{createError}</div>
+          )}
+          <div className="field-group mb-16">
+            <label className="field-label">Display Name *</label>
+            <input
+              className={`field-input${createErrors.leave_type_label ? " field-error" : ""}`}
+              type="text"
+              placeholder="e.g. Compensatory Off"
+              value={createForm.leave_type_label}
+              onChange={e => createField("leave_type_label", sanitizeLeaveName(e.target.value))}
+            />
+            {createErrors.leave_type_label
+              ? <p className="field-error-msg">{createErrors.leave_type_label}</p>
+              : createForm.leave_type_label.trim() && (
+                <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
+                  Key: <code>{createForm.leave_type_label.trim().toLowerCase().replace(/[\s-]+/g, "_")}</code>
+                </p>
+              )
+            }
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+            <div className="field-group mb-16">
+              <label className="field-label">Annual Days *</label>
+              <input className={`field-input${createErrors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={createForm.annual_days} onChange={e => createField("annual_days", Number(e.target.value))} />
+              {createErrors.annual_days && <p className="field-error-msg">{createErrors.annual_days}</p>}
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Max Carry Fwd (days)</label>
+              <input className={`field-input${createErrors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={createForm.max_carry_forward_days} onChange={e => createField("max_carry_forward_days", Number(e.target.value))} disabled={!createForm.can_carry_forward} />
+              {createErrors.max_carry_forward_days && <p className="field-error-msg">{createErrors.max_carry_forward_days}</p>}
             </div>
           </div>
-        </div>
+          <div className="field-group mb-16">
+            <label className="field-label">Policy Note</label>
+            <textarea className="field-input" rows={3} value={createForm.policy_note} onChange={e => createField("policy_note", e.target.value)} placeholder="Visible to employees when applying for leave" style={{ resize: "none" }} />
+          </div>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 4 }}>
+            <label className="module-check">
+              <input type="checkbox" checked={createForm.can_carry_forward} onChange={e => createField("can_carry_forward", e.target.checked)} />
+              <span>Allow Carry Forward</span>
+            </label>
+            <label className="module-check">
+              <input type="checkbox" checked={createForm.is_active} onChange={e => createField("is_active", e.target.checked)} />
+              <span>Active</span>
+            </label>
+          </div>
+        </Modal>
       )}
     </>
   );

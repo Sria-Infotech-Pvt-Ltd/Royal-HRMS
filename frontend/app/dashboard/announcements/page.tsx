@@ -8,6 +8,7 @@ import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
+import Modal from "@/components/Modal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,7 +159,6 @@ export default function AnnouncementsPage() {
   useEffect(() => { setCurrentUser(getStoredUser()); }, []);
 
   const canPost   = (currentUser?.permissions.includes("announcements.create") ?? false) || (currentUser?.is_superuser === true);
-  const canEdit   = (currentUser?.permissions.includes("announcements.edit")   ?? false) || (currentUser?.is_superuser === true);
   // "settings.edit" is this codebase's existing "bypass all branch scoping,
   // treat as global admin" flag (see Branch Admin's role migration) — reused
   // here so the Branch field is unrestricted only for genuinely org-wide roles.
@@ -249,6 +249,10 @@ export default function AnnouncementsPage() {
         }).catch(() => {});
       }
     });
+  // Deliberately re-runs only when the announcement list itself changes, not
+  // on every currentUser identity change — re-running per user-object
+  // reference would re-fire the "mark viewed" POST for cards already marked
+  // this session (view state is deduped via localStorage, not React state).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta?.results]);
 
@@ -666,19 +670,29 @@ export default function AnnouncementsPage() {
           Post / Edit Modal
       ══════════════════════════════════════════════════════════════════ */}
       {showModal && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="modal" style={{ width: "min(640px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-speakerphone" />
-                {editTarget ? " Edit Announcement" : " Post New Announcement"}
-              </div>
-              <button className="modal-close" onClick={closeModal} suppressHydrationWarning>
-                <i className="ti ti-x" />
+        <Modal
+          title={
+            <>
+              <i className="ti ti-speakerphone" />
+              {editTarget ? " Edit Announcement" : " Post New Announcement"}
+            </>
+          }
+          onClose={closeModal}
+          maxWidth="min(640px, 96vw)"
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={closeModal} disabled={saving} suppressHydrationWarning>
+                Cancel
               </button>
-            </div>
-
-            <div className="modal-body">
+              <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
+                {saving
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+                  : <><i className="ti ti-send" /> {editTarget ? "Save Changes" : "Post Announcement"}</>
+                }
+              </button>
+            </>
+          }
+        >
               {saveErr && (
                 <div className="alert alert-error mb-16">
                   <i className="ti ti-alert-circle" /> {saveErr}
@@ -721,7 +735,7 @@ export default function AnnouncementsPage() {
                   )}
                   {form.visibility === "department" && (
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
-                      Not used for "By Department" — that reaches the department across all branches.
+                      Not used for &quot;By Department&quot; — that reaches the department across all branches.
                     </div>
                   )}
                 </div>
@@ -810,49 +824,24 @@ export default function AnnouncementsPage() {
                   </label>
                 )}
               </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={closeModal} disabled={saving} suppressHydrationWarning>
-                Cancel
-              </button>
-              <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
-                {saving
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-                  : <><i className="ti ti-send" /> {editTarget ? "Save Changes" : "Post Announcement"}</>
-                }
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
           Delete Confirm Dialog
       ══════════════════════════════════════════════════════════════════ */}
       {deleteId != null && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget && !deleting) { setDeleteId(null); setDeleteErr(null); } }}>
-          <div className="modal" style={{ width: "min(420px, 94vw)" }}>
-            <div className="modal-header">
-              <div className="modal-title" style={{ color: "var(--error)" }}>
-                <i className="ti ti-trash" /> Delete Announcement
-              </div>
-              <button className="modal-close" onClick={() => { setDeleteId(null); setDeleteErr(null); }} disabled={deleting} suppressHydrationWarning>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {deleteErr && (
-                <div className="alert alert-error mb-16">
-                  <i className="ti ti-alert-circle" />
-                  <div>{deleteErr}</div>
-                </div>
-              )}
-              <p style={{ fontSize: 14, color: "var(--on-variant)" }}>
-                This announcement will be permanently deleted and cannot be recovered.
-              </p>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={
+            <span style={{ color: "var(--error)" }}>
+              <i className="ti ti-trash" /> Delete Announcement
+            </span>
+          }
+          onClose={() => { setDeleteId(null); setDeleteErr(null); }}
+          closeDisabled={deleting}
+          maxWidth="min(420px, 94vw)"
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => { setDeleteId(null); setDeleteErr(null); }} disabled={deleting} suppressHydrationWarning>
                 Cancel
               </button>
@@ -868,9 +857,19 @@ export default function AnnouncementsPage() {
                   : <><i className="ti ti-trash" /> Delete</>
                 }
               </button>
+            </>
+          }
+        >
+          {deleteErr && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" />
+              <div>{deleteErr}</div>
             </div>
-          </div>
-        </div>
+          )}
+          <p style={{ fontSize: 14, color: "var(--on-variant)" }}>
+            This announcement will be permanently deleted and cannot be recovered.
+          </p>
+        </Modal>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -881,18 +880,41 @@ export default function AnnouncementsPage() {
         const av   = avatarColor(live.posted_by_name);
 
         return (
-          <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setViewTarget(null); }}>
-            <div className="modal" style={{ width: "min(640px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
-              <div className="modal-header">
-                <div className="modal-title">
-                  <i className="ti ti-speakerphone" /> Announcement Details
-                </div>
-                <button className="modal-close" onClick={() => setViewTarget(null)} suppressHydrationWarning>
-                  <i className="ti ti-x" />
+          <Modal
+            title={
+              <>
+                <i className="ti ti-speakerphone" /> Announcement Details
+              </>
+            }
+            onClose={() => setViewTarget(null)}
+            maxWidth="min(640px, 96vw)"
+            footer={
+              <>
+                {live.can_edit && (
+                  <>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ color: "var(--error)" }}
+                      onClick={() => { setViewTarget(null); setDeleteErr(null); setDeleteId(live.id); }}
+                      suppressHydrationWarning
+                    >
+                      <i className="ti ti-trash" /> Delete
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => { setViewTarget(null); openEdit(live); }}
+                      suppressHydrationWarning
+                    >
+                      <i className="ti ti-pencil" /> Edit
+                    </button>
+                  </>
+                )}
+                <button className="btn btn-filled" onClick={() => setViewTarget(null)} suppressHydrationWarning>
+                  Close
                 </button>
-              </div>
-
-              <div className="modal-body">
+              </>
+            }
+          >
                 <div className="ann-view-author-row">
                   <div style={{
                     width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
@@ -944,34 +966,7 @@ export default function AnnouncementsPage() {
                     {live.views_count > 0 ? live.views_count : "—"} views
                   </span>
                 </div>
-              </div>
-
-              <div className="modal-footer">
-                {live.can_edit && (
-                  <>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ color: "var(--error)" }}
-                      onClick={() => { setViewTarget(null); setDeleteErr(null); setDeleteId(live.id); }}
-                      suppressHydrationWarning
-                    >
-                      <i className="ti ti-trash" /> Delete
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => { setViewTarget(null); openEdit(live); }}
-                      suppressHydrationWarning
-                    >
-                      <i className="ti ti-pencil" /> Edit
-                    </button>
-                  </>
-                )}
-                <button className="btn btn-filled" onClick={() => setViewTarget(null)} suppressHydrationWarning>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
+          </Modal>
         );
       })()}
 

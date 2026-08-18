@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import ItemsModal from "./_components/ItemsModal";
 import EmployeeMyAssessments from "./_components/EmployeeMyAssessments";
+import Modal from "@/components/Modal";
 
 interface AssessmentSettings {
   default_pass_percentage: number;
@@ -518,13 +519,19 @@ export default function AssessmentsPage() {
 
       {/* ── Assessment create / edit modal ── */}
       {formModal.open && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setFormModal({ open: false, target: null })}>
-          <div className="modal" style={{ maxWidth: 500 }}>
-            <div className="modal-header">
-              <div className="modal-title">{formModal.target ? "Edit Assessment" : "New Assessment"}</div>
-              <button className="modal-close" onClick={() => setFormModal({ open: false, target: null })}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
+        <Modal
+          title={formModal.target ? "Edit Assessment" : "New Assessment"}
+          onClose={() => setFormModal({ open: false, target: null })}
+          maxWidth={500}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setFormModal({ open: false, target: null })}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveAssessment} disabled={saving}>
+                {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
+              </button>
+            </>
+          }
+        >
               {formErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{formErr}</div></div>}
               <div className="field-group mb-12">
                 <label className="field-label">Title *</label>
@@ -574,26 +581,26 @@ export default function AssessmentsPage() {
                   Default (auto-assign)
                 </label>
               </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setFormModal({ open: false, target: null })}>Cancel</button>
-              <button className="btn btn-filled" onClick={saveAssessment} disabled={saving}>
-                {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ── Assign modal ── */}
       {assignFor && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setAssignFor(null)}>
-          <div className="modal" style={{ maxWidth: 500 }}>
-            <div className="modal-header">
-              <div className="modal-title">Assign — {assignFor.title}</div>
-              <button className="modal-close" onClick={() => setAssignFor(null)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
+        <Modal
+          title={`Assign — ${assignFor.title}`}
+          onClose={() => setAssignFor(null)}
+          maxWidth={500}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setAssignFor(null)}>Close</button>
+              <button className="btn btn-primary" onClick={doAssign} disabled={assigning || assignCids.length === 0}>
+                {assigning
+                  ? <><i className="ti ti-loader-2 spin" /> Assigning…</>
+                  : <><i className="ti ti-user-plus" /> Assign{assignCids.length > 1 ? ` (${assignCids.length})` : ""}</>}
+              </button>
+            </>
+          }
+        >
               {assignErr && <div className="alert alert-error mb-12"><i className="ti ti-alert-circle" /><div>{assignErr}</div></div>}
               {assignOk  && <div className="alert alert-success mb-12"><i className="ti ti-check" /><div>{assignOk}</div></div>}
 
@@ -677,18 +684,7 @@ export default function AssessmentsPage() {
                   );
                 })}
               </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setAssignFor(null)}>Close</button>
-              <button className="btn btn-filled" onClick={doAssign} disabled={assigning || assignCids.length === 0}>
-                {assigning
-                  ? <><i className="ti ti-loader-2 spin" /> Assigning…</>
-                  : <><i className="ti ti-user-plus" /> Assign{assignCids.length > 1 ? ` (${assignCids.length})` : ""}</>}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ── Items management modal ── */}

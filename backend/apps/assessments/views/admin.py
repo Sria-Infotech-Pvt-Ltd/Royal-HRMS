@@ -45,15 +45,16 @@ def _queue_assignment_emails(assignment_ids: list, template_name: str) -> None:
     """
     if not assignment_ids:
         return
+    from django.db import connection
     from apps.assessments.tasks import send_assessment_assignment_emails_task
 
-    def _dispatch(ids=list(assignment_ids), tpl=template_name):
+    def _dispatch(ids=list(assignment_ids), tpl=template_name, schema_name=connection.schema_name):
         try:
             # retry=False + ignore_result=True — bounds broker/backend
             # retries so a down Redis can't block this request; see the
             # referral-submission dispatch in recruitment/views.py.
             send_assessment_assignment_emails_task.apply_async(
-                args=[ids, tpl], retry=False, ignore_result=True,
+                args=[schema_name, ids, tpl], retry=False, ignore_result=True,
             )
         except Exception as exc:
             logger.error(
@@ -282,11 +283,6 @@ class AssignAssessmentView(APIView):
                 deadline = tz.make_aware(deadline)
 
         max_score = assessment.compute_max_score()
-
-        from apps.accounts.models import Company
-        company    = Company.objects.first()
-        company_name = company.company_name if company else ''
-        portal_url   = (company.portal_url if company else '') or ''
 
         # ── Single candidate (new joiner) or employee sent as candidate_id ──────
         if candidate_id:

@@ -10,6 +10,7 @@ import { API } from "@/lib/api/endpoints";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
+import Modal from "@/components/Modal";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -244,95 +245,53 @@ export default function WeeklyOffAssignmentTab() {
 
       {/* ── Single assign modal ──────────────────────────────────────────── */}
       {assignTarget && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget && !assigning) setAssignTarget(null); }}>
-          <div className="modal" style={{ width: "min(440px, 94vw)" }}>
-            <div className="modal-header">
-              <div className="modal-title"><i className="ti ti-calendar-cog" /> Assign Weekly Off Pattern</div>
-              <button className="modal-close" onClick={() => setAssignTarget(null)} disabled={assigning} suppressHydrationWarning>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {assignErr && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {assignErr}</div>}
-              <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 12 }}>
-                {assignTarget.employee_name} ({assignTarget.employee_id})
-                {assignTarget.status === "Assigned" && (
-                  <> — currently <strong>{assignTarget.pattern_name}</strong>, effective {assignTarget.effective_from}</>
-                )}
-              </p>
-              <div className="field-group">
-                <label className="field-label">Weekly Off Pattern</label>
-                <select className="field-input" value={assignPattern} onChange={e => setAssignPattern(e.target.value)}>
-                  <option value="">Select pattern…</option>
-                  {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Effective From</label>
-                <input type="date" className="field-input" value={assignDate} onChange={e => setAssignDate(e.target.value)} />
-              </div>
-              <p style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                Past attendance is never affected — this pattern applies from the effective date forward only.
-              </p>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-calendar-cog" /> Assign Weekly Off Pattern</>}
+          onClose={() => setAssignTarget(null)}
+          closeDisabled={assigning}
+          maxWidth="min(440px, 94vw)"
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setAssignTarget(null)} disabled={assigning} suppressHydrationWarning>Cancel</button>
               <button className="btn btn-filled" onClick={handleAssign} disabled={assigning || !assignPattern || !assignDate} suppressHydrationWarning>
                 {assigning ? "Assigning…" : "Assign"}
               </button>
-            </div>
+            </>
+          }
+        >
+          {assignErr && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {assignErr}</div>}
+          <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 12 }}>
+            {assignTarget.employee_name} ({assignTarget.employee_id})
+            {assignTarget.status === "Assigned" && (
+              <> — currently <strong>{assignTarget.pattern_name}</strong>, effective {assignTarget.effective_from}</>
+            )}
+          </p>
+          <div className="field-group">
+            <label className="field-label">Weekly Off Pattern</label>
+            <select className="field-input" value={assignPattern} onChange={e => setAssignPattern(e.target.value)}>
+              <option value="">Select pattern…</option>
+              {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
           </div>
-        </div>
+          <div className="field-group">
+            <label className="field-label">Effective From</label>
+            <input type="date" className="field-input" value={assignDate} onChange={e => setAssignDate(e.target.value)} />
+          </div>
+          <p style={{ fontSize: 11, color: "var(--on-variant)" }}>
+            Past attendance is never affected — this pattern applies from the effective date forward only.
+          </p>
+        </Modal>
       )}
 
       {/* ── Bulk assign modal ────────────────────────────────────────────── */}
       {showBulk && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget && !bulking) setShowBulk(false); }}>
-          <div className="modal" style={{ width: "min(480px, 94vw)" }}>
-            <div className="modal-header">
-              <div className="modal-title"><i className="ti ti-users" /> Bulk Assign Weekly Off Pattern</div>
-              <button className="modal-close" onClick={() => setShowBulk(false)} disabled={bulking} suppressHydrationWarning>
-                <i className="ti ti-x" />
-              </button>
-            </div>
-            <div className="modal-body">
-              {bulkErr && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {bulkErr}</div>}
-              <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 12 }}>
-                Applies to every active employee matching the filters below — resolved on the
-                server, so no employee list needs to load into the browser first.
-              </p>
-              <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Branch</label>
-                  <BranchFilterSelect
-                    branches={branches}
-                    value={unrestricted ? bulkBranch : effectiveBranch}
-                    onChange={v => setBulkBranch(v)}
-                    locked={!unrestricted}
-                    lockedBranchName={effectiveBranch}
-                  />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Department</label>
-                  <select className="field-input" value={bulkDept} onChange={e => setBulkDept(e.target.value)}>
-                    <option value="">All Departments</option>
-                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Weekly Off Pattern</label>
-                <select className="field-input" value={bulkPattern} onChange={e => setBulkPattern(e.target.value)}>
-                  <option value="">Select pattern…</option>
-                  {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Effective From</label>
-                <input type="date" className="field-input" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-users" /> Bulk Assign Weekly Off Pattern</>}
+          onClose={() => setShowBulk(false)}
+          closeDisabled={bulking}
+          maxWidth="min(480px, 94vw)"
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setShowBulk(false)} disabled={bulking} suppressHydrationWarning>Cancel</button>
               <button
                 className="btn btn-filled"
@@ -342,9 +301,45 @@ export default function WeeklyOffAssignmentTab() {
               >
                 {bulking ? "Assigning…" : "Assign to Matching Employees"}
               </button>
+            </>
+          }
+        >
+          {bulkErr && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {bulkErr}</div>}
+          <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 12 }}>
+            Applies to every active employee matching the filters below — resolved on the
+            server, so no employee list needs to load into the browser first.
+          </p>
+          <div className="form-row cols-2">
+            <div className="field-group">
+              <label className="field-label">Branch</label>
+              <BranchFilterSelect
+                branches={branches}
+                value={unrestricted ? bulkBranch : effectiveBranch}
+                onChange={v => setBulkBranch(v)}
+                locked={!unrestricted}
+                lockedBranchName={effectiveBranch}
+              />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Department</label>
+              <select className="field-input" value={bulkDept} onChange={e => setBulkDept(e.target.value)}>
+                <option value="">All Departments</option>
+                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
           </div>
-        </div>
+          <div className="field-group">
+            <label className="field-label">Weekly Off Pattern</label>
+            <select className="field-input" value={bulkPattern} onChange={e => setBulkPattern(e.target.value)}>
+              <option value="">Select pattern…</option>
+              {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Effective From</label>
+            <input type="date" className="field-input" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+          </div>
+        </Modal>
       )}
     </>
   );

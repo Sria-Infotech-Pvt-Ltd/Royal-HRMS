@@ -111,15 +111,44 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const isAuthenticated = request.cookies.get(AUTH_COOKIE)?.value === "1";
-  const isLoginPage = pathname.startsWith("/login");
-  const isOnboarding = pathname.startsWith("/onboarding");
+  // Platform-admin area — a completely separate auth domain from every
+  // tenant login (see backend apps/tenants/authentication.py). Checked
+  // against its own cookie (platform_access_token, httpOnly — readable
+  // here because proxy.ts runs server-side, unlike client JS) rather than
+  // the tenant AUTH_COOKIE/ACCESS_COOKIE above, and returns early so none
+  // of the tenant-specific onboarding/permission logic below ever applies
+  // to it.
+  if (pathname.startsWith("/platform-admin")) {
+    const isPlatformLoginPage = pathname === "/platform-admin/login";
+    const platformToken = request.cookies.get("platform_access_token")?.value;
+    const isPlatformTokenValid = (() => {
+      if (!platformToken) return false;
+      try {
+        const payload = decodeJwtPayload(platformToken);
+        const exp = payload.exp as number | undefined;
+        return exp ? exp * 1000 > Date.now() : true;
+      } catch { return false; }
+    })();
 
-  if (!isAuthenticated && !isLoginPage) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    if (!isPlatformTokenValid && !isPlatformLoginPage) {
+      return NextResponse.redirect(new URL("/platform-admin/login", request.url));
+    }
+    if (isPlatformTokenValid && isPlatformLoginPage) {
+      return NextResponse.redirect(new URL("/platform-admin", request.url));
+    }
+    return NextResponse.next();
   }
 
-  if (isAuthenticated && isLoginPage) {
+  const isAuthenticated = request.cookies.get(AUTH_COOKIE)?.value === "1";
+  const isLoginPage = pathname.startsWith("/login");
+  const isPortalChooser = pathname.startsWith("/portal");
+  const isOnboarding = pathname.startsWith("/onboarding");
+
+  if (!isAuthenticated && !isLoginPage && !isPortalChooser) {
+    return NextResponse.redirect(new URL("/portal", request.url));
+  }
+
+  if (isAuthenticated && (isLoginPage || isPortalChooser)) {
     const token = request.cookies.get(ACCESS_COOKIE)?.value;
     const isTokenValid = (() => {
       if (!token) return false;

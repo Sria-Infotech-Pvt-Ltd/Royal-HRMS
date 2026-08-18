@@ -6,6 +6,7 @@ import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailP
 import { EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import Modal from "@/components/Modal";
 
 interface Props {
   action:        "approve" | "reject";
@@ -118,6 +119,9 @@ export function ApprovalModal({
       })
       .catch(() => setTemplateErr("Could not load email templates."))
       .finally(() => setLoadingTemplates(false));
+  // Deliberately fetches once when the modal opens in approve mode, not on
+  // every `kind`/`action` change — those are fixed for the lifetime of one
+  // modal instance (a new record reopens the modal from scratch).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApprove]);
 
@@ -154,18 +158,32 @@ export function ApprovalModal({
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: isApprove ? 700 : 480 }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {isApprove ? "Approve" : "Reject"} — {itemLabel}
-          </div>
-          <button className="modal-close" suppressHydrationWarning onClick={onClose}>
-            <i className="ti ti-x" />
+    <Modal
+      title={`${isApprove ? "Approve" : "Reject"} — ${itemLabel}`}
+      onClose={onClose}
+      maxWidth={isApprove ? 700 : 480}
+      footer={
+        <>
+          <button className="btn btn-ghost" suppressHydrationWarning onClick={onClose} disabled={saving}>
+            Cancel
           </button>
-        </div>
-
-        <div className="modal-body">
+          <button
+            className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
+            suppressHydrationWarning
+            disabled={saving || (!isApprove && !remarks.trim()) || (isApprove && hasUnfilledVars)}
+            onClick={handleConfirm}
+          >
+            {saving ? (
+              <><i className="ti ti-loader-2 spin" /> Saving…</>
+            ) : isApprove ? (
+              <><i className="ti ti-check" /> {selectedTemplate ? "Approve & Send Email" : "Approve"}</>
+            ) : (
+              <><i className="ti ti-x" /> Reject</>
+            )}
+          </button>
+        </>
+      }
+    >
           {templateErr && (
             <div className="alert alert-error mb-16">
               <i className="ti ti-alert-circle" /><div>{templateErr}</div>
@@ -267,29 +285,7 @@ export function ApprovalModal({
               style={{ resize: "vertical" }}
             />
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" suppressHydrationWarning onClick={onClose} disabled={saving}>
-            Cancel
-          </button>
-          <button
-            className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
-            suppressHydrationWarning
-            disabled={saving || (!isApprove && !remarks.trim()) || (isApprove && hasUnfilledVars)}
-            onClick={handleConfirm}
-          >
-            {saving ? (
-              <><i className="ti ti-loader-2 spin" /> Saving…</>
-            ) : isApprove ? (
-              <><i className="ti ti-check" /> {selectedTemplate ? "Approve & Send Email" : "Approve"}</>
-            ) : (
-              <><i className="ti ti-x" /> Reject</>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

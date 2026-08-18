@@ -1,6 +1,7 @@
 "use client";
 
 import { Candidate, fmtDate } from "../../interview-list/_data";
+import Modal from "@/components/Modal";
 
 interface Props {
   candidate: Candidate;
@@ -27,14 +28,12 @@ function SectionTitle({ title }: { title: string }) {
 
 export default function CandidateViewDrawer({ candidate, onClose }: Props) {
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">Candidate — {candidate.name}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      title={`Candidate — ${candidate.name}`}
+      onClose={onClose}
+      maxWidth={500}
+      footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}
+    >
           <SectionTitle title="Application Info" />
           <Row label="Email"            value={candidate.email} />
           <Row label="Phone"            value={candidate.phone} />
@@ -65,12 +64,6 @@ export default function CandidateViewDrawer({ candidate, onClose }: Props) {
             <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
             The candidate has not yet filled in their detailed profile. Actions will be available once they submit.
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Modal from "@/components/Modal";
 import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
@@ -63,92 +64,17 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-receipt" style={{ marginRight: 6 }} />
-            Reimbursements — {payslip.employee_name}
-          </div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Mode toggle */}
-          {expenses.length > 0 && (
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className={`btn btn-sm ${!manualMode ? "btn-filled" : "btn-ghost"}`}
-                onClick={() => setManualMode(false)}
-              >
-                <i className="ti ti-list-check" /> From expense claims
-              </button>
-              <button
-                className={`btn btn-sm ${manualMode ? "btn-filled" : "btn-ghost"}`}
-                onClick={() => setManualMode(true)}
-              >
-                <i className="ti ti-pencil" /> Enter manually
-              </button>
-            </div>
-          )}
-
-          {!manualMode && expenses.length > 0 && (
-            <>
-              <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                Select expense claims to disburse in this payroll run.
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
-                {expenses.map(exp => (
-                  <label
-                    key={exp.id}
-                    style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", border: `1.5px solid ${checked.has(exp.id) ? "var(--primary)" : "var(--outline-v)"}`, borderRadius: 8, cursor: "pointer", background: checked.has(exp.id) ? "rgba(var(--primary-rgb,59,130,246),0.04)" : "transparent" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked.has(exp.id)}
-                      onChange={() => toggle(exp.id)}
-                      style={{ marginTop: 2, accentColor: "var(--primary)", flexShrink: 0 }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{exp.title}</div>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                        {CATEGORY_LABEL[exp.category] ?? exp.category} · {exp.expense_date}
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: "var(--info)", flexShrink: 0 }}>
-                      {fmt(exp.amount)}
-                    </div>
-                  </label>
-                ))}
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--outline-v)", fontWeight: 700 }}>
-                <span>Total selected</span>
-                <span style={{ color: "var(--info)" }}>{fmt(checkedTotal)}</span>
-              </div>
-            </>
-          )}
-
-          {(manualMode || expenses.length === 0) && (
-            <div>
-              {expenses.length === 0 && (
-                <div className="alert alert-info" style={{ marginBottom: 12 }}>
-                  <i className="ti ti-info-circle" /> No approved expense claims found for this employee.
-                </div>
-              )}
-              <label className="field-label">Reimbursement Amount (₹)</label>
-              <input
-                type="number"
-                className="field-input"
-                min={0}
-                step={100}
-                value={manualAmount}
-                onChange={e => setManualAmount(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="modal-footer">
+    <Modal
+      title={
+        <>
+          <i className="ti ti-receipt" style={{ marginRight: 6 }} />
+          Reimbursements — {payslip.employee_name}
+        </>
+      }
+      onClose={onClose}
+      maxWidth={520}
+      footer={
+        <>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
             {saving
@@ -156,8 +82,83 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
               : <><i className="ti ti-check" /> Save</>
             }
           </button>
-        </div>
+        </>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Mode toggle */}
+        {expenses.length > 0 && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className={`btn btn-sm ${!manualMode ? "btn-filled" : "btn-ghost"}`}
+              onClick={() => setManualMode(false)}
+            >
+              <i className="ti ti-list-check" /> From expense claims
+            </button>
+            <button
+              className={`btn btn-sm ${manualMode ? "btn-filled" : "btn-ghost"}`}
+              onClick={() => setManualMode(true)}
+            >
+              <i className="ti ti-pencil" /> Enter manually
+            </button>
+          </div>
+        )}
+
+        {!manualMode && expenses.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
+              Select expense claims to disburse in this payroll run.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+              {expenses.map(exp => (
+                <label
+                  key={exp.id}
+                  style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", border: `1.5px solid ${checked.has(exp.id) ? "var(--primary)" : "var(--outline-v)"}`, borderRadius: 8, cursor: "pointer", background: checked.has(exp.id) ? "rgba(var(--primary-rgb,59,130,246),0.04)" : "transparent" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked.has(exp.id)}
+                    onChange={() => toggle(exp.id)}
+                    style={{ marginTop: 2, accentColor: "var(--primary)", flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{exp.title}</div>
+                    <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                      {CATEGORY_LABEL[exp.category] ?? exp.category} · {exp.expense_date}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "var(--info)", flexShrink: 0 }}>
+                    {fmt(exp.amount)}
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--outline-v)", fontWeight: 700 }}>
+              <span>Total selected</span>
+              <span style={{ color: "var(--info)" }}>{fmt(checkedTotal)}</span>
+            </div>
+          </>
+        )}
+
+        {(manualMode || expenses.length === 0) && (
+          <div>
+            {expenses.length === 0 && (
+              <div className="alert alert-info" style={{ marginBottom: 12 }}>
+                <i className="ti ti-info-circle" /> No approved expense claims found for this employee.
+              </div>
+            )}
+            <label className="field-label">Reimbursement Amount (₹)</label>
+            <input
+              type="number"
+              className="field-input"
+              min={0}
+              step={100}
+              value={manualAmount}
+              onChange={e => setManualAmount(e.target.value)}
+            />
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

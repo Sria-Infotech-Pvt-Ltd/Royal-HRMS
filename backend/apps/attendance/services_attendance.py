@@ -23,14 +23,9 @@ from django.utils import timezone
 _IST = ZoneInfo('Asia/Kolkata')
 
 from apps.attendance.models import (
-    AttendanceAbsenceAlert,
     AttendancePunch,
     AttendanceRecord,
     AttendanceSettings,
-    AttendanceWorkingHours,
-    AttendanceWeeklyOff,
-    AttendancePunchRules,
-    AttendanceOvertimeRules,
 )
 
 logger = logging.getLogger(__name__)
@@ -429,7 +424,7 @@ class AttendanceProcessorService:
         note = ''
         if is_late:
             grace = cfg.working_hours.grace_period_minutes if cfg and hasattr(cfg, 'working_hours') else 0
-            note = f'Grace exceeded' if grace else 'Late arrival'
+            note = 'Grace exceeded' if grace else 'Late arrival'
 
         return {
             'status':                status,

@@ -10,7 +10,7 @@ from core.responses import error, success
 
 from collections import defaultdict
 
-from ..models import AssessmentItem, AssessmentSection, AssessmentSettings, CandidateAssignment, CandidateResponse
+from ..models import AssessmentItem, AssessmentSettings, CandidateAssignment, CandidateResponse
 from ..serializers import PortalAssignmentSerializer
 
 logger = logging.getLogger(__name__)

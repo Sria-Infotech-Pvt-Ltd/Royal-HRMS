@@ -91,7 +91,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>Manager Approval (L1)</div>
                 <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  Each manager must sign off on their team's attendance
+                  Each manager must sign off on their team&apos;s attendance
                 </div>
               </div>
             </div>
@@ -177,7 +177,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
                       {isApprovedRow && (
                         <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
                           {fmt(row.approved_at)}
-                          {row.note && <span style={{ marginLeft: 8, fontStyle: "italic" }}>"{row.note}"</span>}
+                          {row.note && <span style={{ marginLeft: 8, fontStyle: "italic" }}>&quot;{row.note}&quot;</span>}
                         </div>
                       )}
                     </div>

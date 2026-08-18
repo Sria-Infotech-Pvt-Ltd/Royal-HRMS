@@ -5,6 +5,7 @@ import logging
 import time
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Count, F, Q, Sum
@@ -38,6 +39,9 @@ from ..serializers import (
     LeaveRequestSerializer,
 )
 
+if TYPE_CHECKING:
+    from apps.accounts.models import User
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +51,7 @@ def _current_year() -> int:
     return get_fy_start_year(date.today(), config.get('financial_year_start_month', 'April'))
 
 
-def _resolve_approver(role, employee) -> 'accounts.User | None':
+def _resolve_approver(role, employee) -> 'User | None':
     """Resolve a Role FK to the actual User approver for a given employee."""
     if role is None:
         return None
@@ -1096,7 +1100,6 @@ def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
 
 def _sync_leave_attendance(leave_request: LeaveRequest) -> None:
     """Create or update AttendanceRecord rows to 'on_leave' for every day of an approved leave."""
-    import uuid as _uuid_mod
     from apps.attendance.models import AttendanceRecord
 
     current = leave_request.start_date

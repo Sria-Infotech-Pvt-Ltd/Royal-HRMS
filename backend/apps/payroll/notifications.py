@@ -42,14 +42,24 @@ def _send_email(user, template_name: str, context: dict) -> None:
     if not user or not getattr(user, 'email', ''):
         return
 
+    # Django DB connections are thread-local — the spawned thread below gets
+    # its own connection, defaulting to the public schema, completely
+    # independent of whatever tenant is active on the calling thread. Capture
+    # the schema now (still on the calling thread) and re-activate it inside
+    # the new thread, same reasoning as apps.tenants.utils.run_in_tenant
+    # (Celery tasks have exactly the same problem, one process boundary up).
+    from django.db import connection
+    schema_name = connection.schema_name
+
     def _send():
         try:
             from apps.accounts.utils import send_template_email
-            send_template_email(
+            from apps.tenants.utils import run_in_tenant
+            run_in_tenant(schema_name, lambda: send_template_email(
                 recipient_email=user.email,
                 template_name=template_name,
                 context={**context, 'company_name': _company_name()},
-            )
+            ))
         except Exception:
             logger.exception('Failed to send payroll email "%s" to %s', template_name, user.email)
 

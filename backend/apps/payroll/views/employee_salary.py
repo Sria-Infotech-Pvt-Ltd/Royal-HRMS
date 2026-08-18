@@ -81,7 +81,6 @@ class EmployeeSalaryConfigListView(APIView):
             return error(first_error(serializer.errors))
 
         employee = serializer.validated_data['employee']
-        effective_from = serializer.validated_data['effective_from']
 
         # Deactivate any existing active config for this employee
         EmployeeSalaryConfig.objects.filter(

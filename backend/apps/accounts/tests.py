@@ -3,11 +3,10 @@ from __future__ import annotations
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, OTPVerification, PasswordResetToken, User
+from apps.accounts.models import AuditLog, OTPVerification, User
 from apps.accounts.serializers import ForgotPasswordSerializer
 
 

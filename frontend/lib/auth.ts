@@ -7,6 +7,8 @@ const COOKIE_MAX_AGE = 60 * 60 * 8; // 8 hours
 
 export interface UserInfo {
   userId:            string;
+  companyCode:       string;
+  companyName:       string;
   email:             string;
   name:              string;
   role:              string;

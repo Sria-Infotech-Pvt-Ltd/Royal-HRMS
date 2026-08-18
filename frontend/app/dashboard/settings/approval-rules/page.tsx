@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import type { GlobalApprovalRule, ApprovalWorkflowType } from "@/types/approvalMatrix";
+import Modal from "@/components/Modal";
 
 interface RoleOption {
   id:           number;
@@ -154,53 +155,12 @@ export default function ApprovalRulesPage() {
       )}
 
       {editing && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setEditing(null)}>
-          <div className="modal" style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <div className="modal-title">Edit Rule — {editing.workflow_label}</div>
-              <button className="modal-close" onClick={() => setEditing(null)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              {apiError && (
-                <div className="alert alert-error mb-16">
-                  <i className="ti ti-alert-circle" /> {apiError}
-                </div>
-              )}
-
-              <div className="field-group mb-16">
-                <label className="field-label">L1 Approver Role *</label>
-                <select
-                  className="field-input field-select"
-                  value={editing.l1_approver_role ?? ""}
-                  onChange={e => setEditing(prev => prev ? { ...prev, l1_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
-                  disabled={loadingRoles}
-                >
-                  <option value="">{loadingRoles ? "Loading roles…" : "— Select role —"}</option>
-                  {roles.map(r => (
-                    <option key={r.id} value={r.id}>{r.display_name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">
-                  L2 Approver Role{" "}
-                  <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span>
-                </label>
-                <select
-                  className="field-input field-select"
-                  value={editing.l2_approver_role ?? ""}
-                  onChange={e => setEditing(prev => prev ? { ...prev, l2_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
-                  disabled={loadingRoles}
-                >
-                  <option value="">— Single level (no L2) —</option>
-                  {roles.map(r => (
-                    <option key={r.id} value={r.id}>{r.display_name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={`Edit Rule — ${editing.workflow_label}`}
+          onClose={() => setEditing(null)}
+          maxWidth={440}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
               <button
                 className="btn btn-primary"
@@ -209,9 +169,48 @@ export default function ApprovalRulesPage() {
               >
                 {saving ? <><i className="ti ti-loader-2 spin" /> Saving…</> : "Save Rule"}
               </button>
+            </>
+          }
+        >
+          {apiError && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" /> {apiError}
             </div>
+          )}
+
+          <div className="field-group mb-16">
+            <label className="field-label">L1 Approver Role *</label>
+            <select
+              className="field-input field-select"
+              value={editing.l1_approver_role ?? ""}
+              onChange={e => setEditing(prev => prev ? { ...prev, l1_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
+              disabled={loadingRoles}
+            >
+              <option value="">{loadingRoles ? "Loading roles…" : "— Select role —"}</option>
+              {roles.map(r => (
+                <option key={r.id} value={r.id}>{r.display_name}</option>
+              ))}
+            </select>
           </div>
-        </div>
+
+          <div className="field-group">
+            <label className="field-label">
+              L2 Approver Role{" "}
+              <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span>
+            </label>
+            <select
+              className="field-input field-select"
+              value={editing.l2_approver_role ?? ""}
+              onChange={e => setEditing(prev => prev ? { ...prev, l2_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
+              disabled={loadingRoles}
+            >
+              <option value="">— Single level (no L2) —</option>
+              {roles.map(r => (
+                <option key={r.id} value={r.id}>{r.display_name}</option>
+              ))}
+            </select>
+          </div>
+        </Modal>
       )}
     </div>
   );

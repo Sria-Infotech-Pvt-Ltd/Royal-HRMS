@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
+import Modal from "@/components/Modal";
 import type { ImportResult, ImportRowError } from "@/types/attendance";
 
 type SampleFormat = "csv" | "xlsx";
@@ -75,19 +76,38 @@ export default function ImportModal({ onClose, onImported }: Props) {
   const hasSkipped = (result?.skipped ?? 0) > 0;
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 560 }}>
-        <div className="modal-header">
-          <span className="modal-title">
-            <i className="ti ti-upload" style={{ marginRight: 8, color: "var(--primary)" }} />
-            Import Attendance
-          </span>
-          <button className="modal-close" onClick={onClose}>
-            <i className="ti ti-x" />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      title={
+        <>
+          <i className="ti ti-upload" style={{ marginRight: 8, color: "var(--primary)" }} />
+          Import Attendance
+        </>
+      }
+      onClose={onClose}
+      maxWidth={560}
+      footer={
+        !result ? (
+          <>
+            <button className="btn btn-ghost" onClick={onClose} disabled={uploading}>Cancel</button>
+            <button className="btn btn-filled" onClick={handleUpload} disabled={uploading || !file}>
+              {uploading
+                ? <><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Uploading…</>
+                : <><i className="ti ti-upload" style={{ marginRight: 6 }} />Upload &amp; Process</>
+              }
+            </button>
+          </>
+        ) : (
+          <>
+            {hasFailed && !isSuccess && (
+              <button className="btn btn-ghost" onClick={() => { setResult(null); setFile(null); }}>
+                Import Another File
+              </button>
+            )}
+            <button className="btn btn-filled" onClick={() => onImported(result)}>Done</button>
+          </>
+        )
+      }
+    >
           {!result && (
             <>
               <div className="alert alert-info mb-16">
@@ -233,31 +253,6 @@ export default function ImportModal({ onClose, onImported }: Props) {
               )}
             </>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {!result ? (
-            <>
-              <button className="btn btn-ghost" onClick={onClose} disabled={uploading}>Cancel</button>
-              <button className="btn btn-filled" onClick={handleUpload} disabled={uploading || !file}>
-                {uploading
-                  ? <><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Uploading…</>
-                  : <><i className="ti ti-upload" style={{ marginRight: 6 }} />Upload &amp; Process</>
-                }
-              </button>
-            </>
-          ) : (
-            <>
-              {hasFailed && !isSuccess && (
-                <button className="btn btn-ghost" onClick={() => { setResult(null); setFile(null); }}>
-                  Import Another File
-                </button>
-              )}
-              <button className="btn btn-filled" onClick={() => onImported(result)}>Done</button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

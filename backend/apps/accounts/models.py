@@ -12,6 +12,8 @@ from django.db import models, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from core.encrypted_fields import EncryptedCharField, blind_index
+
 
 # ─── Role & Permission ────────────────────────────────────────────────────────
 
@@ -443,7 +445,6 @@ class AuditLog(models.Model):
     object_id  = models.CharField(max_length=100, blank=True)
     changes    = models.JSONField(default=dict)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
-    branch     = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     # The branch this event pertains to (the affected employee/candidate/
     # document/cycle's branch) — NOT necessarily the acting user's own
@@ -453,7 +454,7 @@ class AuditLog(models.Model):
     # (login/logout, settings, role management). Plain branch-name string,
     # matching User.branch's convention, so it can be compared directly
     # against request.user.branch for HR's branch-scoped audit view.
-    branch     = models.CharField(max_length=100, blank=True, default='')
+    branch     = models.CharField(max_length=100, null=True, blank=True, default='')
 
     class Meta:
         db_table = 'hrms_audit_logs'
@@ -877,24 +878,30 @@ class EmployeeProfile(models.Model):
     previous_designation   = models.CharField(max_length=200, blank=True)
     leaving_reason         = models.TextField(blank=True)
 
-    # Bank
-    account_number      = models.CharField(max_length=20, blank=True)
-    ifsc_code           = models.CharField(max_length=11, blank=True)
+    # Bank — encrypted at rest (see core/encrypted_fields.py). max_length is
+    # sized for Fernet ciphertext, not the plaintext value; real format/length
+    # validation for these lives in the serializer layer (validate_account_number,
+    # validate_ifsc_code), same as before encryption was added.
+    account_number      = EncryptedCharField(max_length=255, blank=True)
+    ifsc_code           = EncryptedCharField(max_length=255, blank=True)
     bank_name           = models.CharField(max_length=200, blank=True)
     bank_branch_name    = models.CharField(max_length=200, blank=True)
     account_holder_name = models.CharField(max_length=150, blank=True)
     account_type        = models.CharField(max_length=10, choices=ACCOUNT_CHOICES, blank=True)
 
-    # Statutory identity — PII requiring encryption at rest (see CLAUDE.md §3);
-    # stored as plain CharField today, matching this model's other sensitive
-    # fields (account_number, ifsc_code) — no field-level encryption exists
-    # yet anywhere in this codebase.
-    name_as_per_aadhar = models.CharField(max_length=150, blank=True, help_text='Name exactly as printed on the Aadhaar card')
-    uan_number         = models.CharField(max_length=12, blank=True, help_text='12-digit Universal Account Number issued by EPFO')
-    pan_number         = models.CharField(
-        max_length=10, blank=True,
-        help_text='10-character PAN (e.g. ABCDE1234F) — unique per person, PII requiring encryption at rest.',
+    # Statutory identity — PII requiring encryption at rest (CLAUDE.md §3).
+    # pan_number can never be looked up by exact match against ciphertext
+    # (Fernet is non-deterministic) — pan_number_hash is a deterministic
+    # blind index used for that instead; see find_conflicting_pan_profile()
+    # and save() below, which keeps it in sync automatically.
+    name_as_per_aadhar = EncryptedCharField(max_length=255, blank=True, help_text='Name exactly as printed on the Aadhaar card')
+    uan_number         = EncryptedCharField(max_length=255, blank=True, help_text='12-digit Universal Account Number issued by EPFO')
+    esi_number         = EncryptedCharField(max_length=255, blank=True, help_text='10-digit ESI Insurance Number (IP Number) issued by ESIC')
+    pan_number         = EncryptedCharField(
+        max_length=255, blank=True,
+        help_text='10-character PAN (e.g. ABCDE1234F) — unique per person, encrypted at rest.',
     )
+    pan_number_hash    = models.CharField(max_length=64, blank=True, db_index=True)
 
     # Emergency Contact
     emergency_name         = models.CharField(max_length=150, blank=True)
@@ -917,6 +924,66 @@ class EmployeeProfile(models.Model):
 
     def __str__(self) -> str:
         return f'Profile — {self.user.email}'
+
+    def save(self, *args, **kwargs):
+        # Keep the blind index in sync with pan_number on every save — this
+        # runs before get_prep_value() encrypts it, so self.pan_number here
+        # is always the current plaintext regardless of whether this row was
+        # previously encrypted (see EncryptedCharField's InvalidToken fallback).
+        self.pan_number_hash = blind_index(self.pan_number) if self.pan_number else ''
+
+        bank_details_changed = False
+        if self.pk:
+            previous = EmployeeProfile.objects.filter(pk=self.pk).values('account_number', 'ifsc_code').first()
+            if previous:
+                bank_details_changed = (
+                    (previous['account_number'] and previous['account_number'] != self.account_number)
+                    or (previous['ifsc_code'] and previous['ifsc_code'] != self.ifsc_code)
+                )
+
+        super().save(*args, **kwargs)
+
+        if bank_details_changed:
+            self._alert_bank_details_changed()
+
+    def _alert_bank_details_changed(self) -> None:
+        """
+        An already-populated bank account number or IFSC was just overwritten
+        with a different value — the exact mechanism of payroll diversion
+        fraud (quietly redirecting someone's salary by editing their bank
+        details). Deliberately does NOT fire on first-time entry (empty ->
+        filled), only on an existing value being replaced.
+
+        Set `profile._changed_by = request.user` before calling save() at the
+        call site to attribute the change in the audit log; falls back to
+        unattributed (still logged, still notifies the employee) if omitted.
+        """
+        from apps.accounts.models import AuditLog
+        actor = getattr(self, '_changed_by', None)
+        try:
+            AuditLog.objects.create(
+                user=actor, action='bank_details_changed', module='employees',
+                object_id=str(self.user_id),
+                changes={'employee': self.user.employee_id or self.user.email},
+                branch=self.user.branch,
+            )
+        except Exception:
+            pass
+        try:
+            from apps.notifications.models import Notification
+            from apps.notifications.signals import _push_live
+            notification = Notification.objects.create(
+                user=self.user,
+                title='Your bank details were changed',
+                message=(
+                    'Your salary bank account number or IFSC code was just updated on your '
+                    'HRMS profile. If you did not make this change, contact HR immediately.'
+                ),
+                notification_type='security_alert', module='security',
+            )
+            _push_live(notification)
+        except Exception:
+            pass
 
 
 PAN_RE = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]$')
@@ -946,7 +1013,9 @@ def find_conflicting_pan_profile(pan_number: str, exclude_profile_pk=None) -> 'E
     (e.g. re-hired under a new email in a different branch), not a
     coincidence. Global check, not branch-scoped, for exactly that reason.
     """
-    qs = EmployeeProfile.objects.filter(pan_number=pan_number).select_related('user')
+    if not pan_number:
+        return None
+    qs = EmployeeProfile.objects.filter(pan_number_hash=blind_index(pan_number)).select_related('user')
     if exclude_profile_pk:
         qs = qs.exclude(pk=exclude_profile_pk)
     return qs.first()

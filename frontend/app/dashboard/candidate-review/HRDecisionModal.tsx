@@ -5,6 +5,7 @@ import { API } from "@/lib/api/endpoints";
 import { buildEmailPreview, CompanyInfo, renderTemplateVars } from "@/lib/emailPreview";
 import { Candidate, EmailTemplate, RECRUITMENT_API } from "../interview-list/_data";
 import clientApi from "@/lib/clientApi";
+import Modal from "@/components/Modal";
 
 interface Props {
   candidate: Candidate;
@@ -139,16 +140,33 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
   const hasUnfilledVars = Object.values(extraVars).some(v => !v.trim());
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 700 }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {isApprove ? "Approve & Send Assessment Invite" : "Request Revision"} — {candidate.name}
-          </div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      title={<>{isApprove ? "Approve & Send Assessment Invite" : "Request Revision"} — {candidate.name}</>}
+      onClose={onClose}
+      maxWidth={700}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
+            onClick={handleConfirm}
+            disabled={
+              saving ||
+              loadingTemplates ||
+              !selectedTemplate ||
+              (!isApprove && !remarks.trim()) ||
+              hasUnfilledVars
+            }
+          >
+            {saving ? (
+              <><i className="ti ti-loader-2 spin" /> Processing…</>
+            ) : (
+              <><i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} /> Confirm & Send Email</>
+            )}
+          </button>
+        </>
+      }
+    >
           {apiError && (
             <div className="alert alert-error mb-16">
               <i className="ti ti-alert-circle" /><div>{apiError}</div>
@@ -264,29 +282,6 @@ export function HRDecisionModal({ candidate, decision, onClose, onDone }: Props)
               />
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            className={`btn ${isApprove ? "btn-success" : "btn-danger"}`}
-            onClick={handleConfirm}
-            disabled={
-              saving ||
-              loadingTemplates ||
-              !selectedTemplate ||
-              (!isApprove && !remarks.trim()) ||
-              hasUnfilledVars
-            }
-          >
-            {saving ? (
-              <><i className="ti ti-loader-2 spin" /> Processing…</>
-            ) : (
-              <><i className={`ti ${isApprove ? "ti-check" : "ti-alert-triangle"}`} /> Confirm & Send Email</>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -318,7 +318,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
             <div style={{ padding: "40px", textAlign: "center", color: "var(--on-variant)" }}>
               <i className="ti ti-calendar-off" style={{ fontSize: 36, display: "block", marginBottom: 12 }} />
               <div style={{ fontWeight: 600, marginBottom: 4 }}>No payroll runs yet</div>
-              <div style={{ fontSize: 13, marginBottom: 16 }}>Click "Run Payroll" to start your first payroll cycle.</div>
+              <div style={{ fontSize: 13, marginBottom: 16 }}>Click &quot;Run Payroll&quot; to start your first payroll cycle.</div>
               <button className="btn btn-filled btn-sm" onClick={() => onRunPayroll()}>
                 <i className="ti ti-player-play" /> Run First Payroll
               </button>

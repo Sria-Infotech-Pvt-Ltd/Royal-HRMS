@@ -44,6 +44,9 @@ export default function EmpConsole({ firstName }: Props) {
   useEffect(() => {
     window.addEventListener("attendance:updated", handlePunchSuccess);
     return () => window.removeEventListener("attendance:updated", handlePunchSuccess);
+  // handlePunchSuccess is a plain function recreated every render; listing it
+  // here would re-attach the listener on every render instead of only when
+  // the refetch functions it calls actually change.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refetchKpis, refetchStatus]);
 

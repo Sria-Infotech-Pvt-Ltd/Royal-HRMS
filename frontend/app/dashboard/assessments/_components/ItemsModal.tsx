@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import Modal from "@/components/Modal";
 import type { Assessment, AssessmentItem, AssessmentSection } from "../page";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -180,14 +181,21 @@ export default function ItemsModal({ assessment, onClose }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 700 }}>
-        <div className="modal-header">
-          <div className="modal-title"><i className="ti ti-layout-list mr-6" /> Sections — {assessment.title}</div>
-          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      title={<><i className="ti ti-layout-list mr-6" /> Sections — {assessment.title}</>}
+      onClose={onClose}
+      maxWidth={700}
+      footer={
+        <>
+          {!panelMode && (
+            <button className="btn btn-secondary" onClick={openAddSection}>
+              <i className="ti ti-plus" /> Add Section
+            </button>
+          )}
+          <button className="btn btn-ghost" onClick={onClose}>Done</button>
+        </>
+      }
+    >
           {loading && <div className="text-center py-12"><i className="ti ti-loader-2 spin" /></div>}
 
           {!loading && sections.length === 0 && items.length === 0 && !panelMode && (
@@ -386,17 +394,6 @@ export default function ItemsModal({ assessment, onClose }: Props) {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          {!panelMode && (
-            <button className="btn btn-ghost" onClick={openAddSection}>
-              <i className="ti ti-plus" /> Add Section
-            </button>
-          )}
-          <button className="btn btn-ghost" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

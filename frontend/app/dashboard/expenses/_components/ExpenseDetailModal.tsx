@@ -2,6 +2,7 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import Modal from "@/components/Modal";
 import {
   type Expense, CATEGORY_LABEL, STATUS_BADGE, formatDate,
 } from "./ExpenseClaims";
@@ -21,20 +22,23 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
   const { cls, label } = STATUS_BADGE[expense.status] ?? STATUS_BADGE.pending;
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ width: "min(520px, 95vw)", maxHeight: "90vh", overflowY: "auto" }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            <i className="ti ti-receipt" style={{ marginRight: 8 }} />
-            {expense.expense_ref}
-          </div>
-          <button className="modal-close" onClick={onClose}>
-            <i className="ti ti-x" />
-          </button>
-        </div>
-
-        <div className="modal-body flex flex-col gap-4">
-          {loading && !data && (
+    <Modal
+      title={
+        <>
+          <i className="ti ti-receipt" style={{ marginRight: 8 }} />
+          {expense.expense_ref}
+        </>
+      }
+      onClose={onClose}
+      maxWidth={520}
+      footer={
+        <button className="btn btn-ghost" onClick={onClose}>
+          Close
+        </button>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {loading && !data && (
             <div className="flex items-center gap-1.5 text-xs text-[var(--on-variant)]">
               <i className="ti ti-loader-2 spin" /> Loading latest status…
             </div>
@@ -111,14 +115,7 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>
-            Close
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

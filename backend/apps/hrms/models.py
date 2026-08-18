@@ -2,7 +2,6 @@ import uuid
 import logging
 
 from django.db import models
-from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 

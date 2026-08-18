@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Modal from "@/components/Modal";
 
 interface Props {
   action:  "approve" | "reject";
@@ -15,43 +16,12 @@ export default function BulkConfirmModal({ action, count, saving, onConfirm, onC
   const isApprove = action === "approve";
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {isApprove ? "Approve" : "Reject"} {count} request{count === 1 ? "" : "s"}
-          </div>
-          <button className="modal-close" suppressHydrationWarning onClick={onClose}>
-            <i className="ti ti-x" />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className={`alert ${isApprove ? "alert-info" : "alert-warn"} mb-16`}>
-            <i className={`ti ${isApprove ? "ti-info-circle" : "ti-alert-triangle"}`} />
-            <div>
-              {isApprove
-                ? `You're about to approve ${count} selected request${count === 1 ? "" : "s"}. Employees will be notified.`
-                : `You're about to reject ${count} selected request${count === 1 ? "" : "s"}. Employees will be notified.`}
-            </div>
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">
-              Remarks {!isApprove && <span style={{ color: "var(--error)" }}>*</span>}
-            </label>
-            <textarea
-              className="field-input"
-              rows={3}
-              placeholder={isApprove ? "Optional notes for the record…" : "Reason for rejection (required)"}
-              value={remarks}
-              onChange={e => setRemarks(e.target.value)}
-              style={{ resize: "vertical" }}
-            />
-          </div>
-        </div>
-
-        <div className="modal-footer">
+    <Modal
+      title={`${isApprove ? "Approve" : "Reject"} ${count} request${count === 1 ? "" : "s"}`}
+      onClose={onClose}
+      maxWidth={480}
+      footer={
+        <>
           <button className="btn btn-ghost" suppressHydrationWarning onClick={onClose} disabled={saving}>
             Cancel
           </button>
@@ -69,8 +39,31 @@ export default function BulkConfirmModal({ action, count, saving, onConfirm, onC
               <><i className="ti ti-x" /> Reject {count}</>
             )}
           </button>
+        </>
+      }
+    >
+      <div className={`alert ${isApprove ? "alert-info" : "alert-warn"} mb-16`}>
+        <i className={`ti ${isApprove ? "ti-info-circle" : "ti-alert-triangle"}`} />
+        <div>
+          {isApprove
+            ? `You're about to approve ${count} selected request${count === 1 ? "" : "s"}. Employees will be notified.`
+            : `You're about to reject ${count} selected request${count === 1 ? "" : "s"}. Employees will be notified.`}
         </div>
       </div>
-    </div>
+
+      <div className="field-group">
+        <label className="field-label">
+          Remarks {!isApprove && <span style={{ color: "var(--error)" }}>*</span>}
+        </label>
+        <textarea
+          className="field-input"
+          rows={3}
+          placeholder={isApprove ? "Optional notes for the record…" : "Reason for rejection (required)"}
+          value={remarks}
+          onChange={e => setRemarks(e.target.value)}
+          style={{ resize: "vertical" }}
+        />
+      </div>
+    </Modal>
   );
 }

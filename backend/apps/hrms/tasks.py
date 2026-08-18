@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def reset_annual_leave_balances(self):
     """
-    Annual task: runs on 1st Jan at 00:01 IST.
+    Annual task: runs on 1st Jan at 00:01 IST, once per active company (see
+    apps.tenants.utils.run_for_all_tenants — this task has no single tenant
+    of its own, it's scheduled, not dispatched from a request).
 
     For every active employee:
     - Checks each active LeavePolicy for eligibility (branch, dept, designation, service period).
@@ -27,7 +29,9 @@ def reset_annual_leave_balances(self):
 
     Idempotent: get_or_create — safe to re-run if the task fires twice.
     """
-    try:
+    from apps.tenants.utils import run_for_all_tenants
+
+    def _run_for_one_tenant():
         from decimal import Decimal
         from apps.accounts.models import User
         from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
@@ -102,10 +106,12 @@ def reset_annual_leave_balances(self):
                 else:
                     skipped_total += 1
 
-        result = {'year': new_year, 'created': created_total, 'skipped': skipped_total}
+        return {'year': new_year, 'created': created_total, 'skipped': skipped_total}
+
+    try:
+        result = run_for_all_tenants(_run_for_one_tenant, task_name='reset_annual_leave_balances')
         logger.info('reset_annual_leave_balances completed: %s', result)
         return result
-
     except Exception as exc:
         logger.error('reset_annual_leave_balances error: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
@@ -123,17 +129,20 @@ def send_birthday_wishes(self):
       - record an AuditLog row (module='birthday') for delivery visibility
         in Settings -> Audit Logs
 
-    Runs at 00:05 IST (configured in CELERY_BEAT_SCHEDULE).
+    Runs at 00:05 IST (configured in CELERY_BEAT_SCHEDULE), once per active
+    company (see apps.tenants.utils.run_for_all_tenants).
     Gated by BirthdaySettings.is_enabled — the whole feature is a no-op
     when disabled.
     Idempotent — skips employees whose birthday_wish_sent_year already
     equals the current year, so retries and duplicate runs are safe. That
     same guard also prevents duplicate notifications/audit rows on retry.
     """
-    try:
+    from apps.tenants.utils import run_for_all_tenants
+
+    def _run_for_one_tenant():
         from apps.accounts.models import BirthdaySettings, Company, EmployeeProfile
         from apps.accounts.utils import send_template_email
-        from apps.hrms.birthday_utils import get_peers, serialize_birthday_person
+        from apps.hrms.birthday_utils import get_peers
         from apps.notifications.signals import _notify
 
         birthday_settings = BirthdaySettings.get()
@@ -214,15 +223,17 @@ def send_birthday_wishes(self):
                     'birthday', 'birthday', str(employee.id),
                 )
 
-        result = {
+        return {
             'date':    today.isoformat(),
             'sent':    sent_count,
             'skipped': skipped_count,
             'failed':  failed_count,
         }
+
+    try:
+        result = run_for_all_tenants(_run_for_one_tenant, task_name='send_birthday_wishes')
         logger.info('send_birthday_wishes completed: %s', result)
         return result
-
     except Exception as exc:
         logger.error('send_birthday_wishes task error: %s', exc, exc_info=True)
         raise self.retry(exc=exc)

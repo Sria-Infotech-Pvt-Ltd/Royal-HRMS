@@ -1,6 +1,5 @@
 import logging
 from collections import defaultdict
-from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -10,7 +9,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.responses import success, error, first_error, get_client_ip
+from core.responses import success, error, get_client_ip
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
 from apps.payroll.models import (
@@ -23,10 +22,11 @@ from apps.payroll.models import (
     StatutoryConfig,
     PayrollAdjustment,
     ManagerAttendanceApproval,
+    SalaryTransferBatch,
+    BranchPayrollConfig,
 )
 from apps.payroll.serializers import (
     PayrollCycleSerializer,
-    EmployeePayslipSerializer,
     ManagerAttendanceApprovalSerializer,
 )
 from apps.accounts.models import AuditLog, User
@@ -45,7 +45,7 @@ _PAYSLIP_FIELDS = [
     'salary_structure',
     'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
     'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
-    'lop_deduction', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
+    'lop_deduction', 'pf_wage_base', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
     'pt_deduction', 'lwf_employee', 'lwf_employer', 'adjustments_earning',
     'adjustments_deduction', 'total_deductions', 'net_pay', 'status',
 ]
@@ -121,13 +121,27 @@ def _compute_employee_payslip(
     pf_applicable = branch_config.pf_applicable if branch_config is not None else True
     pf_employee = Decimal('0')
     pf_employer = Decimal('0')
+    pf_wage_base = Decimal('0')
     if pf_applicable:
         pf_ceiling  = branch_config.pf_wage_ceiling   if branch_config else _PF_DEFAULT_CEILING
         pf_emp_rate = branch_config.pf_employee_rate   if branch_config else _PF_DEFAULT_RATE
         pf_er_rate  = branch_config.pf_employer_rate   if branch_config else _PF_DEFAULT_RATE
-        pf_base     = min(basic, pf_ceiling)
-        pf_employee = pf_base * pf_emp_rate / 100
-        pf_employer = pf_base * pf_er_rate  / 100
+        pf_wage_basis = (
+            branch_config.pf_wage_basis if branch_config else BranchPayrollConfig.PF_WAGE_BASIC_ONLY
+        )
+        # 'basic_only' (default) preserves this branch's existing behavior.
+        # 'basic_plus_allowances' follows the 2019 EPFO ruling (and
+        # Razorpay's documented PF calculation): PF wages = Gross - HRA,
+        # i.e. every allowance except HRA counts, not just basic. Opt-in
+        # per branch via BranchPayrollConfig.pf_wage_basis — see that
+        # field's help_text for why this isn't just silently switched over.
+        if pf_wage_basis == BranchPayrollConfig.PF_WAGE_BASIC_PLUS_ALLOWANCES:
+            uncapped_pf_wage = basic + special_allowance + other_earnings_total
+        else:
+            uncapped_pf_wage = basic
+        pf_wage_base = min(uncapped_pf_wage, pf_ceiling)
+        pf_employee = pf_wage_base * pf_emp_rate / 100
+        pf_employer = pf_wage_base * pf_er_rate  / 100
 
     # ESI, PT, LWF: from the branch's state statutory config
     esi_employee = Decimal('0')
@@ -172,6 +186,7 @@ def _compute_employee_payslip(
         'total_working_days':    total_working_days,
         'lop_days':              lop_days,
         'lop_deduction':         lop_deduction,
+        'pf_wage_base':          pf_wage_base,
         'pf_employee':           pf_employee,
         'pf_employer':           pf_employer,
         'esi_employee':          esi_employee,
@@ -271,7 +286,6 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     so it adds no additional queries and can never widen the population
     (an out-of-branch/inactive/system_admin code simply won't match and is
     silently excluded, same as if it had never been selected)."""
-    settings_obj = PayrollSettings.objects.first()
     default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
 
     employees_qs = _eligible_employees_qs(cycle)
@@ -1016,6 +1030,18 @@ class MarkCyclePaidView(APIView):
             PayrollCycle.STATUS_PAYSLIPS_GENERATED,
         ]:
             return error('Cycle must have payslips generated before marking as paid.')
+
+        # Dual-confirmation gate: money only moves once the employee side
+        # (every payslip acknowledged/resolved) AND the employer side (this
+        # explicit confirm step, which locks a bank-detail snapshot) have
+        # both signed off — see apps/payroll/views/salary_transfer.py.
+        transfer_batch = SalaryTransferBatch.objects.filter(cycle=cycle).first()
+        if not transfer_batch or transfer_batch.status != SalaryTransferBatch.STATUS_CONFIRMED:
+            return error(
+                'Salary transfer must be confirmed (both employee and employer sign-off) '
+                'before this cycle can be marked as paid. '
+                'POST /payroll/cycles/<id>/salary-transfer/confirm/ first.'
+            )
 
         now = timezone.now()
         cycle.status      = PayrollCycle.STATUS_PAID

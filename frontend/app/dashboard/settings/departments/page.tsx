@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import Modal from "@/components/Modal";
 
 interface RoleInfo    { name: string; display_name: string }
 interface Department  {
@@ -94,11 +95,18 @@ export default function DepartmentsPage() {
     finally  { setDesigLoading(false); }
   }
 
-  useEffect(() => { loadDepartments(); }, []); // eslint-disable-line
+  // Deliberately fetches once on mount only — loadDepartments is stable for
+  // the lifetime of this page and must not re-run on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadDepartments(); }, []);
+  // Deliberately keyed on selected?.id, not the whole `selected` object or
+  // loadDesignations — re-running on every field change of the selected
+  // department would refetch designations for no reason.
   useEffect(() => {
     if (selected) loadDesignations(selected.id);
     else setDesignations([]);
-  }, [selected?.id]); // eslint-disable-line
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   // ── Department CRUD ────────────────────────────────────────────────────────
 
@@ -158,6 +166,7 @@ export default function DepartmentsPage() {
     setDesigForm({ name: d.name, is_active: d.is_active }); setDesigModal("edit");
   }
   async function saveDesig() {
+    if (!selected) return;
     const errs: Record<string, string> = {};
     if (!desigForm.name.trim()) errs.name = "Designation name is required.";
     if (Object.keys(errs).length) { setDesigErrors(errs); return; }
@@ -166,9 +175,9 @@ export default function DepartmentsPage() {
       if (desigModal === "edit" && editingDesig)
         await clientApi.put(API.designations.detail(editingDesig.id), desigForm);
       else
-        await clientApi.post(API.designations.list, { ...desigForm, department: selected!.id });
+        await clientApi.post(API.designations.list, { ...desigForm, department: selected.id });
       setDesigModal(null);
-      await Promise.all([loadDesignations(selected!.id), loadDepartments()]);
+      await Promise.all([loadDesignations(selected.id), loadDepartments()]);
     } catch (e: unknown) {
       setSaveError((e as { message?: string }).message ?? "Failed to save.");
     } finally { setSaving(false); }
@@ -177,12 +186,12 @@ export default function DepartmentsPage() {
     setDeleteDesigTarget(d);
   }
   async function confirmDeleteDesig() {
-    if (!deleteDesigTarget) return;
+    if (!deleteDesigTarget || !selected) return;
     setDeletingDesig(true);
     try {
       await clientApi.delete(API.designations.detail(deleteDesigTarget.id));
       setDeleteDesigTarget(null);
-      await Promise.all([loadDesignations(selected!.id), loadDepartments()]);
+      await Promise.all([loadDesignations(selected.id), loadDepartments()]);
     } catch (e: unknown) {
       setPageError((e as { message?: string }).message ?? "Failed to delete.");
     } finally {
@@ -524,96 +533,86 @@ export default function DepartmentsPage() {
 
       {/* ── Department modal ── */}
       {deptModal && (
-        <div className="modal-overlay open">
-          <div className="modal" style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-building-plus" style={{ marginRight: 8 }} />
-                {deptModal === "add" ? "New Department" : `Edit: ${editingDept?.name}`}
-              </div>
-              <button className="modal-close" onClick={() => setDeptModal(null)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              {saveError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveError}</div>}
-              <div className="field-group mb-16">
-                <label className="field-label">Department Name *</label>
-                <input
-                  className={`field-input${deptErrors.name ? " field-error" : ""}`}
-                  value={deptForm.name}
-                  onChange={e => { setDeptErrors(p => { const n = {...p}; delete n.name; return n; }); setDeptForm(p => ({...p, name: e.target.value})); }}
-                  placeholder="e.g. Engineering"
-                  maxLength={100} autoFocus
-                />
-                {deptErrors.name && <p className="field-error-msg">{deptErrors.name}</p>}
-              </div>
-              <div className="field-group mb-16">
-                <label className="field-label">Description <span style={{ color: "var(--outline)", fontWeight: 400 }}>(optional)</span></label>
-                <textarea
-                  className="field-input"
-                  value={deptForm.description}
-                  onChange={e => setDeptForm(p => ({...p, description: e.target.value}))}
-                  placeholder="What does this department do?"
-                  style={{ minHeight: 76 }}
-                />
-              </div>
-              <label className="module-check">
-                <input type="checkbox" checked={deptForm.is_active} onChange={e => setDeptForm(p => ({...p, is_active: e.target.checked}))} />
-                <span>Active</span>
-              </label>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-building-plus" style={{ marginRight: 8 }} />{deptModal === "add" ? "New Department" : `Edit: ${editingDept?.name}`}</>}
+          onClose={() => setDeptModal(null)}
+          maxWidth={480}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setDeptModal(null)}>Cancel</button>
               <button className="btn btn-filled" onClick={saveDept} disabled={saving}>
                 {saving ? <><Spin />&nbsp;{deptModal === "add" ? "Creating…" : "Saving…"}</> : deptModal === "add" ? "Create Department" : "Save Changes"}
               </button>
-            </div>
+            </>
+          }
+        >
+          {saveError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveError}</div>}
+          <div className="field-group mb-16">
+            <label className="field-label">Department Name *</label>
+            <input
+              className={`field-input${deptErrors.name ? " field-error" : ""}`}
+              value={deptForm.name}
+              onChange={e => { setDeptErrors(p => { const n = {...p}; delete n.name; return n; }); setDeptForm(p => ({...p, name: e.target.value})); }}
+              placeholder="e.g. Engineering"
+              maxLength={100} autoFocus
+            />
+            {deptErrors.name && <p className="field-error-msg">{deptErrors.name}</p>}
           </div>
-        </div>
+          <div className="field-group mb-16">
+            <label className="field-label">Description <span style={{ color: "var(--outline)", fontWeight: 400 }}>(optional)</span></label>
+            <textarea
+              className="field-input"
+              value={deptForm.description}
+              onChange={e => setDeptForm(p => ({...p, description: e.target.value}))}
+              placeholder="What does this department do?"
+              style={{ minHeight: 76 }}
+            />
+          </div>
+          <label className="module-check">
+            <input type="checkbox" checked={deptForm.is_active} onChange={e => setDeptForm(p => ({...p, is_active: e.target.checked}))} />
+            <span>Active</span>
+          </label>
+        </Modal>
       )}
 
       {/* ── Designation modal ── */}
       {desigModal && (
-        <div className="modal-overlay open">
-          <div className="modal" style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <i className="ti ti-id-badge" style={{ marginRight: 8 }} />
-                {desigModal === "add" ? `Add Designation` : `Edit Designation`}
-              </div>
-              <button className="modal-close" onClick={() => setDesigModal(null)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body">
-              {selected && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "8px 12px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12, color: "var(--on-variant)" }}>
-                  <i className="ti ti-building" style={{ fontSize: 14 }} />
-                  Department: <strong style={{ color: "var(--on-bg)" }}>{selected.name}</strong>
-                </div>
-              )}
-              {saveError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveError}</div>}
-              <div className="field-group mb-16">
-                <label className="field-label">Designation Name *</label>
-                <input
-                  className={`field-input${desigErrors.name ? " field-error" : ""}`}
-                  value={desigForm.name}
-                  onChange={e => { setDesigErrors(p => { const n = {...p}; delete n.name; return n; }); setDesigForm(p => ({...p, name: e.target.value})); }}
-                  placeholder="e.g. Senior Engineer"
-                  maxLength={100} autoFocus
-                />
-                {desigErrors.name && <p className="field-error-msg">{desigErrors.name}</p>}
-              </div>
-              <label className="module-check">
-                <input type="checkbox" checked={desigForm.is_active} onChange={e => setDesigForm(p => ({...p, is_active: e.target.checked}))} />
-                <span>Active</span>
-              </label>
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={<><i className="ti ti-id-badge" style={{ marginRight: 8 }} />{desigModal === "add" ? `Add Designation` : `Edit Designation`}</>}
+          onClose={() => setDesigModal(null)}
+          maxWidth={440}
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setDesigModal(null)}>Cancel</button>
               <button className="btn btn-filled" onClick={saveDesig} disabled={saving}>
                 {saving ? <><Spin />&nbsp;{desigModal === "add" ? "Adding…" : "Saving…"}</> : desigModal === "add" ? "Add Designation" : "Save Changes"}
               </button>
+            </>
+          }
+        >
+          {selected && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "8px 12px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12, color: "var(--on-variant)" }}>
+              <i className="ti ti-building" style={{ fontSize: 14 }} />
+              Department: <strong style={{ color: "var(--on-bg)" }}>{selected.name}</strong>
             </div>
+          )}
+          {saveError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /> {saveError}</div>}
+          <div className="field-group mb-16">
+            <label className="field-label">Designation Name *</label>
+            <input
+              className={`field-input${desigErrors.name ? " field-error" : ""}`}
+              value={desigForm.name}
+              onChange={e => { setDesigErrors(p => { const n = {...p}; delete n.name; return n; }); setDesigForm(p => ({...p, name: e.target.value})); }}
+              placeholder="e.g. Senior Engineer"
+              maxLength={100} autoFocus
+            />
+            {desigErrors.name && <p className="field-error-msg">{desigErrors.name}</p>}
           </div>
-        </div>
+          <label className="module-check">
+            <input type="checkbox" checked={desigForm.is_active} onChange={e => setDesigForm(p => ({...p, is_active: e.target.checked}))} />
+            <span>Active</span>
+          </label>
+        </Modal>
       )}
 
       {/* ── Delete department confirm ── */}

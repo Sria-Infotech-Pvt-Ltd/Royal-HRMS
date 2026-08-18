@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
+import Modal from "@/components/Modal";
 import SmtpModal from "./_components/SmtpModal";
 import {
   SMTP_BASE, smtpDetail, smtpActivate, SMTP_TEST,
@@ -307,33 +308,19 @@ export default function SmtpSettingsPage() {
 
       {/* Test email modal */}
       {testEntry && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setTestEntry(null); }}>
-          <div className="modal" style={{ width: "min(440px, 96vw)" }}>
-            <div className="modal-header">
-              <div>
-                <div className="modal-title">Send Test Email</div>
-                <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
-                  Via <strong>{testEntry.name}</strong> · from <code style={{ background: "var(--bg-low)", padding: "1px 5px", borderRadius: 3 }}>{testEntry.from_email}</code>
-                </div>
+        <Modal
+          title={
+            <>
+              <div>Send Test Email</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+                Via <strong>{testEntry.name}</strong> · from <code style={{ background: "var(--bg-low)", padding: "1px 5px", borderRadius: 3 }}>{testEntry.from_email}</code>
               </div>
-              <button className="modal-close" onClick={() => setTestEntry(null)} suppressHydrationWarning><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div className="field-group">
-                <label className="field-label">Recipient email <span style={{ color: "var(--error)" }}>*</span></label>
-                <input className="field-input" type="email" placeholder="recipient@example.com"
-                  value={testEmail} onChange={e => setTestEmail(e.target.value)}
-                  autoFocus suppressHydrationWarning />
-              </div>
-              <div className="field-group">
-                <label className="field-label">SMTP Password <span style={{ color: "var(--error)" }}>*</span></label>
-                <input className="field-input" type="password" placeholder="Enter SMTP password to authenticate"
-                  value={testPassword} onChange={e => setTestPassword(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleTest()}
-                  suppressHydrationWarning />
-              </div>
-            </div>
-            <div className="modal-footer">
+            </>
+          }
+          onClose={() => setTestEntry(null)}
+          maxWidth="min(440px, 96vw)"
+          footer={
+            <>
               <button className="btn btn-ghost" onClick={() => setTestEntry(null)} suppressHydrationWarning>Cancel</button>
               <button className="btn btn-filled" onClick={handleTest}
                 disabled={!testEmail.trim() || !testPassword.trim() || testLoading}
@@ -343,9 +330,25 @@ export default function SmtpSettingsPage() {
                   : <><i className="ti ti-send" /> Send Test</>
                 }
               </button>
+            </>
+          }
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div className="field-group">
+              <label className="field-label">Recipient email <span style={{ color: "var(--error)" }}>*</span></label>
+              <input className="field-input" type="email" placeholder="recipient@example.com"
+                value={testEmail} onChange={e => setTestEmail(e.target.value)}
+                autoFocus suppressHydrationWarning />
+            </div>
+            <div className="field-group">
+              <label className="field-label">SMTP Password <span style={{ color: "var(--error)" }}>*</span></label>
+              <input className="field-input" type="password" placeholder="Enter SMTP password to authenticate"
+                value={testPassword} onChange={e => setTestPassword(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleTest()}
+                suppressHydrationWarning />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Delete confirm */}
