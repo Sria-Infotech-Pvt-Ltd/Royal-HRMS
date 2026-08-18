@@ -362,6 +362,41 @@ def _login_assessment_status(user) -> str:
 
 # ─── Authentication ────────────────────────────────────────────────────────────
 
+class PublicCompanyBrandingView(APIView):
+    """
+    Unauthenticated — lets the login page show a company's own logo, name,
+    and accent color before the user has entered a password (see
+    frontend app/login/page.tsx). Deliberately returns only branding
+    fields, nothing sensitive. Company-code existence is not treated as
+    secret here — the login form already requires the caller to know it
+    before authenticating at all, and LoginView's own error message is
+    already generic to avoid confirming a code via failed-login timing;
+    this is the same class of disclosure as a "workspace lookup" page on
+    any other multi-tenant product with branded per-tenant logins.
+    """
+    permission_classes     = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, company_code):
+        from apps.tenants.models import Client
+
+        try:
+            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
+        except Client.DoesNotExist:
+            return error('Company not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        with client:
+            company = Company.objects.first()
+            logo_url = None
+            if company and company.logo:
+                logo_url = request.build_absolute_uri(company.logo.url)
+            return success('OK', data={
+                'company_name': (company.company_name if company else '') or client.company_name,
+                'logo_url':     logo_url,
+                'brand_color':  (company.brand_color if company else '') or '',
+            })
+
+
 class LoginView(APIView):
     permission_classes      = [AllowAny]
     authentication_classes  = []
@@ -443,11 +478,22 @@ class LoginView(APIView):
             if user.role else []
         )
 
+        # This company's own logo/accent color, for the dashboard shell —
+        # same Company row PublicCompanyBrandingView reads pre-login.
+        company = Company.objects.first()
+        company_logo_url = (
+            request.build_absolute_uri(company.logo.url)
+            if company and company.logo else None
+        )
+        company_brand_color = (company.brand_color if company else '') or ''
+
         resp = success('Login successful.', data={
             'user': {
                 'id':                  str(user.id),
                 'company_code':        client.company_code,
                 'company_name':        client.company_name,
+                'company_logo_url':    company_logo_url,
+                'company_brand_color': company_brand_color,
                 'email':               user.email,
                 'full_name':           user.full_name,
                 'role':                user.role.name if user.role else None,

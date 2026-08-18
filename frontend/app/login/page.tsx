@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import clientApi, { resetSessionExpired } from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
@@ -17,6 +17,8 @@ interface LoginApiResponse {
       id: string;
       company_code: string;
       company_name: string;
+      company_logo_url: string | null;
+      company_brand_color: string;
       email: string;
       full_name: string;
       role: string;
@@ -31,24 +33,15 @@ interface LoginApiResponse {
   };
 }
 
-const PORTAL_COPY: Record<string, { title: string; subtitle: string }> = {
-  hr:       { title: "HR & Admin Sign In", subtitle: "Access the HR administration portal" },
-  employee: { title: "Employee Sign In",   subtitle: "Access your personal employee portal" },
-};
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
-  );
+interface BrandingResponse {
+  data: { company_name: string; logo_url: string | null; brand_color: string };
 }
 
-function LoginForm() {
+const DEFAULT_BRAND_NAME = "Royal HRMS";
+const DEFAULT_LOGO = "/logo.png";
+
+export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const portal = searchParams.get("portal");
-  const copy = (portal && PORTAL_COPY[portal]) || { title: "Welcome back", subtitle: "Sign in to your Royal HRMS account" };
   const [companyCode, setCompanyCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,6 +50,59 @@ function LoginForm() {
   const [showPwd, setShowPwd] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+
+  // Per-company white-labeling — swapped in once a valid company code is
+  // known, either typed in below or auto-resolved from a company's own
+  // custom domain (see the effect below). Falls back to the shared Royal
+  // HRMS look whenever no company is resolved yet.
+  const [brandName, setBrandName] = useState(DEFAULT_BRAND_NAME);
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null);
+  const [brandColor, setBrandColor] = useState("");
+  const brandLookupTicket = useRef(0);
+
+  // If this domain has been registered as a company's own custom domain
+  // (platform admin sets Client.custom_domain), skip asking for a Company
+  // ID at all — window.location.hostname is what the browser is actually
+  // on, independent of anything the Next.js→Django proxy hop might do to
+  // request headers along the way.
+  useEffect(() => {
+    const host = window.location.hostname;
+    if (!host || host === "localhost") return;
+    clientApi
+      .get<{ data: { company_code: string } }>(`${API.auth.resolveDomain}?domain=${encodeURIComponent(host)}`)
+      .then(res => setCompanyCode(res.data.data.company_code))
+      .catch(() => {});
+  }, []);
+
+  // Debounced branding lookup as the Company ID field changes.
+  useEffect(() => {
+    const code = companyCode.trim();
+    if (!code) {
+      setBrandName(DEFAULT_BRAND_NAME);
+      setBrandLogoUrl(null);
+      setBrandColor("");
+      return;
+    }
+    const ticket = ++brandLookupTicket.current;
+    const timer = setTimeout(() => {
+      clientApi
+        .get<BrandingResponse>(API.auth.companyBranding(code))
+        .then(res => {
+          if (ticket !== brandLookupTicket.current) return;
+          const b = res.data.data;
+          setBrandName(b.company_name || DEFAULT_BRAND_NAME);
+          setBrandLogoUrl(b.logo_url);
+          setBrandColor(b.brand_color || "");
+        })
+        .catch(() => {
+          if (ticket !== brandLookupTicket.current) return;
+          setBrandName(DEFAULT_BRAND_NAME);
+          setBrandLogoUrl(null);
+          setBrandColor("");
+        });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [companyCode]);
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -71,6 +117,8 @@ function LoginForm() {
         userId: d.user.id,
         companyCode: d.user.company_code,
         companyName: d.user.company_name,
+        companyLogoUrl: d.user.company_logo_url ?? null,
+        companyBrandColor: d.user.company_brand_color ?? "",
         email: d.user.email,
         name: d.user.full_name,
         role: d.user.role,
@@ -105,15 +153,25 @@ function LoginForm() {
     }
   }
 
+  const subtitle = `Sign in to your ${brandName} account`;
+
   return (
-    <div className="login-page-root">
+    <div
+      className="login-page-root"
+      // brandColor is user-configured per company (Company.brand_color) — a
+      // CSS custom property has no dedicated key in React.CSSProperties, so
+      // this cast is the standard way to set one; safe because the value is
+      // validated server-side as a strict #rrggbb hex string before it's
+      // ever stored (see CompanySerializer.validate_brand_color).
+      style={brandColor ? ({ "--primary": brandColor } as React.CSSProperties) : undefined}
+    >
       <div className="login-layout">
 
         {/* Left panel — decorative image, hidden on mobile */}
         <div className="login-image-panel">
           <Image
             src="/login.jpg"
-            alt="Royal HRMS"
+            alt={brandName}
             fill
             className="login-image"
             sizes="60vw"
@@ -129,16 +187,16 @@ function LoginForm() {
             <div className="login-brand-wrap">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
-                alt="Royal HRMS"
+                src={brandLogoUrl || DEFAULT_LOGO}
+                alt={brandName}
                 width={240}
                 height={160}
-                style={{ width: 240, height: "auto" }}
+                style={{ width: 240, height: "auto", maxHeight: 100, objectFit: "contain" }}
               />
             </div>
 
-            <h2 className="login-title">{copy.title}</h2>
-            <p className="login-subtitle">{copy.subtitle}</p>
+            <h2 className="login-title">Welcome back</h2>
+            <p className="login-subtitle">{subtitle}</p>
 
             {/* Error banner */}
             {error && (
@@ -156,7 +214,9 @@ function LoginForm() {
             ) : (
               <form onSubmit={handleSubmit} noValidate>
 
-                {/* Company code field */}
+                {/* Company code field — always required, for every role.
+                    It's what tells the backend which tenant schema to check
+                    for this email (see backend LoginSerializer/LoginView). */}
                 <div className="login-field">
                   <label htmlFor="login-company-code" className="login-label">
                     Company ID
@@ -249,19 +309,8 @@ function LoginForm() {
               </form>
             )}
 
-            {portal && !showForgot && (
-              <button
-                type="button"
-                className="login-forgot-btn"
-                style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 4 }}
-                onClick={() => router.push("/portal")}
-              >
-                <i className="ti ti-arrow-left" /> Not you? Choose a different portal
-              </button>
-            )}
-
             <p className="login-footer-text">
-              Protected by Royal HRMS · Enterprise SSO available
+              Protected by {brandName} · Enterprise SSO available
             </p>
 
           </div>

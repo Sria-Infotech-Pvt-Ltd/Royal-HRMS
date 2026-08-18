@@ -6,9 +6,11 @@ export const USER_COOKIE = "royal_hrms_user";
 const COOKIE_MAX_AGE = 60 * 60 * 8; // 8 hours
 
 export interface UserInfo {
-  userId:            string;
-  companyCode:       string;
-  companyName:       string;
+  userId:              string;
+  companyCode:         string;
+  companyName:         string;
+  companyLogoUrl:      string | null;
+  companyBrandColor:   string;
   email:             string;
   name:              string;
   role:              string;

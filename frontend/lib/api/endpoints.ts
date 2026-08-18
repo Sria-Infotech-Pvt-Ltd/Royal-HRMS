@@ -6,6 +6,8 @@ export const API = {
     verifyOtp: "/verify-otp/",
     resetPassword: "/reset-password/",
     changePassword: "/change-password/",
+    companyBranding: (companyCode: string) => `/public/company-branding/${companyCode}/`,
+    resolveDomain: "/resolve-domain/",
   },
 
   platformAdmin: {
@@ -16,7 +18,9 @@ export const API = {
     companies: {
       list: "/platform-admin/companies/",
       detail: (id: string) => `/platform-admin/companies/${id}/`,
+      revealPassword: (id: string) => `/platform-admin/companies/${id}/reveal-password/`,
     },
+    smtpSettings: "/platform-admin/smtp-settings/",
   },
 
   announcements: {

@@ -5,11 +5,14 @@ import { cookies } from "next/headers";
 import { USER_COOKIE } from "./auth";
 
 export interface SessionPayload {
-  userId:      string;
-  email:       string;
-  name:        string;
-  role:        string;
-  permissions: string[];
+  userId:            string;
+  email:             string;
+  name:              string;
+  role:              string;
+  permissions:       string[];
+  companyName?:      string;
+  companyLogoUrl?:   string | null;
+  companyBrandColor?: string;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

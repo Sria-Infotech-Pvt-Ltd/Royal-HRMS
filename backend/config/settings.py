@@ -324,6 +324,13 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.attendance.tasks.check_missing_clockouts',
         'schedule': 300.0,  # seconds
     },
+    # Runs every 5 minutes — flips any company provisioning stuck at
+    # 'pending' (worker died mid-task) to 'failed' so the platform-admin
+    # UI doesn't show "Provisioning..." forever with no recovery path.
+    'sweep-stale-provisioning': {
+        'task':     'apps.tenants.tasks.sweep_stale_provisioning',
+        'schedule': 300.0,  # seconds
+    },
     # Runs once daily at 09:00 IST — fires absence alerts for employees absent N+ consecutive days.
     'check-absence-alerts': {
         'task':     'apps.attendance.tasks.check_absence_alerts',
