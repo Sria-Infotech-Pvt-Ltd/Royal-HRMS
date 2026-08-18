@@ -32,6 +32,16 @@ from apps.voice_commands.audit import log_no_match
 # Edge; ogg on Firefox) plus wav as a generic fallback — anything else is
 # rejected outright rather than forwarded to Sarvam.
 _ALLOWED_CONTENT_TYPES = frozenset({'audio/webm', 'audio/ogg', 'audio/wav', 'audio/x-wav'})
+
+# This retry exists specifically for Hindi (see class docstring), so it tries
+# an explicit Hindi hint before falling back to auto-detect — real live
+# testing (2026-08-18) showed auto-detect guessing gu-IN/ml-IN/te-IN on every
+# genuine Hindi attempt, never hi-IN. A hinted call gets no
+# language_probability back from Sarvam (confirmed against real docs), so a
+# hinted success is reported to the caller as was_language_hinted=True rather
+# than silently losing the trust signal conversation.py's STT-confirmation
+# gate depends on.
+_PRIMARY_LANGUAGE_HINT = 'hi-IN'
 # A single ~5s retry clip is a few hundred KB at most even uncompressed;
 # 2MB is generous headroom without approaching the project's general 5MB
 # upload cap.
@@ -94,7 +104,16 @@ class VoiceTranscribeFallbackView(APIView):
 
         result = sarvam_client.transcribe_audio(
             audio_bytes, uploaded.name or 'clip.webm', content_type=uploaded.content_type,
+            language_code=_PRIMARY_LANGUAGE_HINT,
         )
+        if result is None:
+            # Hindi hint declined (empty transcript, or genuinely not Hindi)
+            # — fall back to auto-detect exactly as this retry always used
+            # to, so a non-Hindi Indic speaker isn't worse off than before
+            # this hint existed.
+            result = sarvam_client.transcribe_audio(
+                audio_bytes, uploaded.name or 'clip.webm', content_type=uploaded.content_type,
+            )
         if result is None:
             # Same fail-soft contract as the LLM fallback tier: a Sarvam
             # outage, an unconfigured key, or genuine silence/unintelligible

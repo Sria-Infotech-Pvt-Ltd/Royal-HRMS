@@ -45,10 +45,17 @@ const MIC_HANDOFF_SETTLE_MS = 800;
  * caller threads this through to /voice/parse/ as the best available proxy
  * for "is this transcript even trustworthy," per conversation.py's
  * STT-confirmation gate.
+ *
+ * wasLanguageHinted is true when the backend's Hindi-hint attempt succeeded
+ * (see views_transcribe.py) rather than its auto-detect fallback — that mode
+ * gets no languageProbability from Sarvam at all, so the caller threads this
+ * through too, as stt_used_language_hint, telling conversation.py's gate to
+ * always confirm rather than skip confirmation for lack of a signal.
  */
 export async function captureAndTranscribeViaSarvam(): Promise<{
   transcript: string;
   languageProbability: number | null;
+  wasLanguageHinted: boolean;
 } | null> {
   if (
     typeof navigator === "undefined" ||
@@ -60,19 +67,21 @@ export async function captureAndTranscribeViaSarvam(): Promise<{
 
   let stream: MediaStream;
   try {
-    // EXPERIMENT (uncommitted) — bare `{ audio: true }` left echoCancellation/
-    // noiseSuppression/autoGainControl at the browser's own defaults (on, for
-    // all three, in Chrome/Edge). The AnalyserNode probe below taps the
-    // stream AFTER that processing runs, and real captured clips showed
-    // energy peaking briefly then dropping near zero within the same clip —
-    // the signature of a noise gate/suppressor cutting speech, not silence
-    // at the source. Explicitly disabling all three here isolates whether
-    // that processing (tuned for two-way calls, not offline transcription)
-    // is what's actually suppressing the signal Sarvam receives. Scoped to
-    // this capture only — the barge-in VAD tap (useVoiceCommand.ts's
-    // startVadTap) opens its own separate stream and is untouched.
+    // echoCancellation/noiseSuppression/autoGainControl explicitly disabled
+    // rather than left at browser defaults (on, for all three, in Chrome/
+    // Edge) — tried as a theory for the low RMS energy seen in captured
+    // clips, tuned for two-way calls rather than offline transcription.
+    // RULED OUT (2026-08-18): a full live testing session showed no
+    // correlation between capture RMS and transcription success either way
+    // with this disabled — quiet clips succeeded, louder ones still came
+    // back empty. Left disabled anyway since it's harmless and still
+    // reasonable practice for STT capture, just not the fix it was tried as.
+    // sampleRate: 16000 matches Sarvam's own documented guidance ("works
+    // best with audio sampled at 16kHz" — confirmed against real
+    // docs.sarvam.ai docs, 2026-08-18); unset before, so capture ran at
+    // whatever the device's default rate was (commonly 48kHz).
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 16000 },
     });
   } catch {
     return null; // permission denied, or no input device — same "can't help here" outcome
@@ -160,12 +169,15 @@ export async function captureAndTranscribeViaSarvam(): Promise<{
     // against that day's server log. 25000ms matches postVoiceParse's own
     // budget for the same class of problem on the sibling endpoint.
     const res = await clientApi.post(API.voice.transcribeFallback, formData, { timeout: 25000 });
-    const data = (res.data as { data?: { transcript?: string; language_probability?: number | null } })?.data;
+    const data = (res.data as {
+      data?: { transcript?: string; language_probability?: number | null; was_language_hinted?: boolean };
+    })?.data;
     const transcript = data?.transcript;
     if (typeof transcript !== "string" || !transcript.trim()) return null;
     return {
       transcript: transcript.trim(),
       languageProbability: typeof data?.language_probability === "number" ? data.language_probability : null,
+      wasLanguageHinted: data?.was_language_hinted === true,
     };
   } catch {
     return null;
