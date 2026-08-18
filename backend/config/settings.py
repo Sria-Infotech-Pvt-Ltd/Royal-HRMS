@@ -409,6 +409,21 @@ if not DEBUG:
 LOGS_DIR = BASE_DIR / 'logs'
 LOGS_DIR.mkdir(exist_ok=True)
 
+# `manage.py test` runs exercise real code paths (handle_transcript,
+# sarvam_client, audit._record, ...) that log exactly like production
+# traffic, and until now those entries landed in the SAME files real dev/
+# production usage does — indistinguishable from genuine events without
+# reading each test's mocks. Confirmed directly: every "Sarvam STT
+# succeeded" line in logs/voice_commands.log, across every date, turned out
+# on inspection to be test_sarvam_client.py's mocked fixture, not a real
+# transcription — this made that file useless as a real-data source for
+# calibrating anything (see voice_review_report's own docstring on why real
+# data matters here). Test runs get their own subdirectory instead — same
+# handlers/rotation/formatting, just never the same files.
+RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
+_LOG_DIR = (LOGS_DIR / 'test') if RUNNING_TESTS else LOGS_DIR
+_LOG_DIR.mkdir(exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -422,7 +437,7 @@ LOGGING = {
         'auth_file': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'auth.log',
+            'filename': _LOG_DIR / 'auth.log',
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
             'formatter': 'verbose',
@@ -431,7 +446,7 @@ LOGGING = {
         'error_file': {
             'level': 'WARNING',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'errors.log',
+            'filename': _LOG_DIR / 'errors.log',
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
             'formatter': 'verbose',
@@ -440,7 +455,7 @@ LOGGING = {
         'voice_commands_file': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'voice_commands.log',
+            'filename': _LOG_DIR / 'voice_commands.log',
             'maxBytes': 5 * 1024 * 1024,  # 5 MB per file
             'backupCount': 5,
             'formatter': 'verbose',
