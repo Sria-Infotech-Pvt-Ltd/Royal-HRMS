@@ -1000,6 +1000,17 @@ textarea.field-input {
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* Voice assistant: "listening for interruption" indicator, shown only while
+   a barge-in VAD tap is actually open (TTS speaking) — see
+   VoiceConversationPanel.tsx. */
+@keyframes voiceBargeInPulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="voice-panel-barge-in-indicator"] i { animation: none; }
+}
+
 /* Voice assistant FAB — idle resting orb, a soft ring so it still reads as
    interactive/alive without the full-size button sitting on the page. */
 @keyframes voiceIdlePulse {
