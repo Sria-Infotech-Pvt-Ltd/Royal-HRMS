@@ -11,6 +11,8 @@ endpoint shape (multipart file upload vs JSON transcript) and this project's
 """
 from __future__ import annotations
 
+import logging
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -18,6 +20,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.responses import error, success
+
+logger = logging.getLogger(__name__)
 
 from apps.voice_commands import sarvam_client
 from apps.voice_commands.audit import log_no_match
@@ -72,8 +76,24 @@ class VoiceTranscribeFallbackView(APIView):
         if uploaded.size > _MAX_AUDIO_BYTES:
             return error('Audio clip is too large.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
+        audio_bytes = uploaded.read()
+        # Client-side raw-stream RMS energy (voiceSttFallback.ts's AnalyserNode
+        # probe, sampled from the instant getUserMedia resolves through the
+        # whole recording) — tells us whether the mic stream had real signal
+        # at the source, without ever touching the audio itself. Deliberately
+        # NOT the raw clip: this app's voice commands carry real employee
+        # speech, and writing that to disk for debugging is a real exposure,
+        # not a hypothetical one (see this project's own PII-handling rules).
+        # Numeric energy readings serve the same "was this actually silence"
+        # question with none of that risk.
+        client_energy_debug = request.POST.get('clientEnergyDebug')
+        logger.warning(
+            'Voice transcribe-fallback capture: bytes=%d content_type=%s energy=%s',
+            len(audio_bytes), uploaded.content_type, client_energy_debug,
+        )
+
         result = sarvam_client.transcribe_audio(
-            uploaded.read(), uploaded.name or 'clip.webm', content_type=uploaded.content_type,
+            audio_bytes, uploaded.name or 'clip.webm', content_type=uploaded.content_type,
         )
         if result is None:
             # Same fail-soft contract as the LLM fallback tier: a Sarvam
