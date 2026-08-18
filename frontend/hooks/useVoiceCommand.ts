@@ -31,7 +31,32 @@ const IMMEDIATE_RESULT_AUTO_CLOSE_MS = 2500;
 // available), the panel closes this long after the utterance's 'onend'
 // fires rather than after a fixed delay — long enough for the last word to
 // register, short enough not to feel stuck open.
+//
+// BUG (2026-08-18): this alone isn't enough for intents whose spoken text is
+// a short, deliberately-redacted stand-in for a much longer displayed
+// message — see executor_result.py's own speech_message docstring
+// (check_leave_balance/check_leave_status/payslip intents/etc. all speak a
+// generic sentence like "Your leave balance is ready to view." while the
+// panel shows the real figures). TTS finishes that short sentence in ~1-2s,
+// so onEnd + this buffer alone closed the panel before a human could read
+// the actual numbers on screen — confirmed live. estimateReadingTimeMs
+// below sizes a floor off the DISPLAYED text instead, so this buffer still
+// governs the common case (spoken text and displayed text are close in
+// length) but never wins out over "give the reader enough time" when they
+// diverge.
 const TTS_END_BUFFER_MS = 400;
+
+// ~200 words/minute — a commonly-used conservative average adult reading
+// speed for UI dismiss-timing (the same ballpark toast-timing conventions
+// use), not a guess. MIN_READING_TIME_MS floors even a one-word message so
+// it doesn't get a near-zero read window.
+const READING_MS_PER_WORD = 300;
+const MIN_READING_TIME_MS = 1500;
+
+function estimateReadingTimeMs(displayedText: string): number {
+  const wordCount = displayedText.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(MIN_READING_TIME_MS, wordCount * READING_MS_PER_WORD);
+}
 
 // Single source of truth for "which language is this whole voice pipeline
 // operating in" — sent to /voice/parse/ as `lang`, and used as the locale
@@ -99,6 +124,23 @@ type LocationResult = { latitude: number; longitude: number } | { errorMessage: 
 type VoiceParseExtra = Partial<{
   latitude: number; longitude: number;
   face_embedding: number[]; liveness_passed: boolean; liveness_score: number; capture_session_id: string;
+  // TEMP DIAGNOSTIC (uncommitted) — barge-in VAD energy trace, see
+  // bargeInTraceRef below. Logged server-side, never used for anything.
+  barge_in_debug: string;
+  // Only set on a transcript from captureAndTranscribeViaSarvam (the
+  // Sarvam-STT retry) — Sarvam's own confidence in which language it heard,
+  // used server-side (conversation.py's STT-confirmation gate) as the best
+  // available proxy for "is this transcript even trustworthy" before
+  // matching/classifying it at all. Undefined for browser SpeechRecognition
+  // output or typed input, which have no comparable signal.
+  stt_language_probability: number;
+  // Only set (true) when captureAndTranscribeViaSarvam's result came from
+  // the backend's explicit-Hindi-hint attempt rather than auto-detect — that
+  // mode never gets a language_probability back from Sarvam at all, so this
+  // tells conversation.py's gate to confirm regardless rather than skip
+  // confirmation for lack of a signal. See voiceSttFallback.ts's own
+  // wasLanguageHinted docstring.
+  stt_used_language_hint: boolean;
 }>;
 
 // Marks a clock_in/clock_out response as the "taking facial proof" turn —
@@ -118,8 +160,20 @@ function isAwaitingFaceProof(result: unknown): boolean {
 // when needed, a silent resubmit of the SAME transcript with `extra` fields
 // attached (a geofence retry's coordinates, or a face-proof turn's captured
 // descriptor).
+//
+// Per-call timeout override, not clientApi's global 15000ms default: this
+// endpoint's backend pipeline can fall through to sarvam-105b's chat
+// completion on a genuine no-match, which is a reasoning model that
+// measured (2026-08-17) up to ~17s on its "reasoning path" for a single
+// short classification — backend/apps/voice_commands/sarvam_client.py's
+// _CHAT_TIMEOUT_SECONDS was raised to 20s to tolerate that. clientApi's
+// 15s default would then cut the frontend off before the backend's own
+// (longer, intentional) budget expires, surfacing as a client-side
+// "timeout of 15000ms exceeded" even though the backend was still working
+// and would have answered correctly. 25s matches that 20s backend budget
+// with margin, not guessed.
 async function postVoiceParse(transcript: string, lang: string, extra?: VoiceParseExtra): Promise<VoiceParseOutcome> {
-  const res = await clientApi.post(API.voice.parse, { transcript, lang, ...(extra ?? {}) });
+  const res = await clientApi.post(API.voice.parse, { transcript, lang, ...(extra ?? {}) }, { timeout: 25000 });
   const envelope = res.data as { message?: string; data?: VoiceParseResult };
   const data = envelope.data;
   return {
@@ -162,8 +216,48 @@ function captureLocationOrErrorMessage(): Promise<LocationResult> {
 // (isListening flips true, matching the UI) that never captures any audio,
 // because the tail end of the interrupted TTS output hasn't released the
 // input pipeline yet. Only used when something was actually speaking —
-// a no-op-fast-path otherwise.
+// a no-op-fast-path otherwise. Reused as-is for barge-in (see handleBargeIn
+// below) — startListening's gate is engine-agnostic (isTtsPlayingRef, not
+// window.speechSynthesis directly) specifically so this same settle-delay
+// protection applies whether TTS was interrupted by a manual mic press or
+// by VAD-detected barge-in.
 const TTS_CANCEL_SETTLE_MS = 200;
+
+// Barge-in VAD (voice activity detection) — same AnalyserNode/RMS technique
+// as lib/voiceSttFallback.ts's mic-capture diagnostic, repurposed here to
+// detect real speech ARRIVING during TTS playback instead of diagnosing
+// silence after the fact. How often to sample while TTS is speaking.
+//
+// DISABLED (2026-08-18) — reported live as interrupting the normal
+// conversation flow (opens a listening mic on every single spoken response,
+// and misfires on it). Accuracy work on the base voice pipeline (STT
+// non-determinism, mic capture) takes priority; barge-in stays paused until
+// that's in a good place. Gated at its one call site in speak() below rather
+// than deleted — the VAD infrastructure (startVadTap/stopVadTap/
+// handleBargeIn) is untouched so this is a one-line revert once resumed.
+const BARGE_IN_ENABLED = false;
+const BARGE_IN_SAMPLE_INTERVAL_MS = 200;
+
+// NOT YET CALIBRATED — starting point only, per plan: must be validated
+// live against real "speak over the assistant" attempts before being
+// trusted, same discipline MIC_HANDOFF_SETTLE_MS in voiceSttFallback.ts
+// was calibrated with. Materially different risk than that diagnostic
+// though: THAT tap ran while nothing was playing through the device's own
+// speakers; THIS tap runs WHILE this device's speakers are actively
+// outputting the TTS audio, so the mic can pick up its own playback
+// (acoustic echo) unless the browser's echo cancellation (requested below)
+// actually suppresses it. Real noise floor during playback needs to be
+// observed live, not assumed to match the quiet-room baseline from that
+// earlier diagnostic (silence there topped out ~0.006 RMS; real speech
+// there peaked ~0.22 RMS — this constant starts partway between those,
+// pending real data from calibration).
+const BARGE_IN_ENERGY_THRESHOLD = 0.02;
+
+// Debounce: require this many CONSECUTIVE samples above threshold before
+// declaring barge-in — a single loud transient (a door, a chair) shouldn't
+// cancel a whole response. 2 samples at BARGE_IN_SAMPLE_INTERVAL_MS is a
+// ~400ms reaction window; tune alongside the threshold above.
+const BARGE_IN_CONSECUTIVE_SAMPLES = 2;
 
 // "greeting": the panel opened via the keyboard toggle, before any command
 // has been typed yet — never produced by this hook itself (see
@@ -232,6 +326,36 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   // See VoiceConversationState.faceProofTurn's own docstring.
   const faceProofTurnRef = useRef(0);
 
+  // Engine-agnostic "is TTS currently speaking" — deliberately NOT read live
+  // from window.speechSynthesis.speaking (startListening's gate used to do
+  // that) so the exact same gate/settle-delay logic keeps working once a
+  // different TTS engine replaces speechSynthesis. Set true right as
+  // speak() hands the utterance to the engine, false the moment it ends,
+  // errors, or is explicitly cancelled (see cancelSpeech below).
+  const isTtsPlayingRef = useRef(false);
+  // Barge-in VAD tap's own resources — separate from isTtsPlayingRef itself
+  // (see stopVadTap/cancelSpeech: tearing down THIS tap must not always
+  // imply TTS was cancelled, e.g. on a normal utterance end there's nothing
+  // left to interrupt, but nothing needs cancelling either).
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadAudioCtxRef = useRef<AudioContext | null>(null);
+  const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const vadAboveThresholdCountRef = useRef(0);
+  // TEMP DIAGNOSTIC (uncommitted) — every reading from the MOST RECENT VAD
+  // tap, reset when a new tap starts (startVadTap), NOT cleared when a tap
+  // stops (stopVadTap) — so the trace survives long enough to reach
+  // submitTranscript below and get attached to the /voice/parse/ call that
+  // follows a barge-in, letting calibration be read from the backend log
+  // directly instead of depending on DevTools console access.
+  const bargeInTraceRef = useRef<Array<{ rms: number; aboveThreshold: boolean }>>([]);
+  // Ref indirection so handleBargeIn (needed early, by speak()/startVadTap)
+  // can call startListening (declared much later in this component, after
+  // submitTranscript/attemptSilentSpeechFallback) without a declaration-
+  // order cycle — kept current via a plain assignment during render right
+  // after startListening is defined below.
+  const startListeningRef = useRef<(() => void) | null>(null);
+  const [isListeningForInterruption, setIsListeningForInterruption] = useState(false);
+
   const isSupported = getSpeechRecognitionConstructor() !== null;
   // Same condition VoiceCommandButton used to compute locally — centralized
   // here because submitTranscript needs it too, to know whether the panel
@@ -277,6 +401,133 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     [clearAutoCloseTimer]
   );
 
+  // Tears down the VAD tap's OWN resources only — deliberately does not
+  // touch isTtsPlayingRef. Called both when TTS ends normally (nothing left
+  // to interrupt) and as part of cancelSpeech (something else is stopping
+  // TTS anyway) — idempotent so either caller can call it freely.
+  const stopVadTap = useCallback(() => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+    if (vadAudioCtxRef.current) {
+      void vadAudioCtxRef.current.close().catch(() => undefined);
+      vadAudioCtxRef.current = null;
+    }
+    if (vadStreamRef.current) {
+      vadStreamRef.current.getTracks().forEach((track) => track.stop());
+      vadStreamRef.current = null;
+    }
+    vadAboveThresholdCountRef.current = 0;
+    setIsListeningForInterruption(false);
+  }, []);
+
+  // Fired once VAD sees BARGE_IN_CONSECUTIVE_SAMPLES in a row above
+  // threshold. Deliberately does NOT itself cancel TTS or apply a settle
+  // delay — it tears down only this tap's own resources, then calls
+  // startListening(), whose existing gate (below) is what actually checks
+  // isTtsPlayingRef, cancels speech, and waits out TTS_CANCEL_SETTLE_MS
+  // before opening the real capture mic. Reusing that gate verbatim is the
+  // whole point: it's the exact same handoff-timing protection already
+  // proven for a manual mic press during TTS playback, not a new, separately-
+  // risked code path.
+  const handleBargeIn = useCallback((token: number) => {
+    // Stale tap — a newer utterance already superseded this one, or TTS
+    // already ended normally before this fired. Nothing to interrupt.
+    if (utteranceTokenRef.current !== token || !isTtsPlayingRef.current) return;
+    stopVadTap();
+    startListeningRef.current?.();
+  }, [stopVadTap]);
+
+  // Opens a mic stream purely to watch for barge-in while `token`'s
+  // utterance plays — never used to capture the actual interrupting
+  // command itself (that's startListening's job, via handleBargeIn above).
+  // Fire-and-forget: speak() is synchronous and must not await mic
+  // permission before starting TTS, so failure here (no permission, no
+  // input device) just means barge-in isn't available for this utterance —
+  // TTS still plays normally, same as before this feature existed.
+  const startVadTap = useCallback((token: number) => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    const AudioContextCtor =
+      typeof window !== "undefined"
+        ? window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+        : undefined;
+    if (!AudioContextCtor) return;
+
+    navigator.mediaDevices
+      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      .then((stream) => {
+        // The utterance this tap was opened for may already have ended (or
+        // been superseded by a newer one) by the time permission resolves —
+        // don't attach a tap to a response that's no longer playing.
+        if (utteranceTokenRef.current !== token || !isTtsPlayingRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const audioCtx = new AudioContextCtor();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser); // tap only — never connect(audioCtx.destination)
+
+        vadStreamRef.current = stream;
+        vadAudioCtxRef.current = audioCtx;
+        vadAboveThresholdCountRef.current = 0;
+        bargeInTraceRef.current = []; // fresh trace for this tap — see its own declaration
+        setIsListeningForInterruption(true);
+
+        const buffer = new Float32Array(analyser.fftSize);
+        vadIntervalRef.current = setInterval(() => {
+          analyser.getFloatTimeDomainData(buffer);
+          let sumSquares = 0;
+          for (let i = 0; i < buffer.length; i++) sumSquares += buffer[i] * buffer[i];
+          const rms = Math.sqrt(sumSquares / buffer.length);
+          const aboveThreshold = rms >= BARGE_IN_ENERGY_THRESHOLD;
+
+          // TEMP DIAGNOSTIC (uncommitted) — every reading while TTS plays,
+          // to calibrate BARGE_IN_ENERGY_THRESHOLD/BARGE_IN_CONSECUTIVE_SAMPLES
+          // against real speak-over-TTS attempts. Recorded here (read from
+          // the backend log via submitTranscript's barge_in_debug attach
+          // below) rather than relying only on the console.warn line, which
+          // needs DevTools open on the tester's own machine to see.
+          bargeInTraceRef.current.push({ rms, aboveThreshold });
+          console.warn(
+            "[barge-in-diag] rms=%s consecutive=%d threshold=%s",
+            rms.toFixed(4), vadAboveThresholdCountRef.current, BARGE_IN_ENERGY_THRESHOLD
+          );
+
+          if (aboveThreshold) {
+            vadAboveThresholdCountRef.current += 1;
+          } else {
+            vadAboveThresholdCountRef.current = 0;
+          }
+
+          if (vadAboveThresholdCountRef.current >= BARGE_IN_CONSECUTIVE_SAMPLES) {
+            handleBargeIn(token);
+          }
+        }, BARGE_IN_SAMPLE_INTERVAL_MS);
+      })
+      .catch(() => {
+        // No mic permission / no input device — barge-in unavailable for
+        // this utterance; TTS just plays normally, same as always.
+      });
+  }, [handleBargeIn]);
+
+  // Single, engine-swappable "stop whatever is speaking" entry point — every
+  // TTS-cancel call site in this hook goes through this rather than calling
+  // window.speechSynthesis.cancel() directly, so a future TTS engine swap
+  // only needs to change this one function's body. Always tears down the
+  // VAD tap too: if speech is being cancelled for any reason, there's
+  // nothing left to guard against barging in on.
+  const cancelSpeech = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    isTtsPlayingRef.current = false;
+    stopVadTap();
+  }, [stopVadTap]);
+
   // Speaks the same message text shown in the panel/toast, in VOICE_LOCALE.
   // Cancels any utterance already in progress first — a new response should
   // always replace what's currently playing, never queue behind it. Wrapped
@@ -297,45 +548,65 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
 
       try {
-        window.speechSynthesis.cancel();
+        cancelSpeech(); // stop whatever was playing (and its VAD tap) first
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = VOICE_LOCALE;
 
-        if (onEnd) {
-          const token = ++utteranceTokenRef.current;
-          const settle = () => {
-            if (utteranceTokenRef.current === token) onEnd();
-          };
-          utterance.onend = settle;
-          utterance.onerror = settle;
-        }
+        const token = ++utteranceTokenRef.current;
+        // Unconditional now (not gated on `onEnd` being passed) — every
+        // utterance needs isTtsPlayingRef/the VAD tap cleared when it ends,
+        // regardless of whether the caller also wanted an onEnd callback.
+        const settle = () => {
+          if (utteranceTokenRef.current === token) {
+            isTtsPlayingRef.current = false;
+            stopVadTap();
+            onEnd?.();
+          }
+        };
+        utterance.onend = settle;
+        utterance.onerror = settle;
 
         window.speechSynthesis.speak(utterance);
+        isTtsPlayingRef.current = true;
+        if (BARGE_IN_ENABLED) startVadTap(token);
         return true;
       } catch (err) {
         console.error("Voice confirmation speech failed:", err);
         return false;
       }
     },
-    [isMuted]
+    [isMuted, cancelSpeech, stopVadTap, startVadTap]
   );
 
-  // Speaks message, then dismisses the panel — timed to the utterance's real
-  // 'onend' (plus a small buffer) when TTS actually plays, falling back to
-  // fixedDelayMs only when there's no audio to wait for (muted, unsupported,
-  // or synthesis failed to start).
+  // Speaks spokenText, then dismisses the panel — timed to the utterance's
+  // real 'onend' (plus a floor sized to how long displayedText actually
+  // takes to READ, not just how long spokenText takes to SAY) when TTS
+  // actually plays, falling back to fixedDelayMs (with the same reading
+  // floor applied) only when there's no audio to wait for (muted,
+  // unsupported, or synthesis failed to start).
+  //
+  // spokenText and displayedText are the same string for most intents, but
+  // deliberately diverge for confidentiality-redacted ones (see
+  // TTS_END_BUFFER_MS's own comment) — displayedText is always what the
+  // panel actually shows, so it's always what dismiss timing must respect.
   const speakThenDismiss = useCallback(
-    (message: string, fixedDelayMs: number) => {
-      const isSpeaking = speak(message, () => scheduleConversationAutoClose(TTS_END_BUFFER_MS));
+    (spokenText: string, fixedDelayMs: number, displayedText: string) => {
+      const readingFloorMs = estimateReadingTimeMs(displayedText);
+      const isSpeaking = speak(
+        spokenText, () => scheduleConversationAutoClose(Math.max(TTS_END_BUFFER_MS, readingFloorMs))
+      );
       if (!isSpeaking) {
-        scheduleConversationAutoClose(fixedDelayMs);
+        scheduleConversationAutoClose(Math.max(fixedDelayMs, readingFloorMs));
       }
     },
     [speak, scheduleConversationAutoClose]
   );
 
   const submitTranscript = useCallback(
-    async (transcript: string, sourceIsVoice: boolean = false) => {
+    async (
+      transcript: string, sourceIsVoice: boolean = false,
+      sttLanguageProbability?: number | null, sttUsedLanguageHint: boolean = false
+    ) => {
       setStatus("processing");
       clearAutoCloseTimer();
 
@@ -348,9 +619,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       // answer while a long question is still playing blanks the panel's
       // text immediately while the old utterance keeps talking, audibly out
       // of sync with what's on screen.
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
+      cancelSpeech();
 
       // Open the panel immediately with what was recognized, before the
       // response even comes back — same panel for every intent now, not
@@ -365,8 +634,34 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         });
       }
 
+      // TEMP DIAGNOSTIC (uncommitted) — attach the just-completed VAD tap's
+      // energy trace (see bargeInTraceRef) to this submission only when it
+      // came from the mic (sourceIsVoice) and a trace actually exists (TTS
+      // was genuinely playing beforehand) — read back from the backend log
+      // apps/voice_commands/views.py logs it to, for calibration without
+      // needing DevTools console access on the tester's machine. Cleared
+      // immediately after building the payload so it can't leak onto a
+      // later, unrelated submission.
+      const bargeInDebugExtra =
+        sourceIsVoice && bargeInTraceRef.current.length > 0
+          ? { barge_in_debug: JSON.stringify(bargeInTraceRef.current) }
+          : undefined;
+      bargeInTraceRef.current = [];
+
+      // Only set when this transcript came from captureAndTranscribeViaSarvam
+      // (attemptSilentSpeechFallback's retry) — see VoiceParseExtra's own
+      // comment on stt_language_probability.
+      const firstCallExtra = {
+        ...bargeInDebugExtra,
+        ...(sttLanguageProbability != null ? { stt_language_probability: sttLanguageProbability } : {}),
+        ...(sttUsedLanguageHint ? { stt_used_language_hint: true } : {}),
+      };
+
       try {
-        let outcome = await postVoiceParse(transcript, VOICE_LANG);
+        let outcome = await postVoiceParse(
+          transcript, VOICE_LANG,
+          Object.keys(firstCallExtra).length > 0 ? firstCallExtra : undefined,
+        );
         // What the result panel actually shows/acts on — starts as the raw
         // browser transcript, replaced below only if the Sarvam-STT retry
         // fires and comes back with something usable.
@@ -400,10 +695,13 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         // or the resubmitted transcript still no-matches, everything below
         // behaves exactly as if this retry had never been attempted.
         if (sourceIsVoice && !outcome.success && outcome.intent === NO_MATCH_INTENT) {
-          const sarvamTranscript = await captureAndTranscribeViaSarvam();
-          if (sarvamTranscript) {
-            displayTranscript = sarvamTranscript;
-            outcome = await postVoiceParse(sarvamTranscript, VOICE_LANG);
+          const sarvamResult = await captureAndTranscribeViaSarvam();
+          if (sarvamResult) {
+            displayTranscript = sarvamResult.transcript;
+            outcome = await postVoiceParse(sarvamResult.transcript, VOICE_LANG, {
+              stt_language_probability: sarvamResult.languageProbability ?? undefined,
+              ...(sarvamResult.wasLanguageHinted ? { stt_used_language_hint: true } : {}),
+            });
           }
         }
 
@@ -447,7 +745,9 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             // Conversational flows get the slower fixed-delay fallback (used
             // only when muted/unsupported); a one-shot result's fallback is
             // faster. Either way, real speech takes priority over both.
-            speakThenDismiss(spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+            speakThenDismiss(
+              spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message
+            );
           }
         }
       } catch (err: unknown) {
@@ -463,14 +763,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
             faceProofTurn: faceProofTurnRef.current,
           });
-          speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+          speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message);
         }
       } finally {
         setStatus("idle");
         setInterimTranscript("");
       }
     },
-    [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled]
+    [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled, cancelSpeech]
   );
 
   // Browser SpeechRecognition is locked to VOICE_LOCALE ("en-US") — genuine
@@ -489,9 +789,11 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   const attemptSilentSpeechFallback = useCallback(async () => {
     setStatus("processing");
     showToast("Didn't catch that — trying once more…", "success");
-    const sarvamTranscript = await captureAndTranscribeViaSarvam();
-    if (sarvamTranscript) {
-      await submitTranscript(sarvamTranscript, false);
+    const sarvamResult = await captureAndTranscribeViaSarvam();
+    if (sarvamResult) {
+      await submitTranscript(
+        sarvamResult.transcript, false, sarvamResult.languageProbability, sarvamResult.wasLanguageHinted
+      );
     } else {
       showToast("Voice recognition error. Please try again.", "error");
       setStatus("idle");
@@ -535,7 +837,9 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         if (awaitingInput) {
           speak(spokenText);
         } else {
-          speakThenDismiss(spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+          speakThenDismiss(
+            spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message
+          );
         }
       } catch (err: unknown) {
         const e = err as NormalisedError;
@@ -545,7 +849,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
           faceProofTurn: faceProofTurnRef.current,
         });
-        speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS);
+        speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message);
       } finally {
         setStatus("idle");
       }
@@ -651,14 +955,29 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     // the interrupted TTS output hasn't released the input pipeline yet.
     // Nothing to defer in the common case (user waits for the question to
     // finish before answering), so this stays a same-tick start then.
-    const synth = typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
-    if (synth && (synth.speaking || synth.pending)) {
-      synth.cancel();
+    //
+    // Checked via isTtsPlayingRef, not window.speechSynthesis directly, so
+    // this exact gate also protects the barge-in handoff (handleBargeIn
+    // calls startListening() while isTtsPlayingRef is still true) — same
+    // settle-delay protection, same code path, not a second one to keep in
+    // sync.
+    if (isTtsPlayingRef.current) {
+      cancelSpeech();
       pendingStartTimerRef.current = setTimeout(beginRecognition, TTS_CANCEL_SETTLE_MS);
     } else {
       beginRecognition();
     }
-  }, [showToast, submitTranscript, attemptSilentSpeechFallback, resetSilenceTimer, clearSilenceTimer]);
+  }, [showToast, submitTranscript, attemptSilentSpeechFallback, resetSilenceTimer, clearSilenceTimer, cancelSpeech]);
+
+  // Breaks the declaration-order cycle noted at startListeningRef's own
+  // declaration above. A ref write belongs in an effect, not render body
+  // (React: refs must not be read/written during render) — the one-render
+  // lag this implies is harmless here, since handleBargeIn only ever reads
+  // this ref later, from an async interval callback, never synchronously
+  // during the render that just defined startListening.
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
 
   const stopListening = useCallback(() => {
     // Cancels a still-pending deferred start (see startListening) as well as
@@ -675,11 +994,9 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
       clearSilenceTimer();
       clearAutoCloseTimer();
       clearPendingStartTimer();
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
+      cancelSpeech();
     };
-  }, [clearSilenceTimer, clearAutoCloseTimer, clearPendingStartTimer]);
+  }, [clearSilenceTimer, clearAutoCloseTimer, clearPendingStartTimer, cancelSpeech]);
 
   return {
     status,
@@ -692,5 +1009,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     submitFaceProof,
     conversation,
     closeConversation,
+    // Visible "listening for interruption" indicator — true only while a
+    // VAD tap is actually open (i.e. TTS is speaking AND mic permission for
+    // the tap succeeded). Per plan: the mic being live during every spoken
+    // response must be visible to the user, not silent.
+    isListeningForInterruption,
   };
 }
