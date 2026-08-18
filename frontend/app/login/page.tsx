@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import clientApi, { resetSessionExpired } from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
@@ -31,24 +31,8 @@ interface LoginApiResponse {
   };
 }
 
-const PORTAL_COPY: Record<string, { title: string; subtitle: string }> = {
-  hr:       { title: "HR & Admin Sign In", subtitle: "Access the HR administration portal" },
-  employee: { title: "Employee Sign In",   subtitle: "Access your personal employee portal" },
-};
-
 export default function LoginPage() {
-  return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
-  );
-}
-
-function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const portal = searchParams.get("portal");
-  const copy = (portal && PORTAL_COPY[portal]) || { title: "Welcome back", subtitle: "Sign in to your Royal HRMS account" };
   const [companyCode, setCompanyCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -137,8 +121,8 @@ function LoginForm() {
               />
             </div>
 
-            <h2 className="login-title">{copy.title}</h2>
-            <p className="login-subtitle">{copy.subtitle}</p>
+            <h2 className="login-title">Welcome back</h2>
+            <p className="login-subtitle">Sign in to your Royal HRMS account</p>
 
             {/* Error banner */}
             {error && (
@@ -247,17 +231,6 @@ function LoginForm() {
                 </button>
 
               </form>
-            )}
-
-            {portal && !showForgot && (
-              <button
-                type="button"
-                className="login-forgot-btn"
-                style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 4 }}
-                onClick={() => router.push("/portal")}
-              >
-                <i className="ti ti-arrow-left" /> Not you? Choose a different portal
-              </button>
             )}
 
             <p className="login-footer-text">

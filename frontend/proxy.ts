@@ -141,14 +141,13 @@ export function proxy(request: NextRequest) {
 
   const isAuthenticated = request.cookies.get(AUTH_COOKIE)?.value === "1";
   const isLoginPage = pathname.startsWith("/login");
-  const isPortalChooser = pathname.startsWith("/portal");
   const isOnboarding = pathname.startsWith("/onboarding");
 
-  if (!isAuthenticated && !isLoginPage && !isPortalChooser) {
-    return NextResponse.redirect(new URL("/portal", request.url));
+  if (!isAuthenticated && !isLoginPage) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (isAuthenticated && (isLoginPage || isPortalChooser)) {
+  if (isAuthenticated && isLoginPage) {
     const token = request.cookies.get(ACCESS_COOKIE)?.value;
     const isTokenValid = (() => {
       if (!token) return false;
