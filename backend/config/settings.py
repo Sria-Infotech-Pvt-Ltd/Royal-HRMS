@@ -233,6 +233,11 @@ if _REDIS_URL:
                 'IGNORE_EXCEPTIONS': True,
             },
             'KEY_PREFIX': 'hrms',
+            # Prepends the active tenant's schema name to every cache key —
+            # see core/cache_keys.py. Without this, this shared Redis
+            # instance would serve one company's cached data (KPIs, leave
+            # policy, branch/department lists, etc.) to every other company.
+            'KEY_FUNCTION': 'core.cache_keys.tenant_aware_key_func',
         }
     }
     # Logs a WARNING (via the django_redis.cache logger) each time
@@ -243,6 +248,10 @@ else:
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            # Same cross-tenant reasoning as the Redis KEY_FUNCTION above —
+            # LocMemCache is a single in-process dict shared by every
+            # request this worker process handles, tenant or not.
+            'KEY_FUNCTION': 'core.cache_keys.tenant_aware_key_func',
         }
     }
 
