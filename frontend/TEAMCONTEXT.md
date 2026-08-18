@@ -4256,3 +4256,75 @@ Separate from the above — a "check complexity/production-standards, remove unn
 - **Company creation is still a synchronous request that takes several minutes** — works, and the frontend timeout was fixed to match, but this really wants the same "move slow work to a background job" treatment this codebase already gave to onboarding-approval emails, for the same reason (a slow synchronous call in the request path).
 - **No automated tests** were added for any of the platform-admin models/views/services, or for the three migration fixes above.
 - **Deferred from the earlier code-quality pass, not done:** splitting `accounts/views.py` (5,699 lines) and `recruitment/views.py` (2,186 lines) into domain files; converting `branch`/`announcements` models' integer PKs to UUID; fixing `proxy.ts`'s onboarding/assessment/superuser checks to read from the signed JWT instead of the unsigned `royal_hrms_user` cookie.
+
+---
+
+# Team Context — Provisioning Reliability + Login Flow Changes
+
+**Author:** G.Durga Prasad
+**Date:** 18 August 2026
+**Branch:** Backend-Tenant
+
+---
+
+## Overview
+
+Continuation of the multi-tenancy/platform-admin work from 17 August. Two separate threads this session: (1) making company provisioning actually survive the dev server dying mid-migration, which had been failing repeatedly and silently, and (2) several rounds of login-flow changes (per-company branding, portal separation, a Company-ID-less admin login) that were built, tested, and ultimately **reverted back to a single common login** per explicit direction partway through the session. The `/portal` chooser mentioned in the 17 August notes above no longer exists as of this session — see §3.
+
+---
+
+## 1. Company Provisioning Reliability
+
+Company creation from the Platform Admin UI had been failing repeatedly and silently — the dev server's own auto-reloader (or a manual restart) would kill the request mid-migration, leaving a corrupted, partially-migrated schema every time (`tenant_demo`, `tenant_test`, and others all hit this multiple times).
+
+- **First fix attempt (superseded, now dead code): a detached OS subprocess.** `apps/tenants/services.py` gained `create_pending_client()` (fast: just the registry row) + `launch_provisioning_subprocess()` (spawns `manage.py provision_company_subprocess` as a separate OS process via `subprocess.Popen`) so the web request returns in ~1s instead of blocking for minutes. On Windows this needed `subprocess.CREATE_BREAKAWAY_FROM_JOB` in addition to `DETACHED_PROCESS`/`CREATE_NEW_PROCESS_GROUP` — without it, the child stays trapped in whatever Windows Job Object its parent belongs to (common with terminal apps/IDEs that assign kill-on-close jobs to spawned processes), which was the actual root cause of the silent, trace-less failures. **This whole approach (`launch_provisioning_subprocess`/`create_pending_client` in `services.py`, `apps/tenants/management/commands/provision_company_subprocess.py`) was superseded later the same session by the Celery approach below and is now unused — worth deleting rather than leaving as dead code.**
+- **What actually shipped: Celery.** `apps/tenants/tasks.py` (new) — `finish_provisioning_task` (the actual schema+migration+seed work, dispatched via `.delay()` from `CompanyListCreateView.post()` onto an already-running Celery worker instead of a freshly-spawned OS process) and `sweep_stale_provisioning` (a Celery Beat task, every 5 minutes, that flips any `Client` row stuck at `provisioning_status='pending'` for 15+ minutes to `'failed'` — a self-healing safety net for a worker that dies mid-task). This sidesteps the Windows Job Object problem entirely: a Celery worker is a long-lived daemon, not a per-request spawn, so there's no child process to lose track of. Verified end-to-end: a test company reached `active` with 101 tables, a seeded `Company` row, and an admin superuser, **while the dev server was actively mid-reload** — proof the reload can no longer reach the actual provisioning work.
+- **Separate, real bug found during testing:** a single Postgres connection had been leaked in `idle in transaction` state for 5+ hours (from an early failed synchronous provisioning attempt, before either fix above), stuck mid-`SET search_path`. This was the likely cause of a `django_migrations` deadlock captured in `logs/errors.log`. Fixed by locating it via `pg_stat_activity` and closing it with `pg_terminate_backend` — not a code fix, just a one-time cleanup, but worth knowing this class of problem exists (a crashed/killed request can leave a connection open indefinitely on Neon).
+- New `Client` fields (`provisioning_status`: pending/active/failed, `pending_admin_password`) and `CompanyRevealPasswordView` (`POST /companies/<id>/reveal-password/`) so the admin password generated at provisioning time can be viewed once from the Platform Admin UI instead of only being emailed.
+
+---
+
+## 2. Platform-Level Email
+
+New `PlatformSMTPSettings` singleton model (`apps/tenants/models.py`) — deliberately separate from each tenant's own `apps.accounts.models.SMTPSettings`, because a brand-new company has no SMTP configured yet at the exact moment its "you're all set up" email needs to send. Configured via a new Platform Admin UI modal (`SmtpSettingsModal.tsx`). `apps/tenants/utils.py`'s `send_company_provisioned_email()` reads this config and fails soft (logs and continues) rather than blocking company creation if SMTP isn't set up yet.
+
+---
+
+## 3. Login Flow: Branding, Portal Split, Then Full Revert
+
+This went through several iterations in one session — documented in order since the end state is a revert, not the most-built version:
+
+1. **Per-company branding** — `Company.brand_color` field, a public `PublicCompanyBrandingView` (`/api/public/company-branding/<company_code>/`) so the login page can show the right logo/name/accent color before authentication, and a `Client.custom_domain` field + `/api/resolve-domain/` endpoint so a company's own custom domain auto-fills its Company ID instead of the visitor typing it. **This part is still live** — untouched by the revert in step 4.
+2. **Portal separation, built twice.** First pass: "HR & Admin" portal (`system_admin`/`branch_admin`/`hr_admin`) vs "Employee" portal (`manager`/`employee`), enforced via a `portal` field on login plus role-name checks in `LoginView._authenticate`. Second pass, per explicit request: reshaped into "Admin" (`system_admin` only) vs "Staff" (`hr_admin`/`branch_admin`/`manager`/`employee`), because HR is assigned by an admin after company creation the same way any other employee is, not part of the account-owner tier.
+3. **Company-ID-less Admin login.** For the "Admin" portal specifically, `LoginView._authenticate_admin_by_email()` let a `system_admin` sign in with just email+password by scanning every active company's schema for a matching eligible account. Benchmarked against the live database (not estimated): **~106ms per company**, so ~2-3 seconds of added login latency at 20-30 companies, growing linearly — acceptable at current scale, would need a public-schema email→company lookup table to stay flat if the platform grows past ~30-40 companies.
+4. **Full revert, per explicit request.** All of the above portal/no-Company-ID machinery was removed the same session: `LoginSerializer.company_code` is required again for everyone, the `portal` field and all portal-eligibility/cross-company-search logic were deleted from `LoginView`, the `/portal` chooser page (`app/portal/page.tsx`) was deleted outright, and `/` + `proxy.ts`'s route guard now send unauthenticated visitors straight to `/login`. One common login, one mandatory Company ID field, no role-based routing. **The branding and custom-domain work from step 1 was not part of this revert and is still active.**
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/tenants/tasks.py` (new) | `finish_provisioning_task` (Celery) + `sweep_stale_provisioning` (Celery Beat safety net) — the provisioning mechanism that actually shipped |
+| `apps/tenants/services.py` | `create_pending_client`/`launch_provisioning_subprocess`/`finish_pending_provisioning` — the subprocess approach, now superseded by `tasks.py` and unused |
+| `apps/tenants/management/commands/provision_company_subprocess.py` (new, now dead) | Only ever called by the superseded subprocess approach |
+| `apps/tenants/models.py` | `PlatformSMTPSettings` (singleton), `Client.custom_domain`, `Client.provisioning_status`/`pending_admin_password` |
+| `apps/tenants/utils.py` | `send_company_provisioned_email()` — platform-level SMTP, fails soft |
+| `apps/tenants/views.py` | `CompanyRevealPasswordView`, `PlatformSMTPSettingsView`, `ResolveCompanyDomainView`; `CompanyListCreateView.post()` now dispatches `finish_provisioning_task.delay()` |
+| `apps/accounts/models.py` | `Company.brand_color` |
+| `apps/accounts/views.py` | `PublicCompanyBrandingView`; `LoginView`/`LoginSerializer` portal logic added, then fully removed (net: back to the original single-login shape, plus branding fields in the login response) |
+| `frontend/app/login/page.tsx` | Custom-domain/branding auto-lookup (kept); portal-conditional copy and Company-ID-field hiding (added, then removed) |
+| `frontend/app/portal/page.tsx` | Added this session, then deleted this session |
+| `frontend/proxy.ts`, `frontend/app/page.tsx` | Routed through `/portal`, now route straight to `/login` |
+| `frontend/app/platform-admin/_components/SmtpSettingsModal.tsx` (new) | Platform SMTP config UI |
+| `frontend/app/platform-admin/_components/CompaniesTable.tsx` | Provisioning-status badge, "View credentials" one-time password reveal, polling while any company is `pending` |
+
+---
+
+## Notes for Next Developer
+
+- **Delete the dead subprocess code** — `apps/tenants/services.py`'s `create_pending_client`/`launch_provisioning_subprocess`/`finish_pending_provisioning` (note: `finish_pending_provisioning` is still called by `tasks.py`, keep that one) and the whole `provision_company_subprocess.py` management command are unused now that Celery does this. Left in place this session rather than deleted mid-investigation; safe to remove once confirmed nothing still references `launch_provisioning_subprocess`/`create_pending_client`.
+- **Celery must actually be running for provisioning to work** — `CELERY_TASK_ALWAYS_EAGER` is `True` only when `REDIS_URL` isn't set (falls back to synchronous in-process execution); with Redis configured, provisioning silently does nothing if no `celery -A config worker` process is running. Worth a startup check or at least a clear runbook note.
+- **The Admin-portal-no-Company-ID feature and the Admin/Staff split were built, verified working, and then removed the same session** — if this is revisited later, the ~106ms-per-company benchmark and the public-schema-lookup-table suggestion in §3 are the starting point, not a fresh investigation.
+- **No automated tests** were added for the Celery tasks, the reveal-password endpoint, or any of the login-flow changes.
+- **Leaked idle-in-transaction connections are a real, recurring risk on this database** — no code changes were made to prevent this class of problem (e.g., a statement timeout or idle-in-transaction timeout at the connection-pool level); it was diagnosed and manually cleared once, not systemically fixed.

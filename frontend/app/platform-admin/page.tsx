@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import platformAdminApi from "@/lib/platformAdminApi";
@@ -8,6 +8,7 @@ import { API } from "@/lib/api/endpoints";
 import type { CompanyListResponse, PlatformAdminInfo } from "@/types/platformAdmin";
 import CompaniesTable from "./_components/CompaniesTable";
 import AddCompanyModal from "./_components/AddCompanyModal";
+import SmtpSettingsModal from "./_components/SmtpSettingsModal";
 
 export default function PlatformAdminPage() {
   const router = useRouter();
@@ -15,6 +16,17 @@ export default function PlatformAdminPage() {
   const { data: companyList, loading, error, refetch } =
     useFetch<CompanyListResponse>(API.platformAdmin.companies.list, platformAdminApi);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSmtpModal, setShowSmtpModal] = useState(false);
+
+  // Auto-refresh while any company is still provisioning in the background,
+  // so "Pending" flips to "Active" (and the credentials button appears)
+  // without the platform admin needing to manually reload the page.
+  const hasPending = (companyList?.results ?? []).some(c => c.provisioning_status === "pending");
+  useEffect(() => {
+    if (!hasPending) return;
+    const interval = setInterval(refetch, 10000);
+    return () => clearInterval(interval);
+  }, [hasPending, refetch]);
 
   async function handleLogout() {
     try {
@@ -32,6 +44,9 @@ export default function PlatformAdminPage() {
           {me && <p className="text-muted" style={{ fontSize: 13 }}>Signed in as {me.full_name || me.email}</p>}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={() => setShowSmtpModal(true)} suppressHydrationWarning>
+            <i className="ti ti-mail" /> Email settings
+          </button>
           <button className="btn btn-filled" onClick={() => setShowAddModal(true)} suppressHydrationWarning>
             <i className="ti ti-plus" /> Add company
           </button>
@@ -63,6 +78,10 @@ export default function PlatformAdminPage() {
           onClose={() => setShowAddModal(false)}
           onCreated={refetch}
         />
+      )}
+
+      {showSmtpModal && (
+        <SmtpSettingsModal onClose={() => setShowSmtpModal(false)} />
       )}
     </div>
   );

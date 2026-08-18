@@ -93,7 +93,47 @@ class Client(TenantMixin):
         help_text=f'Subset of: {", ".join(ALL_MODULES)}',
     )
 
+    # A real domain this company's users actually visit (e.g. "www.demo.com"),
+    # distinct from Domain/DomainMixin above (django-tenants' own internal
+    # bookkeeping, e.g. "demo.internal" — never resolved from a real request).
+    # Blank means "no custom domain yet, log in via the shared URL + company
+    # code". Setting this alone does NOT make the domain reachable — the DNS
+    # for it must be pointed at wherever this app is hosted, and the hosting/
+    # reverse-proxy layer must be configured to accept that hostname; neither
+    # of those can happen from application code. See
+    # apps/accounts/views.py ResolveCompanyDomainView for how it's used once
+    # that infrastructure is in place.
+    custom_domain = models.CharField(max_length=255, blank=True, default='')
+
     is_active = models.BooleanField(default=True)
+
+    # Set only by the platform-admin API's async provisioning path (see
+    # apps/tenants/views.py CompanyListCreateView.post and
+    # apps/tenants/tasks.py finish_provisioning_task) — a Celery task
+    # finishes the actual work independently of the web server process, so
+    # restarting/crashing/reloading that process (which used to repeatedly
+    # kill synchronous in-request provisioning) can no longer corrupt a
+    # company mid-creation. manage.py create_company (terminal)
+    # never sets this — it still runs synchronously start-to-finish and
+    # a Client row it creates is 'active' immediately, matching the
+    # default below.
+    PROVISIONING_PENDING = 'pending'
+    PROVISIONING_ACTIVE  = 'active'
+    PROVISIONING_FAILED  = 'failed'
+    PROVISIONING_STATUS_CHOICES = [
+        (PROVISIONING_PENDING, 'Pending'),
+        (PROVISIONING_ACTIVE,  'Active'),
+        (PROVISIONING_FAILED,  'Failed'),
+    ]
+    provisioning_status = models.CharField(
+        max_length=10, choices=PROVISIONING_STATUS_CHOICES, default=PROVISIONING_ACTIVE,
+    )
+    # The generated admin password, held here only until a platform admin
+    # views it once through the UI (see CompanyRevealPasswordView), for the
+    # async path where it can no longer be returned directly in the
+    # HTTP response that kicked off provisioning (that response now
+    # returns immediately, before the password even exists yet).
+    pending_admin_password = models.CharField(max_length=128, blank=True, default='')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -213,3 +253,41 @@ class PlatformAdmin(models.Model):
         )
         self.failed_login_attempts = 0
         self.locked_until          = None
+
+
+class PlatformSMTPSettings(models.Model):
+    """
+    Singleton (pk=1) — the platform's OWN outbound mail account, used only
+    for emails that aren't about any single company (e.g. "your company
+    has been provisioned, here's your login" — see
+    apps.tenants.utils.send_company_provisioned_email). Deliberately
+    separate from apps.accounts.models.SMTPSettings, which is a per-tenant
+    setting living inside one company's own schema — a brand-new company
+    has no SMTP of its own configured yet at the exact moment this email
+    needs to go out, and borrowing one specific tenant's credentials for a
+    platform-wide purpose would be its own kind of layering violation.
+    Configured by a platform admin; if left blank, provisioning emails are
+    skipped (logged, not fatal — see send_company_provisioned_email).
+    """
+    host        = models.CharField(max_length=255, blank=True)
+    port        = models.PositiveIntegerField(default=587)
+    username    = models.CharField(max_length=255, blank=True)
+    password    = models.CharField(max_length=255, blank=True)
+    use_tls     = models.BooleanField(default=True)
+    from_email  = models.EmailField(max_length=255, blank=True)
+    sender_name = models.CharField(max_length=255, blank=True, default='Royal HRMS')
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tenants_platform_smtp_settings'
+
+    def __str__(self) -> str:
+        return f'Platform SMTP ({self.host or "not configured"})'
+
+    def is_configured(self) -> bool:
+        return bool(self.host and self.username and self.password and self.from_email)
+
+    @classmethod
+    def get_solo(cls) -> 'PlatformSMTPSettings':
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

@@ -8,6 +8,7 @@ public schema — no business tables live there at all (see SHARED_APPS /
 TENANT_APPS in config/settings.py), so every query fails outright.
 """
 import logging
+import re
 
 from apps.tenants.models import Client
 
@@ -81,3 +82,86 @@ def get_current_company_code() -> str:
     except Exception:
         logger.exception('get_current_company_code failed for schema %s', current_schema)
         return ''
+
+
+def send_company_provisioned_email(admin_email: str, company_code: str, company_name: str, password: str) -> None:
+    """
+    Tells a brand-new company's first admin their login is ready.
+
+    Deliberately does NOT go through apps.accounts.utils.send_template_email
+    (the pattern every other email in this codebase uses) — that helper
+    requires an active SMTPSettings row in the CURRENT schema, and a
+    company that was just created a moment ago has never configured one
+    yet (SMTP is itself a per-tenant setting living inside the schema this
+    email is announcing the existence of — a chicken-and-egg problem).
+    This is a platform-level email, sent via PlatformSMTPSettings (see
+    apps/tenants/models.py) — the platform operator's own outbound mail
+    account, configured once by a platform admin, not any one tenant's.
+
+    Best-effort: failures (including "not configured yet") are logged and
+    swallowed, never raised — a flaky send must not fail company creation
+    itself, since by this point the company already exists and is fully
+    functional. The platform admin still sees the password once in the
+    UI/CLI output regardless, as a fallback if this email never arrives.
+    """
+    from django.core.mail import EmailMultiAlternatives, get_connection
+
+    from apps.tenants.models import PlatformSMTPSettings
+
+    smtp = PlatformSMTPSettings.get_solo()
+    if not smtp.is_configured():
+        logger.warning(
+            'Platform SMTP not configured — skipped provisioning email to %s for company %s. '
+            'Configure it in the platform-admin settings, or share the password shown above directly.',
+            admin_email, company_code,
+        )
+        return
+
+    html_body = f"""
+        <p>Hi,</p>
+        <p>Your company <strong>{company_name}</strong> has been set up on Royal HRMS.
+        Use the credentials below to sign in for the first time:</p>
+        <table style="border-collapse:collapse;margin:16px 0;">
+          <tr>
+            <td style="padding:6px 12px;font-weight:600;color:#555;">Company ID</td>
+            <td style="padding:6px 12px;font-family:monospace;">{company_code}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 12px;font-weight:600;color:#555;">Login Email</td>
+            <td style="padding:6px 12px;">{admin_email}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 12px;font-weight:600;color:#555;">Temporary Password</td>
+            <td style="padding:6px 12px;font-family:monospace;letter-spacing:1px;">{password}</td>
+          </tr>
+        </table>
+        <p>You'll be asked to set a new password the first time you log in.</p>
+        <p style="color:#888;font-size:13px;">
+            Keep this email private — anyone with these details can sign in as your company's administrator.
+            If you weren't expecting this, please ignore it.
+        </p>
+        <p>Regards,<br><strong>Royal HRMS</strong></p>
+    """
+    try:
+        connection = get_connection(
+            backend='django.core.mail.backends.smtp.EmailBackend',
+            host=smtp.host, port=smtp.port,
+            username=smtp.username, password=smtp.password,
+            use_tls=smtp.use_tls, fail_silently=False,
+        )
+        from_email = f'{smtp.sender_name} <{smtp.from_email}>' if smtp.sender_name else smtp.from_email
+        msg = EmailMultiAlternatives(
+            subject=f'Your {company_name} account on Royal HRMS is ready',
+            body=re.sub(r'<[^>]+>', '', html_body).strip(),
+            from_email=from_email,
+            to=[admin_email],
+            connection=connection,
+        )
+        msg.attach_alternative(html_body, 'text/html')
+        msg.send(fail_silently=False)
+    except Exception:
+        logger.exception(
+            'Failed to send provisioning email to %s for company %s — '
+            'the platform admin still has the password from the create-company response.',
+            admin_email, company_code,
+        )

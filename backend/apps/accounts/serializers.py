@@ -132,6 +132,8 @@ class RoleSerializer(serializers.ModelSerializer):
 # ─── Auth serializers ─────────────────────────────────────────────────────────
 
 class LoginSerializer(serializers.Serializer):
+    # One common login for every role — always required, since it's what
+    # tells the system which tenant schema to check for this email.
     company_code = serializers.CharField(max_length=50)
     email        = serializers.EmailField()
     password     = serializers.CharField(min_length=1, max_length=128)
@@ -552,7 +554,7 @@ class CompanySerializer(serializers.ModelSerializer):
             'id', 'company_name', 'trade_name', 'logo', 'logo_url',
             'gstin', 'cin', 'pan', 'tan',
             'address', 'city', 'state', 'pin_code',
-            'website', 'official_phone', 'portal_url', 'updated_at',
+            'website', 'official_phone', 'portal_url', 'brand_color', 'updated_at',
         ]
         read_only_fields = ['id', 'updated_at', 'logo_url']
         extra_kwargs     = {'logo': {'required': False, 'allow_null': True}}
@@ -562,6 +564,12 @@ class CompanySerializer(serializers.ModelSerializer):
             return None
         request = self.context.get('request')
         return request.build_absolute_uri(obj.logo.url) if request else obj.logo.url
+
+    def validate_brand_color(self, value: str) -> str:
+        value = (value or '').strip()
+        if value and not re.fullmatch(r'#[0-9a-fA-F]{6}', value):
+            raise serializers.ValidationError('Must be a hex color like "#1e4e8c".')
+        return value
 
     def validate_company_name(self, value: str) -> str:
         value = value.strip()

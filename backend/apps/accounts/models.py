@@ -626,6 +626,11 @@ class Company(models.Model):
                          max_length=255, blank=True,
                          help_text='Employee onboarding portal URL sent in invitation emails.',
                      )
+    brand_color    = models.CharField(
+                         max_length=7, blank=True, default='',
+                         help_text='Hex accent color (e.g. "#1e4e8c") applied to this '
+                                    'company\'s own login page and dashboard. Blank uses the default.',
+                     )
     financial_year_start_month = models.CharField(
                          max_length=10,
                          choices=MONTH_CHOICES,

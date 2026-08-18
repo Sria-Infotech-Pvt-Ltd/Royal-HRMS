@@ -35,14 +35,19 @@ export interface PlatformAdminInfo {
   full_name: string;
 }
 
+export type ProvisioningStatus = "pending" | "active" | "failed";
+
 export interface Company {
-  id:              string;
-  company_code:    string;
-  company_name:    string;
-  enabled_modules: ModuleKey[];
-  is_active:       boolean;
-  created_at:      string;
-  updated_at:      string;
+  id:                    string;
+  company_code:          string;
+  company_name:          string;
+  enabled_modules:       ModuleKey[];
+  custom_domain:         string;
+  is_active:             boolean;
+  provisioning_status:   ProvisioningStatus;
+  has_pending_password:  boolean;
+  created_at:            string;
+  updated_at:            string;
 }
 
 export interface CompanyListResponse {
@@ -61,6 +66,26 @@ export interface CreateCompanyInput {
 }
 
 export interface CreateCompanyResult {
-  client:   Company;
-  password: string;
+  client: Company;
+}
+
+export interface PlatformSMTPSettings {
+  host:          string;
+  port:          number;
+  username:      string;
+  use_tls:       boolean;
+  from_email:    string;
+  sender_name:   string;
+  is_configured: boolean;
+  updated_at:    string;
+}
+
+export interface PlatformSMTPSettingsInput {
+  host:        string;
+  port:        number;
+  username:    string;
+  password?:   string;
+  use_tls:     boolean;
+  from_email:  string;
+  sender_name: string;
 }

@@ -29,6 +29,7 @@ from apps.accounts.views import (
     EmployeeStatsView,
     LoginView,
     LogoutView,
+    PublicCompanyBrandingView,
     TokenRefreshAPIView,
     ForgotPasswordView,
     VerifyOTPView,
@@ -54,6 +55,7 @@ from apps.accounts.views_profile_photo import ProfilePhotoView
 urlpatterns = [
     # Auth
     path('login/',           LoginView.as_view(),          name='login'),
+    path('public/company-branding/<str:company_code>/', PublicCompanyBrandingView.as_view(), name='public-company-branding'),
     path('logout/',          LogoutView.as_view(),          name='logout'),
     path('token/refresh/',   TokenRefreshAPIView.as_view(), name='token-refresh'),
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),

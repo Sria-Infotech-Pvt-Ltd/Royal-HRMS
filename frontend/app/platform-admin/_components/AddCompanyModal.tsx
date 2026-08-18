@@ -5,7 +5,7 @@ import Modal from "@/components/Modal";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
 import { ALL_MODULES, MODULE_LABELS } from "@/types/platformAdmin";
-import type { CreateCompanyResult, ModuleKey } from "@/types/platformAdmin";
+import type { ModuleKey } from "@/types/platformAdmin";
 
 interface Props {
   onClose: () => void;
@@ -19,8 +19,7 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
   const [modules,     setModules]     = useState<ModuleKey[]>(ALL_MODULES);
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState("");
-  const [result,      setResult]      = useState<CreateCompanyResult | null>(null);
-  const [copied,      setCopied]      = useState(false);
+  const [started,     setStarted]     = useState(false);
 
   function toggleModule(key: ModuleKey) {
     setModules(prev => prev.includes(key) ? prev.filter(m => m !== key) : [...prev, key]);
@@ -34,16 +33,17 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
     }
     setSaving(true);
     try {
-      const { data } = await platformAdminApi.post<{ data: CreateCompanyResult }>(
+      // Returns almost immediately — provisioning itself now runs in a
+      // detached background process (see backend apps/tenants/services.py),
+      // not inline in this request, specifically so a web-server restart
+      // can't kill it partway through. The company shows as "Pending" in
+      // the table and flips to "Active" (with a "View credentials" button)
+      // once the background process finishes, usually within a few minutes.
+      await platformAdminApi.post(
         API.platformAdmin.companies.list,
         { company_code: companyCode.trim(), company_name: companyName.trim(), admin_email: adminEmail.trim(), modules },
-        // Provisioning a new company runs a full schema + migration replay
-        // synchronously (see backend apps/tenants/services.py) — confirmed
-        // to take several minutes, not seconds, so this one call needs a
-        // much longer timeout than platformAdminApi's 15s instance default.
-        { timeout: 360000 },
       );
-      setResult(data.data);
+      setStarted(true);
       onCreated();
     } catch (err) {
       const message = (err as { response?: { data?: { message?: string } } })
@@ -54,39 +54,21 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
     }
   }
 
-  function copyPassword() {
-    if (!result) return;
-    navigator.clipboard.writeText(result.password).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  if (result) {
+  if (started) {
     return (
-      <Modal title="Company created" onClose={onClose} maxWidth={460}
+      <Modal title="Company creation started" onClose={onClose} maxWidth={460}
         footer={<button className="btn btn-filled" onClick={onClose} suppressHydrationWarning>Done</button>}>
-        <div className="alert alert-warn mb-16">
-          <i className="ti ti-alert-triangle" />
-          <div>This password is shown once and is not stored anywhere else. Copy it now and share it with the company&apos;s admin.</div>
-        </div>
-        <div className="field-group" style={{ marginBottom: 12 }}>
-          <span className="field-label">Company code</span>
-          <div className="field-static">{result.client.company_code}</div>
-        </div>
-        <div className="field-group" style={{ marginBottom: 12 }}>
-          <span className="field-label">Admin login email</span>
-          <div className="field-static">{adminEmail.trim()}</div>
-        </div>
-        <div className="field-group">
-          <span className="field-label">Temporary password</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div className="field-static" style={{ fontFamily: "monospace", flex: 1 }}>{result.password}</div>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={copyPassword} suppressHydrationWarning>
-              <i className={`ti ${copied ? "ti-check" : "ti-copy"}`} /> {copied ? "Copied" : "Copy"}
-            </button>
+        <div className="alert alert-success mb-16">
+          <i className="ti ti-check" />
+          <div>
+            <strong>{companyCode.trim()}</strong> is being set up now — this runs in the background
+            and takes a few minutes. It will show as <strong>Active</strong> in the companies list once
+            ready, with a &quot;View credentials&quot; button to see the admin login password (shown once).
           </div>
         </div>
+        <p style={{ fontSize: 13, color: "var(--on-variant)" }}>
+          You can safely close this and keep using the dashboard — no need to wait here.
+        </p>
       </Modal>
     );
   }
@@ -101,7 +83,7 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
         <>
           <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
           <button className="btn btn-filled" onClick={handleCreate} disabled={saving} suppressHydrationWarning>
-            {saving ? (<><i className="ti ti-loader-2 spin" /> Creating… (can take a few minutes)</>) : "Create company"}
+            {saving ? (<><i className="ti ti-loader-2 spin" /> Starting…</>) : "Create company"}
           </button>
         </>
       }
