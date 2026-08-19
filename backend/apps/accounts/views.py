@@ -52,7 +52,6 @@ from core.template_context import (
     universal_context as _universal_template_context,
 )
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication   
 
@@ -103,7 +102,7 @@ from apps.accounts.serializers import (
     VerifyOTPSerializer,
 )
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle
-from apps.accounts.tokens import RoleBasedRefreshToken
+from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
 from apps.accounts.utils import send_otp_email, send_template_email, send_test_email
 
 logger = logging.getLogger(__name__)
@@ -549,7 +548,7 @@ class TokenRefreshAPIView(APIView):
         )
         if not refresh_str:
             return error('Session expired. Please log in again.', http_status=status.HTTP_401_UNAUTHORIZED)
-        serializer = TokenRefreshSerializer(data={'refresh': refresh_str})
+        serializer = FreshClaimsTokenRefreshSerializer(data={'refresh': refresh_str})
         try:
             serializer.is_valid(raise_exception=True)
         except (TokenError, InvalidToken):

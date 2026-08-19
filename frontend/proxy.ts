@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const AUTH_COOKIE = "royal_hrms_auth";
 const ACCESS_COOKIE = "royal_access_token";
-const USER_COOKIE = "royal_hrms_user";
 
 const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/announcements": "announcements.view",
@@ -51,48 +50,39 @@ function getPermissions(request: NextRequest): string[] {
   return Array.isArray(payload.permissions) ? (payload.permissions as string[]) : [];
 }
 
+// Onboarding/assessment/superuser gates used to read royal_hrms_user — a
+// plain, non-httpOnly cookie the client sets via document.cookie (see
+// lib/auth.ts saveAuth/setOnboardingStatus/setAssessmentStatus) and can
+// therefore edit freely in devtools to force any value here. The real API
+// still rejects anything that value would have let through, so this was
+// never an actual data-exposure path — but it did mean a user could bypass
+// this route gate and briefly see dashboard shell/layout they shouldn't.
+// These four now come from the signed royal_access_token JWT instead
+// (apps.accounts.tokens.RoleBasedRefreshToken / FreshClaimsTokenRefreshSerializer
+// keep them re-derived from the current User row on every login/refresh),
+// matching how getPermissions() above already worked.
+function getJwtPayload(request: NextRequest): Record<string, unknown> {
+  const token = request.cookies.get(ACCESS_COOKIE)?.value;
+  if (!token) return {};
+  return decodeJwtPayload(token);
+}
+
 function getOnboardingStatus(request: NextRequest): string {
-  const raw = request.cookies.get(USER_COOKIE)?.value;
-  if (!raw) return "complete"; // unknown — allow through, dashboard will handle
-  try {
-    const user = JSON.parse(decodeURIComponent(raw)) as { onboarding_status?: string };
-    return user.onboarding_status ?? "complete";
-  } catch {
-    return "complete";
-  }
+  const payload = getJwtPayload(request);
+  return typeof payload.onboarding_status === "string" ? payload.onboarding_status : "complete";
 }
 
 function getAssessmentStatus(request: NextRequest): string {
-  const raw = request.cookies.get(USER_COOKIE)?.value;
-  if (!raw) return "complete";
-  try {
-    const user = JSON.parse(decodeURIComponent(raw)) as { assessment_status?: string };
-    return user.assessment_status ?? "complete";
-  } catch {
-    return "complete";
-  }
+  const payload = getJwtPayload(request);
+  return typeof payload.assessment_status === "string" ? payload.assessment_status : "complete";
 }
 
 function getCanManageTeam(request: NextRequest): boolean {
-  const raw = request.cookies.get(USER_COOKIE)?.value;
-  if (!raw) return false;
-  try {
-    const user = JSON.parse(decodeURIComponent(raw)) as { can_manage_team?: boolean };
-    return user.can_manage_team === true;
-  } catch {
-    return false;
-  }
+  return getJwtPayload(request).can_manage_team === true;
 }
 
 function getIsSuperuser(request: NextRequest): boolean {
-  const raw = request.cookies.get(USER_COOKIE)?.value;
-  if (!raw) return false;
-  try {
-    const user = JSON.parse(decodeURIComponent(raw)) as { is_superuser?: boolean };
-    return user.is_superuser === true;
-  } catch {
-    return false;
-  }
+  return getJwtPayload(request).is_superuser === true;
 }
 
 export function proxy(request: NextRequest) {
