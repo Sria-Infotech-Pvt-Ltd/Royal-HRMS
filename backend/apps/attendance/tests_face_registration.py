@@ -7,6 +7,7 @@ convention) — see face_registration.py for the endpoints under test.
 from __future__ import annotations
 
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -224,6 +225,70 @@ class FaceRegistrationApprovalTests(TestCase):
         self.assertIsNone(face_request.approved_by)
         self.assertIsNone(face_request.approved_at)
         self.assertNotEqual(no_perm_user.id, face_request.employee_id)
+
+    def test_two_active_registrations_for_the_same_employee_violate_the_db_constraint(self):
+        # Bypasses activate_registration entirely (direct .create() calls) —
+        # this asserts the DB itself refuses two simultaneously-active rows
+        # for one employee, not just that application code happens to avoid
+        # it. See uniq_active_face_registration_per_employee in
+        # FaceRegistrationRequest.Meta.constraints.
+        FaceRegistrationRequest.objects.create(
+            employee=self.employee, face_embedding=[0.1, 0.2, 0.3],
+            status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                FaceRegistrationRequest.objects.create(
+                    employee=self.employee, face_embedding=[0.4, 0.5, 0.6],
+                    status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True,
+                )
+
+    def test_approving_via_review_deactivates_the_prior_active_registration(self):
+        _login(self.client, 'facereg-hr@test.com')
+        prior = FaceRegistrationRequest.objects.create(
+            employee=self.employee, face_embedding=[0.1, 0.2, 0.3],
+            status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True,
+        )
+        new_request = _make_pending_request(self.employee)
+
+        resp = self._review(new_request.pk, {'status': 'approved'})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        new_request.refresh_from_db()
+        prior.refresh_from_db()
+        self.assertTrue(new_request.is_active)
+        self.assertFalse(prior.is_active)
+        # Only is_active moved — the prior row's own approval decision is an
+        # immutable audit record and must stay exactly as it was.
+        self.assertEqual(prior.status, FaceRegistrationRequest.STATUS_APPROVED)
+
+    def test_hr_register_deactivates_the_prior_active_registration(self):
+        _set_face_verification_mandatory(True)
+        _login(self.client, 'facereg-hr@test.com')
+        prior = FaceRegistrationRequest.objects.create(
+            employee=self.employee, face_embedding=[0.1, 0.2, 0.3],
+            status=FaceRegistrationRequest.STATUS_APPROVED, is_active=True,
+        )
+
+        resp = self.client.post(
+            reverse('face-registration-hr-register'),
+            {
+                'employee_uuid':   str(self.employee.pk),
+                'face_embedding':  [0.4, 0.5, 0.6, 0.7],
+                'liveness_passed': True,
+                'liveness_score':  0.95,
+                'consent_acknowledged': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        prior.refresh_from_db()
+        self.assertFalse(prior.is_active)
+        new_request = FaceRegistrationRequest.objects.get(pk=resp.data['data']['id'])
+        self.assertTrue(new_request.is_active)
+        self.assertNotEqual(new_request.pk, prior.pk)
 
 
 class FaceRegistrationPendingListTests(TestCase):
