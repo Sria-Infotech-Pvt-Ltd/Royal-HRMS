@@ -199,7 +199,7 @@ def _cloudinary_signed_url(file_field) -> str:
     name  = file_field.name
     parts = _os.path.basename(name).rsplit('.', 1)
     fmt   = parts[1].lower() if len(parts) == 2 else 'raw'
-    return _cu.private_download_url(name, fmt, resource_type='raw', type='upload', attachment=False)
+    return _cu.private_download_url(name, fmt, resource_type='raw', type='authenticated', attachment=False)
 
 
 def _document_dict(doc) -> dict:
@@ -4404,7 +4404,7 @@ class EmployeeDocumentView(APIView):
                 dl_url = cloudinary.utils.private_download_url(
                     name, fmt,
                     resource_type='raw',
-                    type='upload',
+                    type='authenticated',
                     attachment=False,
                 )
                 r = http_req.get(dl_url, stream=True, timeout=30)

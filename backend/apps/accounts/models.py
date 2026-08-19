@@ -8,11 +8,12 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password as _check_hash
 from django.contrib.auth.hashers import make_password as _make_hash
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.db.models import F
 from django.utils import timezone
 
 from core.encrypted_fields import EncryptedCharField, blind_index
+from core.storage import AuthenticatedRawMediaCloudinaryStorage
 
 
 # ─── Role & Permission ────────────────────────────────────────────────────────
@@ -1105,11 +1106,15 @@ class OnboardingFieldConfig(models.Model):
 
 def _employee_doc_path(instance, filename):
     import os
+    schema = getattr(connection, 'schema_name', None) or 'public'
     uid = (
         getattr(instance.user, 'employee_id', None)
         or str(instance.user_id)
     )
-    return os.path.join('employee_documents', str(uid), os.path.basename(filename))
+    # employee_id is only unique within a company, not globally — the schema
+    # prefix stops two tenants' employee "EMP001" from ever landing in the
+    # same Cloudinary path.
+    return os.path.join(schema, 'employee_documents', str(uid), os.path.basename(filename))
 
 
 class EmployeeDocument(models.Model):
@@ -1138,7 +1143,7 @@ class EmployeeDocument(models.Model):
     # Django's FileField max_length defaults to 100 — _employee_doc_path() embeds
     # the original filename into the stored path, so anything beyond a short name
     # overflows that default (matches file_name's own width for the same reason).
-    file          = models.FileField(upload_to=_employee_doc_path, max_length=255)
+    file          = models.FileField(upload_to=_employee_doc_path, storage=AuthenticatedRawMediaCloudinaryStorage(), max_length=255)
     file_name     = models.CharField(max_length=255)
     file_size     = models.PositiveBigIntegerField()
     uploaded_at   = models.DateTimeField(auto_now_add=True)

@@ -1139,7 +1139,7 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
                 return _cu.private_download_url(
                     name, fmt,
                     resource_type='raw',
-                    type='upload',
+                    type='authenticated',
                     attachment=False,
                 )
             except Exception:
