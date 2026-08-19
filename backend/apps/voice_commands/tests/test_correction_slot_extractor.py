@@ -241,6 +241,17 @@ class StripCorrectionSlotPhrasesTests(SimpleTestCase):
         result = strip_correction_slot_phrases('my clock in time was wrong yesterday')
         self.assertNotIn('clock in', result)
 
+    def test_clock_in_with_one_trailing_filler_word_survives_untouched(self):
+        """Real bug (2026-08-19): Sarvam transcribing spoken "muje clockin
+        karo" as properly-spaced "clock in karo"/"clock in cr" was being
+        stripped down to just "karo"/"cr" — a single leftover word was
+        enough to pass the old guard, silently breaking every voice clock-in
+        Sarvam transcribed with correct spacing instead of typed input's
+        "clockin". One incidental trailing word must not count as "a longer
+        correction sentence" the way five real words above do."""
+        self.assertEqual(strip_correction_slot_phrases('clock in karo'), 'clock in karo')
+        self.assertEqual(strip_correction_slot_phrases('clock in cr'), 'clock in cr')
+
     def test_date_and_time_spans_are_stripped(self):
         result = strip_correction_slot_phrases('correct my attendance on july 20 2026 to 9:15 am')
         self.assertNotIn('july', result)
