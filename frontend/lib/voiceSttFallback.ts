@@ -5,7 +5,20 @@ import { API } from "@/lib/api/endpoints";
 // that a full sentence fits, short enough that the fixed-duration capture
 // (there's no live transcript here to key a silence timeout off, unlike the
 // browser SpeechRecognition path) doesn't feel like a hang.
+//
+// TRIED dynamically stopping on detected silence instead (2026-08-19, two
+// real repro rounds): reverted. Real ambient-noise floor varied so much
+// between takes on the same mic — sometimes true 0, sometimes 0.007-0.01 at
+// rest — that a single energy threshold needed opposite corrections twice
+// in one session (0.02 was too high and missed real speech entirely; 0.004
+// was too low and never detected silence, defeating the point). Given real
+// time pressure and that the actual root cause of failed voice commands
+// turned out to be unrelated (see correction_slot_extractor.py's
+// 2026-08-19 fix — "clock in karo" was being mangled AFTER transcription,
+// not before it), a fixed duration is the lower-risk choice: simple,
+// already proven, and not a second unresolved variable to chase.
 const RECORDING_DURATION_MS = 5000;
+const ENERGY_SAMPLE_INTERVAL_MS = 250;
 
 // Mirrors useVoiceCommand.ts's TTS_CANCEL_SETTLE_MS pattern — same class of
 // bug, different handoff. There, canceling speechSynthesis and starting
@@ -27,11 +40,13 @@ const MIC_HANDOFF_SETTLE_MS = 800;
  * useVoiceCommand.ts's submitTranscript falls back to only after a voice
  * transcript has already round-tripped through /voice/parse/ and come back
  * as a final no_match (both the rule engine and the sarvam-105b fallback
- * tier declined it). Saaras' translate mode (see backend/apps/voice_commands/
- * sarvam_client.py) auto-detects the spoken language — English or any of 22
- * Indic languages, Hindi included — and always returns English text, so the
- * caller can resubmit the result through the exact same /voice/parse/ flow
- * with no language-specific handling of its own.
+ * tier declined it). Saaras' translit mode (see backend/apps/voice_commands/
+ * sarvam_client.py) returns a Romanized (Latin-script) transcript of
+ * whatever was actually said — Hindi speech comes back as Hinglish text
+ * ("muje clockin karo"), not an invented English sentence — so the caller
+ * can resubmit the result through the exact same /voice/parse/ flow with no
+ * language-specific handling or translation step of its own; the existing
+ * intent matcher already understands Hinglish.
  *
  * Returns null on ANY failure — no mic permission, MediaRecorder/getUserMedia
  * unsupported, a network error, or Sarvam coming back with nothing usable —
@@ -46,8 +61,9 @@ const MIC_HANDOFF_SETTLE_MS = 800;
  * for "is this transcript even trustworthy," per conversation.py's
  * STT-confirmation gate.
  *
- * wasLanguageHinted is true when the backend's Hindi-hint attempt succeeded
- * (see views_transcribe.py) rather than its auto-detect fallback — that mode
+ * wasLanguageHinted is true whenever this succeeded at all — both of
+ * views_transcribe.py's tiers (hi-IN, then en-IN) always pass an explicit
+ * language hint now, never unconstrained auto-detect — and a hinted call
  * gets no languageProbability from Sarvam at all, so the caller threads this
  * through too, as stt_used_language_hint, telling conversation.py's gate to
  * always confirm rather than skip confirmation for lack of a signal.
@@ -67,35 +83,43 @@ export async function captureAndTranscribeViaSarvam(): Promise<{
 
   let stream: MediaStream;
   try {
-    // echoCancellation/noiseSuppression/autoGainControl explicitly disabled
-    // rather than left at browser defaults (on, for all three, in Chrome/
-    // Edge) — tried as a theory for the low RMS energy seen in captured
-    // clips, tuned for two-way calls rather than offline transcription.
-    // RULED OUT (2026-08-18): a full live testing session showed no
-    // correlation between capture RMS and transcription success either way
-    // with this disabled — quiet clips succeeded, louder ones still came
-    // back empty. Left disabled anyway since it's harmless and still
-    // reasonable practice for STT capture, just not the fix it was tried as.
+    // echoCancellation/noiseSuppression explicitly disabled rather than left
+    // at browser defaults (on, for both, in Chrome/Edge) — tried as a theory
+    // for the low RMS energy seen in captured clips, tuned for two-way calls
+    // rather than offline transcription. RULED OUT for those two specifically
+    // (2026-08-18): a full live testing session showed no correlation
+    // between capture RMS and transcription success either way with all
+    // three disabled — quiet clips succeeded, louder ones still came back
+    // empty. Left disabled anyway since it's harmless and still reasonable
+    // practice for STT capture.
+    //
+    // autoGainControl re-enabled (2026-08-19), split out from the other two:
+    // a real-audio repro that day (raw Sarvam response logged server-side)
+    // showed max energy of only ~0.026 even when speaking at normal volume
+    // with the hi-IN hint correctly applied — language detection was right,
+    // but the transcript was still short/wrong ("Huh? Go, go." for "muje
+    // clockin karo"), consistent with the captured signal simply being too
+    // quiet for Saaras to extract real content from, not a language problem.
+    // Disabling AGC removes the browser's own gain boost on a naturally
+    // quiet mic signal; re-enabling it targets that specific gap. Not yet
+    // re-verified against a full live session — if hallucinated/garbled
+    // transcripts persist with this on, this wasn't the (whole) fix.
     // sampleRate: 16000 matches Sarvam's own documented guidance ("works
     // best with audio sampled at 16kHz" — confirmed against real
     // docs.sarvam.ai docs, 2026-08-18); unset before, so capture ran at
     // whatever the device's default rate was (commonly 48kHz).
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 16000 },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true, sampleRate: 16000 },
     });
   } catch {
     return null; // permission denied, or no input device — same "can't help here" outcome
   }
 
-  // TEMP DIAGNOSTIC (uncommitted) — tap the raw stream with an AnalyserNode
-  // running IN PARALLEL with MediaRecorder (both just read the same live
-  // MediaStreamTrack; neither excludes the other), sampled from the instant
-  // getUserMedia resolves through the whole recording. This must add zero
-  // delay before MediaRecorder starts — the point is to observe today's
-  // exact failing timing unmodified, not to accidentally fix it by stalling
-  // here. Answers: is the raw signal already silent at the source (device/
-  // OS issue), or does it have real energy that's lost downstream (encoder/
-  // timing issue)?
+  // Tap the raw stream with an AnalyserNode running IN PARALLEL with
+  // MediaRecorder (both just read the same live MediaStreamTrack; neither
+  // excludes the other) — passive diagnostic only, sent to the backend as
+  // clientEnergyDebug so future real failures can be root-caused from
+  // server logs without needing another live repro session.
   const energyReadings: number[] = [];
   let audioCtx: AudioContext | null = null;
   let energyIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -115,24 +139,18 @@ export async function captureAndTranscribeViaSarvam(): Promise<{
       energyReadings.push(Math.sqrt(sumSquares / buffer.length));
     };
     sampleEnergy(); // immediate reading, right when the stream resolves
-    energyIntervalId = setInterval(sampleEnergy, 250);
+    energyIntervalId = setInterval(sampleEnergy, ENERGY_SAMPLE_INTERVAL_MS);
   } catch (err) {
     console.warn("[voice-diag] energy probe failed to set up:", err);
   }
 
   try {
-    // FIX: wait out the mic-handoff settle window before recording starts —
-    // see MIC_HANDOFF_SETTLE_MS above. The energy probe above keeps
-    // sampling right through this delay, so the readings below show the
-    // settle window and the actual recording in one continuous trace —
-    // needed to confirm this fix against real energy data, not a lucky retry.
+    // Wait out the mic-handoff settle window before recording starts — see
+    // MIC_HANDOFF_SETTLE_MS above. The energy probe above keeps sampling
+    // right through this delay, so the readings below show the settle
+    // window and the actual recording in one continuous trace.
     await new Promise((resolve) => setTimeout(resolve, MIC_HANDOFF_SETTLE_MS));
-    // Split point captured AFTER the wait, not before — this must count every
-    // reading the setInterval above collected DURING the settle window itself,
-    // not just the single synchronous t=0 sample taken before the wait even
-    // started. Capturing it earlier (a bug fixed here) silently mislabeled
-    // real settle-window readings as "recording" readings below.
-    const settleReadingCount = energyReadings.length; // split point for before/after comparison below
+    const settleReadingCount = energyReadings.length;
 
     const blob = await recordClip(stream);
     if (blob.size === 0) return null;
@@ -145,10 +163,6 @@ export async function captureAndTranscribeViaSarvam(): Promise<{
     const avgDuringRecording = recordingReadings.length
       ? recordingReadings.reduce((a, b) => a + b, 0) / recordingReadings.length
       : -1;
-    console.warn("[voice-diag] raw stream RMS energy (settle-delay fix applied)", {
-      maxEnergy, avgEnergy, maxDuringRecording, avgDuringRecording,
-      settleReadings, recordingReadings,
-    });
 
     const formData = new FormData();
     formData.append("audio", blob, "clip.webm");

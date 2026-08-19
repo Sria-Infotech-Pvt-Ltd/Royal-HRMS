@@ -159,10 +159,17 @@ def strip_correction_slot_phrases(text: str) -> str:
     clock_in/clock_out intents — stripping one of those unconditionally
     would erase a genuine bare "clock in" command down to nothing before it
     ever reaches match_intent(). The guard below only applies a punch-type
-    removal when it leaves other content behind, which is exactly the
-    difference between "clock in" (the whole utterance, and clock_in's own
-    phrase — must survive untouched) and "...my clock in time was wrong..."
-    (a mention inside a much longer correction sentence — safe to strip).
+    removal when it leaves at least two words behind, which is the
+    difference between "clock in"/"clock in karo" (the whole command, plus
+    at most one trailing filler/verb word from natural speech — must
+    survive untouched) and "...my clock in time was wrong..." (a mention
+    inside a much longer correction sentence — safe to strip). A one-word
+    remainder threshold (bug found 2026-08-19 via real Sarvam transcripts:
+    "clock in karo"/"clock in cr" were being stripped down to just "karo"/
+    "cr" and then failing to match anything, silently breaking every voice
+    clock-in that Sarvam transcribed with a properly-spaced "clock in"
+    instead of typed-input's "clockin") was too weak — a single incidental
+    word left over doesn't make an utterance a genuine correction sentence.
     """
     stripped = _SYSTEM_DOWN_RE.sub('', text)
     stripped = _DATE_SPAN_RE.sub('', stripped)
@@ -173,7 +180,7 @@ def strip_correction_slot_phrases(text: str) -> str:
 
     for phrase in _PUNCH_TYPE_SYNONYMS:
         candidate = stripped.replace(phrase, '')
-        if _WHITESPACE_RE.sub(' ', candidate).strip():
+        if len(_WHITESPACE_RE.sub(' ', candidate).strip().split()) >= 2:
             stripped = candidate
 
     for keyword in _REASON_SYNONYMS:

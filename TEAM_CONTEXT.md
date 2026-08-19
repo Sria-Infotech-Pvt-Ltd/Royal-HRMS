@@ -3545,3 +3545,37 @@ Root cause was a field-shape mismatch, not a scoping issue (branch scoping was c
 ### Nothing committed
 
 Both fixes above (4 files + 1 already-applied migration) are local working-tree changes on branch `separation`, not yet pushed. The `0070` migration is the one exception — it's already live against the shared Neon DB regardless of git state, since a role-permission migration takes effect on `migrate`, not on deploy.
+
+## Session Log — 2026-08-19
+**Author: Gangadhar Reddy**
+
+### Bug Fixes Shipped — Voice Commands
+
+**1. `strip_correction_slot_phrases` was deleting genuine "clock in"/"clock out" commands**
+
+Real root cause behind voice clock-in/out silently failing to match, found by replaying real Sarvam transcripts through the actual matching pipeline step by step rather than assuming the STT output itself was to blame. `correction_slot_extractor.py`'s punch-type-removal guard only checked whether stripping "clock in"/"clock out" left *any* text behind, not whether that leftover was genuine correction-sentence content — so "clock in karo" and "clock in cr" (Sarvam transcripts with one trailing filler word) satisfied the guard and were stripped down to just "karo"/"cr" before ever reaching `match_intent()`, which then matched nothing. Fixed: guard now requires at least two leftover words, matching the real correction-sentence case it was built for ("my clock in time was wrong yesterday" — 5+ words left over) while leaving a bare command plus one filler word untouched. Verified against real data: "clock in cr" now matches `clock_in` directly at 84% confidence; "clock in karo" triggers a clean "did you mean clock in?" clarification. 257 tests pass.
+- Files: `backend/apps/voice_commands/correction_slot_extractor.py`, `backend/apps/voice_commands/tests/test_correction_slot_extractor.py`. **Committed** (`819b071`).
+
+### Investigation (informational, code changed but scoped as a known limitation, not a fix)
+
+**Hindi speech-to-text via Sarvam Saaras v3 does not reliably work, and it isn't fixable from this side**
+
+Extensive real-audio testing across every available lever, escalating one real repro round at a time rather than guessing blind:
+- `mode="translate"` (generates fresh English text) confidently hallucinated fluent, grammatically correct, but entirely unrelated sentences for real spoken Hindi commands ("Yes, yes, yes, yes, yes.", "Huh? Go, go.", "Oh, it's a pain.", "You should tell me four things.", "The government should provide support to the farmers." — none related to the actual "muje clockin karo" spoken).
+- `mode="translit"` (Romanized output, no translation/generation step) was tried as a fix, hoping a narrower task would avoid hallucination — instead it just as often returned a completely empty transcript on both language hints.
+- Root-caused the persistently low mic-energy readings along the way: Windows' own OS-level "Voice Focus" audio enhancement (Settings → Sound → Input → Audio enhancements) was silently processing/degrading the microphone signal *before* it ever reached the browser — no browser-level `getUserMedia` constraint can see or disable this. Disabling it raised measured RMS energy 4-5x, the best signal of the whole investigation.
+- Re-tested `translate` mode with that excellent signal, live, multiple times. It still hallucinated unrelated sentences. This rules out audio quality, language hint (hi-IN/en-IN), and output mode as the cause — it's a real limitation of Saaras v3 for short spoken Hindi/Hinglish commands via this endpoint.
+- Also confirmed via real docs.sarvam.ai lookup: there is no API parameter to constrain language detection to a candidate list (only one hint or full 23-language auto-detect), which is why the hint chain is hi-IN → en-IN, never unconstrained auto-detect (that misdetected genuine Hindi as gu-IN/ml-IN/te-IN in earlier testing).
+
+**Decision**: kept `mode="translate"` (it never fails silently, unlike translit) with the hi-IN→en-IN hint chain, added a repeated-word hallucination filter (`_looks_like_hallucination`) to skip an obviously-garbage confirmation round-trip, and documented this directly in code as a known limitation rather than continuing to chase it under deadline pressure. **What works**: typed Hinglish input, and English speech via the browser's own Web Speech API (Sarvam is only reached as a fallback after both of those miss). **What doesn't**: Hindi speech specifically, via this retry. **Safety net regardless of any of the above**: `conversation.py`'s STT-confirmation gate means a hallucinated/wrong transcript is never executed without the user explicitly confirming it — this held throughout every test.
+
+- Also re-enabled `autoGainControl` in the mic capture constraints (split out from `echoCancellation`/`noiseSuppression`, which stay disabled — separately ruled out as unrelated) and changed the failure message to point the user at typed input instead of a blind "try again."
+- Files: `backend/apps/voice_commands/sarvam_client.py`, `backend/apps/voice_commands/views_transcribe.py`, `frontend/lib/voiceSttFallback.ts`, plus their tests. **Committed** (`4b4959d`).
+
+### Follow-up (documented for later — not an action item now)
+
+If Hindi STT accuracy needs to improve beyond today's known-limitation state, the next evidence-based step is **not** a blind global-vendor swap — published benchmarks won't say how a provider handles this app's actual users' accents and phrasing. Instead: a real side-by-side test, the same 15-20 real spoken phrases run through both **Sarvam** (current) and **Reverie** (closest India-specific alternative), scored on actual transcription accuracy against those exact phrases. That's the only way to get a number worth trusting instead of another vendor's marketing page. Whoever picks this up next should start there, not with a switch.
+
+### Also fixed along the way — unrelated schema drift blocking login
+
+`django.db.utils.ProgrammingError: column tenants_client.custom_domain does not exist` — migration `0005_client_custom_domain` was recorded as applied in Django's migration history, but the actual `ADD COLUMN` never took effect against the real Neon dev DB (confirmed: a *later* migration's column, `pending_admin_password` from `0007`, was present; `0005`'s was not — genuine drift, not a missing `migrate` run). Fixed directly against the live DB with an idempotent `ALTER TABLE tenants_client ADD COLUMN IF NOT EXISTS custom_domain varchar(255) NOT NULL DEFAULT ''` matching exactly what the migration would have done. No code/migration file change needed — reality now matches what the migration history already claimed. Already applied; nothing to commit for this one.
