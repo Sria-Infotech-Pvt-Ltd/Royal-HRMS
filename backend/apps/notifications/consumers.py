@@ -2,6 +2,8 @@ import logging
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
+from core.notification_groups import notification_group_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,10 +16,11 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         user = self.scope.get('user')
-        if not user or not user.is_authenticated:
+        schema_name = self.scope.get('tenant_schema')
+        if not user or not user.is_authenticated or not schema_name:
             await self.close(code=4401)
             return
-        self.group_name = f'notifications_{user.id}'
+        self.group_name = notification_group_name(user.id, schema_name)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 

@@ -140,10 +140,12 @@ class AttendancePunchView(APIView):
         try:
             from asgiref.sync import async_to_sync
             from channels.layers import get_channel_layer
+
+            from core.notification_groups import notification_group_name
             layer = get_channel_layer()
             if layer:
                 async_to_sync(layer.group_send)(
-                    f'notifications_{request.user.id}',
+                    notification_group_name(request.user.id),
                     {'type': 'attendance.update'},
                 )
         except Exception:

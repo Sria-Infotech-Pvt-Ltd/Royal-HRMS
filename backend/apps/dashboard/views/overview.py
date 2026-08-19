@@ -410,10 +410,12 @@ def push_leave_update(approving_user_id) -> None:
     try:
         from asgiref.sync import async_to_sync
         from channels.layers import get_channel_layer
+
+        from core.notification_groups import notification_group_name
         layer = get_channel_layer()
         if layer:
             async_to_sync(layer.group_send)(
-                f'notifications_{approving_user_id}',
+                notification_group_name(approving_user_id),
                 {
                     'type':            'leave.update',
                     'action_queue':    action_queue,
