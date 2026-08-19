@@ -21,6 +21,7 @@ import secrets
 import string
 
 from django.core.management import call_command
+from django.db import IntegrityError
 
 from apps.tenants.models import ALL_MODULES, Client, Domain
 from apps.tenants.utils import send_company_provisioned_email
@@ -28,6 +29,23 @@ from apps.tenants.utils import send_company_provisioned_email
 
 class CompanyCodeTaken(Exception):
     """Raised with the taken code as its message."""
+
+
+def _save_new_client(client: Client) -> None:
+    """
+    _validate_new_company's own uniqueness check (SELECT ... WHERE
+    company_code) and this save race against each other under concurrent
+    requests: two platform admins submitting the same code within the same
+    instant can both pass that check before either has inserted, so the
+    second .save() here hits company_code's DB-level unique constraint
+    instead. Without this, that surfaces as a raw, unhandled IntegrityError
+    (a 500) rather than the same clean CompanyCodeTaken error the earlier,
+    far-more-common non-concurrent case already returns.
+    """
+    try:
+        client.save()
+    except IntegrityError:
+        raise CompanyCodeTaken(client.company_code)
 
 
 class InvalidModules(Exception):
@@ -119,7 +137,7 @@ def provision_company(*, company_code: str, company_name: str, admin_email: str,
         enabled_modules=modules,
         is_active=True,
     )
-    client.save()  # auto_create_schema=True (default) creates + migrates the schema here
+    _save_new_client(client)  # auto_create_schema=True (default) creates + migrates the schema here
 
     Domain.objects.create(domain=f'{company_code.lower()}.internal', tenant=client, is_primary=True)
 
@@ -147,7 +165,7 @@ def create_pending_client(*, company_code: str, company_name: str, modules=None)
         provisioning_status=Client.PROVISIONING_PENDING,
     )
     client.auto_create_schema = False  # deferred — finish_pending_provisioning creates it
-    client.save()
+    _save_new_client(client)
     return client
 
 
