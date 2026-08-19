@@ -1,11 +1,108 @@
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from apps.tenants.models import ALL_MODULES, Client, PlatformSMTPSettings
+from apps.tenants.models import ALL_MODULES, Client, PlatformAdmin, PlatformAdminAuditLog, PlatformSMTPSettings
 
 
 class PlatformAdminLoginSerializer(serializers.Serializer):
     email    = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+
+
+class PlatformAdminForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value: str) -> str:
+        # Same enumeration-safe pattern as accounts.ForgotPasswordSerializer —
+        # never raise here for an unknown/inactive email, so the view's own
+        # "same response either way" branch is what actually decides what
+        # gets sent back, not field validation short-circuiting first.
+        admin = PlatformAdmin.objects.filter(email__iexact=value, is_active=True).first()
+        if admin:
+            self.context['admin'] = admin
+        return value
+
+
+class PlatformAdminVerifyOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp   = serializers.CharField(min_length=6, max_length=6)
+
+    def validate_otp(self, value: str) -> str:
+        if not value.isdigit():
+            raise serializers.ValidationError('OTP must contain digits only.')
+        return value
+
+
+class PlatformAdminResetPasswordSerializer(serializers.Serializer):
+    reset_token      = serializers.UUIDField()
+    new_password     = serializers.CharField(min_length=8, max_length=128, write_only=True)
+    confirm_password = serializers.CharField(min_length=8, max_length=128, write_only=True)
+
+    def validate_new_password(self, value: str) -> str:
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+        return attrs
+
+
+class PlatformAdminChangePasswordSerializer(serializers.Serializer):
+    old_password     = serializers.CharField(min_length=1, max_length=128, write_only=True)
+    new_password     = serializers.CharField(min_length=8, max_length=128, write_only=True)
+    confirm_password = serializers.CharField(min_length=8, max_length=128, write_only=True)
+
+    def validate_new_password(self, value: str) -> str:
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+        if attrs['old_password'] == attrs['new_password']:
+            raise serializers.ValidationError(
+                {'new_password': 'New password must be different from the current password.'}
+            )
+        return attrs
+
+
+class PlatformAdminAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = PlatformAdmin
+        fields = ['id', 'email', 'full_name', 'is_active', 'last_login', 'created_at']
+
+
+class PlatformAdminInviteSerializer(serializers.Serializer):
+    email     = serializers.EmailField()
+    full_name = serializers.CharField(max_length=150)
+
+    def validate_email(self, value: str) -> str:
+        if PlatformAdmin.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('A platform admin with this email already exists.')
+        return value
+
+
+class PlatformAdminAuditLogSerializer(serializers.ModelSerializer):
+    admin_email          = serializers.SerializerMethodField(read_only=True)
+    target_company_code  = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model  = PlatformAdminAuditLog
+        fields = ['id', 'admin_email', 'action', 'target_company_code', 'changes', 'ip_address', 'created_at']
+
+    def get_admin_email(self, obj: PlatformAdminAuditLog) -> str:
+        return obj.admin.email if obj.admin else '(deleted admin)'
+
+    def get_target_company_code(self, obj: PlatformAdminAuditLog) -> str:
+        return obj.target_company.company_code if obj.target_company else ''
 
 
 class ClientSerializer(serializers.ModelSerializer):
@@ -15,7 +112,7 @@ class ClientSerializer(serializers.ModelSerializer):
         model  = Client
         fields = [
             'id', 'company_code', 'company_name', 'enabled_modules',
-            'custom_domain', 'is_active', 'provisioning_status',
+            'is_active', 'provisioning_status',
             'has_pending_password', 'created_at', 'updated_at',
         ]
 

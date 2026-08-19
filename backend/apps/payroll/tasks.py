@@ -27,6 +27,7 @@ def send_payroll_approval_reminders(self):
     behaviour for a daily nudge. Does not fire for cycles created less than
     REMINDER_HOURS ago (the initial notification covers those).
     """
+    from apps.tenants.models import MODULE_PAYROLL
     from apps.tenants.utils import run_for_all_tenants
 
     def _run_for_one_tenant():
@@ -74,7 +75,9 @@ def send_payroll_approval_reminders(self):
         return {'reminded': reminded_count}
 
     try:
-        result = run_for_all_tenants(_run_for_one_tenant, task_name='send_payroll_approval_reminders')
+        result = run_for_all_tenants(
+            _run_for_one_tenant, task_name='send_payroll_approval_reminders', required_module=MODULE_PAYROLL,
+        )
         logger.info('send_payroll_approval_reminders: %s', result)
         return result
     except Exception as exc:

@@ -25,6 +25,7 @@ def check_missing_clockouts(self):
     request).  Safe to run multiple times — idempotent via
     STATUS_INCOMPLETE exclusion and MissingPunchNotification dedup.
     """
+    from apps.tenants.models import MODULE_ATTENDANCE
     from apps.tenants.utils import run_for_all_tenants
 
     def _run_for_one_tenant():
@@ -33,7 +34,9 @@ def check_missing_clockouts(self):
         return detect_and_mark_unpunches(target_date=today)
 
     try:
-        result = run_for_all_tenants(_run_for_one_tenant, task_name='check_missing_clockouts')
+        result = run_for_all_tenants(
+            _run_for_one_tenant, task_name='check_missing_clockouts', required_module=MODULE_ATTENDANCE,
+        )
         logger.info('check_missing_clockouts: %s', result)
         return result
     except Exception as exc:
@@ -100,6 +103,7 @@ def check_absence_alerts(self):
     Threshold and recipients come from AttendanceSettings → AbsenceAlert config.
     Safe to re-run — de-duplicated per employee per calendar day.
     """
+    from apps.tenants.models import MODULE_ATTENDANCE
     from apps.tenants.utils import run_for_all_tenants
 
     def _run_for_one_tenant():
@@ -107,7 +111,9 @@ def check_absence_alerts(self):
         return detect_absence_alerts()
 
     try:
-        result = run_for_all_tenants(_run_for_one_tenant, task_name='check_absence_alerts')
+        result = run_for_all_tenants(
+            _run_for_one_tenant, task_name='check_absence_alerts', required_module=MODULE_ATTENDANCE,
+        )
         logger.info('check_absence_alerts: %s', result)
         return result
     except Exception as exc:

@@ -7,7 +7,6 @@ export const API = {
     resetPassword: "/reset-password/",
     changePassword: "/change-password/",
     companyBranding: (companyCode: string) => `/public/company-branding/${companyCode}/`,
-    resolveDomain: "/resolve-domain/",
   },
 
   platformAdmin: {
@@ -15,11 +14,21 @@ export const API = {
     logout: "/platform-admin/logout/",
     refresh: "/platform-admin/token/refresh/",
     me: "/platform-admin/me/",
+    forgotPassword: "/platform-admin/forgot-password/",
+    verifyOtp: "/platform-admin/verify-otp/",
+    resetPassword: "/platform-admin/reset-password/",
+    changePassword: "/platform-admin/change-password/",
     companies: {
       list: "/platform-admin/companies/",
       detail: (id: string) => `/platform-admin/companies/${id}/`,
       revealPassword: (id: string) => `/platform-admin/companies/${id}/reveal-password/`,
     },
+    admins: {
+      list: "/platform-admin/admins/",
+      detail: (id: string) => `/platform-admin/admins/${id}/`,
+    },
+    auditLogs: "/platform-admin/audit-logs/",
+    dashboardStats: "/platform-admin/dashboard-stats/",
     smtpSettings: "/platform-admin/smtp-settings/",
   },
 

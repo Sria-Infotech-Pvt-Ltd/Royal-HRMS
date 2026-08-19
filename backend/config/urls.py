@@ -3,11 +3,8 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
-from apps.tenants.views import ResolveCompanyDomainView
-
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/resolve-domain/', ResolveCompanyDomainView.as_view(), name='resolve-company-domain'),
     path('api/', include('apps.accounts.urls')),
     path('api/branch/', include('apps.branch.urls')),
     path('api/announcements/', include('apps.announcements.urls')),

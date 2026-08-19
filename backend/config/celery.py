@@ -26,6 +26,7 @@ the incompatibility entirely:
 import os
 
 from celery import Celery
+from celery.signals import task_postrun, task_prerun
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
@@ -36,3 +37,25 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 
 # Auto-discover tasks in all INSTALLED_APPS
 app.autodiscover_tasks()
+
+
+# Both the worker and (on Windows, since -B/embedded-beat isn't supported
+# here — see the module docstring) the standalone `celery beat` process are
+# long-running processes that sit idle between tasks, sometimes for minutes.
+# Django's usual "close a connection past CONN_MAX_AGE" cleanup is wired to
+# the request_finished signal, which never fires outside an HTTP
+# request/response cycle — so a connection opened by an earlier task run (or
+# by Celery Beat's own scheduling query, e.g. sweep_stale_provisioning) can
+# sit idle long enough for Neon (or any managed Postgres with its own idle
+# timeout) to close it server-side, while Django's Python-level connection
+# object has no way to know that until the next query fails outright with
+# "connection already closed". close_old_connections() actively probes and
+# closes anything unusable, forcing a fresh connection on the very next
+# query — this is the standard Django+Celery fix for exactly this failure,
+# and it runs for both a real worker dispatch and Celery's eager (in-process)
+# execution path, since task_prerun/task_postrun fire either way.
+@task_prerun.connect
+@task_postrun.connect
+def _close_stale_db_connections(**kwargs):
+    from django.db import close_old_connections
+    close_old_connections()

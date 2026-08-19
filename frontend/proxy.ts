@@ -51,6 +51,16 @@ function getPermissions(request: NextRequest): string[] {
   return Array.isArray(payload.permissions) ? (payload.permissions as string[]) : [];
 }
 
+// Read from the signed access-token JWT, not the client-writable USER_COOKIE
+// (same reasoning as getPermissions above) — this gate gets bypassed if a
+// user could just edit their own cookie to flip it false.
+function getMustChangePassword(request: NextRequest): boolean {
+  const token = request.cookies.get(ACCESS_COOKIE)?.value;
+  if (!token) return false;
+  const payload = decodeJwtPayload(token);
+  return payload.must_change_password === true;
+}
+
 function getOnboardingStatus(request: NextRequest): string {
   const raw = request.cookies.get(USER_COOKIE)?.value;
   if (!raw) return "complete"; // unknown — allow through, dashboard will handle
@@ -120,6 +130,9 @@ export function proxy(request: NextRequest) {
   // to it.
   if (pathname.startsWith("/platform-admin")) {
     const isPlatformLoginPage = pathname === "/platform-admin/login";
+    // Forgot-password is reachable by definition without a valid session —
+    // same unauthenticated-entry-point treatment as the login page itself.
+    const isPlatformForgotPasswordPage = pathname.startsWith("/platform-admin/forgot-password");
     const platformToken = request.cookies.get("platform_access_token")?.value;
     const isPlatformTokenValid = (() => {
       if (!platformToken) return false;
@@ -130,10 +143,10 @@ export function proxy(request: NextRequest) {
       } catch { return false; }
     })();
 
-    if (!isPlatformTokenValid && !isPlatformLoginPage) {
+    if (!isPlatformTokenValid && !isPlatformLoginPage && !isPlatformForgotPasswordPage) {
       return NextResponse.redirect(new URL("/platform-admin/login", request.url));
     }
-    if (isPlatformTokenValid && isPlatformLoginPage) {
+    if (isPlatformTokenValid && (isPlatformLoginPage || isPlatformForgotPasswordPage)) {
       return NextResponse.redirect(new URL("/platform-admin", request.url));
     }
     return NextResponse.next();
@@ -142,6 +155,7 @@ export function proxy(request: NextRequest) {
   const isAuthenticated = request.cookies.get(AUTH_COOKIE)?.value === "1";
   const isLoginPage = pathname.startsWith("/login");
   const isOnboarding = pathname.startsWith("/onboarding");
+  const isChangePasswordPage = pathname.startsWith("/change-password");
 
   if (!isAuthenticated && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -157,10 +171,26 @@ export function proxy(request: NextRequest) {
         return exp ? exp * 1000 > Date.now() : true;
       } catch { return false; }
     })();
-    if (isTokenValid) return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (isTokenValid) {
+      const dest = getMustChangePassword(request) ? "/change-password" : "/dashboard";
+      return NextResponse.redirect(new URL(dest, request.url));
+    }
   }
 
-  if (isAuthenticated) {
+  // A temporary or admin-reset password must be replaced before anything
+  // else is reachable — checked ahead of onboarding/assessment/permission
+  // gates below since fixing the account's credentials comes first.
+  if (isAuthenticated && !isLoginPage) {
+    const mustChangePassword = getMustChangePassword(request);
+    if (mustChangePassword && !isChangePasswordPage) {
+      return NextResponse.redirect(new URL("/change-password", request.url));
+    }
+    if (!mustChangePassword && isChangePasswordPage) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
+  if (isAuthenticated && !isChangePasswordPage) {
     const onboardingStatus = getOnboardingStatus(request);
     const assessmentStatus = getAssessmentStatus(request);
     const canManageTeam    = getCanManageTeam(request);

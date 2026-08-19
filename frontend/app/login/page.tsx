@@ -24,6 +24,7 @@ interface LoginApiResponse {
       role: string;
       branch: string;
       permissions: string[];
+      must_change_password: boolean;
       onboarding_status: string;
       assessment_status: string;
       can_manage_team: boolean;
@@ -52,27 +53,14 @@ export default function LoginPage() {
   const [forgotSent, setForgotSent] = useState(false);
 
   // Per-company white-labeling — swapped in once a valid company code is
-  // known, either typed in below or auto-resolved from a company's own
-  // custom domain (see the effect below). Falls back to the shared Royal
-  // HRMS look whenever no company is resolved yet.
+  // typed below (see the effect after this one). Falls back to the shared
+  // Royal HRMS look whenever no company is resolved yet. Every company
+  // signs in through this one shared URL — there's no per-company
+  // subdomain to auto-resolve a company code from.
   const [brandName, setBrandName] = useState(DEFAULT_BRAND_NAME);
   const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null);
   const [brandColor, setBrandColor] = useState("");
   const brandLookupTicket = useRef(0);
-
-  // If this domain has been registered as a company's own custom domain
-  // (platform admin sets Client.custom_domain), skip asking for a Company
-  // ID at all — window.location.hostname is what the browser is actually
-  // on, independent of anything the Next.js→Django proxy hop might do to
-  // request headers along the way.
-  useEffect(() => {
-    const host = window.location.hostname;
-    if (!host || host === "localhost") return;
-    clientApi
-      .get<{ data: { company_code: string } }>(`${API.auth.resolveDomain}?domain=${encodeURIComponent(host)}`)
-      .then(res => setCompanyCode(res.data.data.company_code))
-      .catch(() => {});
-  }, []);
 
   // Debounced branding lookup as the Company ID field changes.
   useEffect(() => {
@@ -133,11 +121,15 @@ export default function LoginPage() {
       saveAuth(user);
       resetSessionExpired();
       let dest = "/dashboard";
+      // A temporary or admin-reset password must be replaced before anything
+      // else — checked first, ahead of onboarding/assessments, matching the
+      // same priority order enforced server-side in proxy.ts.
+      if (d.user.must_change_password) dest = "/change-password";
       // Superusers are platform/IT-provisioned admin accounts, never a real
       // hire that came through the candidate pipeline — the onboarding wizard
       // (personal details, bank info, documents) doesn't apply to them, so
       // they always land on the dashboard regardless of onboarding_status.
-      if (user.onboarding_status !== "complete" && !user.is_superuser) dest = "/onboarding";
+      else if (user.onboarding_status !== "complete" && !user.is_superuser) dest = "/onboarding";
       // Managers get auto-assigned default assessments the same as any new
       // employee (no role distinction on the backend), but the pre-onboarding
       // assessment portal isn't meant for them — skip it here too, matching

@@ -4328,3 +4328,117 @@ This went through several iterations in one session — documented in order sinc
 - **The Admin-portal-no-Company-ID feature and the Admin/Staff split were built, verified working, and then removed the same session** — if this is revisited later, the ~106ms-per-company benchmark and the public-schema-lookup-table suggestion in §3 are the starting point, not a fresh investigation.
 - **No automated tests** were added for the Celery tasks, the reveal-password endpoint, or any of the login-flow changes.
 - **Leaked idle-in-transaction connections are a real, recurring risk on this database** — no code changes were made to prevent this class of problem (e.g., a statement timeout or idle-in-transaction timeout at the connection-pool level); it was diagnosed and manually cleared once, not systemically fixed.
+
+---
+
+# Team Context — Full Platform Admin Panel, Module-Gating Fixes, Custom-Domain Removal
+
+**Author:** G.Durga Prasad
+**Date:** 19 August 2026
+**Branch:** Backend-19/08/2026
+
+---
+
+## Overview
+
+Three threads this session: (1) closing two real module-gating gaps found while auditing whether disabling a module actually blocks all the ways a company could still reach it, (2) fixing the Celery reliability issues that were quietly undermining the "provisioning survives a restart" work from 18 August, and (3) building out the Platform Admin panel from a bare companies list into a full admin product — dashboard, sidebar navigation, forgot/reset/change-password flows, multi-admin account management, audit logging, and a consolidated Settings area — plus removing the custom-domain/subdomain login feature entirely per direction and replacing it with a single shared login URL.
+
+---
+
+## 1. Module-Gating Gaps Closed
+
+Auditing "if a company disables module X, is it actually unreachable everywhere" surfaced two real bypasses of `Client.enabled_modules`, neither caught by the existing middleware-level gate:
+
+- **Voice commands bypassed the gate entirely** — `apps/voice_commands/executor.py` dispatches intents via direct Python calls that never re-enter `TenantSchemaMiddleware`, so a disabled module was still fully reachable by voice. Fixed with an `_INTENT_MODULES` mapping and an explicit `connection.tenant.has_module()` check in `execute_intent()`, alongside the existing permission check.
+- **Celery background jobs ignored `enabled_modules`** — the periodic tasks in `apps/attendance/tasks.py`, `apps/hrms/tasks.py`, and `apps/payroll/tasks.py` ran for every active tenant regardless of which modules that company had enabled. `run_for_all_tenants()` (`apps/tenants/utils.py`) gained an optional `required_module` parameter, now passed from all three task files.
+
+---
+
+## 2. Celery Reliability Fixes
+
+- **`SchedulingError: connection already closed` in Celery Beat** — fixed with `task_prerun`/`task_postrun` signal handlers in `config/celery.py` calling `django.db.close_old_connections()`.
+- **Periodic tasks crashing on mid-provisioning tenants** (`relation "attendance_settings" does not exist`) — `run_for_all_tenants()` now filters on `provisioning_status=Client.PROVISIONING_ACTIVE` in addition to `is_active=True`, so a company still being built is never touched by a periodic task.
+- **Root cause found for a bigger problem: `CELERY_TASK_ALWAYS_EAGER` was silently `True`** the whole time, because `REDIS_URL` was commented out in `.env`. This meant every "provisioning survives a worker/server restart" guarantee from 18 August's Celery work was not actually in effect — tasks were running synchronously in-process the entire time. Fixed by uncommenting `REDIS_URL` (Redis was already installed and running as a Windows service) and restarting the server/worker/beat processes.
+- A stale Celery worker process (started before a migration dropped `Client.custom_domain`, see §6) kept crashing with `column tenants_client.custom_domain does not exist` until every worker/beat process — including any the team was running in their own terminals — was killed and restarted fresh. **Anyone running their own `celery worker`/`celery beat` locally needs to restart both after pulling this branch.**
+
+---
+
+## 3. Platform Admin Panel — Full Build
+
+Previously just a login page and a bare companies list. Added:
+
+- **Sidebar + dashboard shell** (`app/platform-admin/layout.tsx`) with nav for Dashboard, Companies, Platform Admins, and a consolidated Settings entry.
+- **Forgot/reset/change password** — `PlatformAdminOTP` and `PlatformAdminPasswordResetToken` models, a 4-step OTP flow (`forgot-password/page.tsx`) mirroring the tenant side's existing flow, and a change-password page for already-authenticated admins. Rate-limited (`platform_admin_forgot_password`: 5/hour, `platform_admin_otp_verify`: 10/hour).
+- **Multi-admin support** — a second (and further) platform admin can now be invited from the UI (`admins/page.tsx`, `InviteAdminModal.tsx`) instead of only via the `create_platform_admin` management command; existing admins can be deactivated/reactivated, but never by themselves.
+- **Audit logging of platform-admin actions** — new `PlatformAdminAuditLog` model + a `_log_platform_action()` helper called from every state-changing view, and an Audit Log page to read them. This closes the "no audit trail for platform admin actions" gap flagged as not-done in the 17 August entry above.
+- **Dashboard with real per-company usage data** — beyond registry counts (total/active/disabled companies), the dashboard now shows per-tenant employee counts and last-activity timestamps (`PlatformAdminDashboardStatsView._company_usage()`), a dormant-company count (30+ days inactive or never used), and module-adoption breakdown across all companies.
+- All new models/views follow the existing platform-admin isolation pattern from 17 August — own JWT cookie namespace, own SMTP connection, never touches a tenant schema.
+
+---
+
+## 4. Settings Consolidation + Companies Page Fixes
+
+- Audit Log, Email Settings, and My Account were three separate top-level nav items; consolidated into one **Settings** hub page (`settings/page.tsx`) linking to all three, which keep their original URLs.
+- Companies page (`_components/CompaniesTable.tsx`) had visible gaps on both sides of the table at certain widths — fixed as part of the page-wide full-width pass in §7. Also added a live search box (filters by name/code) and changed the Modules column from comma-separated text to pill-style badges with an edit-modules modal.
+- "View credentials" (one-time admin password reveal) changed from an inline banner to a proper modal dialog with a warning message, monospace password display, and a copy button.
+
+---
+
+## 5. Custom-Domain / Subdomain Login Removed
+
+Per explicit direction: companies now get one shared login URL, not a per-company custom-domain/subdomain login. Removed entirely rather than left dormant:
+
+- Backend: `Client.custom_domain` field dropped (migration `0009_remove_client_custom_domain`), `ResolveCompanyDomainView` and its URL route deleted, `custom_domain` removed from `ClientSerializer` and from `CompanyDetailView.patch()`.
+- Frontend: the custom-domain auto-detection `useEffect` removed from `app/login/page.tsx`; the Domain column and its edit state/handlers removed from `CompaniesTable.tsx`; `/api/resolve-domain/` removed from `endpoints.ts`.
+- This reverses part of what 18 August's entry described as "still live" (per-company branding stayed; the custom-domain/auto-fill half did not).
+
+---
+
+## 6. Company Creation Simplified + Provisioning Email Improved
+
+- The "which modules should this company get" checkbox step was removed from company creation (`AddCompanyModal.tsx` now only asks for company code, company name, and admin email) — every new company now gets all modules enabled by default, adjustable afterward from the Companies page's per-company module editor.
+- `send_company_provisioned_email()` (`apps/tenants/utils.py`) now includes the login URL (`{FRONTEND_URL}/login`) in the welcome email alongside the company ID, username, and password, so a new company's first admin has everything needed in one place. New `FRONTEND_URL` setting, documented in `.env.example`.
+
+---
+
+## 7. Full-Width Layout, Applied Platform-Admin-Wide
+
+Every platform-admin page (Dashboard, Companies, Platform Admins, Audit Log, Settings hub, Email Settings, Account) now uses a full-width page wrapper instead of leaving dead gaps on either side. Email Settings and Account intentionally keep their inner form `.card` at a fixed max-width (640px / 480px) so inputs don't stretch edge-to-edge — the page is full-width, the form is not.
+
+---
+
+## 8. Dashboard Design-Token Bug Fix + Professional Redesign
+
+While addressing feedback that the dashboard "didn't look professional," found that four files (`layout.tsx`, `page.tsx`, `settings/page.tsx`, `_components/CompaniesTable.tsx`) referenced CSS custom properties that don't exist anywhere in this project's design system (`--primary-container`, `--outline-variant`, `--surface-variant`, `--on-surface` — the real tokens, defined in `globals.css`, are `--primary-c`, `--outline-v`, `--bg-low`, `--on-bg`). Several intended background tints had been silently rendering as transparent all along. Fixed across all four files, and the Dashboard page itself was rebuilt to reuse the `.stats-grid`/`.stat-card`/`.card-header`/`.card-title` components already used throughout the tenant-side dashboards, instead of the one-off inline-styled markup it had before — same visual language as the rest of the app, plus a proportional provisioning-status bar and clearer module-adoption bars.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/voice_commands/executor.py` | `_INTENT_MODULES` + `has_module()` check — closes the voice-command module-gating bypass |
+| `apps/attendance/tasks.py`, `apps/hrms/tasks.py`, `apps/payroll/tasks.py` | Pass `required_module` to `run_for_all_tenants()` |
+| `apps/tenants/utils.py` | `required_module` param on `run_for_all_tenants()`; `provisioning_status` filter; `_get_platform_smtp_connection()`, `send_platform_admin_otp_email()`, `send_platform_admin_invite_email()`; login URL added to the provisioning email |
+| `config/celery.py` | `task_prerun`/`task_postrun` signal handlers to close stale DB connections |
+| `apps/tenants/models.py` | `PlatformAdminOTP`, `PlatformAdminPasswordResetToken`, `PlatformAdminAuditLog` added; `Client.custom_domain` removed |
+| `apps/tenants/migrations/0008_...`, `0009_remove_client_custom_domain.py` (new) | Schema changes for the above |
+| `apps/tenants/serializers.py`, `views.py`, `urls.py`, `throttles.py` | New platform-admin forgot/reset/change-password, admin-account management, audit-log, and dashboard-stats endpoints; `ResolveCompanyDomainView` and `custom_domain` handling removed |
+| `frontend/app/platform-admin/layout.tsx` (new) | Sidebar + nav shell |
+| `frontend/app/platform-admin/page.tsx` | Redesigned dashboard — real usage data, corrected design tokens, shared component classes |
+| `frontend/app/platform-admin/settings/page.tsx`, `audit-log/page.tsx`, `account/page.tsx` (new) | Settings hub + its two remaining standalone pages |
+| `frontend/app/platform-admin/admins/page.tsx`, `_components/InviteAdminModal.tsx` (new) | Multi-admin management |
+| `frontend/app/platform-admin/forgot-password/page.tsx` (new) | Platform-admin OTP-based password reset |
+| `frontend/app/platform-admin/_components/CompaniesTable.tsx` | Search box, pill-style module badges + edit modal, credentials-reveal modal, domain column removed |
+| `frontend/app/platform-admin/_components/AddCompanyModal.tsx` | Module checkboxes removed — all modules enabled by default |
+| `frontend/app/platform-admin/_components/SmtpSettingsModal.tsx` | Deleted — superseded by `email-settings/page.tsx` |
+| `frontend/proxy.ts`, `frontend/types/platformAdmin.ts`, `frontend/lib/api/endpoints.ts` | Forgot-password route exemption; new types and endpoint paths for everything above; `custom_domain`/`resolveDomain` removed |
+
+---
+
+## Notes for Next Developer
+
+- **Platform-admin refresh tokens still can't be revoked on logout** — this was flagged in the 17 August entry and remains open; not addressed this session.
+- **Company creation is still synchronous work handed to Celery, not instant** — unchanged from 18 August; still no automated tests around any of the platform-admin models/views/tasks added this session.
+- **If you run your own `celery worker`/`celery beat` locally, restart both after pulling this branch** — a stale worker process still holding the old `Client` model (with `custom_domain`) will crash on ordinary queries once the migration in §6 is applied.
+- **Nothing in this session has been committed or pushed yet** — all of the above is still in the working tree on `Backend-19/08/2026` as of this writing.

@@ -93,18 +93,6 @@ class Client(TenantMixin):
         help_text=f'Subset of: {", ".join(ALL_MODULES)}',
     )
 
-    # A real domain this company's users actually visit (e.g. "www.demo.com"),
-    # distinct from Domain/DomainMixin above (django-tenants' own internal
-    # bookkeeping, e.g. "demo.internal" — never resolved from a real request).
-    # Blank means "no custom domain yet, log in via the shared URL + company
-    # code". Setting this alone does NOT make the domain reachable — the DNS
-    # for it must be pointed at wherever this app is hosted, and the hosting/
-    # reverse-proxy layer must be configured to accept that hostname; neither
-    # of those can happen from application code. See
-    # apps/accounts/views.py ResolveCompanyDomainView for how it's used once
-    # that infrastructure is in place.
-    custom_domain = models.CharField(max_length=255, blank=True, default='')
-
     is_active = models.BooleanField(default=True)
 
     # Set only by the platform-admin API's async provisioning path (see
@@ -291,3 +279,111 @@ class PlatformSMTPSettings(models.Model):
     def get_solo(cls) -> 'PlatformSMTPSettings':
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class PlatformAdminOTP(models.Model):
+    """
+    Forgot-password OTP for a PlatformAdmin — mirrors apps.accounts.models.
+    OTPVerification exactly, but keyed to PlatformAdmin instead of a tenant
+    User, since PlatformAdmin has no self-service recovery path today
+    (currently only fixable via direct database access).
+    """
+    admin      = models.ForeignKey(PlatformAdmin, on_delete=models.CASCADE, related_name='otps')
+    otp        = models.CharField(max_length=128)   # stores the hash, not the plain OTP
+    attempts   = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    is_used    = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        db_table = 'tenants_platform_admin_otp'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['admin', 'is_used', 'expires_at']),
+        ]
+
+    def __str__(self) -> str:
+        return f'OTP for {self.admin.email} (used={self.is_used})'
+
+    def is_valid(self) -> bool:
+        max_attempts = getattr(settings, 'OTP_MAX_ATTEMPTS', 5)
+        return (
+            not self.is_used
+            and self.attempts <= max_attempts
+            and timezone.now() < self.expires_at
+        )
+
+    def check_otp(self, plain_otp: str) -> bool:
+        return check_password(plain_otp, self.otp)
+
+    @classmethod
+    @transaction.atomic
+    def create_for_admin(cls, admin: 'PlatformAdmin') -> tuple['PlatformAdminOTP', str]:
+        from apps.accounts.utils import generate_otp  # shared, tenant-agnostic helper
+
+        cls.objects.filter(admin=admin, is_used=False).update(is_used=True)
+
+        expiry_minutes = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
+        plain_otp      = generate_otp()
+
+        otp_obj = cls.objects.create(
+            admin      = admin,
+            otp        = make_password(plain_otp),
+            expires_at = timezone.now() + timedelta(minutes=expiry_minutes),
+        )
+        return otp_obj, plain_otp
+
+
+class PlatformAdminPasswordResetToken(models.Model):
+    """Mirrors apps.accounts.models.PasswordResetToken, keyed to PlatformAdmin."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    admin      = models.ForeignKey(PlatformAdmin, on_delete=models.CASCADE, related_name='reset_tokens')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    is_used    = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        db_table = 'tenants_platform_admin_reset_token'
+
+    def __str__(self) -> str:
+        return f'ResetToken({self.admin.email}, used={self.is_used})'
+
+    def is_valid(self) -> bool:
+        return not self.is_used and timezone.now() < self.expires_at
+
+    @classmethod
+    @transaction.atomic
+    def create_for_admin(cls, admin: 'PlatformAdmin') -> 'PlatformAdminPasswordResetToken':
+        cls.objects.filter(admin=admin, is_used=False).update(is_used=True)
+        return cls.objects.create(admin=admin, expires_at=timezone.now() + timedelta(minutes=60))
+
+
+class PlatformAdminAuditLog(models.Model):
+    """
+    Append-only record of platform-admin actions (create/disable a company,
+    change its modules, reveal a password, invite another platform admin) —
+    previously nonexistent, unlike every tenant-side action which already
+    gets an AuditLog row. admin is SET_NULL so history survives an admin
+    account being removed later; target_company likewise, since a company
+    can in principle be deleted independently of its audit trail.
+    """
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    admin          = models.ForeignKey(
+                         PlatformAdmin, on_delete=models.SET_NULL, null=True, blank=True,
+                         related_name='audit_logs',
+                     )
+    action         = models.CharField(max_length=100)
+    target_company = models.ForeignKey(
+                         Client, on_delete=models.SET_NULL, null=True, blank=True,
+                         related_name='platform_audit_logs',
+                     )
+    changes        = models.JSONField(default=dict, blank=True)
+    ip_address     = models.GenericIPAddressField(null=True, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'tenants_platform_admin_audit_log'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.action} by {self.admin_id} @ {self.created_at}'

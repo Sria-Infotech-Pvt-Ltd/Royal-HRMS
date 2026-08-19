@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
+from django.db import connection
+
+from apps.tenants.models import MODULE_ATTENDANCE, MODULE_LABELS, MODULE_LEAVE, MODULE_PAYROLL
 from apps.voice_commands.executor_approval import (
     execute_check_team_attendance,
     execute_check_team_leave_queue,
@@ -55,6 +58,36 @@ INTENT_GREETING = 'greeting'
 _LEAVE_APPROVAL_INTENT_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
 
 _PERMISSION_DENIED_MESSAGE = "You don't have permission to do that."
+
+# Every intent below dispatches straight into another app's view/service code
+# via a direct Python call (APIRequestFactory or a raw query), never a real
+# HTTP request — so apps.tenants.middleware.TenantSchemaMiddleware's module
+# gate, which only inspects the *outer* request path (/api/voice/parse/,
+# gated on voice_commands itself), never runs a second time for the module
+# the action actually belongs to. Without the check below, a company with
+# voice_commands enabled but not leave/attendance/payroll could use voice to
+# fully exercise those modules regardless of enabled_modules. Mirrors
+# apps.tenants.feature_gate.MODULE_URL_PREFIXES's mapping, keyed by intent
+# instead of URL path since there's no request path to inspect here.
+_INTENT_MODULES = {
+    INTENT_CLOCK_IN: MODULE_ATTENDANCE,
+    INTENT_CLOCK_OUT: MODULE_ATTENDANCE,
+    INTENT_CHECK_ATTENDANCE_STATS: MODULE_ATTENDANCE,
+    INTENT_CHECK_ATTENDANCE_SUMMARY: MODULE_ATTENDANCE,
+    INTENT_REQUEST_ATTENDANCE_CORRECTION: MODULE_ATTENDANCE,
+    INTENT_CHECK_TEAM_ATTENDANCE: MODULE_ATTENDANCE,
+    INTENT_CHECK_LEAVE_BALANCE: MODULE_LEAVE,
+    INTENT_CHECK_LEAVE_STATUS: MODULE_LEAVE,
+    INTENT_CANCEL_LEAVE: MODULE_LEAVE,
+    INTENT_APPLY_LEAVE: MODULE_LEAVE,
+    INTENT_CHECK_TEAM_LEAVE_QUEUE: MODULE_LEAVE,
+    INTENT_APPROVE_LEAVE: MODULE_LEAVE,
+    INTENT_REJECT_LEAVE: MODULE_LEAVE,
+    INTENT_CHECK_MY_PAYSLIP: MODULE_PAYROLL,
+    INTENT_ACKNOWLEDGE_PAYSLIP: MODULE_PAYROLL,
+    INTENT_RAISE_PAYSLIP_QUERY: MODULE_PAYROLL,
+    INTENT_CHECK_EMPLOYEE_PAYSLIP: MODULE_PAYROLL,
+}
 
 
 def execute_intent(
@@ -144,11 +177,25 @@ def execute_intent(
     yourself (payslips.py:61); a caller who only has payroll.view_own is
     correctly blocked from this intent by the gate below, the same way they
     would be from PayslipDetailView itself for someone else's payslip.
+
+    Every leave/attendance/payroll intent is also gated on _INTENT_MODULES
+    below. This exists because every one of those intents dispatches into
+    its module's view/service code via a direct Python call rather than a
+    real HTTP request, so apps.tenants.middleware.TenantSchemaMiddleware's
+    module check — which only ever inspects the outer /api/voice/parse/
+    request path — never runs for the inner module. Without this, a company
+    with voice_commands enabled but not leave/attendance/payroll could use
+    voice to fully exercise those modules regardless of enabled_modules.
     """
     required_permission = get_required_permission(intent, lang=lang)
     if required_permission and not has_required_permission(request.user, required_permission):
         log_permission_denied(request, intent, required_permission)
         return ExecutionResult(success=False, message=_PERMISSION_DENIED_MESSAGE)
+
+    required_module = _INTENT_MODULES.get(intent)
+    if required_module and not connection.tenant.has_module(required_module):
+        label = MODULE_LABELS.get(required_module, required_module)
+        return ExecutionResult(success=False, message=f'{label} is not enabled for your company.')
 
     if intent == INTENT_CLOCK_IN:
         return execute_clock_in(request, attendance_mode, latitude, longitude)
