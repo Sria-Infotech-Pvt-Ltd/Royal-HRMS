@@ -6,7 +6,7 @@ channels-redis==4.2.1
 charset-normalizer==3.4.7
 daphne==4.1.2
 cloudinary==1.44.2
-Django==5.2
+Django==5.1.15
 django-cloudinary-storage==0.3.0
 django-cors-headers==4.5.0
 django-environ==0.11.2
