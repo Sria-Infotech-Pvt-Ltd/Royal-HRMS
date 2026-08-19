@@ -104,3 +104,24 @@ def document_center_upload_path(instance, filename) -> str:
     from django.utils import timezone
     stamp = timezone.now().strftime('%Y/%m')
     return f'{_tenant_schema()}/documents/{stamp}/{filename}'
+
+
+def email_template_attachment_upload_path(instance, filename) -> str:
+    return f'{_tenant_schema()}/email_template_attachments/{filename}'
+
+
+def profile_photo_upload_path(instance, filename) -> str:
+    # Public-by-design (rendered as a plain <img src>, shown in employee
+    # directories) — unlike the categories above this deliberately keeps
+    # the default public storage rather than AuthenticatedRawMediaCloudinaryStorage,
+    # since a signed/expiring URL would break long-lived <img> caching. Only
+    # the path gets tenant-scoped, closing the cross-tenant path-collision
+    # gap without changing who can view a photo.
+    return f'{_tenant_schema()}/profile_photos/{filename}'
+
+
+def company_logo_upload_path(instance, filename) -> str:
+    # Same reasoning as profile_photo_upload_path — a company logo is
+    # intentionally public (shown pre-login) via PublicCompanyBrandingView;
+    # only the path needs tenant-scoping.
+    return f'{_tenant_schema()}/company/{filename}'

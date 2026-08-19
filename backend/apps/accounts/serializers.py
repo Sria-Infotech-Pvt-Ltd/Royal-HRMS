@@ -337,6 +337,7 @@ class EmailTemplateAttachmentSerializer(serializers.ModelSerializer):
             signed_url, _ = cloudinary.utils.cloudinary_url(
                 obj.file.name,
                 resource_type='raw',
+                type='authenticated',
                 sign_url=True,
                 expires_at=int(time.time()) + 7200,
                 secure=True,

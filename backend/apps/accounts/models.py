@@ -13,7 +13,13 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.encrypted_fields import EncryptedCharField, blind_index
-from core.storage import AuthenticatedRawMediaCloudinaryStorage, document_center_upload_path
+from core.storage import (
+    AuthenticatedRawMediaCloudinaryStorage,
+    company_logo_upload_path,
+    document_center_upload_path,
+    email_template_attachment_upload_path,
+    profile_photo_upload_path,
+)
 
 
 # ─── Role & Permission ────────────────────────────────────────────────────────
@@ -190,7 +196,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     failed_login_attempts   = models.PositiveSmallIntegerField(default=0)
     locked_until            = models.DateTimeField(null=True, blank=True)
     last_login_ip           = models.GenericIPAddressField(null=True, blank=True)
-    profile_photo           = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
+    profile_photo           = models.ImageField(upload_to=profile_photo_upload_path, null=True, blank=True)
     date_joined  = models.DateTimeField(auto_now_add=True)
     updated_at   = models.DateTimeField(auto_now=True)
 
@@ -612,7 +618,7 @@ class Company(models.Model):
 
     company_name   = models.CharField(max_length=200)
     trade_name     = models.CharField(max_length=200, blank=True)
-    logo           = models.ImageField(upload_to='company/', null=True, blank=True)
+    logo           = models.ImageField(upload_to=company_logo_upload_path, null=True, blank=True)
     gstin          = models.CharField(max_length=15)
     cin            = models.CharField(max_length=21)
     pan            = models.CharField(max_length=10)
@@ -1258,7 +1264,7 @@ class EmailTemplateAttachment(models.Model):
     }
 
     template    = models.ForeignKey(EmailTemplate, on_delete=models.CASCADE, related_name='attachments')
-    file        = models.FileField(upload_to='email_template_attachments/')
+    file        = models.FileField(upload_to=email_template_attachment_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage())
     filename    = models.CharField(max_length=255)
     mime_type   = models.CharField(max_length=100)
     size        = models.PositiveIntegerField(help_text='File size in bytes')
