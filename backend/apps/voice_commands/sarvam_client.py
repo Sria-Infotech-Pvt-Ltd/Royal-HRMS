@@ -14,11 +14,25 @@ Auth: both endpoints accept the SAME header, `api-subscription-key: <key>` —
 used exclusively here rather than mixing in the also-supported
 `Authorization: Bearer` scheme, so there's one auth code path for both calls.
 
-mode="translate" on the STT call converts any of Saaras's 22 supported Indic
-languages (Hindi included) DIRECTLY to English text, auto-detecting the
-source language with no language_code needed on the request — see
-transcribe_audio's docstring for why that's what lets Hindi capture skip
-every other language-aware code path in this app.
+transcribe_audio's `mode` selects the STT output shape — see its own
+docstring. views_transcribe.py uses mode="translate". mode="translit" was
+tried instead (2026-08-19) hoping its narrower, less-generative task would
+avoid translate's hallucination — it didn't help: on a real repro with
+excellent mic signal (fixed after finding Windows' own OS-level "Voice
+Focus" audio enhancement was degrading input before it ever reached the
+browser), translit just as often returned nothing at all. translate was
+then re-verified with that same good signal and STILL confidently
+hallucinated complete, fluent, unrelated English sentences ("You should
+tell me four things.", "The government should provide support to the
+farmers.") for real spoken Hindi across multiple attempts — ruling out
+audio quality as the cause. This is a real limitation of Saaras v3 for
+short spoken Hindi/Hinglish commands via this endpoint, not something
+fixable by mode, language hint, or client-side audio processing choices.
+Known limitation, not silently worked around: the STT-confirmation gate in
+conversation.py still means a wrong transcript is never executed without
+explicit confirmation — see views_transcribe.py's own docstring for the
+current scope decision (Hindi speech-to-text is unreliable; typed Hinglish
+and English speech via the browser's own Web Speech API both work).
 
 Every function here returns None on ANY failure (missing key, network error,
 timeout, non-2xx, unrecognized response shape) rather than raising — a
@@ -114,15 +128,27 @@ def chat_completion(
 
 def transcribe_audio(
     file_bytes: bytes, filename: str, content_type: str = 'audio/webm',
-    language_code: Optional[str] = None,
+    language_code: Optional[str] = None, mode: str = 'translate',
 ) -> Optional[dict]:
     """
-    POST /speech-to-text with model=saaras:v3, mode="translate" — converts
-    speech in any of Saaras's 22 supported Indic languages (or English)
-    directly to English text. This is the one call that lets
-    views_transcribe.py's Hindi-capture retry hand back plain English to the
-    exact same /voice/parse/ pipeline every other transcript already goes
-    through, with no Hindi-aware code anywhere else in this app.
+    POST /speech-to-text with model=saaras:v3. `mode` selects the output
+    shape (confirmed against real docs.sarvam.ai docs, 2026-08-19):
+      - "translate": generates fresh English text from the audio. The most
+        hallucination-prone option — this is a generation task, not a
+        transcription one, and real testing (2026-08-19) showed it
+        confidently producing fluent, complete, but entirely unrelated
+        English sentences ("Yes, yes, yes, yes, yes.", "Oh, it's a pain.")
+        for real Hindi speech, rather than failing cleanly.
+      - "translit": Romanized (Latin-script) output of the actual spoken
+        words in whatever language was spoken — e.g. Hindi speech comes back
+        as "muje clockin karo", not an invented English sentence. This is
+        what views_transcribe.py now uses: a task much closer to raw
+        transcription than translate's generation, and its output format
+        exactly matches what a Hinglish-typing user would type directly —
+        the existing intent matcher (rule engine + sarvam-105b LLM fallback,
+        whose own system prompt already expects "English, Hindi, or Hinglish
+        (romanized Hindi)") already handles that text with zero
+        translation step needed.
 
     language_code (e.g. 'hi-IN'), when given, tells Sarvam which language to
     expect instead of auto-detecting it — confirmed against real docs.sarvam.ai
@@ -157,7 +183,7 @@ def transcribe_audio(
     if not api_key:
         return None
 
-    request_payload = {'model': STT_MODEL, 'mode': 'translate'}
+    request_payload = {'model': STT_MODEL, 'mode': mode}
     if language_code:
         request_payload['language_code'] = language_code
 
@@ -187,5 +213,13 @@ def transcribe_audio(
             'was_language_hinted': language_code is not None,
         }
     except (requests.RequestException, ValueError) as exc:
-        logger.warning('Sarvam speech-to-text failed: %s', exc)
+        # Includes the response body text (not just the exception) since a
+        # 4xx/5xx from Sarvam often carries a real error message in the body
+        # that str(exc) alone won't show — Sarvam's own service response,
+        # not user speech content, so safe to log in full.
+        body = getattr(exc, 'response', None)
+        logger.warning(
+            'Sarvam speech-to-text failed (mode=%s, requested_language=%s): %s — body=%r',
+            mode, language_code, exc, body.text if body is not None else None,
+        )
         return None

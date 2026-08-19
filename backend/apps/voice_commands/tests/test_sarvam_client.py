@@ -122,6 +122,19 @@ class TranscribeAudioTests(SimpleTestCase):
         self.assertEqual(call_kwargs['data']['language_code'], 'hi-IN')
 
     @patch('apps.voice_commands.sarvam_client.requests.post')
+    def test_mode_defaults_to_translate_but_is_overridable(self, mock_post):
+        mock_post.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {'transcript': 'muje clockin karo', 'language_code': 'hi-IN'},
+        )
+
+        sarvam_client.transcribe_audio(b'fake-audio-bytes', 'clip.webm')
+        self.assertEqual(mock_post.call_args.kwargs['data']['mode'], 'translate')
+
+        sarvam_client.transcribe_audio(b'fake-audio-bytes', 'clip.webm', mode='translit')
+        self.assertEqual(mock_post.call_args.kwargs['data']['mode'], 'translit')
+
+    @patch('apps.voice_commands.sarvam_client.requests.post')
     def test_returns_none_on_empty_transcript(self, mock_post):
         """Silence, or audio Saaras couldn't make out at all — the caller
         (views_transcribe.py) treats this identically to a hard failure."""
