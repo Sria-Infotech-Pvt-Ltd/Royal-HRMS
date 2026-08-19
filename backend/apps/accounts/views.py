@@ -271,6 +271,9 @@ def _employee_dict(user: User) -> dict:
         'emergency_relationship': p.emergency_relationship if p else '',
         'emergency_phone':        p.emergency_phone        if p else '',
         'emergency_email':        p.emergency_email        if p else '',
+        # HR-created custom fields (Settings > Onboarding Fields) — see
+        # OnboardingFieldConfig/EmployeeProfile.custom_field_values.
+        'custom_field_values': (p.custom_field_values or {}) if p else {},
     }
 
     try:
@@ -3119,6 +3122,21 @@ def _check_promotion_hierarchy(employee, old_designation: str, new_designation: 
     return None
 
 
+# Personal/Education/Bank/Emergency EmployeeProfile fields editable via
+# EmployeeDetailView.put() — see _employee_dict()'s profile_data above for
+# the matching read-side list (date_of_birth/current_address excluded here,
+# see the comment at the call site).
+_PROFILE_FIELD_KEYS = frozenset({
+    'gender', 'marital_status', 'father_name', 'blood_group', 'permanent_address',
+    'highest_qualification', 'institution', 'year_of_passing', 'specialization',
+    'total_experience_years', 'previous_employer', 'previous_designation', 'leaving_reason',
+    'account_holder_name', 'account_type', 'account_number', 'ifsc_code',
+    'bank_name', 'bank_branch_name',
+    'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
+    'custom_field_values',
+})
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3206,7 +3224,32 @@ class EmployeeDetailView(APIView):
             profile.date_of_birth = dob_raw
             profile.save(update_fields=['date_of_birth', 'updated_at'])
 
-        if len(update_fields) == 1:
+        # Personal/Education/Bank/Emergency EmployeeProfile fields — previously
+        # displayed on this page's edit form but silently dropped on save (no
+        # write path existed for any of them). Reuses EmployeeProfileSerializer
+        # (already handles validation, encryption, and the bank-details-changed
+        # audit alert via _changed_by) rather than 23 more manual field blocks.
+        # date_of_birth/current_address are deliberately excluded — the former
+        # already has its own block above, the latter isn't part of this page's
+        # editable set today.
+        profile_saved = False
+        if _PROFILE_FIELD_KEYS & set(data.keys()):
+            from apps.accounts.models import EmployeeProfile
+            from apps.accounts.serializers import EmployeeProfileSerializer
+            profile, _ = EmployeeProfile.objects.get_or_create(user=employee)
+            profile_update = {k: v for k, v in data.items() if k in _PROFILE_FIELD_KEYS}
+            if 'custom_field_values' in profile_update:
+                merged = dict(profile.custom_field_values or {})
+                merged.update(profile_update['custom_field_values'] or {})
+                profile_update['custom_field_values'] = merged
+            serializer = EmployeeProfileSerializer(profile, data=profile_update, partial=True)
+            if not serializer.is_valid():
+                return error(first_error(serializer.errors), data=serializer.errors)
+            profile._changed_by = request.user
+            serializer.save()
+            profile_saved = True
+
+        if len(update_fields) == 1 and not profile_saved:
             # Check if hr_id, reporting_manager_id, or reporting_approver_id will be set before bailing
             if 'hr_id' not in data and 'reporting_manager_id' not in data and 'reporting_approver_id' not in data:
                 return error('No updatable fields provided.')
@@ -3269,7 +3312,7 @@ class EmployeeDetailView(APIView):
             if 'reporting_approver' not in update_fields:
                 update_fields.append('reporting_approver')
 
-        if len(update_fields) == 1:
+        if len(update_fields) == 1 and not profile_saved:
             return error('No updatable fields provided.')
 
         # Promotion (Employee > Promotion screen) piggybacks on this same
@@ -5006,11 +5049,33 @@ class MyProfileView(APIView):
             'emergency_phone', 'emergency_email',
         ]
         profile_data = {k: v for k, v in data.items() if k in profile_fields}
-        if profile_data:
+
+        # Self-service can only edit Emergency-category custom fields (see
+        # MyProfileUpdateSerializer's custom_field_values docstring) — filtered
+        # here against OnboardingFieldConfig rather than trusted from the
+        # request, so a crafted request can't edit a Bank/Personal/Education
+        # custom field through this endpoint.
+        incoming_custom = data.get('custom_field_values') or {}
+        if incoming_custom:
+            from apps.accounts.models import OnboardingFieldConfig
+            allowed_keys = set(
+                OnboardingFieldConfig.objects.filter(
+                    step=OnboardingFieldConfig.STEP_EMERGENCY, is_custom=True,
+                ).values_list('field_key', flat=True)
+            )
+            incoming_custom = {k: v for k, v in incoming_custom.items() if k in allowed_keys}
+
+        if profile_data or incoming_custom:
             profile, _ = EmployeeProfile.objects.get_or_create(user=request.user)
             for key, value in profile_data.items():
                 setattr(profile, key, value)
-            profile.save(update_fields=list(profile_data.keys()) + ['updated_at'])
+            update_fields = list(profile_data.keys())
+            if incoming_custom:
+                merged = dict(profile.custom_field_values or {})
+                merged.update(incoming_custom)
+                profile.custom_field_values = merged
+                update_fields.append('custom_field_values')
+            profile.save(update_fields=update_fields + ['updated_at'])
 
         logger.info('Profile updated by %s', request.user.email)
         return success('Profile updated successfully.')

@@ -1365,6 +1365,14 @@ class MyProfileUpdateSerializer(serializers.Serializer):
     emergency_relationship = serializers.CharField(max_length=50,   required=False, allow_blank=True)
     emergency_phone        = serializers.CharField(max_length=20,   required=False, allow_blank=True)
     emergency_email        = serializers.EmailField(required=False, allow_blank=True)
+    # HR-created custom fields belonging to the Emergency Contact category
+    # only (self-service can't edit Personal/Education/Bank custom fields,
+    # matching those categories' existing built-in fields being read-only
+    # here) — MyProfileView.patch() filters this to Emergency-only keys
+    # before merging, so a crafted request can't smuggle in a Bank-category
+    # custom field edit even though this serializer itself doesn't know the
+    # difference.
+    custom_field_values    = serializers.DictField(required=False)
 
     def _validate_phone_value(self, value: str, field_label: str) -> str:
         if not value:
