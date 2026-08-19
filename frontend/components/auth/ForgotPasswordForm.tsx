@@ -49,28 +49,32 @@ const fieldStyle: React.CSSProperties = { marginBottom: "14px" };
 
 export default function ForgotPasswordForm({
   onBack,
+  initialCompanyCode,
 }: {
   onBack: () => void;
   sent: boolean;
   onSend: () => void;
+  initialCompanyCode?: string;
 }) {
-  const [step,       setStep]       = useState<ForgotStep>("email");
-  const [emailVal,   setEmailVal]   = useState("");
-  const [otp,        setOtp]        = useState("");
-  const [resetToken, setResetToken] = useState("");
-  const [newPwd,     setNewPwd]     = useState("");
-  const [confirmPwd, setConfirmPwd] = useState("");
-  const [showNew,    setShowNew]    = useState(false);
-  const [showConf,   setShowConf]   = useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
+  const [step,        setStep]        = useState<ForgotStep>("email");
+  const [companyCode, setCompanyCode] = useState(initialCompanyCode ?? "");
+  const [emailVal,    setEmailVal]    = useState("");
+  const [otp,         setOtp]         = useState("");
+  const [resetToken,  setResetToken]  = useState("");
+  const [newPwd,      setNewPwd]      = useState("");
+  const [confirmPwd,  setConfirmPwd]  = useState("");
+  const [showNew,     setShowNew]     = useState(false);
+  const [showConf,    setShowConf]    = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
 
   async function sendForgot(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!companyCode.trim()) { setError("Please enter your Company ID."); return; }
     if (!emailVal.trim()) { setError("Please enter your email address."); return; }
     setLoading(true); setError("");
     try {
-      await clientApi.post(API.auth.forgotPassword, { email: emailVal.trim() });
+      await clientApi.post(API.auth.forgotPassword, { company_code: companyCode.trim(), email: emailVal.trim() });
       setStep("otp");
     } catch (err) {
       const { message } = err as { message: string };
@@ -84,7 +88,7 @@ export default function ForgotPasswordForm({
     setLoading(true); setError("");
     try {
       const { data } = await clientApi.post<{ data?: { reset_token?: string }; reset_token?: string }>(
-        API.auth.verifyOtp, { email: emailVal.trim(), otp: otp.trim() },
+        API.auth.verifyOtp, { company_code: companyCode.trim(), email: emailVal.trim(), otp: otp.trim() },
       );
       const token = data?.data?.reset_token ?? (data as Record<string, unknown>).reset_token as string ?? "";
       setResetToken(token);
@@ -102,7 +106,7 @@ export default function ForgotPasswordForm({
     setLoading(true); setError("");
     try {
       await clientApi.post(API.auth.resetPassword, {
-        reset_token: resetToken, new_password: newPwd, confirm_password: confirmPwd,
+        company_code: companyCode.trim(), reset_token: resetToken, new_password: newPwd, confirm_password: confirmPwd,
       });
       setStep("done");
     } catch (err) {
@@ -147,6 +151,21 @@ export default function ForgotPasswordForm({
           {error && <ErrorBanner msg={error} />}
           <form onSubmit={sendForgot} noValidate>
             <div style={fieldStyle}>
+              <label htmlFor="forgot-company-code" style={labelStyle}>Company ID</label>
+              <input
+                id="forgot-company-code"
+                type="text"
+                className="login-input"
+                placeholder="e.g. ROYALHRMS"
+                value={companyCode}
+                onChange={e => setCompanyCode(e.target.value)}
+                required
+                autoComplete="organization"
+                autoFocus={!initialCompanyCode}
+                suppressHydrationWarning
+              />
+            </div>
+            <div style={fieldStyle}>
               <label htmlFor="forgot-email" style={labelStyle}>Email</label>
               <input
                 id="forgot-email"
@@ -157,7 +176,7 @@ export default function ForgotPasswordForm({
                 onChange={e => setEmailVal(e.target.value)}
                 required
                 autoComplete="email"
-                autoFocus
+                autoFocus={!!initialCompanyCode}
                 suppressHydrationWarning
               />
             </div>

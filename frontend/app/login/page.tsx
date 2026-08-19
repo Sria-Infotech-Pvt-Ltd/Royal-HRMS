@@ -210,6 +210,7 @@ export default function LoginPage() {
                 onBack={() => { setShowForgot(false); setForgotSent(false); }}
                 sent={forgotSent}
                 onSend={() => setForgotSent(true)}
+                initialCompanyCode={companyCode}
               />
             ) : (
               <form onSubmit={handleSubmit} noValidate>

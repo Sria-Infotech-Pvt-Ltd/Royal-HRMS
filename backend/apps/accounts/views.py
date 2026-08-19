@@ -594,14 +594,31 @@ class ForgotPasswordView(APIView):
     throttle_classes   = [ForgotPasswordRateThrottle]
 
     def post(self, request):
-        serializer = ForgotPasswordSerializer(data=request.data, context={})
+        serializer = ForgotPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        user = serializer.context.get('user')
+        company_code = serializer.validated_data['company_code']
+        email        = serializer.validated_data['email']
+
+        from apps.tenants.models import Client
+        try:
+            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
+        except Client.DoesNotExist:
+            return error('Invalid company code.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # Everything from here on must run against THIS company's schema —
+        # User/OTPVerification both live per-tenant, same reasoning as
+        # LoginView.
+        with client:
+            return self._send_otp(email)
+
+    def _send_otp(self, email):
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
         if not user:
-            # Return the same message regardless of whether the account exists
-            # to prevent attackers from enumerating registered email addresses.
+            # Same response regardless of whether the account exists, to
+            # prevent attackers from enumerating registered email addresses
+            # within a company they've already correctly identified.
             return success('OTP sent to your email address. It is valid for 10 minutes.')
 
         try:
@@ -635,9 +652,21 @@ class VerifyOTPView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        email     = serializer.validated_data['email']
-        otp_input = serializer.validated_data['otp']
+        company_code = serializer.validated_data['company_code']
+        email        = serializer.validated_data['email']
+        otp_input    = serializer.validated_data['otp']
 
+        from apps.tenants.models import Client
+        try:
+            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
+        except Client.DoesNotExist:
+            return error('Invalid company code.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # User/OTPVerification/PasswordResetToken all live per-tenant.
+        with client:
+            return self._verify(email, otp_input)
+
+    def _verify(self, email, otp_input):
         try:
             user = User.objects.get(email__iexact=email, is_active=True)
         except User.DoesNotExist:
@@ -682,9 +711,21 @@ class ResetPasswordView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        reset_token_id = serializer.validated_data['reset_token']
-        new_password   = serializer.validated_data['new_password']
+        company_code    = serializer.validated_data['company_code']
+        reset_token_id  = serializer.validated_data['reset_token']
+        new_password    = serializer.validated_data['new_password']
 
+        from apps.tenants.models import Client
+        try:
+            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
+        except Client.DoesNotExist:
+            return error('Invalid company code.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # PasswordResetToken/User both live per-tenant.
+        with client:
+            return self._reset(request, reset_token_id, new_password)
+
+    def _reset(self, request, reset_token_id, new_password):
         try:
             token_obj = PasswordResetToken.objects.select_related('user').get(id=reset_token_id)
         except PasswordResetToken.DoesNotExist:

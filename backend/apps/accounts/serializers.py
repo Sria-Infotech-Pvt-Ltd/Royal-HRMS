@@ -141,20 +141,18 @@ class LoginSerializer(serializers.Serializer):
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-
-    def validate_email(self, value: str) -> str:
-        # Never raise here for an unknown/inactive email — doing so makes this
-        # field fail validation, which short-circuits before the view's own
-        # "same response either way" branch ever runs, defeating the whole
-        # point of that branch (silently leaking which emails are registered).
-        user = User.objects.filter(email__iexact=value, is_active=True).first()
-        if user:
-            self.context['user'] = user
-        return value
+    # Required so the view knows which tenant schema to look the email up
+    # in — same reasoning as LoginSerializer.company_code. The actual User
+    # lookup can't happen here in a validate_email hook any more: it has to
+    # run only after the view has activated that schema (see
+    # ForgotPasswordView.post), never against whatever schema happens to be
+    # active when this serializer is validated.
+    company_code = serializers.CharField(max_length=50)
+    email        = serializers.EmailField()
 
 
 class VerifyOTPSerializer(serializers.Serializer):
+    company_code = serializers.CharField(max_length=50)
     email = serializers.EmailField()
     otp   = serializers.CharField(min_length=6, max_length=6)
 
@@ -165,6 +163,7 @@ class VerifyOTPSerializer(serializers.Serializer):
 
 
 class ResetPasswordSerializer(serializers.Serializer):
+    company_code     = serializers.CharField(max_length=50)
     reset_token      = serializers.UUIDField()
     new_password     = serializers.CharField(min_length=8, max_length=128, write_only=True)
     confirm_password = serializers.CharField(min_length=8, max_length=128, write_only=True)
