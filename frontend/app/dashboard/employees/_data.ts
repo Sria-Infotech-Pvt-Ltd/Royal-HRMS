@@ -4,6 +4,8 @@
 //  backend is ready (see fetchEmployees / fetchEmployee stubs).
 // ============================================================
 
+import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+
 export type EmployeeStatus = "active" | "onboarding" | "inactive";
 export type Gender = "male" | "female" | "transgender";
 
@@ -253,6 +255,85 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
   },
 
 ];
+
+// ── Settings-driven field config (Settings > Onboarding Fields) ────────────
+// PROFILE_SECTIONS' personal/education/bank/emergency FieldDefs use camelCase
+// keys (dateOfBirth, fatherName, ...) while OnboardingFieldConfig/EmployeeProfile
+// use the backend's snake_case column names — this maps the ones that overlap.
+// Fields with no entry here (department, code, uanNumber, ...) aren't covered
+// by onboarding-field config and are always shown as-is.
+const CAMEL_TO_SNAKE: Record<string, string> = {
+  dateOfBirth: "date_of_birth", gender: "gender", maritalStatus: "marital_status",
+  fatherName: "father_name", bloodGroup: "blood_group",
+  currentAddress: "current_address", permanentAddress: "permanent_address",
+  highestQualification: "highest_qualification", institution: "institution",
+  yearOfPassing: "year_of_passing", specialization: "specialization",
+  totalExperienceYears: "total_experience_years", previousEmployer: "previous_employer",
+  previousDesignation: "previous_designation", leavingReason: "leaving_reason",
+  accountHolderName: "account_holder_name", accountType: "account_type",
+  accountNumber: "account_number", ifscCode: "ifsc_code",
+  bankName: "bank_name", bankBranch: "bank_branch_name",
+  emergencyName: "emergency_name", emergencyRelationship: "emergency_relationship",
+  emergencyPhone: "emergency_phone", emergencyEmail: "emergency_email",
+};
+
+const SECTION_TO_STEP: Record<string, number> = {
+  personal: 0, education: 1, bank: 2, emergency: 3,
+};
+
+function fieldTypeFromConfig(type: string): FieldType {
+  if (type === "dropdown") return "select";
+  if (type === "textarea") return "textarea";
+  if (type === "number") return "text";
+  if (type === "date") return "date";
+  if (type === "checkbox") return "radio";
+  return "text";
+}
+
+/**
+ * Filters a grid section's built-in fields by the settings-driven visible
+ * flag, and appends that step's HR-created custom fields as additional
+ * FieldDefs — same config the onboarding wizard and self-service Profile
+ * page read, so a field hidden/added in Settings > Onboarding Fields shows
+ * up consistently everywhere. Returns the section unchanged if it's not one
+ * of the four onboarding-covered sections, or if config hasn't loaded yet
+ * (empty {}) — better to show everything than flash-hide fields while
+ * loading.
+ */
+export function applyFieldConfig(section: ProfileSection, fieldConfig: OnboardingFieldConfigByStep): ProfileSection {
+  if (section.kind !== "grid") return section;
+  const step = SECTION_TO_STEP[section.id];
+  if (step === undefined) return section;
+  const configs = fieldConfig[String(step)];
+  if (!configs || configs.length === 0) return section;
+
+  const visibleFields = section.fields.filter(f => {
+    const snakeKey = CAMEL_TO_SNAKE[f.key];
+    if (!snakeKey) return true;
+    const entry = configs.find(c => c.field_key === snakeKey);
+    return entry ? entry.visible : true;
+  });
+
+  const customFields: FieldDef[] = configs
+    .filter(c => c.is_custom && c.visible)
+    .map(c => ({
+      key: c.field_key,
+      label: c.label,
+      type: fieldTypeFromConfig(c.field_type),
+      required: c.required,
+      full: c.field_type === "textarea",
+      options: c.field_type === "dropdown" ? c.options.map(o => ({ value: o, label: o })) : undefined,
+    }));
+
+  return { ...section, fields: [...visibleFields, ...customFields] };
+}
+
+/** Every custom field_key across all onboarding-covered sections — used to
+ * pull custom_field_values out of the flat `values` state when building the
+ * PUT payload. */
+export function customFieldKeys(fieldConfig: OnboardingFieldConfigByStep): string[] {
+  return Object.values(fieldConfig).flat().filter(c => c.is_custom).map(c => c.field_key);
+}
 
 // ── top-level tab bar of the detail page ────────────────────
 export const PROFILE_TABS = [

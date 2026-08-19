@@ -4334,9 +4334,16 @@ class OnboardingFieldConfigView(APIView):
 
 class OnboardingFieldConfigPublicView(APIView):
     """
-    Wizard-facing: only visible fields, grouped by step. Every onboarding
-    employee needs this regardless of role — not gated behind settings.view,
-    same reasoning as FaceVerificationStatusView.
+    Every field (visible AND hidden) grouped by step — used by the wizard,
+    the self-service Profile page, and the HR Employee Detail page, each of
+    which filters to `visible` client-side rather than here. Returning only
+    visible fields would make "hidden" indistinguishable from "config hasn't
+    loaded yet" for callers that need to tell the two apart (Profile/Employee
+    pages fall back to "show it" while loading — a hidden field would then
+    incorrectly show forever, since it never appears in the response at all
+    for them to find visible=false on). Every onboarding employee needs this
+    regardless of role — not gated behind settings.view, same reasoning as
+    FaceVerificationStatusView.
     """
     permission_classes = [IsAuthenticated]
 
@@ -4346,8 +4353,7 @@ class OnboardingFieldConfigPublicView(APIView):
 
         by_step: dict = defaultdict(list)
         for c in OnboardingFieldConfigCacheService.get_all():
-            if c.visible:
-                by_step[c.step].append(c)
+            by_step[c.step].append(c)
 
         data = {
             str(step): OnboardingFieldConfigSerializer(

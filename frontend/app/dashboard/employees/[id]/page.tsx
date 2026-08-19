@@ -5,10 +5,14 @@ import Link from "next/link";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { useFetch } from "@/hooks/useFetch";
+import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
   apiDocumentToEntry,
+  applyFieldConfig,
+  customFieldKeys,
   type ApiDocument,
   type DetailValues,
   type DocEntry,
@@ -43,6 +47,7 @@ interface ApiProfile {
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
   uan_number?: string; name_as_per_aadhar?: string;
+  custom_field_values?: Record<string, string>;
 }
 
 interface ApiEmployee {
@@ -165,6 +170,10 @@ function apiToEmployee(u: ApiEmployee): Employee {
       // EPF / Statutory
       uanNumber:       p.uan_number          || "",
       nameAsPerAadhar: p.name_as_per_aadhar  || "",
+      // HR-created custom fields (Settings > Onboarding Fields) — keyed by
+      // their own snake_case field_key, never collides with the camelCase
+      // keys above.
+      ...(p.custom_field_values ?? {}),
     },
     tables: {},
     documents: buildDocEntries(u.documents ?? []),
@@ -282,7 +291,13 @@ export default function EmployeeProfilePage({
       .finally(() => setLoading(false));
   }, [id]);
 
-  const section = PROFILE_SECTIONS.find(s => s.id === sectionId)!;
+  // Per-company field visibility/custom fields — same endpoint the
+  // onboarding wizard and self-service Profile page read.
+  const { data: fieldConfigData } = useFetch<OnboardingFieldConfigByStep>(API.onboarding.fieldConfig);
+  const fieldConfig = fieldConfigData ?? {};
+
+  const rawSection = PROFILE_SECTIONS.find(s => s.id === sectionId)!;
+  const section = applyFieldConfig(rawSection, fieldConfig);
 
   const dirty =
     JSON.stringify(values) !== JSON.stringify(baseValues) ||
@@ -340,37 +355,47 @@ export default function EmployeeProfilePage({
         reporting_approver_id:  values.reportingApproverId  || null,
         hr_id:                  values.hrId                  || null,
         // Personal fields
+        // date_of_birth/year_of_passing/total_experience_years are the only
+        // fields below backed by a nullable model column — everything else
+        // is `blank=True` without `null=True`, so the serializer rejects an
+        // explicit null and an empty string must be sent instead.
         date_of_birth:          values.dateOfBirth          || null,
-        gender:                 values.gender               || null,
-        marital_status:         values.maritalStatus?.toLowerCase() || null,
-        father_name:            values.fatherName           || null,
-        blood_group:            values.bloodGroup           || null,
-        current_address:        values.currentAddress       || null,
-        permanent_address:      values.permanentAddress     || null,
+        gender:                 values.gender               || "",
+        marital_status:         values.maritalStatus?.toLowerCase() || "",
+        father_name:            values.fatherName           || "",
+        blood_group:            values.bloodGroup           || "",
+        current_address:        values.currentAddress       || "",
+        permanent_address:      values.permanentAddress     || "",
         // Education & experience
-        highest_qualification:  values.highestQualification || null,
-        institution:            values.institution          || null,
+        highest_qualification:  values.highestQualification || "",
+        institution:            values.institution          || "",
         year_of_passing:        values.yearOfPassing        || null,
-        specialization:         values.specialization       || null,
+        specialization:         values.specialization       || "",
         total_experience_years: values.totalExperienceYears || null,
-        previous_employer:      values.previousEmployer     || null,
-        previous_designation:   values.previousDesignation  || null,
-        leaving_reason:         values.leavingReason        || null,
+        previous_employer:      values.previousEmployer     || "",
+        previous_designation:   values.previousDesignation  || "",
+        leaving_reason:         values.leavingReason        || "",
         // Bank details
-        account_holder_name:    values.accountHolderName    || null,
-        account_type:           values.accountType          || null,
-        account_number:         values.accountNumber        || null,
-        ifsc_code:              values.ifscCode             || null,
-        bank_name:              values.bankName             || null,
-        bank_branch_name:       values.bankBranch           || null,
+        account_holder_name:    values.accountHolderName    || "",
+        account_type:           values.accountType          || "",
+        account_number:         values.accountNumber        || "",
+        ifsc_code:              values.ifscCode             || "",
+        bank_name:              values.bankName             || "",
+        bank_branch_name:       values.bankBranch           || "",
         // Emergency contact
-        emergency_name:         values.emergencyName        || null,
-        emergency_relationship: values.emergencyRelationship || null,
-        emergency_phone:        values.emergencyPhone       || null,
-        emergency_email:        values.emergencyEmail       || null,
+        emergency_name:         values.emergencyName        || "",
+        emergency_relationship: values.emergencyRelationship || "",
+        emergency_phone:        values.emergencyPhone       || "",
+        emergency_email:        values.emergencyEmail       || "",
         // EPF / Statutory
-        uan_number:          values.uanNumber       || null,
-        name_as_per_aadhar:  values.nameAsPerAadhar || null,
+        uan_number:          values.uanNumber       || "",
+        name_as_per_aadhar:  values.nameAsPerAadhar || "",
+        // HR-created custom fields (Settings > Onboarding Fields) — this page
+        // edits any category's custom fields under the same isEditing/
+        // employees.edit gate as their section's built-ins.
+        custom_field_values: Object.fromEntries(
+          customFieldKeys(fieldConfig).map(key => [key, values[key] ?? ""]),
+        ),
       };
 
       await clientApi.put(API.employees.detail(id), employeePayload);

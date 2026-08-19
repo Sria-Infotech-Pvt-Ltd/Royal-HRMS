@@ -169,11 +169,14 @@ export default function OnboardingPage() {
     setSaveMsg(null); setSaveErr(null);
 
     // Required-ness is settings-driven now (see Settings > Onboarding
-    // Fields) — fieldConfig[tab] already reflects each company's own
-    // visible+required choices, covering both built-in and custom fields.
+    // Fields) — fieldConfig[tab] covers each company's own visible+required
+    // choices for both built-in and custom fields. A hidden field can never
+    // block saving even if still marked required in the config (matches the
+    // backend's _step_required_configs, which checks visible AND required
+    // together for the same reason).
     const stepConfigs = fieldConfig[String(tab)] ?? [];
     const missing = stepConfigs
-      .filter(c => c.required)
+      .filter(c => c.visible && c.required)
       .filter(c => {
         const value = c.is_custom ? customValues[c.field_key] : form[c.field_key as keyof ProfileForm];
         return !value?.trim();
@@ -466,7 +469,7 @@ export default function OnboardingPage() {
 
           {tab <= 3 && (
             <DynamicStepFields
-              configs={fieldConfig[String(tab)] ?? []}
+              configs={(fieldConfig[String(tab)] ?? []).filter(c => c.visible)}
               form={form}
               customValues={customValues}
               onBuiltinChange={set}

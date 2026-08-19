@@ -12,6 +12,8 @@ import ChangePasswordForm from "./ChangePasswordForm";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
+import OnboardingDynamicField from "@/components/OnboardingDynamicField";
+import type { OnboardingFieldConfig, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 
 interface ProfileSub {
   date_of_birth:          string | null;
@@ -39,6 +41,7 @@ interface ProfileSub {
   emergency_relationship: string | null;
   emergency_phone:        string | null;
   emergency_email:        string | null;
+  custom_field_values:    Record<string, string> | null;
 }
 
 interface AssignedPerson {
@@ -141,6 +144,19 @@ function ReadField({ label, value }: { label: string; value: string | number | n
   );
 }
 
+// Built-in field visible unless the settings-driven config explicitly says
+// otherwise — while fieldConfig is still loading (empty {}), nothing here
+// has an entry yet, so this defaults to "show it" rather than a hide-then-show
+// flash for the common case (nothing hidden).
+function isBuiltinVisible(fieldConfig: OnboardingFieldConfigByStep, step: number, fieldKey: string): boolean {
+  const entry = (fieldConfig[String(step)] ?? []).find(c => c.field_key === fieldKey);
+  return entry ? entry.visible : true;
+}
+
+function customFieldsFor(fieldConfig: OnboardingFieldConfigByStep, step: number): OnboardingFieldConfig[] {
+  return (fieldConfig[String(step)] ?? []).filter(c => c.is_custom && c.visible);
+}
+
 type TabId = "personal" | "work" | "education" | "bank" | "documents" | "face" | "security";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
@@ -156,10 +172,18 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 export default function ProfileClient({ session }: { session: SessionPayload }) {
   const { data: profile, loading, error: profileError } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
+  // Per-company field visibility/custom fields (Settings > Onboarding Fields)
+  // — same endpoint the onboarding wizard uses. Only Emergency Contact
+  // (step 3) custom fields are editable here, matching that section's
+  // existing full editability; Personal/Education/Bank customs render
+  // read-only below, matching those sections' existing fields.
+  const { data: fieldConfigData } = useFetch<OnboardingFieldConfigByStep>(API.onboarding.fieldConfig);
+  const fieldConfig = fieldConfigData ?? {};
 
   const [active, setActive] = useState<TabId>("personal");
 
   const [form,   setForm]   = useState<EditableFields>(EMPTY);
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [toast,  setToast]  = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -206,10 +230,15 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       emergency_phone:        profile.profile?.emergency_phone ?? "",
       emergency_email:        profile.profile?.emergency_email ?? "",
     });
+    setCustomValues(profile.profile?.custom_field_values ?? {});
   }, [profile]);
 
   function field(key: keyof EditableFields, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
+  }
+
+  function customField(fieldKey: string, value: string) {
+    setCustomValues(prev => ({ ...prev, [fieldKey]: value }));
   }
 
   function showToast(msg: string, ok = true) {
@@ -220,7 +249,15 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   async function handleSave() {
     setSaving(true);
     try {
-      await clientApi.patch(API.employees.me, form);
+      // Only Emergency-category (step 3) custom fields are ever edited here
+      // — the backend independently filters to the same set server-side, but
+      // scoping the payload client-side too keeps the request itself honest
+      // about what this page actually lets you change.
+      const emergencyCustomKeys = new Set(customFieldsFor(fieldConfig, 3).map(c => c.field_key));
+      const custom_field_values = Object.fromEntries(
+        Object.entries(customValues).filter(([k]) => emergencyCustomKeys.has(k)),
+      );
+      await clientApi.patch(API.employees.me, { ...form, custom_field_values });
       showToast("Profile updated successfully.");
     } catch {
       showToast("Failed to update profile.", false);
@@ -381,14 +418,17 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                   placeholder="+91 98765 43210" suppressHydrationWarning />
               </div>
               <div className="form-row cols-2">
-                <ReadField label="Date of Birth"   value={fmtDate(p?.date_of_birth)} />
-                <ReadField label="Gender"          value={p?.gender} />
+                {isBuiltinVisible(fieldConfig, 0, "date_of_birth") && <ReadField label="Date of Birth"   value={fmtDate(p?.date_of_birth)} />}
+                {isBuiltinVisible(fieldConfig, 0, "gender")        && <ReadField label="Gender"          value={p?.gender} />}
               </div>
               <div className="form-row cols-2">
-                <ReadField label="Marital Status"  value={p?.marital_status} />
-                <ReadField label="Blood Group"     value={p?.blood_group} />
+                {isBuiltinVisible(fieldConfig, 0, "marital_status") && <ReadField label="Marital Status" value={p?.marital_status} />}
+                {isBuiltinVisible(fieldConfig, 0, "blood_group")    && <ReadField label="Blood Group"    value={p?.blood_group} />}
               </div>
-              <ReadField label="Father's Name"     value={p?.father_name} />
+              {isBuiltinVisible(fieldConfig, 0, "father_name") && <ReadField label="Father's Name" value={p?.father_name} />}
+              {customFieldsFor(fieldConfig, 0).map(c => (
+                <ReadField key={c.field_key} label={c.label} value={p?.custom_field_values?.[c.field_key]} />
+              ))}
             </div>
           </div>
 
@@ -398,18 +438,22 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               <span className="card-title"><i className="ti ti-map-pin" />Address</span>
             </div>
             <div className="card-body">
-              <div className="field-group">
-                <label className="field-label">Current Address</label>
-                <textarea className="field-input" rows={2} value={form.current_address}
-                  onChange={e => field("current_address", e.target.value)}
-                  placeholder="Current residential address" style={{ resize: "vertical" }} suppressHydrationWarning />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Permanent Address</label>
-                <textarea className="field-input" rows={2} value={form.permanent_address}
-                  onChange={e => field("permanent_address", e.target.value)}
-                  placeholder="Permanent / home town address" style={{ resize: "vertical" }} suppressHydrationWarning />
-              </div>
+              {isBuiltinVisible(fieldConfig, 0, "current_address") && (
+                <div className="field-group">
+                  <label className="field-label">Current Address</label>
+                  <textarea className="field-input" rows={2} value={form.current_address}
+                    onChange={e => field("current_address", e.target.value)}
+                    placeholder="Current residential address" style={{ resize: "vertical" }} suppressHydrationWarning />
+                </div>
+              )}
+              {isBuiltinVisible(fieldConfig, 0, "permanent_address") && (
+                <div className="field-group">
+                  <label className="field-label">Permanent Address</label>
+                  <textarea className="field-input" rows={2} value={form.permanent_address}
+                    onChange={e => field("permanent_address", e.target.value)}
+                    placeholder="Permanent / home town address" style={{ resize: "vertical" }} suppressHydrationWarning />
+                </div>
+              )}
             </div>
           </div>
 
@@ -425,33 +469,53 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             </div>
             <div className="card-body">
               <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Name</label>
-                  <input className="field-input" value={form.emergency_name}
-                    onChange={e => field("emergency_name", e.target.value)}
-                    placeholder="Contact name" suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Relationship</label>
-                  <input className="field-input" value={form.emergency_relationship}
-                    onChange={e => field("emergency_relationship", e.target.value)}
-                    placeholder="e.g. Spouse, Parent" suppressHydrationWarning />
-                </div>
+                {isBuiltinVisible(fieldConfig, 3, "emergency_name") && (
+                  <div className="field-group">
+                    <label className="field-label">Name</label>
+                    <input className="field-input" value={form.emergency_name}
+                      onChange={e => field("emergency_name", e.target.value)}
+                      placeholder="Contact name" suppressHydrationWarning />
+                  </div>
+                )}
+                {isBuiltinVisible(fieldConfig, 3, "emergency_relationship") && (
+                  <div className="field-group">
+                    <label className="field-label">Relationship</label>
+                    <input className="field-input" value={form.emergency_relationship}
+                      onChange={e => field("emergency_relationship", e.target.value)}
+                      placeholder="e.g. Spouse, Parent" suppressHydrationWarning />
+                  </div>
+                )}
               </div>
               <div className="form-row cols-2">
-                <div className="field-group">
-                  <label className="field-label">Phone</label>
-                  <input className="field-input" value={form.emergency_phone}
-                    onChange={e => field("emergency_phone", e.target.value)}
-                    placeholder="+91 98765 43210" suppressHydrationWarning />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input className="field-input" value={form.emergency_email}
-                    onChange={e => field("emergency_email", e.target.value)}
-                    placeholder="email@example.com" suppressHydrationWarning />
-                </div>
+                {isBuiltinVisible(fieldConfig, 3, "emergency_phone") && (
+                  <div className="field-group">
+                    <label className="field-label">Phone</label>
+                    <input className="field-input" value={form.emergency_phone}
+                      onChange={e => field("emergency_phone", e.target.value)}
+                      placeholder="+91 98765 43210" suppressHydrationWarning />
+                  </div>
+                )}
+                {isBuiltinVisible(fieldConfig, 3, "emergency_email") && (
+                  <div className="field-group">
+                    <label className="field-label">Email</label>
+                    <input className="field-input" value={form.emergency_email}
+                      onChange={e => field("emergency_email", e.target.value)}
+                      placeholder="email@example.com" suppressHydrationWarning />
+                  </div>
+                )}
               </div>
+              {customFieldsFor(fieldConfig, 3).length > 0 && (
+                <div className="form-row cols-2">
+                  {customFieldsFor(fieldConfig, 3).map(c => (
+                    <OnboardingDynamicField
+                      key={c.field_key}
+                      config={c}
+                      value={customValues[c.field_key] ?? ""}
+                      onChange={v => customField(c.field_key, v)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -520,21 +584,24 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
         </div>
         <div className="card-body">
           <div className="form-row cols-2">
-            <ReadField label="Qualification"     value={p?.highest_qualification} />
-            <ReadField label="Institution"       value={p?.institution} />
+            {isBuiltinVisible(fieldConfig, 1, "highest_qualification") && <ReadField label="Qualification" value={p?.highest_qualification} />}
+            {isBuiltinVisible(fieldConfig, 1, "institution")           && <ReadField label="Institution"   value={p?.institution} />}
           </div>
           <div className="form-row cols-2">
-            <ReadField label="Year of Passing"   value={p?.year_of_passing} />
-            <ReadField label="Specialization"    value={p?.specialization} />
+            {isBuiltinVisible(fieldConfig, 1, "year_of_passing") && <ReadField label="Year of Passing" value={p?.year_of_passing} />}
+            {isBuiltinVisible(fieldConfig, 1, "specialization")  && <ReadField label="Specialization"  value={p?.specialization} />}
           </div>
           <div className="form-row cols-2">
-            <ReadField label="Experience (yrs)"  value={p?.total_experience_years} />
-            <ReadField label="Previous Employer" value={p?.previous_employer} />
+            {isBuiltinVisible(fieldConfig, 1, "total_experience_years") && <ReadField label="Experience (yrs)"  value={p?.total_experience_years} />}
+            {isBuiltinVisible(fieldConfig, 1, "previous_employer")      && <ReadField label="Previous Employer" value={p?.previous_employer} />}
           </div>
           <div className="form-row cols-2">
-            <ReadField label="Previous Role"     value={p?.previous_designation} />
-            <ReadField label="Leaving Reason"    value={p?.leaving_reason} />
+            {isBuiltinVisible(fieldConfig, 1, "previous_designation") && <ReadField label="Previous Role"  value={p?.previous_designation} />}
+            {isBuiltinVisible(fieldConfig, 1, "leaving_reason")       && <ReadField label="Leaving Reason" value={p?.leaving_reason} />}
           </div>
+          {customFieldsFor(fieldConfig, 1).map(c => (
+            <ReadField key={c.field_key} label={c.label} value={p?.custom_field_values?.[c.field_key]} />
+          ))}
         </div>
       </div>
       )}
@@ -549,17 +616,20 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
         </div>
         <div className="card-body">
           <div className="form-row cols-2">
-            <ReadField label="Bank Name"       value={p?.bank_name} />
-            <ReadField label="Account Type"    value={p?.account_type} />
+            {isBuiltinVisible(fieldConfig, 2, "bank_name")    && <ReadField label="Bank Name"    value={p?.bank_name} />}
+            {isBuiltinVisible(fieldConfig, 2, "account_type") && <ReadField label="Account Type" value={p?.account_type} />}
           </div>
           <div className="form-row cols-2">
-            <ReadField label="Account Holder"  value={p?.account_holder_name} />
-            <ReadField label="Account Number"  value={p?.account_number ? `••••${p.account_number.slice(-4)}` : null} />
+            {isBuiltinVisible(fieldConfig, 2, "account_holder_name") && <ReadField label="Account Holder" value={p?.account_holder_name} />}
+            {isBuiltinVisible(fieldConfig, 2, "account_number")      && <ReadField label="Account Number" value={p?.account_number ? `••••${p.account_number.slice(-4)}` : null} />}
           </div>
           <div className="form-row cols-2">
-            <ReadField label="IFSC Code"       value={p?.ifsc_code} />
-            <ReadField label="Bank Branch"     value={p?.bank_branch_name} />
+            {isBuiltinVisible(fieldConfig, 2, "ifsc_code")        && <ReadField label="IFSC Code"   value={p?.ifsc_code} />}
+            {isBuiltinVisible(fieldConfig, 2, "bank_branch_name") && <ReadField label="Bank Branch" value={p?.bank_branch_name} />}
           </div>
+          {customFieldsFor(fieldConfig, 2).map(c => (
+            <ReadField key={c.field_key} label={c.label} value={p?.custom_field_values?.[c.field_key]} />
+          ))}
         </div>
       </div>
       )}

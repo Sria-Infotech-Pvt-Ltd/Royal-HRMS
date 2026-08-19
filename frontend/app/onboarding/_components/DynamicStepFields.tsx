@@ -1,6 +1,6 @@
 "use client";
 
-import DynamicField from "./DynamicField";
+import DynamicField from "@/components/OnboardingDynamicField";
 import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
 import type { ProfileForm } from "../_types";
 
