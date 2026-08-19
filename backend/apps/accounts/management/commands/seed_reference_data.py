@@ -4,10 +4,12 @@ Management command: seed_reference_data
 Re-seeds all reference / configuration data that was delivered via Django
 data migrations but is not re-applied if those rows are deleted at runtime.
 
-Run:  python manage.py seed_reference_data
+Run:  python manage.py seed_reference_data --schema tenant_royalhrms
+      python manage.py seed_reference_data --all
 """
-from django.core.management.base import BaseCommand
 from django.db import transaction
+
+from core.tenant_command import TenantCommand
 
 
 # ── States & Cities ────────────────────────────────────────────────────────────
@@ -421,10 +423,13 @@ EMAIL_TEMPLATES = [
 ]
 
 
-class Command(BaseCommand):
-    help = 'Re-seeds states, cities, email template categories, email templates, and EmployeeCodeSettings'
+class Command(TenantCommand):
+    help = (
+        'Re-seeds states, cities, email template categories, email templates, and '
+        'EmployeeCodeSettings. Requires --schema/--company-code/--all.'
+    )
 
-    def handle(self, *args, **options):
+    def handle_tenant(self, client, *args, **options):
         with transaction.atomic():
             self._seed_states_cities()
             self._seed_email_categories()

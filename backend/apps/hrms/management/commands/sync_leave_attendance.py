@@ -4,29 +4,28 @@ Backfill AttendanceRecord rows for all approved leave requests.
 Run once to fix existing data, then leave approval auto-syncs going forward.
 
 Usage:
-    python manage.py sync_leave_attendance
-    python manage.py sync_leave_attendance --dry-run
-    python manage.py sync_leave_attendance --year 2026
+    python manage.py sync_leave_attendance --schema tenant_royalhrms
+    python manage.py sync_leave_attendance --all --dry-run
+    python manage.py sync_leave_attendance --schema tenant_royalhrms --year 2026
 """
 import logging
 from datetime import timedelta
 
-from django.core.management.base import BaseCommand
-
 from apps.attendance.models import AttendanceRecord
 from apps.hrms.models import LeaveRequest, REQ_APPROVED
+from core.tenant_command import TenantCommand
 
 logger = logging.getLogger(__name__)
 
 
-class Command(BaseCommand):
-    help = 'Sync approved leave requests into AttendanceRecord (status=on_leave).'
+class Command(TenantCommand):
+    help = 'Sync approved leave requests into AttendanceRecord (status=on_leave). Requires --schema/--company-code/--all.'
 
-    def add_arguments(self, parser):
+    def add_tenant_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true', help='Preview changes without writing.')
         parser.add_argument('--year', type=int, default=None, help='Limit to a specific year.')
 
-    def handle(self, *args, **options):
+    def handle_tenant(self, client, *args, **options):
         dry_run = options['dry_run']
         year    = options['year']
 

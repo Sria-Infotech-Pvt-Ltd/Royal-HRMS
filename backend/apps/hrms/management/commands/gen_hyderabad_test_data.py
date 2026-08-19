@@ -2,7 +2,7 @@
 One-off dummy-data generator: 1 manager + 1 HR + 7 employees, Hyderabad branch,
 with July 2026 attendance + leave data, for testing a payroll run.
 
-Run with: manage.py gen_hyderabad_test_data
+Run with: manage.py gen_hyderabad_test_data --schema tenant_royalhrms
 Not wired into any URL/schedule -- delete this file after use if it should
 not remain in the codebase long-term.
 """
@@ -10,7 +10,6 @@ import calendar
 from datetime import date, time
 from decimal import Decimal
 
-from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.accounts.models import Department, Designation, EmployeeProfile, Role, User
@@ -18,16 +17,17 @@ from apps.attendance.models import AttendanceRecord
 from apps.branch.models import Branch
 from apps.hrms.models import LeaveBalance, LeaveRequest
 from apps.payroll.models import EmployeeSalaryConfig
+from core.tenant_command import TenantCommand
 
 BRANCH_NAME = "Hyderabad"
 JOIN_DATE = date(2025, 6, 1)
 YEAR, MONTH = 2026, 7
 
 
-class Command(BaseCommand):
-    help = "Generate 1 manager + 1 HR + 7 employees for Hyderabad with July 2026 attendance/leave data."
+class Command(TenantCommand):
+    help = "Generate 1 manager + 1 HR + 7 employees for Hyderabad with July 2026 attendance/leave data. Requires --schema/--company-code/--all."
 
-    def handle(self, *args, **options):
+    def handle_tenant(self, client, *args, **options):
         days_in_month = calendar.monthrange(YEAR, MONTH)[1]
 
         Branch.objects.get(branch_name=BRANCH_NAME)  # sanity check it exists

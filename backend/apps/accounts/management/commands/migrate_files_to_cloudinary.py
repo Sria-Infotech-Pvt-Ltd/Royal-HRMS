@@ -6,17 +6,17 @@ Cloudinary, then updates the database record so future URL lookups resolve
 to the Cloudinary CDN instead of the local /media/ path.
 
 Usage:
-    python manage.py migrate_files_to_cloudinary
-    python manage.py migrate_files_to_cloudinary --dry-run
+    python manage.py migrate_files_to_cloudinary --schema tenant_royalhrms
+    python manage.py migrate_files_to_cloudinary --all --dry-run
 """
 
 import os
 
 from django.conf import settings
 from django.core.files import File
-from django.core.management.base import BaseCommand
 
 from apps.accounts.models import Document, EmailTemplateAttachment
+from core.tenant_command import TenantCommand
 
 
 def _is_local_path(name: str) -> bool:
@@ -24,17 +24,20 @@ def _is_local_path(name: str) -> bool:
     return bool(name) and not name.startswith(('http://', 'https://'))
 
 
-class Command(BaseCommand):
-    help = 'Migrate locally stored Document and EmailTemplateAttachment files to Cloudinary.'
+class Command(TenantCommand):
+    help = (
+        'Migrate locally stored Document and EmailTemplateAttachment files to Cloudinary. '
+        'Requires --schema/--company-code/--all.'
+    )
 
-    def add_arguments(self, parser):
+    def add_tenant_arguments(self, parser):
         parser.add_argument(
             '--dry-run',
             action='store_true',
             help='Print what would be migrated without making any changes.',
         )
 
-    def handle(self, *args, **options):
+    def handle_tenant(self, client, *args, **options):
         dry_run   = options['dry_run']
         media_root = settings.MEDIA_ROOT
 
