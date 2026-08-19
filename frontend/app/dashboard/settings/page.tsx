@@ -13,6 +13,7 @@ const SETTINGS_ITEMS = [
   { id: "payroll-config",     cat: "modules", icon: "ti-report-money",    iconClass: "sc-modules", label: "Payroll Rules",         desc: "Salary components, tax slabs and statutory" },
   { id: "attendance-config",  cat: "modules", icon: "ti-clock",           iconClass: "sc-modules", label: "Attendance Rules",      desc: "Shift timings, late marks and overtime" },
   { id: "assessment-config",  cat: "modules", icon: "ti-clipboard-check", iconClass: "sc-modules", label: "Assessment Config",     desc: "Pass percentage, attempt limits and time settings" },
+  { id: "onboarding-fields",  cat: "modules", icon: "ti-forms",           iconClass: "sc-modules", label: "Onboarding Fields",     desc: "Show, hide, require, or add fields on the employee onboarding wizard" },
   { id: "referral-rules",     cat: "modules", icon: "ti-user-plus",       iconClass: "sc-modules", label: "Referral Rules",        desc: "Manage the rules and bonus details shown on the Referral page" },
   { id: "email-templates",    cat: "comm",    icon: "ti-mail",            iconClass: "sc-comm",    label: "Email Templates",       desc: "Customize transactional emails and birthday wish settings" },
   { id: "smtp",               cat: "comm",    icon: "ti-server",          iconClass: "sc-comm",    label: "SMTP Settings",         desc: "Outgoing email server configuration" },
@@ -45,6 +46,7 @@ const ITEM_ROUTES: Record<string, string> = {
   "attendance-config":    "/dashboard/settings/attendance-config",
   "payroll-config":       "/dashboard/settings/payroll-config",
   "assessment-config":    "/dashboard/settings/assessment-config",
+  "onboarding-fields":    "/dashboard/settings/onboarding-fields",
   "referral-rules":       "/dashboard/settings/referral-rules",
   "notifications":        "/dashboard/settings/notifications",
 };

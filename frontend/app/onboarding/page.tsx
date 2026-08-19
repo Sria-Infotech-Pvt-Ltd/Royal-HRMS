@@ -8,23 +8,11 @@ import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
+import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import type { ProfileForm } from "./_types";
+import DynamicStepFields from "./_components/DynamicStepFields";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ProfileForm {
-  date_of_birth: string; gender: string; marital_status: string;
-  father_name: string; blood_group: string;
-  current_address: string; permanent_address: string;
-  highest_qualification: string; institution: string;
-  year_of_passing: string; specialization: string;
-  total_experience_years: string; previous_employer: string;
-  previous_designation: string; leaving_reason: string;
-  account_number: string; ifsc_code: string; bank_name: string;
-  bank_branch_name: string; account_holder_name: string; account_type: string;
-  emergency_name: string; emergency_relationship: string;
-  emergency_phone: string; emergency_email: string;
-  pan_number: string;
-}
 
 interface UploadedDoc { id: string; document_type: string; document_type_display: string; file?: string; file_name: string; uploaded_at: string; }
 
@@ -67,7 +55,6 @@ const DOC_TYPES = [
 ];
 
 const INP = "field-input";
-const SEL = "field-input";
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -88,6 +75,13 @@ export default function OnboardingPage() {
   const [checkingApproval,   setCheckingApproval]   = useState(false);
   const [highestSaved, setHighestSaved] = useState(-1);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Per-company configurable fields (steps 0-3) — see Settings > Onboarding
+  // Fields. Empty object until fetched; DynamicStepFields renders nothing for
+  // a step until its config arrives, same "nothing to show yet" behavior as
+  // every other useFetch-backed list in this app.
+  const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
 
   const [faceMandatory, setFaceMandatory] = useState(false);
   const [faceRegistration, setFaceRegistration] = useState<Partial<FaceRegistrationRequest> | null>(null);
@@ -138,9 +132,17 @@ export default function OnboardingPage() {
       setForm(prev => ({ ...prev, ...Object.fromEntries(
         Object.keys(EMPTY).map(k => [k, d[k] ?? ""])
       ) }));
+      setCustomValues(
+        Object.fromEntries(
+          Object.entries(d.custom_field_values ?? {}).map(([k, v]) => [k, v == null ? "" : String(v)]),
+        ),
+      );
     }).catch(() => {});
     clientApi.get(API.onboarding.documents).then(r => {
       setDocs(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get(API.onboarding.fieldConfig).then(r => {
+      setFieldConfig(r.data?.data ?? {});
     }).catch(() => {});
   }, []);
 
@@ -159,38 +161,24 @@ export default function OnboardingPage() {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
-  const STEP_REQUIRED: Record<number, { key: keyof ProfileForm; label: string }[]> = {
-    0: [
-      { key: "date_of_birth",  label: "Date of Birth" },
-      { key: "gender",         label: "Gender" },
-      { key: "marital_status", label: "Marital Status" },
-      { key: "father_name",    label: "Father's Name" },
-      { key: "current_address",label: "Current Address" },
-    ],
-    1: [
-      { key: "highest_qualification", label: "Highest Qualification" },
-      { key: "institution",           label: "Institution / University" },
-    ],
-    2: [
-      { key: "account_holder_name", label: "Account Holder Name" },
-      { key: "account_type",        label: "Account Type" },
-      { key: "account_number",      label: "Account Number" },
-      { key: "ifsc_code",           label: "IFSC Code" },
-      { key: "bank_name",           label: "Bank Name" },
-      { key: "bank_branch_name",    label: "Bank Branch Name" },
-    ],
-    3: [
-      { key: "emergency_name",         label: "Emergency Contact Name" },
-      { key: "emergency_relationship", label: "Relationship" },
-      { key: "emergency_phone",        label: "Emergency Contact Phone" },
-    ],
-  };
+  function setCustom(fieldKey: string, value: string) {
+    setCustomValues(prev => ({ ...prev, [fieldKey]: value }));
+  }
 
   async function saveSection(): Promise<boolean> {
     setSaveMsg(null); setSaveErr(null);
 
-    const required = STEP_REQUIRED[tab] ?? [];
-    const missing = required.filter(f => !form[f.key]?.trim()).map(f => f.label);
+    // Required-ness is settings-driven now (see Settings > Onboarding
+    // Fields) — fieldConfig[tab] already reflects each company's own
+    // visible+required choices, covering both built-in and custom fields.
+    const stepConfigs = fieldConfig[String(tab)] ?? [];
+    const missing = stepConfigs
+      .filter(c => c.required)
+      .filter(c => {
+        const value = c.is_custom ? customValues[c.field_key] : form[c.field_key as keyof ProfileForm];
+        return !value?.trim();
+      })
+      .map(c => c.label);
     if (missing.length > 0) {
       setSaveErr(`Please fill in: ${missing.join(", ")}`);
       return false;
@@ -202,9 +190,18 @@ export default function OnboardingPage() {
     // handleSubmit fire the single submit request.
     if (tab >= 4) return true;
 
+    // Custom field values for this step ride along in the same PATCH body —
+    // the backend filters incoming keys to this step's configured fields
+    // (built-in and custom alike), same as it already does for `form`.
+    const customForStep = Object.fromEntries(
+      stepConfigs.filter(c => c.is_custom).map(c => [c.field_key, customValues[c.field_key] ?? ""]),
+    );
+
     setSaving(true);
     try {
-      const res = await clientApi.patch<{ success: boolean; message: string }>(API.onboarding.profileStep(tab), form);
+      const res = await clientApi.patch<{ success: boolean; message: string }>(
+        API.onboarding.profileStep(tab), { ...form, ...customForStep },
+      );
       if (res.data?.success === false) {
         setSaveErr(res.data.message ?? "Please fill in all required fields.");
         return false;
@@ -467,10 +464,15 @@ export default function OnboardingPage() {
           {saveErr && <div className="alert alert-error"  style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
           {saveMsg && <div className="alert alert-success" style={{ marginBottom: "1.25rem" }}>{saveMsg}</div>}
 
-          {tab === 0 && <TabPersonal  form={form} set={set} />}
-          {tab === 1 && <TabEducation form={form} set={set} />}
-          {tab === 2 && <TabBank      form={form} set={set} />}
-          {tab === 3 && <TabEmergency form={form} set={set} />}
+          {tab <= 3 && (
+            <DynamicStepFields
+              configs={fieldConfig[String(tab)] ?? []}
+              form={form}
+              customValues={customValues}
+              onBuiltinChange={set}
+              onCustomChange={setCustom}
+            />
+          )}
           {tab === 4 && (
             <TabDocuments
               docs={docs}
@@ -589,189 +591,6 @@ const CARD_STYLE: React.CSSProperties = {
 
 // ── Shared: required marker ───────────────────────────────────────────────────
 const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }}>*</span>;
-
-// ── Tab: Personal ─────────────────────────────────────────────────────────────
-
-function TabPersonal({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm, v: string) => void }) {
-  return (
-    <div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Date of Birth<Req /></label>
-          <input type="date" className={INP} value={form.date_of_birth} onChange={e => set("date_of_birth", e.target.value)} />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Gender<Req /></label>
-          <select className={SEL} value={form.gender} onChange={e => set("gender", e.target.value)}>
-            <option value="">Select</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other / Prefer not to say</option>
-          </select>
-        </div>
-        <div className="field-group">
-          <label className="field-label">Marital Status<Req /></label>
-          <select className={SEL} value={form.marital_status} onChange={e => set("marital_status", e.target.value)}>
-            <option value="">Select</option>
-            <option value="single">Single</option>
-            <option value="married">Married</option>
-            <option value="divorced">Divorced</option>
-            <option value="widowed">Widowed</option>
-          </select>
-        </div>
-      </div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Father&apos;s Name<Req /></label>
-          <input className={INP} value={form.father_name} onChange={e => set("father_name", e.target.value)} placeholder="Father's full name" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Blood Group</label>
-          <select className={SEL} value={form.blood_group} onChange={e => set("blood_group", e.target.value)}>
-            <option value="">Select</option>
-            {["A+","A-","B+","B-","O+","O-","AB+","AB-"].map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </div>
-      </div>
-      <div className="field-group">
-        <label className="field-label">Current Address<Req /></label>
-        <textarea className={INP} rows={2} value={form.current_address} onChange={e => set("current_address", e.target.value)} placeholder="House / Flat no., Street, City, State, PIN" />
-      </div>
-      <div className="field-group">
-        <label className="field-label">Permanent Address <span style={{ color: "var(--outline)", fontWeight: 400, fontSize: ".8rem" }}>(if different)</span></label>
-        <textarea className={INP} rows={2} value={form.permanent_address} onChange={e => set("permanent_address", e.target.value)} placeholder="Leave blank if same as current" />
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Education & Experience ───────────────────────────────────────────────
-
-function TabEducation({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm, v: string) => void }) {
-  return (
-    <div>
-      <p style={{ fontWeight: 600, color: "var(--on-variant)", fontSize: ".8rem", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "1rem" }}>Education</p>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Highest Qualification<Req /></label>
-          <input className={INP} value={form.highest_qualification} onChange={e => set("highest_qualification", e.target.value)} placeholder="e.g. B.Tech, MBA" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Specialization</label>
-          <input className={INP} value={form.specialization} onChange={e => set("specialization", e.target.value)} placeholder="e.g. Computer Science" />
-        </div>
-      </div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Institution / University<Req /></label>
-          <input className={INP} value={form.institution} onChange={e => set("institution", e.target.value)} placeholder="College or university name" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Year of Passing</label>
-          <input type="number" className={INP} value={form.year_of_passing} onChange={e => set("year_of_passing", e.target.value)} placeholder="e.g. 2020" min={1950} max={2099} />
-        </div>
-      </div>
-      <p style={{ fontWeight: 600, color: "var(--on-variant)", fontSize: ".8rem", textTransform: "uppercase", letterSpacing: ".05em", margin: "1.5rem 0 1rem" }}>Work Experience</p>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Total Experience (years)</label>
-          <input type="number" className={INP} value={form.total_experience_years} onChange={e => set("total_experience_years", e.target.value)} placeholder="e.g. 3.5" step="0.1" min={0} />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Previous Employer</label>
-          <input className={INP} value={form.previous_employer} onChange={e => set("previous_employer", e.target.value)} placeholder="Company name (if any)" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Previous Designation</label>
-          <input className={INP} value={form.previous_designation} onChange={e => set("previous_designation", e.target.value)} placeholder="Job title (if any)" />
-        </div>
-      </div>
-      <div className="field-group">
-        <label className="field-label">Reason for Leaving</label>
-        <textarea className={INP} rows={2} value={form.leaving_reason} onChange={e => set("leaving_reason", e.target.value)} placeholder="Optional" />
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Bank Details ─────────────────────────────────────────────────────────
-
-function TabBank({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm, v: string) => void }) {
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fffbea", border: "1px solid #f0c040", borderRadius: 10, padding: ".75rem 1rem", marginBottom: "1.5rem" }}>
-        <i className="ti ti-alert-triangle" style={{ color: "#b07c00", fontSize: 18, flexShrink: 0 }} />
-        <span style={{ fontSize: ".85rem", color: "#7c5800" }}>Bank details are used for payroll. Ensure all information matches your passbook exactly.</span>
-      </div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Account Holder Name<Req /></label>
-          <input className={INP} value={form.account_holder_name} onChange={e => set("account_holder_name", e.target.value)} placeholder="As printed on passbook" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Account Type<Req /></label>
-          <select className={SEL} value={form.account_type} onChange={e => set("account_type", e.target.value)}>
-            <option value="">Select</option>
-            <option value="savings">Savings</option>
-            <option value="current">Current</option>
-          </select>
-        </div>
-      </div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Account Number<Req /></label>
-          <input className={INP} value={form.account_number} onChange={e => set("account_number", e.target.value)} placeholder="Bank account number" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">IFSC Code<Req /></label>
-          <input className={INP} value={form.ifsc_code} onChange={e => set("ifsc_code", e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" maxLength={11} />
-        </div>
-      </div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Bank Name<Req /></label>
-          <input className={INP} value={form.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder="e.g. State Bank of India" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Branch Name<Req /></label>
-          <input className={INP} value={form.bank_branch_name} onChange={e => set("bank_branch_name", e.target.value)} placeholder="Branch city / locality" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Tab: Emergency Contact ────────────────────────────────────────────────────
-
-function TabEmergency({ form, set }: { form: ProfileForm; set: (f: keyof ProfileForm, v: string) => void }) {
-  return (
-    <div>
-      <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-        This person will be contacted in case of an emergency at the workplace.
-      </p>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Contact Name<Req /></label>
-          <input className={INP} value={form.emergency_name} onChange={e => set("emergency_name", e.target.value)} placeholder="Full name" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Relationship<Req /></label>
-          <input className={INP} value={form.emergency_relationship} onChange={e => set("emergency_relationship", e.target.value)} placeholder="e.g. Spouse, Parent, Sibling" />
-        </div>
-      </div>
-      <div className="field-group-row">
-        <div className="field-group">
-          <label className="field-label">Phone Number<Req /></label>
-          <input className={INP} value={form.emergency_phone} onChange={e => set("emergency_phone", e.target.value)} placeholder="Mobile number" />
-        </div>
-        <div className="field-group">
-          <label className="field-label">Email <span style={{ color: "var(--outline)", fontWeight: 400, fontSize: ".8rem" }}>(optional)</span></label>
-          <input type="email" className={INP} value={form.emergency_email} onChange={e => set("emergency_email", e.target.value)} placeholder="email@example.com" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Tab: Documents ────────────────────────────────────────────────────────────
 

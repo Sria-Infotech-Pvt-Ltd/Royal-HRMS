@@ -87,6 +87,10 @@ export const API = {
     resolveTemplateContext: "/settings/email-templates/resolve-context/",
     approvalRules: "/settings/approval-rules/",
     assessmentConfig: "/assessments/settings/",
+    onboardingFields: {
+      list: "/settings/onboarding-fields/",
+      detail: (fieldKey: string) => `/settings/onboarding-fields/${fieldKey}/`,
+    },
   },
 
   hrms: {
@@ -124,6 +128,7 @@ export const API = {
   onboarding: {
     profile: "/onboarding/",
     profileStep: (step: number) => `/onboarding/step/${step}/`,
+    fieldConfig: "/onboarding/field-config/",
     documents: "/onboarding/documents/",
     documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,
     submit: "/onboarding/",
