@@ -43,6 +43,7 @@ export default function VoiceCommandButton() {
   const {
     status, interimTranscript, isDisabled, startListening, stopListening,
     submitTranscript, submitFaceProof, conversation, closeConversation,
+    isListeningForInterruption,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
   // Lets a user open a chat-style box to type the very first command instead
@@ -191,6 +192,7 @@ export default function VoiceCommandButton() {
           onClose={() => { setIsHovered(false); closeConversation(); }}
           isMuted={isMuted}
           onToggleMute={toggleMuted}
+          isListeningForInterruption={isListeningForInterruption}
         />
         {/* Opens on top of the panel above for clock_in/clock_out's "taking
             facial proof" turn (see conversation_clock_in_face.py) — same
@@ -241,6 +243,7 @@ export default function VoiceCommandButton() {
         onClose={() => setIsTypedInputOpen(false)}
         isMuted={isMuted}
         onToggleMute={toggleMuted}
+        isListeningForInterruption={false}
       />
     );
   }

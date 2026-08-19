@@ -28,6 +28,11 @@ interface VoiceConversationPanelProps {
   onClose: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  // True while a barge-in VAD tap is actually open (TTS is speaking and mic
+  // permission for the tap succeeded) — surfaced so the mic being live
+  // during every spoken response is visible, not silent (see
+  // useVoiceCommand.ts's startVadTap).
+  isListeningForInterruption: boolean;
 }
 
 const PANEL_WIDTH = 300;
@@ -40,7 +45,7 @@ export default function VoiceConversationPanel({
   transcript, message, phase, conversational, awaitingInput, resultStatus,
   isListening, isProcessing, interimTranscript,
   onStartListening, onStopListening, onSubmitText, onClose,
-  isMuted, onToggleMute,
+  isMuted, onToggleMute, isListeningForInterruption,
 }: VoiceConversationPanelProps) {
   return (
     <div
@@ -55,9 +60,27 @@ export default function VoiceConversationPanel({
     >
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)" }}>
-          Voice Assistant
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)" }}>
+            Voice Assistant
+          </span>
+          {isListeningForInterruption && (
+            <span
+              data-testid="voice-panel-barge-in-indicator"
+              title="Listening for interruption — speak to cut in"
+              aria-label="Listening for interruption — speak to cut in"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                fontSize: 10, color: "var(--primary)",
+              }}
+            >
+              <i
+                className="ti ti-microphone"
+                style={{ fontSize: 11, animation: "voiceBargeInPulse 1.2s ease-in-out infinite" }}
+              />
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <button
             onClick={onToggleMute}

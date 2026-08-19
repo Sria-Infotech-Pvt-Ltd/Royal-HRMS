@@ -26,6 +26,7 @@ from typing import Callable, Optional
 
 from apps.voice_commands import sarvam_client
 from apps.voice_commands.audit import log_llm_fallback_used
+from apps.voice_commands.conversation_clarification import start_clarification
 from apps.voice_commands.executor import (
     INTENT_ACKNOWLEDGE_PAYSLIP,
     INTENT_APPLY_LEAVE,
@@ -79,15 +80,52 @@ _INTENT_DESCRIPTIONS: dict[str, str] = {
 _ALLOWED_INTENTS = frozenset(_INTENT_DESCRIPTIONS)
 _NO_MATCH_LABEL = "no_match"  # what the model is told to say when nothing fits — see prompt below.
 
+# Mirrors mode_extractor.py's _MODE_CONSTANTS keys exactly — these are the
+# only attendance modes execute_intent/PunchService understand. Used only as
+# a fallback for clock_in/clock_out (see try_llm_fallback below) when
+# extract_attendance_mode's English-only regex scan over the ORIGINAL
+# transcript found nothing — which is guaranteed for typed Hindi/Hinglish
+# text ("ghar se kaam karti hoon" contains no English "home"/"wfh" substring
+# for the regex to find, even though it plainly means work-from-home).
+# Spoken Hindi never hits this gap: Sarvam Saaras' translate-mode STT (see
+# sarvam_client.py) already converts it to English text before it reaches
+# extract_attendance_mode at all, so the regex scan finds "home" there just
+# fine. This is specifically for the one path that skips that translation —
+# a user typing Hindi/Hinglish directly, bypassing STT entirely.
+_ALLOWED_MODES = frozenset({"office", "wfh", "field", "client_location", "remote_office"})
+
+# NOT YET CALIBRATED — starting point only, pending real data. The prompt
+# below has always asked the model for this field; this module simply never
+# read it before now — meaning ANY valid, allow-listed intent was dispatched
+# immediately regardless of the confidence the model itself reported,
+# including a low-confidence guess for an action-taking intent (clock_in,
+# apply_leave, approve_leave, ...). That's a real gap against this app's own
+# hard constraint: low confidence must always mean "ask," never "guess and
+# act." Every real confidence value observed so far this session (2026-08-17)
+# was 0.9-1.0 whenever the model committed to a concrete intent at all — we
+# have no real example yet of it reporting genuine low confidence, so this
+# threshold is a placeholder pending live examples, same discipline as every
+# other threshold calibrated this session (rule engine's own 60/80 split was
+# empirically derived from real score distributions, not guessed).
+_LLM_CLARIFICATION_THRESHOLD = 0.7
+
 _SYSTEM_PROMPT = (
     "You classify a single spoken or typed command from an HR system's voice "
-    "assistant into exactly one intent. The transcript may be in English or "
-    "may already be an English translation of Hindi speech — treat it as "
-    "plain English either way. Reply with a single JSON object of the exact "
-    'shape {"intent": "<name>", "confidence": <0.0-1.0>} and nothing else. '
+    "assistant into exactly one intent. The transcript may be in English, "
+    "in Hindi or Hinglish (romanized Hindi), or already be an English "
+    "translation of Hindi speech — understand its meaning regardless of "
+    "language or script. Reply with a single JSON object of the exact shape "
+    '{"intent": "<name>", "confidence": <0.0-1.0>, "attendance_mode": '
+    '<mode-or-null>} and nothing else. '
     f'"intent" must be one of: {", ".join(sorted(_ALLOWED_INTENTS))}, or '
     f'"{_NO_MATCH_LABEL}" if the transcript genuinely does not fit any of '
-    "them. Never invent an intent name outside this list.\n\nIntents:\n"
+    "them. Never invent an intent name outside this list.\n\n"
+    '"attendance_mode" only matters when intent is clock_in or clock_out: '
+    "set it to one of "
+    f'{", ".join(sorted(_ALLOWED_MODES))} only if the transcript itself '
+    "states where the caller is working from today (e.g. home/office/field/"
+    "a client site) — otherwise null. Never guess a mode the transcript "
+    "didn't actually state.\n\nIntents:\n"
     + "\n".join(f"- {name}: {desc}" for name, desc in _INTENT_DESCRIPTIONS.items())
 )
 
@@ -121,7 +159,22 @@ def try_llm_fallback(
     reaches dispatch_matched_intent — deliberately. Slot extraction for
     apply_leave/request_attendance_correction/etc. still runs the existing,
     unchanged extractors against this text; this function's only contribution
-    to the outcome is which intent name gets dispatched.
+    to the outcome is which intent name gets dispatched, plus — only when
+    the caller-supplied `attendance_mode` came back None from
+    extract_attendance_mode's English-only regex scan — the LLM's own read of
+    an explicitly-stated attendance mode. That regex scan structurally can't
+    read Hindi/Hinglish text ("ghar se kaam karti hoon" contains no English
+    "home" substring), so without this, a clock_in resolved from typed Hindi
+    always fell back to office mode and failed geofencing even when the
+    caller plainly said they were working from home. The LLM-derived mode
+    NEVER overrides a real regex extraction — see _ALLOWED_MODES' comment.
+
+    A valid, allow-listed intent below _LLM_CLARIFICATION_THRESHOLD is NOT
+    dispatched directly — it goes through start_clarification (the SAME
+    "did you mean X?" mechanism the rule engine's own middle confidence band
+    uses), so a low-confidence guess still requires an explicit "yes" before
+    anything with side effects runs. See _LLM_CLARIFICATION_THRESHOLD's own
+    comment for why this gate didn't exist before now.
     """
     if not sarvam_client.is_configured():
         return None
@@ -136,38 +189,71 @@ def try_llm_fallback(
         log_llm_fallback_used(request, transcript, None)
         return None
 
-    intent = _parse_intent(raw)
+    intent, llm_mode, confidence = _parse_response(raw)
     if intent is None or intent == _NO_MATCH_LABEL or intent not in _ALLOWED_INTENTS:
         logger.info(
             'Voice LLM fallback: user=%s transcript=%r resolved=%r (rejected/no_match)',
             request.user.pk, transcript, intent,
         )
-        log_llm_fallback_used(request, transcript, None)
+        log_llm_fallback_used(request, transcript, None, confidence)
         return None
 
+    resolved_mode = attendance_mode if attendance_mode is not None else llm_mode
+
+    # confidence is None (field omitted/wrong type/out of 0-1 range) is
+    # treated as low-confidence too — a model that doesn't comply with the
+    # requested response shape gets no benefit of the doubt, consistent with
+    # never guessing on uncertain ground.
+    if confidence is None or confidence < _LLM_CLARIFICATION_THRESHOLD:
+        logger.info(
+            'Voice LLM fallback: user=%s transcript=%r low-confidence intent=%s confidence=%s — asking',
+            request.user.pk, transcript, intent, confidence,
+        )
+        log_llm_fallback_used(request, transcript, intent, confidence)
+        return start_clarification(
+            request, intent, intent.replace('_', ' '), confidence or 0.0,
+            intent_text, resolved_mode, lang or DEFAULT_LANG, source='llm',
+        )
+
     logger.info(
-        'Voice LLM fallback: user=%s transcript=%r resolved intent=%s',
-        request.user.pk, transcript, intent,
+        'Voice LLM fallback: user=%s transcript=%r resolved intent=%s mode=%s confidence=%s',
+        request.user.pk, transcript, intent, resolved_mode, confidence,
     )
-    log_llm_fallback_used(request, transcript, intent)
+    log_llm_fallback_used(request, transcript, intent, confidence)
     return dispatch_matched_intent(
         request, intent, intent_text, None,
-        attendance_mode=attendance_mode, lang=lang or DEFAULT_LANG,
+        attendance_mode=resolved_mode, lang=lang or DEFAULT_LANG,
         latitude=latitude, longitude=longitude,
     )
 
 
-def _parse_intent(raw: str) -> Optional[str]:
+def _parse_response(raw: str) -> tuple[Optional[str], Optional[str], Optional[float]]:
     """
-    Pull `intent` out of the model's JSON reply. Anything that isn't the
-    exact {"intent": "...", ...} shape we asked for — malformed JSON, missing
-    key, wrong type — returns None rather than guessing; try_llm_fallback
-    treats that identically to the model explicitly saying no_match.
+    Pull (`intent`, `attendance_mode`, `confidence`) out of the model's JSON
+    reply. Anything that isn't the exact shape we asked for — malformed
+    JSON, missing/wrong-type `intent` — returns (None, None, None) rather
+    than guessing; try_llm_fallback treats a None intent identically to the
+    model explicitly saying no_match. An `attendance_mode` outside the fixed
+    allow-list (a hallucinated value, or the model omitting the field
+    entirely) is silently dropped to None — same "never invent a value
+    outside the list" treatment intent itself already gets. `confidence`
+    outside [0.0, 1.0] (or the wrong type, or omitted) is dropped to None
+    too — try_llm_fallback treats a None confidence as low-confidence, not
+    as "no opinion, dispatch anyway."
     """
     try:
         parsed = json.loads(raw)
         intent = parsed.get("intent")
-        return intent.strip() if isinstance(intent, str) else None
+        intent = intent.strip() if isinstance(intent, str) else None
+        mode = parsed.get("attendance_mode")
+        mode = mode.strip() if isinstance(mode, str) else None
+        if mode not in _ALLOWED_MODES:
+            mode = None
+        confidence = parsed.get("confidence")
+        confidence = float(confidence) if isinstance(confidence, (int, float)) else None
+        if confidence is not None and not (0.0 <= confidence <= 1.0):
+            confidence = None
+        return intent, mode, confidence
     except (ValueError, AttributeError) as exc:
         logger.warning('Voice LLM fallback: could not parse model response %r: %s', raw, exc)
-        return None
+        return None, None, None

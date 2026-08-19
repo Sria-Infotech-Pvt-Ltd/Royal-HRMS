@@ -7,6 +7,21 @@ import { API } from "@/lib/api/endpoints";
 // browser SpeechRecognition path) doesn't feel like a hang.
 const RECORDING_DURATION_MS = 5000;
 
+// Mirrors useVoiceCommand.ts's TTS_CANCEL_SETTLE_MS pattern — same class of
+// bug, different handoff. There, canceling speechSynthesis and starting
+// SpeechRecognition in the same tick could leave recognition "started" but
+// capturing nothing because the interrupted TTS output hadn't released the
+// input pipeline yet. Here, this function opens a FRESH getUserMedia stream
+// immediately after the browser's own SpeechRecognition session (which just
+// used the mic) ended — confirmed via a real AnalyserNode energy probe
+// (2026-08-17) that the newly-resolved stream carried genuine zero energy
+// for its first ~750ms before any real signal appeared, even though
+// getUserMedia had already resolved and permission was already granted.
+// Recording starts only after this settle window elapses — with margin
+// above the observed ~750ms silent window — so that dead air isn't what
+// gets encoded and sent to Sarvam.
+const MIC_HANDOFF_SETTLE_MS = 800;
+
 /**
  * One-shot mic capture + Sarvam Saaras transcription — the Hindi-STT retry
  * useVoiceCommand.ts's submitTranscript falls back to only after a voice
@@ -22,8 +37,26 @@ const RECORDING_DURATION_MS = 5000;
  * unsupported, a network error, or Sarvam coming back with nothing usable —
  * callers must fall back to the original no-match result exactly as if this
  * retry had never been attempted.
+ *
+ * languageProbability is Sarvam's own confidence in which language it
+ * heard, NOT a transcript-accuracy score (Sarvam doesn't expose one) — a
+ * real, confirmed failure mode: identical audio resubmitted to this same
+ * endpoint can return different transcripts across calls (2026-08-17). The
+ * caller threads this through to /voice/parse/ as the best available proxy
+ * for "is this transcript even trustworthy," per conversation.py's
+ * STT-confirmation gate.
+ *
+ * wasLanguageHinted is true when the backend's Hindi-hint attempt succeeded
+ * (see views_transcribe.py) rather than its auto-detect fallback — that mode
+ * gets no languageProbability from Sarvam at all, so the caller threads this
+ * through too, as stt_used_language_hint, telling conversation.py's gate to
+ * always confirm rather than skip confirmation for lack of a signal.
  */
-export async function captureAndTranscribeViaSarvam(): Promise<string | null> {
+export async function captureAndTranscribeViaSarvam(): Promise<{
+  transcript: string;
+  languageProbability: number | null;
+  wasLanguageHinted: boolean;
+} | null> {
   if (
     typeof navigator === "undefined" ||
     !navigator.mediaDevices?.getUserMedia ||
@@ -34,23 +67,123 @@ export async function captureAndTranscribeViaSarvam(): Promise<string | null> {
 
   let stream: MediaStream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // echoCancellation/noiseSuppression/autoGainControl explicitly disabled
+    // rather than left at browser defaults (on, for all three, in Chrome/
+    // Edge) — tried as a theory for the low RMS energy seen in captured
+    // clips, tuned for two-way calls rather than offline transcription.
+    // RULED OUT (2026-08-18): a full live testing session showed no
+    // correlation between capture RMS and transcription success either way
+    // with this disabled — quiet clips succeeded, louder ones still came
+    // back empty. Left disabled anyway since it's harmless and still
+    // reasonable practice for STT capture, just not the fix it was tried as.
+    // sampleRate: 16000 matches Sarvam's own documented guidance ("works
+    // best with audio sampled at 16kHz" — confirmed against real
+    // docs.sarvam.ai docs, 2026-08-18); unset before, so capture ran at
+    // whatever the device's default rate was (commonly 48kHz).
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 16000 },
+    });
   } catch {
     return null; // permission denied, or no input device — same "can't help here" outcome
   }
 
+  // TEMP DIAGNOSTIC (uncommitted) — tap the raw stream with an AnalyserNode
+  // running IN PARALLEL with MediaRecorder (both just read the same live
+  // MediaStreamTrack; neither excludes the other), sampled from the instant
+  // getUserMedia resolves through the whole recording. This must add zero
+  // delay before MediaRecorder starts — the point is to observe today's
+  // exact failing timing unmodified, not to accidentally fix it by stalling
+  // here. Answers: is the raw signal already silent at the source (device/
+  // OS issue), or does it have real energy that's lost downstream (encoder/
+  // timing issue)?
+  const energyReadings: number[] = [];
+  let audioCtx: AudioContext | null = null;
+  let energyIntervalId: ReturnType<typeof setInterval> | null = null;
   try {
+    const AudioContextCtor =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    audioCtx = new AudioContextCtor();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser); // tap only — never connect(audioCtx.destination), no echo
+    const buffer = new Float32Array(analyser.fftSize);
+    const sampleEnergy = () => {
+      analyser.getFloatTimeDomainData(buffer);
+      let sumSquares = 0;
+      for (let i = 0; i < buffer.length; i++) sumSquares += buffer[i] * buffer[i];
+      energyReadings.push(Math.sqrt(sumSquares / buffer.length));
+    };
+    sampleEnergy(); // immediate reading, right when the stream resolves
+    energyIntervalId = setInterval(sampleEnergy, 250);
+  } catch (err) {
+    console.warn("[voice-diag] energy probe failed to set up:", err);
+  }
+
+  try {
+    // FIX: wait out the mic-handoff settle window before recording starts —
+    // see MIC_HANDOFF_SETTLE_MS above. The energy probe above keeps
+    // sampling right through this delay, so the readings below show the
+    // settle window and the actual recording in one continuous trace —
+    // needed to confirm this fix against real energy data, not a lucky retry.
+    await new Promise((resolve) => setTimeout(resolve, MIC_HANDOFF_SETTLE_MS));
+    // Split point captured AFTER the wait, not before — this must count every
+    // reading the setInterval above collected DURING the settle window itself,
+    // not just the single synchronous t=0 sample taken before the wait even
+    // started. Capturing it earlier (a bug fixed here) silently mislabeled
+    // real settle-window readings as "recording" readings below.
+    const settleReadingCount = energyReadings.length; // split point for before/after comparison below
+
     const blob = await recordClip(stream);
     if (blob.size === 0) return null;
 
+    const settleReadings = energyReadings.slice(0, settleReadingCount);
+    const recordingReadings = energyReadings.slice(settleReadingCount);
+    const maxEnergy = energyReadings.length ? Math.max(...energyReadings) : -1;
+    const avgEnergy = energyReadings.length ? energyReadings.reduce((a, b) => a + b, 0) / energyReadings.length : -1;
+    const maxDuringRecording = recordingReadings.length ? Math.max(...recordingReadings) : -1;
+    const avgDuringRecording = recordingReadings.length
+      ? recordingReadings.reduce((a, b) => a + b, 0) / recordingReadings.length
+      : -1;
+    console.warn("[voice-diag] raw stream RMS energy (settle-delay fix applied)", {
+      maxEnergy, avgEnergy, maxDuringRecording, avgDuringRecording,
+      settleReadings, recordingReadings,
+    });
+
     const formData = new FormData();
     formData.append("audio", blob, "clip.webm");
-    const res = await clientApi.post(API.voice.transcribeFallback, formData);
-    const transcript = (res.data as { data?: { transcript?: string } })?.data?.transcript;
-    return typeof transcript === "string" && transcript.trim() ? transcript.trim() : null;
+    formData.append(
+      "clientEnergyDebug",
+      JSON.stringify({ maxEnergy, avgEnergy, maxDuringRecording, avgDuringRecording, settleReadings, recordingReadings }),
+    );
+    // Per-call timeout override, not clientApi's global 15000ms default —
+    // same reasoning as useVoiceCommand.ts's postVoiceParse. Confirmed live
+    // (2026-08-18): a real Sarvam STT call took 12.44s server-side alone
+    // (sarvam_client.py's own _STT_TIMEOUT_SECONDS=10 is a per-chunk read
+    // timeout, not a hard cap on total response time, so this can legally
+    // run longer than that). At 12.44s the total client-observed round trip
+    // (upload + Django dispatch + this call + response) can cross the 15s
+    // default, causing clientApi to abort client-side while Django keeps
+    // running unaware and logs a successful transcription a moment later —
+    // a real transcript with no resubmit to follow it, confirmed directly
+    // against that day's server log. 25000ms matches postVoiceParse's own
+    // budget for the same class of problem on the sibling endpoint.
+    const res = await clientApi.post(API.voice.transcribeFallback, formData, { timeout: 25000 });
+    const data = (res.data as {
+      data?: { transcript?: string; language_probability?: number | null; was_language_hinted?: boolean };
+    })?.data;
+    const transcript = data?.transcript;
+    if (typeof transcript !== "string" || !transcript.trim()) return null;
+    return {
+      transcript: transcript.trim(),
+      languageProbability: typeof data?.language_probability === "number" ? data.language_probability : null,
+      wasLanguageHinted: data?.was_language_hinted === true,
+    };
   } catch {
     return null;
   } finally {
+    if (energyIntervalId) clearInterval(energyIntervalId);
+    if (audioCtx) void audioCtx.close().catch(() => undefined);
     stream.getTracks().forEach((track) => track.stop());
   }
 }

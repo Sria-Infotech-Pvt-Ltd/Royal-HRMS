@@ -96,11 +96,30 @@ class TranscribeAudioTests(SimpleTestCase):
 
         result = sarvam_client.transcribe_audio(b'fake-audio-bytes', 'clip.webm')
 
-        self.assertEqual(result, {'transcript': 'I need leave', 'language_code': 'hi-IN'})
+        self.assertEqual(
+            result,
+            {
+                'transcript': 'I need leave', 'language_code': 'hi-IN', 'language_probability': 0.95,
+                'was_language_hinted': False,
+            },
+        )
         call_kwargs = mock_post.call_args.kwargs
         self.assertEqual(call_kwargs['data']['mode'], 'translate')
         self.assertEqual(call_kwargs['data']['model'], sarvam_client.STT_MODEL)
         self.assertNotIn('language_code', call_kwargs['data'])  # auto-detected, never sent on the request
+
+    @patch('apps.voice_commands.sarvam_client.requests.post')
+    def test_language_code_is_sent_and_hint_flag_is_true_when_requested(self, mock_post):
+        mock_post.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {'transcript': 'mujhe leave chahiye', 'language_code': 'hi-IN'},
+        )
+
+        result = sarvam_client.transcribe_audio(b'fake-audio-bytes', 'clip.webm', language_code='hi-IN')
+
+        self.assertEqual(result['was_language_hinted'], True)
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs['data']['language_code'], 'hi-IN')
 
     @patch('apps.voice_commands.sarvam_client.requests.post')
     def test_returns_none_on_empty_transcript(self, mock_post):

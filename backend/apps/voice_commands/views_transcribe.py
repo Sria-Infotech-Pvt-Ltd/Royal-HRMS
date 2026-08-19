@@ -11,6 +11,8 @@ endpoint shape (multipart file upload vs JSON transcript) and this project's
 """
 from __future__ import annotations
 
+import logging
+
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -18,6 +20,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.responses import error, success
+
+logger = logging.getLogger(__name__)
 
 from apps.voice_commands import sarvam_client
 from apps.voice_commands.audit import log_no_match
@@ -28,6 +32,16 @@ from apps.voice_commands.audit import log_no_match
 # Edge; ogg on Firefox) plus wav as a generic fallback — anything else is
 # rejected outright rather than forwarded to Sarvam.
 _ALLOWED_CONTENT_TYPES = frozenset({'audio/webm', 'audio/ogg', 'audio/wav', 'audio/x-wav'})
+
+# This retry exists specifically for Hindi (see class docstring), so it tries
+# an explicit Hindi hint before falling back to auto-detect — real live
+# testing (2026-08-18) showed auto-detect guessing gu-IN/ml-IN/te-IN on every
+# genuine Hindi attempt, never hi-IN. A hinted call gets no
+# language_probability back from Sarvam (confirmed against real docs), so a
+# hinted success is reported to the caller as was_language_hinted=True rather
+# than silently losing the trust signal conversation.py's STT-confirmation
+# gate depends on.
+_PRIMARY_LANGUAGE_HINT = 'hi-IN'
 # A single ~5s retry clip is a few hundred KB at most even uncompressed;
 # 2MB is generous headroom without approaching the project's general 5MB
 # upload cap.
@@ -72,9 +86,34 @@ class VoiceTranscribeFallbackView(APIView):
         if uploaded.size > _MAX_AUDIO_BYTES:
             return error('Audio clip is too large.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
-        result = sarvam_client.transcribe_audio(
-            uploaded.read(), uploaded.name or 'clip.webm', content_type=uploaded.content_type,
+        audio_bytes = uploaded.read()
+        # Client-side raw-stream RMS energy (voiceSttFallback.ts's AnalyserNode
+        # probe, sampled from the instant getUserMedia resolves through the
+        # whole recording) — tells us whether the mic stream had real signal
+        # at the source, without ever touching the audio itself. Deliberately
+        # NOT the raw clip: this app's voice commands carry real employee
+        # speech, and writing that to disk for debugging is a real exposure,
+        # not a hypothetical one (see this project's own PII-handling rules).
+        # Numeric energy readings serve the same "was this actually silence"
+        # question with none of that risk.
+        client_energy_debug = request.POST.get('clientEnergyDebug')
+        logger.warning(
+            'Voice transcribe-fallback capture: bytes=%d content_type=%s energy=%s',
+            len(audio_bytes), uploaded.content_type, client_energy_debug,
         )
+
+        result = sarvam_client.transcribe_audio(
+            audio_bytes, uploaded.name or 'clip.webm', content_type=uploaded.content_type,
+            language_code=_PRIMARY_LANGUAGE_HINT,
+        )
+        if result is None:
+            # Hindi hint declined (empty transcript, or genuinely not Hindi)
+            # — fall back to auto-detect exactly as this retry always used
+            # to, so a non-Hindi Indic speaker isn't worse off than before
+            # this hint existed.
+            result = sarvam_client.transcribe_audio(
+                audio_bytes, uploaded.name or 'clip.webm', content_type=uploaded.content_type,
+            )
         if result is None:
             # Same fail-soft contract as the LLM fallback tier: a Sarvam
             # outage, an unconfigured key, or genuine silence/unintelligible

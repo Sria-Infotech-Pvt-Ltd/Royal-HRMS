@@ -43,7 +43,20 @@ _SPEECH_TO_TEXT_URL = 'https://api.sarvam.ai/speech-to-text'
 CHAT_MODEL = 'sarvam-105b'  # NOT sarvam-30b — deprecated, never use it here.
 STT_MODEL = 'saaras:v3'
 
-_CHAT_TIMEOUT_SECONDS = 6
+# sarvam-105b is a reasoning model: it can silently spend a large, variable
+# number of hidden "reasoning_content" tokens before ever emitting the
+# requested {"intent": ...} JSON. Measured directly against the real API
+# (2026-08-17): a "fast path" with no reasoning answers in ~1.2-1.4s using
+# ~20 completion tokens, but a "reasoning path" — which can trigger on the
+# exact same transcript on a different call, same temperature — took
+# 15-17s and consumed 987-1203 completion tokens on reasoning alone before
+# the final answer. The previous settings here (timeout=6, max_tokens=512)
+# guaranteed that path always failed: killed by the timeout before
+# finishing, and even if it hadn't, truncated by max_tokens (finish_reason
+# "length") with the actual `content` field left null — silently
+# indistinguishable from a genuine no_match/outage to every caller. Sized
+# with real headroom above both observed worst cases, not guessed.
+_CHAT_TIMEOUT_SECONDS = 20
 # STT uploads a short audio file on top of the round trip — a little more
 # headroom than the text-only chat call, still well under any UI patience.
 _STT_TIMEOUT_SECONDS = 10
@@ -60,7 +73,7 @@ def is_configured() -> bool:
 
 
 def chat_completion(
-    messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 512,
+    messages: list[dict], *, temperature: float = 0.2, max_tokens: int = 2048,
 ) -> Optional[str]:
     """
     POST /v1/chat/completions with model=sarvam-105b, response_format=json_object
@@ -68,6 +81,11 @@ def chat_completion(
     llm_fallback.py for what it asks for). Returns the raw assistant message
     string (choices[0].message.content) on success, or None on any failure —
     see this module's docstring for the fail-soft contract.
+
+    max_tokens default sized at 2048, not the classification answer's own
+    ~20-token footprint — see _CHAT_TIMEOUT_SECONDS' comment above on why:
+    hidden reasoning tokens alone measured up to ~1200 on this model for a
+    single short classification prompt.
     """
     api_key = _api_key()
     if not api_key:
@@ -96,18 +114,41 @@ def chat_completion(
 
 def transcribe_audio(
     file_bytes: bytes, filename: str, content_type: str = 'audio/webm',
+    language_code: Optional[str] = None,
 ) -> Optional[dict]:
     """
     POST /speech-to-text with model=saaras:v3, mode="translate" — converts
     speech in any of Saaras's 22 supported Indic languages (or English)
-    directly to English text, auto-detecting the source language. This is
-    the one call that lets views_transcribe.py's Hindi-capture retry hand
-    back plain English to the exact same /voice/parse/ pipeline every other
-    transcript already goes through, with no Hindi-aware code anywhere else
-    in this app.
+    directly to English text. This is the one call that lets
+    views_transcribe.py's Hindi-capture retry hand back plain English to the
+    exact same /voice/parse/ pipeline every other transcript already goes
+    through, with no Hindi-aware code anywhere else in this app.
 
-    Returns {'transcript': str, 'language_code': str | None} on success —
-    language_code is logged for telemetry only, never shown to the user.
+    language_code (e.g. 'hi-IN'), when given, tells Sarvam which language to
+    expect instead of auto-detecting it — confirmed against real docs.sarvam.ai
+    docs (2026-08-18) as an accepted optional request parameter. Real live
+    testing this session showed auto-detect getting the language flatly wrong
+    on every genuine Hindi attempt (gu-IN/ml-IN/te-IN guessed, never hi-IN),
+    so views_transcribe.py's retry now tries a Hindi hint first — see its own
+    docstring. Per the same docs, Sarvam only returns language_probability in
+    auto-detect mode; a hinted call gets none, which is why the returned dict
+    always reports was_language_hinted — the caller has no other way to tell
+    "no probability because we didn't ask" apart from "no probability because
+    the field was missing for some other reason."
+
+    Returns {'transcript': str, 'language_code': str | None,
+    'language_probability': float | None, 'was_language_hinted': bool} on
+    success — language_code/language_probability are Sarvam's own confidence
+    in which language it heard, NOT a transcript-accuracy score (Sarvam
+    doesn't expose one). A real, confirmed failure mode: identical audio
+    bytes resubmitted to this same endpoint can return different transcripts
+    AND different detected languages across calls (observed directly,
+    2026-08-17 — see conversation.py's STT-confirmation gate, which uses
+    language_probability as the best available proxy signal, and falls back
+    to was_language_hinted when that signal doesn't exist). Logged on every
+    successful call — previously not logged at all — so that signal can
+    eventually be calibrated against real outcomes instead of only being
+    visible when something already went wrong.
     Returns None on any failure, or on a successful call that came back with
     an empty transcript (silence, or audio Saaras couldn't make out at all) —
     both are treated identically by the caller as "this retry didn't help."
@@ -116,11 +157,15 @@ def transcribe_audio(
     if not api_key:
         return None
 
+    request_payload = {'model': STT_MODEL, 'mode': 'translate'}
+    if language_code:
+        request_payload['language_code'] = language_code
+
     try:
         response = requests.post(
             _SPEECH_TO_TEXT_URL,
             headers={'api-subscription-key': api_key},
-            data={'model': STT_MODEL, 'mode': 'translate'},
+            data=request_payload,
             files={'file': (filename, file_bytes, content_type)},
             timeout=_STT_TIMEOUT_SECONDS,
         )
@@ -129,7 +174,18 @@ def transcribe_audio(
         transcript = (data.get('transcript') or '').strip()
         if not transcript:
             return None
-        return {'transcript': transcript, 'language_code': data.get('language_code')}
+        language_probability = data.get('language_probability')
+        logger.info(
+            'Sarvam STT succeeded: requested_language=%s language_code=%s '
+            'language_probability=%s transcript_len=%d',
+            language_code, data.get('language_code'), language_probability, len(transcript),
+        )
+        return {
+            'transcript': transcript,
+            'language_code': data.get('language_code'),
+            'language_probability': language_probability,
+            'was_language_hinted': language_code is not None,
+        }
     except (requests.RequestException, ValueError) as exc:
         logger.warning('Sarvam speech-to-text failed: %s', exc)
         return None

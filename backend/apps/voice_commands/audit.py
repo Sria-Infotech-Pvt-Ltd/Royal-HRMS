@@ -47,6 +47,20 @@ ACTION_UNUSUAL_ACTIVITY = 'voice_unusual_activity'
 # whether the LLM tier is even reachable; this one only fires when it
 # actually ran.
 ACTION_LLM_FALLBACK_USED = 'voice_llm_fallback_used'
+# Fires once per STT-confirmation turn started (see
+# conversation_stt_confirmation.py's start_stt_confirmation) — previously
+# only reached the module's file logger, invisible to /dashboard/audit and to
+# the voice_review_report management command's clarification-outcome stats.
+ACTION_STT_CONFIRMATION_STARTED = 'voice_stt_confirmation_started'
+# Fires once per clarification turn resolved — confirmed, declined, or
+# re-asked (an unrecognized yes/no answer) — for all three clarification
+# flavors this app has (rule-engine "did you mean", LLM low-confidence "did
+# you mean", and STT-transcript confirmation). clarification_type distin-
+# guishes which flavor; a start-with-no-matching-outcome-within-the-report-
+# window is how voice_review_report infers "abandoned" — no separate event
+# for that, since Redis pending state just expires silently with no eviction
+# callback to hook.
+ACTION_CLARIFICATION_OUTCOME = 'voice_clarification_outcome'
 
 # Straightforward count-based threshold: this many permission-denial/no-match
 # events from the SAME user inside this window is unusual enough to flag for
@@ -74,7 +88,9 @@ def log_no_match(
     })
 
 
-def log_llm_fallback_used(request, transcript: str, resolved_intent: Optional[str]) -> None:
+def log_llm_fallback_used(
+    request, transcript: str, resolved_intent: Optional[str], confidence: Optional[float] = None,
+) -> None:
     """
     Called from llm_fallback.py.try_llm_fallback on every attempt at the
     sarvam-105b classifier. resolved_intent is the intent it settled on, or
@@ -83,9 +99,33 @@ def log_llm_fallback_used(request, transcript: str, resolved_intent: Optional[st
     intent outside the allow-list — kept in one action type rather than two
     so /dashboard/audit shows total Sarvam usage in one place; the changes
     payload's resolved_intent field distinguishes a hit from a miss.
+
+    confidence is the model's own reported score (may be None — see
+    llm_fallback.py's _parse_response). Without it, a low-confidence guess
+    routed to start_clarification and a high-confidence direct dispatch were
+    indistinguishable in the audit trail — both logged the same resolved_intent
+    with no way to tell which path was taken.
     """
     _record(request, ACTION_LLM_FALLBACK_USED, {
-        'transcript': transcript, 'resolved_intent': resolved_intent,
+        'transcript': transcript, 'resolved_intent': resolved_intent, 'confidence': confidence,
+    })
+
+
+def log_stt_confirmation_started(
+    request, transcript: str, language_probability: Optional[float] = None,
+) -> None:
+    _record(request, ACTION_STT_CONFIRMATION_STARTED, {
+        'transcript': transcript, 'language_probability': language_probability,
+    })
+
+
+def log_clarification_outcome(request, clarification_type: str, outcome: str) -> None:
+    """
+    clarification_type: 'rule_engine' | 'llm' | 'stt'.
+    outcome: 'confirmed' | 'declined' | 're_asked'.
+    """
+    _record(request, ACTION_CLARIFICATION_OUTCOME, {
+        'clarification_type': clarification_type, 'outcome': outcome,
     })
 
 
