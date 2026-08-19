@@ -921,6 +921,13 @@ class EmployeeProfile(models.Model):
                   'Used to prevent duplicate sends on Celery beat retries.',
     )
 
+    # Values for HR-created custom onboarding fields (see OnboardingFieldConfig
+    # below) — these have no real column since HR defines them at runtime with
+    # no code deploy, so {field_key: value} lives here instead. Built-in fields
+    # (father_name, bank details, etc.) are untouched by this and keep using
+    # their own real columns above.
+    custom_field_values = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1024,6 +1031,74 @@ def find_conflicting_pan_profile(pan_number: str, exclude_profile_pk=None) -> 'E
     if exclude_profile_pk:
         qs = qs.exclude(pk=exclude_profile_pk)
     return qs.first()
+
+
+# ─── Onboarding Field Configuration ────────────────────────────────────────────
+
+class OnboardingFieldConfig(models.Model):
+    """
+    Per-company configuration for the self-onboarding wizard's steps 0-3
+    (Personal, Education, Bank, Emergency — step 4/Documents is a separate,
+    file-upload-based flow and isn't covered here). One row per field, tenant-
+    scoped like everything else in this app — each company's configuration is
+    independent by construction (separate schema), no extra scoping needed.
+
+    is_custom=False rows describe a real EmployeeProfile column (field_key
+    matches the model field name exactly) — visible/required/order/label can
+    be changed, but the row itself can't be deleted (see the view). is_custom=True
+    rows are fields HR created at runtime with no code deploy; their values
+    live in EmployeeProfile.custom_field_values instead of a real column.
+
+    is_locked=True fields are shown in the settings UI but visible/required
+    can't be changed — for fields the business always wants collected,
+    independent of any one HR admin's settings choices.
+    """
+    TYPE_TEXT      = 'text'
+    TYPE_TEXTAREA  = 'textarea'
+    TYPE_NUMBER    = 'number'
+    TYPE_DATE      = 'date'
+    TYPE_DROPDOWN  = 'dropdown'
+    TYPE_CHECKBOX  = 'checkbox'
+    FIELD_TYPE_CHOICES = [
+        (TYPE_TEXT,     'Text'),
+        (TYPE_TEXTAREA, 'Long text'),
+        (TYPE_NUMBER,   'Number'),
+        (TYPE_DATE,     'Date'),
+        (TYPE_DROPDOWN, 'Dropdown'),
+        (TYPE_CHECKBOX, 'Checkbox'),
+    ]
+
+    STEP_PERSONAL  = 0
+    STEP_EDUCATION = 1
+    STEP_BANK      = 2
+    STEP_EMERGENCY = 3
+    STEP_CHOICES = [
+        (STEP_PERSONAL,  'Personal Information'),
+        (STEP_EDUCATION, 'Education & Experience'),
+        (STEP_BANK,      'Bank Details'),
+        (STEP_EMERGENCY, 'Emergency Contact'),
+    ]
+
+    field_key  = models.CharField(max_length=64, unique=True)
+    label      = models.CharField(max_length=150)
+    field_type = models.CharField(max_length=20, choices=FIELD_TYPE_CHOICES, default=TYPE_TEXT)
+    # Dropdown choices only, e.g. ["Option A", "Option B"] — ignored for every other field_type.
+    options    = models.JSONField(default=list, blank=True)
+    step       = models.PositiveSmallIntegerField(choices=STEP_CHOICES)
+    order      = models.PositiveSmallIntegerField(default=0)
+    visible    = models.BooleanField(default=True)
+    required   = models.BooleanField(default=False)
+    is_custom  = models.BooleanField(default=False)
+    is_locked  = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_onboarding_field_configs'
+        ordering = ['step', 'order']
+
+    def __str__(self) -> str:
+        return f'{self.label} ({self.field_key})'
 
 
 # ─── Employee Documents ───────────────────────────────────────────────────────

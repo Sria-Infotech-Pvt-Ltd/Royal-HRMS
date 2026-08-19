@@ -13,6 +13,8 @@ from apps.accounts.views import (
     HRListView,
     ManagerListView,
     MyProfileView,
+    OnboardingFieldConfigPublicView,
+    OnboardingFieldConfigView,
     OnboardingView,
     OnboardingApprovalView,
     CompanyFinancialYearView,
@@ -86,6 +88,11 @@ urlpatterns = [
     path('onboarding/documents/<str:doc_id>/',       EmployeeDocumentView.as_view(),   name='onboarding-document-detail'),
     path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
+    path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),
+
+    # Onboarding field configuration (HR settings screen)
+    path('settings/onboarding-fields/',              OnboardingFieldConfigView.as_view(), name='onboarding-field-settings'),
+    path('settings/onboarding-fields/<str:field_key>/', OnboardingFieldConfigView.as_view(), name='onboarding-field-settings-detail'),
 
     # Organisation structure
     path('departments/',           DepartmentListCreateView.as_view(), name='department-list'),

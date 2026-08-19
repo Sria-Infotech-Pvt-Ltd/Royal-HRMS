@@ -19,6 +19,7 @@ class CacheTTL:
     DESIGNATIONS        = 12 * 3600
     FINANCIAL_YEAR      = 24 * 3600
     COMPANY             = 600
+    ONBOARDING_FIELDS   = 6  * 3600
 
 
 def _slug(s: str) -> str:
@@ -509,3 +510,42 @@ class CompanyCacheService:
             cache.delete(cls._KEY)
         except Exception:
             logger.warning('Cache delete failed for company:info')
+
+
+# ── Onboarding Field Config ──────────────────────────────────────────────────
+
+class OnboardingFieldConfigCacheService:
+    """
+    All OnboardingFieldConfig rows, grouped by step — read on every onboarding
+    GET/save and every settings-page load, so worth caching same as the other
+    per-company config lists above. tenant_aware_key_func (config/settings.py)
+    already scopes this cache key per company automatically.
+    """
+    _ALL_KEY = 'onboarding_field_config:all'
+
+    @classmethod
+    def get_all(cls) -> list:
+        try:
+            cached = cache.get(cls._ALL_KEY)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for onboarding_field_config:all')
+        from apps.accounts.models import OnboardingFieldConfig
+        data = list(OnboardingFieldConfig.objects.all())
+        try:
+            cache.set(cls._ALL_KEY, data, CacheTTL.ONBOARDING_FIELDS)
+        except Exception:
+            logger.warning('Cache write failed for onboarding_field_config:all')
+        return data
+
+    @classmethod
+    def get_for_step(cls, step: int) -> list:
+        return [c for c in cls.get_all() if c.step == step]
+
+    @classmethod
+    def invalidate(cls) -> None:
+        try:
+            cache.delete(cls._ALL_KEY)
+        except Exception:
+            logger.warning('Cache delete failed for onboarding_field_config:all')

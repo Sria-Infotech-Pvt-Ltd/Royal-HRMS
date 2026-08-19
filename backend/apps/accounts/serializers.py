@@ -24,6 +24,7 @@ from apps.accounts.models import (
     EmployeeCodeSettings,
     EmployeeDocument,
     EmployeeProfile,
+    OnboardingFieldConfig,
     Permission,
     Role,
     RolePermission,
@@ -857,6 +858,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'account_holder_name', 'account_type',
             'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
             'uan_number', 'esi_number', 'name_as_per_aadhar', 'pan_number',
+            'custom_field_values',
             'updated_at',
         ]
         read_only_fields = ('updated_at',)
@@ -1164,6 +1166,50 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
             )
         value.name = os.path.basename(value.name).strip()
         return value
+
+
+# ─── Onboarding Field Configuration ────────────────────────────────────────────
+
+class OnboardingFieldConfigSerializer(serializers.ModelSerializer):
+    """Read-only — used for the settings list and the wizard-facing config."""
+    class Meta:
+        model  = OnboardingFieldConfig
+        fields = [
+            'field_key', 'label', 'field_type', 'options', 'step', 'order',
+            'visible', 'required', 'is_custom', 'is_locked', 'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class OnboardingFieldConfigCreateSerializer(serializers.Serializer):
+    """Creates a new HR-defined custom field. field_key is derived from label
+    in the view (mirrors LeavePolicyCreateSerializer's leave_type_label ->
+    leave_type_key pattern) rather than submitted directly."""
+    label      = serializers.CharField(max_length=150, trim_whitespace=True)
+    field_type = serializers.ChoiceField(choices=OnboardingFieldConfig.FIELD_TYPE_CHOICES)
+    options    = serializers.ListField(child=serializers.CharField(max_length=200), required=False, default=list)
+    step       = serializers.ChoiceField(choices=OnboardingFieldConfig.STEP_CHOICES)
+    required   = serializers.BooleanField(default=False)
+
+    def validate_label(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Label cannot be blank.')
+        return value
+
+    def validate(self, attrs):
+        if attrs['field_type'] == OnboardingFieldConfig.TYPE_DROPDOWN and not attrs.get('options'):
+            raise serializers.ValidationError('Dropdown fields need at least one option.')
+        return attrs
+
+
+class OnboardingFieldConfigUpdateSerializer(serializers.ModelSerializer):
+    """Partial update only — field_key, field_type, is_custom, and is_locked
+    are immutable after creation (changing field_type after data has been
+    collected under the old type would corrupt existing custom_field_values)."""
+    class Meta:
+        model  = OnboardingFieldConfig
+        fields = ['label', 'options', 'order', 'visible', 'required']
 
 
 # ─── Onboarding Pipeline (pending + submitted) ────────────────────────────────

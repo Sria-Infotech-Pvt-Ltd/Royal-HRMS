@@ -35,7 +35,7 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, StreamingHttpResponse
 from django.db.models.deletion import ProtectedError
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Max, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -43,7 +43,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.pagination import paginate, paginated_data
-from core.permissions import has_perm as _has_perm
+from core.permissions import HasSettingsPermission, has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 from core.template_context import (
     candidate_context as _candidate_template_context,
@@ -69,6 +69,7 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSettings,
+    OnboardingFieldConfig,
     OTPVerification,
     PasswordResetToken,
     Permission,
@@ -3568,64 +3569,18 @@ class EmployeeCodeSettingsView(APIView):
 # ─── Onboarding — Employee fills their own profile ────────────────────────────
 
 
-_STEP_REQUIRED_FIELDS = {
-    # Step 0 — Personal Information
-    0: {
-        'date_of_birth':   'Date of Birth',
-        'gender':          'Gender',
-        'marital_status':  'Marital Status',
-        'father_name':     "Father's Name",
-        'current_address': 'Current Address',
-    },
-    # Step 1 — Education & Experience
-    1: {
-        'highest_qualification': 'Highest Qualification',
-        'institution':           'Institution / University',
-    },
-    # Step 2 — Bank Details
-    2: {
-        'account_holder_name': 'Account Holder Name',
-        'account_type':        'Account Type',
-        'account_number':      'Account Number',
-        'ifsc_code':           'IFSC Code',
-        'bank_name':           'Bank Name',
-        'bank_branch_name':    'Bank Branch Name',
-    },
-    # Step 3 — Emergency Contact
-    3: {
-        'emergency_name':         'Emergency Contact Name',
-        'emergency_relationship': 'Relationship',
-        'emergency_phone':        'Emergency Contact Phone',
-    },
-    # Step 4 — Documents (handled separately via EmployeeDocument records)
-    4: {},
-}
+# Step numbers are structural to the wizard (5 steps, 0-4) — unlike which
+# FIELDS live in each step, this isn't something HR customizes, so it stays a
+# plain constant rather than being derived from OnboardingFieldConfig (which
+# only covers steps 0-3; step 4/Documents is a separate file-upload flow).
+_VALID_STEPS = frozenset({0, 1, 2, 3, 4})
 
-# All profile fields that belong to each step — prevents cross-step writes when
-# the frontend sends the full form payload on every "Save & Continue" call.
-_STEP_ALL_FIELDS: dict = {
-    0: frozenset({
-        'date_of_birth', 'gender', 'marital_status', 'father_name',
-        'blood_group', 'current_address', 'permanent_address',
-    }),
-    1: frozenset({
-        'highest_qualification', 'institution', 'year_of_passing', 'specialization',
-        'total_experience_years', 'previous_employer', 'previous_designation', 'leaving_reason',
-    }),
-    2: frozenset({
-        'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
-        'account_holder_name', 'account_type',
-    }),
-    3: frozenset({
-        'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
-    }),
-    # Step 4 — Documents. pan_number is the one exception to "documents are
-    # handled separately via EmployeeDocument records" above: real-world
-    # onboarding captures the PAN *number* at the moment the PAN card proof
-    # is uploaded, not later — so the frontend saves it here, right before
-    # the upload request for that specific document.
-    4: frozenset({'pan_number'}),
-}
+# Step 4 — Documents. pan_number is the one exception to "documents are
+# handled separately via EmployeeDocument records": real-world onboarding
+# captures the PAN *number* at the moment the PAN card proof is uploaded, not
+# later — so the frontend saves it here, right before the upload request for
+# that specific document. Not customizable, same reasoning as _VALID_STEPS.
+_STEP_4_FIELDS = frozenset({'pan_number'})
 
 # Profile fields that are nullable in the DB (null=True).
 # Empty string from the frontend is converted to None for these fields so they
@@ -3636,6 +3591,72 @@ _NULLABLE_PROFILE_FIELDS = frozenset({
     'year_of_passing',
     'total_experience_years',
 })
+
+_STEP_LABELS = dict(OnboardingFieldConfig.STEP_CHOICES)
+
+
+def _step_configs(step: int) -> list:
+    """All OnboardingFieldConfig rows for steps 0-3, any visibility — cached."""
+    from core.cache_service import OnboardingFieldConfigCacheService
+    return OnboardingFieldConfigCacheService.get_for_step(step)
+
+
+def _step_all_field_keys(step: int) -> frozenset:
+    if step == 4:
+        return _STEP_4_FIELDS
+    return frozenset(c.field_key for c in _step_configs(step))
+
+
+def _step_required_configs(step: int) -> list:
+    """Visible AND required configs for a step — what actually gates completion.
+    Checking both (not just `required`) means a field HR hid can never block
+    submission, even if `required` was left on from before it was hidden."""
+    if step == 4:
+        return []
+    return [c for c in _step_configs(step) if c.visible and c.required]
+
+
+def _step_custom_field_keys(step: int) -> frozenset:
+    if step == 4:
+        return frozenset()
+    return frozenset(c.field_key for c in _step_configs(step) if c.is_custom)
+
+
+def _field_value(profile, config: 'OnboardingFieldConfig'):
+    if config.is_custom:
+        return (profile.custom_field_values or {}).get(config.field_key)
+    return getattr(profile, config.field_key, None)
+
+
+def _missing_required(profile, step: int) -> list:
+    """Human-readable '<label> (<step name>)' strings for required-but-empty
+    fields in this step — same format the old hardcoded _submit() checks used."""
+    step_label = _STEP_LABELS.get(step, '')
+    missing = []
+    for c in _step_required_configs(step):
+        if not _field_filled(_field_value(profile, c)):
+            missing.append(f'{c.label} ({step_label})' if step_label else c.label)
+    return missing
+
+
+def _step_is_complete(profile, step: int) -> bool:
+    return not _missing_required(profile, step)
+
+
+def _extract_step_data(profile, all_data: dict, step: int) -> dict:
+    """
+    Built-in field values come from `all_data` (an EmployeeProfileSerializer
+    .data dict); custom field values have no serializer field of their own,
+    so they're read out of profile.custom_field_values and flattened in
+    alongside the built-in ones — the frontend doesn't need to know which is
+    which.
+    """
+    step_fields = _step_all_field_keys(step)
+    custom_keys = _step_custom_field_keys(step)
+    data = {k: v for k, v in all_data.items() if k in step_fields}
+    for key in custom_keys:
+        data[key] = (profile.custom_field_values or {}).get(key)
+    return data
 
 
 def _field_filled(value) -> bool:
@@ -3652,12 +3673,7 @@ def _compute_completed_steps(profile, user) -> list:
     without persisting a separate progress field — completion is always
     recomputed from the profile/document data that is already saved.
     """
-    completed = []
-    for step, required in _STEP_REQUIRED_FIELDS.items():
-        if step == 4 or not required:
-            continue
-        if all(_field_filled(getattr(profile, field, None)) for field in required):
-            completed.append(step)
+    completed = [step for step in range(4) if _step_is_complete(profile, step)]
 
     from apps.accounts.models import EmployeeDocument as ED
     uploaded = set(ED.objects.filter(user=user).values_list('document_type', flat=True))
@@ -3710,14 +3726,13 @@ class EmployeeProfileView(APIView):
             return success('Nothing to save.', data=EmployeeProfileSerializer(profile).data)
 
         if step is not None:
-            required = _STEP_REQUIRED_FIELDS.get(step, {})
             missing = []
-            for field, label in required.items():
-                incoming = filled_data.get(field)
-                saved    = getattr(profile, field, None)
+            for c in _step_required_configs(step):
+                incoming = filled_data.get(c.field_key)
+                saved    = _field_value(profile, c)
                 value    = incoming if incoming not in (None, '') else saved
-                if not value or (isinstance(value, str) and not value.strip()):
-                    missing.append(label)
+                if not _field_filled(value):
+                    missing.append(c.label)
             if missing:
                 return error(
                     f'Please fill in the following required fields: {", ".join(missing)}.'
@@ -3745,8 +3760,6 @@ class OnboardingView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes     = [JSONParser, FormParser, MultiPartParser]
 
-    _VALID_STEPS = frozenset(_STEP_ALL_FIELDS.keys())
-
     @staticmethod
     def _get_or_create_profile(user):
         from apps.accounts.models import EmployeeProfile as EP
@@ -3763,7 +3776,7 @@ class OnboardingView(APIView):
             data['completed_steps'] = _compute_completed_steps(profile, request.user)
             return success('Profile retrieved.', data=data)
 
-        if step not in self._VALID_STEPS:
+        if step not in _VALID_STEPS:
             return error(
                 f'Invalid step {step}. Valid steps are 0 to 4.',
                 http_status=status.HTTP_400_BAD_REQUEST,
@@ -3799,14 +3812,14 @@ class OnboardingView(APIView):
 
         return success(
             f'Step {step} data retrieved.',
-            data={k: v for k, v in all_data.items() if k in _STEP_ALL_FIELDS[step]},
+            data=_extract_step_data(profile, all_data, step),
         )
 
     # ── POST — save step data or submit the completed wizard ─────────────────
 
     def post(self, request, step: int = None):
         if step is not None:
-            if step not in self._VALID_STEPS:
+            if step not in _VALID_STEPS:
                 return error(
                     f'Invalid step {step}. Valid steps are 0 to 4.',
                     http_status=status.HTTP_400_BAD_REQUEST,
@@ -3830,7 +3843,7 @@ class OnboardingView(APIView):
                 'Specify a step: PATCH /onboarding/step/<n>/',
                 http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        if step not in self._VALID_STEPS:
+        if step not in _VALID_STEPS:
             return error(
                 f'Invalid step {step}. Valid steps are 0 to 4.',
                 http_status=status.HTTP_400_BAD_REQUEST,
@@ -3845,7 +3858,7 @@ class OnboardingView(APIView):
                 'Specify a step to clear, e.g. DELETE /onboarding/step/0/.',
                 http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        if step not in self._VALID_STEPS:
+        if step not in _VALID_STEPS:
             return error(
                 f'Invalid step {step}. Valid steps are 0 to 4.',
                 http_status=status.HTTP_400_BAD_REQUEST,
@@ -3871,9 +3884,11 @@ class OnboardingView(APIView):
                 data={},
             )
 
-        step_fields = _STEP_ALL_FIELDS.get(step, frozenset())
+        step_fields = _step_all_field_keys(step)
         if not step_fields:
             return success(f'Step {step} has no profile fields to clear.', data={})
+        custom_keys = _step_custom_field_keys(step)
+        builtin_keys = step_fields - custom_keys
 
         from apps.accounts.models import EmployeeProfile as EP
         try:
@@ -3887,7 +3902,11 @@ class OnboardingView(APIView):
             )
 
         try:
-            EP.objects.filter(pk=profile.pk).update(**{field: None for field in step_fields})
+            if builtin_keys:
+                EP.objects.filter(pk=profile.pk).update(**{field: None for field in builtin_keys})
+            if custom_keys:
+                remaining = {k: v for k, v in (profile.custom_field_values or {}).items() if k not in custom_keys}
+                EP.objects.filter(pk=profile.pk).update(custom_field_values=remaining)
         except Exception as exc:
             logger.error('OnboardingView DELETE clear failed user=%s step=%d: %s',
                          request.user.pk, step, exc, exc_info=True)
@@ -3912,40 +3931,8 @@ class OnboardingView(APIView):
             return error('Please fill in your profile details before submitting.')
 
         missing = []
-        if not profile.date_of_birth:
-            missing.append('Date of Birth (Personal)')
-        if not profile.gender:
-            missing.append('Gender (Personal)')
-        if not profile.marital_status:
-            missing.append('Marital Status (Personal)')
-        if not (profile.father_name or '').strip():
-            missing.append("Father's Name (Personal)")
-        if not (profile.current_address or '').strip():
-            missing.append('Current Address (Personal)')
-        if not (profile.highest_qualification or '').strip():
-            missing.append('Highest Qualification (Education)')
-        if not (profile.institution or '').strip():
-            missing.append('Institution / University (Education)')
-        if not profile.year_of_passing:
-            missing.append('Year of Passing (Education)')
-        if not (profile.account_holder_name or '').strip():
-            missing.append('Account Holder Name (Bank Details)')
-        if not profile.account_type:
-            missing.append('Account Type (Bank Details)')
-        if not (profile.account_number or '').strip():
-            missing.append('Account Number (Bank Details)')
-        if not (profile.ifsc_code or '').strip():
-            missing.append('IFSC Code (Bank Details)')
-        if not (profile.bank_name or '').strip():
-            missing.append('Bank Name (Bank Details)')
-        if not (profile.bank_branch_name or '').strip():
-            missing.append('Bank Branch Name (Bank Details)')
-        if not (profile.emergency_name or '').strip():
-            missing.append('Emergency Contact Name (Emergency Contact)')
-        if not (profile.emergency_relationship or '').strip():
-            missing.append('Relationship (Emergency Contact)')
-        if not (profile.emergency_phone or '').strip():
-            missing.append('Emergency Contact Phone (Emergency Contact)')
+        for step in range(4):
+            missing.extend(_missing_required(profile, step))
 
         if missing:
             return error(
@@ -4028,7 +4015,7 @@ def _save_profile_step(request, step: int):
         )
 
     # ── Step range validation ──────────────────────────────────────────────────
-    if step not in _STEP_REQUIRED_FIELDS:
+    if step not in _VALID_STEPS:
         return error(
             f'Invalid step {step}. Valid steps are 0 to 4.',
             http_status=status.HTTP_400_BAD_REQUEST,
@@ -4130,12 +4117,22 @@ def _save_profile_step(request, step: int):
             http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    step_fields   = _STEP_ALL_FIELDS.get(step, frozenset())
-    required_keys = frozenset(_STEP_REQUIRED_FIELDS[step].keys())
+    step_fields   = _step_all_field_keys(step)
+    required_keys = frozenset(c.field_key for c in _step_required_configs(step))
+    custom_keys   = _step_custom_field_keys(step)
 
     filled_data: dict = {}
+    custom_updates: dict = {}
     for k, v in request.data.items():
         if k not in step_fields:
+            continue
+        if k in custom_keys:
+            # No serializer-level type coercion for custom fields (they're
+            # HR-defined at runtime, not real columns) — stored as submitted,
+            # empty value included. Required-ness is checked separately by
+            # _missing_required at step-complete/submit time, same as
+            # built-in fields' "let required-field validation catch it" below.
+            custom_updates[k] = v
             continue
         if v in ('', None):
             if k in required_keys:
@@ -4144,11 +4141,16 @@ def _save_profile_step(request, step: int):
         else:
             filled_data[k] = v
 
+    if custom_updates:
+        merged = dict(profile.custom_field_values or {})
+        merged.update(custom_updates)
+        filled_data['custom_field_values'] = merged
+
     # Step-scoped "nothing to save" — only triggers when the request had no step
     # fields at all or all were required fields with empty values.
     if not filled_data:
         all_data  = EmployeeProfileSerializer(profile).data
-        step_data = {k: v for k, v in all_data.items() if k in step_fields}
+        step_data = _extract_step_data(profile, all_data, step)
         return success('Nothing to save.', data=step_data)
 
     serializer = EmployeeProfileSerializer(profile, data=filled_data, partial=True)
@@ -4180,11 +4182,137 @@ def _save_profile_step(request, step: int):
 
     # Return ONLY the fields for this step — never leak other steps' data
     all_data  = EmployeeProfileSerializer(profile).data
-    step_data = {k: v for k, v in all_data.items() if k in step_fields}
+    step_data = _extract_step_data(profile, all_data, step)
     logger.info('Onboarding step %d saved for user %s', step, request.user.email)
     return success('Profile saved.', data=step_data)
 
 
+# ─── Onboarding Field Configuration ────────────────────────────────────────────
+
+class OnboardingFieldConfigView(APIView):
+    """
+    HR-only settings screen for the onboarding wizard's field configuration
+    (steps 0-3 — Documents/step 4 is a separate file-upload flow, not covered
+    here). GET lists every field (built-in + custom); POST creates a custom
+    field; PATCH updates one; DELETE removes a custom field (built-in fields
+    can only be hidden via PATCH, never deleted).
+    """
+    permission_classes = [HasSettingsPermission]
+
+    def get(self, request):
+        from apps.accounts.serializers import OnboardingFieldConfigSerializer
+        from core.cache_service import OnboardingFieldConfigCacheService
+        configs = sorted(OnboardingFieldConfigCacheService.get_all(), key=lambda c: (c.step, c.order))
+        return success(
+            'Onboarding field configuration retrieved.',
+            OnboardingFieldConfigSerializer(configs, many=True).data,
+        )
+
+    def post(self, request):
+        from apps.accounts.serializers import (
+            OnboardingFieldConfigCreateSerializer,
+            OnboardingFieldConfigSerializer,
+        )
+        from core.cache_service import OnboardingFieldConfigCacheService
+
+        serializer = OnboardingFieldConfigCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        data = serializer.validated_data
+
+        base_key = re.sub(r'[^a-z0-9]+', '_', data['label'].lower()).strip('_') or 'field'
+        field_key = f'custom_{base_key}'
+        suffix = 1
+        while OnboardingFieldConfig.objects.filter(field_key=field_key).exists():
+            suffix += 1
+            field_key = f'custom_{base_key}_{suffix}'
+
+        max_order = OnboardingFieldConfig.objects.filter(step=data['step']).aggregate(m=Max('order'))['m']
+        config = OnboardingFieldConfig.objects.create(
+            field_key=field_key,
+            label=data['label'],
+            field_type=data['field_type'],
+            options=data.get('options') or [],
+            step=data['step'],
+            order=(max_order or 0) + 1,
+            visible=True,
+            required=data.get('required', False),
+            is_custom=True,
+            is_locked=False,
+        )
+        OnboardingFieldConfigCacheService.invalidate()
+        logger.info('Created custom onboarding field "%s" by %s', field_key, request.user.email)
+        return success(
+            'Custom field created.', OnboardingFieldConfigSerializer(config).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+    def patch(self, request, field_key: str):
+        from apps.accounts.serializers import (
+            OnboardingFieldConfigSerializer,
+            OnboardingFieldConfigUpdateSerializer,
+        )
+        from core.cache_service import OnboardingFieldConfigCacheService
+
+        config = OnboardingFieldConfig.objects.filter(field_key=field_key).first()
+        if not config:
+            return error('Field not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if config.is_locked and ({'visible', 'required'} & set(request.data.keys())):
+            return error(
+                f'"{config.label}" is a locked field — its visibility and requirement can\'t be changed.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = OnboardingFieldConfigUpdateSerializer(config, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        serializer.save()
+        OnboardingFieldConfigCacheService.invalidate()
+        logger.info('Updated onboarding field "%s" by %s', field_key, request.user.email)
+        return success('Field updated.', OnboardingFieldConfigSerializer(config).data)
+
+    def delete(self, request, field_key: str):
+        from core.cache_service import OnboardingFieldConfigCacheService
+
+        config = OnboardingFieldConfig.objects.filter(field_key=field_key).first()
+        if not config:
+            return error('Field not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not config.is_custom:
+            return error(
+                'Built-in fields can\'t be deleted — hide them instead.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+        config.delete()
+        OnboardingFieldConfigCacheService.invalidate()
+        logger.info('Deleted custom onboarding field "%s" by %s', field_key, request.user.email)
+        return success('Custom field deleted.')
+
+
+class OnboardingFieldConfigPublicView(APIView):
+    """
+    Wizard-facing: only visible fields, grouped by step. Every onboarding
+    employee needs this regardless of role — not gated behind settings.view,
+    same reasoning as FaceVerificationStatusView.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.serializers import OnboardingFieldConfigSerializer
+        from core.cache_service import OnboardingFieldConfigCacheService
+
+        by_step: dict = defaultdict(list)
+        for c in OnboardingFieldConfigCacheService.get_all():
+            if c.visible:
+                by_step[c.step].append(c)
+
+        data = {
+            str(step): OnboardingFieldConfigSerializer(
+                sorted(fields, key=lambda c: c.order), many=True,
+            ).data
+            for step, fields in by_step.items()
+        }
+        return success('Onboarding field configuration retrieved.', data=data)
 
 
 # ─── Onboarding — Document upload / stream / delete ──────────────────────────
