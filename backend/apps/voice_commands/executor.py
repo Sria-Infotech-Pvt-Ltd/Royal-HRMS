@@ -193,9 +193,20 @@ def execute_intent(
         return ExecutionResult(success=False, message=_PERMISSION_DENIED_MESSAGE)
 
     required_module = _INTENT_MODULES.get(intent)
-    if required_module and not connection.tenant.has_module(required_module):
-        label = MODULE_LABELS.get(required_module, required_module)
-        return ExecutionResult(success=False, message=f'{label} is not enabled for your company.')
+    if required_module:
+        # connection.tenant is a real Client (has_module available) only once
+        # TenantSchemaMiddleware has activated a schema from a genuine HTTP
+        # request — exactly the case this whole check exists for. Anything
+        # that reaches execute_intent() without that (django-tenants' own
+        # FakeTenant placeholder when no schema is active — e.g. every
+        # existing voice_commands test, which calls this directly with no
+        # request cycle) has no module information to gate on at all, so
+        # this is skipped rather than crashed on, matching the "not
+        # applicable" behaviour of the `required_module` falsy case above.
+        has_module = getattr(connection.tenant, 'has_module', None)
+        if callable(has_module) and not has_module(required_module):
+            label = MODULE_LABELS.get(required_module, required_module)
+            return ExecutionResult(success=False, message=f'{label} is not enabled for your company.')
 
     if intent == INTENT_CLOCK_IN:
         return execute_clock_in(request, attendance_mode, latitude, longitude)
