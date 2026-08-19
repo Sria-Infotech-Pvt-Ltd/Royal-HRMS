@@ -3,6 +3,14 @@ import logging
 
 from django.db import models
 
+from core.storage import (
+    AuthenticatedRawMediaCloudinaryStorage,
+    expense_receipt_upload_path,
+    leave_document_upload_path,
+    separation_document_upload_path,
+    separation_request_upload_path,
+)
+
 logger = logging.getLogger(__name__)
 
 # ─── Leave constants ──────────────────────────────────────────────────────────
@@ -121,7 +129,7 @@ class Expense(models.Model):
 class ExpenseReceipt(models.Model):
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     expense    = models.ForeignKey(Expense, on_delete=models.CASCADE, related_name='receipts')
-    file       = models.FileField(upload_to='expenses/receipts/')
+    file       = models.FileField(upload_to=expense_receipt_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage())
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -350,7 +358,7 @@ class SeparationRequest(models.Model):
     proposed_last_working_day = models.DateField()
     notice_period_days        = models.PositiveIntegerField(default=30)
     comments                  = models.TextField(blank=True, default='')
-    document                  = models.FileField(upload_to='separation_documents/', null=True, blank=True)
+    document                  = models.FileField(upload_to=separation_request_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(), null=True, blank=True)
     status                    = models.CharField(max_length=20, choices=SEPARATION_STATUS_CHOICES, default=SEP_PENDING, db_index=True)
 
     created_by = models.ForeignKey(
@@ -509,7 +517,7 @@ class SeparationDocument(models.Model):
     id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     request        = models.ForeignKey(SeparationRequest, on_delete=models.CASCADE, related_name='documents')
     document_type  = models.CharField(max_length=30, choices=SEP_DOCUMENT_TYPE_CHOICES, default=SEP_DOC_OTHER)
-    file           = models.FileField(upload_to='separation_documents/')
+    file           = models.FileField(upload_to=separation_document_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage())
     uploaded_by    = models.ForeignKey(
         'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='separation_documents_uploaded',
@@ -582,7 +590,7 @@ class LeaveRequest(models.Model):
     handover_to          = models.CharField(max_length=150, blank=True, default='')
     handover_notes       = models.TextField(blank=True, default='')
 
-    document   = models.FileField(upload_to='leave_documents/', null=True, blank=True)
+    document   = models.FileField(upload_to=leave_document_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage(), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
