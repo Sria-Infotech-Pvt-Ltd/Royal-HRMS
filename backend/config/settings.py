@@ -385,6 +385,8 @@ REST_FRAMEWORK = {
         'forgot_password':      '5/hour',
         'otp_verify':           '10/hour',
         'platform_admin_login': '20/hour',
+        'platform_admin_forgot_password': '5/hour',
+        'platform_admin_otp_verify':      '10/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }
@@ -410,6 +412,12 @@ OTP_EXPIRY_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 30
+
+# The one shared frontend URL every company signs in through (no per-company
+# subdomains) — used to build a clickable login link in the provisioning
+# welcome email. Must NOT have a trailing slash (see apps.tenants.utils
+# send_company_provisioned_email, which appends '/login').
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000').rstrip('/')
 
 CORS_ALLOWED_ORIGINS = env.list(
     'CORS_ALLOWED_ORIGINS',

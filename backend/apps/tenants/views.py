@@ -1,6 +1,9 @@
 import logging
+from datetime import timedelta
 
 from django.conf import settings
+from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -8,18 +11,27 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 
 from core.pagination import paginate, paginated_data
-from core.responses import error, first_error, success
+from core.responses import error, first_error, get_client_ip, success
 
 from apps.tenants.authentication import PlatformAdminAuthentication
-from apps.tenants.models import ALL_MODULES, Client, PlatformAdmin, PlatformSMTPSettings
+from apps.tenants.models import (
+    ALL_MODULES, Client, PlatformAdmin, PlatformAdminAuditLog, PlatformAdminOTP,
+    PlatformAdminPasswordResetToken, PlatformSMTPSettings,
+)
 from apps.tenants.permissions import IsPlatformAdmin
 from apps.tenants.serializers import (
-    ClientCreateSerializer, ClientSerializer, PlatformAdminLoginSerializer, PlatformSMTPSettingsSerializer,
+    ClientCreateSerializer, ClientSerializer, PlatformAdminAccountSerializer, PlatformAdminAuditLogSerializer,
+    PlatformAdminChangePasswordSerializer, PlatformAdminForgotPasswordSerializer, PlatformAdminInviteSerializer,
+    PlatformAdminLoginSerializer, PlatformAdminResetPasswordSerializer, PlatformAdminVerifyOtpSerializer,
+    PlatformSMTPSettingsSerializer,
 )
-from apps.tenants.services import CompanyCodeTaken, InvalidModules, create_pending_client
+from apps.tenants.services import CompanyCodeTaken, InvalidModules, create_pending_client, generate_password
 from apps.tenants.tasks import finish_provisioning_task
-from apps.tenants.throttles import PlatformAdminLoginRateThrottle
+from apps.tenants.throttles import (
+    PlatformAdminForgotPasswordRateThrottle, PlatformAdminLoginRateThrottle, PlatformAdminOTPVerifyRateThrottle,
+)
 from apps.tenants.tokens import PlatformAdminRefreshToken
+from apps.tenants.utils import send_platform_admin_invite_email, send_platform_admin_otp_email
 
 logger = logging.getLogger(__name__)
 
@@ -39,35 +51,20 @@ def _set_platform_cookies(resp, access: str, refresh: str | None = None) -> None
         )
 
 
-class ResolveCompanyDomainView(APIView):
+def _log_platform_action(request, action: str, target_company: Client | None = None, changes: dict | None = None) -> None:
     """
-    Unauthenticated — lets the frontend ask "which company does the domain
-    the browser is actually on belong to?" so a company with a real custom
-    domain configured (Client.custom_domain, set by a platform admin) can
-    skip typing a Company ID and land straight on their own branded login.
-
-    Takes ?domain= explicitly rather than reading the request's own Host
-    header — this request already crossed the Next.js proxy by the time it
-    reaches Django, and what browser Host header survives that hop isn't
-    something to rely on. window.location.hostname on the frontend is
-    always accurate, so it's passed through as a plain query param instead.
-
-    Setting Client.custom_domain alone does not make a domain reachable —
-    see the field's own docstring in apps/tenants/models.py for the DNS/
-    hosting steps that still have to happen outside this codebase.
+    Every platform-admin action that changes something gets a row here —
+    previously nonexistent, unlike every tenant-side action which already
+    gets an apps.accounts.models.AuditLog row. Best-effort: a logging
+    failure must never block the actual action it's recording.
     """
-    permission_classes     = [AllowAny]
-    authentication_classes = []
-
-    def get(self, request):
-        domain = (request.query_params.get('domain') or '').strip().lower()
-        if not domain:
-            return error('domain query parameter is required.')
-        try:
-            client = Client.objects.get(custom_domain__iexact=domain, is_active=True)
-        except Client.DoesNotExist:
-            return error('No company registered for this domain.', http_status=status.HTTP_404_NOT_FOUND)
-        return success('OK', data={'company_code': client.company_code})
+    try:
+        PlatformAdminAuditLog.objects.create(
+            admin=request.user, action=action, target_company=target_company,
+            changes=changes or {}, ip_address=get_client_ip(request),
+        )
+    except Exception:
+        logger.exception('Failed to write platform-admin audit log for action %s', action)
 
 
 class PlatformAdminLoginView(APIView):
@@ -210,6 +207,9 @@ class CompanyListCreateView(APIView):
 
         finish_provisioning_task.delay(str(client.id), data['admin_email'], client.enabled_modules)
 
+        _log_platform_action(request, 'company_created', target_company=client, changes={
+            'company_name': client.company_name, 'modules': client.enabled_modules,
+        })
         logger.info(
             'Company %s provisioning started in the background by platform admin %s',
             client.company_code, request.user.email,
@@ -253,14 +253,11 @@ class CompanyDetailView(APIView):
                 return error(f'enabled_modules must be a list drawn from: {", ".join(ALL_MODULES)}')
             client.enabled_modules = modules
             update_fields.append('enabled_modules')
-        if 'custom_domain' in request.data:
-            domain = (request.data['custom_domain'] or '').strip().lower()
-            if domain and Client.objects.exclude(pk=client.pk).filter(custom_domain__iexact=domain).exists():
-                return error(f'Domain "{domain}" is already assigned to another company.')
-            client.custom_domain = domain
-            update_fields.append('custom_domain')
 
         client.save(update_fields=update_fields)
+        _log_platform_action(request, 'company_updated', target_company=client, changes={
+            f: request.data[f] for f in ('is_active', 'enabled_modules') if f in request.data
+        })
         logger.info('Company %s updated by platform admin %s', client.company_code, request.user.email)
         return success('Company updated.', ClientSerializer(client).data)
 
@@ -290,6 +287,7 @@ class CompanyRevealPasswordView(APIView):
         password = client.pending_admin_password
         client.pending_admin_password = ''
         client.save(update_fields=['pending_admin_password', 'updated_at'])
+        _log_platform_action(request, 'company_password_revealed', target_company=client)
         logger.info('Password for company %s revealed by platform admin %s', client.company_code, request.user.email)
         return success('Password retrieved — this is the only time it will be shown.', data={'password': password})
 
@@ -322,3 +320,297 @@ class PlatformSMTPSettingsView(APIView):
         serializer.save()
         logger.info('Platform SMTP settings updated by %s', request.user.email)
         return success('Platform SMTP settings saved.', PlatformSMTPSettingsSerializer(smtp).data)
+
+
+# ─── Platform-admin password recovery ─────────────────────────────────────────
+# Mirrors apps.accounts.views's ForgotPasswordView/VerifyOTPView/
+# ResetPasswordView exactly, but keyed to PlatformAdmin — previously the
+# only way to recover a platform admin's forgotten password was direct
+# database access, unlike every tenant user who already has this flow.
+
+class PlatformAdminForgotPasswordView(APIView):
+    permission_classes     = [AllowAny]
+    authentication_classes = []
+    throttle_classes       = [PlatformAdminForgotPasswordRateThrottle]
+
+    def post(self, request):
+        serializer = PlatformAdminForgotPasswordSerializer(data=request.data, context={})
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        admin = serializer.context.get('admin')
+        if not admin:
+            # Same response either way — never reveal whether the email is
+            # a registered platform admin (see accounts.ForgotPasswordView).
+            return success('OTP sent to your email address. It is valid for 10 minutes.')
+
+        try:
+            _, plain_otp = PlatformAdminOTP.create_for_admin(admin)
+        except Exception:
+            logger.exception('Failed to create platform-admin OTP for %s', admin.email)
+            return error('Could not generate OTP. Please try again later.', http_status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            send_platform_admin_otp_email(admin.email, plain_otp, admin.full_name)
+        except Exception:
+            logger.exception('Failed to send platform-admin OTP email to %s', admin.email)
+            return error(
+                'Failed to send OTP email. Please check platform SMTP settings or try again later.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        logger.info('Platform-admin OTP sent to %s', admin.email)
+        return success('OTP sent to your email address. It is valid for 10 minutes.')
+
+
+class PlatformAdminVerifyOtpView(APIView):
+    permission_classes     = [AllowAny]
+    authentication_classes = []
+    throttle_classes       = [PlatformAdminOTPVerifyRateThrottle]
+
+    def post(self, request):
+        serializer = PlatformAdminVerifyOtpSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        email     = serializer.validated_data['email']
+        otp_input = serializer.validated_data['otp']
+
+        try:
+            admin = PlatformAdmin.objects.get(email__iexact=email, is_active=True)
+        except PlatformAdmin.DoesNotExist:
+            return error('No active platform admin found with this email address.')
+
+        otp_obj = PlatformAdminOTP.objects.filter(admin=admin, is_used=False).order_by('-created_at').first()
+        if not otp_obj:
+            return error('No OTP found. Please request a new OTP.')
+
+        PlatformAdminOTP.objects.filter(pk=otp_obj.pk).update(attempts=F('attempts') + 1)
+        otp_obj.refresh_from_db(fields=['attempts'])
+
+        if not otp_obj.is_valid():
+            return error('OTP has expired or maximum attempts exceeded. Please request a new OTP.')
+        if not otp_obj.check_otp(otp_input):
+            return error('Invalid OTP. Please try again.')
+
+        with transaction.atomic():
+            otp_obj.is_used = True
+            otp_obj.save(update_fields=['is_used'])
+            reset_token = PlatformAdminPasswordResetToken.create_for_admin(admin)
+
+        logger.info('Platform-admin OTP verified for %s', email)
+        return success('OTP verified successfully.', data={'reset_token': str(reset_token.id)})
+
+
+class PlatformAdminResetPasswordView(APIView):
+    permission_classes     = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = PlatformAdminResetPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        reset_token_id = serializer.validated_data['reset_token']
+        new_password   = serializer.validated_data['new_password']
+
+        try:
+            token_obj = PlatformAdminPasswordResetToken.objects.select_related('admin').get(id=reset_token_id)
+        except PlatformAdminPasswordResetToken.DoesNotExist:
+            return error('Invalid or expired reset token.')
+
+        if not token_obj.is_valid():
+            return error('This reset token has already been used or has expired.')
+
+        admin = token_obj.admin
+        with transaction.atomic():
+            admin.set_password(new_password)
+            admin.failed_login_attempts = 0
+            admin.locked_until          = None
+            admin.save(update_fields=['password', 'failed_login_attempts', 'locked_until', 'updated_at'])
+            token_obj.is_used = True
+            token_obj.save(update_fields=['is_used'])
+
+        logger.info('Password reset for platform admin %s', admin.email)
+        return success('Password has been reset successfully. Please log in with your new password.')
+
+
+class PlatformAdminChangePasswordView(APIView):
+    """Voluntary change from My Account, for an already-authenticated platform admin."""
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def post(self, request):
+        serializer = PlatformAdminChangePasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        admin        = request.user
+        old_password = serializer.validated_data['old_password']
+        new_password = serializer.validated_data['new_password']
+
+        if not admin.check_password(old_password):
+            return error('Current password is incorrect.')
+
+        admin.set_password(new_password)
+        admin.save(update_fields=['password', 'updated_at'])
+        logger.info('Password changed for platform admin %s', admin.email)
+
+        resp = success('Password changed successfully. Please log in again with your new password.')
+        resp.delete_cookie(_ACCESS_COOKIE, path='/')
+        resp.delete_cookie(_REFRESH_COOKIE, path='/')
+        return resp
+
+
+# ─── Platform admin accounts (invite / list / deactivate) ─────────────────────
+
+class PlatformAdminAccountListCreateView(APIView):
+    """
+    Adding a second platform admin used to require the create_platform_admin
+    management command — there was no UI path at all. This lets an existing
+    admin invite another one directly.
+    """
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def get(self, request):
+        admins = PlatformAdmin.objects.all().order_by('-created_at')
+        page_obj, paginator = paginate(admins, request, default_page_size=20)
+        return success('Platform admins retrieved.', paginated_data(
+            paginator, page_obj, PlatformAdminAccountSerializer(page_obj.object_list, many=True).data,
+        ))
+
+    def post(self, request):
+        serializer = PlatformAdminInviteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+
+        email     = serializer.validated_data['email'].strip().lower()
+        full_name = serializer.validated_data['full_name'].strip()
+        password  = generate_password()
+
+        new_admin = PlatformAdmin(email=email, full_name=full_name, is_active=True)
+        new_admin.set_password(password)
+        new_admin.save()
+
+        send_platform_admin_invite_email(email, full_name, password)
+        _log_platform_action(request, 'platform_admin_invited', changes={'email': email, 'full_name': full_name})
+        logger.info('Platform admin %s invited by %s', email, request.user.email)
+
+        return success(
+            'Platform admin created — their login and temporary password were emailed to them.',
+            data=PlatformAdminAccountSerializer(new_admin).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformAdminAccountDetailView(APIView):
+    """PATCH is_active only — deactivating another platform admin. An admin cannot deactivate themselves."""
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def patch(self, request, pk):
+        try:
+            target = PlatformAdmin.objects.get(pk=pk)
+        except PlatformAdmin.DoesNotExist:
+            return error('Platform admin not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if 'is_active' not in request.data:
+            return error('is_active is required.')
+
+        if str(target.pk) == str(request.user.pk) and not request.data['is_active']:
+            return error('You cannot deactivate your own account.')
+
+        target.is_active = bool(request.data['is_active'])
+        target.save(update_fields=['is_active', 'updated_at'])
+        _log_platform_action(
+            request, 'platform_admin_deactivated' if not target.is_active else 'platform_admin_reactivated',
+            changes={'email': target.email},
+        )
+        logger.info('Platform admin %s set is_active=%s by %s', target.email, target.is_active, request.user.email)
+        return success('Platform admin updated.', PlatformAdminAccountSerializer(target).data)
+
+
+# ─── Audit log + dashboard ─────────────────────────────────────────────────────
+
+class PlatformAdminAuditLogListView(APIView):
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def get(self, request):
+        logs = PlatformAdminAuditLog.objects.select_related('admin', 'target_company').all()
+        page_obj, paginator = paginate(logs, request, default_page_size=20)
+        return success('Audit log retrieved.', paginated_data(
+            paginator, page_obj, PlatformAdminAuditLogSerializer(page_obj.object_list, many=True).data,
+        ))
+
+
+class PlatformAdminDashboardStatsView(APIView):
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def _company_usage(self, clients: list[Client]) -> list[dict]:
+        """
+        Real activity per company — not just the registry row. Switches
+        into each fully-provisioned company's own schema (same pattern as
+        apps.tenants.utils.run_for_all_tenants) to count active employees
+        and find the most recent AuditLog entry, so a platform admin can
+        see which companies are actually being used versus paid-for but
+        dormant. Skipped for anything not provisioning_status='active' —
+        a pending/failed company's schema may not exist yet or may be
+        missing tables (same reasoning as run_for_all_tenants).
+        """
+        from apps.accounts.models import AuditLog, User
+
+        usage = []
+        for client in clients:
+            if client.provisioning_status != Client.PROVISIONING_ACTIVE:
+                continue
+            try:
+                with client:
+                    employee_count = User.objects.filter(is_active=True).count()
+                    last_activity = AuditLog.objects.order_by('-created_at').first()
+            except Exception:
+                logger.exception('Failed to read usage stats for company %s', client.company_code)
+                continue
+            usage.append({
+                'company_code':    client.company_code,
+                'company_name':    client.company_name,
+                'employee_count':  employee_count,
+                'last_activity_at': last_activity.created_at.isoformat() if last_activity else None,
+            })
+        return usage
+
+    def get(self, request):
+        clients = list(Client.objects.all())
+        module_counts = {m: 0 for m in ALL_MODULES}
+        for client in clients:
+            for module in client.enabled_modules or []:
+                if module in module_counts:
+                    module_counts[module] += 1
+
+        recent = Client.objects.order_by('-created_at')[:5]
+        company_usage = self._company_usage(clients)
+        # Companies that have never logged a single action, or haven't in
+        # 30+ days, surface first — the platform admin cares more about
+        # spotting a dormant paying customer than re-confirming an active one.
+        stale_cutoff = timezone.now() - timedelta(days=30)
+        company_usage.sort(key=lambda u: u['last_activity_at'] or '')
+
+        return success('Dashboard stats retrieved.', {
+            'total_companies':    len(clients),
+            'active_companies':   sum(1 for c in clients if c.is_active),
+            'disabled_companies': sum(1 for c in clients if not c.is_active),
+            'provisioning': {
+                'pending': sum(1 for c in clients if c.provisioning_status == Client.PROVISIONING_PENDING),
+                'active':  sum(1 for c in clients if c.provisioning_status == Client.PROVISIONING_ACTIVE),
+                'failed':  sum(1 for c in clients if c.provisioning_status == Client.PROVISIONING_FAILED),
+            },
+            'module_adoption': module_counts,
+            'recent_companies': ClientSerializer(recent, many=True).data,
+            'company_usage': company_usage,
+            'dormant_company_count': sum(
+                1 for u in company_usage
+                if not u['last_activity_at'] or u['last_activity_at'] < stale_cutoff.isoformat()
+            ),
+        })

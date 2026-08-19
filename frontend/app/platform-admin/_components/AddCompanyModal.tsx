@@ -4,8 +4,6 @@ import { useState } from "react";
 import Modal from "@/components/Modal";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
-import { ALL_MODULES, MODULE_LABELS } from "@/types/platformAdmin";
-import type { ModuleKey } from "@/types/platformAdmin";
 
 interface Props {
   onClose: () => void;
@@ -16,14 +14,9 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
   const [companyCode, setCompanyCode] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [adminEmail,  setAdminEmail]  = useState("");
-  const [modules,     setModules]     = useState<ModuleKey[]>(ALL_MODULES);
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState("");
   const [started,     setStarted]     = useState(false);
-
-  function toggleModule(key: ModuleKey) {
-    setModules(prev => prev.includes(key) ? prev.filter(m => m !== key) : [...prev, key]);
-  }
 
   async function handleCreate() {
     setError("");
@@ -33,15 +26,17 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
     }
     setSaving(true);
     try {
-      // Returns almost immediately — provisioning itself now runs in a
-      // detached background process (see backend apps/tenants/services.py),
-      // not inline in this request, specifically so a web-server restart
-      // can't kill it partway through. The company shows as "Pending" in
-      // the table and flips to "Active" (with a "View credentials" button)
-      // once the background process finishes, usually within a few minutes.
+      // Every company gets every module — omitting `modules` entirely lets
+      // the backend default to the full set (apps.tenants.services
+      // _validate_new_company) instead of asking here. Returns almost
+      // immediately — provisioning itself runs as a background Celery task
+      // (see backend apps/tenants/tasks.py), not inline in this request, so
+      // a web-server restart can't kill it partway through. The company
+      // shows as "Pending" in the table and flips to "Active" (with a
+      // "View credentials" button) once the task finishes.
       await platformAdminApi.post(
         API.platformAdmin.companies.list,
-        { company_code: companyCode.trim(), company_name: companyName.trim(), admin_email: adminEmail.trim(), modules },
+        { company_code: companyCode.trim(), company_name: companyName.trim(), admin_email: adminEmail.trim() },
       );
       setStarted(true);
       onCreated();
@@ -77,7 +72,7 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
     <Modal
       title="Add company"
       onClose={onClose}
-      maxWidth={520}
+      maxWidth={480}
       closeDisabled={saving}
       footer={
         <>
@@ -108,22 +103,10 @@ export default function AddCompanyModal({ onClose, onCreated }: Props) {
         </div>
       </div>
 
-      <div className="field-group" style={{ marginBottom: 16 }}>
+      <div className="field-group">
         <label className="field-label" htmlFor="ac-email">First admin&apos;s email</label>
         <input id="ac-email" type="email" className="field-input" placeholder="admin@acme.com" value={adminEmail}
           onChange={e => setAdminEmail(e.target.value)} disabled={saving} suppressHydrationWarning />
-      </div>
-
-      <div className="field-group">
-        <span className="field-label">Modules enabled for this company</span>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", marginTop: 6 }}>
-          {ALL_MODULES.map(key => (
-            <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: saving ? "default" : "pointer" }}>
-              <input type="checkbox" checked={modules.includes(key)} onChange={() => toggleModule(key)} disabled={saving} suppressHydrationWarning />
-              {MODULE_LABELS[key]}
-            </label>
-          ))}
-        </div>
       </div>
     </Modal>
   );

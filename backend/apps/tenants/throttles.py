@@ -9,3 +9,11 @@ class PlatformAdminLoginRateThrottle(AnonRateThrottle):
     tenant login attempts from the same IP.
     """
     scope = 'platform_admin_login'
+
+
+class PlatformAdminForgotPasswordRateThrottle(AnonRateThrottle):
+    scope = 'platform_admin_forgot_password'
+
+
+class PlatformAdminOTPVerifyRateThrottle(AnonRateThrottle):
+    scope = 'platform_admin_otp_verify'

@@ -60,8 +60,11 @@ export default function PlatformAdminLoginPage() {
               />
             </div>
 
-            <div className="field-group" style={{ marginBottom: 20 }}>
-              <label htmlFor="pa-password" className="field-label">Password</label>
+            <div className="field-group" style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <label htmlFor="pa-password" className="field-label">Password</label>
+                <a href="/platform-admin/forgot-password" style={{ fontSize: 12.5 }}>Forgot password?</a>
+              </div>
               <input
                 id="pa-password"
                 type="password"
@@ -75,7 +78,7 @@ export default function PlatformAdminLoginPage() {
               />
             </div>
 
-            <button type="submit" className="btn btn-filled" style={{ width: "100%", justifyContent: "center" }} disabled={loading} suppressHydrationWarning>
+            <button type="submit" className="btn btn-filled" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} disabled={loading} suppressHydrationWarning>
               {loading ? (<><i className="ti ti-loader-2 spin" /> Signing in…</>) : "Sign in"}
             </button>
           </form>

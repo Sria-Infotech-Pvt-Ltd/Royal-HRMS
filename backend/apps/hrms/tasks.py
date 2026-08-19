@@ -29,6 +29,7 @@ def reset_annual_leave_balances(self):
 
     Idempotent: get_or_create — safe to re-run if the task fires twice.
     """
+    from apps.tenants.models import MODULE_LEAVE
     from apps.tenants.utils import run_for_all_tenants
 
     def _run_for_one_tenant():
@@ -109,7 +110,9 @@ def reset_annual_leave_balances(self):
         return {'year': new_year, 'created': created_total, 'skipped': skipped_total}
 
     try:
-        result = run_for_all_tenants(_run_for_one_tenant, task_name='reset_annual_leave_balances')
+        result = run_for_all_tenants(
+            _run_for_one_tenant, task_name='reset_annual_leave_balances', required_module=MODULE_LEAVE,
+        )
         logger.info('reset_annual_leave_balances completed: %s', result)
         return result
     except Exception as exc:

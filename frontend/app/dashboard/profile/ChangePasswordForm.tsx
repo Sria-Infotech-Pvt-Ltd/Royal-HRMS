@@ -4,7 +4,12 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
-export default function ChangePasswordForm() {
+interface Props {
+  /** Called after a successful change — omit for the default (inline success message, stay on page). */
+  onSuccess?: () => void;
+}
+
+export default function ChangePasswordForm({ onSuccess }: Props) {
   const [oldPwd,     setOldPwd]     = useState("");
   const [newPwd,     setNewPwd]     = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -27,6 +32,11 @@ export default function ChangePasswordForm() {
       await clientApi.post(API.auth.changePassword, { old_password: oldPwd, new_password: newPwd, confirm_password: confirmPwd });
       setSuccess(true);
       setOldPwd(""); setNewPwd(""); setConfirmPwd("");
+      // The backend blacklists the current session's refresh token and clears
+      // both auth cookies on a successful change (a fresh login is required
+      // either way), so a caller that wants to redirect can safely do so
+      // right away instead of waiting on anything else here.
+      onSuccess?.();
     } catch (err) {
       const { message } = err as { message: string };
       setError(message || "Failed to change password. Please try again.");

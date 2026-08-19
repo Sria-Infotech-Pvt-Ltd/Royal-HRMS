@@ -42,7 +42,6 @@ export interface Company {
   company_code:          string;
   company_name:          string;
   enabled_modules:       ModuleKey[];
-  custom_domain:         string;
   is_active:             boolean;
   provisioning_status:   ProvisioningStatus;
   has_pending_password:  boolean;
@@ -88,4 +87,66 @@ export interface PlatformSMTPSettingsInput {
   use_tls:     boolean;
   from_email:  string;
   sender_name: string;
+}
+
+export interface PlatformAdminAccount {
+  id:         string;
+  email:      string;
+  full_name:  string;
+  is_active:  boolean;
+  last_login: string | null;
+  created_at: string;
+}
+
+export interface PlatformAdminAccountListResponse {
+  count:       number;
+  page:        number;
+  page_size:   number;
+  total_pages: number;
+  results:     PlatformAdminAccount[];
+}
+
+export interface PlatformAdminInviteInput {
+  email:     string;
+  full_name: string;
+}
+
+export interface AuditLogEntry {
+  id:                  string;
+  admin_email:         string;
+  action:              string;
+  target_company_code: string;
+  changes:             Record<string, unknown>;
+  ip_address:          string | null;
+  created_at:          string;
+}
+
+export interface AuditLogListResponse {
+  count:       number;
+  page:        number;
+  page_size:   number;
+  total_pages: number;
+  results:     AuditLogEntry[];
+}
+
+export interface CompanyUsage {
+  company_code:      string;
+  company_name:      string;
+  employee_count:    number;
+  last_activity_at:  string | null;
+}
+
+export interface DashboardStats {
+  total_companies:    number;
+  active_companies:   number;
+  disabled_companies: number;
+  provisioning: {
+    pending: number;
+    active:  number;
+    failed:  number;
+  };
+  module_adoption:      Record<ModuleKey, number>;
+  recent_companies:     Company[];
+  company_usage:        CompanyUsage[];
+  dormant_company_count: number;
 }
