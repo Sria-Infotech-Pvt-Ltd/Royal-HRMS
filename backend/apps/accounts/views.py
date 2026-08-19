@@ -2307,7 +2307,7 @@ class DocumentDetailView(APIView):
             dl_url = cloudinary.utils.private_download_url(
                 name, fmt,
                 resource_type='raw',
-                type='upload',
+                type='authenticated',
                 attachment=False,
             )
             r = http_req.get(dl_url, stream=True, timeout=30)

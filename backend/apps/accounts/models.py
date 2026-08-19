@@ -13,7 +13,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.encrypted_fields import EncryptedCharField, blind_index
-from core.storage import AuthenticatedRawMediaCloudinaryStorage
+from core.storage import AuthenticatedRawMediaCloudinaryStorage, document_center_upload_path
 
 
 # ─── Role & Permission ────────────────────────────────────────────────────────
@@ -793,7 +793,7 @@ class Document(models.Model):
     title       = models.CharField(max_length=200)
     description = models.TextField(blank=True, default='')
     category    = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER)
-    file        = models.FileField(upload_to='documents/%Y/%m/')
+    file        = models.FileField(upload_to=document_center_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage())
     file_name   = models.CharField(max_length=255)
     file_type   = models.CharField(max_length=10)       # PDF / DOCX / XLSX …
     file_size   = models.PositiveBigIntegerField()       # bytes

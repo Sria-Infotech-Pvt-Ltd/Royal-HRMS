@@ -95,3 +95,12 @@ def separation_document_upload_path(instance, filename) -> str:
 
 def leave_document_upload_path(instance, filename) -> str:
     return f'{_tenant_schema()}/leave_documents/{filename}'
+
+
+def document_center_upload_path(instance, filename) -> str:
+    # Matches the year/month partitioning the old upload_to='documents/%Y/%m/'
+    # string gave for free — a callable upload_to doesn't get Django's
+    # automatic strftime substitution, so it's done by hand here.
+    from django.utils import timezone
+    stamp = timezone.now().strftime('%Y/%m')
+    return f'{_tenant_schema()}/documents/{stamp}/{filename}'
