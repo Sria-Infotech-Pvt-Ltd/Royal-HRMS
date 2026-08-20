@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 
 export type EmployeeStatus = "active" | "onboarding" | "inactive";
 export type Gender = "male" | "female" | "transgender";
@@ -280,6 +281,22 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
 const SECTION_TO_STEP: Record<string, number> = {
   personal: 0, education: 1, bank: 2, emergency: 3,
 };
+
+/**
+ * Replaces a "docs" section's static `documents` list with one built from
+ * DocumentTypeConfig — same reasoning as applyFieldConfig() below, but for
+ * onboarding Step 5. Falls back to the static list if config hasn't loaded
+ * yet (empty array) so the page doesn't flash empty while loading.
+ */
+export function applyDocumentTypeConfig(section: ProfileSection, documentTypeConfig: DocumentTypeConfig[]): ProfileSection {
+  if (section.kind !== "docs") return section;
+  if (documentTypeConfig.length === 0) return section;
+  const documents: DocEntry[] = documentTypeConfig
+    .filter(t => t.visible)
+    .sort((a, b) => a.order - b.order)
+    .map(t => ({ name: t.label, documentType: t.type_key, required: t.required }));
+  return { ...section, documents };
+}
 
 function fieldTypeFromConfig(type: string): FieldType {
   if (type === "dropdown") return "select";

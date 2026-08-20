@@ -101,6 +101,10 @@ export const API = {
       list: "/settings/onboarding-fields/",
       detail: (fieldKey: string) => `/settings/onboarding-fields/${fieldKey}/`,
     },
+    documentTypes: {
+      list: "/settings/document-types/",
+      detail: (typeKey: string) => `/settings/document-types/${typeKey}/`,
+    },
   },
 
   hrms: {
@@ -139,6 +143,7 @@ export const API = {
     profile: "/onboarding/",
     profileStep: (step: number) => `/onboarding/step/${step}/`,
     fieldConfig: "/onboarding/field-config/",
+    documentTypeConfig: "/onboarding/document-type-config/",
     documents: "/onboarding/documents/",
     documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,
     customFileFields: "/onboarding/custom-file-fields/",

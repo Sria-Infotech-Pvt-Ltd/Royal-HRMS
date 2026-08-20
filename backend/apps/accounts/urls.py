@@ -3,6 +3,8 @@ from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
     CustomFieldFileValueView,
+    DocumentTypeConfigPublicView,
+    DocumentTypeConfigView,
     EmployeeApprovalMatrixView,
     EmployeeBulkImportView,
     EmployeeCodeSettingsView,
@@ -94,10 +96,13 @@ urlpatterns = [
     path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
     path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),
+    path('onboarding/document-type-config/',         DocumentTypeConfigPublicView.as_view(), name='onboarding-document-type-config'),
 
     # Onboarding field configuration (HR settings screen)
     path('settings/onboarding-fields/',              OnboardingFieldConfigView.as_view(), name='onboarding-field-settings'),
     path('settings/onboarding-fields/<str:field_key>/', OnboardingFieldConfigView.as_view(), name='onboarding-field-settings-detail'),
+    path('settings/document-types/',                 DocumentTypeConfigView.as_view(), name='document-type-settings'),
+    path('settings/document-types/<str:type_key>/',  DocumentTypeConfigView.as_view(), name='document-type-settings-detail'),
 
     # Organisation structure
     path('departments/',           DepartmentListCreateView.as_view(), name='department-list'),

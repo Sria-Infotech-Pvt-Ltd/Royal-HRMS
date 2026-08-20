@@ -210,10 +210,11 @@ def _document_dict(doc) -> dict:
     except Exception:
         logger.warning('Cloudinary signed URL failed for employee document %s', doc.id, exc_info=True)
         file_url = ''
+    from core.cache_service import DocumentTypeConfigCacheService
     return {
         'id':                    doc.id,
         'document_type':         doc.document_type,
-        'document_type_display': doc.get_document_type_display(),
+        'document_type_display': DocumentTypeConfigCacheService.label_for(doc.document_type),
         'file':                  file_url,
         'file_name':             doc.file_name,
         'file_size':             doc.file_size,
@@ -3819,6 +3820,29 @@ def _field_filled(value) -> bool:
     return bool(value)
 
 
+def _missing_required_docs(user) -> list:
+    """
+    Human-readable labels for required-but-not-yet-uploaded document types
+    (visible+required DocumentTypeConfig rows the user has no
+    EmployeeDocument for) — the Step-5 equivalent of _missing_required()
+    above. Single shared implementation for what used to be three duplicated
+    hardcoded PAN/Aadhaar/Degree/conditional-Experience checks (in this
+    function, _save_profile_step's step-4 branch, and OnboardingView._submit)
+    — document types and their required-ness are now configurable per
+    company via DocumentTypeConfig, so there is no hardcoded type list left
+    to check against, and no conditional experience-based special case
+    (dropped in favor of a plain per-type required flag, same as every other
+    onboarding field).
+    """
+    from apps.accounts.models import EmployeeDocument as ED
+    from core.cache_service import DocumentTypeConfigCacheService
+    uploaded = set(ED.objects.filter(user=user).values_list('document_type', flat=True))
+    return [
+        c.label for c in DocumentTypeConfigCacheService.get_all()
+        if c.visible and c.required and c.type_key not in uploaded
+    ]
+
+
 def _compute_completed_steps(profile, user) -> list:
     """
     Derive which wizard steps (0-4) already satisfy their required fields,
@@ -3826,19 +3850,8 @@ def _compute_completed_steps(profile, user) -> list:
     recomputed from the profile/document data that is already saved.
     """
     completed = [step for step in range(4) if _step_is_complete(profile, step)]
-
-    from apps.accounts.models import EmployeeDocument as ED
-    uploaded = set(ED.objects.filter(user=user).values_list('document_type', flat=True))
-    required_docs = {ED.TYPE_PAN, ED.TYPE_AADHAAR, ED.TYPE_DEGREE}
-    has_experience = (
-        bool((profile.previous_employer or '').strip())
-        or (profile.total_experience_years is not None and profile.total_experience_years > 0)
-    )
-    if has_experience:
-        required_docs.add(ED.TYPE_EXPERIENCE)
-    if required_docs.issubset(uploaded):
+    if not _missing_required_docs(user):
         completed.append(4)
-
     return completed
 
 
@@ -4096,23 +4109,7 @@ class OnboardingView(APIView):
                 f'{", ".join(missing)}.'
             )
 
-        from apps.accounts.models import EmployeeDocument as ED
-        uploaded = set(
-            ED.objects.filter(user=request.user).values_list('document_type', flat=True)
-        )
-        missing_docs = []
-        if ED.TYPE_PAN not in uploaded:
-            missing_docs.append('PAN Card')
-        if ED.TYPE_AADHAAR not in uploaded:
-            missing_docs.append('Aadhaar Card')
-        if ED.TYPE_DEGREE not in uploaded:
-            missing_docs.append('Degree Certificate')
-        has_experience = (
-            bool((profile.previous_employer or '').strip())
-            or (profile.total_experience_years is not None and profile.total_experience_years > 0)
-        )
-        if has_experience and ED.TYPE_EXPERIENCE not in uploaded:
-            missing_docs.append('Experience Certificate (required for experienced candidates)')
+        missing_docs = _missing_required_docs(request.user)
         if missing_docs:
             return error(
                 f'Please upload the following required documents before submitting: '
@@ -4216,11 +4213,8 @@ def _save_profile_step(request, step: int):
             profile.save(update_fields=['pan_number', 'updated_at'])
             return success('PAN number saved.', data={'pan_number': pan_value})
 
-        from apps.accounts.models import EmployeeDocument as ED
         try:
-            uploaded = set(
-                ED.objects.filter(user=request.user).values_list('document_type', flat=True)
-            )
+            missing_docs = _missing_required_docs(request.user)
         except Exception as exc:
             logger.error('_save_profile_step step=4 document query failed user=%s: %s',
                          request.user.pk, exc, exc_info=True)
@@ -4228,32 +4222,6 @@ def _save_profile_step(request, step: int):
                 'Unable to verify documents. Please try again.',
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-        missing_docs = []
-        if ED.TYPE_PAN not in uploaded:
-            missing_docs.append('PAN Card')
-        if ED.TYPE_AADHAAR not in uploaded:
-            missing_docs.append('Aadhaar Card')
-        if ED.TYPE_DEGREE not in uploaded:
-            missing_docs.append('Degree Certificate')
-
-        # Experience letter required only when previous employer is on record
-        try:
-            profile, _ = EP.objects.get_or_create(user=request.user)
-        except Exception as exc:
-            logger.error('_save_profile_step step=4 profile fetch failed user=%s: %s',
-                         request.user.pk, exc, exc_info=True)
-            return error(
-                'Unable to retrieve profile. Please try again.',
-                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        has_experience = (
-            bool((profile.previous_employer or '').strip())
-            or (profile.total_experience_years is not None and profile.total_experience_years > 0)
-        )
-        if has_experience and ED.TYPE_EXPERIENCE not in uploaded:
-            missing_docs.append('Experience Certificate (required for experienced candidates)')
 
         if missing_docs:
             return error(
@@ -4485,6 +4453,123 @@ class OnboardingFieldConfigPublicView(APIView):
         return success('Onboarding field configuration retrieved.', data=data)
 
 
+# ─── Document Type Configuration (onboarding Step 5) ──────────────────────────
+
+class DocumentTypeConfigView(APIView):
+    """
+    HR-only settings screen for onboarding Step 5 (Documents) — sibling of
+    OnboardingFieldConfigView for the document-type list. GET lists every
+    type (built-in + custom); POST creates a custom type; PATCH updates one;
+    DELETE removes a custom type (built-in types can only be hidden via
+    PATCH, never deleted — deleting one would orphan already-uploaded
+    EmployeeDocument rows referencing it).
+    """
+    permission_classes = [HasSettingsPermission]
+
+    def get(self, request):
+        from apps.accounts.serializers import DocumentTypeConfigSerializer
+        from core.cache_service import DocumentTypeConfigCacheService
+        configs = sorted(DocumentTypeConfigCacheService.get_all(), key=lambda c: c.order)
+        return success(
+            'Document type configuration retrieved.',
+            DocumentTypeConfigSerializer(configs, many=True).data,
+        )
+
+    def post(self, request):
+        from apps.accounts.models import DocumentTypeConfig
+        from apps.accounts.serializers import (
+            DocumentTypeConfigCreateSerializer,
+            DocumentTypeConfigSerializer,
+        )
+        from core.cache_service import DocumentTypeConfigCacheService
+
+        serializer = DocumentTypeConfigCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        data = serializer.validated_data
+
+        base_key = re.sub(r'[^a-z0-9]+', '_', data['label'].lower()).strip('_') or 'document'
+        type_key = f'custom_{base_key}'
+        suffix = 1
+        while DocumentTypeConfig.objects.filter(type_key=type_key).exists():
+            suffix += 1
+            type_key = f'custom_{base_key}_{suffix}'
+
+        max_order = DocumentTypeConfig.objects.aggregate(m=Max('order'))['m']
+        config = DocumentTypeConfig.objects.create(
+            type_key=type_key,
+            label=data['label'],
+            order=(max_order or 0) + 1,
+            visible=True,
+            required=data.get('required', False),
+            allow_multiple=data.get('allow_multiple', False),
+            is_custom=True,
+            is_locked=False,
+        )
+        DocumentTypeConfigCacheService.invalidate()
+        logger.info('Created custom document type "%s" by %s', type_key, request.user.email)
+        return success(
+            'Document type created.', DocumentTypeConfigSerializer(config).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+    def patch(self, request, type_key: str):
+        from apps.accounts.models import DocumentTypeConfig
+        from apps.accounts.serializers import (
+            DocumentTypeConfigSerializer,
+            DocumentTypeConfigUpdateSerializer,
+        )
+        from core.cache_service import DocumentTypeConfigCacheService
+
+        config = DocumentTypeConfig.objects.filter(type_key=type_key).first()
+        if not config:
+            return error('Document type not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        serializer = DocumentTypeConfigUpdateSerializer(config, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        serializer.save()
+        DocumentTypeConfigCacheService.invalidate()
+        logger.info('Updated document type "%s" by %s', type_key, request.user.email)
+        return success('Document type updated.', DocumentTypeConfigSerializer(config).data)
+
+    def delete(self, request, type_key: str):
+        from apps.accounts.models import DocumentTypeConfig
+        from core.cache_service import DocumentTypeConfigCacheService
+
+        config = DocumentTypeConfig.objects.filter(type_key=type_key).first()
+        if not config:
+            return error('Document type not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not config.is_custom:
+            return error(
+                'Built-in document types can\'t be deleted — hide them instead.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+        config.delete()
+        DocumentTypeConfigCacheService.invalidate()
+        logger.info('Deleted custom document type "%s" by %s', type_key, request.user.email)
+        return success('Document type deleted.')
+
+
+class DocumentTypeConfigPublicView(APIView):
+    """
+    Every document type (visible AND hidden), sorted by order — used by the
+    wizard, the self-service Profile page, and the HR Employee Detail page,
+    each of which filters to `visible` client-side. Same
+    hidden-vs-not-loaded-yet reasoning as OnboardingFieldConfigPublicView.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.serializers import DocumentTypeConfigSerializer
+        from core.cache_service import DocumentTypeConfigCacheService
+        configs = sorted(DocumentTypeConfigCacheService.get_all(), key=lambda c: c.order)
+        return success(
+            'Document type configuration retrieved.',
+            DocumentTypeConfigSerializer(configs, many=True).data,
+        )
+
+
 # ─── Onboarding — Document upload / stream / delete ──────────────────────────
 
 class EmployeeDocumentView(APIView):
@@ -4560,16 +4645,20 @@ class EmployeeDocumentView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
         file_obj = serializer.validated_data['file']
         doc_type = serializer.validated_data['document_type']
+        type_config = _get_document_type_config(doc_type)
+        if not type_config:
+            return error('Invalid document type.', http_status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             doc = serializer.save(
                 user=request.user,
                 file_name=file_obj.name[:255],
                 file_size=file_obj.size,
             )
-            ED.objects.filter(
-                user=request.user,
-                document_type=doc_type,
-            ).exclude(pk=doc.pk).delete()
+            if not type_config.allow_multiple:
+                ED.objects.filter(
+                    user=request.user,
+                    document_type=doc_type,
+                ).exclude(pk=doc.pk).delete()
         return success('Document uploaded.', data=EmployeeDocumentSerializer(doc, context={'request': request}).data,
                        http_status=status.HTTP_201_CREATED)
 
@@ -4648,15 +4737,20 @@ class EmployeeProfileDocumentView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
         file_obj = serializer.validated_data['file']
         doc_type = serializer.validated_data['document_type']
+        type_config = _get_document_type_config(doc_type)
+        if not type_config:
+            return error('Invalid document type.', http_status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             doc = serializer.save(
                 user=employee,
                 file_name=file_obj.name,
                 file_size=file_obj.size,
             )
-            # Upsert by type — a re-upload of the same document_type replaces
-            # the previous file rather than accumulating duplicates.
-            ED.objects.filter(user=employee, document_type=doc_type).exclude(pk=doc.pk).delete()
+            # Upsert by type (unless allow_multiple) — a re-upload of the
+            # same document_type replaces the previous file rather than
+            # accumulating duplicates.
+            if not type_config.allow_multiple:
+                ED.objects.filter(user=employee, document_type=doc_type).exclude(pk=doc.pk).delete()
 
         try:
             AuditLog.objects.create(
@@ -4675,6 +4769,19 @@ class EmployeeProfileDocumentView(APIView):
             data=EmployeeDocumentSerializer(doc, context={'request': request}).data,
             http_status=status.HTTP_201_CREATED,
         )
+
+
+def _get_document_type_config(type_key: str):
+    """Return the visible DocumentTypeConfig row for type_key, or None. Every
+    document upload endpoint validates against this before accepting a file
+    — document_type no longer has a `choices=` enum (see DocumentTypeConfig),
+    so this is the only thing standing between an upload and an arbitrary
+    string being stored as a document type."""
+    from core.cache_service import DocumentTypeConfigCacheService
+    for c in DocumentTypeConfigCacheService.get_all():
+        if c.type_key == type_key and c.visible:
+            return c
+    return None
 
 
 # ─── Custom Field File Values (file/image-type OnboardingFieldConfig fields) ──

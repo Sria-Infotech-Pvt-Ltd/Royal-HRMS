@@ -7,11 +7,13 @@ import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { useFetch } from "@/hooks/useFetch";
 import type { CustomFieldFileValue, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
   apiDocumentToEntry,
+  applyDocumentTypeConfig,
   applyFieldConfig,
   customFieldKeys,
   type ApiDocument,
@@ -67,11 +69,16 @@ interface ApiEmployee {
   custom_file_fields?: { id: number; field_key: string; file: string; file_name: string; file_size: number; uploaded_at: string }[];
 }
 
-function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
-  // Use the static expected document types as the base list so the cards section
-  // always shows all document slots — uploaded ones get their file info merged in.
+function buildDocEntries(apiDocs: ApiDocument[], documentTypeConfig: DocumentTypeConfig[] = []): DocEntry[] {
+  // Base list of expected document type "slots" so the cards section always
+  // shows every configured type — uploaded ones get their file info merged
+  // in. Config-driven when it's loaded (applyDocumentTypeConfig), falling
+  // back to the static built-in list otherwise (same fallback
+  // applyDocumentTypeConfig itself uses, so behavior matches exactly whether
+  // called here or wherever else the section is rendered).
   const docsSection = PROFILE_SECTIONS.find(s => s.id === "documents");
-  const base: DocEntry[] = docsSection?.kind === "docs" ? [...docsSection.documents] : [];
+  const configuredSection = docsSection ? applyDocumentTypeConfig(docsSection, documentTypeConfig) : undefined;
+  const base: DocEntry[] = configuredSection?.kind === "docs" ? [...configuredSection.documents] : [];
 
   return base.map(expected => {
     const uploaded = apiDocs.find(d => d.document_type === expected.documentType);
@@ -88,7 +95,7 @@ function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
   });
 }
 
-function apiToEmployee(u: ApiEmployee): Employee {
+function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeConfig[] = []): Employee {
   const p: ApiProfile = u.profile ?? {};
   return {
     id:            u.employee_id || u.id,
@@ -178,7 +185,7 @@ function apiToEmployee(u: ApiEmployee): Employee {
       ...(p.custom_field_values ?? {}),
     },
     tables: {},
-    documents: buildDocEntries(u.documents ?? []),
+    documents: buildDocEntries(u.documents ?? [], documentTypeConfig),
   };
 }
 
@@ -213,6 +220,13 @@ export default function EmployeeProfilePage({
   const [customFileFields, setCustomFileFields] = useState<CustomFieldFileValue[]>([]);
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
   const [fileUploadError,  setFileUploadError]  = useState<string>("");
+
+  // Raw (unmerged) documents from the last successful fetch — kept around so
+  // the documents list can be rebuilt once documentTypeConfig arrives, since
+  // that fetch is independent of (and may resolve after) the employee fetch
+  // that first builds `employee.documents`.
+  const [rawApiDocuments, setRawApiDocuments] = useState<ApiDocument[]>([]);
+  const { data: documentTypeConfigData } = useFetch<DocumentTypeConfig[]>(API.onboarding.documentTypeConfig);
 
   const [deptOptions,     setDeptOptions]     = useState<FieldOption[]>([]);
   const [allDesigs,       setAllDesigs]       = useState<{ name: string; department_name: string }[]>([]);
@@ -265,10 +279,16 @@ export default function EmployeeProfilePage({
       .get<{ data: ApiEmployee }>(API.employees.detail(id))
       .then(async ({ data }) => {
         const raw = data.data;
-        const emp = apiToEmployee(raw);
+        // documentTypeConfig isn't a dependency of this effect (only `id` is)
+        // — it's applied here with whatever's in cache/empty on first render,
+        // then the effect below reactively rebuilds `documents` once/whenever
+        // documentTypeConfigData actually resolves, so this never needs to
+        // re-run just because that fetch settles later.
+        const emp = apiToEmployee(raw, []);
         setEmployee(emp);
         setEmployeeUuid(raw.uuid);
         setOnboardingStatus(raw.onboarding_status ?? "");
+        setRawApiDocuments(raw.documents ?? []);
         setCustomFileFields(
           (raw.custom_file_fields ?? []).map(f => ({
             id: f.id, field_key: f.field_key, file_url: f.file,
@@ -302,6 +322,14 @@ export default function EmployeeProfilePage({
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // documentTypeConfig is fetched independently of the employee GET above and
+  // may resolve after it — rebuild the documents list once it arrives so a
+  // hidden/reordered/custom type is reflected without needing a full refetch.
+  useEffect(() => {
+    if (!documentTypeConfigData) return;
+    setEmployee(prev => prev && { ...prev, documents: buildDocEntries(rawApiDocuments, documentTypeConfigData) });
+  }, [documentTypeConfigData, rawApiDocuments]);
 
   // Per-company field visibility/custom fields — same endpoint the
   // onboarding wizard and self-service Profile page read.
@@ -441,7 +469,8 @@ export default function EmployeeProfilePage({
       // Re-fetch so the card picks up the real uploaded_at/file_size/file_url
       // from the server rather than guessing them client-side.
       const { data } = await clientApi.get<{ data: ApiEmployee }>(API.employees.detail(id));
-      const freshDocs = buildDocEntries(data.data.documents ?? []);
+      setRawApiDocuments(data.data.documents ?? []);
+      const freshDocs = buildDocEntries(data.data.documents ?? [], documentTypeConfigData ?? []);
       setEmployee(prev => (prev ? { ...prev, documents: freshDocs } : prev));
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;

@@ -9,6 +9,7 @@ import DocPreviewModal from "@/components/DocPreviewModal";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 import type { OnboardingFieldConfigByStep, CustomFieldFileValue } from "@/types/onboardingFieldConfig";
+import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "./_types";
 import DynamicStepFields from "./_components/DynamicStepFields";
 
@@ -47,13 +48,6 @@ const STEPS = [
 // file) never shift.
 const FACE_STEP = { label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id" };
 
-const DOC_TYPES = [
-  { value: "pan_card",           label: "PAN Card" },
-  { value: "aadhaar_card",       label: "Aadhaar Card" },
-  { value: "degree_certificate", label: "Degree Certificate" },
-  { value: "experience_letter",  label: "Experience Letter" },
-];
-
 const INP = "field-input";
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -83,6 +77,10 @@ export default function OnboardingPage() {
   const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [customFileValues, setCustomFileValues] = useState<CustomFieldFileValue[]>([]);
+  // Per-company configurable document types (Settings > Onboarding Fields >
+  // Documents) — same fetch-all-filter-visible pattern as fieldConfig above.
+  const [docTypeConfig, setDocTypeConfig] = useState<DocumentTypeConfig[]>([]);
+  const docTypes = docTypeConfig.filter(t => t.visible).sort((a, b) => a.order - b.order);
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
   const [fileUploadError, setFileUploadError] = useState<string | null>(null);
 
@@ -149,6 +147,9 @@ export default function OnboardingPage() {
     }).catch(() => {});
     clientApi.get(API.onboarding.customFileFields).then(r => {
       setCustomFileValues(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get(API.onboarding.documentTypeConfig).then(r => {
+      setDocTypeConfig(r.data?.data ?? []);
     }).catch(() => {});
   }, []);
 
@@ -525,6 +526,7 @@ export default function OnboardingPage() {
           )}
           {tab === 4 && (
             <TabDocuments
+              docTypes={docTypes}
               docs={docs}
               uploadedTypes={uploadedTypes}
               uploading={uploading}
@@ -645,9 +647,10 @@ const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }
 // ── Tab: Documents ────────────────────────────────────────────────────────────
 
 function TabDocuments({
-  docs, uploadedTypes, uploading, fileRefs, onUpload,
+  docTypes, docs, uploadedTypes, uploading, fileRefs, onUpload,
   panNumber, onPanNumberChange, onPanCardUpload, panErr, panSaving,
 }: {
+  docTypes: DocumentTypeConfig[];
   docs: UploadedDoc[];
   uploadedTypes: Set<string>;
   uploading: string | null;
@@ -676,14 +679,14 @@ function TabDocuments({
           Upload clear scans or photos. Accepted: PDF, JPG, PNG · Max 5 MB each.
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: ".875rem" }}>
-          {DOC_TYPES.map(dt => {
-            const uploaded     = uploadedTypes.has(dt.value);
-            const uploaded_doc = docs.find(d => d.document_type === dt.value);
-            const isPan        = dt.value === "pan_card";
-            const isUploading  = uploading === dt.value || (isPan && panSaving);
+          {docTypes.map(dt => {
+            const uploaded     = uploadedTypes.has(dt.type_key);
+            const uploaded_doc = docs.find(d => d.document_type === dt.type_key);
+            const isPan        = dt.type_key === "pan_card";
+            const isUploading  = uploading === dt.type_key || (isPan && panSaving);
             const panBlocked   = isPan && !PAN_RE.test(panNumber.trim());
             return (
-              <div key={dt.value} style={{
+              <div key={dt.type_key} style={{
                 padding: "1rem 1.25rem", borderRadius: 12,
                 border: `1.5px solid ${uploaded ? "var(--success)" : "var(--outline-v)"}`,
                 background: uploaded ? "var(--success-c)" : "#fff",
@@ -708,12 +711,12 @@ function TabDocuments({
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png"
                       style={{ display: "none" }}
-                      ref={el => { fileRefs.current[dt.value] = el; }}
+                      ref={el => { fileRefs.current[dt.type_key] = el; }}
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (file) {
                           if (isPan) onPanCardUpload(file);
-                          else onUpload(dt.value, file);
+                          else onUpload(dt.type_key, file);
                         }
                         e.target.value = "";
                       }}
@@ -731,7 +734,7 @@ function TabDocuments({
                     <button
                       className="btn btn-ghost"
                       style={{ fontSize: ".83rem", borderColor: uploaded ? "var(--success)" : undefined, color: uploaded ? "var(--success)" : undefined }}
-                      onClick={() => fileRefs.current[dt.value]?.click()}
+                      onClick={() => fileRefs.current[dt.type_key]?.click()}
                       disabled={isUploading || panBlocked}
                       title={panBlocked ? "Enter a valid PAN number first" : undefined}
                       type="button"

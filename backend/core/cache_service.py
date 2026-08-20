@@ -549,3 +549,48 @@ class OnboardingFieldConfigCacheService:
             cache.delete(cls._ALL_KEY)
         except Exception:
             logger.warning('Cache delete failed for onboarding_field_config:all')
+
+
+class DocumentTypeConfigCacheService:
+    """
+    All DocumentTypeConfig rows — sibling of OnboardingFieldConfigCacheService
+    for onboarding Step 5 (Documents). Read on every document upload/list
+    (to resolve a type_key's label/required/allow_multiple) and every
+    settings-page load.
+    """
+    _ALL_KEY = 'document_type_config:all'
+
+    @classmethod
+    def get_all(cls) -> list:
+        try:
+            cached = cache.get(cls._ALL_KEY)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for document_type_config:all')
+        from apps.accounts.models import DocumentTypeConfig
+        data = list(DocumentTypeConfig.objects.all())
+        try:
+            cache.set(cls._ALL_KEY, data, CacheTTL.ONBOARDING_FIELDS)
+        except Exception:
+            logger.warning('Cache write failed for document_type_config:all')
+        return data
+
+    @classmethod
+    def label_for(cls, type_key: str) -> str:
+        """Human label for a type_key, falling back to the raw key if the
+        config row is missing (e.g. a since-deleted custom type — the
+        underlying EmployeeDocument row itself is never deleted alongside
+        it, same as a deleted custom OnboardingFieldConfig field leaving its
+        historical value behind)."""
+        for c in cls.get_all():
+            if c.type_key == type_key:
+                return c.label
+        return type_key
+
+    @classmethod
+    def invalidate(cls) -> None:
+        try:
+            cache.delete(cls._ALL_KEY)
+        except Exception:
+            logger.warning('Cache delete failed for document_type_config:all')

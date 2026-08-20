@@ -1114,6 +1114,42 @@ class OnboardingFieldConfig(models.Model):
         return f'{self.label} ({self.field_key})'
 
 
+class DocumentTypeConfig(models.Model):
+    """
+    Per-company configuration for onboarding Step 5 (Documents) — the
+    sibling of OnboardingFieldConfig for steps 0-3. is_custom=False rows are
+    the 7 built-in types seeded by a data migration (matching the values
+    EmployeeDocument.TYPE_PAN etc. used to enforce via a `choices=` enum);
+    they can be hidden/reordered/required-toggled but never deleted, since
+    deleting one would orphan any already-uploaded EmployeeDocument rows of
+    that type. is_custom=True rows are types HR adds at runtime.
+
+    Unlike OnboardingFieldConfig, every field here (including the 7
+    built-ins) is fully editable — no is_locked=True rows are seeded; the
+    column exists for parity with its sibling model and the shared settings
+    table UI, not because any type is currently protected.
+    """
+    type_key       = models.CharField(max_length=64, unique=True)
+    label          = models.CharField(max_length=150)
+    order          = models.PositiveSmallIntegerField(default=0)
+    visible        = models.BooleanField(default=True)
+    required       = models.BooleanField(default=False)
+    # Single file (replaced on reupload) vs a growing list — same convention
+    # as OnboardingFieldConfig.allow_multiple for its file-type fields.
+    allow_multiple = models.BooleanField(default=False)
+    is_custom      = models.BooleanField(default=False)
+    is_locked      = models.BooleanField(default=False)
+    created_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_document_type_configs'
+        ordering = ['order']
+
+    def __str__(self) -> str:
+        return f'{self.label} ({self.type_key})'
+
+
 # ─── Employee Documents ───────────────────────────────────────────────────────
 
 def _employee_doc_path(instance, filename):
@@ -1130,6 +1166,11 @@ def _employee_doc_path(instance, filename):
 
 
 class EmployeeDocument(models.Model):
+    # Plain string identifiers for the 7 built-in types seeded by
+    # DocumentTypeConfig (see below) — no longer a `choices=` enum on the
+    # field itself. What document types actually exist/are allowed is now
+    # configurable per tenant via DocumentTypeConfig; these constants just
+    # keep the seeded built-ins' type_key values readable in code.
     TYPE_PAN               = 'pan_card'
     TYPE_AADHAAR           = 'aadhaar_card'
     TYPE_DEGREE            = 'degree_certificate'
@@ -1137,21 +1178,15 @@ class EmployeeDocument(models.Model):
     TYPE_PASSPORT_PHOTO    = 'passport_photo'
     TYPE_CANCELLED_CHEQUE  = 'cancelled_cheque'
     TYPE_OTHER             = 'other'
-    TYPE_CHOICES    = [
-        (TYPE_PAN,              'PAN Card'),
-        (TYPE_AADHAAR,          'Aadhaar Card'),
-        (TYPE_DEGREE,           'Degree Certificate'),
-        (TYPE_EXPERIENCE,       'Experience Letter'),
-        (TYPE_PASSPORT_PHOTO,   'Passport Photo'),
-        (TYPE_CANCELLED_CHEQUE, 'Cancelled Cheque'),
-        (TYPE_OTHER,            'Other'),
-    ]
 
     ALLOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'application/pdf'}
     MAX_FILE_SIZE      = 5 * 1024 * 1024  # 5 MB
 
     user          = models.ForeignKey(User, on_delete=models.CASCADE, related_name='employee_documents')
-    document_type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    # Validated against DocumentTypeConfig at the view layer, not via a
+    # `choices=` enum — max_length matches DocumentTypeConfig.type_key so a
+    # custom (HR-added) type's slug always fits.
+    document_type = models.CharField(max_length=64)
     # Django's FileField max_length defaults to 100 — _employee_doc_path() embeds
     # the original filename into the stored path, so anything beyond a short name
     # overflows that default (matches file_name's own width for the same reason).

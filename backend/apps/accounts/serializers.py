@@ -19,6 +19,7 @@ from apps.accounts.models import (
     Department,
     Designation,
     Document,
+    DocumentTypeConfig,
     EmailTemplate,
     EmailTemplateAttachment,
     EmailTemplateCategory,
@@ -1113,7 +1114,11 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
 # ─── Employee Document ────────────────────────────────────────────────────────
 
 class EmployeeDocumentSerializer(serializers.ModelSerializer):
-    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    # document_type no longer has a `choices=` enum (see DocumentTypeConfig),
+    # so there's no auto-generated get_document_type_display() to source from
+    # any more — resolved via the same config cache the settings/upload views
+    # already read.
+    document_type_display = serializers.SerializerMethodField()
     # file_url points to our backend proxy which signs the Cloudinary request —
     # the raw Cloudinary URL requires authentication and cannot be opened directly.
     file_url = serializers.SerializerMethodField()
@@ -1126,6 +1131,10 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ('id', 'document_type_display', 'file_url', 'file_name', 'file_size', 'uploaded_at')
         extra_kwargs = {'file': {'write_only': True}}
+
+    def get_document_type_display(self, obj):
+        from core.cache_service import DocumentTypeConfigCacheService
+        return DocumentTypeConfigCacheService.label_for(obj.document_type)
 
     def get_file_url(self, obj):
         # HR approval context: return a signed Cloudinary URL so admins can
@@ -1253,6 +1262,44 @@ class OnboardingFieldConfigUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = OnboardingFieldConfig
         fields = ['label', 'options', 'order', 'visible', 'required']
+
+
+# ─── Document Type Configuration (onboarding Step 5) ───────────────────────────
+
+class DocumentTypeConfigSerializer(serializers.ModelSerializer):
+    """Read-only — used for the settings list and the wizard/Profile/Employee-
+    Detail-facing public config."""
+    class Meta:
+        model  = DocumentTypeConfig
+        fields = [
+            'type_key', 'label', 'order', 'visible', 'required',
+            'allow_multiple', 'is_custom', 'is_locked', 'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class DocumentTypeConfigCreateSerializer(serializers.Serializer):
+    """Creates a new HR-defined document type. type_key is derived from
+    label in the view, same pattern as OnboardingFieldConfigCreateSerializer's
+    field_key derivation."""
+    label          = serializers.CharField(max_length=150, trim_whitespace=True)
+    required       = serializers.BooleanField(default=False)
+    allow_multiple = serializers.BooleanField(default=False)
+
+    def validate_label(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Label cannot be blank.')
+        return value
+
+
+class DocumentTypeConfigUpdateSerializer(serializers.ModelSerializer):
+    """Partial update only — type_key and is_custom are immutable after
+    creation (changing type_key would orphan already-uploaded documents
+    referencing the old key)."""
+    class Meta:
+        model  = DocumentTypeConfig
+        fields = ['label', 'order', 'visible', 'required', 'allow_multiple']
 
 
 # ─── Onboarding Pipeline (pending + submitted) ────────────────────────────────

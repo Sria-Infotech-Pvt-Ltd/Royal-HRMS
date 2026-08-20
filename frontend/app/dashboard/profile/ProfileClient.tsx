@@ -5,7 +5,8 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
-import { PROFILE_SECTIONS, type DocEntry } from "@/app/dashboard/employees/_data";
+import { PROFILE_SECTIONS, applyDocumentTypeConfig, type DocEntry } from "@/app/dashboard/employees/_data";
+import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import { useFaceRegistrationCard } from "@/hooks/useFaceRegistrationCard";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ChangePasswordForm from "./ChangePasswordForm";
@@ -82,9 +83,10 @@ interface DocumentItem {
 
 const DOC_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
 
-function buildDocEntries(apiDocs: DocumentItem[]): (DocEntry & { docId?: number })[] {
+function buildDocEntries(apiDocs: DocumentItem[], documentTypeConfig: DocumentTypeConfig[] = []): (DocEntry & { docId?: number })[] {
   const docsSection = PROFILE_SECTIONS.find(s => s.id === "documents");
-  const base = docsSection?.kind === "docs" ? docsSection.documents : [];
+  const configuredSection = docsSection ? applyDocumentTypeConfig(docsSection, documentTypeConfig) : undefined;
+  const base = configuredSection?.kind === "docs" ? configuredSection.documents : [];
   return base.map(expected => {
     const uploaded = apiDocs.find(d => d.document_type === expected.documentType);
     if (!uploaded) return expected;
@@ -194,6 +196,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   // read-only below, matching those sections' existing fields.
   const { data: fieldConfigData } = useFetch<OnboardingFieldConfigByStep>(API.onboarding.fieldConfig);
   const fieldConfig = fieldConfigData ?? {};
+  const { data: documentTypeConfigData } = useFetch<DocumentTypeConfig[]>(API.onboarding.documentTypeConfig);
 
   const [active, setActive] = useState<TabId>("personal");
 
@@ -203,7 +206,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   const [toast,  setToast]  = useState<{ msg: string; ok: boolean } | null>(null);
 
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
-  const docEntries = buildDocEntries(docs ?? []);
+  const docEntries = buildDocEntries(docs ?? [], documentTypeConfigData ?? []);
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
 
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
