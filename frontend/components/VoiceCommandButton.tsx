@@ -14,7 +14,7 @@ import FaceVerificationModal from "@/components/FaceVerificationModal";
 // offers both a mic button and a "type your answer" text field
 // (VoiceInputControls) — so a single launcher covers voice AND typed entry
 // without needing its own separate keyboard-toggle icon.
-const LAUNCHER_SIZE = 60;
+const LAUNCHER_SIZE = 72;
 
 const EDGE_MARGIN = 8;
 const SAFE_W = 180;
