@@ -1066,6 +1066,7 @@ class OnboardingFieldConfig(models.Model):
     TYPE_DATE      = 'date'
     TYPE_DROPDOWN  = 'dropdown'
     TYPE_CHECKBOX  = 'checkbox'
+    TYPE_FILE      = 'file'
     FIELD_TYPE_CHOICES = [
         (TYPE_TEXT,     'Text'),
         (TYPE_TEXTAREA, 'Long text'),
@@ -1073,6 +1074,7 @@ class OnboardingFieldConfig(models.Model):
         (TYPE_DATE,     'Date'),
         (TYPE_DROPDOWN, 'Dropdown'),
         (TYPE_CHECKBOX, 'Checkbox'),
+        (TYPE_FILE,     'File / Image'),
     ]
 
     STEP_PERSONAL  = 0
@@ -1091,6 +1093,10 @@ class OnboardingFieldConfig(models.Model):
     field_type = models.CharField(max_length=20, choices=FIELD_TYPE_CHOICES, default=TYPE_TEXT)
     # Dropdown choices only, e.g. ["Option A", "Option B"] — ignored for every other field_type.
     options    = models.JSONField(default=list, blank=True)
+    # File fields only: whether multiple files may be uploaded for this field
+    # (a growing list) vs a single file that's replaced on reupload — ignored
+    # for every other field_type, same convention as `options` above.
+    allow_multiple = models.BooleanField(default=False)
     step       = models.PositiveSmallIntegerField(choices=STEP_CHOICES)
     order      = models.PositiveSmallIntegerField(default=0)
     visible    = models.BooleanField(default=True)
@@ -1161,6 +1167,52 @@ class EmployeeDocument(models.Model):
 
     def __str__(self) -> str:
         return f'{self.user.email} — {self.document_type}'
+
+
+# ─── Custom Field File Values ─────────────────────────────────────────────────
+
+def _custom_field_file_path(instance, filename):
+    import os
+    schema = getattr(connection, 'schema_name', None) or 'public'
+    uid = (
+        getattr(instance.user, 'employee_id', None)
+        or str(instance.user_id)
+    )
+    # Same tenant-prefix reasoning as _employee_doc_path() above; a separate
+    # subfolder just keeps ad-hoc custom-field uploads out of the real
+    # employee_documents tree rather than mixing the two file families.
+    return os.path.join(schema, 'custom_field_files', str(uid), os.path.basename(filename))
+
+
+class CustomFieldFileValue(models.Model):
+    """
+    File/image values for OnboardingFieldConfig fields with field_type='file'
+    (see OnboardingFieldConfig.TYPE_FILE). Deliberately not folded into
+    EmployeeProfile.custom_field_values (a plain JSONField) — that dict holds
+    only JSON-primitive values for every other custom field type, and a real
+    upload needs its own storage row (Cloudinary path, size, mime validation)
+    the same way EmployeeDocument does, not a blob of bytes stuffed into JSON.
+
+    No unique_together on (user, field_key): cardinality is controlled by
+    OnboardingFieldConfig.allow_multiple instead, enforced by the view
+    (delete-then-create when False, plain create when True) rather than a DB
+    constraint, since a single model has to serve both cardinalities
+    depending on which field a row belongs to.
+    """
+    user        = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_field_files')
+    field_key   = models.CharField(max_length=64)
+    file        = models.FileField(upload_to=_custom_field_file_path, storage=AuthenticatedRawMediaCloudinaryStorage(), max_length=255)
+    file_name   = models.CharField(max_length=255)
+    file_size   = models.PositiveBigIntegerField()
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_custom_field_file_values'
+        ordering = ['field_key', '-uploaded_at']
+
+    def __str__(self) -> str:
+        return f'{self.user.email} — {self.field_key}'
 
 
 # ─── Approval Workflow Rules (global defaults) ────────────────────────────────

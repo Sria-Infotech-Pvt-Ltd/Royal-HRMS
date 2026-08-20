@@ -15,6 +15,7 @@ from rest_framework import serializers
 from apps.accounts.models import (
     AuditLog,
     Company,
+    CustomFieldFileValue,
     Department,
     Designation,
     Document,
@@ -1168,6 +1169,45 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         return value
 
 
+# ─── Custom Field File Value ───────────────────────────────────────────────────
+
+class CustomFieldFileValueSerializer(serializers.ModelSerializer):
+    # Same signed-proxy reasoning as EmployeeDocumentSerializer.file_url above —
+    # the raw Cloudinary URL requires authentication the browser doesn't have.
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = CustomFieldFileValue
+        fields = ['id', 'field_key', 'file', 'file_url', 'file_name', 'file_size', 'uploaded_at']
+        read_only_fields = ('id', 'file_url', 'file_name', 'file_size', 'uploaded_at')
+        extra_kwargs = {'file': {'write_only': True}}
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return None
+        return request.build_absolute_uri(f'/api/onboarding/custom-file-fields/{obj.pk}/')
+
+    def validate_file(self, value):
+        # Identical validation to EmployeeDocumentSerializer.validate_file —
+        # ad-hoc custom-field uploads get the same whitelist/size treatment as
+        # real documents, reusing EmployeeDocument's constants rather than
+        # redeclaring them.
+        import os
+        if not getattr(value, 'name', None):
+            raise serializers.ValidationError('Uploaded file must have a name.')
+        if value.size == 0:
+            raise serializers.ValidationError('Uploaded file is empty.')
+        if value.content_type not in EmployeeDocument.ALLOWED_MIME_TYPES:
+            raise serializers.ValidationError('Only PDF, JPG, and PNG files are allowed.')
+        if value.size > EmployeeDocument.MAX_FILE_SIZE:
+            raise serializers.ValidationError(
+                f'File size {value.size / (1024 * 1024):.1f} MB exceeds the 5 MB limit.'
+            )
+        value.name = os.path.basename(value.name).strip()
+        return value
+
+
 # ─── Onboarding Field Configuration ────────────────────────────────────────────
 
 class OnboardingFieldConfigSerializer(serializers.ModelSerializer):
@@ -1175,7 +1215,7 @@ class OnboardingFieldConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model  = OnboardingFieldConfig
         fields = [
-            'field_key', 'label', 'field_type', 'options', 'step', 'order',
+            'field_key', 'label', 'field_type', 'options', 'allow_multiple', 'step', 'order',
             'visible', 'required', 'is_custom', 'is_locked', 'updated_at',
         ]
         read_only_fields = fields
@@ -1188,6 +1228,9 @@ class OnboardingFieldConfigCreateSerializer(serializers.Serializer):
     label      = serializers.CharField(max_length=150, trim_whitespace=True)
     field_type = serializers.ChoiceField(choices=OnboardingFieldConfig.FIELD_TYPE_CHOICES)
     options    = serializers.ListField(child=serializers.CharField(max_length=200), required=False, default=list)
+    # File fields only, mirrors `options` being dropdown-only — ignored for
+    # every other field_type.
+    allow_multiple = serializers.BooleanField(default=False)
     step       = serializers.ChoiceField(choices=OnboardingFieldConfig.STEP_CHOICES)
     required   = serializers.BooleanField(default=False)
 

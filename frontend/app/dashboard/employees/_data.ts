@@ -48,7 +48,7 @@ export interface Employee {
 
 export type FieldType =
   | "text" | "email" | "tel" | "number"
-  | "select" | "date" | "radio" | "textarea" | "readonly";
+  | "select" | "date" | "radio" | "textarea" | "readonly" | "file";
 
 export interface FieldOption { value: string; label: string; }
 
@@ -287,6 +287,11 @@ function fieldTypeFromConfig(type: string): FieldType {
   if (type === "number") return "text";
   if (type === "date") return "date";
   if (type === "checkbox") return "radio";
+  // "file" is never actually rendered by FormField — the detail page's
+  // fieldSlot intercepts file-type keys before FormField sees them (same
+  // mechanism the manager-picker fields already use) — but the type still
+  // needs to round-trip correctly rather than falling through to "text".
+  if (type === "file") return "file";
   return "text";
 }
 
@@ -328,11 +333,15 @@ export function applyFieldConfig(section: ProfileSection, fieldConfig: Onboardin
   return { ...section, fields: [...visibleFields, ...customFields] };
 }
 
-/** Every custom field_key across all onboarding-covered sections — used to
- * pull custom_field_values out of the flat `values` state when building the
- * PUT payload. */
+/** Every custom field_key across all onboarding-covered sections, EXCLUDING
+ * file-type fields — used to pull custom_field_values out of the flat
+ * `values` state when building the PUT payload. File-type values are never
+ * part of that flat state (they upload immediately through their own
+ * endpoint, see CustomFieldFileUpload) and have no EmployeeProfile column or
+ * custom_field_values entry to send — including them here would only ever
+ * send a stray empty string. */
 export function customFieldKeys(fieldConfig: OnboardingFieldConfigByStep): string[] {
-  return Object.values(fieldConfig).flat().filter(c => c.is_custom).map(c => c.field_key);
+  return Object.values(fieldConfig).flat().filter(c => c.is_custom && c.field_type !== "file").map(c => c.field_key);
 }
 
 // ── top-level tab bar of the detail page ────────────────────

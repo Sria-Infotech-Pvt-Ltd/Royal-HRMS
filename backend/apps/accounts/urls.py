@@ -2,9 +2,11 @@ from django.urls import path
 from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
+    CustomFieldFileValueView,
     EmployeeApprovalMatrixView,
     EmployeeBulkImportView,
     EmployeeCodeSettingsView,
+    EmployeeCustomFieldFileValueView,
     EmployeeDetailView,
     EmployeeDocumentView,
     EmployeeProfileDocumentView,
@@ -78,6 +80,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
+    path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
@@ -86,6 +89,8 @@ urlpatterns = [
     path('onboarding/step/<int:step>/',              OnboardingView.as_view(),         name='onboarding-step'),
     path('onboarding/documents/',                    EmployeeDocumentView.as_view(),   name='onboarding-documents'),
     path('onboarding/documents/<str:doc_id>/',       EmployeeDocumentView.as_view(),   name='onboarding-document-detail'),
+    path('onboarding/custom-file-fields/',              CustomFieldFileValueView.as_view(), name='onboarding-custom-file-fields'),
+    path('onboarding/custom-file-fields/<str:value_id>/', CustomFieldFileValueView.as_view(), name='onboarding-custom-file-field-detail'),
     path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
     path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),

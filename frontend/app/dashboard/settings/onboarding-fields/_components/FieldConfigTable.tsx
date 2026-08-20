@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<string, string> = {
   date: "Date",
   dropdown: "Dropdown",
   checkbox: "Checkbox",
+  file: "File / Image",
 };
 
 export default function FieldConfigTable({ fields, canEdit, onChanged }: Props) {

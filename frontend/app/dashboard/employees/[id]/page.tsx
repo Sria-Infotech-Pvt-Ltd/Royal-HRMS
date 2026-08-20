@@ -6,7 +6,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import { useFetch } from "@/hooks/useFetch";
-import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import type { CustomFieldFileValue, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
@@ -63,6 +64,7 @@ interface ApiEmployee {
   hr:                 { id: string; uuid: string | null; name: string } | null;
   profile?: ApiProfile;
   documents?: ApiDocument[];
+  custom_file_fields?: { id: number; field_key: string; file: string; file_name: string; file_size: number; uploaded_at: string }[];
 }
 
 function buildDocEntries(apiDocs: ApiDocument[]): DocEntry[] {
@@ -208,6 +210,10 @@ export default function EmployeeProfilePage({
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
   const [docUploadError,   setDocUploadError]   = useState<string>("");
 
+  const [customFileFields, setCustomFileFields] = useState<CustomFieldFileValue[]>([]);
+  const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
+  const [fileUploadError,  setFileUploadError]  = useState<string>("");
+
   const [deptOptions,     setDeptOptions]     = useState<FieldOption[]>([]);
   const [allDesigs,       setAllDesigs]       = useState<{ name: string; department_name: string }[]>([]);
   const [desigOptions,    setDesigOptions]    = useState<FieldOption[]>([]);
@@ -263,6 +269,12 @@ export default function EmployeeProfilePage({
         setEmployee(emp);
         setEmployeeUuid(raw.uuid);
         setOnboardingStatus(raw.onboarding_status ?? "");
+        setCustomFileFields(
+          (raw.custom_file_fields ?? []).map(f => ({
+            id: f.id, field_key: f.field_key, file_url: f.file,
+            file_name: f.file_name, file_size: f.file_size, uploaded_at: f.uploaded_at,
+          })),
+        );
 
         const details = { ...emp.details };
 
@@ -444,6 +456,42 @@ export default function EmployeeProfilePage({
     setJustSaved(false);
     setIsEditing(false);
   }
+  async function onUploadCustomFile(fieldKey: string, file: File) {
+    setFileUploadError("");
+    setUploadingFileKey(fieldKey);
+    try {
+      const formData = new FormData();
+      formData.append("field_key", fieldKey);
+      formData.append("file", file);
+      await clientApi.post(API.employees.customFileFields(id), formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const { data } = await clientApi.get<{ data: ApiEmployee["custom_file_fields"] }>(API.employees.customFileFields(id));
+      setCustomFileFields(
+        (data.data ?? []).map(f => ({
+          id: f.id, field_key: f.field_key, file_url: f.file,
+          file_name: f.file_name, file_size: f.file_size, uploaded_at: f.uploaded_at,
+        })),
+      );
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setFileUploadError(msg || "Failed to upload file. Please try again.");
+    } finally {
+      setUploadingFileKey(null);
+    }
+  }
+
+  async function onDeleteCustomFile(_fieldKey: string, valueId: number) {
+    setFileUploadError("");
+    try {
+      await clientApi.delete(API.onboarding.customFileFieldDetail(valueId));
+      setCustomFileFields(prev => prev.filter(v => v.id !== valueId));
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setFileUploadError(msg || "Failed to delete file. Please try again.");
+    }
+  }
+
   function onDocumentUploaded(entry: DocEntry) {
     setEmployee(emp => emp && {
       ...emp,
@@ -491,6 +539,12 @@ export default function EmployeeProfilePage({
             <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-[var(--error-c)] text-[var(--error)] text-[13px] font-medium">
               <i className="ti ti-alert-circle text-[16px]" />
               {saveError}
+            </div>
+          )}
+          {fileUploadError && (
+            <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-[var(--error-c)] text-[var(--error)] text-[13px] font-medium">
+              <i className="ti ti-alert-circle text-[16px]" />
+              {fileUploadError}
             </div>
           )}
         </>
@@ -588,6 +642,24 @@ export default function EmployeeProfilePage({
                       onSelect={(uuid, name) =>
                         setValues(v => ({ ...v, hr: name ?? "", hrId: uuid ?? "" }))
                       }
+                    />
+                  );
+                }
+                const fileFieldConfig = Object.values(fieldConfig).flat().find(
+                  c => c.field_key === key && c.is_custom && c.field_type === "file",
+                );
+                if (fileFieldConfig) {
+                  return (
+                    <CustomFieldFileUpload
+                      fieldKey={fileFieldConfig.field_key}
+                      label={fileFieldConfig.label}
+                      required={fileFieldConfig.required}
+                      allowMultiple={fileFieldConfig.allow_multiple}
+                      value={customFileFields.filter(v => v.field_key === fileFieldConfig.field_key)}
+                      uploading={uploadingFileKey === fileFieldConfig.field_key}
+                      onUpload={onUploadCustomFile}
+                      onDelete={disabled ? undefined : onDeleteCustomFile}
+                      disabled={disabled}
                     />
                   );
                 }

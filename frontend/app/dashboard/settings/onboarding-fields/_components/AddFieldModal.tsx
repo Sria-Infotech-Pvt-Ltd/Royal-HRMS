@@ -19,6 +19,7 @@ const TYPE_OPTIONS: { value: OnboardingFieldType; label: string }[] = [
   { value: "date",     label: "Date" },
   { value: "dropdown", label: "Dropdown" },
   { value: "checkbox", label: "Checkbox" },
+  { value: "file",     label: "File / Image" },
 ];
 
 function Spin() {
@@ -29,6 +30,7 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
   const [label, setLabel] = useState("");
   const [fieldType, setFieldType] = useState<OnboardingFieldType>("text");
   const [optionsText, setOptionsText] = useState("");
+  const [allowMultiple, setAllowMultiple] = useState(false);
   const [required, setRequired] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
       options: fieldType === "dropdown"
         ? optionsText.split(",").map(o => o.trim()).filter(Boolean)
         : [],
+      allow_multiple: fieldType === "file" ? allowMultiple : false,
     };
     try {
       await clientApi.post(API.settings.onboardingFields.list, payload);
@@ -125,6 +128,13 @@ export default function AddFieldModal({ step, onClose, onCreated }: Props) {
             : <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>Separate options with commas.</p>
           }
         </div>
+      )}
+
+      {fieldType === "file" && (
+        <label className="module-check mb-16">
+          <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)} />
+          <span>Allow multiple files</span>
+        </label>
       )}
 
       <label className="module-check">

@@ -13,7 +13,8 @@ import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
 import OnboardingDynamicField from "@/components/OnboardingDynamicField";
-import type { OnboardingFieldConfig, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
+import type { CustomFieldFileValue, OnboardingFieldConfig, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 
 interface ProfileSub {
   date_of_birth:          string | null;
@@ -157,6 +158,17 @@ function customFieldsFor(fieldConfig: OnboardingFieldConfigByStep, step: number)
   return (fieldConfig[String(step)] ?? []).filter(c => c.is_custom && c.visible);
 }
 
+// File-type customs never live in custom_field_values (see the backend's
+// CustomFieldFileValue model) — every read-only/editable render site below
+// needs to route them to CustomFieldFileUpload instead of ReadField/
+// OnboardingDynamicField, so these two split customFieldsFor's result by type.
+function textCustomFieldsFor(fieldConfig: OnboardingFieldConfigByStep, step: number): OnboardingFieldConfig[] {
+  return customFieldsFor(fieldConfig, step).filter(c => c.field_type !== "file");
+}
+function fileCustomFieldsFor(fieldConfig: OnboardingFieldConfigByStep, step: number): OnboardingFieldConfig[] {
+  return customFieldsFor(fieldConfig, step).filter(c => c.field_type === "file");
+}
+
 type TabId = "personal" | "work" | "education" | "bank" | "documents" | "face" | "security";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
@@ -172,6 +184,9 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 export default function ProfileClient({ session }: { session: SessionPayload }) {
   const { data: profile, loading, error: profileError } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
+  const { data: customFileValuesData, refetch: refetchCustomFileValues } =
+    useFetch<CustomFieldFileValue[]>(API.onboarding.customFileFields);
+  const customFileValues = customFileValuesData ?? [];
   // Per-company field visibility/custom fields (Settings > Onboarding Fields)
   // — same endpoint the onboarding wizard uses. Only Emergency Contact
   // (step 3) custom fields are editable here, matching that section's
@@ -189,6 +204,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
   const docEntries = buildDocEntries(docs ?? []);
+  const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
 
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const { state: faceCardState, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
@@ -216,6 +232,35 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       showToast(msg || "Failed to upload document.", false);
     } finally {
       setUploadingDocType(null);
+    }
+  }
+
+  async function handleCustomFileUpload(fieldKey: string, file: File) {
+    setUploadingFileKey(fieldKey);
+    try {
+      const formData = new FormData();
+      formData.append("field_key", fieldKey);
+      formData.append("file", file);
+      await clientApi.post(API.onboarding.customFileFields, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      refetchCustomFileValues();
+      showToast("File uploaded successfully.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast(msg || "Failed to upload file.", false);
+    } finally {
+      setUploadingFileKey(null);
+    }
+  }
+
+  async function handleCustomFileDelete(_fieldKey: string, valueId: number) {
+    try {
+      await clientApi.delete(API.onboarding.customFileFieldDetail(valueId));
+      refetchCustomFileValues();
+      showToast("File deleted.");
+    } catch {
+      showToast("Failed to delete file.", false);
     }
   }
 
@@ -253,7 +298,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       // — the backend independently filters to the same set server-side, but
       // scoping the payload client-side too keeps the request itself honest
       // about what this page actually lets you change.
-      const emergencyCustomKeys = new Set(customFieldsFor(fieldConfig, 3).map(c => c.field_key));
+      const emergencyCustomKeys = new Set(textCustomFieldsFor(fieldConfig, 3).map(c => c.field_key));
       const custom_field_values = Object.fromEntries(
         Object.entries(customValues).filter(([k]) => emergencyCustomKeys.has(k)),
       );
@@ -426,8 +471,16 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                 {isBuiltinVisible(fieldConfig, 0, "blood_group")    && <ReadField label="Blood Group"    value={p?.blood_group} />}
               </div>
               {isBuiltinVisible(fieldConfig, 0, "father_name") && <ReadField label="Father's Name" value={p?.father_name} />}
-              {customFieldsFor(fieldConfig, 0).map(c => (
+              {textCustomFieldsFor(fieldConfig, 0).map(c => (
                 <ReadField key={c.field_key} label={c.label} value={p?.custom_field_values?.[c.field_key]} />
+              ))}
+              {fileCustomFieldsFor(fieldConfig, 0).map(c => (
+                <CustomFieldFileUpload
+                  key={c.field_key} fieldKey={c.field_key} label={c.label}
+                  allowMultiple={c.allow_multiple}
+                  value={customFileValues.filter(v => v.field_key === c.field_key)}
+                  onUpload={() => {}}
+                />
               ))}
             </div>
           </div>
@@ -504,14 +557,31 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                   </div>
                 )}
               </div>
-              {customFieldsFor(fieldConfig, 3).length > 0 && (
+              {textCustomFieldsFor(fieldConfig, 3).length > 0 && (
                 <div className="form-row cols-2">
-                  {customFieldsFor(fieldConfig, 3).map(c => (
+                  {textCustomFieldsFor(fieldConfig, 3).map(c => (
                     <OnboardingDynamicField
                       key={c.field_key}
                       config={c}
                       value={customValues[c.field_key] ?? ""}
                       onChange={v => customField(c.field_key, v)}
+                    />
+                  ))}
+                </div>
+              )}
+              {fileCustomFieldsFor(fieldConfig, 3).length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 14 }}>
+                  {fileCustomFieldsFor(fieldConfig, 3).map(c => (
+                    <CustomFieldFileUpload
+                      key={c.field_key}
+                      fieldKey={c.field_key}
+                      label={c.label}
+                      required={c.required}
+                      allowMultiple={c.allow_multiple}
+                      value={customFileValues.filter(v => v.field_key === c.field_key)}
+                      uploading={uploadingFileKey === c.field_key}
+                      onUpload={handleCustomFileUpload}
+                      onDelete={handleCustomFileDelete}
                     />
                   ))}
                 </div>
@@ -599,8 +669,16 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             {isBuiltinVisible(fieldConfig, 1, "previous_designation") && <ReadField label="Previous Role"  value={p?.previous_designation} />}
             {isBuiltinVisible(fieldConfig, 1, "leaving_reason")       && <ReadField label="Leaving Reason" value={p?.leaving_reason} />}
           </div>
-          {customFieldsFor(fieldConfig, 1).map(c => (
+          {textCustomFieldsFor(fieldConfig, 1).map(c => (
             <ReadField key={c.field_key} label={c.label} value={p?.custom_field_values?.[c.field_key]} />
+          ))}
+          {fileCustomFieldsFor(fieldConfig, 1).map(c => (
+            <CustomFieldFileUpload
+              key={c.field_key} fieldKey={c.field_key} label={c.label}
+              allowMultiple={c.allow_multiple}
+              value={customFileValues.filter(v => v.field_key === c.field_key)}
+              onUpload={() => {}}
+            />
           ))}
         </div>
       </div>
@@ -627,8 +705,16 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             {isBuiltinVisible(fieldConfig, 2, "ifsc_code")        && <ReadField label="IFSC Code"   value={p?.ifsc_code} />}
             {isBuiltinVisible(fieldConfig, 2, "bank_branch_name") && <ReadField label="Bank Branch" value={p?.bank_branch_name} />}
           </div>
-          {customFieldsFor(fieldConfig, 2).map(c => (
+          {textCustomFieldsFor(fieldConfig, 2).map(c => (
             <ReadField key={c.field_key} label={c.label} value={p?.custom_field_values?.[c.field_key]} />
+          ))}
+          {fileCustomFieldsFor(fieldConfig, 2).map(c => (
+            <CustomFieldFileUpload
+              key={c.field_key} fieldKey={c.field_key} label={c.label}
+              allowMultiple={c.allow_multiple}
+              value={customFileValues.filter(v => v.field_key === c.field_key)}
+              onUpload={() => {}}
+            />
           ))}
         </div>
       </div>

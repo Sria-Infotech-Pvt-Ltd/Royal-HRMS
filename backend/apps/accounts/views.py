@@ -221,6 +221,26 @@ def _document_dict(doc) -> dict:
     }
 
 
+def _custom_field_file_dict(v) -> dict:
+    """Shared shape for a single CustomFieldFileValue — mirrors _document_dict()
+    keyed by field_key instead of document_type, used by _employee_dict() so
+    the HR Employee Detail page gets every step's file-type custom values in
+    the one existing GET, same as `documents` today."""
+    try:
+        file_url = _cloudinary_signed_url(v.file) if v.file else ''
+    except Exception:
+        logger.warning('Cloudinary signed URL failed for custom field file %s', v.id, exc_info=True)
+        file_url = ''
+    return {
+        'id':          v.id,
+        'field_key':   v.field_key,
+        'file':        file_url,
+        'file_name':   v.file_name,
+        'file_size':   v.file_size,
+        'uploaded_at': v.uploaded_at.isoformat() if v.uploaded_at else '',
+    }
+
+
 def _employee_dict(user: User) -> dict:
     parts = user.full_name.strip().split(' ', 1)
     first = parts[0]
@@ -279,6 +299,10 @@ def _employee_dict(user: User) -> dict:
         documents = [_document_dict(doc) for doc in user.employee_documents.all()]
     except Exception:
         documents = []
+    try:
+        custom_file_fields = [_custom_field_file_dict(v) for v in user.custom_field_files.all()]
+    except Exception:
+        custom_file_fields = []
     mgr = getattr(user, 'reporting_manager', None)
     _hr = getattr(user, 'hr', None)
     approver = getattr(user, 'reporting_approver', None)
@@ -313,6 +337,7 @@ def _employee_dict(user: User) -> dict:
         },
         'profile':            profile_data,
         'documents':          documents,
+        'custom_file_fields': custom_file_fields,
         'onboarding_status':  user.onboarding_status,
     }
 
@@ -2682,6 +2707,7 @@ class EmployeeListCreateView(APIView):
             User.objects
             .select_related('role', 'profile', 'reporting_manager')
             .prefetch_related('employee_documents')
+            .prefetch_related('custom_field_files')
             .filter(is_active__in=[True, False])
             .exclude(employee_id='')   # portal candidates have no employee_id until onboarding is approved
             .order_by('-date_joined')
@@ -3077,6 +3103,7 @@ def _get_employee(identifier: str):
             User.objects
             .select_related('role', 'profile', 'reporting_manager', 'hr')
             .prefetch_related('employee_documents')
+            .prefetch_related('custom_field_files')
             .get(employee_id=identifier)
         )
     except User.DoesNotExist:
@@ -3279,8 +3306,12 @@ class EmployeeDetailView(APIView):
             profile, _ = EmployeeProfile.objects.get_or_create(user=employee)
             profile_update = {k: v for k, v in data.items() if k in _PROFILE_FIELD_KEYS}
             if 'custom_field_values' in profile_update:
+                file_keys = _file_type_custom_field_keys()
                 merged = dict(profile.custom_field_values or {})
-                merged.update(profile_update['custom_field_values'] or {})
+                merged.update({
+                    k: v for k, v in (profile_update['custom_field_values'] or {}).items()
+                    if k not in file_keys
+                })
                 profile_update['custom_field_values'] = merged
             serializer = EmployeeProfileSerializer(profile, data=profile_update, partial=True)
             if not serializer.is_valid():
@@ -3700,15 +3731,53 @@ def _step_required_configs(step: int) -> list:
 
 
 def _step_custom_field_keys(step: int) -> frozenset:
+    """Custom field_keys for a step, EXCLUDING file-type ones — file values
+    live in CustomFieldFileValue, never in EmployeeProfile.custom_field_values,
+    so a JSON-body request touching one of these keys must be dropped rather
+    than merged (same trust-boundary pattern as MyProfileView.patch's
+    step-scoping below)."""
     if step == 4:
         return frozenset()
-    return frozenset(c.field_key for c in _step_configs(step) if c.is_custom)
+    return frozenset(
+        c.field_key for c in _step_configs(step)
+        if c.is_custom and c.field_type != OnboardingFieldConfig.TYPE_FILE
+    )
+
+
+def _step_file_field_keys(step: int) -> frozenset:
+    """The file-type custom field_keys _step_custom_field_keys() excludes —
+    used wherever a caller needs to handle them separately (they have no real
+    EmployeeProfile column and no custom_field_values entry; their values
+    live entirely in CustomFieldFileValue rows)."""
+    if step == 4:
+        return frozenset()
+    return frozenset(
+        c.field_key for c in _step_configs(step)
+        if c.is_custom and c.field_type == OnboardingFieldConfig.TYPE_FILE
+    )
 
 
 def _field_value(profile, config: 'OnboardingFieldConfig'):
     if config.is_custom:
+        if config.field_type == OnboardingFieldConfig.TYPE_FILE:
+            from apps.accounts.models import CustomFieldFileValue
+            return CustomFieldFileValue.objects.filter(
+                user=profile.user, field_key=config.field_key
+            ).exists() or None
         return (profile.custom_field_values or {}).get(config.field_key)
     return getattr(profile, config.field_key, None)
+
+
+def _file_type_custom_field_keys() -> frozenset:
+    """All is_custom field_keys (any step) whose field_type is 'file' — used
+    to strip file-type keys out of any custom_field_values JSON payload
+    before merging, since file values live in CustomFieldFileValue and never
+    belong in this dict (see _field_value())."""
+    from core.cache_service import OnboardingFieldConfigCacheService
+    return frozenset(
+        c.field_key for c in OnboardingFieldConfigCacheService.get_all()
+        if c.is_custom and c.field_type == OnboardingFieldConfig.TYPE_FILE
+    )
 
 
 def _missing_required(profile, step: int) -> list:
@@ -3971,7 +4040,8 @@ class OnboardingView(APIView):
         if not step_fields:
             return success(f'Step {step} has no profile fields to clear.', data={})
         custom_keys = _step_custom_field_keys(step)
-        builtin_keys = step_fields - custom_keys
+        file_keys   = _step_file_field_keys(step)
+        builtin_keys = step_fields - custom_keys - file_keys
 
         from apps.accounts.models import EmployeeProfile as EP
         try:
@@ -3990,6 +4060,9 @@ class OnboardingView(APIView):
             if custom_keys:
                 remaining = {k: v for k, v in (profile.custom_field_values or {}).items() if k not in custom_keys}
                 EP.objects.filter(pk=profile.pk).update(custom_field_values=remaining)
+            if file_keys:
+                from apps.accounts.models import CustomFieldFileValue
+                CustomFieldFileValue.objects.filter(user=request.user, field_key__in=file_keys).delete()
         except Exception as exc:
             logger.error('OnboardingView DELETE clear failed user=%s step=%d: %s',
                          request.user.pk, step, exc, exc_info=True)
@@ -4203,11 +4276,18 @@ def _save_profile_step(request, step: int):
     step_fields   = _step_all_field_keys(step)
     required_keys = frozenset(c.field_key for c in _step_required_configs(step))
     custom_keys   = _step_custom_field_keys(step)
+    file_keys     = _step_file_field_keys(step)
 
     filled_data: dict = {}
     custom_updates: dict = {}
     for k, v in request.data.items():
         if k not in step_fields:
+            continue
+        if k in file_keys:
+            # File-type custom fields never ride along in this JSON body —
+            # their bytes go through the dedicated multipart upload endpoint,
+            # and their presence has no real EmployeeProfile column or
+            # custom_field_values entry to write here (see _field_value()).
             continue
         if k in custom_keys:
             # No serializer-level type coercion for custom fields (they're
@@ -4316,6 +4396,7 @@ class OnboardingFieldConfigView(APIView):
             label=data['label'],
             field_type=data['field_type'],
             options=data.get('options') or [],
+            allow_multiple=data.get('allow_multiple', False),
             step=data['step'],
             order=(max_order or 0) + 1,
             visible=True,
@@ -4592,6 +4673,237 @@ class EmployeeProfileDocumentView(APIView):
         return success(
             'Document uploaded.',
             data=EmployeeDocumentSerializer(doc, context={'request': request}).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+# ─── Custom Field File Values (file/image-type OnboardingFieldConfig fields) ──
+
+def _get_file_field_config(field_key: str):
+    """Return the OnboardingFieldConfig row for field_key if it's a visible,
+    is_custom=True, field_type='file' field; else None. Every upload/list
+    endpoint below validates against this before touching CustomFieldFileValue,
+    so a request can't create a file value for a field that doesn't exist,
+    isn't custom, or isn't a file-type field."""
+    from core.cache_service import OnboardingFieldConfigCacheService
+    for c in OnboardingFieldConfigCacheService.get_all():
+        if c.field_key == field_key and c.is_custom and c.field_type == OnboardingFieldConfig.TYPE_FILE and c.visible:
+            return c
+    return None
+
+
+def _self_can_write_custom_file(user, config) -> bool:
+    """Self-service write rule for a file-type custom field — mirrors the
+    Emergency-only-after-onboarding rule MyProfileView.patch already applies
+    to text-type custom fields: Emergency-step fields stay editable forever,
+    every other step is only writable while still mid-wizard."""
+    if config.step == OnboardingFieldConfig.STEP_EMERGENCY:
+        return True
+    return user.onboarding_status != User.ONBOARDING_COMPLETE
+
+
+class CustomFieldFileValueView(APIView):
+    """
+    GET    /onboarding/custom-file-fields/           → list all of this user's file-type custom values
+    POST   /onboarding/custom-file-fields/           → upload a value for {field_key, file}
+    GET    /onboarding/custom-file-fields/<value_id>/ → stream the file (Cloudinary signed proxy)
+    DELETE /onboarding/custom-file-fields/<value_id>/ → delete a value
+
+    Reads are unrestricted by step (Personal/Education/Bank file fields still
+    need to render read-only on the self-service Profile page); only writes
+    are step-gated via _self_can_write_custom_file(). By-id GET/DELETE also
+    serve HR (via the employees.edit permission check below), the same way
+    EmployeeDocumentView's single by-id route already serves both self and HR
+    for real documents — no separate HR-only stream/delete route needed.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def _get_value(self, request, value_id: str):
+        from apps.accounts.models import CustomFieldFileValue
+        try:
+            value = CustomFieldFileValue.objects.get(id=value_id)
+        except CustomFieldFileValue.DoesNotExist:
+            return None, error('File not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if value.user_id != request.user.id and not _has_perm(request.user, 'employees.edit'):
+            return None, error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        return value, None
+
+    def get(self, request, value_id: str = None):
+        from apps.accounts.models import CustomFieldFileValue
+        from apps.accounts.serializers import CustomFieldFileValueSerializer
+
+        if value_id:
+            value, err = self._get_value(request, value_id)
+            if err:
+                return err
+
+            name  = value.file.name
+            parts = os.path.basename(name).rsplit('.', 1)
+            fmt   = parts[1].lower() if len(parts) == 2 else ''
+
+            try:
+                dl_url = cloudinary.utils.private_download_url(
+                    name, fmt,
+                    resource_type='raw',
+                    type='authenticated',
+                    attachment=False,
+                )
+                r = http_req.get(dl_url, stream=True, timeout=30)
+                r.raise_for_status()
+            except http_req.exceptions.HTTPError as exc:
+                logger.error('Custom field file Cloudinary fetch failed id=%s status=%s',
+                             value_id, exc.response.status_code)
+                return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
+            except Exception as exc:
+                logger.error('Custom field file download error id=%s: %s', value_id, exc, exc_info=True)
+                return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
+
+            content_type = 'application/pdf' if fmt == 'pdf' else r.headers.get('content-type', 'application/octet-stream')
+            response = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{value.file_name}"'
+            if 'content-length' in r.headers:
+                response['Content-Length'] = r.headers['content-length']
+            response['Cache-Control'] = 'no-store'
+            return response
+
+        values = CustomFieldFileValue.objects.filter(user=request.user)
+        return success('Custom field files retrieved.',
+                       data=CustomFieldFileValueSerializer(values, many=True, context={'request': request}).data)
+
+    def post(self, request):
+        from apps.accounts.models import CustomFieldFileValue
+        from apps.accounts.serializers import CustomFieldFileValueSerializer
+
+        field_key = (request.data.get('field_key') or '').strip()
+        config = _get_file_field_config(field_key)
+        if not config:
+            return error('Invalid field_key — not a file-type custom field.', http_status=status.HTTP_400_BAD_REQUEST)
+        if not _self_can_write_custom_file(request.user, config):
+            return error(
+                f'"{config.label}" can no longer be edited here. Contact HR to update it.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = CustomFieldFileValueSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        file_obj = serializer.validated_data['file']
+        with transaction.atomic():
+            value = serializer.save(
+                user=request.user,
+                field_key=field_key,
+                file_name=file_obj.name[:255],
+                file_size=file_obj.size,
+            )
+            if not config.allow_multiple:
+                CustomFieldFileValue.objects.filter(
+                    user=request.user, field_key=field_key,
+                ).exclude(pk=value.pk).delete()
+
+        return success(
+            'File uploaded.',
+            data=CustomFieldFileValueSerializer(value, context={'request': request}).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+    def delete(self, request, value_id: str = None):
+        if not value_id:
+            return error('File ID is required.', http_status=status.HTTP_400_BAD_REQUEST)
+        value, err = self._get_value(request, value_id)
+        if err:
+            return err
+        config = _get_file_field_config(value.field_key)
+        if value.user_id == request.user.id:
+            if config and not _self_can_write_custom_file(request.user, config):
+                return error(
+                    'This field can no longer be edited here. Contact HR to update it.',
+                    http_status=status.HTTP_403_FORBIDDEN,
+                )
+        elif not _has_perm(request.user, 'employees.edit'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
+        value.delete()
+        logger.info('Custom field file %s (%s) deleted by %s', value_id, value.field_key, request.user.email)
+        return success('File deleted.')
+
+
+class EmployeeCustomFieldFileValueView(APIView):
+    """
+    GET  /employees/<employee_id>/custom-file-fields/ → list a managed employee's file-type custom values
+    POST /employees/<employee_id>/custom-file-fields/ → upload/replace a value for {field_key, file}
+
+    HR-side equivalent of CustomFieldFileValueView — no step restriction
+    (HR can manage any of the 4 steps' file fields, matching the existing
+    "HR Employee Detail: all steps editable" rule for text-type custom
+    fields). By-id GET/DELETE reuse CustomFieldFileValueView's own route
+    (the employees.edit permission check there already covers HR), so this
+    view only needs list + upload.
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser]
+
+    def get(self, request, employee_id: str):
+        from apps.accounts.models import CustomFieldFileValue
+        from apps.accounts.serializers import CustomFieldFileValueSerializer
+
+        employee = _get_employee(employee_id)
+        if employee is None:
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_manage_employee_documents(request.user, employee):
+            return error('You do not have permission to view files for this employee.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
+        values = CustomFieldFileValue.objects.filter(user=employee)
+        return success('Custom field files retrieved.',
+                       data=CustomFieldFileValueSerializer(values, many=True, context={'request': request}).data)
+
+    def post(self, request, employee_id: str):
+        from apps.accounts.models import CustomFieldFileValue
+        from apps.accounts.serializers import CustomFieldFileValueSerializer
+
+        employee = _get_employee(employee_id)
+        if employee is None:
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_manage_employee_documents(request.user, employee):
+            return error('You do not have permission to upload files for this employee.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
+        field_key = (request.data.get('field_key') or '').strip()
+        config = _get_file_field_config(field_key)
+        if not config:
+            return error('Invalid field_key — not a file-type custom field.', http_status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = CustomFieldFileValueSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        file_obj = serializer.validated_data['file']
+        with transaction.atomic():
+            value = serializer.save(
+                user=employee,
+                field_key=field_key,
+                file_name=file_obj.name[:255],
+                file_size=file_obj.size,
+            )
+            if not config.allow_multiple:
+                CustomFieldFileValue.objects.filter(
+                    user=employee, field_key=field_key,
+                ).exclude(pk=value.pk).delete()
+
+        try:
+            AuditLog.objects.create(
+                user=request.user, action='custom_field_file_uploaded', module='documents',
+                object_id=str(value.id),
+                changes={'employee': employee.employee_id, 'field_key': field_key},
+                branch=employee.branch,
+                ip_address=get_client_ip(request),
+            )
+        except Exception:
+            logger.warning('AuditLog write failed for custom_field_file_uploaded id=%s', value.id)
+
+        logger.info('Custom field file %s uploaded for %s by %s', field_key, employee.email, request.user.email)
+        return success(
+            'File uploaded.',
+            data=CustomFieldFileValueSerializer(value, context={'request': request}).data,
             http_status=status.HTTP_201_CREATED,
         )
 
@@ -4989,6 +5301,7 @@ class OnboardingApprovalView(APIView):
             .filter(onboarding_status__in=[User.ONBOARDING_SUBMITTED, User.ONBOARDING_REJECTED])
             .select_related('role', 'profile')
             .prefetch_related('employee_documents')
+            .prefetch_related('custom_field_files')
             .order_by('date_joined')
         )
         role = request.user.role
@@ -5036,6 +5349,7 @@ class OnboardingApprovalView(APIView):
                 User.objects
                 .select_related('role', 'profile')
                 .prefetch_related('employee_documents')
+                .prefetch_related('custom_field_files')
                 .get(pk=user_id)
             )
         except User.DoesNotExist:
@@ -5107,7 +5421,8 @@ class MyProfileView(APIView):
             allowed_keys = set(
                 OnboardingFieldConfig.objects.filter(
                     step=OnboardingFieldConfig.STEP_EMERGENCY, is_custom=True,
-                ).values_list('field_key', flat=True)
+                ).exclude(field_type=OnboardingFieldConfig.TYPE_FILE)
+                .values_list('field_key', flat=True)
             )
             incoming_custom = {k: v for k, v in incoming_custom.items() if k in allowed_keys}
 

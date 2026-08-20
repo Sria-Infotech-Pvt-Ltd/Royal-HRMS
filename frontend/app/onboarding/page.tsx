@@ -8,7 +8,7 @@ import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
-import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import type { OnboardingFieldConfigByStep, CustomFieldFileValue } from "@/types/onboardingFieldConfig";
 import type { ProfileForm } from "./_types";
 import DynamicStepFields from "./_components/DynamicStepFields";
 
@@ -82,6 +82,9 @@ export default function OnboardingPage() {
   // every other useFetch-backed list in this app.
   const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [customFileValues, setCustomFileValues] = useState<CustomFieldFileValue[]>([]);
+  const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
+  const [fileUploadError, setFileUploadError] = useState<string | null>(null);
 
   const [faceMandatory, setFaceMandatory] = useState(false);
   const [faceRegistration, setFaceRegistration] = useState<Partial<FaceRegistrationRequest> | null>(null);
@@ -144,7 +147,39 @@ export default function OnboardingPage() {
     clientApi.get(API.onboarding.fieldConfig).then(r => {
       setFieldConfig(r.data?.data ?? {});
     }).catch(() => {});
+    clientApi.get(API.onboarding.customFileFields).then(r => {
+      setCustomFileValues(r.data?.data ?? []);
+    }).catch(() => {});
   }, []);
+
+  async function handleCustomFileUpload(fieldKey: string, file: File) {
+    setFileUploadError(null);
+    setUploadingFileKey(fieldKey);
+    try {
+      const formData = new FormData();
+      formData.append("field_key", fieldKey);
+      formData.append("file", file);
+      await clientApi.post(API.onboarding.customFileFields, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const { data } = await clientApi.get(API.onboarding.customFileFields);
+      setCustomFileValues(data?.data ?? []);
+    } catch (err: unknown) {
+      setFileUploadError((err as { message?: string })?.message ?? "Failed to upload file. Please try again.");
+    } finally {
+      setUploadingFileKey(null);
+    }
+  }
+
+  async function handleCustomFileDelete(fieldKey: string, valueId: number) {
+    setFileUploadError(null);
+    try {
+      await clientApi.delete(API.onboarding.customFileFieldDetail(valueId));
+      setCustomFileValues(prev => prev.filter(v => v.id !== valueId));
+    } catch (err: unknown) {
+      setFileUploadError((err as { message?: string })?.message ?? "Failed to delete file. Please try again.");
+    }
+  }
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -178,6 +213,13 @@ export default function OnboardingPage() {
     const missing = stepConfigs
       .filter(c => c.visible && c.required)
       .filter(c => {
+        // File-type fields have no entry in `customValues` at all — their
+        // presence is checked against the uploaded-files list instead (same
+        // choke-point fix as the backend's _field_value()), or a required
+        // file field would report missing forever, even after upload.
+        if (c.field_type === "file") {
+          return !customFileValues.some(v => v.field_key === c.field_key);
+        }
         const value = c.is_custom ? customValues[c.field_key] : form[c.field_key as keyof ProfileForm];
         return !value?.trim();
       })
@@ -197,7 +239,7 @@ export default function OnboardingPage() {
     // the backend filters incoming keys to this step's configured fields
     // (built-in and custom alike), same as it already does for `form`.
     const customForStep = Object.fromEntries(
-      stepConfigs.filter(c => c.is_custom).map(c => [c.field_key, customValues[c.field_key] ?? ""]),
+      stepConfigs.filter(c => c.is_custom && c.field_type !== "file").map(c => [c.field_key, customValues[c.field_key] ?? ""]),
     );
 
     setSaving(true);
@@ -474,6 +516,11 @@ export default function OnboardingPage() {
               customValues={customValues}
               onBuiltinChange={set}
               onCustomChange={setCustom}
+              customFileValues={customFileValues}
+              uploadingFileKey={uploadingFileKey}
+              fileUploadError={fileUploadError}
+              onCustomFileUpload={handleCustomFileUpload}
+              onCustomFileDelete={handleCustomFileDelete}
             />
           )}
           {tab === 4 && (
