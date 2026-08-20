@@ -17,6 +17,15 @@ import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 const POLL_INTERVAL_MS = 60000;
 const WS_RECONNECT_BASE_MS = 1000;
 const WS_RECONNECT_MAX_MS  = 30000;
+// Refreshing on every single reconnect attempt (previously unconditional)
+// means a socket that keeps failing to open — a flaky backend/proxy, or an
+// environment where the WS handshake never succeeds at all — hammers
+// /token/refresh/ every 1-30s forever, rotating the refresh token each time
+// for no reason (the cookie was never actually close to expiring). Only
+// refresh if it's been at least this long since the last one; 10 minutes
+// stays safely under the 15-minute access-token lifetime this guard exists
+// for in the first place.
+const REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 
 function notificationsSocketUrl(): string | null {
   if (!API_URL) return null;
@@ -109,6 +118,7 @@ export function useNotifications() {
   const reconnectAttempt = useRef(0);
   const reconnectTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef        = useRef<WebSocket | null>(null);
+  const lastRefreshAt    = useRef(0);
 
   useEffect(() => {
     const url = notificationsSocketUrl();
@@ -118,12 +128,17 @@ export function useNotifications() {
 
     function connect() {
       if (stopped) return;
-      // Refresh the access-token cookie right before every (re)connect attempt
-      // so a reconnect after a backgrounded/throttled tab never races a stale
-      // token — see refreshTokenSilently() above. Best-effort: if it fails,
+      // Refresh the access-token cookie before a (re)connect attempt, but
+      // only if it's actually been long enough that the cookie could be
+      // stale — see REFRESH_COOLDOWN_MS above. Best-effort: if it fails,
       // fall through and try the handshake anyway (matching prior behavior).
+      if (Date.now() - lastRefreshAt.current < REFRESH_COOLDOWN_MS) {
+        openSocket();
+        return;
+      }
       refreshTokenSilently().then(() => {
         if (stopped) return;
+        lastRefreshAt.current = Date.now();
         openSocket();
       });
     }
