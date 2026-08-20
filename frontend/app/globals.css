@@ -1024,6 +1024,20 @@ textarea.field-input {
   .voice-fab-idle-pulse { animation: none; }
 }
 
+/* Voice assistant mascot — a gentle float so it reads as "alive" while
+   idle, not a static sticker. Applied to the <img> itself, independent of
+   the ring-pulse above (which lives on the button container). */
+@keyframes voiceBotFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+.voice-bot-float {
+  animation: voiceBotFloat 2.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-bot-float { animation: none; }
+}
+
 /* Upload zone */
 .upload-zone {
   border: 2px dashed var(--outline-v);

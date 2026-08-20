@@ -265,10 +265,17 @@ export default function VoiceCommandButton() {
           width: LAUNCHER_SIZE, height: LAUNCHER_SIZE, borderRadius: "50%", border: "none",
           display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
           cursor: isDragging ? "grabbing" : "pointer",
-          touchAction: "none", userSelect: "none", overflow: "hidden",
-          background: isDisabled ? "var(--bg-low)" : "var(--primary)",
+          touchAction: "none", userSelect: "none", overflow: "visible",
+          // No hard solid circle behind the mascot (per direct feedback that
+          // looked wrong) — but the character is mostly white/silver, so on
+          // a light page background it needs *some* contrast or it
+          // disappears entirely. A soft radial glow that fades to fully
+          // transparent well before the edge reads as "glow", not "badge".
+          background: isDisabled
+            ? "var(--bg-low)"
+            : "radial-gradient(circle, rgba(37,99,235,0.38) 0%, rgba(37,99,235,0.20) 45%, rgba(37,99,235,0) 72%)",
           color: isDisabled ? "var(--on-variant)" : "#fff",
-          boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
+          boxShadow: isDisabled ? "0 4px 12px rgba(0,0,0,0.18)" : "none",
         }}
       >
         {isDisabled ? (
@@ -282,11 +289,17 @@ export default function VoiceCommandButton() {
             src="/bot.png"
             alt=""
             aria-hidden="true"
+            className="voice-bot-float"
             // contain, not cover — bot.png is a transparent PNG with the
             // character centered and padding around it; cover was zooming
-            // in tight enough to crop most of the character out. Padding
-            // below keeps it off the circle's edge instead of touching it.
-            style={{ width: "100%", height: "100%", objectFit: "contain", padding: 6 }}
+            // in tight enough to crop most of the character out. No solid
+            // background behind it any more (see above) — drop-shadow
+            // instead of a box-shadow gives it depth against the page
+            // itself, following the actual alpha shape rather than a box.
+            style={{
+              width: "100%", height: "100%", objectFit: "contain",
+              filter: isDragging ? "drop-shadow(0 8px 16px rgba(0,0,0,0.35))" : "drop-shadow(0 3px 8px rgba(0,0,0,0.25))",
+            }}
           />
         )}
       </button>
