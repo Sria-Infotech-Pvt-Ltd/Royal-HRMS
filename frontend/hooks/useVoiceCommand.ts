@@ -27,6 +27,14 @@ const CONVERSATION_AUTO_CLOSE_MS = 4000;
 // muted/unsupported-only fallback caveat as CONVERSATION_AUTO_CLOSE_MS.
 const IMMEDIATE_RESULT_AUTO_CLOSE_MS = 2500;
 
+// If the assistant hasn't been used in this long, the next exchange starts
+// a fresh chat transcript instead of tacking onto a stale one from a much
+// earlier session — matches how the reference chat-widget examples behave
+// (they don't accumulate history indefinitely either), while still keeping
+// recent context during genuinely back-to-back use (e.g. checking leave
+// balance then immediately applying for leave).
+const HISTORY_IDLE_CLEAR_MS = 10 * 60 * 1000;
+
 // Once TTS is actually driving dismissal timing (not muted, synthesis
 // available), the panel closes this long after the utterance's 'onend'
 // fires rather than after a fixed delay — long enough for the last word to
@@ -269,6 +277,19 @@ const BARGE_IN_CONSECUTIVE_SAMPLES = 2;
 export type VoicePanelPhase = "greeting" | "transcript" | "result";
 export type VoiceResultStatus = "success" | "error";
 
+// One completed exchange — appended whenever a response actually comes
+// back (see the 4 setConversation(..., phase: "result", ...) call sites
+// below), never during the transient "transcript" (request in flight)
+// phase. Purely additive display log for the chat-style transcript in
+// VoiceConversationPanel — nothing here feeds back into the state machine
+// that drives timers/TTS/dismissal above.
+export interface VoiceHistoryEntry {
+  id: number;
+  transcript: string;
+  message: string;
+  resultStatus: VoiceResultStatus;
+}
+
 export interface VoiceConversationState {
   transcript: string;
   message: string;
@@ -309,6 +330,27 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   const [status, setStatus] = useState<VoiceCommandStatus>("idle");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [conversation, setConversation] = useState<VoiceConversationState | null>(null);
+  // Session-only log of completed exchanges, oldest first — kept across the
+  // panel closing/reopening since this hook lives in the root layout and
+  // never unmounts on navigation, but reset to a clean slate (not literally
+  // forever) if the assistant hasn't been used in a while — see
+  // HISTORY_IDLE_CLEAR_MS below.
+  const [history, setHistory] = useState<VoiceHistoryEntry[]>([]);
+  const historyIdRef = useRef(0);
+  const lastActivityAtRef = useRef(0);
+
+  const appendHistory = useCallback((transcript: string, message: string, resultStatus: VoiceResultStatus) => {
+    const now = Date.now();
+    historyIdRef.current += 1;
+    const entry: VoiceHistoryEntry = { id: historyIdRef.current, transcript, message, resultStatus };
+    setHistory(prev => {
+      const isStale = prev.length > 0 && now - lastActivityAtRef.current > HISTORY_IDLE_CLEAR_MS;
+      return isStale ? [entry] : [...prev, entry];
+    });
+    lastActivityAtRef.current = now;
+  }, []);
+
+  const clearHistory = useCallback(() => setHistory([]), []);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const transcriptRef = useRef({ final: "", interim: "" });
@@ -737,6 +779,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             resultStatus: isSuccess ? "success" : "error",
             awaitingFaceProof, faceProofTurn: faceProofTurnRef.current,
           });
+          appendHistory(displayTranscript, message, isSuccess ? "success" : "error");
           if (awaitingInput) {
             // Still mid-dialogue — the question is spoken, but the panel
             // stays open waiting for the user's answer, no dismissal to time.
@@ -763,6 +806,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
             faceProofTurn: faceProofTurnRef.current,
           });
+          appendHistory(transcript, message, "error");
           speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message);
         }
       } finally {
@@ -770,7 +814,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         setInterimTranscript("");
       }
     },
-    [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled, cancelSpeech]
+    [showToast, clearAutoCloseTimer, speak, speakThenDismiss, isDisabled, cancelSpeech, appendHistory]
   );
 
   // Browser SpeechRecognition is locked to VOICE_LOCALE ("en-US") — genuine
@@ -834,6 +878,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           resultStatus: isSuccess ? "success" : "error",
           awaitingFaceProof, faceProofTurn: faceProofTurnRef.current,
         });
+        appendHistory(transcript, message, isSuccess ? "success" : "error");
         if (awaitingInput) {
           speak(spokenText);
         } else {
@@ -849,12 +894,13 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           conversational: false, awaitingInput: false, resultStatus: "error", awaitingFaceProof: false,
           faceProofTurn: faceProofTurnRef.current,
         });
+        appendHistory(transcript, message, "error");
         speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message);
       } finally {
         setStatus("idle");
       }
     },
-    [conversation, clearAutoCloseTimer, speak, speakThenDismiss]
+    [conversation, clearAutoCloseTimer, speak, speakThenDismiss, appendHistory]
   );
 
   const clearPendingStartTimer = useCallback(() => {
@@ -1014,5 +1060,8 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     // the tap succeeded). Per plan: the mic being live during every spoken
     // response must be visible to the user, not silent.
     isListeningForInterruption,
+    // Session-only chat transcript — see VoiceHistoryEntry.
+    history,
+    clearHistory,
   };
 }

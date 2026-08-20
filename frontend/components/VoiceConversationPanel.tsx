@@ -1,6 +1,7 @@
 "use client";
 
-import type { VoicePanelPhase, VoiceResultStatus } from "@/hooks/useVoiceCommand";
+import { useEffect, useRef } from "react";
+import type { VoiceHistoryEntry, VoicePanelPhase, VoiceResultStatus } from "@/hooks/useVoiceCommand";
 import VoiceInputControls from "@/components/VoiceInputControls";
 
 // Static placeholder shown only in the "greeting" phase, before any command
@@ -12,13 +13,118 @@ import VoiceInputControls from "@/components/VoiceInputControls";
 // string is pure frontend UI and never reaches /api/voice/parse/.
 const GREETING_MESSAGE = "Hi, how can I help you?";
 
+// One tap submits the phrase exactly like a typed command (onSubmitText),
+// so it goes through the real /voice/parse/ pipeline — not a shortcut, not
+// a different code path. Every phrase here is copied verbatim from
+// backend/apps/voice_commands/registry/intents_en.yaml so a tap is
+// guaranteed to match, and every one of these intents has
+// required_permission: null — available to literally every authenticated
+// employee, so the chips never need per-user permission filtering.
+const QUICK_ACTIONS: { label: string; phrase: string; icon: string }[] = [
+  { label: "Clock In",           phrase: "clock in",                   icon: "ti-login-2" },
+  { label: "Clock Out",          phrase: "clock out",                  icon: "ti-logout-2" },
+  { label: "Leave Balance",      phrase: "check my leave balance",     icon: "ti-calendar-stats" },
+  { label: "Apply for Leave",    phrase: "apply for leave",            icon: "ti-calendar-plus" },
+  { label: "My Attendance",      phrase: "show my attendance summary", icon: "ti-clipboard-list" },
+];
+
+const BOT_AVATAR_SRC = "/bot.png";
+
+function BotAvatar({ size = 22 }: { size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={BOT_AVATAR_SRC}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, objectFit: "cover", background: "var(--bg-low)" }}
+    />
+  );
+}
+
+function ResultIcon({ resultStatus }: { resultStatus: VoiceResultStatus }) {
+  return (
+    <i
+      className={`ti ${resultStatus === "error" ? "ti-alert-circle" : "ti-circle-check"}`}
+      style={{ fontSize: 12, color: resultStatus === "error" ? "var(--error)" : "var(--success)" }}
+    />
+  );
+}
+
+// Past completed exchanges, oldest first — each rendered as a right-aligned
+// "you said" bubble followed by a left-aligned assistant bubble, so a
+// returning user scrolls up through something that actually reads as a
+// conversation instead of only ever seeing the latest turn. No avatar per
+// bubble — bot.png is a detailed, glossy render that reads as a mismatched
+// sticker at the ~20px an inline per-message icon would need; alignment +
+// color alone already disambiguates the two sides of a 2-party chat, the
+// same way most minimal chat UIs work. The one appearance of the mascot in
+// this panel is the header (full-size, where its detail actually holds up).
+function HistoryList({ history }: { history: VoiceHistoryEntry[] }) {
+  if (history.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {history.map(entry => (
+        <div key={entry.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div
+              style={{
+                maxWidth: "80%", padding: "6px 10px", borderRadius: "12px 12px 2px 12px",
+                background: "var(--primary)", color: "#fff", fontSize: 12.5, lineHeight: 1.4,
+              }}
+            >
+              {entry.transcript}
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div
+              style={{
+                maxWidth: "82%", padding: "6px 10px", borderRadius: "12px 12px 12px 2px",
+                background: "var(--bg-low)", color: "var(--on-bg)", fontSize: 12.5, lineHeight: 1.4,
+                display: "flex", alignItems: "flex-start", gap: 6,
+              }}
+            >
+              <span>{entry.message}</span>
+              <span style={{ marginTop: 2 }}><ResultIcon resultStatus={entry.resultStatus} /></span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QuickActionChips({ onPick }: { onPick: (phrase: string) => void }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {QUICK_ACTIONS.map(action => (
+        <button
+          key={action.phrase}
+          onClick={() => onPick(action.phrase)}
+          data-testid={`voice-quick-action-${action.phrase.replace(/\s+/g, "-")}`}
+          style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "6px 10px", borderRadius: 16, border: "1px solid var(--outline-v)",
+            background: "var(--surface)", color: "var(--on-bg)", fontSize: 11.5, fontWeight: 500,
+            cursor: "pointer", whiteSpace: "nowrap",
+          }}
+        >
+          <i className={`ti ${action.icon}`} style={{ fontSize: 13, color: "var(--primary)" }} />
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface VoiceConversationPanelProps {
   transcript: string;
   message: string;
   phase: VoicePanelPhase;
   conversational: boolean;
   awaitingInput: boolean;
-  resultStatus: VoiceResultStatus | null;
   isListening: boolean;
   isProcessing: boolean;
   interimTranscript: string;
@@ -33,34 +139,52 @@ interface VoiceConversationPanelProps {
   // during every spoken response is visible, not silent (see
   // useVoiceCommand.ts's startVadTap).
   isListeningForInterruption: boolean;
+  // Past completed exchanges (see useVoiceCommand's VoiceHistoryEntry) —
+  // rendered above whatever the current phase shows, so this reads as one
+  // continuous chat rather than a single-turn popup. Empty on a fresh
+  // session/after a reload; not cleared just because the panel closes.
+  history: VoiceHistoryEntry[];
 }
 
 const PANEL_WIDTH = 300;
+const MAX_BODY_HEIGHT = 360;
 
 // Anchored where the mic FAB normally sits — VoiceCommandButton swaps the
 // plain button out for this panel for every voice response now (not just
 // conversational ones), so this reads as the mic icon expanding in place,
 // not a separate destination.
 export default function VoiceConversationPanel({
-  transcript, message, phase, conversational, awaitingInput, resultStatus,
+  transcript, message, phase, conversational, awaitingInput,
   isListening, isProcessing, interimTranscript,
   onStartListening, onStopListening, onSubmitText, onClose,
-  isMuted, onToggleMute, isListeningForInterruption,
+  isMuted, onToggleMute, isListeningForInterruption, history,
 }: VoiceConversationPanelProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Keep the latest turn in view as history/phase/message change — a chat
+  // transcript that silently leaves you scrolled up on the previous turn
+  // while a new one lands below the fold defeats the point of showing
+  // history at all.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history.length, phase, message, transcript]);
+
   return (
     <div
       data-testid="voice-panel"
       style={{
         position: "fixed", right: 20, bottom: 20, zIndex: 1000,
         width: PANEL_WIDTH, maxWidth: "calc(100vw - 40px)",
-        display: "flex", flexDirection: "column", gap: 10,
-        background: "var(--surface)", borderRadius: 14, padding: 14,
-        boxShadow: "0 8px 28px rgba(0,0,0,0.22)",
+        display: "flex", flexDirection: "column",
+        background: "var(--surface)", borderRadius: 14,
+        boxShadow: "0 8px 28px rgba(0,0,0,0.22)", overflow: "hidden",
       }}
     >
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 8px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <BotAvatar size={20} />
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)" }}>
             Voice Assistant
           </span>
@@ -113,50 +237,28 @@ export default function VoiceConversationPanel({
         </div>
       </div>
 
-      {phase === "greeting" ? (
-        <>
-          {/* Opened via the keyboard toggle, before anything has been typed
-              or spoken yet — same message styling as a real assistant
-              response (voice-panel-message below) so it reads as part of
-              the same conversation, not a separate splash screen. */}
-          <div data-testid="voice-panel-greeting" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-bg)" }}>
-            {GREETING_MESSAGE}
-          </div>
-          <VoiceInputControls
-            isListening={isListening}
-            isProcessing={isProcessing}
-            interimTranscript={interimTranscript}
-            onStartListening={onStartListening}
-            onStopListening={onStopListening}
-            onSubmitText={onSubmitText}
-          />
-        </>
-      ) : phase === "transcript" ? (
-        <>
-          {/* What was recognized, shown while the request is in flight —
-              every voice response starts here now, not just conversational
-              ones (see useVoiceCommand's submitTranscript). */}
-          <div
-            data-testid="voice-panel-transcript"
-            style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-variant)", fontStyle: "italic" }}
-          >
-            “{transcript}”
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)" }}>
-            <i className="ti ti-loader-2" style={{ fontSize: 15, animation: "spin 1s linear infinite" }} />
-            Processing…
-          </div>
-        </>
-      ) : conversational ? (
-        <>
-          {/* Multi-turn dialogue (apply_leave today) — unchanged from before:
-              plain message, mic/typed-answer controls while a follow-up
-              question is pending. */}
-          <div data-testid="voice-panel-message" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-bg)" }}>
-            {message}
-          </div>
+      {/* Scrollable body: past history (if any) + whatever the current phase shows */}
+      <div
+        ref={bodyRef}
+        style={{
+          display: "flex", flexDirection: "column", gap: 12,
+          padding: "4px 14px 14px", overflowY: "auto", maxHeight: MAX_BODY_HEIGHT,
+        }}
+      >
+        <HistoryList history={history} />
 
-          {awaitingInput && (
+        {phase === "greeting" ? (
+          <>
+            {/* Opened via the keyboard toggle, before anything has been typed
+                or spoken yet — same message styling as a real assistant
+                response (voice-panel-message below) so it reads as part of
+                the same conversation, not a separate splash screen. */}
+            {history.length === 0 && (
+              <div data-testid="voice-panel-greeting" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-bg)" }}>
+                {GREETING_MESSAGE}
+              </div>
+            )}
+            <QuickActionChips onPick={onSubmitText} />
             <VoiceInputControls
               isListening={isListening}
               isProcessing={isProcessing}
@@ -165,24 +267,48 @@ export default function VoiceConversationPanel({
               onStopListening={onStopListening}
               onSubmitText={onSubmitText}
             />
-          )}
-        </>
-      ) : (
-        // Immediate-action intent (or no-match) — the whole exchange was one
-        // shot, so the result is the last thing shown before the panel
-        // auto-closes itself (useVoiceCommand's IMMEDIATE_RESULT_AUTO_CLOSE_MS).
-        <div data-testid="voice-panel-result" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <i
-            className={`ti ${resultStatus === "error" ? "ti-alert-circle" : "ti-circle-check"}`}
-            style={{
-              fontSize: 20, flexShrink: 0,
-              color: resultStatus === "error" ? "var(--error)" : "var(--success)",
-              animation: resultStatus === "error" ? undefined : "voiceCheckPop 0.35s ease-out",
-            }}
-          />
-          <span style={{ fontSize: 13, lineHeight: 1.5, color: "var(--on-bg)" }}>{message}</span>
-        </div>
-      )}
+          </>
+        ) : phase === "transcript" ? (
+          <>
+            {/* What was recognized, shown while the request is in flight —
+                every voice response starts here now, not just conversational
+                ones (see useVoiceCommand's submitTranscript). */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div
+                data-testid="voice-panel-transcript"
+                style={{
+                  maxWidth: "80%", padding: "6px 10px", borderRadius: "12px 12px 2px 12px",
+                  background: "var(--primary)", color: "#fff", fontSize: 12.5, lineHeight: 1.4, fontStyle: "italic",
+                }}
+              >
+                “{transcript}”
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)" }}>
+              <i className="ti ti-loader-2" style={{ fontSize: 15, animation: "spin 1s linear infinite" }} />
+              Processing…
+            </div>
+          </>
+        ) : (
+          // phase === "result": the outcome is already the last entry in
+          // `history` (useVoiceCommand appends at the exact moment it sets
+          // this phase) — HistoryList above already rendered it, bubble,
+          // bot avatar, checkmark/error icon and all. The only thing left to
+          // add here is input controls, and only for a conversational
+          // dialogue's follow-up question (a one-shot result has nothing
+          // more to do before it auto-closes).
+          conversational && awaitingInput && (
+            <VoiceInputControls
+              isListening={isListening}
+              isProcessing={isProcessing}
+              interimTranscript={interimTranscript}
+              onStartListening={onStartListening}
+              onStopListening={onStopListening}
+              onSubmitText={onSubmitText}
+            />
+          )
+        )}
+      </div>
     </div>
   );
 }

@@ -43,7 +43,7 @@ export default function VoiceCommandButton() {
   const {
     status, interimTranscript, isDisabled, startListening, stopListening,
     submitTranscript, submitFaceProof, conversation, closeConversation,
-    isListeningForInterruption,
+    isListeningForInterruption, history,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
   // Lets a user open a chat-style box to type the very first command instead
@@ -182,7 +182,6 @@ export default function VoiceCommandButton() {
           phase={conversation.phase}
           conversational={conversation.conversational}
           awaitingInput={conversation.awaitingInput}
-          resultStatus={conversation.resultStatus}
           isListening={isListening}
           isProcessing={isProcessing}
           interimTranscript={interimTranscript}
@@ -193,6 +192,7 @@ export default function VoiceCommandButton() {
           isMuted={isMuted}
           onToggleMute={toggleMuted}
           isListeningForInterruption={isListeningForInterruption}
+          history={history}
         />
         {/* Opens on top of the panel above for clock_in/clock_out's "taking
             facial proof" turn (see conversation_clock_in_face.py) — same
@@ -233,7 +233,6 @@ export default function VoiceCommandButton() {
         phase="greeting"
         conversational={false}
         awaitingInput={false}
-        resultStatus={null}
         isListening={isListening}
         isProcessing={isProcessing}
         interimTranscript={interimTranscript}
@@ -244,6 +243,7 @@ export default function VoiceCommandButton() {
         isMuted={isMuted}
         onToggleMute={toggleMuted}
         isListeningForInterruption={false}
+        history={history}
       />
     );
   }
@@ -301,13 +301,33 @@ export default function VoiceCommandButton() {
             width: IDLE_SIZE, height: IDLE_SIZE, borderRadius: "50%", border: "none",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
             cursor: isDragging ? "grabbing" : "pointer",
-            touchAction: "none", userSelect: "none",
+            touchAction: "none", userSelect: "none", overflow: "hidden",
             background: isDisabled ? "var(--bg-low)" : "var(--primary)",
             color: isDisabled ? "var(--on-variant)" : "#fff",
             boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
           }}
         >
-          <i className={`ti ${isDisabled ? "ti-microphone-off" : "ti-microphone"}`} />
+          {isDisabled ? (
+            // Mic-off, not the mascot, while genuinely unavailable (logged
+            // out / unsupported browser) — a friendly bot face here would
+            // read as "available", the opposite of what this state means.
+            <i className="ti ti-microphone-off" />
+          ) : (
+            // Idle resting state shows the mascot instead of a mic icon —
+            // at this 46px size its detail actually reads fine, unlike the
+            // ~20px inline uses this asset was dropped from (see
+            // VoiceConversationPanel.tsx). Once tapped/hovered, the row
+            // below still leads with a plain mic icon on the actual talk
+            // button — the mascot is only ever the *idle* face, never a
+            // stand-in for "tap here to start listening".
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/bot.png"
+              alt=""
+              aria-hidden="true"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          )}
         </button>
       ) : (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
