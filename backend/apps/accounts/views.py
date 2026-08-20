@@ -3240,6 +3240,14 @@ class EmployeeDetailView(APIView):
         data          = request.data
         update_fields = ['updated_at']
         changes       = {}
+        # full_name/phone/date_of_joining are shown as read-only on the
+        # employee detail page once onboarding is complete ("set by system,
+        # not editable" — see PROFILE_SECTIONS in the frontend's _data.ts).
+        # That was previously a front-end-only convention with no matching
+        # check here, so any direct API call could silently overwrite them
+        # even after the UI stopped offering a way to. Enforced here now so
+        # the lock is real, not just an absent button.
+        locked = employee.onboarding_status == User.ONBOARDING_COMPLETE
 
         role_name = (data.get('role') or '').strip()
         if role_name:
@@ -3255,7 +3263,7 @@ class EmployeeDetailView(APIView):
             employee.role = new_role
             update_fields.append('role')
 
-        for field in ('department', 'designation', 'branch', 'phone'):
+        for field in ('department', 'designation', 'branch'):
             val = (data.get(field) or '').strip()
             if field in data:
                 old_val = getattr(employee, field, '')
@@ -3271,8 +3279,25 @@ class EmployeeDetailView(APIView):
                 setattr(employee, field, val)
                 update_fields.append(field)
 
+        if 'phone' in data:
+            phone = (data.get('phone') or '').strip()
+            if locked and phone != employee.phone:
+                return error(
+                    'Phone number is locked once onboarding is complete and can no longer be changed here.',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
+            if employee.phone != phone:
+                changes['phone'] = {'from': employee.phone, 'to': phone}
+            employee.phone = phone
+            update_fields.append('phone')
+
         full_name = (data.get('full_name') or '').strip()
         if full_name:
+            if locked and full_name != employee.full_name:
+                return error(
+                    'Full name is locked once onboarding is complete and can no longer be changed here.',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
             if employee.full_name != full_name:
                 changes['full_name'] = {'from': employee.full_name, 'to': full_name}
             employee.full_name = full_name
@@ -3284,6 +3309,11 @@ class EmployeeDetailView(APIView):
                 datetime.strptime(doj, '%Y-%m-%d')
             except ValueError:
                 return error('date_of_joining must be in YYYY-MM-DD format.')
+            if locked and doj != str(employee.date_of_joining):
+                return error(
+                    'Date of joining is locked once onboarding is complete and can no longer be changed here.',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
             if str(employee.date_of_joining) != doj:
                 changes['date_of_joining'] = {'from': str(employee.date_of_joining), 'to': doj}
             employee.date_of_joining = doj
