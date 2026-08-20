@@ -157,8 +157,6 @@ export default function VoiceCommandButton() {
           transcript={conversation.transcript}
           message={conversation.message}
           phase={conversation.phase}
-          conversational={conversation.conversational}
-          awaitingInput={conversation.awaitingInput}
           isListening={isListening}
           isProcessing={isProcessing}
           interimTranscript={interimTranscript}
@@ -211,8 +209,6 @@ export default function VoiceCommandButton() {
         transcript=""
         message=""
         phase="greeting"
-        conversational={false}
-        awaitingInput={false}
         isListening={isListening}
         isProcessing={isProcessing}
         interimTranscript={interimTranscript}

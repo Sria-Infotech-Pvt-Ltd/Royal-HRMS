@@ -126,8 +126,6 @@ interface VoiceConversationPanelProps {
   transcript: string;
   message: string;
   phase: VoicePanelPhase;
-  conversational: boolean;
-  awaitingInput: boolean;
   isListening: boolean;
   isProcessing: boolean;
   interimTranscript: string;
@@ -157,7 +155,7 @@ const MAX_BODY_HEIGHT = 360;
 // conversational ones), so this reads as the mic icon expanding in place,
 // not a separate destination.
 export default function VoiceConversationPanel({
-  transcript, message, phase, conversational, awaitingInput,
+  transcript, message, phase,
   isListening, isProcessing, interimTranscript,
   onStartListening, onStopListening, onSubmitText, onClose,
   isMuted, onToggleMute, isListeningForInterruption, history,
@@ -296,20 +294,22 @@ export default function VoiceConversationPanel({
           // phase === "result": the outcome is already the last entry in
           // `history` (useVoiceCommand appends at the exact moment it sets
           // this phase) — HistoryList above already rendered it, bubble,
-          // bot avatar, checkmark/error icon and all. The only thing left to
-          // add here is input controls, and only for a conversational
-          // dialogue's follow-up question (a one-shot result has nothing
-          // more to do before it auto-closes).
-          conversational && awaitingInput && (
-            <VoiceInputControls
-              isListening={isListening}
-              isProcessing={isProcessing}
-              interimTranscript={interimTranscript}
-              onStartListening={onStartListening}
-              onStopListening={onStopListening}
-              onSubmitText={onSubmitText}
-            />
-          )
+          // bot avatar, checkmark/error icon and all. Input controls show
+          // here regardless of conversational/awaitingInput — a one-shot
+          // result auto-closes after a delay (IMMEDIATE_RESULT_AUTO_CLOSE_MS
+          // in useVoiceCommand.ts), and without this the user couldn't type
+          // a follow-up command until that timer fired and reopened the
+          // greeting screen. Submitting here calls submitTranscript, which
+          // already clears the pending auto-close timer at its start, so
+          // there's no race between a fresh request and the old timer.
+          <VoiceInputControls
+            isListening={isListening}
+            isProcessing={isProcessing}
+            interimTranscript={interimTranscript}
+            onStartListening={onStartListening}
+            onStopListening={onStopListening}
+            onSubmitText={onSubmitText}
+          />
         )}
       </div>
     </div>
