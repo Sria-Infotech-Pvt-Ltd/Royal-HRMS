@@ -87,10 +87,6 @@ const NO_MATCH_INTENT = "no_match";
 // only these can come back with the geofencing rejection below.
 const CLOCK_INTENTS = new Set(["clock_in", "clock_out"]);
 
-// HR/manager intents that change leave request state — dispatching
-// leave:updated lets the approval table and action queue refresh immediately.
-const LEAVE_APPROVAL_INTENTS = new Set(["approve_leave", "reject_leave"]);
-
 // Mirrors backend/apps/attendance/services_geofencing.py's _validate_office
 // verbatim — this is the ONE rejection reason a client-side geolocation
 // retry can actually fix (the branch requires GPS and none was sent yet).

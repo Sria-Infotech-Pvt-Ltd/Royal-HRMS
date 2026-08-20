@@ -1,11 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import clientApi from "@/lib/clientApi";
-import { API } from "@/lib/api/endpoints";
 import {
-  apiDocumentToEntry,
-  type ApiDocument,
   type DetailValues,
   type DocEntry,
   type FieldOption,
@@ -29,8 +25,6 @@ export default function ProfileForm({
   dirty,
   saving,
   liveDocuments,
-  employeeId,
-  onDocumentUploaded,
   fieldOptions,
   fieldSlot,
   readOnly,
@@ -49,8 +43,6 @@ export default function ProfileForm({
   dirty: boolean;
   saving?: boolean;
   liveDocuments?: DocEntry[];
-  employeeId?: string;
-  onDocumentUploaded?: (entry: DocEntry) => void;
   fieldOptions?: Record<string, FieldOption[]>;
   fieldSlot?: (key: string, disabled: boolean) => React.ReactNode | null | "hidden";
   readOnly?: boolean;

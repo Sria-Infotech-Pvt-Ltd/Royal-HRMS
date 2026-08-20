@@ -4,12 +4,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { usePermission } from "@/hooks/usePermission";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
 
 /* ── Types ────────────────────────────────────────────────────── */
-interface ApiRole   { id: number; name: string; display_name: string }
+interface ApiRole   { id: number; name: string; display_name: string; permissions: string[] }
 interface ApiDept   { id: number; name: string }
 interface ApiDesig  { id: number; name: string; department_name: string }
 interface ApiBranch { id: number; branch_name: string; branch_code: string }
@@ -144,7 +143,12 @@ export default function AddEmployeeModal({
     ])
       .then(([r, d, b]) => {
         if (r.status === "fulfilled") {
-          setRoles(r.value.data.data.results.filter(x => x.name !== "system_admin"));
+          // Matched by capability (same signal the backend itself enforces
+          // in EmployeeListCreateView.post/EmployeeDetailView.put), not by
+          // the literal role name — a company can rename "System Admin" to
+          // anything, and a name-only filter would silently stop excluding
+          // it the moment they did.
+          setRoles(r.value.data.data.results.filter(x => !x.permissions.includes("settings.edit")));
         }
         if (d.status === "fulfilled") setDepts(d.value.data.data?.results ?? []);
         if (b.status === "fulfilled") setBranches(b.value.data.data.results);

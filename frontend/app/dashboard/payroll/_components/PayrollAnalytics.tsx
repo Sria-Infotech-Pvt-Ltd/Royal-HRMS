@@ -8,7 +8,6 @@ interface PagedResponse<T> { results: T[]; count: number; }
 
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-function fmtL(n: number) { return n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : `₹${(n / 1000).toFixed(0)}K`; }
 
 function BarChart({ data, max, color }: { data: { label: string; value: number }[]; max: number; color: string }) {
   return (

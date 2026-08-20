@@ -12,7 +12,6 @@ import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
-  apiDocumentToEntry,
   applyDocumentTypeConfig,
   applyFieldConfig,
   customFieldKeys,
@@ -519,13 +518,6 @@ export default function EmployeeProfilePage({
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setFileUploadError(msg || "Failed to delete file. Please try again.");
     }
-  }
-
-  function onDocumentUploaded(entry: DocEntry) {
-    setEmployee(emp => emp && {
-      ...emp,
-      documents: (emp.documents ?? []).map(d => d.documentType === entry.documentType ? entry : d),
-    });
   }
 
   const activeTab = PROFILE_TABS.find(t => t.id === tab)!;

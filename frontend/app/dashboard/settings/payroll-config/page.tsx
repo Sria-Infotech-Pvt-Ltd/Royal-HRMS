@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { PayrollSettings, SalaryStructureListItem, StatutoryConfig, BranchPayrollConfig } from "@/types/payroll";
+import type { PayrollSettings } from "@/types/payroll";
 import SalaryStructuresTab from "./_components/SalaryStructuresTab";
 import StatutoryConfigTab from "./_components/StatutoryConfigTab";
 import BranchConfigTab from "./_components/BranchConfigTab";

@@ -5,7 +5,6 @@ import type {
   LeaveBalanceSummary,
   ActionItemsResponse,
   RecentRequestsResponse,
-  AttendanceSummary,
   AttendanceStatus,
   Announcement,
   BirthdaysTodayResponse,
@@ -30,13 +29,6 @@ export const useActionItems = (page: number = 1, pageSize: number = 5) =>
 export const useRecentRequests = (page: number = 1, pageSize: number = 5) =>
   useFetch<RecentRequestsResponse>(
     `${API.employeeDashboard.recentRequests}?page=${page}&page_size=${pageSize}`
-  );
-
-export const useAttendanceSummary = (month?: number, year?: number) =>
-  useFetch<AttendanceSummary>(
-    month && year
-      ? `${API.employeeDashboard.attendanceSummary}?month=${month}&year=${year}`
-      : API.employeeDashboard.attendanceSummary
   );
 
 export const useAttendanceStatus = () =>

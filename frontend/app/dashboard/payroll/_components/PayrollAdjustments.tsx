@@ -35,11 +35,6 @@ const TYPE_LABELS: Record<string, string> = { addition: "Addition", deduction: "
 const TYPE_BADGE: Record<string, string> = { addition: "badge-success", deduction: "badge-error", arrear: "badge-warning" };
 const PAGE_SIZE = 10;
 
-function currentMonthParam() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function monthParam(month: string, year: string) {
   const idx = MONTHS.indexOf(month) + 1;
   return `${year}-${String(idx).padStart(2, "0")}`;

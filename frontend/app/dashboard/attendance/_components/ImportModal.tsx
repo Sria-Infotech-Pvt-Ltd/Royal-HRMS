@@ -5,7 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
 import Modal from "@/components/Modal";
-import type { ImportResult, ImportRowError } from "@/types/attendance";
+import type { ImportResult } from "@/types/attendance";
 
 type SampleFormat = "csv" | "xlsx";
 

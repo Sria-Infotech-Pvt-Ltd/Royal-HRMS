@@ -110,20 +110,6 @@ export interface ApiDocument {
   uploaded_at: string;
 }
 
-const DOC_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-/** Merge an uploaded ApiDocument onto its matching static DocEntry slot. */
-export function apiDocumentToEntry(base: DocEntry, doc: ApiDocument): DocEntry {
-  const dt = new Date(doc.uploaded_at);
-  return {
-    ...base,
-    status: "pending",
-    uploadedOn: `${DOC_MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`,
-    fileUrl: doc.file,
-    fileName: doc.file_name,
-    fileSize: doc.file_size,
-  };
-}
 export interface DocSection {
   id: string;
   label: string;
