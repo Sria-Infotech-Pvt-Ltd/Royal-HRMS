@@ -21,6 +21,7 @@ export default function EditRoleModal({ role, permissionsMap, saving, error, onC
   const [form, setForm]     = useState<RoleForm>({
     display_name:        role.display_name,
     can_manage_team:     role.can_manage_team,
+    can_manage_branch:   role.can_manage_branch,
     permission_codenames: role.permissions,
   });
   const [errors, setErrors] = useState<RoleFormErrors>({});

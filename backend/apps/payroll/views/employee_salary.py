@@ -40,19 +40,23 @@ class EmployeeSalaryConfigListView(APIView):
             'employee', 'salary_structure',
         ).order_by('employee__full_name')
 
-        # Branch-scoped users (branch_admin, HR) must only see configs for
-        # employees in their own branch — matches the scoping already applied
-        # to the /employees/ list (EmployeeListCreateView), which this list is
-        # zipped against on the frontend. Without this, a branch_admin got
-        # every branch's configs while the employee list was already
-        # branch-scoped, so IDs never matched and every row read "Not set".
+        # Matches the scoping already applied to the /employees/ list
+        # (EmployeeListCreateView.get()), which this list is zipped against on
+        # the frontend — without matching it exactly, IDs never lined up and
+        # every row read "Not set".
+        #   - A manager (can_manage_team) only sees their own direct reports'
+        #     configs, not their whole branch's.
+        #   - Everyone else without settings.edit is branch-scoped.
         if not _is_admin(request.user):
-            if not request.user.branch:
+            if request.user.role and request.user.role.can_manage_team:
+                configs = configs.filter(employee__reporting_manager=request.user)
+            elif request.user.branch:
+                configs = configs.filter(employee__branch=request.user.branch)
+            else:
                 return error(
                     'Your account is not assigned to a branch. Contact an administrator.',
                     http_status=400,
                 )
-            configs = configs.filter(employee__branch=request.user.branch)
 
         page_obj, paginator = paginate(configs, request)
         serializer = EmployeeSalaryConfigSerializer(page_obj.object_list, many=True)

@@ -1790,6 +1790,37 @@ textarea.field-input {
   line-height: 1;
 }
 
+/* ── Login: platform-admin brand panel (gradient side panel, replaces the
+   photo panel used on the tenant login — an internal ops console reads
+   better with the same gradient language as the platform-admin dashboard
+   than with a stock photo of people). ── */
+.login-brand-panel {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--primary) 0%, #12213b 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 56px;
+  color: #fff;
+}
+
+.pa-login-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+}
+
+.pa-login-feature i {
+  font-size: 17px;
+  color: #fff;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
 /* ── Login: brand icon ── */
 .login-brand-wrap {
   display: flex;
@@ -1912,6 +1943,20 @@ textarea.field-input {
   color: var(--outline);
 }
 
+/* ── Login: link to the separate platform-admin login ── */
+.login-platform-admin-link {
+  display: block;
+  font-size: 11px;
+  text-align: center;
+  margin-top: 8px;
+  color: var(--outline);
+  text-decoration: underline;
+}
+
+.login-platform-admin-link:hover {
+  color: var(--primary);
+}
+
 /* ── Login: button spinner ── */
 .login-spinner {
   width: 16px;
@@ -1942,7 +1987,8 @@ textarea.field-input {
   }
 
   /* No image on mobile — pure form */
-  .login-image-panel {
+  .login-image-panel,
+  .login-brand-panel {
     display: none;
   }
 

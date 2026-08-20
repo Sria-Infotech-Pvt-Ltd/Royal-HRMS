@@ -105,6 +105,12 @@ class BranchListCreateView(APIView):
         if not _has_perm(request.user, 'branches.view'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         qs = Branch.objects.select_related('state', 'city').all()
+        # Same scoping already applied to editing a branch (_branch_out_of_scope)
+        # and to every other module (employees, leave, attendance) — a
+        # non-org-wide user (no settings.edit) only sees their own branch,
+        # not every branch in the company.
+        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
+            qs = qs.filter(branch_name__iexact=request.user.branch)
         if status_filter := request.query_params.get('status'):
             allowed_statuses = {Branch.STATUS_ACTIVE, Branch.STATUS_INACTIVE}
             if status_filter not in allowed_statuses:
@@ -207,6 +213,8 @@ class BranchDetailView(APIView):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
+            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _branch_out_of_scope(request.user, branch):
             return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Branch retrieved successfully.', data=BranchSerializer(branch).data)
 

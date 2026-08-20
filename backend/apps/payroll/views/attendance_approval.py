@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.responses import success, error
 from core.permissions import has_perm as _has_perm
+from apps.branch.models import Branch
 from apps.payroll.models import PayrollCycle, ManagerAttendanceApproval
 from apps.payroll.serializers import PayrollCycleSerializer, ManagerAttendanceApprovalSerializer
 
@@ -28,6 +29,13 @@ def _is_hr(user):
     return _has_perm(user, HR_PERMISSION)
 
 
+def _resolve_user_branch(user):
+    """Return the Branch object for a non-org-wide user's assigned branch, or None."""
+    if not user.branch:
+        return None
+    return Branch.objects.filter(branch_name=user.branch, status=Branch.STATUS_ACTIVE).first()
+
+
 def _can_view_approvals(user):
     return _is_manager(user) or _is_hr(user)
 
@@ -46,10 +54,21 @@ class AttendancePendingCyclesView(APIView):
             return error('Access denied.', http_status=403)
 
         if _is_hr(request.user) and not _is_manager(request.user):
-            # Pure HR: show all pending cycles (they may need to do L2)
+            # Pure HR: show pending cycles they may need to do L2 on — company-
+            # wide only for an org-wide user (settings.edit); otherwise scoped
+            # to their own branch, same as every other payroll list.
             cycles = PayrollCycle.objects.filter(
                 status=PayrollCycle.STATUS_ATTENDANCE_PENDING,
-            ).select_related(
+            )
+            if not _has_perm(request.user, 'settings.edit'):
+                branch_obj = _resolve_user_branch(request.user)
+                if branch_obj is None:
+                    return error(
+                        'Your account is not assigned to a branch. Contact an administrator.',
+                        http_status=400,
+                    )
+                cycles = cycles.filter(branch=branch_obj)
+            cycles = cycles.select_related(
                 'created_by', 'attendance_approved_by_l1', 'attendance_approved_by_l2',
             ).order_by('-cycle_start')
         else:

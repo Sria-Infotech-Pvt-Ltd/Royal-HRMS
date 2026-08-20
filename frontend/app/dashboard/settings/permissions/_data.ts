@@ -6,6 +6,8 @@ export interface ApiRole {
   display_name: string;   // human, e.g. "HR Admin"
   is_active: boolean;
   can_manage_team: boolean;
+  can_manage_branch: boolean;
+  is_system_role: boolean; // one of the 5 roles this company was provisioned with — can't be deleted
   user_count: number;
   permissions: string[];  // codenames, e.g. ["employees.view", "employees.create"]
   updated_at: string;     // used to detect concurrent edits on save
@@ -26,6 +28,7 @@ export type PermissionsMap = Record<string, ApiPermission[]>;
 export interface RoleForm {
   display_name: string;
   can_manage_team: boolean;
+  can_manage_branch: boolean;
   permission_codenames: string[];
 }
 
@@ -34,6 +37,7 @@ export type RoleFormErrors = Partial<Record<keyof RoleForm, string>>;
 export const EMPTY_ROLE_FORM: RoleForm = {
   display_name: "",
   can_manage_team: false,
+  can_manage_branch: false,
   permission_codenames: [],
 };
 

@@ -305,6 +305,9 @@ export default function LoginPage() {
             <p className="login-footer-text">
               Protected by {brandName} · Enterprise SSO available
             </p>
+            <a href="/platform-admin/login" className="login-platform-admin-link">
+              Platform Admin login
+            </a>
 
           </div>
         </div>

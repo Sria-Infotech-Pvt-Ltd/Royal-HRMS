@@ -100,6 +100,26 @@ export default function RoleFormFields({ form, errors, permissionsMap, onChange,
         </label>
       </div>
 
+      {/* Can manage branch */}
+      <div className="field-group mb-16">
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={form.can_manage_branch}
+            style={{ accentColor: "var(--primary)", marginTop: 2, flexShrink: 0 }}
+            onChange={e => onChange({ can_manage_branch: e.target.checked })}
+          />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
+              Can manage branch
+            </div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+              Users with this role have unconditional access to every employee, request, and record within their own branch — not limited to employees specifically assigned to them (unlike HR) or their direct reports (unlike a manager).
+            </div>
+          </div>
+        </label>
+      </div>
+
       {/* Permissions section */}
       <div className="field-group">
 

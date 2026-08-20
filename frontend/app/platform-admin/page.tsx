@@ -3,8 +3,14 @@
 import { useFetch } from "@/hooks/useFetch";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
-import { MODULE_LABELS } from "@/types/platformAdmin";
-import type { DashboardStats, PlatformAdminInfo } from "@/types/platformAdmin";
+import type { Company, DashboardStats, PlatformAdminInfo } from "@/types/platformAdmin";
+
+const AVATAR_TINTS = [
+  { bg: "rgba(30, 78, 140, 0.12)", fg: "var(--primary)" },
+  { bg: "var(--sec-c)",            fg: "var(--secondary)" },
+  { bg: "var(--success-c)",        fg: "var(--success)" },
+  { bg: "var(--info-c)",           fg: "var(--info)" },
+];
 
 export default function PlatformAdminDashboard() {
   const { data: me } = useFetch<PlatformAdminInfo>(API.platformAdmin.me, platformAdminApi);
@@ -12,9 +18,29 @@ export default function PlatformAdminDashboard() {
 
   return (
     <div style={{ padding: "32px 24px" }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700 }}>Dashboard</h1>
-        {me && <p className="text-muted" style={{ fontSize: 13 }}>Signed in as {me.full_name || me.email}</p>}
+      <div
+        style={{
+          position: "relative", overflow: "hidden", borderRadius: "var(--radius-lg)",
+          background: "linear-gradient(135deg, var(--primary) 0%, #12213b 100%)",
+          padding: "26px 32px", marginBottom: 24, color: "#fff",
+        }}
+      >
+        <i
+          className="ti ti-building"
+          style={{ position: "absolute", right: 20, top: "50%", transform: "translateY(-50%)", fontSize: 128, opacity: 0.1 }}
+          aria-hidden
+        />
+        <div style={{ position: "relative" }}>
+          <div style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.75, marginBottom: 8 }}>
+            Platform Admin
+          </div>
+          <h1 style={{ fontSize: 23, fontWeight: 700 }}>
+            Welcome back{me?.full_name ? `, ${me.full_name.split(" ")[0]}` : ""}
+          </h1>
+          <p style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+            {stats ? `${stats.total_companies} ${stats.total_companies === 1 ? "company" : "companies"} under management` : "Loading your companies…"}
+          </p>
+        </div>
       </div>
 
       {loading ? (
@@ -26,94 +52,44 @@ export default function PlatformAdminDashboard() {
       ) : stats ? (
         <>
           <div className="stats-grid mb-6">
-            <div className="stat-card">
-              <div>
-                <div className="stat-label">Total companies</div>
-                <div className="stat-value">{stats.total_companies}</div>
-              </div>
-              <div className="stat-icon si-primary"><i className="ti ti-building" /></div>
+            <KpiCard label="Total companies" value={stats.total_companies} icon="ti-building" tint="si-primary" accent="var(--primary)" />
+            <KpiCard label="Active" value={stats.active_companies} icon="ti-circle-check" tint="si-success" accent="var(--success)" />
+            <KpiCard label="Disabled" value={stats.disabled_companies} icon="ti-circle-x" tint="si-info" accent="var(--info)" />
+            <KpiCard
+              label="Dormant" value={stats.dormant_company_count} icon="ti-clock-pause" tint="si-warn" accent="var(--warn)"
+              sub="30+ days inactive"
+            />
+          </div>
+
+          <div className="card pa-hover" style={{ marginBottom: 24 }}>
+            <div className="card-header">
+              <div className="card-title"><i className="ti ti-chart-donut" /> Provisioning status</div>
             </div>
-            <div className="stat-card">
-              <div>
-                <div className="stat-label">Active</div>
-                <div className="stat-value">{stats.active_companies}</div>
+            <div className="card-body">
+              <ProvisioningBar provisioning={stats.provisioning} />
+              <div style={{ display: "flex", gap: 32, marginTop: 18 }}>
+                <ProvisioningRow icon="ti-circle-check" color="var(--success)" label="Active" count={stats.provisioning.active} />
+                <ProvisioningRow icon="ti-clock-hour-4" color="var(--warn)" label="Pending" count={stats.provisioning.pending} />
+                <ProvisioningRow icon="ti-alert-circle" color="var(--error)" label="Failed" count={stats.provisioning.failed} />
               </div>
-              <div className="stat-icon si-success"><i className="ti ti-circle-check" /></div>
-            </div>
-            <div className="stat-card">
-              <div>
-                <div className="stat-label">Disabled</div>
-                <div className="stat-value">{stats.disabled_companies}</div>
-              </div>
-              <div className="stat-icon si-info"><i className="ti ti-circle-x" /></div>
-            </div>
-            <div className="stat-card">
-              <div>
-                <div className="stat-label">Dormant</div>
-                <div className="stat-value">{stats.dormant_company_count}</div>
-                <div className="stat-sub">30+ days inactive</div>
-              </div>
-              <div className="stat-icon si-warn"><i className="ti ti-clock-pause" /></div>
+              {(stats.provisioning.pending > 0 || stats.provisioning.failed > 0) && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--outline-v)" }}>
+                  {stats.provisioning.pending > 0 && (
+                    <a href="/platform-admin/companies" style={{ fontSize: 12.5 }}>
+                      View pending companies →
+                    </a>
+                  )}
+                  {stats.provisioning.failed > 0 && (
+                    <a href="/platform-admin/companies" className="text-error" style={{ fontSize: 12.5 }}>
+                      {stats.provisioning.failed} failed — review and recreate →
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title"><i className="ti ti-chart-donut" /> Provisioning status</div>
-              </div>
-              <div className="card-body">
-                <ProvisioningBar provisioning={stats.provisioning} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
-                  <ProvisioningRow label="Active" badgeClass="badge-success" count={stats.provisioning.active} />
-                  <ProvisioningRow label="Pending" badgeClass="badge-warn" count={stats.provisioning.pending} />
-                  <ProvisioningRow label="Failed" badgeClass="badge-error" count={stats.provisioning.failed} />
-                </div>
-                {(stats.provisioning.pending > 0 || stats.provisioning.failed > 0) && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--outline-v)" }}>
-                    {stats.provisioning.pending > 0 && (
-                      <a href="/platform-admin/companies" style={{ fontSize: 12.5 }}>
-                        View pending companies →
-                      </a>
-                    )}
-                    {stats.provisioning.failed > 0 && (
-                      <a href="/platform-admin/companies" className="text-error" style={{ fontSize: 12.5 }}>
-                        {stats.provisioning.failed} failed — review and recreate →
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title"><i className="ti ti-puzzle" /> Module adoption</div>
-              </div>
-              <div className="card-body">
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {Object.entries(stats.module_adoption).map(([key, count]) => {
-                    const pct = stats.total_companies ? Math.round((count / stats.total_companies) * 100) : 0;
-                    return (
-                      <div key={key}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6 }}>
-                          <span style={{ color: "var(--on-bg)", fontWeight: 500 }}>
-                            {MODULE_LABELS[key as keyof typeof MODULE_LABELS] ?? key}
-                          </span>
-                          <span className="text-muted">{count} · {pct}%</span>
-                        </div>
-                        <div style={{ height: 6, borderRadius: 3, background: "var(--bg-mid)", overflow: "hidden" }}>
-                          <div style={{ height: "100%", borderRadius: 3, background: "var(--primary)", width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card" style={{ marginBottom: 24 }}>
+          <div className="card pa-hover" style={{ marginBottom: 24 }}>
             <div className="card-header">
               <div className="card-title"><i className="ti ti-activity" /> Company usage</div>
               {stats.dormant_company_count > 0 && (
@@ -141,15 +117,20 @@ export default function PlatformAdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.company_usage.map(u => {
+                    {stats.company_usage.map((u, i) => {
                       const dormant = isDormant(u.last_activity_at);
                       return (
                         <tr key={u.company_code}>
                           <td>
-                            {u.company_name}{" "}
-                            <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{u.company_code}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <CompanyAvatar name={u.company_name} index={i} />
+                              <span>
+                                {u.company_name}{" "}
+                                <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{u.company_code}</span>
+                              </span>
+                            </div>
                           </td>
-                          <td>{u.employee_count}</td>
+                          <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.employee_count}</td>
                           <td>
                             <span className={dormant ? "text-error" : undefined} style={{ fontSize: 13 }}>
                               {formatRelativeTime(u.last_activity_at)}
@@ -165,7 +146,7 @@ export default function PlatformAdminDashboard() {
             )}
           </div>
 
-          <div className="card">
+          <div className="card pa-hover">
             <div className="card-header">
               <div className="card-title"><i className="ti ti-clock" /> Recently created</div>
               <a href="/platform-admin/companies" style={{ fontSize: 12.5 }}>View all →</a>
@@ -174,28 +155,45 @@ export default function PlatformAdminDashboard() {
               <p className="text-muted" style={{ fontSize: 13, padding: "0 20px 20px" }}>No companies yet.</p>
             ) : (
               <div>
-                {stats.recent_companies.map(c => (
-                  <div
-                    key={c.id}
-                    style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13,
-                      padding: "12px 20px", borderBottom: "1px solid var(--bg-high)",
-                    }}
-                  >
-                    <div>
-                      <strong>{c.company_name}</strong>{" "}
-                      <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{c.company_code}</span>
-                    </div>
-                    <span className="text-muted" style={{ fontSize: 12 }}>
-                      {new Date(c.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
+                {stats.recent_companies.map((c, i) => (
+                  <RecentCompanyRow key={c.id} company={c} index={i} />
                 ))}
               </div>
             )}
           </div>
         </>
       ) : null}
+
+      <style jsx>{`
+        .pa-hover { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+        .pa-hover:hover { box-shadow: var(--shadow-md); }
+        @media (prefers-reduced-motion: reduce) {
+          .pa-hover { transition: none; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function KpiCard({
+  label, value, icon, tint, accent, sub,
+}: { label: string; value: number; icon: string; tint: string; accent: string; sub?: string }) {
+  return (
+    <div className="stat-card pa-kpi" style={{ borderTop: `3px solid ${accent}` }}>
+      <div>
+        <div className="stat-label">{label}</div>
+        <div className="stat-value">{value}</div>
+        {sub && <div className="stat-sub">{sub}</div>}
+      </div>
+      <div className={`stat-icon ${tint}`}><i className={`ti ${icon}`} /></div>
+      <style jsx>{`
+        .pa-kpi { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+        .pa-kpi:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        @media (prefers-reduced-motion: reduce) {
+          .pa-kpi { transition: none; }
+          .pa-kpi:hover { transform: none; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -203,27 +201,77 @@ export default function PlatformAdminDashboard() {
 function ProvisioningBar({ provisioning }: { provisioning: DashboardStats["provisioning"] }) {
   const total = provisioning.active + provisioning.pending + provisioning.failed;
   if (total === 0) {
-    return <div style={{ height: 8, borderRadius: 4, background: "var(--bg-mid)" }} />;
+    return <div style={{ height: 10, borderRadius: 5, background: "var(--bg-mid)" }} />;
   }
-  const segments: { count: number; color: string }[] = [
-    { count: provisioning.active, color: "var(--success)" },
-    { count: provisioning.pending, color: "var(--warn)" },
-    { count: provisioning.failed, color: "var(--error)" },
-  ];
+  const segments: { count: number; color: string; label: string }[] = [
+    { count: provisioning.active,  color: "var(--success)", label: "Active" },
+    { count: provisioning.pending, color: "var(--warn)",    label: "Pending" },
+    { count: provisioning.failed,  color: "var(--error)",   label: "Failed" },
+  ].filter(s => s.count > 0);
   return (
-    <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", background: "var(--bg-mid)" }}>
-      {segments.filter(s => s.count > 0).map((s, i) => (
-        <div key={i} style={{ width: `${(s.count / total) * 100}%`, background: s.color }} />
+    <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", gap: 2 }}>
+      {segments.map((s, i) => (
+        <div
+          key={i}
+          title={`${s.label}: ${s.count}`}
+          style={{ width: `${(s.count / total) * 100}%`, background: s.color }}
+        />
       ))}
     </div>
   );
 }
 
-function ProvisioningRow({ label, badgeClass, count }: { label: string; badgeClass: string; count: number }) {
+function ProvisioningRow({ icon, color, label, count }: { icon: string; color: string; label: string; count: number }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-      <span className={`badge ${badgeClass}`}>{label}</span>
-      <strong>{count}</strong>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+      <i className={`ti ${icon}`} style={{ color, fontSize: 15 }} />
+      <span style={{ color: "var(--on-bg)" }}>{label}</span>
+      <strong style={{ fontVariantNumeric: "tabular-nums" }}>{count}</strong>
+    </div>
+  );
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function CompanyAvatar({ name, index }: { name: string; index: number }) {
+  const tint = AVATAR_TINTS[index % AVATAR_TINTS.length];
+  return (
+    <span
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+        background: tint.bg, color: tint.fg, fontSize: 11, fontWeight: 700,
+      }}
+      aria-hidden
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+function RecentCompanyRow({ company, index }: { company: Company; index: number }) {
+  return (
+    <div
+      style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13,
+        padding: "12px 20px", borderBottom: "1px solid var(--bg-high)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <CompanyAvatar name={company.company_name} index={index} />
+        <span>
+          <strong>{company.company_name}</strong>{" "}
+          <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{company.company_code}</span>
+        </span>
+      </div>
+      <span className="text-muted" style={{ fontSize: 12 }}>
+        {new Date(company.created_at).toLocaleDateString()}
+      </span>
     </div>
   );
 }

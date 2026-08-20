@@ -61,10 +61,17 @@ class RoleSerializer(serializers.ModelSerializer):
         model  = Role
         fields = (
             'id', 'name', 'display_name', 'is_active', 'can_manage_team',
+            'can_manage_branch', 'is_system_role',
             'permissions', 'permission_codenames', 'user_count',
             'created_at', 'updated_at',
         )
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        # can_manage_branch is writable the same way can_manage_team already
+        # is — an admin can grant unconditional branch-scoped access to any
+        # role, not just the seeded Branch Admin. Callers (e.g. the "assign
+        # Branch Admin" picker) find the role by this capability instead of
+        # matching its name, same as core/permissions.py does server-side.
+        # is_system_role is never settable by any client — provisioning-time only.
+        read_only_fields = ('id', 'created_at', 'updated_at', 'is_system_role')
 
     def get_permissions(self, obj: Role) -> list[str]:
         # Uses prefetch_related('role_permissions__permission') cache — no extra query.
