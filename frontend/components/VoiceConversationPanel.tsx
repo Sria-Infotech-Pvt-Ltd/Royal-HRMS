@@ -30,7 +30,7 @@ const QUICK_ACTIONS: { label: string; phrase: string; icon: string }[] = [
 
 const BOT_AVATAR_SRC = "/bot.png";
 
-function BotAvatar({ size = 22 }: { size?: number }) {
+function BotAvatar({ size = 24 }: { size?: number }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -39,7 +39,10 @@ function BotAvatar({ size = 22 }: { size?: number }) {
       aria-hidden="true"
       width={size}
       height={size}
-      style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, objectFit: "cover", background: "var(--bg-low)" }}
+      // contain, not cover — bot.png is a transparent PNG with the
+      // character centered and padding around it; cover crops in tight
+      // enough to lose most of the character at small sizes.
+      style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, objectFit: "contain", background: "var(--bg-low)" }}
     />
   );
 }

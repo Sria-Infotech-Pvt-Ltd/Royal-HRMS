@@ -8,13 +8,14 @@ import { useVoiceMutePreference } from "@/hooks/useVoiceMutePreference";
 import VoiceConversationPanel from "@/components/VoiceConversationPanel";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
 
-const FAB_SIZE = 56;
-const MUTE_TOGGLE_SIZE = 32;
-const IDLE_SIZE = 46;
+// One button, one size — no separate idle-orb/expanded-row states any more.
+// Clicking it always opens the same VoiceConversationPanel (greeting phase,
+// or whatever the active conversation's phase is), which itself already
+// offers both a mic button and a "type your answer" text field
+// (VoiceInputControls) — so a single launcher covers voice AND typed entry
+// without needing its own separate keyboard-toggle icon.
+const LAUNCHER_SIZE = 60;
 
-// Dragging only ever moves the idle orb (46px), but it can expand into the
-// full mute/keyboard/mic row afterward — reserve room for that wider/taller
-// shape so a corner drop never leaves the expanded row spilling off-screen.
 const EDGE_MARGIN = 8;
 const SAFE_W = 180;
 const SAFE_H = 90;
@@ -46,25 +47,17 @@ export default function VoiceCommandButton() {
     isListeningForInterruption, history,
   } = useVoiceCommand(isMuted, isAuthenticated);
 
-  // Lets a user open a chat-style box to type the very first command instead
-  // of speaking it — opens the same VoiceConversationPanel used for the rest
-  // of the exchange (see the "greeting" phase branch below), just ahead of
-  // any real conversation existing yet. Local UI-only state (not lifted into
-  // useVoiceCommand) since nothing outside this component's render needs it.
-  const [isTypedInputOpen, setIsTypedInputOpen] = useState(false);
+  // Opens the same VoiceConversationPanel used for the rest of the exchange
+  // (see the "greeting" phase branch below), ahead of any real conversation
+  // existing yet — the launcher's only job is opening this, voice vs typed
+  // is then whichever the user picks inside VoiceInputControls.
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const isListening  = status === "listening";
   const isProcessing = status === "processing";
 
-  // Idle state: the FAB rests as a small orb and only expands to the full
-  // mic/mute/keyboard row on hover (desktop) or tap (touch — no real hover
-  // event, so the orb's own onClick also expands it). Always expanded while
-  // actually in use so it can never collapse out from under an active
-  // interaction.
   const [isHovered, setIsHovered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isBusy = isListening || isProcessing || isTypedInputOpen || !!interimTranscript;
-  const showExpanded = isHovered || isBusy;
 
   // Draggable widget — lets a user physically move it off whatever it's
   // covering (table pagination, wizard footers) instead of just hoping the
@@ -72,8 +65,7 @@ export default function VoiceCommandButton() {
   // only, not persisted — it survives client-side navigation (this component
   // lives in the root layout, which React Router keeps mounted across route
   // changes) but resets to the default corner on an actual page reload, by
-  // design. Declared before the outside-click effect below, which reads
-  // isDragging.
+  // design.
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragStateRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
@@ -91,26 +83,6 @@ export default function VoiceCommandButton() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  // Touch devices don't fire mouseleave, so an expanded-by-tap orb would
-  // otherwise stay expanded forever — collapse on the next tap/click
-  // anywhere outside the widget instead, but never while actually busy or
-  // mid-drag (a drag must never trigger a state change that swaps out the
-  // element currently holding pointer capture).
-  useEffect(() => {
-    if (!isHovered || isBusy || isDragging) return;
-    function handleOutside(e: MouseEvent | TouchEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsHovered(false);
-      }
-    }
-    document.addEventListener("mousedown", handleOutside);
-    document.addEventListener("touchstart", handleOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      document.removeEventListener("touchstart", handleOutside);
-    };
-  }, [isHovered, isBusy, isDragging]);
 
   function handleDragPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -142,8 +114,8 @@ export default function VoiceCommandButton() {
   function handleDragPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
     const ds = dragStateRef.current;
     if (ds?.moved) {
-      // The click event that follows this pointerup must not also expand
-      // the orb — the drag itself was the intended action.
+      // The click event that follows this pointerup must not also open the
+      // panel — the drag itself was the intended action.
       justDraggedRef.current = true;
       const x = clamp(ds.origX + (e.clientX - ds.startX), EDGE_MARGIN, window.innerWidth - SAFE_W);
       const y = clamp(ds.origY + (e.clientY - ds.startY), EDGE_MARGIN, window.innerHeight - SAFE_H);
@@ -159,16 +131,10 @@ export default function VoiceCommandButton() {
     ? "Log in to use voice commands"
     : "Voice commands need a Chromium-based browser (Chrome, Edge) — the Web Speech API isn't available here.";
 
-  // Typing doesn't need the Web Speech API the mic button requires — only
-  // authentication does (the same server-side gate /api/voice/parse/
-  // enforces regardless). Gating on isAuthenticated alone, not isDisabled,
-  // means this also becomes the working fallback on non-Chromium browsers.
-  const canType = isAuthenticated;
-
   // Every voice response now opens this panel — the recognized transcript
   // while the request is in flight, then the result, whether the intent was
   // conversational or a one-shot. The panel replaces the plain button in
-  // place, so it reads as the mic icon expanding rather than a separate
+  // place, so it reads as the launcher expanding rather than a separate
   // destination. Never shown while logged out/unsupported: isDisabled
   // already gates whether a conversation could ever have started (see
   // useVoiceCommand's submitTranscript, which checks the same condition
@@ -188,7 +154,7 @@ export default function VoiceCommandButton() {
           onStartListening={startListening}
           onStopListening={stopListening}
           onSubmitText={submitTranscript}
-          onClose={() => { setIsHovered(false); closeConversation(); }}
+          onClose={closeConversation}
           isMuted={isMuted}
           onToggleMute={toggleMuted}
           isListeningForInterruption={isListeningForInterruption}
@@ -205,27 +171,30 @@ export default function VoiceCommandButton() {
           key={conversation.faceProofTurn}
           isOpen={conversation.awaitingFaceProof}
           onCaptured={submitFaceProof}
-          onClose={() => { setIsHovered(false); closeConversation(); }}
+          onClose={closeConversation}
         />
       </>
     );
   }
 
-  // Keyboard toggle opens the same panel component in its "greeting" phase —
-  // a chat box with a static hello and the typed/mic input controls, open
-  // before any real command exists. Submitting from here calls submitTranscript
-  // the same as every other entry point, which sets `conversation` and hands
-  // rendering back to the branch above for the rest of the exchange.
+  // Launcher click opens the same panel in its "greeting" phase — a chat box
+  // with a static hello, quick-action chips, and the mic/typed input
+  // controls, open before any real command exists. Submitting from here
+  // calls submitTranscript the same as every other entry point, which sets
+  // `conversation` and hands rendering back to the branch above for the rest
+  // of the exchange.
   //
-  // Gated on canType, not isDisabled — same reasoning as canType's own
-  // definition above: typing needs only authentication, not Web Speech API
-  // support, so this chat box must still open on non-Chromium browsers (the
-  // one place typed commands work at all there). On such a browser,
-  // submitTranscript's own isDisabled check still routes the *result* to a
-  // toast instead of setting `conversation` (see its docstring) — this panel
-  // simply stays open afterwards, ready for the next typed command, rather
-  // than transitioning to a transcript/result view it can't show there.
-  if (isTypedInputOpen && canType) {
+  // Rendered whenever isAuthenticated (not gated on isDisabled) — typing
+  // needs only authentication, not Web Speech API support, so this chat box
+  // must still open on non-Chromium browsers (the one place typed commands
+  // work at all there); the mic button inside it stays disabled/absent per
+  // VoiceInputControls' own isProcessing/isListening handling. On such a
+  // browser, submitTranscript's own isDisabled check still routes the
+  // *result* to a toast instead of setting `conversation` (see its
+  // docstring) — this panel simply stays open afterwards, ready for the
+  // next typed command, rather than transitioning to a transcript/result
+  // view it can't show there.
+  if (isPanelOpen && isAuthenticated) {
     return (
       <VoiceConversationPanel
         transcript=""
@@ -239,7 +208,7 @@ export default function VoiceCommandButton() {
         onStartListening={startListening}
         onStopListening={stopListening}
         onSubmitText={submitTranscript}
-        onClose={() => setIsTypedInputOpen(false)}
+        onClose={() => setIsPanelOpen(false)}
         isMuted={isMuted}
         onToggleMute={toggleMuted}
         isListeningForInterruption={false}
@@ -252,7 +221,7 @@ export default function VoiceCommandButton() {
     <div
       ref={containerRef}
       onMouseEnter={() => { if (!isDragging) setIsHovered(true); }}
-      onMouseLeave={() => { if (!isBusy && !isDragging) setIsHovered(false); }}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: "fixed", zIndex: 1000,
         ...(dragPos
@@ -261,166 +230,66 @@ export default function VoiceCommandButton() {
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8,
       }}
     >
-      {/* Once processing starts, submitTranscript opens the panel (above)
-          in the same tick — this bubble only ever covers the listening
-          phase now, before there's a transcript to show there yet. */}
-      {isListening && (
+      {/* Hover prompt — bilingual, matches the reference "How can I help
+          you?" speech-bubble pattern. Shown only before the panel is ever
+          opened; once engaged there's no reason to keep nudging. */}
+      {isHovered && !isDragging && !isDisabled && (
         <div
+          data-testid="voice-hover-tooltip"
           style={{
-            maxWidth: 260, padding: "8px 12px", borderRadius: 10,
+            maxWidth: 220, padding: "8px 12px", borderRadius: 10,
             background: "var(--surface)", boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
-            fontSize: 12, lineHeight: 1.4,
-            color: interimTranscript ? "var(--on-bg)" : "var(--on-variant)",
-            fontStyle: interimTranscript ? "normal" : "italic",
+            fontSize: 12.5, lineHeight: 1.5, color: "var(--on-bg)",
           }}
         >
-          {interimTranscript || "Listening…"}
+          <div>How can I help you?</div>
+          <div lang="hi" style={{ color: "var(--on-variant)" }}>मैं आपकी कैसे मदद कर सकता हूँ?</div>
         </div>
       )}
 
-      {!showExpanded ? (
-        // Idle resting state — a small orb, not the full row, so the widget
-        // stops competing with page content (table pagination, wizard
-        // footers) for the same corner. Hover/tap expands it below; press
-        // and drag physically moves it (position persists across reloads).
-        <button
-          onMouseEnter={() => { if (!isDragging) setIsHovered(true); }}
-          onClick={() => {
-            if (justDraggedRef.current) { justDraggedRef.current = false; return; }
-            setIsHovered(true);
-          }}
-          onPointerDown={handleDragPointerDown}
-          onPointerMove={handleDragPointerMove}
-          onPointerUp={handleDragPointerUp}
-          onPointerCancel={handleDragPointerUp}
-          aria-label={isDisabled ? disabledReason : "Open voice assistant — press and drag to move"}
-          title={isDisabled ? disabledReason : "Voice assistant — drag to move"}
-          data-testid="voice-fab-idle"
-          className={!isDisabled && !isDragging ? "voice-fab-idle-pulse" : undefined}
-          style={{
-            width: IDLE_SIZE, height: IDLE_SIZE, borderRadius: "50%", border: "none",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
-            cursor: isDragging ? "grabbing" : "pointer",
-            touchAction: "none", userSelect: "none", overflow: "hidden",
-            background: isDisabled ? "var(--bg-low)" : "var(--primary)",
-            color: isDisabled ? "var(--on-variant)" : "#fff",
-            boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
-          }}
-        >
-          {isDisabled ? (
-            // Mic-off, not the mascot, while genuinely unavailable (logged
-            // out / unsupported browser) — a friendly bot face here would
-            // read as "available", the opposite of what this state means.
-            <i className="ti ti-microphone-off" />
-          ) : (
-            // Idle resting state shows the mascot instead of a mic icon —
-            // at this 46px size its detail actually reads fine, unlike the
-            // ~20px inline uses this asset was dropped from (see
-            // VoiceConversationPanel.tsx). Once tapped/hovered, the row
-            // below still leads with a plain mic icon on the actual talk
-            // button — the mascot is only ever the *idle* face, never a
-            // stand-in for "tap here to start listening".
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src="/bot.png"
-              alt=""
-              aria-hidden="true"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
-        </button>
-      ) : (
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {!isDisabled && (
-          <button
-            onClick={toggleMuted}
-            title={isMuted ? "Unmute spoken responses" : "Mute spoken responses"}
-            aria-label={isMuted ? "Unmute spoken responses" : "Mute spoken responses"}
-            aria-pressed={isMuted}
-            data-testid="voice-mute-toggle"
-            suppressHydrationWarning
-            style={{
-              width: MUTE_TOGGLE_SIZE, height: MUTE_TOGGLE_SIZE, borderRadius: "50%", border: "none",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-              cursor: "pointer", background: "var(--surface)", color: "var(--on-variant)",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.16)", flexShrink: 0,
-            }}
-          >
-            <i className={`ti ${isMuted ? "ti-volume-off" : "ti-volume"}`} />
-          </button>
+      <button
+        onClick={() => {
+          if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+          if (!isAuthenticated) return;
+          setIsPanelOpen(true);
+        }}
+        onPointerDown={handleDragPointerDown}
+        onPointerMove={handleDragPointerMove}
+        onPointerUp={handleDragPointerUp}
+        onPointerCancel={handleDragPointerUp}
+        aria-label={isDisabled ? disabledReason : "Open voice assistant — press and drag to move"}
+        title={isDisabled ? disabledReason : "Voice assistant — drag to move"}
+        data-testid="voice-fab-idle"
+        className={!isDisabled && !isDragging ? "voice-fab-idle-pulse" : undefined}
+        style={{
+          width: LAUNCHER_SIZE, height: LAUNCHER_SIZE, borderRadius: "50%", border: "none",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+          cursor: isDragging ? "grabbing" : "pointer",
+          touchAction: "none", userSelect: "none", overflow: "hidden",
+          background: isDisabled ? "var(--bg-low)" : "var(--primary)",
+          color: isDisabled ? "var(--on-variant)" : "#fff",
+          boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
+        }}
+      >
+        {isDisabled ? (
+          // Mic-off, not the mascot, while genuinely unavailable (logged
+          // out / unsupported browser) — a friendly bot face here would
+          // read as "available", the opposite of what this state means.
+          <i className="ti ti-microphone-off" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src="/bot.png"
+            alt=""
+            aria-hidden="true"
+            // contain, not cover — bot.png is a transparent PNG with the
+            // character centered and padding around it; cover was zooming
+            // in tight enough to crop most of the character out. Padding
+            // below keeps it off the circle's edge instead of touching it.
+            style={{ width: "100%", height: "100%", objectFit: "contain", padding: 6 }}
+          />
         )}
-
-        {canType && !isListening && (
-          <button
-            onClick={() => setIsTypedInputOpen((open) => !open)}
-            title={isTypedInputOpen ? "Hide typed command" : "Type a command instead"}
-            aria-label={isTypedInputOpen ? "Hide typed command input" : "Type a command instead"}
-            aria-pressed={isTypedInputOpen}
-            data-testid="voice-fab-type-toggle"
-            style={{
-              width: MUTE_TOGGLE_SIZE, height: MUTE_TOGGLE_SIZE, borderRadius: "50%", border: "none",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
-              cursor: "pointer",
-              background: isTypedInputOpen ? "var(--primary)" : "var(--surface)",
-              color: isTypedInputOpen ? "#fff" : "var(--on-variant)",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.16)", flexShrink: 0,
-              transition: "background 0.15s, color 0.15s",
-            }}
-          >
-            <i className="ti ti-keyboard" />
-          </button>
-        )}
-
-        <button
-          onClick={() => {
-            if (justDraggedRef.current) { justDraggedRef.current = false; return; }
-            if (isDisabled) return;
-            if (isListening) stopListening();
-            else { setIsTypedInputOpen(false); startListening(); }
-          }}
-          onPointerDown={isDisabled ? undefined : handleDragPointerDown}
-          onPointerMove={isDisabled ? undefined : handleDragPointerMove}
-          onPointerUp={isDisabled ? undefined : handleDragPointerUp}
-          onPointerCancel={isDisabled ? undefined : handleDragPointerUp}
-          disabled={isDisabled}
-          title={isDisabled ? disabledReason : (isListening ? "Click to stop and send — press and drag to move" : "Click to speak a voice command — press and drag to move")}
-          data-testid="voice-fab"
-          style={{
-            width: FAB_SIZE, height: FAB_SIZE, borderRadius: "50%", border: "none",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
-            cursor: isDisabled || isProcessing ? "not-allowed" : isDragging ? "grabbing" : "pointer",
-            touchAction: "none", overflow: "hidden",
-            background: isDisabled ? "var(--bg-low)" : isListening ? "var(--error)" : "var(--primary)",
-            color: isDisabled ? "var(--on-variant)" : "#fff",
-            opacity: isProcessing ? 0.7 : 1,
-            boxShadow: isDragging ? "0 8px 20px rgba(0,0,0,0.28)" : "0 4px 12px rgba(0,0,0,0.18)",
-            userSelect: "none",
-            transition: "background 0.15s, opacity 0.15s",
-          }}
-        >
-          {isProcessing ? (
-            <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />
-          ) : isListening ? (
-            // Only while genuinely capturing audio does this switch away
-            // from the mascot — real functional feedback that recording is
-            // in progress, not something to hide behind the bot face. Idle/
-            // hovered-but-not-yet-tapped keeps the mascot (see below) rather
-            // than swapping the moment the row merely expands.
-            <i className="ti ti-microphone" style={{ animation: "clockPulse 1s ease-in-out infinite" }} />
-          ) : isDisabled ? (
-            <i className="ti ti-microphone-off" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src="/bot.png"
-              alt=""
-              aria-hidden="true"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
-        </button>
-      </div>
-      )}
+      </button>
     </div>
   );
 }
