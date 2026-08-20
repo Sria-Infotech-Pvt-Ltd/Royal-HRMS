@@ -19,7 +19,6 @@ import Avatar from "./_components/Avatar";
 import StatusBadge from "./_components/StatusBadge";
 import AddEmployeeModal  from "./_components/AddEmployeeModal";
 import BulkImportModal  from "./_components/BulkImportModal";
-import EditEmployeeModal  from "./_components/EditEmployeeModal";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 
 /* ── API response shape ─────────────────────────────────────── */
@@ -110,7 +109,6 @@ export default function EmployeesPage() {
   const [status,      setStatus]      = useState<"all" | EmployeeStatus>("all");
   const [showModal,   setShowModal]   = useState(false);
   const [showImport,  setShowImport]  = useState(false);
-  const [editing,     setEditing]     = useState<Employee | null>(null);
   const [toggling,    setToggling]    = useState<string | null>(null);
   const [page,        setPage]        = useState(1);
   const [totalPages,  setTotalPages]  = useState(1);
@@ -187,23 +185,6 @@ export default function EmployeesPage() {
   // legitimately has zero matching rows to filter to, so deriving from employees is fine here.
   const branchOptions = empStats.branch_names;
   const deptOptions    = empStats.department_names;
-
-  // Full master lists (from the Branch/Department models, not "branches/departments that
-  // currently have an employee"). Edit Employee needs these — a brand-new branch or
-  // department with no one assigned to it yet must still be selectable when reassigning
-  // someone, which the employee-derived branchOptions/deptOptions above can never show.
-  const [allBranchNames, setAllBranchNames] = useState<string[]>([]);
-  const [allDeptNames,   setAllDeptNames]   = useState<string[]>([]);
-
-  useEffect(() => {
-    Promise.allSettled([
-      clientApi.get<{ data: { results: { branch_name: string }[] } }>(API.employees.branches, { params: { page_size: 100 } }),
-      clientApi.get<{ data: { results: { name: string }[] } }>(API.departments.list, { params: { page_size: 100 } }),
-    ]).then(([b, d]) => {
-      if (b.status === "fulfilled") setAllBranchNames(b.value.data.data.results.map(r => r.branch_name));
-      if (d.status === "fulfilled") setAllDeptNames(d.value.data.data.results.map(r => r.name));
-    });
-  }, []);
 
   const stats = useMemo(() => [
     { label: "Total Employees", value: empStats.total,       icon: "ti-users",      tint: "primary" as const },
@@ -414,12 +395,6 @@ export default function EmployeesPage() {
                             <i className="ti ti-eye text-[15px]" />
                           </button>
                           {canEdit && (
-                            <button onClick={() => setEditing(e)} suppressHydrationWarning title="Edit"
-                              className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
-                              <i className="ti ti-edit text-[15px]" />
-                            </button>
-                          )}
-                          {canEdit && (
                             <button
                               onClick={() => toggleStatus(e)}
                               disabled={toggling === e.id}
@@ -505,20 +480,6 @@ export default function EmployeesPage() {
         <BulkImportModal
           onClose={() => setShowImport(false)}
           onSuccess={() => fetchEmployees(search, 1)}
-        />
-      )}
-
-      {/* ── Edit Employee Modal ── */}
-      {editing && (
-        <EditEmployeeModal
-          employee={editing}
-          branchOptions={allBranchNames}
-          deptOptions={allDeptNames}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            fetchEmployees(search, page);
-          }}
         />
       )}
     </div>
