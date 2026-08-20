@@ -17,8 +17,14 @@ import FaceVerificationModal from "@/components/FaceVerificationModal";
 const LAUNCHER_SIZE = 72;
 
 const EDGE_MARGIN = 8;
-const SAFE_W = 180;
-const SAFE_H = 90;
+// The drag-clamp ceiling must match the button's actual footprint — these
+// used to be sized for the old wider multi-button hover row, which no
+// longer exists (a single LAUNCHER_SIZE button is all that's dragged now).
+// Left stale after that redesign, they clamped the drag area tighter than
+// the button itself, so the default resting corner was already past the
+// ceiling and the button snapped inward the instant a drag began.
+const SAFE_W = LAUNCHER_SIZE + EDGE_MARGIN;
+const SAFE_H = LAUNCHER_SIZE + EDGE_MARGIN;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -57,7 +63,6 @@ export default function VoiceCommandButton() {
   const isProcessing = status === "processing";
 
   const [isHovered, setIsHovered] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Draggable widget — lets a user physically move it off whatever it's
   // covering (table pagination, wizard footers) instead of just hoping the
@@ -85,8 +90,14 @@ export default function VoiceCommandButton() {
   }, []);
 
   function handleDragPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    // Measure the button itself, not the outer container — the container
+    // also wraps the hover tooltip when it's visible, which is wider/taller
+    // than the button and right-aligned above it. Measuring the container
+    // captured the tooltip's top-left corner as the drag origin; the
+    // instant a drag started the tooltip unmounted (its render condition
+    // includes !isDragging), so the button snapped to align with where the
+    // tooltip used to be instead of tracking the mouse.
+    const rect = e.currentTarget.getBoundingClientRect();
     dragStateRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top, moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
@@ -219,7 +230,6 @@ export default function VoiceCommandButton() {
 
   return (
     <div
-      ref={containerRef}
       onMouseEnter={() => { if (!isDragging) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
       style={{
@@ -289,6 +299,12 @@ export default function VoiceCommandButton() {
             src="/bot.png"
             alt=""
             aria-hidden="true"
+            // Images are natively draggable by default; without this, the
+            // browser's own HTML5 drag-and-drop (dragstart/drag/dragend)
+            // hijacks the pointer stream the instant the mouse moves a few
+            // pixels, stopping the custom pointermove-based drag above dead
+            // after its first event instead of tracking the cursor.
+            draggable={false}
             className="voice-bot-float"
             // contain, not cover — bot.png is a transparent PNG with the
             // character centered and padding around it; cover was zooming
