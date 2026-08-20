@@ -107,7 +107,7 @@ a {
 .sidebar-logo-expanded {
   width: 100%;
   height: auto;
-  max-height: 56px;
+  max-height: 64px;
   object-fit: contain;
   object-position: left center;
   flex-shrink: 0;
