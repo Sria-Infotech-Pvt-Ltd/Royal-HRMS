@@ -73,6 +73,7 @@ export default function RolesPermissionsPage() {
         display_name:        form.display_name,
         is_active:           true,
         can_manage_team:     form.can_manage_team,
+        can_manage_branch:   form.can_manage_branch,
         permission_codenames: form.permission_codenames,
       });
       const res = await clientApi.get(API.roles.list);
@@ -98,6 +99,7 @@ export default function RolesPermissionsPage() {
         display_name:        form.display_name,
         is_active:           editingRole.is_active,  // toggle handles this separately
         can_manage_team:     form.can_manage_team,
+        can_manage_branch:   form.can_manage_branch,
         permission_codenames: form.permission_codenames,
         expected_updated_at: editingRole.updated_at,
       });

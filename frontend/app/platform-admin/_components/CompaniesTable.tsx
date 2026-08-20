@@ -4,9 +4,7 @@ import { useMemo, useState } from "react";
 import Modal from "@/components/Modal";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
-import { MODULE_LABELS } from "@/types/platformAdmin";
 import type { Company } from "@/types/platformAdmin";
-import EditModulesModal from "./EditModulesModal";
 
 interface Props {
   companies: Company[];
@@ -23,7 +21,6 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
   const [search, setSearch] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState("");
-  const [editingModulesFor, setEditingModulesFor] = useState<Company | null>(null);
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<{ company: Company; password: string } | null>(null);
   const [revealError, setRevealError] = useState("");
@@ -127,7 +124,6 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
               <tr>
                 <th>Company</th>
                 <th>Code</th>
-                <th>Modules</th>
                 <th>Provisioning</th>
                 <th>Status</th>
                 <th>Created</th>
@@ -139,29 +135,6 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
                 <tr key={c.id}>
                   <td>{c.company_name}</td>
                   <td><span className="badge badge-neutral">{c.company_code}</span></td>
-                  <td style={{ maxWidth: 300 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-                      {c.enabled_modules.length === 0 ? (
-                        <span className="text-muted" style={{ fontSize: 12 }}>None</span>
-                      ) : (
-                        c.enabled_modules.map(m => (
-                          <span key={m} className="badge badge-neutral" style={{ fontSize: 11 }}>
-                            {MODULE_LABELS[m] ?? m}
-                          </span>
-                        ))
-                      )}
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        style={{ padding: "2px 6px" }}
-                        onClick={() => setEditingModulesFor(c)}
-                        aria-label={`Edit modules for ${c.company_name}`}
-                        suppressHydrationWarning
-                      >
-                        <i className="ti ti-pencil" />
-                      </button>
-                    </div>
-                  </td>
                   <td>
                     <span className={`badge ${STATUS_BADGE[c.provisioning_status].className}`}>
                       {c.provisioning_status === "pending" && <i className="ti ti-loader-2 spin" style={{ marginRight: 4 }} />}
@@ -178,10 +151,7 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
                     {/* Flex lives on this inner wrapper, not the <td> itself —
                         `display: flex` directly on a table cell breaks the
                         table's default `vertical-align: middle` (that
-                        property only applies to table-cell boxes), which
-                        left these buttons stuck at the top of the row once
-                        the Modules column above grew tall enough to wrap
-                        across multiple lines. */}
+                        property only applies to table-cell boxes). */}
                     <div style={{ display: "flex", gap: 6 }}>
                       {c.has_pending_password && (
                         <button
@@ -210,14 +180,6 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
             </tbody>
           </table>
         </div>
-      )}
-
-      {editingModulesFor && (
-        <EditModulesModal
-          company={editingModulesFor}
-          onClose={() => setEditingModulesFor(null)}
-          onSaved={onChanged}
-        />
       )}
 
       {revealed && (

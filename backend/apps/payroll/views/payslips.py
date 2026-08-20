@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from core.responses import success, error
 from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
+from apps.branch.models import Branch
 from apps.payroll.models import (
     PayrollCycle,
     EmployeePayslip,
@@ -21,6 +22,13 @@ from apps.payroll.models import (
 from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_user_branch(user):
+    """Return the Branch object for a non-org-wide user's assigned branch, or None."""
+    if not user.branch:
+        return None
+    return Branch.objects.filter(branch_name=user.branch, status=Branch.STATUS_ACTIVE).first()
 
 
 class CyclePayslipListView(APIView):
@@ -33,6 +41,14 @@ class CyclePayslipListView(APIView):
             return error('Only HR admin can view all payslips.', http_status=403)
 
         cycle = get_object_or_404(PayrollCycle, pk=cycle_pk)
+        # Same branch scoping as every other payroll list (cycles.py) — a
+        # non-org-wide user (e.g. Branch Admin, who has payroll.view but not
+        # settings.edit) could otherwise list every branch's payslips just by
+        # knowing/guessing a cycle id from another branch.
+        if not _has_perm(request.user, 'settings.edit'):
+            branch_obj = _resolve_user_branch(request.user)
+            if branch_obj is None or cycle.branch_id != branch_obj.id:
+                return error('Payroll cycle not found.', http_status=404)
         payslips = cycle.payslips.select_related('employee').order_by('employee__full_name')
 
         page_obj, paginator = paginate(payslips, request)

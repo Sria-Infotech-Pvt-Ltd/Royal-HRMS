@@ -4442,3 +4442,117 @@ While addressing feedback that the dashboard "didn't look professional," found t
 - **Company creation is still synchronous work handed to Celery, not instant** — unchanged from 18 August; still no automated tests around any of the platform-admin models/views/tasks added this session.
 - **If you run your own `celery worker`/`celery beat` locally, restart both after pulling this branch** — a stale worker process still holding the old `Client` model (with `custom_domain`) will crash on ordinary queries once the migration in §6 is applied.
 - **Nothing in this session has been committed or pushed yet** — all of the above is still in the working tree on `Backend-19/08/2026` as of this writing.
+
+---
+
+# Team Context — Branch Admin Assignment + Role/Permission Edge-Case Hardening
+
+**Author:** G.Durga Prasad
+**Date:** 20 August 2026
+**Branch:** Backend-19/08/2026
+
+---
+
+## Overview
+
+Two threads this session: (1) letting a Branch Admin be assigned right at branch-creation time instead of requiring a separate follow-up edit, which surfaced a string of permission-architecture questions that were worked through and then fixed rather than left as known gaps, and (2) a further visual pass on the Platform Admin panel (dashboard, login page, companies table) following up on the 19 August build-out.
+
+---
+
+## 1. Branch Admin Assignment on Branch Creation
+
+**File:** `app/dashboard/branches/_components/BranchManagement.tsx`
+
+The "Add New Branch" form now has an optional "Assign Branch Admin" section, placed after the address fields and before Status/Headquarter/Geofencing. Two modes, chosen with a checkbox:
+
+- **New person** — Name, Email, Department, Designation. Reuses the exact same `POST /employees/` invite flow as the Employees page (same welcome email, same password-set mechanism), just pre-filled with the new branch and the resolved Branch Admin role.
+- **Existing employee** — a searchable dropdown of the company's current employees (System Admins excluded — an admin can't be demoted into a branch role this way). Reuses the exact same `PUT /employees/<id>/` flow as editing an employee from the Employees page, just setting `role` and `branch`.
+
+Picking an existing employee who already manages reports or is HR-for-others triggers a confirmation modal first (`transferConfirm`) warning that those relationships won't auto-reassign — the count check calls `GET /employees/?reporting_manager_id=<uuid>` and `?hr_id=<uuid>` (new backend filters, see §4) before showing it.
+
+The role itself is resolved dynamically, never hardcoded:
+```typescript
+const role = roles.find(r => r.can_manage_branch && !r.permissions.includes("settings.edit"));
+if (!role) throw new Error("No Branch Admin role is set up for this company yet.");
+```
+This is what led into the permission-architecture questions below — the lookup only works if `can_manage_branch` is a real, writable, and correctly-scoped signal, none of which were fully true before this session (see §2–§4).
+
+---
+
+## 2. Role Model — `is_system_role` Flag
+
+**Files:** `apps/accounts/models.py`, migrations `0076_mark_system_roles.py` / `0077_revoke_settings_edit_from_hr.py`, `serializers.py`, `views.py`
+
+Deleting a role used to be blocked by a hardcoded set in the view: `{'employee', 'hr', 'system_admin', 'manager__team_lead'}` — which meant `branch_admin` (and any custom-named system role) had **zero delete protection**. Replaced with a real `Role.is_system_role` boolean field (permissions and display name stay fully editable; only deletion is blocked):
+
+```python
+is_system_role = models.BooleanField(default=False, help_text=(...))
+```
+
+Backfilled by capability flag where one exists (`settings.edit` → System Admin, `can_manage_branch` → Branch Admin, `can_manage_team` → Manager) and by name-variant matching only where no flag exists (HR, Employee — same `{'hr', 'hr_admin'}`-style variant-set pattern already used in migration `0043`, since role names are known to drift outside tracked migrations). `RoleDetailView.delete()` now checks `role.is_system_role` instead of the name set. `is_system_role` is exposed on `RoleSerializer` as read-only — always server-computed, never client-settable.
+
+## 3. HR's `settings.edit` Permission Revoked
+
+**File:** migration `0077_revoke_settings_edit_from_hr.py`
+
+Found that HR held `settings.edit` — this codebase's universal "bypass every scoping check" signal (checked directly in `core/permissions.has_perm()`), meaning HR could see and act on every branch's data company-wide, not just their own, and could also edit the org's core Settings pages, which HR should never need. Mirrors the already-committed `0070_revoke_settings_edit_from_branch_admin.py`, matched by name-variant set instead of a single literal. **Confirmed explicitly with the team before applying** since it's a live behavior change, not just a code-quality fix.
+
+## 4. `can_manage_branch` Made Writable + Branch/Payroll Scoping Fixes
+
+**Files:** `apps/accounts/serializers.py`, `dashboard/settings/permissions/*`, `apps/branch/views.py`, `apps/branch/views_access.py`, `apps/payroll/views/{payslips,attendance_approval,employee_salary}.py`
+
+`can_manage_branch` existed on the model but had no UI to set it and wasn't in `RoleSerializer.Meta.fields` — added alongside the existing `can_manage_team` checkbox in Settings → Roles (`RoleFormFields.tsx`, `_data.ts`, `EditRoleModal.tsx`, `page.tsx`).
+
+With HR's `settings.edit` removed (§3), several list endpoints that relied on `settings.edit` as their only "am I org-wide or branch-scoped" check were re-audited and branch-scoped for everyone else:
+
+- `BranchListCreateView.get()` / `BranchDetailView.get()` — a branch-scoped user now only sees their own branch (was: all branches).
+- `EmployeeBranchAccessListCreateView.get()` — same pattern.
+- `CyclePayslipListView.get()` (`payslips.py`) — a payroll-view holder could previously list any branch's payslips by cycle ID; now 404s outside their own branch.
+- `AttendancePendingCyclesView.get()` — pure-HR branch scoped by `_resolve_user_branch()`; managers were already scoped separately via their own `ManagerAttendanceApproval` rows.
+- `EmployeeSalaryConfigListView.get()` — added a manager tier (`can_manage_team` → own direct reports only) ahead of the existing branch tier, so a manager doesn't see the whole branch's salary configs.
+
+**Deliberately left unchanged:** `PayrollCycleListView` stays branch-scoped (not manager-scoped) for managers — a payroll cycle is a whole-branch processing run, not a per-employee-owned resource, so "my team only" doesn't structurally fit there.
+
+---
+
+## 5. `create_platform_admin` → `createsuperuser` Override
+
+**Files:** `apps/tenants/management/commands/createsuperuser.py` (new), `create_platform_admin.py` (deleted), `apps/tenants/views.py` (comment only)
+
+The one-off `create_platform_admin` management command is gone; `manage.py createsuperuser` is now overridden at the app level to create a `PlatformAdmin` (public-schema, non-tenant) instead of Django's default `User`, matching what every engineer already reaches for by muscle memory.
+
+---
+
+## 6. Platform Admin Visual Follow-Up
+
+- **Dashboard** (`app/platform-admin/page.tsx`) — removed the "Module adoption" card; "Provisioning status" is now full-width with Active/Pending/Failed counts laid out horizontally instead of leaving dead space.
+- **Platform Admin login page** (`app/platform-admin/login/page.tsx`) — rebuilt as a two-panel layout: a gradient brand panel on the left (headline + 3 feature bullets, collapses on mobile) and the sign-in form on the right, now carrying the real product logo instead of a placeholder.
+- **Tenant login page** (`app/login/page.tsx`) — added a "Platform Admin login" link so platform admins don't need to know the URL by heart.
+- **Companies table** (`_components/CompaniesTable.tsx`) — the Modules column (pill badges + edit-pencil) removed; `EditModulesModal.tsx` deleted as now-orphaned. Per-company module changes go through the existing company detail flow.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/accounts/models.py` | `Role.is_system_role` field added |
+| `apps/accounts/migrations/0076_mark_system_roles.py`, `0077_revoke_settings_edit_from_hr.py` (new) | Backfill `is_system_role`; revoke HR's `settings.edit` |
+| `apps/accounts/serializers.py` | `can_manage_branch`, `is_system_role` added to `RoleSerializer` (the latter read-only) |
+| `apps/accounts/views.py` | `RoleDetailView.delete()` now checks `is_system_role`; `EmployeeListCreateView.get()` gained `reporting_manager_id` / `hr_id` filters |
+| `apps/branch/views.py`, `views_access.py` | Branch-scoped list/detail views for non-org-wide users |
+| `apps/payroll/views/payslips.py`, `attendance_approval.py`, `employee_salary.py` | Branch/manager scoping fixes following HR's `settings.edit` revocation |
+| `apps/tenants/management/commands/createsuperuser.py` (new) | Replaces `create_platform_admin.py` (deleted) |
+| `frontend/app/dashboard/branches/_components/BranchManagement.tsx` | New "Assign Branch Admin" section — invite-new or assign-existing, with transfer-confirmation modal |
+| `frontend/app/dashboard/settings/permissions/*` | `can_manage_branch` checkbox wired through `_data.ts`, `RoleFormFields.tsx`, `EditRoleModal.tsx`, `page.tsx` |
+| `frontend/app/platform-admin/page.tsx`, `login/page.tsx`, `_components/CompaniesTable.tsx` | Module-adoption card removed, login page two-panel redesign, Modules column removed |
+| `frontend/app/login/page.tsx`, `globals.css` | Platform Admin login link + supporting styles |
+
+---
+
+## Notes for Next Developer
+
+- **No UI exists yet to delete a role at all** — the `is_system_role` protection in `RoleDetailView.delete()` currently only guards a direct-API-call vector, not something reachable through the current frontend. Correct defense-in-depth regardless, but worth knowing if you're looking for where that button lives.
+- **HR and Employee have no capability flag** (unlike `can_manage_branch` / `can_manage_team`) — they're identified by name-variant matching only. If you rename either role's underlying `name` value outside a migration, update the variant sets in `0076`/`0077` and anywhere else that matches on name.
+- **Frontend role/permission cache is login-scoped** — `useCurrentUser()` reads the cached user from login, not a live refetch, so a role's permission changes take effect on the backend immediately but a logged-in user's menus/buttons won't reflect it until they log out and back in (existing, documented behavior — not new this session).
+- **Still no automated tests** around any of the role/branch/payroll scoping changes in this entry — all verified manually against the running dev server with disposable test accounts.

@@ -466,7 +466,7 @@ class PlatformAdminChangePasswordView(APIView):
 
 class PlatformAdminAccountListCreateView(APIView):
     """
-    Adding a second platform admin used to require the create_platform_admin
+    Adding a second platform admin used to require the createsuperuser
     management command — there was no UI path at all. This lets an existing
     admin invite another one directly.
     """

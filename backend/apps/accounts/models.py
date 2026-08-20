@@ -35,6 +35,16 @@ class Role(models.Model):
             'which is org-wide.'
         ),
     )
+    is_system_role = models.BooleanField(
+        default=False,
+        help_text=(
+            'One of the roles this company was provisioned with (System Admin, '
+            'Branch Admin, HR, Manager, Employee) — cannot be deleted, regardless '
+            'of name. Permissions and the display name stay fully editable; only '
+            'deletion is blocked, so the rest of the app can always assume these '
+            'roles exist.'
+        ),
+    )
     created_at   = models.DateTimeField(auto_now_add=True, null=True)
     updated_at   = models.DateTimeField(auto_now=True)
 

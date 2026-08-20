@@ -65,9 +65,13 @@ export function getStoredUser(): UserInfo | null {
 // returns, rather than showing an "All Branches" option that silently no-ops.
 export function isUnrestrictedUser(user: UserInfo | null): boolean {
   // is_superuser alone misses real System Admin accounts — that Django flag
-  // is only ever set via createsuperuser, while system_admin-role users are
-  // created through the normal employee flow (and so carry a branch, like
-  // any other employee). settings.edit is the permission the backend itself
+  // is only ever set by User.objects.create_superuser() (called once per
+  // company during provisioning, for that company's first admin), while
+  // system_admin-role users created afterward through the normal employee
+  // flow don't get it (and so carry a branch, like any other employee).
+  // Note: `manage.py createsuperuser` itself creates a platform-wide
+  // PlatformAdmin now, not a tenant User — unrelated to this flag.
+  // settings.edit is the permission the backend itself
   // already treats as "full org-wide bypass" everywhere else (leave, expense,
   // attendance, dashboard, accounts, recruitment) — check it here too so this
   // matches what the API actually does instead of drifting from it.

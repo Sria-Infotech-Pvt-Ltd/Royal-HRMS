@@ -907,8 +907,11 @@ class RoleDetailView(APIView):
         if not role:
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        _SYSTEM_ROLES = {'employee', 'hr', 'system_admin', 'manager__team_lead'}
-        if role.name in _SYSTEM_ROLES:
+        # A real flag, not a hardcoded name set — role names can be (and have
+        # been) renamed from Settings, which would silently defeat a
+        # name-based check. is_system_role is set once, at provisioning, and
+        # survives any later rename.
+        if role.is_system_role:
             return error(
                 f'Role "{role.display_name}" is a system role and cannot be deleted.',
                 http_status=status.HTTP_400_BAD_REQUEST,
@@ -2694,6 +2697,14 @@ class EmployeeListCreateView(APIView):
                 qs = qs.filter(is_active=True, must_change_password=True)
             else:
                 return error('status must be one of: active, onboarding, inactive.')
+
+        # Used to check "does anyone currently report to this person, or have
+        # them as HR" before a caller re-roles/re-branches them elsewhere —
+        # only the count matters, so callers pass page_size=1.
+        if reporting_manager_id := request.query_params.get('reporting_manager_id', '').strip():
+            qs = qs.filter(reporting_manager_id=reporting_manager_id, is_active=True)
+        if hr_id := request.query_params.get('hr_id', '').strip():
+            qs = qs.filter(hr_id=hr_id, is_active=True)
 
         try:
             page_num  = max(1, int(request.query_params.get('page', 1)))

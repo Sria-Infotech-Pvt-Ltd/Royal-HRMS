@@ -66,6 +66,124 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
+function LeaderFields({
+  label, form, setForm, employees, depts, errors, prefix,
+}: {
+  label: string;
+  form: LeaderForm;
+  setForm: (updater: (f: LeaderForm) => LeaderForm) => void;
+  employees: ApiEmployeeOption[];
+  depts: ApiDept[];
+  errors: Record<string, string>;
+  prefix: string;
+}) {
+  function set<K extends keyof LeaderForm>(k: K, v: LeaderForm[K]) {
+    setForm(f => ({ ...f, [k]: v }));
+  }
+
+  const filtered = form.search.trim()
+    ? employees.filter(e =>
+        e.full_name.toLowerCase().includes(form.search.trim().toLowerCase()) ||
+        e.email.toLowerCase().includes(form.search.trim().toLowerCase()) ||
+        e.employee_id.toLowerCase().includes(form.search.trim().toLowerCase()),
+      )
+    : employees;
+
+  return (
+    <div style={{ marginBottom: "18px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+        <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--primary)" }}>{label}</div>
+        {employees.length > 0 && (
+          <label className="module-check" style={{ fontSize: "12px", fontWeight: 400 }}>
+            <input
+              type="checkbox"
+              checked={form.mode === "existing"}
+              onChange={e => set("mode", e.target.checked ? "existing" : "new")}
+            />
+            <span>Assign an existing employee instead</span>
+          </label>
+        )}
+      </div>
+
+      {form.mode === "existing" ? (
+        <div className="field-group">
+          <input
+            type="text"
+            className="field-input"
+            value={form.search}
+            onChange={e => set("search", e.target.value)}
+            placeholder="Search by name, email, or employee ID…"
+            style={{ marginBottom: "8px" }}
+          />
+          <select
+            className={`field-input${errors[`${prefix}Employee`] ? " field-error" : ""}`}
+            value={form.employeeId}
+            onChange={e => set("employeeId", e.target.value)}
+          >
+            <option value="">— Select employee —</option>
+            {filtered.map(e => (
+              <option key={e.id} value={e.id}>
+                {e.full_name} ({e.employee_id}) — {e.branch || "no branch"}
+              </option>
+            ))}
+          </select>
+          {errors[`${prefix}Employee`] && <p className="field-error-msg">{errors[`${prefix}Employee`]}</p>}
+        </div>
+      ) : (
+        <>
+          <div className="form-row cols-2" style={{ marginBottom: "8px" }}>
+            <div className="field-group">
+              <input
+                type="text"
+                className={`field-input${errors[`${prefix}Name`] ? " field-error" : ""}`}
+                value={form.name}
+                onChange={e => set("name", e.target.value)}
+                placeholder="Full name"
+              />
+              {errors[`${prefix}Name`] && <p className="field-error-msg">{errors[`${prefix}Name`]}</p>}
+            </div>
+            <div className="field-group">
+              <input
+                type="email"
+                className={`field-input${errors[`${prefix}Email`] ? " field-error" : ""}`}
+                value={form.email}
+                onChange={e => set("email", e.target.value)}
+                placeholder="Work email"
+              />
+              {errors[`${prefix}Email`] && <p className="field-error-msg">{errors[`${prefix}Email`]}</p>}
+            </div>
+          </div>
+          <div className="form-row cols-2">
+            <div className="field-group">
+              <select
+                className={`field-input${errors[`${prefix}Department`] ? " field-error" : ""}`}
+                value={form.department}
+                onChange={e => set("department", e.target.value)}
+              >
+                <option value="">— Select Department —</option>
+                {depts.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+              {errors[`${prefix}Department`] && <p className="field-error-msg">{errors[`${prefix}Department`]}</p>}
+            </div>
+            <div className="field-group">
+              <input
+                type="text"
+                className={`field-input${errors[`${prefix}Designation`] ? " field-error" : ""}`}
+                value={form.designation}
+                onChange={e => set("designation", e.target.value)}
+                placeholder="Designation"
+              />
+              {errors[`${prefix}Designation`] && <p className="field-error-msg">{errors[`${prefix}Designation`]}</p>}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 interface BranchStats {
   total_branches:          number;
   total_employees:         number;
@@ -82,6 +200,38 @@ interface BranchDistribution {
 
 type Envelope<T> = { status: string; message: string; data: T };
 type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
+
+interface ApiRole {
+  id: number; name: string; display_name: string;
+  can_manage_branch: boolean; permissions: string[];
+}
+interface ApiDept { id: number; name: string }
+interface ApiEmployeeOption {
+  id: string; uuid: string; employee_id: string; full_name: string; email: string; branch: string; role: string;
+}
+
+interface LeaderForm {
+  // "new" invites a brand-new person via the same create-and-email-credentials
+  // flow as the Employees page; "existing" instead re-roles/re-branches an
+  // employee who's already in the company (a transfer, not a new hire).
+  mode: "new" | "existing";
+  name: string; email: string; department: string; designation: string;
+  employeeId: string; search: string;
+}
+const EMPTY_LEADER: LeaderForm = {
+  mode: "new", name: "", email: "", department: "", designation: "Branch Manager",
+  employeeId: "", search: "",
+};
+
+// A leader row counts as "in use" the moment it's touched — once it is,
+// every field that mode needs becomes required together.
+function isLeaderActive(f: LeaderForm): boolean {
+  return f.mode === "existing"
+    ? !!f.employeeId
+    : !!(f.name.trim() || f.email.trim());
+}
+
+const EMAIL_RE = /^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 
 const OTHER_CITY = "__other__";
 const BRANCH_NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9 &\-.]*[A-Za-z0-9])?$/;
@@ -114,6 +264,21 @@ export default function BranchManagement() {
   const [deleting,      setDeleting]      = useState(false);
 
   const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
+
+  // Optional "assign leadership" field on the Add Branch form — a fresh
+  // branch has no one in it, so this lets the admin assign its first Branch
+  // Admin in the same step instead of having to find the new branch again
+  // afterward on the Employees page. Optional — leaving it blank is fine.
+  const [branchAdminForm, setBranchAdminForm] = useState<LeaderForm>(EMPTY_LEADER);
+  const [leaderErrors,    setLeaderErrors]    = useState<Record<string, string>>({});
+  const [roles, setRoles] = useState<ApiRole[]>([]);
+  const [depts, setDepts] = useState<ApiDept[]>([]);
+  const [leaderEmployees, setLeaderEmployees] = useState<ApiEmployeeOption[]>([]);
+  const [inviteAlert, setInviteAlert] = useState<{ type: "warn" | "success"; text: string } | null>(null);
+  const [transferConfirm, setTransferConfirm] = useState<
+    { employee: ApiEmployeeOption; reportsCount: number; hrForCount: number } | null
+  >(null);
+  const [transferChecking, setTransferChecking] = useState(false);
 
   const [editForm, setEditForm] = useState({
     id:             0,
@@ -249,6 +414,65 @@ export default function BranchManagement() {
     return errs;
   };
 
+  // Only validates a leader row if the admin actually started filling it in —
+  // an untouched row is simply skipped, not an error.
+  const validateLeaders = () => {
+    const errs: Record<string, string> = {};
+    const f = branchAdminForm;
+    if (isLeaderActive(f)) {
+      if (f.mode === "existing") {
+        if (!f.employeeId) errs.branchAdminEmployee = "Select an employee.";
+      } else {
+        if (!f.name.trim())        errs.branchAdminName        = "Name is required.";
+        if (!f.email.trim())       errs.branchAdminEmail       = "Email is required.";
+        else if (!EMAIL_RE.test(f.email.trim())) errs.branchAdminEmail = "Enter a valid email.";
+        if (!f.department)         errs.branchAdminDepartment  = "Department is required.";
+        if (!f.designation.trim()) errs.branchAdminDesignation = "Designation is required.";
+      }
+    }
+    return errs;
+  };
+
+  // Two ways to fill the leadership slot:
+  //  - "existing": re-roles/re-branches an employee who already works here —
+  //    a transfer, not a new hire, so it only ever touches role + branch.
+  //  - "new": reuses the same employee-creation endpoint/invite mechanism as
+  //    the Employees page — same generated temp password, same
+  //    must-change-password welcome email — pre-scoped to the branch that
+  //    was just created. Department/designation are pre-filled with a
+  //    sensible default but shown and editable, not decided silently.
+  const applyLeaderRole = async (f: LeaderForm, branchName: string) => {
+    // Found by capability, not by name — a role can be renamed from Settings
+    // at any time, so matching a literal string like "branch_admin" would
+    // silently break. Also excludes settings.edit roles: a role that happens
+    // to carry both can_manage_branch and settings.edit is company-wide, not
+    // branch-scoped, and this picker must never hand out that much access.
+    const role = roles.find(r => r.can_manage_branch && !r.permissions.includes("settings.edit"));
+    if (!role) throw new Error("No Branch Admin role is set up for this company yet.");
+
+    if (f.mode === "existing") {
+      await clientApi.put(API.employees.detail(f.employeeId), {
+        role: role.name,
+        branch: branchName,
+      });
+      return;
+    }
+
+    const name = f.name.trim();
+    const splitAt = name.indexOf(" ");
+    const first_name = splitAt === -1 ? name : name.slice(0, splitAt);
+    const last_name  = splitAt === -1 ? name : name.slice(splitAt + 1).trim() || name;
+    await clientApi.post(API.employees.list, {
+      first_name, last_name,
+      email: f.email.trim(),
+      role: role.id,
+      department: f.department,
+      designation: f.designation.trim(),
+      branch: branchName,
+      date_of_joining: new Date().toISOString().slice(0, 10),
+    });
+  };
+
   const doSave = async () => {
     setSaveError(null);
     setHqConfirm(false);
@@ -261,7 +485,9 @@ export default function BranchManagement() {
       geofencing_enabled:    editForm.geofencing_enabled,
       latitude:              editForm.geofencing_enabled ? Number(editForm.latitude)  : null,
       longitude:             editForm.geofencing_enabled ? Number(editForm.longitude) : null,
-      allowed_radius_meters: editForm.geofencing_enabled ? Number(editForm.allowed_radius_meters) : null,
+      // allowed_radius_meters is a non-nullable field on the backend (default 150) —
+      // unlike latitude/longitude, it can't be sent as null when geofencing is off.
+      allowed_radius_meters: editForm.geofencing_enabled ? Number(editForm.allowed_radius_meters) : 150,
     };
     if (editForm.city === OTHER_CITY) {
       payload.new_city_name = newCityName.trim();
@@ -275,8 +501,30 @@ export default function BranchManagement() {
       } else {
         await clientApi.post(API.branches.list, payload);
       }
+      const branchName = editForm.branch_name.trim();
       setModalMode(null);
       fetchData();
+
+      // Leadership assignment runs after the branch is already saved and the
+      // modal is closed — the branch itself must never be blocked or rolled
+      // back by a problem with this optional, secondary step.
+      if (modalMode === "add" && isLeaderActive(branchAdminForm)) {
+        try {
+          await applyLeaderRole(branchAdminForm, branchName);
+          setInviteAlert({
+            type: "success",
+            text: branchAdminForm.mode === "new"
+              ? `${branchName} was created and its Branch Admin was invited by email.`
+              : `${branchName} was created and its Branch Admin was assigned.`,
+          });
+        } catch (e) {
+          setInviteAlert({
+            type: "warn",
+            text: `${branchName} was created, but assigning its Branch Admin failed: ${(e as { message?: string })?.message ?? "unknown error"} — use the Employees page instead.`,
+          });
+        }
+        setBranchAdminForm(EMPTY_LEADER);
+      }
     } catch (err: unknown) {
       const e = err as { message?: string };
       setSaveError(e.message ?? "Failed to save branch.");
@@ -285,14 +533,17 @@ export default function BranchManagement() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaveError(null);
     const errs = validate();
-    if (Object.keys(errs).length > 0) {
+    const leaderErrs = modalMode === "add" ? validateLeaders() : {};
+    if (Object.keys(errs).length > 0 || Object.keys(leaderErrs).length > 0) {
       setFieldErrors(errs);
+      setLeaderErrors(leaderErrs);
       return;
     }
     setFieldErrors({});
+    setLeaderErrors({});
     const existingHq = branches.find(
       b => b.is_headquarter && b.id !== editForm.id
     );
@@ -300,6 +551,42 @@ export default function BranchManagement() {
       setHqConfirm(true);
       return;
     }
+
+    // Transferring a real, already-employed person is a bigger deal than
+    // inviting someone new — confirm it explicitly, and warn if they
+    // currently manage people or are someone's HR (those relationships
+    // don't get reassigned automatically by this transfer).
+    if (modalMode === "add" && branchAdminForm.mode === "existing" && branchAdminForm.employeeId) {
+      const employee = leaderEmployees.find(e => e.id === branchAdminForm.employeeId);
+      if (employee) {
+        setTransferChecking(true);
+        try {
+          // reporting_manager_id / hr_id filter on the FK's real primary key
+          // (a UUID), not the human-readable employee_id code used elsewhere.
+          const [reportsRes, hrRes] = await Promise.all([
+            clientApi.get<{ data: { count: number } }>(API.employees.list, {
+              params: { reporting_manager_id: employee.uuid, page_size: 1 },
+            }),
+            clientApi.get<{ data: { count: number } }>(API.employees.list, {
+              params: { hr_id: employee.uuid, page_size: 1 },
+            }),
+          ]);
+          setTransferConfirm({
+            employee,
+            reportsCount: reportsRes.data.data?.count ?? 0,
+            hrForCount: hrRes.data.data?.count ?? 0,
+          });
+        } catch {
+          // The check itself failing shouldn't block the transfer — just
+          // confirm without the relationship counts.
+          setTransferConfirm({ employee, reportsCount: 0, hrForCount: 0 });
+        } finally {
+          setTransferChecking(false);
+        }
+        return;
+      }
+    }
+
     doSave();
   };
 
@@ -341,10 +628,37 @@ export default function BranchManagement() {
               setSaveError(null);
               setModalMode("add");
               setFieldErrors({});
+              setLeaderErrors({});
+              setBranchAdminForm(EMPTY_LEADER);
+              setTransferConfirm(null);
               setNewCityName("");
               setEditForm({
                 id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false,
                 geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
+              });
+              Promise.allSettled([
+                clientApi.get<{ data: { results: ApiRole[] } }>(API.roles.list,        { params: { page_size: 100 } }),
+                clientApi.get<{ data: { results: ApiDept[] } }>(API.departments.list,   { params: { page_size: 100 } }),
+                clientApi.get<{ data: { results: ApiEmployeeOption[] } }>(API.employees.list, { params: { page_size: 50, status: "active" } }),
+              ]).then(([r, d, e]) => {
+                setRoles(r.status === "fulfilled" ? r.value.data.data.results : []);
+                const deptResults = d.status === "fulfilled" ? (d.value.data.data?.results ?? []) : [];
+                setDepts(deptResults);
+                // Pre-fill rather than hide — the admin sees and can change
+                // this instead of it being silently decided for them.
+                if (deptResults.length > 0) {
+                  setBranchAdminForm(f => (f.department ? f : { ...f, department: deptResults[0].name }));
+                }
+                // Never offer the company's own system_admin(s) here — this
+                // picker only ever re-roles someone into branch_admin, and a
+                // system_admin must never be silently demoted by picking them
+                // by accident (same exclusion AddEmployeeModal already
+                // applies to the role dropdown itself).
+                setLeaderEmployees(
+                  e.status === "fulfilled"
+                    ? (e.value.data.data?.results ?? []).filter(emp => emp.role !== "system_admin")
+                    : [],
+                );
               });
             }}>
               <i className="ti ti-plus" /> Add Branch
@@ -356,6 +670,21 @@ export default function BranchManagement() {
       {error && (
         <div className="alert alert-error mb-24">
           <i className="ti ti-alert-circle" /> {error}
+        </div>
+      )}
+
+      {inviteAlert && (
+        <div className={`alert ${inviteAlert.type === "warn" ? "alert-warn" : "alert-success"} mb-24`}>
+          <i className={`ti ${inviteAlert.type === "warn" ? "ti-alert-triangle" : "ti-check"}`} />
+          <span style={{ flex: 1 }}>{inviteAlert.text}</span>
+          <button
+            type="button"
+            onClick={() => setInviteAlert(null)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, marginLeft: 12 }}
+            aria-label="Dismiss"
+          >
+            <i className="ti ti-x" />
+          </button>
         </div>
       )}
 
@@ -447,6 +776,9 @@ export default function BranchManagement() {
                       onClick={() => {
                         setSaveError(null);
                         setFieldErrors({});
+                        setLeaderErrors({});
+                        setBranchAdminForm(EMPTY_LEADER);
+                        setTransferConfirm(null);
                         setModalMode("edit");
                         setNewCityName("");
                         setEditForm({
@@ -552,10 +884,12 @@ export default function BranchManagement() {
               <button
                 className="btn btn-filled"
                 onClick={handleSave}
-                disabled={saving || codeLoading || citiesLoading}
+                disabled={saving || codeLoading || citiesLoading || transferChecking}
               >
                 {saving ? (
                   <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />{modalMode === "add" ? "Creating…" : "Saving…"}</>
+                ) : transferChecking ? (
+                  <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Checking…</>
                 ) : codeLoading || citiesLoading ? (
                   <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Please wait…</>
                 ) : modalMode === "add" ? "Create Branch" : "Save Changes"}
@@ -683,6 +1017,19 @@ export default function BranchManagement() {
                   {fieldErrors.address && <p className="field-error-msg">{fieldErrors.address}</p>}
                 </div>
               </div>
+
+              {modalMode === "add" && (
+                <div style={{ marginTop: "4px", marginBottom: "20px", paddingTop: "18px", paddingBottom: "4px", borderTop: "1px solid var(--outline-v)" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "14px" }}>
+                    Assign Branch Admin <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span>
+                  </div>
+                  <LeaderFields
+                    label="Branch Admin" form={branchAdminForm} setForm={setBranchAdminForm}
+                    employees={leaderEmployees} depts={depts} errors={leaderErrors} prefix="branchAdmin"
+                  />
+                </div>
+              )}
+
               <div className="form-row cols-2">
                 <div className="field-group">
                   <label className="field-label">Status *</label>
@@ -778,6 +1125,50 @@ export default function BranchManagement() {
                   </div>
                 </>
               )}
+        </Modal>
+      )}
+
+      {transferConfirm && (
+        <Modal
+          title={
+            <>
+              <i className="ti ti-arrows-right-left" style={{ marginRight: "8px", color: "var(--primary)" }} />
+              Move {transferConfirm.employee.full_name}?
+            </>
+          }
+          onClose={() => setTransferConfirm(null)}
+          maxWidth="440px"
+          zIndex={1010}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setTransferConfirm(null)}>Cancel</button>
+              <button
+                className="btn btn-filled"
+                onClick={() => { setTransferConfirm(null); doSave(); }}
+              >
+                Yes, Move Them
+              </button>
+            </>
+          }
+        >
+          <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6, marginBottom: (transferConfirm.reportsCount > 0 || transferConfirm.hrForCount > 0) ? "14px" : 0 }}>
+            <strong>{transferConfirm.employee.full_name}</strong> currently belongs to{" "}
+            <strong>{transferConfirm.employee.branch || "no branch"}</strong>. This will move them to the new branch
+            and change their role to Branch Admin.
+          </p>
+          {(transferConfirm.reportsCount > 0 || transferConfirm.hrForCount > 0) && (
+            <div className="alert alert-warn">
+              <i className="ti ti-alert-triangle" />
+              <div>
+                {transferConfirm.reportsCount > 0 && (
+                  <div>They currently manage {transferConfirm.reportsCount} {transferConfirm.reportsCount === 1 ? "employee" : "employees"} — that reporting line won&apos;t be reassigned automatically.</div>
+                )}
+                {transferConfirm.hrForCount > 0 && (
+                  <div>They&apos;re the assigned HR for {transferConfirm.hrForCount} {transferConfirm.hrForCount === 1 ? "employee" : "employees"} — that assignment won&apos;t be reassigned automatically.</div>
+                )}
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 

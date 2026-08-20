@@ -44,6 +44,10 @@ class EmployeeBranchAccessListCreateView(APIView):
             .select_related('employee', 'branch')
             .order_by('employee__full_name', '-is_primary')
         )
+        # Same scoping as every other branch-scoped list in this codebase —
+        # a non-org-wide user only sees their own branch's access records.
+        if not _has_perm(request.user, 'settings.edit') and request.user.branch:
+            qs = qs.filter(branch__branch_name__iexact=request.user.branch)
 
         if employee_id := request.query_params.get('employee'):
             qs = qs.filter(employee_id=employee_id)
