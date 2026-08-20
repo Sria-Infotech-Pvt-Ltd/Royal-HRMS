@@ -389,7 +389,7 @@ export default function VoiceCommandButton() {
             width: FAB_SIZE, height: FAB_SIZE, borderRadius: "50%", border: "none",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
             cursor: isDisabled || isProcessing ? "not-allowed" : isDragging ? "grabbing" : "pointer",
-            touchAction: "none",
+            touchAction: "none", overflow: "hidden",
             background: isDisabled ? "var(--bg-low)" : isListening ? "var(--error)" : "var(--primary)",
             color: isDisabled ? "var(--on-variant)" : "#fff",
             opacity: isProcessing ? 0.7 : 1,
@@ -400,10 +400,22 @@ export default function VoiceCommandButton() {
         >
           {isProcessing ? (
             <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />
+          ) : isListening ? (
+            // Only while genuinely capturing audio does this switch away
+            // from the mascot — real functional feedback that recording is
+            // in progress, not something to hide behind the bot face. Idle/
+            // hovered-but-not-yet-tapped keeps the mascot (see below) rather
+            // than swapping the moment the row merely expands.
+            <i className="ti ti-microphone" style={{ animation: "clockPulse 1s ease-in-out infinite" }} />
+          ) : isDisabled ? (
+            <i className="ti ti-microphone-off" />
           ) : (
-            <i
-              className={`ti ${isDisabled ? "ti-microphone-off" : "ti-microphone"}`}
-              style={isListening ? { animation: "clockPulse 1s ease-in-out infinite" } : undefined}
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/bot.png"
+              alt=""
+              aria-hidden="true"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           )}
         </button>
