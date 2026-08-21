@@ -86,6 +86,10 @@ function getCanManageTeam(request: NextRequest): boolean {
   return getJwtPayload(request).can_manage_team === true;
 }
 
+function getCanManageBranch(request: NextRequest): boolean {
+  return getJwtPayload(request).can_manage_branch === true;
+}
+
 function getIsSuperuser(request: NextRequest): boolean {
   return getJwtPayload(request).is_superuser === true;
 }
@@ -179,6 +183,7 @@ export function proxy(request: NextRequest) {
     const onboardingStatus = getOnboardingStatus(request);
     const assessmentStatus = getAssessmentStatus(request);
     const canManageTeam    = getCanManageTeam(request);
+    const canManageBranch  = getCanManageBranch(request);
     const isSuperuser      = getIsSuperuser(request);
     const isAssessmentsPage = pathname.startsWith("/onboarding/assessments");
 
@@ -187,15 +192,17 @@ export function proxy(request: NextRequest) {
     // Superusers are platform/IT-provisioned admin accounts, never hired
     // through the candidate pipeline — the onboarding wizard never applies
     // to them, regardless of their onboarding_status value (see login/page.tsx
-    // for the matching exemption at login time).
-    const needsOnboarding = onboardingStatus !== "complete" && !isSuperuser;
+    // for the matching exemption at login time). Branch Admin is the same
+    // kind of administrative account (assigned at branch-creation time, not
+    // hired through the candidate pipeline), so it gets the same exemption.
+    const needsOnboarding = onboardingStatus !== "complete" && !isSuperuser && !canManageBranch;
     // Default assessments get auto-assigned to every new employee record on
     // creation — including managers — with no role distinction, so a manager
     // can end up with assessment_status "pending" despite the pre-onboarding
     // assessment portal being meant for new-hire employees, not managers.
-    // Exempt can_manage_team here since the backend doesn't. Superusers are
-    // exempt too, for the same reason as needsOnboarding above.
-    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending" && !canManageTeam && !isSuperuser;
+    // Exempt can_manage_team here since the backend doesn't. Superusers and
+    // Branch Admin are exempt too, for the same reason as needsOnboarding above.
+    const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending" && !canManageTeam && !canManageBranch && !isSuperuser;
 
     // Block /onboarding/assessments until HR has approved the onboarding form.
     // Without this explicit check the route slips through because isOnboarding

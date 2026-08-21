@@ -67,13 +67,12 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
 }
 
 function LeaderFields({
-  label, form, setForm, employees, depts, errors, prefix,
+  label, form, setForm, employees, errors, prefix,
 }: {
   label: string;
   form: LeaderForm;
   setForm: (updater: (f: LeaderForm) => LeaderForm) => void;
   employees: ApiEmployeeOption[];
-  depts: ApiDept[];
   errors: Record<string, string>;
   prefix: string;
 }) {
@@ -153,30 +152,15 @@ function LeaderFields({
               {errors[`${prefix}Email`] && <p className="field-error-msg">{errors[`${prefix}Email`]}</p>}
             </div>
           </div>
-          <div className="form-row cols-2">
-            <div className="field-group">
-              <select
-                className={`field-input${errors[`${prefix}Department`] ? " field-error" : ""}`}
-                value={form.department}
-                onChange={e => set("department", e.target.value)}
-              >
-                <option value="">— Select Department —</option>
-                {depts.map(d => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
-                ))}
-              </select>
-              {errors[`${prefix}Department`] && <p className="field-error-msg">{errors[`${prefix}Department`]}</p>}
-            </div>
-            <div className="field-group">
-              <input
-                type="text"
-                className={`field-input${errors[`${prefix}Designation`] ? " field-error" : ""}`}
-                value={form.designation}
-                onChange={e => set("designation", e.target.value)}
-                placeholder="Designation"
-              />
-              {errors[`${prefix}Designation`] && <p className="field-error-msg">{errors[`${prefix}Designation`]}</p>}
-            </div>
+          <div className="field-group">
+            <input
+              type="text"
+              className={`field-input${errors[`${prefix}Designation`] ? " field-error" : ""}`}
+              value={form.designation}
+              onChange={e => set("designation", e.target.value)}
+              placeholder="Designation"
+            />
+            {errors[`${prefix}Designation`] && <p className="field-error-msg">{errors[`${prefix}Designation`]}</p>}
           </div>
         </>
       )}
@@ -205,7 +189,6 @@ interface ApiRole {
   id: number; name: string; display_name: string;
   can_manage_branch: boolean; permissions: string[];
 }
-interface ApiDept { id: number; name: string }
 interface ApiEmployeeOption {
   id: string; uuid: string; employee_id: string; full_name: string; email: string; branch: string; role: string;
 }
@@ -214,12 +197,14 @@ interface LeaderForm {
   // "new" invites a brand-new person via the same create-and-email-credentials
   // flow as the Employees page; "existing" instead re-roles/re-branches an
   // employee who's already in the company (a transfer, not a new hire).
+  // No department field — a Branch Admin oversees every department in the
+  // branch, not one, unlike every other role.
   mode: "new" | "existing";
-  name: string; email: string; department: string; designation: string;
+  name: string; email: string; designation: string;
   employeeId: string; search: string;
 }
 const EMPTY_LEADER: LeaderForm = {
-  mode: "new", name: "", email: "", department: "", designation: "Branch Manager",
+  mode: "new", name: "", email: "", designation: "Branch Manager",
   employeeId: "", search: "",
 };
 
@@ -272,7 +257,6 @@ export default function BranchManagement() {
   const [branchAdminForm, setBranchAdminForm] = useState<LeaderForm>(EMPTY_LEADER);
   const [leaderErrors,    setLeaderErrors]    = useState<Record<string, string>>({});
   const [roles, setRoles] = useState<ApiRole[]>([]);
-  const [depts, setDepts] = useState<ApiDept[]>([]);
   const [leaderEmployees, setLeaderEmployees] = useState<ApiEmployeeOption[]>([]);
   const [inviteAlert, setInviteAlert] = useState<{ type: "warn" | "success"; text: string } | null>(null);
   const [transferConfirm, setTransferConfirm] = useState<
@@ -426,7 +410,6 @@ export default function BranchManagement() {
         if (!f.name.trim())        errs.branchAdminName        = "Name is required.";
         if (!f.email.trim())       errs.branchAdminEmail       = "Email is required.";
         else if (!EMAIL_RE.test(f.email.trim())) errs.branchAdminEmail = "Enter a valid email.";
-        if (!f.department)         errs.branchAdminDepartment  = "Department is required.";
         if (!f.designation.trim()) errs.branchAdminDesignation = "Designation is required.";
       }
     }
@@ -439,8 +422,11 @@ export default function BranchManagement() {
   //  - "new": reuses the same employee-creation endpoint/invite mechanism as
   //    the Employees page — same generated temp password, same
   //    must-change-password welcome email — pre-scoped to the branch that
-  //    was just created. Department/designation are pre-filled with a
-  //    sensible default but shown and editable, not decided silently.
+  //    was just created. Designation is pre-filled with a sensible default
+  //    but shown and editable, not decided silently. No department — a
+  //    Branch Admin oversees every department in the branch, not one, so
+  //    the backend doesn't require it for this role (see
+  //    EmployeeListCreateView.post's department_required check).
   const applyLeaderRole = async (f: LeaderForm, branchName: string) => {
     // Found by capability, not by name — a role can be renamed from Settings
     // at any time, so matching a literal string like "branch_admin" would
@@ -466,7 +452,6 @@ export default function BranchManagement() {
       first_name, last_name,
       email: f.email.trim(),
       role: role.id,
-      department: f.department,
       designation: f.designation.trim(),
       branch: branchName,
       date_of_joining: new Date().toISOString().slice(0, 10),
@@ -638,17 +623,9 @@ export default function BranchManagement() {
               });
               Promise.allSettled([
                 clientApi.get<{ data: { results: ApiRole[] } }>(API.roles.list,        { params: { page_size: 100 } }),
-                clientApi.get<{ data: { results: ApiDept[] } }>(API.departments.list,   { params: { page_size: 100 } }),
                 clientApi.get<{ data: { results: ApiEmployeeOption[] } }>(API.employees.list, { params: { page_size: 50, status: "active" } }),
-              ]).then(([r, d, e]) => {
+              ]).then(([r, e]) => {
                 setRoles(r.status === "fulfilled" ? r.value.data.data.results : []);
-                const deptResults = d.status === "fulfilled" ? (d.value.data.data?.results ?? []) : [];
-                setDepts(deptResults);
-                // Pre-fill rather than hide — the admin sees and can change
-                // this instead of it being silently decided for them.
-                if (deptResults.length > 0) {
-                  setBranchAdminForm(f => (f.department ? f : { ...f, department: deptResults[0].name }));
-                }
                 // Never offer the company's own system_admin(s) here — this
                 // picker only ever re-roles someone into branch_admin, and a
                 // system_admin must never be silently demoted by picking them
@@ -1025,7 +1002,7 @@ export default function BranchManagement() {
                   </div>
                   <LeaderFields
                     label="Branch Admin" form={branchAdminForm} setForm={setBranchAdminForm}
-                    employees={leaderEmployees} depts={depts} errors={leaderErrors} prefix="branchAdmin"
+                    employees={leaderEmployees} errors={leaderErrors} prefix="branchAdmin"
                   />
                 </div>
               )}

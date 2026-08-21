@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import AttendanceDetailDrawer from "./AttendanceDetailDrawer";
@@ -107,6 +107,12 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
   const [viewing,  setViewing]  = useState<{ id: string; date: string } | null>(null);
   const [marking,  setMarking]  = useState<{ date: string } | null>(null);
   const [seeded, setSeeded]     = useState(false);
+
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside the modal and releasing past its edge would otherwise land on the
+  // overlay and close it. Only close when the gesture both started AND ended
+  // on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
 
   const { data: empList } = useFetch<EmpListResponse>(`${API.employees.list}?page_size=500`);
   const allEmployees = empList?.results ?? [];
@@ -321,7 +327,11 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
 
       {/* Mark Attendance modal — for absent / no-record days */}
       {marking && selected && (
-        <div className="drawer-overlay open" onClick={e => { if (e.target === e.currentTarget) setMarking(null); }}>
+        <div
+          className="drawer-overlay open"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setMarking(null); }}
+        >
           <div className="drawer open" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <div className="drawer-header">
               <span className="drawer-title">Mark Attendance — {marking.date}</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -66,6 +66,11 @@ export default function PromotionTab({
   const [history, setHistory] = useState<PromotionRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside the modal and releasing past its edge would otherwise land on the
+  // overlay and close it. Only close when the gesture both started AND ended
+  // on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -216,7 +221,11 @@ export default function PromotionTab({
       </div>
 
       {showModal && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
+        <div
+          className="modal-overlay open"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setShowModal(false); }}
+        >
           <div className="modal">
             <div className="modal-header">
               <span className="modal-title">Promote Employee</span>

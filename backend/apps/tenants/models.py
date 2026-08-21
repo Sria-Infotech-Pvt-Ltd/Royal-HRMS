@@ -95,6 +95,17 @@ class Client(TenantMixin):
 
     is_active = models.BooleanField(default=True)
 
+    # Captured once at signup, editable afterward via CompanyDetailView.patch —
+    # none of this feeds provisioning or login; it's account-management
+    # context for the platform admin (who to call, what they signed up for),
+    # deliberately kept optional so a quick trial signup isn't blocked on it.
+    contact_name            = models.CharField(max_length=150, blank=True)
+    contact_phone           = models.CharField(max_length=20, blank=True)
+    address                 = models.TextField(blank=True)
+    gstin                   = models.CharField(max_length=15, blank=True)
+    expected_employee_count = models.PositiveIntegerField(null=True, blank=True)
+    contract_start_date     = models.DateField(null=True, blank=True)
+
     # Set only by the platform-admin API's async provisioning path (see
     # apps/tenants/views.py CompanyListCreateView.post and
     # apps/tenants/tasks.py finish_provisioning_task) — a Celery task

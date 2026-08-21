@@ -74,6 +74,13 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside the editor and releasing past a modal's edge would otherwise land
+  // on the overlay and close it mid-edit. Only close when the gesture both
+  // started AND ended on the backdrop itself. Shared between this modal and
+  // the crop modal below since only one overlay is interacted with at once.
+  const mouseDownOnOverlay = useRef(false);
+
   // Seed the editor when switching back from source view. Deliberately keyed
   // only on viewSource, not form.body — the contentEditable div owns the body
   // text while editing; re-seeding on every form.body change would overwrite
@@ -369,7 +376,11 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
   return (
     <>
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="modal-overlay open"
+      onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onClose(); }}
+    >
       <div className="modal et-modal-wrap" style={{ width: "min(1280px, 96vw)", maxHeight: "92vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
         {/* ── Header ── */}
@@ -956,7 +967,8 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
     {/* ── Crop modal ── */}
     {cropState && (
       <div style={{ position: "fixed", inset: 0, zIndex: 10001, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center" }}
-        onClick={e => { if (e.target === e.currentTarget) setCropState(null); }}>
+        onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+        onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setCropState(null); }}>
         <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", maxWidth: "96vw" }}>
 
           {/* Header */}

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 
 interface ModalProps {
   title: ReactNode;
@@ -39,11 +39,20 @@ export default function Modal({
     if (!closeDisabled) onClose();
   }
 
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside a field and releasing the drag past the modal's edge would
+  // otherwise land on the overlay and close it mid-input. Only close when
+  // the gesture both started AND ended on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
+
   return (
     <div
       className="modal-overlay open"
       style={zIndex ? { zIndex } : undefined}
-      onClick={e => e.target === e.currentTarget && handleClose()}
+      onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={e => {
+        if (mouseDownOnOverlay.current && e.target === e.currentTarget) handleClose();
+      }}
     >
       <div
         className={`modal${size === "lg" ? " modal-lg" : ""}`}

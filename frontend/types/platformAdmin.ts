@@ -38,15 +38,21 @@ export interface PlatformAdminInfo {
 export type ProvisioningStatus = "pending" | "active" | "failed";
 
 export interface Company {
-  id:                    string;
-  company_code:          string;
-  company_name:          string;
-  enabled_modules:       ModuleKey[];
-  is_active:             boolean;
-  provisioning_status:   ProvisioningStatus;
-  has_pending_password:  boolean;
-  created_at:            string;
-  updated_at:            string;
+  id:                       string;
+  company_code:             string;
+  company_name:             string;
+  enabled_modules:          ModuleKey[];
+  is_active:                boolean;
+  provisioning_status:      ProvisioningStatus;
+  contact_name:             string;
+  contact_phone:            string;
+  address:                  string;
+  gstin:                    string;
+  expected_employee_count:  number | null;
+  contract_start_date:      string | null;
+  has_pending_password:     boolean;
+  created_at:               string;
+  updated_at:               string;
 }
 
 export interface CompanyListResponse {
@@ -62,6 +68,12 @@ export interface CreateCompanyInput {
   company_name: string;
   admin_email:  string;
   modules?:     ModuleKey[] | null;
+  contact_name?:             string;
+  contact_phone?:            string;
+  address?:                  string;
+  gstin?:                    string;
+  expected_employee_count?:  number | null;
+  contract_start_date?:      string | null;
 }
 
 export interface CreateCompanyResult {

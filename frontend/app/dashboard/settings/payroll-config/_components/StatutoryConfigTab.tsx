@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -17,6 +17,11 @@ export default function StatutoryConfigTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside a field and releasing past the modal's edge would otherwise land
+  // on the overlay and close it mid-input. Only close when the gesture both
+  // started AND ended on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
   const [newStateId, setNewStateId] = useState("");
   const [draft, setDraft] = useState<Partial<StatutoryConfig>>({});
 
@@ -350,7 +355,11 @@ export default function StatutoryConfigTab() {
 
       {/* New state modal */}
       {showNew && (
-        <div className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowNew(false)}>
+        <div
+          className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-4"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => mouseDownOnOverlay.current && e.target === e.currentTarget && setShowNew(false)}
+        >
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div className="font-semibold text-gray-900">Add State Config</div>

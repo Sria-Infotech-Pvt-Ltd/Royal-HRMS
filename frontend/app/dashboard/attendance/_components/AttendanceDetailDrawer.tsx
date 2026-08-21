@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
@@ -106,8 +106,18 @@ export default function AttendanceDetailDrawer({ recordId, date, onClose, onReco
     }
   }
 
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside the drawer and releasing past its edge would otherwise land on
+  // the overlay and close it. Only close when the gesture both started AND
+  // ended on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
+
   return (
-    <div className="drawer-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="drawer-overlay open"
+      onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onClose(); }}
+    >
       <div className="drawer open" onClick={e => e.stopPropagation()}>
         <div className="drawer-header">
           <span className="drawer-title">Attendance Detail</span>
