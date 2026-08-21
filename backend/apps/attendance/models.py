@@ -10,6 +10,8 @@ _IST = ZoneInfo('Asia/Kolkata')
 from django.conf import settings
 from django.db import models
 
+from core.encrypted_fields import EncryptedJSONField
+
 # ─── Weekly Days constants (used by model + serializers) ──────────────────────
 
 DAYS_OF_WEEK = [
@@ -1717,7 +1719,13 @@ class FaceRegistrationRequest(models.Model):
         related_name='face_registration_requests',
     )
 
-    face_embedding          = models.JSONField()
+    # Biometric data — encrypted at rest, same treatment as PAN/Aadhaar/bank
+    # details elsewhere in this project (see core/encrypted_fields.py). Never
+    # exposed over the API (FaceRegistrationReadSerializer/DecisionSerializer
+    # both deliberately exclude it) and never looked up by exact value —
+    # matching is always a distance computation in application code, so this
+    # has no blind-index equivalent need.
+    face_embedding          = EncryptedJSONField()
     embedding_model_version = models.CharField(max_length=50, default=FACE_RECOGNITION_MODEL_VERSION)
 
     # Multi-frame registration capture quality (see frontend lib/faceApi/
