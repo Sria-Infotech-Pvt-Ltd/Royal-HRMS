@@ -70,8 +70,6 @@ export default function ProfileForm({
           <h3 className="text-[14px] font-semibold text-white">{section.label}</h3>
         </div>
         <div className="flex items-center gap-1">
-          <HeaderBtn icon="ti-upload" title="Import" />
-          <HeaderBtn icon="ti-download" title="Export" />
           {readOnly && onEdit && (
             <button
               onClick={onEdit}
@@ -160,18 +158,6 @@ export default function ProfileForm({
   );
 }
 
-/* ── header icon button ─────────────────────────────────────── */
-function HeaderBtn({ icon, title }: { icon: string; title: string }) {
-  return (
-    <button
-      title={title}
-      suppressHydrationWarning
-      className="w-8 h-8 flex items-center justify-center rounded-lg text-white/80 hover:bg-white/15 transition-colors"
-    >
-      <i className={`ti ${icon} text-[16px]`} />
-    </button>
-  );
-}
 
 /* ── table editor with read/edit toggle ─────────────────────── */
 function TableEditor({
