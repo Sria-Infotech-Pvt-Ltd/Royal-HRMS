@@ -33,7 +33,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/logo.png" />
         <link
           rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"
+          href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.46.0/tabler-icons.min.css"
         />
       </head>
       <body className={poppins.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
