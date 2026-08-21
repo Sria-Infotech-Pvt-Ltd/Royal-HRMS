@@ -819,14 +819,28 @@ function TabFaceId({
             </div>
           </div>
         </div>
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: ".83rem", borderColor: status ? "var(--success)" : undefined, color: status ? "var(--success)" : undefined }}
-          onClick={onRegister}
-          type="button"
-        >
-          {status === "approved" ? "Update" : status ? "Register Again" : "Register Face ID"}
-        </button>
+        {status === "pending" ? (
+          // No re-submit affordance while a request is already awaiting HR
+          // review — matches the self-service Profile page's rule for the
+          // same state. Without this, repeatedly clicking through here
+          // (most likely exactly what happens during onboarding, while
+          // waiting on HR) creates duplicate pending requests; the backend
+          // now also rejects a second one outright, but hiding the button
+          // is the actual fix for the confusing "why did clicking do
+          // nothing" experience that would otherwise cause.
+          <span style={{ fontSize: ".83rem", color: "var(--on-variant)", fontWeight: 600 }}>
+            Awaiting review
+          </span>
+        ) : (
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: ".83rem", borderColor: status ? "var(--success)" : undefined, color: status ? "var(--success)" : undefined }}
+            onClick={onRegister}
+            type="button"
+          >
+            {status === "approved" ? "Update" : status ? "Register Again" : "Register Face ID"}
+          </button>
+        )}
       </div>
     </div>
   );

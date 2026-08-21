@@ -19,14 +19,25 @@ const MODEL_URL = "/models";
 
 let modelsPromise: Promise<void> | null = null;
 
-/** Idempotent — safe to call from every mount; the network fetch happens once. */
+/**
+ * Idempotent — safe to call from every mount; the network fetch happens once
+ * per success. On failure the cached promise is cleared so the next call
+ * (e.g. the user clicking "Try Again") actually re-issues the network
+ * request instead of replaying the same rejection forever for the rest of
+ * the tab's life.
+ */
 export function loadFaceApiModels(): Promise<void> {
   if (!modelsPromise) {
     modelsPromise = Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
       faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-    ]).then(() => undefined);
+    ])
+      .then(() => undefined)
+      .catch((err) => {
+        modelsPromise = null;
+        throw err;
+      });
   }
   return modelsPromise;
 }
