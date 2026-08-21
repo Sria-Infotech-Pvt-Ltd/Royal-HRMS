@@ -124,6 +124,68 @@ class LanguageHintRetryTests(SimpleTestCase):
         self.assertEqual(response.data['status'], 'error')
 
 
+class DetectedLanguageFieldTests(SimpleTestCase):
+    """
+    Phase 4 — completes Phase 3.1's Gap 2. was_language_hinted alone can't
+    distinguish "Hindi tier succeeded" from "Hindi failed, English fallback
+    tier succeeded" (both report was_language_hinted=True — see Phase 3.1's
+    own DetectLanguageAmbiguityTests, which pinned this down as a real,
+    unfixed gap at the time). detected_language is the new signal that DOES
+    distinguish them, known for free from which sequential attempt survived
+    — these two tests are the positive mirror of that ambiguity test: same
+    two scenarios, but now provably told apart.
+    """
+
+    @patch('apps.voice_commands.views_transcribe.sarvam_client.transcribe_audio')
+    def test_hindi_tier_success_reports_detected_language_hi(self, mock_transcribe):
+        mock_transcribe.return_value = {
+            'transcript': 'mujhe leave chahiye', 'language_code': 'hi-IN',
+            'language_probability': None, 'was_language_hinted': True,
+        }
+
+        response = VoiceTranscribeFallbackView().post(_fake_request())
+
+        self.assertEqual(response.data['data']['detected_language'], 'hi')
+        # was_language_hinted is unchanged/still present — additive, not replaced.
+        self.assertEqual(response.data['data']['was_language_hinted'], True)
+
+    @patch('apps.voice_commands.views_transcribe.sarvam_client.transcribe_audio')
+    def test_english_fallback_tier_success_reports_detected_language_en(self, mock_transcribe):
+        # The exact scenario the old boolean-only signal could not tell apart
+        # from the Hindi-tier-success case above: hi-IN declines, en-IN wins.
+        mock_transcribe.side_effect = [
+            None,
+            {
+                'transcript': 'check my leave balance', 'language_code': 'en-IN',
+                'language_probability': None, 'was_language_hinted': True,
+            },
+        ]
+
+        response = VoiceTranscribeFallbackView().post(_fake_request())
+
+        self.assertEqual(response.data['data']['detected_language'], 'en')
+        # was_language_hinted is STILL True here too — the exact ambiguity
+        # detected_language exists to resolve.
+        self.assertEqual(response.data['data']['was_language_hinted'], True)
+
+    @patch('apps.voice_commands.views_transcribe.sarvam_client.transcribe_audio')
+    def test_hindi_hallucination_falling_back_to_english_still_reports_en(self, mock_transcribe):
+        mock_transcribe.side_effect = [
+            {
+                'transcript': 'Yes, yes, yes, yes, yes.', 'language_code': 'hi-IN',
+                'language_probability': None, 'was_language_hinted': True,
+            },
+            {
+                'transcript': 'check my leave balance', 'language_code': 'en-IN',
+                'language_probability': None, 'was_language_hinted': True,
+            },
+        ]
+
+        response = VoiceTranscribeFallbackView().post(_fake_request())
+
+        self.assertEqual(response.data['data']['detected_language'], 'en')
+
+
 class LooksLikeHallucinationTests(SimpleTestCase):
     def test_repeated_single_word_is_flagged(self):
         self.assertTrue(_looks_like_hallucination('Yes, yes, yes, yes, yes.'))

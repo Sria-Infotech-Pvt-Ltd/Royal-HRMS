@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { captureAndTranscribeViaSarvam } from "@/lib/voiceSttFallback";
+import { fetchSpeechAudio, type TtsLanguage } from "@/lib/voiceTts";
 import type { VoiceCommandStatus, VoiceParseResult } from "@/types/voice";
 
 type NormalisedError = { message?: string };
@@ -66,13 +67,18 @@ function estimateReadingTimeMs(displayedText: string): number {
   return Math.max(MIN_READING_TIME_MS, wordCount * READING_MS_PER_WORD);
 }
 
-// Single source of truth for "which language is this whole voice pipeline
-// operating in" — sent to /voice/parse/ as `lang`, and used as the locale
-// for both speech recognition and speech-synthesis playback, so all three
-// always agree. The backend only ships an intents_en.yaml registry today
-// (apps/voice_commands/registry/), so this is the only value that currently
-// makes sense; when a second language's registry exists, this is the one
-// place that needs to change (plus however that language gets selected).
+// VOICE_LANG: sent to /voice/parse/ as `lang` — which registry to match the
+// transcript against (apps/voice_commands/registry/ only ships intents_en.yaml
+// today, so this is the only value that currently makes sense; when a second
+// language's registry exists, this is the one place that needs to change,
+// plus however that language gets selected).
+//
+// VOICE_LOCALE: STILL drives SpeechRecognition's own recognition.lang below
+// (browser STT input) — untouched by Phase 4. It no longer has any role in
+// TTS OUTPUT: speak() now sources the reply's spoken language from each
+// response's own `language` field ("en"/"hi", see types/voice.ts), since a
+// Hindi response needs Hindi speech regardless of what the browser's input
+// recognizer is locked to.
 const VOICE_LANG = "en";
 const VOICE_LOCALE = "en-US";
 
@@ -117,6 +123,12 @@ interface VoiceParseOutcome {
   awaitingInput: boolean;
   success: boolean;
   result: unknown;
+  // The language THIS response's text is actually in ("en"/"hi") — see
+  // types/voice.ts's VoiceParseResult.language. Defaults to "en" when absent
+  // (a response built without ever reaching conversation.py's _payload, e.g.
+  // a locally-constructed error) rather than leaving it undefined, so speak()
+  // always has a language to request TTS in.
+  language: TtsLanguage;
 }
 
 type LocationResult = { latitude: number; longitude: number } | { errorMessage: string };
@@ -143,8 +155,17 @@ type VoiceParseExtra = Partial<{
   // mode never gets a language_probability back from Sarvam at all, so this
   // tells conversation.py's gate to confirm regardless rather than skip
   // confirmation for lack of a signal. See voiceSttFallback.ts's own
-  // wasLanguageHinted docstring.
+  // wasLanguageHinted docstring. UNCHANGED by Phase 4 — still the
+  // STT-confirmation gate's only trust signal alongside stt_language_probability.
   stt_used_language_hint: boolean;
+  // Phase 4 (completes Phase 3.1's Gap 2) — the accurate signal
+  // stt_used_language_hint alone can't provide: which Sarvam-STT hint tier
+  // (hi-IN vs en-IN) actually produced this transcript, forwarded verbatim
+  // from captureAndTranscribeViaSarvam's own detectedLanguage. Additive:
+  // conversation.py's handle_transcript prefers this for EN/HI text/voice
+  // selection when present, but it plays no part in the STT-confirmation
+  // gate above — see language.detect_language's own docstring.
+  stt_detected_language: "en" | "hi";
 }>;
 
 // Marks a clock_in/clock_out response as the "taking facial proof" turn —
@@ -188,6 +209,7 @@ async function postVoiceParse(transcript: string, lang: string, extra?: VoicePar
     awaitingInput: !!data?.awaiting_input,
     success: data?.success ?? true,
     result: data?.result,
+    language: data?.language === "hi" ? "hi" : "en",
   };
 }
 
@@ -353,23 +375,35 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Identifies the most recently spoken utterance — speak() cancels whatever
-  // was previously playing before starting a new one, which fires the OLD
-  // utterance's onerror ("interrupted") asynchronously. Without this guard,
-  // that stale event would fire its onEnd callback (scheduling dismissal for
-  // whatever message is on screen NOW) moments after the new message
-  // replaced it, closing the panel almost immediately instead of waiting for
-  // the new utterance to actually finish.
+  // Identifies the most recently spoken utterance — bumped by cancelSpeech()
+  // (called at the top of every speak(), and directly whenever something
+  // needs to stop TTS with no new utterance following, e.g. the mic being
+  // opened). Every async step of a spoken reply (the /voice/speak/ fetch,
+  // then playback) re-checks this before acting, so an utterance superseded
+  // (or outright cancelled) while its network call was still in flight is
+  // silently dropped instead of starting to play — and its dismissal-timing
+  // onEnd callback fires at most once, for whichever utterance is actually
+  // current when it settles.
   const utteranceTokenRef = useRef(0);
+  // The <audio> element currently playing a spoken reply, if any — the one
+  // thing cancelSpeech() needs to actually stop audible output. Replaces
+  // this hook's old reliance on window.speechSynthesis.cancel() implicitly
+  // stopping "whatever's playing"; there's no such single global for
+  // network-fetched audio, so this hook has to track it itself.
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   // See VoiceConversationState.faceProofTurn's own docstring.
   const faceProofTurnRef = useRef(0);
 
   // Engine-agnostic "is TTS currently speaking" — deliberately NOT read live
-  // from window.speechSynthesis.speaking (startListening's gate used to do
-  // that) so the exact same gate/settle-delay logic keeps working once a
-  // different TTS engine replaces speechSynthesis. Set true right as
-  // speak() hands the utterance to the engine, false the moment it ends,
-  // errors, or is explicitly cancelled (see cancelSpeech below).
+  // from the playback engine itself (window.speechSynthesis.speaking,
+  // startListening's gate used to read that directly; now the network-
+  // fetched <audio> element's own .paused/.ended, which this ref replaces
+  // for the same reason) so the exact same gate/settle-delay logic survives
+  // a future engine swap unchanged. Set true right as speak() starts
+  // fetching the reply's audio (not once playback literally begins — the
+  // network round trip is itself something startListening's gate needs to
+  // interrupt), false the moment it ends, errors, or is explicitly
+  // cancelled (see cancelSpeech below).
   const isTtsPlayingRef = useRef(false);
   // Barge-in VAD tap's own resources — separate from isTtsPlayingRef itself
   // (see stopVadTap/cancelSpeech: tearing down THIS tap must not always
@@ -553,85 +587,130 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   }, [handleBargeIn]);
 
   // Single, engine-swappable "stop whatever is speaking" entry point — every
-  // TTS-cancel call site in this hook goes through this rather than calling
-  // window.speechSynthesis.cancel() directly, so a future TTS engine swap
-  // only needs to change this one function's body. Always tears down the
-  // VAD tap too: if speech is being cancelled for any reason, there's
-  // nothing left to guard against barging in on.
+  // TTS-cancel call site in this hook goes through this rather than reaching
+  // into the playback engine directly, so a future TTS engine swap only
+  // needs to change this one function's body. Bumps utteranceTokenRef so
+  // ANY earlier utterance's still-in-flight /voice/speak/ fetch or scheduled
+  // playback is recognized as stale and dropped when it resolves (see
+  // speak() below) — network-fetched audio has no single global "cancel
+  // whatever's playing" the way window.speechSynthesis.cancel() was, so this
+  // hook has to track and stop it explicitly. Always tears down the VAD tap
+  // too: if speech is being cancelled for any reason, there's nothing left
+  // to guard against barging in on.
   const cancelSpeech = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+    utteranceTokenRef.current += 1;
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      URL.revokeObjectURL(currentAudioRef.current.src);
+      currentAudioRef.current = null;
     }
     isTtsPlayingRef.current = false;
     stopVadTap();
   }, [stopVadTap]);
 
-  // Speaks the same message text shown in the panel/toast, in VOICE_LOCALE.
-  // Cancels any utterance already in progress first — a new response should
-  // always replace what's currently playing, never queue behind it. Wrapped
-  // in try/catch because this is a nice-to-have layered on top of the
-  // panel/toast text that's already visible — a synthesis failure (blocked
-  // by browser policy, no voices installed, whatever) must never propagate
-  // out and get mistaken for the voice command itself having failed.
+  // Speaks the same message text shown in the panel/toast, via POST
+  // /api/voice/speak/ (Sarvam Bulbul TTS, always voiced as "shubh"
+  // server-side) in `language` — the response's own detected language
+  // ("en"/"hi"), NOT VOICE_LOCALE (that constant only drives STT's
+  // recognition.lang now — see its own comment). Cancels any utterance
+  // already in progress first — a new response should always replace what's
+  // currently playing, never queue behind it.
   //
-  // onEnd, when given, fires once this utterance actually finishes (or
-  // errors out) — callers use it to tie panel dismissal to real speech
-  // duration instead of a fixed timer. Returns whether speech synthesis was
-  // actually attempted; false (muted, unsupported, or a synchronous
-  // failure) means onEnd will never fire and the caller must fall back to
-  // its own fixed-delay dismissal.
+  // onEnd, when given, fires once this utterance actually finishes playing,
+  // fails to play, or the /voice/speak/ call itself fails — callers use it
+  // to tie panel dismissal to real speech duration instead of a fixed timer,
+  // and rely on it always eventually firing (never left hanging) so long as
+  // this returns true. Returns whether playback was actually attempted;
+  // false (muted or empty text — the only synchronous no-op cases) means
+  // onEnd will never fire and the caller must fall back to its own
+  // fixed-delay dismissal.
   const speak = useCallback(
-    (text: string, onEnd?: () => void) => {
+    (text: string, language: TtsLanguage, onEnd?: () => void) => {
       if (isMuted || !text) return false;
-      if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
 
-      try {
-        cancelSpeech(); // stop whatever was playing (and its VAD tap) first
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = VOICE_LOCALE;
+      cancelSpeech(); // stop whatever was playing (and its VAD tap) first, bumping the token
+      const token = utteranceTokenRef.current;
+      isTtsPlayingRef.current = true;
 
-        const token = ++utteranceTokenRef.current;
-        // Unconditional now (not gated on `onEnd` being passed) — every
-        // utterance needs isTtsPlayingRef/the VAD tap cleared when it ends,
-        // regardless of whether the caller also wanted an onEnd callback.
-        const settle = () => {
-          if (utteranceTokenRef.current === token) {
-            isTtsPlayingRef.current = false;
-            stopVadTap();
-            onEnd?.();
-          }
-        };
-        utterance.onend = settle;
-        utterance.onerror = settle;
+      // Unconditional now (not gated on `onEnd` being passed) — every
+      // utterance needs isTtsPlayingRef/the VAD tap cleared when it ends,
+      // regardless of whether the caller also wanted an onEnd callback.
+      const settle = () => {
+        if (utteranceTokenRef.current === token) {
+          isTtsPlayingRef.current = false;
+          stopVadTap();
+          onEnd?.();
+        }
+      };
 
-        window.speechSynthesis.speak(utterance);
-        isTtsPlayingRef.current = true;
-        if (BARGE_IN_ENABLED) startVadTap(token);
-        return true;
-      } catch (err) {
-        console.error("Voice confirmation speech failed:", err);
-        return false;
-      }
+      void fetchSpeechAudio(text, language).then((blob) => {
+        // Superseded (or outright cancelled) while the network call was in
+        // flight — cancelSpeech() already bumped the token for whatever
+        // superseded this. Never start playing stale audio, and never call
+        // settle() for it either: the utterance that superseded this one
+        // owns dismissal timing now.
+        if (utteranceTokenRef.current !== token) return;
+        if (!blob) {
+          // fetchSpeechAudio already logged the distinguishing 422/429/503/
+          // 504/502/network reason — settle() here is the "fall back to the
+          // existing dismiss-timer behavior so nothing hangs" half of that
+          // failure handling (see speakThenDismiss's own onEnd, which sizes
+          // its delay off the DISPLAYED text's reading time, not a guess).
+          settle();
+          return;
+        }
+
+        try {
+          const blobUrl = URL.createObjectURL(blob);
+          const audio = new Audio(blobUrl);
+          currentAudioRef.current = audio;
+          const finish = () => {
+            URL.revokeObjectURL(blobUrl);
+            if (currentAudioRef.current === audio) currentAudioRef.current = null;
+            settle();
+          };
+          audio.onended = finish;
+          audio.onerror = finish;
+
+          if (BARGE_IN_ENABLED) startVadTap(token);
+          audio.play().catch((err) => {
+            console.error("Voice speak: playback failed —", err);
+            finish();
+          });
+        } catch (err) {
+          // Belt-and-suspenders — Audio()/createObjectURL essentially never
+          // throw, but this is a nice-to-have layered on top of the
+          // panel/toast text that's already visible, same reasoning this
+          // hook's old speechSynthesis try/catch gave: a synthesis/playback
+          // failure must never propagate out as if the voice COMMAND itself
+          // had failed, and must never leave the caller hanging without
+          // settle() ever firing.
+          console.error("Voice speak: could not start playback —", err);
+          settle();
+        }
+      });
+
+      return true;
     },
     [isMuted, cancelSpeech, stopVadTap, startVadTap]
   );
 
-  // Speaks spokenText, then dismisses the panel — timed to the utterance's
-  // real 'onend' (plus a floor sized to how long displayedText actually
-  // takes to READ, not just how long spokenText takes to SAY) when TTS
-  // actually plays, falling back to fixedDelayMs (with the same reading
-  // floor applied) only when there's no audio to wait for (muted,
-  // unsupported, or synthesis failed to start).
+  // Speaks spokenText in `language`, then dismisses the panel — timed to the
+  // utterance's real end (plus a floor sized to how long displayedText
+  // actually takes to READ, not just how long spokenText takes to SAY) when
+  // TTS actually plays (successfully or not — see speak()'s own settle()),
+  // falling back to fixedDelayMs (with the same reading floor applied) only
+  // when there's no audio attempt to wait for at all (muted or empty text).
   //
   // spokenText and displayedText are the same string for most intents, but
   // deliberately diverge for confidentiality-redacted ones (see
   // TTS_END_BUFFER_MS's own comment) — displayedText is always what the
   // panel actually shows, so it's always what dismiss timing must respect.
   const speakThenDismiss = useCallback(
-    (spokenText: string, fixedDelayMs: number, displayedText: string) => {
+    (spokenText: string, fixedDelayMs: number, displayedText: string, language: TtsLanguage) => {
       const readingFloorMs = estimateReadingTimeMs(displayedText);
       const isSpeaking = speak(
-        spokenText, () => scheduleConversationAutoClose(Math.max(TTS_END_BUFFER_MS, readingFloorMs))
+        spokenText, language, () => scheduleConversationAutoClose(Math.max(TTS_END_BUFFER_MS, readingFloorMs))
       );
       if (!isSpeaking) {
         scheduleConversationAutoClose(Math.max(fixedDelayMs, readingFloorMs));
@@ -643,7 +722,8 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
   const submitTranscript = useCallback(
     async (
       transcript: string, sourceIsVoice: boolean = false,
-      sttLanguageProbability?: number | null, sttUsedLanguageHint: boolean = false
+      sttLanguageProbability?: number | null, sttUsedLanguageHint: boolean = false,
+      sttDetectedLanguage?: "en" | "hi" | null
     ) => {
       setStatus("processing");
       clearAutoCloseTimer();
@@ -693,6 +773,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         ...bargeInDebugExtra,
         ...(sttLanguageProbability != null ? { stt_language_probability: sttLanguageProbability } : {}),
         ...(sttUsedLanguageHint ? { stt_used_language_hint: true } : {}),
+        ...(sttDetectedLanguage ? { stt_detected_language: sttDetectedLanguage } : {}),
       };
 
       try {
@@ -739,6 +820,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             outcome = await postVoiceParse(sarvamResult.transcript, VOICE_LANG, {
               stt_language_probability: sarvamResult.languageProbability ?? undefined,
               ...(sarvamResult.wasLanguageHinted ? { stt_used_language_hint: true } : {}),
+              ...(sarvamResult.detectedLanguage ? { stt_detected_language: sarvamResult.detectedLanguage } : {}),
             });
           }
         }
@@ -766,7 +848,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           // Panel can't render (e.g. the session expired mid-request) —
           // toast is the guaranteed-visible fallback for this edge case only.
           showToast(message, isSuccess ? "success" : "error");
-          speak(spokenText);
+          speak(spokenText, outcome.language);
         } else {
           const awaitingFaceProof = awaitingInput && isAwaitingFaceProof(outcome.result);
           if (awaitingFaceProof) faceProofTurnRef.current += 1;
@@ -779,13 +861,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           if (awaitingInput) {
             // Still mid-dialogue — the question is spoken, but the panel
             // stays open waiting for the user's answer, no dismissal to time.
-            speak(spokenText);
+            speak(spokenText, outcome.language);
           } else {
             // Conversational flows get the slower fixed-delay fallback (used
-            // only when muted/unsupported); a one-shot result's fallback is
-            // faster. Either way, real speech takes priority over both.
+            // only when muted or /voice/speak/ failed); a one-shot result's
+            // fallback is faster. Either way, real speech takes priority over both.
             speakThenDismiss(
-              spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message
+              spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message,
+              outcome.language
             );
           }
         }
@@ -793,9 +876,12 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         const e = err as NormalisedError;
         const message = e?.message ?? "Could not process the voice command. Please try again.";
 
+        // A locally-constructed English string (the /voice/parse/ call itself
+        // failed, so there's no backend `language` field to read) — spoken in
+        // English, same as before this response ever had a language of its own.
         if (isDisabled) {
           showToast(message, "error");
-          speak(message);
+          speak(message, "en");
         } else {
           setConversation({
             transcript, message, phase: "result",
@@ -803,7 +889,7 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             faceProofTurn: faceProofTurnRef.current,
           });
           appendHistory(transcript, message, "error");
-          speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message);
+          speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message, "en");
         }
       } finally {
         setStatus("idle");
@@ -832,7 +918,8 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     const sarvamResult = await captureAndTranscribeViaSarvam();
     if (sarvamResult) {
       await submitTranscript(
-        sarvamResult.transcript, false, sarvamResult.languageProbability, sarvamResult.wasLanguageHinted
+        sarvamResult.transcript, false, sarvamResult.languageProbability, sarvamResult.wasLanguageHinted,
+        sarvamResult.detectedLanguage
       );
     } else {
       showToast("Voice recognition error. Please try again.", "error");
@@ -876,10 +963,11 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         });
         appendHistory(transcript, message, isSuccess ? "success" : "error");
         if (awaitingInput) {
-          speak(spokenText);
+          speak(spokenText, outcome.language);
         } else {
           speakThenDismiss(
-            spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message
+            spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message,
+            outcome.language
           );
         }
       } catch (err: unknown) {
@@ -891,7 +979,9 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           faceProofTurn: faceProofTurnRef.current,
         });
         appendHistory(transcript, message, "error");
-        speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message);
+        // Locally-constructed English string (the /voice/parse/ call itself
+        // failed) — same reasoning as submitTranscript's own catch block.
+        speakThenDismiss(message, IMMEDIATE_RESULT_AUTO_CLOSE_MS, message, "en");
       } finally {
         setStatus("idle");
       }

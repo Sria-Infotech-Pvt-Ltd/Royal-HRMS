@@ -9,6 +9,7 @@ from apps.voice_commands.approval_extractor import parse_yes_no
 from apps.voice_commands.audit import log_clarification_outcome
 from apps.voice_commands.clarification import clear_pending, set_pending
 from apps.voice_commands.executor import INTENT_CLOCK_IN, INTENT_CLOCK_OUT
+from apps.voice_commands.language import get_current_language, text
 from apps.voice_commands.matcher import DEFAULT_LANG, get_conversational
 
 logger = logging.getLogger(__name__)
@@ -45,12 +46,24 @@ CLARIFICATION_STAGE = 'awaiting_clarification_confirmation'
 # reusing that marker for a case that is success=True here.
 CLARIFICATION_DECLINED_INTENT = 'clarification_declined'
 
-_REASK_MESSAGE = 'Sorry, was that a yes or a no — did you mean: "{phrase}"?'
+# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
+# site — same pattern executor_*.py's own messages already use.
+_DID_YOU_MEAN_TEMPLATE = {
+    'en': 'Did you mean: "{phrase}"?',
+    'hi': 'क्या आपका मतलब था: "{phrase}"?',
+}
+_REASK_MESSAGE = {
+    'en': 'Sorry, was that a yes or a no — did you mean: "{phrase}"?',
+    'hi': 'माफ़ कीजिए, क्या वह हां था या नहीं — क्या आपका मतलब था: "{phrase}"?',
+}
 # A "no" answer is a deliberate, expected decline — not a failure to
 # understand — so it gets its own friendly reset instead of conversation.py's
 # generic no-match message (reserved for transcripts that never matched
 # anything at all).
-_DECLINED_MESSAGE = "Okay, is there anything else I can help you with?"
+_DECLINED_MESSAGE = {
+    'en': 'Okay, is there anything else I can help you with?',
+    'hi': 'ठीक है, क्या मैं आपकी और किसी चीज़ में मदद कर सकता हूं?',
+}
 
 
 def start_clarification(
@@ -94,7 +107,7 @@ def start_clarification(
         'Voice command clarification: user=%s transcript=%r candidate=%s confidence=%s',
         request.user.pk, intent_text, candidate_intent, confidence,
     )
-    question = f'Did you mean: "{phrase}"?'
+    question = text(_DID_YOU_MEAN_TEMPLATE).format(phrase=phrase)
     # conversational=True is an explicit override, not the registry lookup —
     # the candidate might itself be registered conversational: false (e.g.
     # clock_in, check_leave_balance), but THIS turn is a yes/no question
@@ -129,14 +142,14 @@ def continue_clarification(
         # as leave-approval confirmation's own not-yes-no re-ask.
         set_pending(request.user.id, candidate_intent, slots)
         log_clarification_outcome(request, clarification_type, 're_asked')
-        question = _REASK_MESSAGE.format(phrase=matched_phrase)
+        question = text(_REASK_MESSAGE).format(phrase=matched_phrase)
         return _payload(candidate_intent, None, None, question, awaiting_input=True, conversational=True)
 
     clear_pending(request.user.id)
 
     if not decision:
         log_clarification_outcome(request, clarification_type, 'declined')
-        return _payload(CLARIFICATION_DECLINED_INTENT, None, None, _DECLINED_MESSAGE, conversational=True)
+        return _payload(CLARIFICATION_DECLINED_INTENT, None, None, text(_DECLINED_MESSAGE), conversational=True)
 
     log_clarification_outcome(request, clarification_type, 'confirmed')
 
@@ -186,7 +199,7 @@ def _payload(
     third party's personal details (see conversation.py's own _payload for
     where it's actually set); included for shape-consistency with every
     other _payload builder so the frontend can rely on the key always being
-    present.
+    present. language (Phase 3): see conversation.py's own _payload docstring.
     """
     return {
         'intent': intent,
@@ -197,4 +210,5 @@ def _payload(
         'conversational': get_conversational(intent) if conversational is None else conversational,
         'awaiting_input': awaiting_input,
         'success': success,
+        'language': get_current_language(),
     }

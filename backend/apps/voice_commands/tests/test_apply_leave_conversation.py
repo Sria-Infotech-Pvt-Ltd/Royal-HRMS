@@ -12,6 +12,7 @@ from apps.voice_commands.conversation import (
     handle_transcript,
 )
 from apps.voice_commands.executor import INTENT_APPLY_LEAVE, ExecutionResult
+from apps.voice_commands.language import text
 from apps.voice_commands.matcher import NO_MATCH_INTENT
 
 
@@ -274,7 +275,7 @@ class ExpiredClarificationHeuristicTests(SimpleTestCase):
     def test_bare_leave_type_answer_after_expiry_returns_timeout_message(self, mock_get_pending, mock_execute):
         result = handle_transcript(_fake_request(), 'sick')
 
-        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertEqual(result['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         self.assertEqual(result['intent'], NO_MATCH_INTENT)
         mock_execute.assert_not_called()
 
@@ -283,7 +284,7 @@ class ExpiredClarificationHeuristicTests(SimpleTestCase):
     def test_bare_date_answer_after_expiry_returns_timeout_message(self, mock_get_pending, mock_execute):
         result = handle_transcript(_fake_request(), 'july 24 2026')
 
-        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertEqual(result['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         mock_execute.assert_not_called()
 
     @patch('apps.voice_commands.conversation.execute_intent')
@@ -294,7 +295,7 @@ class ExpiredClarificationHeuristicTests(SimpleTestCase):
         # timed-out clarification.
         result = handle_transcript(_fake_request(), 'asdkjhasd')
 
-        self.assertEqual(result['message'], _NO_MATCH_MESSAGE)
+        self.assertEqual(result['message'], text(_NO_MATCH_MESSAGE))
         mock_execute.assert_not_called()
 
     def test_unrelated_fresh_command_is_not_flagged_as_a_slot_answer(self):
@@ -314,7 +315,7 @@ class ExpiredClarificationHeuristicTests(SimpleTestCase):
 
         result = handle_transcript(_fake_request(), 'how many unapproved leaves i have')
 
-        self.assertNotEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertNotEqual(result['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         self.assertEqual(result['intent'], 'check_leave_status')
         mock_execute.assert_called_once()
 
@@ -347,7 +348,7 @@ class GenuineExpiryAfterRealInactivityTests(SimpleTestCase):
 
         result = handle_transcript(request, 'sick')
 
-        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertEqual(result['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         mock_execute.assert_not_called()
 
 

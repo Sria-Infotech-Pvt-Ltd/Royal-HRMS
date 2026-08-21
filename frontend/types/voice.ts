@@ -28,6 +28,12 @@ export interface VoiceParseResult {
   // Distinct from the HTTP call succeeding, which is a precondition for this
   // field existing at all.
   success: boolean;
+  // The detected input language for THIS response — "en" or "hi" — present
+  // on every response, not just ones with a Hindi counterpart to select
+  // (see backend apps/voice_commands/conversation.py's _payload docstring).
+  // Phase 4: drives which language POST /api/voice/speak/ is asked to
+  // synthesize this response's spoken text in.
+  language: "en" | "hi";
 }
 
 export type VoiceCommandStatus = "idle" | "listening" | "processing";

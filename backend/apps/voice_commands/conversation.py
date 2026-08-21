@@ -44,6 +44,7 @@ from apps.voice_commands.executor import (
     execute_intent,
 )
 from apps.voice_commands.expired_answer_detector import looks_like_expired_slot_answer as _looks_like_expired_slot_answer
+from apps.voice_commands.language import detect_language, get_current_language, set_current_language, text
 from apps.voice_commands.llm_fallback import try_llm_fallback
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational, match_intent
 from apps.voice_commands.mode_extractor import extract_attendance_mode
@@ -70,13 +71,21 @@ logger = logging.getLogger(__name__)
 # store pending state to interpret the next turn as an answer. Friendlier
 # than the flat "didn't understand" wording this constant used to hold —
 # same name kept so existing tests asserting against this constant (not a
-# hardcoded string) automatically track the improved wording.
-_NO_MATCH_MESSAGE = "Sorry, I didn't catch that — could you say it differently?"
+# hardcoded string) automatically track the improved wording. Bilingual pair
+# (Phase 3.1 — Gap 1) rather than a bare string, selected through text() at
+# every call site, same pattern executor_*.py's own messages already use.
+_NO_MATCH_MESSAGE = {
+    'en': "Sorry, I didn't catch that — could you say it differently?",
+    'hi': 'माफ़ कीजिए, मैं समझ नहीं पाया — क्या आप इसे दूसरे तरीके से कह सकते हैं?',
+}
 # Generic on purpose — apply_leave was the only conversational intent when
 # this was first written, but request_attendance_correction is conversational
 # now too (see _looks_like_expired_slot_answer below), and any future
 # multi-turn intent will hit this same branch.
-_EXPIRED_CLARIFICATION_MESSAGE = "Your request timed out — let's start over."
+_EXPIRED_CLARIFICATION_MESSAGE = {
+    'en': "Your request timed out — let's start over.",
+    'hi': 'आपका अनुरोध समय सीमा समाप्त हो गया — कृपया फिर से शुरू करें।',
+}
 
 # NOT YET CALIBRATED — starting point only, pending real data. Every genuine
 # failure observed this session (2026-08-17, including the same audio bytes
@@ -97,6 +106,8 @@ def handle_transcript(
     liveness_score: Optional[float] = None, capture_session_id: str = '',
     stt_language_probability: Optional[float] = None,
     stt_used_language_hint: bool = False,
+    stt_detected_language: Optional[str] = None,
+    response_language: Optional[str] = None,
 ) -> dict:
     """
     Single entry point VoiceParseView.post() calls for every transcript.
@@ -122,7 +133,21 @@ def handle_transcript(
     back at all, so stt_language_probability is always None for these and the
     usual threshold check above has nothing to test. Rather than treat "no
     signal" as "trustworthy by default" — the opposite of this gate's whole
-    purpose — a hinted transcript always goes through confirmation.
+    purpose — a hinted transcript always goes through confirmation. This
+    field's meaning and role in the gate above are UNCHANGED by Phase 4 —
+    stt_detected_language (below) only changes which signal decides EN vs HI
+    text/voice selection, never this gate's own trust logic.
+
+    stt_detected_language (Phase 4 — completes Phase 3.1's Gap 2): 'en' or
+    'hi', forwarded by useVoiceCommand.ts from views_transcribe.py's own
+    `detected_language` field — the tier (hi-IN vs en-IN hint) that actually
+    produced the Sarvam-STT retry's transcript, known deterministically
+    server-side with no new API call. Passed straight through to
+    language.detect_language(), which prefers it over the
+    stt_used_language_hint-derived approximation when present — see that
+    function's own docstring. Does not participate in the STT-confirmation
+    gate above at all; only stt_used_language_hint/stt_language_probability
+    do.
 
     Every intent except apply_leave goes straight through match_intent ->
     execute_intent, exactly as before this feature existed. apply_leave can
@@ -150,7 +175,37 @@ def handle_transcript(
     face_embedding/liveness_passed/liveness_score/capture_session_id: same
     silent-resubmit shape, for clock_in/clock_out's "taking facial proof"
     turn (conversation_clock_in_face.py) — every other intent ignores them.
+
+    Sets the ambient response language (apps.voice_commands.language) from
+    stt_used_language_hint FIRST, before anything else below runs — this is
+    the single entry point every transcript passes through (see this
+    docstring's own opening line), so every executor_*.py message built
+    anywhere downstream of this call, however many turns deep, reads the
+    correct language for THIS request. See language.detect_language's own
+    docstring for exactly what this signal does and doesn't tell us.
+
+    response_language (Phase 3.1 — fixes a leaked-contextvar bug of the same
+    class Phase 3 already had to catch once): set instead of
+    detect_language(stt_used_language_hint) when given. The one caller that
+    passes it is conversation_stt_confirmation.continue_stt_confirmation's
+    "yes" branch, which re-enters handle_transcript on the now-confirmed
+    original transcript — this function unconditionally re-runs
+    set_current_language() as its very first line on every call (including
+    that re-entrant one), so without a way to replay the language THAT
+    original transcript resolved to, a confirmed Hindi-STT command would
+    silently dispatch and speak back in English. Deliberately a SEPARATE
+    parameter from stt_used_language_hint rather than reusing it for this
+    replay — stt_used_language_hint also drives the STT-confirmation gate
+    below (pending is None and (... or stt_used_language_hint)), and that
+    re-entrant call already has pending=None (clear_pending already ran);
+    replaying stt_used_language_hint=True there would re-trigger this exact
+    same confirmation question forever instead of finally dispatching.
     """
+    if response_language is not None:
+        set_current_language(response_language)
+    else:
+        set_current_language(detect_language(stt_used_language_hint, stt_detected_language))
+
     user = request.user
     pending = get_pending(user.id)
 
@@ -168,11 +223,11 @@ def handle_transcript(
     # first: left in, a slot-filled or name-bearing utterance drags the
     # fuzzy score below match_intent()'s threshold. Each strip_*() no-ops
     # when its own pattern is absent, so chaining is safe either way.
-    text = strip_leave_slot_phrases(intent_text)
-    text = strip_employee_name_phrases(text)
-    text = strip_payslip_query_phrases(text)
-    text = strip_payslip_employee_name_phrases(text)
-    matching_text = strip_correction_slot_phrases(text)
+    stripped_text = strip_leave_slot_phrases(intent_text)
+    stripped_text = strip_employee_name_phrases(stripped_text)
+    stripped_text = strip_payslip_query_phrases(stripped_text)
+    stripped_text = strip_payslip_employee_name_phrases(stripped_text)
+    matching_text = strip_correction_slot_phrases(stripped_text)
     fresh_match = match_intent(matching_text, lang=lang)
 
     if pending and fresh_match.intent != NO_MATCH_INTENT and fresh_match.intent != pending['intent']:
@@ -216,7 +271,7 @@ def handle_transcript(
                 'Voice command: no pending state but transcript looks like an expired '
                 'clarification answer — user=%s transcript=%r', user.pk, transcript,
             )
-            return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, _EXPIRED_CLARIFICATION_MESSAGE, success=False)
+            return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, text(_EXPIRED_CLARIFICATION_MESSAGE), success=False)
 
         # Genuine no-match, below the clarification floor — the ONE point
         # where the hybrid architecture's LLM fallback tier gets a shot,
@@ -241,7 +296,7 @@ def handle_transcript(
             'Voice command no match: user=%s transcript=%r confidence=%s',
             user.pk, transcript, fresh_match.confidence,
         )
-        return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, _NO_MATCH_MESSAGE, success=False)
+        return _payload(NO_MATCH_INTENT, fresh_match.confidence, None, text(_NO_MATCH_MESSAGE), success=False)
 
     return _dispatch_matched_intent(
         request, fresh_match.intent, intent_text, fresh_match.confidence,
@@ -403,6 +458,15 @@ def _payload(
     — see VoiceCommandButton's retry flow, which keys off this field to
     decide whether a clock_in/clock_out rejection is worth retrying with
     geolocation.
+
+    language (Phase 3) is the ambient value set at the top of
+    handle_transcript — "en" or "hi", the detected input language that
+    decided which of message/speech_message's string this response actually
+    carries (see language.detect_language's own docstring for the exact
+    signal and its limits). Present on every response, not just ones with a
+    Hindi counterpart to select, so the frontend can rely on the key always
+    being there — same reasoning speech_message's own always-present-but-
+    often-None shape already follows.
     """
     return {
         'intent': intent,
@@ -413,4 +477,5 @@ def _payload(
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,
+        'language': get_current_language(),
     }

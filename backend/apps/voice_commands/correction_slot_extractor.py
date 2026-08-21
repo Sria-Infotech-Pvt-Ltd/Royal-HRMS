@@ -14,6 +14,7 @@ from apps.voice_commands.correction_datetime_extractor import (
     extract_correction_date,
     extract_time,
 )
+from apps.voice_commands.language import text
 
 # Split out from slot_extractor.py (apply_leave's own slot-filling module)
 # rather than added into it — this is a different domain with a genuinely
@@ -61,6 +62,22 @@ _REASON_SYNONYMS = {
 _VALID_REASONS = frozenset(key for key, _ in AttendanceCorrection.REASON_CHOICES)
 _REASON_LABELS = [label for _, label in AttendanceCorrection.REASON_CHOICES]
 REASON_CHOICES_PROMPT = ', '.join(_REASON_LABELS[:-1]) + f', or {_REASON_LABELS[-1]}'
+# Hindi label per REASON_CHOICES code — this app's own addition (Phase 3.1),
+# kept local to voice_commands rather than touching the attendance app's
+# model, mirroring executor_payroll._STATUS_LABELS_HI's own reasoning for the
+# same kind of model-choices label map.
+_REASON_LABELS_HI = {
+    AttendanceCorrection.REASON_BIOMETRIC: 'डिवाइस खराबी / बायोमेट्रिक त्रुटि',
+    AttendanceCorrection.REASON_FORGOT: 'पंच करना भूल गए',
+    AttendanceCorrection.REASON_FIELD_WORK: 'फील्ड से कार्य (क्लाइंट विज़िट)',
+    AttendanceCorrection.REASON_SYSTEM: 'सिस्टम / सर्वर डाउनटाइम',
+    AttendanceCorrection.REASON_OTHER: 'अन्य',
+}
+_REASON_CHOICES_PROMPT_HI = (
+    ', '.join(_REASON_LABELS_HI[code] for code, _ in AttendanceCorrection.REASON_CHOICES[:-1])
+    + f', या {_REASON_LABELS_HI[AttendanceCorrection.REASON_CHOICES[-1][0]]}'
+)
+_REASON_CHOICES_PROMPT_TEXT = {'en': REASON_CHOICES_PROMPT, 'hi': _REASON_CHOICES_PROMPT_HI}
 
 # 'system down'/'server down' as a bare substring check misses the common
 # "the system WAS down"/"IS down" phrasing (the verb sits between the two
@@ -211,18 +228,76 @@ def next_missing_slot(slots: dict) -> Optional[str]:
     return None
 
 
+# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
+# site — same pattern executor_*.py's own messages already use.
+_DATE_QUESTION = {
+    'en': 'What date was the punch you need corrected?',
+    'hi': 'जिस पंच को सुधारना है वह किस तारीख का था?',
+}
+_PUNCH_TYPE_QUESTION = {
+    'en': 'Was this for your clock-in, clock-out, or both?',
+    'hi': 'क्या यह आपके क्लॉक-इन, क्लॉक-आउट, या दोनों के लिए था?',
+}
+_CORRECT_IN_TIME_QUESTION = {
+    'en': 'What should the correct clock-in time be?',
+    'hi': 'सही क्लॉक-इन समय क्या होना चाहिए?',
+}
+_CORRECT_OUT_TIME_QUESTION = {
+    'en': 'What should the correct clock-out time be?',
+    'hi': 'सही क्लॉक-आउट समय क्या होना चाहिए?',
+}
+_REASON_QUESTION_TEMPLATE = {
+    'en': 'What is the reason — {choices}?',
+    'hi': 'कारण क्या है — {choices}?',
+}
+_GENERIC_SLOT_QUESTION_TEMPLATE = {
+    'en': 'Could you provide {slot_name}?',
+    'hi': 'क्या आप {slot_name} बता सकते हैं?',
+}
+_DATE_NOT_UNDERSTOOD_MESSAGE = {
+    'en': "I didn't catch a date there — could you say the date again?",
+    'hi': 'मुझे वहां कोई तारीख समझ नहीं आई — क्या आप तारीख फिर से बता सकते हैं?',
+}
+_FUTURE_DATE_MESSAGE = {
+    'en': (
+        'That date is in the future — corrections can only be filed for a past punch. '
+        'What date was it?'
+    ),
+    'hi': (
+        'वह तारीख भविष्य की है — सुधार केवल पिछले पंच के लिए दर्ज किए जा सकते हैं। '
+        'वह किस तारीख का था?'
+    ),
+}
+_INVALID_PUNCH_TYPE_MESSAGE = {
+    'en': 'Please say clock-in, clock-out, or both.',
+    'hi': 'कृपया क्लॉक-इन, क्लॉक-आउट, या दोनों कहें।',
+}
+_TIME_NOT_UNDERSTOOD_MESSAGE = {
+    'en': "I didn't catch a time there — could you say it again, like '9:15 AM'?",
+    'hi': "मुझे वहां कोई समय समझ नहीं आया — क्या आप इसे फिर से बता सकते हैं, जैसे '9:15 AM'?",
+}
+_UNRECOGNIZED_REASON_TEMPLATE = {
+    'en': "That's not a reason I recognize. Please say one of: {choices}.",
+    'hi': 'यह मेरे लिए पहचाना जाने वाला कारण नहीं है। कृपया इनमें से कोई एक कहें: {choices}।',
+}
+_GENERIC_SLOT_PROMPT_TEMPLATE = {
+    'en': 'Please provide {slot_name}.',
+    'hi': 'कृपया {slot_name} बताएं।',
+}
+
+
 def question_for_slot(slot_name: str) -> str:
     if slot_name == 'date':
-        return 'What date was the punch you need corrected?'
+        return text(_DATE_QUESTION)
     if slot_name == 'punch_type':
-        return 'Was this for your clock-in, clock-out, or both?'
+        return text(_PUNCH_TYPE_QUESTION)
     if slot_name == 'correct_in_time':
-        return 'What should the correct clock-in time be?'
+        return text(_CORRECT_IN_TIME_QUESTION)
     if slot_name == 'correct_out_time':
-        return 'What should the correct clock-out time be?'
+        return text(_CORRECT_OUT_TIME_QUESTION)
     if slot_name == 'reason':
-        return f'What is the reason — {REASON_CHOICES_PROMPT}?'
-    return f'Could you provide {slot_name}?'
+        return text(_REASON_QUESTION_TEMPLATE).format(choices=text(_REASON_CHOICES_PROMPT_TEXT))
+    return text(_GENERIC_SLOT_QUESTION_TEMPLATE).format(slot_name=slot_name)
 
 
 def parse_slot_answer(slot_name: str, answer: str) -> tuple[Optional[object], Optional[str]]:
@@ -234,30 +309,27 @@ def parse_slot_answer(slot_name: str, answer: str) -> tuple[Optional[object], Op
     if slot_name == 'date':
         parsed = _parse_correction_date(answer, date.today(), allow_relative=True)
         if parsed is None:
-            return None, "I didn't catch a date there — could you say the date again?"
+            return None, text(_DATE_NOT_UNDERSTOOD_MESSAGE)
         if parsed > date.today():
-            return None, (
-                "That date is in the future — corrections can only be filed for a past punch. "
-                "What date was it?"
-            )
+            return None, text(_FUTURE_DATE_MESSAGE)
         return parsed, None
 
     if slot_name == 'punch_type':
         punch_type = extract_punch_type(answer, targeted_answer=True)
         if punch_type is None:
-            return None, 'Please say clock-in, clock-out, or both.'
+            return None, text(_INVALID_PUNCH_TYPE_MESSAGE)
         return punch_type, None
 
     if slot_name in ('correct_in_time', 'correct_out_time'):
         parsed_time = extract_time(answer)
         if parsed_time is None:
-            return None, "I didn't catch a time there — could you say it again, like '9:15 AM'?"
+            return None, text(_TIME_NOT_UNDERSTOOD_MESSAGE)
         return parsed_time, None
 
     if slot_name == 'reason':
         reason = extract_correction_reason(answer)
         if reason is None or reason not in _VALID_REASONS:
-            return None, f"That's not a reason I recognize. Please say one of: {REASON_CHOICES_PROMPT}."
+            return None, text(_UNRECOGNIZED_REASON_TEMPLATE).format(choices=text(_REASON_CHOICES_PROMPT_TEXT))
         return reason, None
 
-    return None, f'Please provide {slot_name}.'
+    return None, text(_GENERIC_SLOT_PROMPT_TEMPLATE).format(slot_name=slot_name)

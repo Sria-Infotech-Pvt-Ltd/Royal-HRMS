@@ -35,6 +35,7 @@ from apps.attendance.services_geofencing import GeofencingService
 from apps.voice_commands.clarification import clear_pending, set_pending
 from apps.voice_commands.executor import INTENT_CLOCK_IN
 from apps.voice_commands.executor_attendance import execute_clock_in, execute_clock_out
+from apps.voice_commands.language import get_current_language, text
 from apps.voice_commands.matcher import get_conversational
 
 logger = logging.getLogger(__name__)
@@ -45,17 +46,38 @@ MAX_VOICE_FACE_ATTEMPTS = 3
 # Item 5 — directs the employee to HR/their manager rather than leaving them
 # stuck: only FaceRegistrationHRRegisterView (facial_recognition.approve) can
 # create an approved registration, so self-service voice can't resolve this.
-_NO_REGISTRATION_MESSAGE = (
-    "You don't have a registered face ID yet, so I can't verify you by voice. Please contact "
-    "your HR representative or manager to get your face ID registered, or use the manual "
-    "Clock In button once it's set up."
-)
-_TAKING_FACIAL_PROOF_MESSAGE = "Taking facial proof — please look at the camera."
-_RETRY_MESSAGE = "That didn't match. Please try again, facing the camera directly."
-_GIVE_UP_MESSAGE = (
-    "We couldn't verify your face after {attempts} attempts. Please use the manual Clock In "
-    "button on your dashboard, or contact HR if this keeps happening."
-)
+# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
+# site — same pattern executor_*.py's own messages already use.
+_NO_REGISTRATION_MESSAGE = {
+    'en': (
+        "You don't have a registered face ID yet, so I can't verify you by voice. Please contact "
+        "your HR representative or manager to get your face ID registered, or use the manual "
+        "Clock In button once it's set up."
+    ),
+    'hi': (
+        'आपकी अभी तक कोई फेस आईडी दर्ज नहीं है, इसलिए मैं आवाज़ से आपकी पहचान सत्यापित नहीं कर सकता। '
+        'कृपया अपनी फेस आईडी दर्ज करवाने के लिए अपने एचआर प्रतिनिधि या मैनेजर से संपर्क करें, या सेटअप होने के '
+        'बाद मैन्युअल क्लॉक इन बटन का उपयोग करें।'
+    ),
+}
+_TAKING_FACIAL_PROOF_MESSAGE = {
+    'en': 'Taking facial proof — please look at the camera.',
+    'hi': 'चेहरे की पुष्टि की जा रही है — कृपया कैमरे की ओर देखें।',
+}
+_RETRY_MESSAGE = {
+    'en': "That didn't match. Please try again, facing the camera directly.",
+    'hi': 'यह मेल नहीं खाया। कृपया कैमरे के ठीक सामने देखकर फिर से प्रयास करें।',
+}
+_GIVE_UP_MESSAGE = {
+    'en': (
+        "We couldn't verify your face after {attempts} attempts. Please use the manual Clock In "
+        "button on your dashboard, or contact HR if this keeps happening."
+    ),
+    'hi': (
+        '{attempts} प्रयासों के बाद भी हम आपके चेहरे की पुष्टि नहीं कर सके। कृपया अपने डैशबोर्ड पर मैन्युअल '
+        'क्लॉक इन बटन का उपयोग करें, या यह बार-बार होने पर एचआर से संपर्क करें।'
+    ),
+}
 
 def _executor_for(intent: str):
     """
@@ -87,7 +109,7 @@ def start_voice_clock_punch(
     ).exists()
     if not has_registration:
         logger.info('Voice clock punch blocked — no approved face registration for user=%s', request.user.pk)
-        return _payload(intent, confidence, None, _NO_REGISTRATION_MESSAGE, success=False)
+        return _payload(intent, confidence, None, text(_NO_REGISTRATION_MESSAGE), success=False)
 
     geo = GeofencingService.validate(
         employee=request.user, attendance_mode=attendance_mode or 'office',
@@ -103,7 +125,7 @@ def start_voice_clock_punch(
     set_pending(request.user.id, intent, slots)
     logger.info('Voice clock punch awaiting facial proof: user=%s intent=%s', request.user.pk, intent)
     return _payload(
-        intent, confidence, {'awaiting_face_proof': True}, _TAKING_FACIAL_PROOF_MESSAGE,
+        intent, confidence, {'awaiting_face_proof': True}, text(_TAKING_FACIAL_PROOF_MESSAGE),
         awaiting_input=True, conversational=True,
     )
 
@@ -125,7 +147,7 @@ def continue_voice_clock_punch(
         # branch below for why.
         set_pending(request.user.id, intent, slots)
         return _payload(
-            intent, None, {'awaiting_face_proof': True}, _TAKING_FACIAL_PROOF_MESSAGE,
+            intent, None, {'awaiting_face_proof': True}, text(_TAKING_FACIAL_PROOF_MESSAGE),
             awaiting_input=True, conversational=True,
         )
 
@@ -149,7 +171,7 @@ def continue_voice_clock_punch(
 
     if outcome.blocked or attempt >= MAX_VOICE_FACE_ATTEMPTS:
         clear_pending(request.user.id)
-        message = outcome.rejection_message if outcome.blocked else _GIVE_UP_MESSAGE.format(attempts=attempt)
+        message = outcome.rejection_message if outcome.blocked else text(_GIVE_UP_MESSAGE).format(attempts=attempt)
         logger.info(
             'Voice clock punch face verification exhausted: user=%s intent=%s attempt=%s blocked=%s',
             request.user.pk, intent, attempt, outcome.blocked,
@@ -166,7 +188,7 @@ def continue_voice_clock_punch(
     # retry, surfaced when the 2026-08-13 step-up/threshold fixes produced
     # the first genuine voice mismatch this flow had ever hit in practice.
     return _payload(
-        intent, None, {'awaiting_face_proof': True}, _RETRY_MESSAGE,
+        intent, None, {'awaiting_face_proof': True}, text(_RETRY_MESSAGE),
         awaiting_input=True, conversational=True,
     )
 
@@ -198,7 +220,8 @@ def _payload(
     circular import back into conversation.py). conversational overrides the
     registry lookup: clock_in/clock_out are registered conversational: false
     (a single-turn command in the common case), true only for the mid-dialogue
-    turns this module itself produces."""
+    turns this module itself produces. language (Phase 3): see conversation.py's
+    own _payload docstring."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -208,4 +231,5 @@ def _payload(
         'conversational': get_conversational(intent) if conversational is None else conversational,
         'awaiting_input': awaiting_input,
         'success': success,
+        'language': get_current_language(),
     }

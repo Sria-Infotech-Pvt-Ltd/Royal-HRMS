@@ -20,10 +20,49 @@ from apps.attendance.services_attendance import AttendanceDashboardService, Punc
 from apps.attendance.views.my_attendance import AttendanceCorrectionView
 
 from apps.voice_commands.executor_result import ExecutionResult
+from apps.voice_commands.language import text
 
 logger = logging.getLogger(__name__)
 
-_CORRECTION_SUBMIT_FAILED_MESSAGE = 'Could not submit the attendance correction request.'
+_CORRECTION_SUBMIT_FAILED_MESSAGE = {
+    'en': 'Could not submit the attendance correction request.',
+    'hi': 'उपस्थिति सुधार अनुरोध सबमिट नहीं हो सका।',
+}
+_CLOCK_IN_SUCCESS_MESSAGE = {
+    'en': 'You have been clocked in successfully.',
+    'hi': 'आपकी उपस्थिति सफलतापूर्वक दर्ज कर दी गई है।',
+}
+_CLOCK_OUT_SUCCESS_MESSAGE = {
+    'en': 'You have been clocked out successfully.',
+    'hi': 'आपका क्लॉक-आउट सफलतापूर्वक दर्ज कर दिया गया है।',
+}
+_PUNCH_FAILED_MESSAGE = {
+    'en': 'Could not process the request.',
+    'hi': 'अनुरोध संसाधित नहीं किया जा सका।',
+}
+_ATTENDANCE_STATS_TEMPLATE = {
+    'en': (
+        "This month you've been present {days_present} of {working_days} working days "
+        '({attendance_percentage}% attendance), with {late_arrivals} late arrival(s) '
+        'and an average of {avg_hours_per_day} hours per day.'
+    ),
+    'hi': (
+        'इस महीने आप {working_days} कार्य दिवसों में से {days_present} दिन उपस्थित रहे हैं '
+        '({attendance_percentage}% उपस्थिति), {late_arrivals} बार देर से आए, '
+        'और औसतन प्रतिदिन {avg_hours_per_day} घंटे काम किया।'
+    ),
+}
+_ATTENDANCE_SUMMARY_TEMPLATE = {
+    'en': (
+        'This month — {days_present} days present, {days_absent} absent, '
+        '{leave_days} leave day(s), {half_days} half day(s), '
+        'out of {working_days} working days.'
+    ),
+    'hi': (
+        'इस महीने — {working_days} कार्य दिवसों में से {days_present} दिन उपस्थित, '
+        '{days_absent} अनुपस्थित, {leave_days} छुट्टी के दिन, {half_days} आधे दिन।'
+    ),
+}
 
 # Building a request through this doesn't touch the database or any shared
 # state, just Django's request/response plumbing — same reasoning
@@ -50,7 +89,7 @@ def execute_clock_in(
     mode = attendance_mode or AttendancePunch.MODE_OFFICE
     return _execute_punch(
         request, punch_type='IN', attendance_mode=mode,
-        success_message='You have been clocked in successfully.',
+        success_message=text(_CLOCK_IN_SUCCESS_MESSAGE),
         latitude=latitude, longitude=longitude, face_embedding=face_embedding,
         liveness_passed=liveness_passed, liveness_score=liveness_score,
         capture_session_id=capture_session_id,
@@ -73,7 +112,7 @@ def execute_clock_out(
     mode = attendance_mode or _resolve_clock_out_mode(request.user)
     return _execute_punch(
         request, punch_type='OUT', attendance_mode=mode,
-        success_message='You have been clocked out successfully.',
+        success_message=text(_CLOCK_OUT_SUCCESS_MESSAGE),
         latitude=latitude, longitude=longitude, face_embedding=face_embedding,
         liveness_passed=liveness_passed, liveness_score=liveness_score,
         capture_session_id=capture_session_id,
@@ -130,7 +169,7 @@ def _execute_punch(
     })
     if not serializer.is_valid():
         logger.error('Voice %s payload invalid: %s', punch_type, serializer.errors)
-        return ExecutionResult(success=False, message='Could not process the request.')
+        return ExecutionResult(success=False, message=text(_PUNCH_FAILED_MESSAGE))
 
     punch_data = serializer.validated_data.copy()
     punch_data['ip_address'] = get_client_ip(request)
@@ -173,10 +212,10 @@ def execute_check_attendance_stats(request) -> ExecutionResult:
     stats = AttendanceDashboardService.get_stats(request.user, today.year, today.month)
     data = StatsSerializer(stats).data
 
-    message = (
-        f"This month you've been present {data['days_present']} of {data['working_days']} working days "
-        f"({data['attendance_percentage']}% attendance), with {data['late_arrivals']} late arrival(s) "
-        f"and an average of {data['avg_hours_per_day']} hours per day."
+    message = text(_ATTENDANCE_STATS_TEMPLATE).format(
+        days_present=data['days_present'], working_days=data['working_days'],
+        attendance_percentage=data['attendance_percentage'], late_arrivals=data['late_arrivals'],
+        avg_hours_per_day=data['avg_hours_per_day'],
     )
     return ExecutionResult(success=True, message=message, data=data)
 
@@ -187,10 +226,9 @@ def execute_check_attendance_summary(request) -> ExecutionResult:
     summary = AttendanceDashboardService.get_monthly_summary(request.user, today.year, today.month)
     data = MonthlySummarySerializer(summary).data
 
-    message = (
-        f"This month — {data['days_present']} days present, {data['days_absent']} absent, "
-        f"{data['leave_days']} leave day(s), {data['half_days']} half day(s), "
-        f"out of {data['working_days']} working days."
+    message = text(_ATTENDANCE_SUMMARY_TEMPLATE).format(
+        days_present=data['days_present'], days_absent=data['days_absent'],
+        leave_days=data['leave_days'], half_days=data['half_days'], working_days=data['working_days'],
     )
     return ExecutionResult(success=True, message=message, data=data)
 
@@ -221,11 +259,15 @@ def execute_request_attendance_correction(request, slots: dict) -> ExecutionResu
     response = AttendanceCorrectionView.as_view()(django_request)
 
     if response.status_code >= 400:
-        message = _CORRECTION_SUBMIT_FAILED_MESSAGE
+        message = text(_CORRECTION_SUBMIT_FAILED_MESSAGE)
         if isinstance(response.data, dict) and response.data.get('message'):
-            message = response.data['message']
+            message = response.data['message']  # external, dynamic — see executor_leave's own note
         return ExecutionResult(success=False, message=message, data=response.data)
 
     data = response.data.get('data') if isinstance(response.data, dict) else None
-    message = response.data.get('message') if isinstance(response.data, dict) else _CORRECTION_SUBMIT_FAILED_MESSAGE
+    # response.data['message'] here is AttendanceCorrectionView's own success
+    # message — external and dynamic, same as the failure path's passthrough
+    # above (see executor_leave's own note) — not one of this app's own
+    # strings, so there's no Hindi counterpart to select for it.
+    message = response.data.get('message') if isinstance(response.data, dict) else text(_CORRECTION_SUBMIT_FAILED_MESSAGE)
     return ExecutionResult(success=True, message=message, data=data)

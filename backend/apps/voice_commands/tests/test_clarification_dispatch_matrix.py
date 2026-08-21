@@ -46,6 +46,7 @@ from django.test import SimpleTestCase
 from apps.voice_commands import clarification
 from apps.voice_commands.conversation import _EXPIRED_CLARIFICATION_MESSAGE, handle_transcript
 from apps.voice_commands.executor import ExecutionResult
+from apps.voice_commands.language import text
 
 _NO_MATCH_MESSAGE = "Sorry, I didn't understand that command."
 _DECLINED_MESSAGE = "Okay, is there anything else I can help you with?"
@@ -445,7 +446,7 @@ class RealCacheExpiryRegressionTests(SimpleTestCase):
         result = handle_transcript(self.request, 'yes')
 
         mock_execute.assert_not_called()
-        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertEqual(result['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         self.assertNotEqual(result['message'], _NO_MATCH_MESSAGE)
 
     @patch('apps.voice_commands.clarification.PENDING_TIMEOUT_SECONDS', 1)
@@ -460,7 +461,7 @@ class RealCacheExpiryRegressionTests(SimpleTestCase):
         result = handle_transcript(self.request, 'no')
 
         mock_execute.assert_not_called()
-        self.assertEqual(result['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertEqual(result['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         self.assertNotEqual(result['message'], _NO_MATCH_MESSAGE)
 
 
@@ -513,7 +514,7 @@ class GeofencingRetryDuringClarificationTests(SimpleTestCase):
         self.assertFalse(rejected['success'])
         # Not re-labeled as a stale/expired answer -- the clarification must
         # still be alive for the browser's silent retry to complete.
-        self.assertNotEqual(rejected['message'], _EXPIRED_CLARIFICATION_MESSAGE)
+        self.assertNotEqual(rejected['message'], text(_EXPIRED_CLARIFICATION_MESSAGE))
         self.assertNotEqual(rejected['message'], _NO_MATCH_MESSAGE)
         self.assertIn(42, self.store._store)
         self.assertEqual(self.store._store[42]['intent'], 'clock_in')

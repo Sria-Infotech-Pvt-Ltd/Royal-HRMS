@@ -33,6 +33,7 @@ from apps.voice_commands.executor_payroll import (
 )
 from apps.voice_commands.audit import log_permission_denied
 from apps.voice_commands.executor_result import ExecutionResult
+from apps.voice_commands.language import text
 from apps.voice_commands.matcher import DEFAULT_LANG, get_required_permission
 from apps.voice_commands.permissions import has_required_permission
 
@@ -57,7 +58,24 @@ INTENT_GREETING = 'greeting'
 
 _LEAVE_APPROVAL_INTENT_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
 
-_PERMISSION_DENIED_MESSAGE = "You don't have permission to do that."
+_PERMISSION_DENIED_MESSAGE = {
+    'en': "You don't have permission to do that.",
+    'hi': 'आपके पास इसकी अनुमति नहीं है।',
+}
+# label is the module's own English display name (apps.tenants.models.
+# MODULE_LABELS, e.g. "Leave") — left untranslated on purpose. Localizing it
+# would mean adding Hindi labels to the tenants app's module registry, which
+# is outside voice_commands and outside this phase's scope; flagged in the
+# Phase 3 report rather than silently left as an unnoticed English word
+# inside an otherwise-Hindi sentence.
+_MODULE_NOT_ENABLED_TEMPLATE = {
+    'en': '{label} is not enabled for your company.',
+    'hi': '{label} आपकी कंपनी के लिए सक्षम नहीं है।',
+}
+_UNRECOGNIZED_INTENT_MESSAGE = {
+    'en': "I didn't understand that command.",
+    'hi': 'मुझे यह कमांड समझ नहीं आया।',
+}
 
 # Every intent below dispatches straight into another app's view/service code
 # via a direct Python call (APIRequestFactory or a raw query), never a real
@@ -190,7 +208,7 @@ def execute_intent(
     required_permission = get_required_permission(intent, lang=lang)
     if required_permission and not has_required_permission(request.user, required_permission):
         log_permission_denied(request, intent, required_permission)
-        return ExecutionResult(success=False, message=_PERMISSION_DENIED_MESSAGE)
+        return ExecutionResult(success=False, message=text(_PERMISSION_DENIED_MESSAGE))
 
     required_module = _INTENT_MODULES.get(intent)
     if required_module:
@@ -206,7 +224,7 @@ def execute_intent(
         has_module = getattr(connection.tenant, 'has_module', None)
         if callable(has_module) and not has_module(required_module):
             label = MODULE_LABELS.get(required_module, required_module)
-            return ExecutionResult(success=False, message=f'{label} is not enabled for your company.')
+            return ExecutionResult(success=False, message=text(_MODULE_NOT_ENABLED_TEMPLATE).format(label=label))
 
     if intent == INTENT_CLOCK_IN:
         return execute_clock_in(request, attendance_mode, latitude, longitude)
@@ -246,4 +264,4 @@ def execute_intent(
         return execute_identify_employee_payslip(request, (slots or {}).get('name_query'))
     if intent == INTENT_GREETING:
         return execute_greeting(request)
-    return ExecutionResult(success=False, message="I didn't understand that command.")
+    return ExecutionResult(success=False, message=text(_UNRECOGNIZED_INTENT_MESSAGE))

@@ -10,6 +10,7 @@ from apps.payroll.views.payslips import AcknowledgePayslipView, PayslipDetailVie
 
 from apps.voice_commands.approval_extractor import match_employee_name
 from apps.voice_commands.executor_result import ExecutionResult
+from apps.voice_commands.language import LANG_HI, get_current_language, text
 
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -23,7 +24,10 @@ User = get_user_model()  # matches apps/payroll/views/employee_salary.py's own c
 # reasoning as executor_leave.py/executor_approval.py's own factory.
 _api_request_factory = APIRequestFactory()
 
-_NO_PAYSLIP_MESSAGE = "You don't have any payslips on record yet."
+_NO_PAYSLIP_MESSAGE = {
+    'en': "You don't have any payslips on record yet.",
+    'hi': 'अभी तक आपका कोई पेस्लिप रिकॉर्ड में नहीं है।',
+}
 
 # Spoken instead of the figures-bearing `message` — TTS confidentiality:
 # gross/net pay figures shouldn't be read aloud by default (shoulder-surfing
@@ -31,15 +35,75 @@ _NO_PAYSLIP_MESSAGE = "You don't have any payslips on record yet."
 # the panel/toast. check_employee_payslip's version doesn't even say the
 # employee's name aloud — it's someone else's financial data, not the
 # caller's own. See executor_result.ExecutionResult.speech_message.
-_OWN_PAYSLIP_SPEECH_MESSAGE = 'Your payslip is ready — check your screen for the details.'
-_EMPLOYEE_PAYSLIP_SPEECH_MESSAGE = 'The payslip is ready — check your screen for the details.'
+_OWN_PAYSLIP_SPEECH_MESSAGE = {
+    'en': 'Your payslip is ready — check your screen for the details.',
+    'hi': 'आपकी पेस्लिप तैयार है — विवरण के लिए अपनी स्क्रीन देखें।',
+}
+_EMPLOYEE_PAYSLIP_SPEECH_MESSAGE = {
+    'en': 'The payslip is ready — check your screen for the details.',
+    'hi': 'पेस्लिप तैयार है — विवरण के लिए अपनी स्क्रीन देखें।',
+}
 
-# Built straight from the model's own choices rather than hand-copied, so a
-# future status added to EmployeePayslip.STATUS_CHOICES is picked up here
-# too — same intent as executor_leave.py's _STATUS_LABELS, but there's
-# nothing to rephrase for TTS here: "Sent to Employee" / "Query Raised" /
-# etc. already read naturally out loud as-is.
-_STATUS_LABELS = dict(EmployeePayslip.STATUS_CHOICES)
+# Built straight from the model's own choices for the English side (so a
+# future status added to EmployeePayslip.STATUS_CHOICES is picked up there
+# too, same intent as executor_leave.py's _STATUS_LABELS) with a parallel
+# Hindi label added per code — this app's own addition (Phase 3), kept
+# local to voice_commands rather than touching the payroll app's model.
+_STATUS_LABELS_HI = {
+    EmployeePayslip.STATUS_DRAFT: 'ड्राफ्ट',
+    EmployeePayslip.STATUS_SENT: 'कर्मचारी को भेजी गई',
+    EmployeePayslip.STATUS_ACKNOWLEDGED: 'स्वीकार की गई',
+    EmployeePayslip.STATUS_QUERIED: 'प्रश्न दर्ज किया गया',
+    EmployeePayslip.STATUS_RESOLVED: 'प्रश्न सुलझाया गया',
+    EmployeePayslip.STATUS_PAID: 'भुगतान हो चुका',
+}
+_STATUS_LABELS = {
+    code: {'en': label, 'hi': _STATUS_LABELS_HI.get(code, label)}
+    for code, label in EmployeePayslip.STATUS_CHOICES
+}
+
+_ACKNOWLEDGE_FAILED_MESSAGE = {
+    'en': 'Could not acknowledge your payslip.',
+    'hi': 'आपकी पेस्लिप को स्वीकार नहीं किया जा सका।',
+}
+_ACKNOWLEDGED_MESSAGE = {
+    'en': 'Your payslip has been acknowledged.',
+    'hi': 'आपकी पेस्लिप स्वीकार कर ली गई है।',
+}
+_QUERY_FAILED_MESSAGE = {
+    'en': 'Could not raise a query on your payslip.',
+    'hi': 'आपकी पेस्लिप पर प्रश्न दर्ज नहीं किया जा सका।',
+}
+_QUERY_RAISED_MESSAGE = {
+    'en': "Your query has been raised with HR — they'll follow up on your payslip.",
+    'hi': 'आपका प्रश्न एचआर के पास दर्ज कर दिया गया है — वे आपकी पेस्लिप के बारे में आपसे संपर्क करेंगे।',
+}
+_NEED_EMPLOYEE_NAME_MESSAGE = {
+    'en': "Which employee's payslip would you like to check?",
+    'hi': 'आप किस कर्मचारी की पेस्लिप देखना चाहेंगे?',
+}
+_NO_EMPLOYEE_FOUND_TEMPLATE = {
+    'en': 'No employee found named {name_query}.',
+    'hi': '{name_query} नाम का कोई कर्मचारी नहीं मिला।',
+}
+_MULTIPLE_EMPLOYEES_TEMPLATE = {
+    'en': (
+        'More than one employee matches "{name_query}" — '
+        'could you be more specific, for example with a last name?'
+    ),
+    'hi': (
+        '"{name_query}" से एक से अधिक कर्मचारी मेल खाते हैं — '
+        'क्या आप अधिक स्पष्ट बता सकते हैं, जैसे उपनाम के साथ?'
+    ),
+}
+_EMPLOYEE_NO_PAYSLIP_TEMPLATE = {
+    'en': "{employee_name} doesn't have any payslips on record yet.",
+    'hi': '{employee_name} की अभी तक कोई पेस्लिप रिकॉर्ड में नहीं है।',
+}
+_EMPLOYEE_PAYSLIP_RETRIEVE_FAILED_TEMPLATE = {
+    'en': "Could not retrieve {employee_name}'s payslip.",
+    'hi': '{employee_name} की पेस्लिप प्राप्त नहीं की जा सकी।',
+}
 
 
 def _most_recent_payslip(employee_id):
@@ -63,13 +127,37 @@ def _most_recent_payslip(employee_id):
     )
 
 
-def _payslip_summary_message(data: dict, *, subject: str) -> str:
-    status_label = _STATUS_LABELS.get(data['status'], data['status'])
-    return (
-        f"{subject} most recent payslip, for the period ending {data['cycle_end']}, "
-        f"shows gross earnings of ₹{data['gross_earnings']}, total deductions of "
-        f"₹{data['total_deductions']}, and a net pay of ₹{data['net_pay']}. "
-        f"Status: {status_label}."
+_PAYSLIP_SUMMARY_TEMPLATE = {
+    'en': (
+        '{subject} most recent payslip, for the period ending {cycle_end}, '
+        'shows gross earnings of ₹{gross_earnings}, total deductions of '
+        '₹{total_deductions}, and a net pay of ₹{net_pay}. '
+        'Status: {status_label}.'
+    ),
+    # subject_hi already carries the correct possessive marker ("आपकी" /
+    # "{name} की") — see _payslip_summary_message's own subject_hi param.
+    'hi': (
+        '{subject} सबसे हाल की पेस्लिप, अवधि {cycle_end} तक, में '
+        '₹{gross_earnings} की सकल आय, ₹{total_deductions} की कुल कटौती, '
+        'और ₹{net_pay} का शुद्ध वेतन दिखाया गया है। स्थिति: {status_label}।'
+    ),
+}
+
+
+def _payslip_summary_message(data: dict, *, subject_en: str, subject_hi: str) -> str:
+    """
+    subject_en/subject_hi are the SAME possessive phrase in each language
+    ("Your"/"आपकी" for the caller's own payslip, "{name}'s"/"{name} की" for
+    someone else's) — kept as two separate params rather than one `subject`
+    reused across languages because Hindi possessive agreement ("की", since
+    पेस्लिप is grammatically feminine) doesn't share English's "'s" form, so
+    the caller must supply both, not just translate one at the call site.
+    """
+    status_label = text(_STATUS_LABELS.get(data['status'], {'en': data['status'], 'hi': data['status']}))
+    subject = subject_hi if get_current_language() == LANG_HI else subject_en
+    return text(_PAYSLIP_SUMMARY_TEMPLATE).format(
+        subject=subject, cycle_end=data['cycle_end'], gross_earnings=data['gross_earnings'],
+        total_deductions=data['total_deductions'], net_pay=data['net_pay'], status_label=status_label,
     )
 
 
@@ -83,12 +171,12 @@ def execute_check_my_payslip(request) -> ExecutionResult:
     """
     payslip = _most_recent_payslip(request.user.id)
     if payslip is None:
-        return ExecutionResult(success=True, message=_NO_PAYSLIP_MESSAGE, data=None)
+        return ExecutionResult(success=True, message=text(_NO_PAYSLIP_MESSAGE), data=None)
 
     data = EmployeePayslipSerializer(payslip).data
-    message = _payslip_summary_message(data, subject='Your')
+    message = _payslip_summary_message(data, subject_en='Your', subject_hi='आपकी')
     return ExecutionResult(
-        success=True, message=message, data=data, speech_message=_OWN_PAYSLIP_SPEECH_MESSAGE,
+        success=True, message=message, data=data, speech_message=text(_OWN_PAYSLIP_SPEECH_MESSAGE),
     )
 
 
@@ -104,7 +192,7 @@ def execute_acknowledge_payslip(request) -> ExecutionResult:
     """
     payslip = _most_recent_payslip(request.user.id)
     if payslip is None:
-        return ExecutionResult(success=False, message=_NO_PAYSLIP_MESSAGE)
+        return ExecutionResult(success=False, message=text(_NO_PAYSLIP_MESSAGE))
 
     django_request = _api_request_factory.post(
         f'/api/payroll/my-payslips/{payslip.pk}/acknowledge/', {}, format='json',
@@ -113,13 +201,13 @@ def execute_acknowledge_payslip(request) -> ExecutionResult:
     response = AcknowledgePayslipView.as_view()(django_request, pk=payslip.pk)
 
     if response.status_code >= 400:
-        message = 'Could not acknowledge your payslip.'
+        message = text(_ACKNOWLEDGE_FAILED_MESSAGE)
         if isinstance(response.data, dict) and response.data.get('message'):
-            message = response.data['message']
+            message = response.data['message']  # external, dynamic — see execute_apply_leave's own note
         return ExecutionResult(success=False, message=message, data=response.data)
 
     data = response.data.get('data') if isinstance(response.data, dict) else None
-    return ExecutionResult(success=True, message='Your payslip has been acknowledged.', data=data)
+    return ExecutionResult(success=True, message=text(_ACKNOWLEDGED_MESSAGE), data=data)
 
 
 def execute_raise_payslip_query(request, description: str) -> ExecutionResult:
@@ -139,7 +227,7 @@ def execute_raise_payslip_query(request, description: str) -> ExecutionResult:
     """
     payslip = _most_recent_payslip(request.user.id)
     if payslip is None:
-        return ExecutionResult(success=False, message=_NO_PAYSLIP_MESSAGE)
+        return ExecutionResult(success=False, message=text(_NO_PAYSLIP_MESSAGE))
 
     django_request = _api_request_factory.post(
         '/api/payroll/queries/',
@@ -150,17 +238,13 @@ def execute_raise_payslip_query(request, description: str) -> ExecutionResult:
     response = PayslipQueryListView.as_view()(django_request)
 
     if response.status_code >= 400:
-        message = 'Could not raise a query on your payslip.'
+        message = text(_QUERY_FAILED_MESSAGE)
         if isinstance(response.data, dict) and response.data.get('message'):
-            message = response.data['message']
+            message = response.data['message']  # external, dynamic — see execute_apply_leave's own note
         return ExecutionResult(success=False, message=message, data=response.data)
 
     data = response.data.get('data') if isinstance(response.data, dict) else None
-    return ExecutionResult(
-        success=True,
-        message="Your query has been raised with HR — they'll follow up on your payslip.",
-        data=data,
-    )
+    return ExecutionResult(success=True, message=text(_QUERY_RAISED_MESSAGE), data=data)
 
 
 def _find_employees_by_name(request, name_query: str) -> list:
@@ -211,7 +295,7 @@ def execute_identify_employee_payslip(request, name_query: Optional[str]) -> Exe
     if not name_query:
         return ExecutionResult(
             success=True,
-            message="Which employee's payslip would you like to check?",
+            message=text(_NEED_EMPLOYEE_NAME_MESSAGE),
             data={'outcome': 'need_name'},
         )
 
@@ -220,17 +304,14 @@ def execute_identify_employee_payslip(request, name_query: Optional[str]) -> Exe
     if not matches:
         return ExecutionResult(
             success=False,
-            message=f'No employee found named {name_query}.',
+            message=text(_NO_EMPLOYEE_FOUND_TEMPLATE).format(name_query=name_query),
             data={'outcome': 'zero_match'},
         )
 
     if len(matches) > 1:
         return ExecutionResult(
             success=True,
-            message=(
-                f'More than one employee matches "{name_query}" — '
-                'could you be more specific, for example with a last name?'
-            ),
+            message=text(_MULTIPLE_EMPLOYEES_TEMPLATE).format(name_query=name_query),
             data={'outcome': 'multiple_match'},
         )
 
@@ -239,7 +320,7 @@ def execute_identify_employee_payslip(request, name_query: Optional[str]) -> Exe
     if payslip is None:
         return ExecutionResult(
             success=True,
-            message=f"{matched['employee_name']} doesn't have any payslips on record yet.",
+            message=text(_EMPLOYEE_NO_PAYSLIP_TEMPLATE).format(employee_name=matched['employee_name']),
             data={'outcome': 'single_match', 'matched': matched},
         )
 
@@ -248,15 +329,17 @@ def execute_identify_employee_payslip(request, name_query: Optional[str]) -> Exe
     response = PayslipDetailView.as_view()(django_request, pk=payslip.pk)
 
     if response.status_code >= 400:
-        message = f"Could not retrieve {matched['employee_name']}'s payslip."
+        message = text(_EMPLOYEE_PAYSLIP_RETRIEVE_FAILED_TEMPLATE).format(employee_name=matched['employee_name'])
         if isinstance(response.data, dict) and response.data.get('message'):
-            message = response.data['message']
+            message = response.data['message']  # external, dynamic — see execute_apply_leave's own note
         return ExecutionResult(success=False, message=message, data={'outcome': 'zero_match'})
 
     data = response.data.get('data') if isinstance(response.data, dict) else None
-    message = _payslip_summary_message(data, subject=f"{matched['employee_name']}'s")
+    message = _payslip_summary_message(
+        data, subject_en=f"{matched['employee_name']}'s", subject_hi=f"{matched['employee_name']} की",
+    )
     return ExecutionResult(
         success=True, message=message,
         data={'outcome': 'single_match', 'matched': matched, 'payslip': data},
-        speech_message=_EMPLOYEE_PAYSLIP_SPEECH_MESSAGE,
+        speech_message=text(_EMPLOYEE_PAYSLIP_SPEECH_MESSAGE),
     )
