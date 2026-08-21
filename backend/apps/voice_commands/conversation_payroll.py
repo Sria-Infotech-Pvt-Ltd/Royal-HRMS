@@ -8,6 +8,7 @@ from apps.voice_commands.executor import (
     INTENT_RAISE_PAYSLIP_QUERY,
     execute_intent,
 )
+from apps.voice_commands.language import get_current_language, text
 from apps.voice_commands.matcher import get_conversational
 from apps.voice_commands.payslip_extractor import (
     extract_employee_name_query,
@@ -35,15 +36,24 @@ _MIN_DESCRIPTION_LENGTH = 10  # voice-only floor — PayslipQuerySerializer has 
 # answer ("no", "nothing") as a real HR query would be a bad outcome. Mirrors the spirit of
 # slot_extractor.py's _MIN_REASON_LENGTH, without a serializer validator to mirror here.
 
-_QUERY_QUESTION = 'What would you like to ask about your payslip?'
+# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
+# site — same pattern executor_*.py's own messages already use.
+_QUERY_QUESTION = {
+    'en': 'What would you like to ask about your payslip?',
+    'hi': 'आप अपनी पेस्लिप के बारे में क्या पूछना चाहेंगे?',
+}
 # looks_like_download_request() is a keyword check on the transcript itself, independent of
 # which registered phrase the fuzzy matcher actually landed on — both the direct-query phrases
 # and the download-flavored ones resolve to this same intent (registry/intents_en.yaml), so this
 # is the only signal available for picking which preamble to open with.
-_DOWNLOAD_REDIRECT_PREFIX = (
-    "Payslip downloads aren't available yet — I can raise a query with HR on your behalf instead. "
-)
-_SHORT_ANSWER_REASK = "Could you say a bit more about what you'd like to ask?"
+_DOWNLOAD_REDIRECT_PREFIX = {
+    'en': "Payslip downloads aren't available yet — I can raise a query with HR on your behalf instead. ",
+    'hi': 'पेस्लिप डाउनलोड अभी उपलब्ध नहीं है — इसके बजाय मैं आपकी ओर से एचआर के पास एक प्रश्न दर्ज कर सकता हूं। ',
+}
+_SHORT_ANSWER_REASK = {
+    'en': "Could you say a bit more about what you'd like to ask?",
+    'hi': 'क्या आप थोड़ा और बता सकते हैं कि आप क्या पूछना चाहते हैं?',
+}
 
 
 def start_raise_payslip_query(request, intent_text: str, confidence: float) -> dict:
@@ -55,9 +65,9 @@ def start_raise_payslip_query(request, intent_text: str, confidence: float) -> d
     if description and len(description) >= _MIN_DESCRIPTION_LENGTH:
         return _submit(request, description, confidence)
 
-    question = _QUERY_QUESTION
+    question = text(_QUERY_QUESTION)
     if looks_like_download_request(intent_text):
-        question = _DOWNLOAD_REDIRECT_PREFIX + _QUERY_QUESTION
+        question = text(_DOWNLOAD_REDIRECT_PREFIX) + text(_QUERY_QUESTION)
 
     set_pending(request.user.id, INTENT_RAISE_PAYSLIP_QUERY, {})
     return _payload(INTENT_RAISE_PAYSLIP_QUERY, confidence, None, question, awaiting_input=True)
@@ -70,7 +80,7 @@ def continue_raise_payslip_query(request, pending: dict, answer_text: str) -> di
         # Bad answer: re-ask, don't advance and don't fail silently — same
         # rule apply_leave's slot answers follow (slot_extractor.parse_slot_answer).
         set_pending(request.user.id, INTENT_RAISE_PAYSLIP_QUERY, {})
-        return _payload(INTENT_RAISE_PAYSLIP_QUERY, None, None, _SHORT_ANSWER_REASK, awaiting_input=True)
+        return _payload(INTENT_RAISE_PAYSLIP_QUERY, None, None, text(_SHORT_ANSWER_REASK), awaiting_input=True)
 
     return _submit(request, answer, None)
 
@@ -145,8 +155,8 @@ def _payload(
     conversation.py <-> conversation_payroll.py circular import (conversation.py
     must import start_raise_payslip_query etc. from this module); same
     reasoning executor_result.py's docstring gives for splitting
-    ExecutionResult out of executor.py. speech_message: see conversation.py's
-    own _payload docstring.
+    ExecutionResult out of executor.py. speech_message, language (Phase 3):
+    see conversation.py's own _payload docstring.
     """
     return {
         'intent': intent,
@@ -157,4 +167,5 @@ def _payload(
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,
+        'language': get_current_language(),
     }

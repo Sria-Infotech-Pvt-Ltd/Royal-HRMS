@@ -292,6 +292,7 @@ export const API = {
   voice: {
     parse: "/voice/parse/",
     transcribeFallback: "/voice/transcribe-fallback/",
+    speak: "/voice/speak/",
   },
 
   notifications: {

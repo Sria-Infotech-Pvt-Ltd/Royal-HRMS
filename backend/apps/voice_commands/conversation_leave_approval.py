@@ -5,6 +5,7 @@ from typing import Optional
 from apps.voice_commands.approval_extractor import extract_employee_name_query, parse_yes_no
 from apps.voice_commands.clarification import clear_pending, set_pending
 from apps.voice_commands.executor import INTENT_APPROVE_LEAVE, INTENT_REJECT_LEAVE, execute_intent
+from apps.voice_commands.language import get_current_language, text
 from apps.voice_commands.matcher import get_conversational
 
 # Split out of conversation.py (already close to this project's 300-line
@@ -15,6 +16,23 @@ from apps.voice_commands.matcher import get_conversational
 
 LEAVE_APPROVAL_INTENTS = (INTENT_APPROVE_LEAVE, INTENT_REJECT_LEAVE)
 _LEAVE_APPROVAL_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
+# action is always 'approve'/'reject' (see _LEAVE_APPROVAL_ACTIONS above) —
+# this local Hindi verb-form lookup mirrors executor_approval._ACTION_LABELS_HI
+# (same two values) rather than importing that private name across modules;
+# `action` is pre-selected through text() before .format() ever runs, same
+# single-shared-placeholder reasoning executor_approval._WHO_TO_ACTION_TEMPLATE
+# documents, so English/Hindi templates stay structurally comparable.
+_ACTION_LABELS_HI = {'approve': 'स्वीकृत', 'reject': 'अस्वीकृत'}
+# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
+# site — same pattern executor_*.py's own messages already use.
+_CONFIRM_ACTION_TEMPLATE = {
+    'en': 'Sorry, was that a yes or a no — should I {action} this leave request?',
+    'hi': 'माफ़ कीजिए, क्या वह हां था या नहीं — क्या मैं इस छुट्टी अनुरोध को {action} करूं?',
+}
+_NOT_ACTIONED_TEMPLATE = {
+    'en': 'Okay, that leave request has not been {verb}.',
+    'hi': 'ठीक है, वह छुट्टी अनुरोध {verb} नहीं किया गया है।',
+}
 
 
 def start_leave_approval(request, intent: str, intent_text: str, confidence: float) -> dict:
@@ -73,15 +91,19 @@ def _continue_leave_approval_confirmation(request, intent: str, pending: dict, a
 
     if decision is None:
         set_pending(request.user.id, intent, pending['slots'])
-        question = f'Sorry, was that a yes or a no — should I {action} this leave request?'
+        question = text(_CONFIRM_ACTION_TEMPLATE).format(
+            action=text({'en': action, 'hi': _ACTION_LABELS_HI[action]}),
+        )
         return _payload(intent, None, None, question, awaiting_input=True)
 
     request_id = pending['slots'].get('request_id')
     clear_pending(request.user.id)
 
     if not decision:
-        verb = 'approved' if action == 'approve' else 'rejected'
-        return _payload(intent, None, None, f"Okay, that leave request has not been {verb}.")
+        verb_en = 'approved' if action == 'approve' else 'rejected'
+        verb_hi = _ACTION_LABELS_HI[action]
+        message = text(_NOT_ACTIONED_TEMPLATE).format(verb=text({'en': verb_en, 'hi': verb_hi}))
+        return _payload(intent, None, None, message)
 
     outcome = execute_intent(intent, request, slots={'stage': 'confirm', 'request_id': request_id})
     return _payload(intent, None, outcome.data, outcome.message, success=outcome.success)
@@ -94,8 +116,8 @@ def _payload(
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload —
     same reasoning conversation_payroll.py's docstring gives for its own copy
-    (avoiding a circular import back into conversation.py). speech_message:
-    see conversation.py's own _payload docstring."""
+    (avoiding a circular import back into conversation.py). speech_message,
+    language (Phase 3): see conversation.py's own _payload docstring."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -105,4 +127,5 @@ def _payload(
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,
+        'language': get_current_language(),
     }

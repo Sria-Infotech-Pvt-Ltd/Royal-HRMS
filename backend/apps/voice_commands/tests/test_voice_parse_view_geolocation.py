@@ -34,7 +34,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=17.385044, longitude=78.486671,
             face_embedding=None, liveness_passed=None, liveness_score=None, capture_session_id='',
-            stt_language_probability=None, stt_used_language_hint=False,
+            stt_language_probability=None, stt_used_language_hint=False, stt_detected_language=None,
         )
 
     @patch('apps.voice_commands.views.handle_transcript')
@@ -47,7 +47,33 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=None, longitude=None,
             face_embedding=None, liveness_passed=None, liveness_score=None, capture_session_id='',
-            stt_language_probability=None, stt_used_language_hint=False,
+            stt_language_probability=None, stt_used_language_hint=False, stt_detected_language=None,
+        )
+
+    @patch('apps.voice_commands.views.handle_transcript')
+    def test_forwards_a_recognized_stt_detected_language(self, mock_handle_transcript):
+        mock_handle_transcript.return_value = {'message': 'ok'}
+        request = _fake_request({'transcript': 'clock in', 'lang': 'en', 'stt_detected_language': 'hi'})
+
+        VoiceParseView().post(request)
+
+        mock_handle_transcript.assert_called_once_with(
+            request, 'clock in', lang='en', latitude=None, longitude=None,
+            face_embedding=None, liveness_passed=None, liveness_score=None, capture_session_id='',
+            stt_language_probability=None, stt_used_language_hint=False, stt_detected_language='hi',
+        )
+
+    @patch('apps.voice_commands.views.handle_transcript')
+    def test_drops_an_unrecognized_stt_detected_language_rather_than_forwarding_it(self, mock_handle_transcript):
+        mock_handle_transcript.return_value = {'message': 'ok'}
+        request = _fake_request({'transcript': 'clock in', 'lang': 'en', 'stt_detected_language': 'fr'})
+
+        VoiceParseView().post(request)
+
+        mock_handle_transcript.assert_called_once_with(
+            request, 'clock in', lang='en', latitude=None, longitude=None,
+            face_embedding=None, liveness_passed=None, liveness_score=None, capture_session_id='',
+            stt_language_probability=None, stt_used_language_hint=False, stt_detected_language=None,
         )
 
     @patch('apps.voice_commands.views.handle_transcript')

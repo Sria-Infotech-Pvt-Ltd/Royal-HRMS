@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from core.responses import error, success
 
 from apps.voice_commands.conversation import handle_transcript
+from apps.voice_commands.language import LANG_EN, LANG_HI
 
 
 class VoiceParseView(APIView):
@@ -56,6 +57,16 @@ class VoiceParseView(APIView):
     views_transcribe.py) — that mode never gets a language_probability back
     from Sarvam, so handle_transcript treats it as always needing
     confirmation instead of trying to threshold a signal that doesn't exist.
+
+    stt_detected_language is optional (Phase 4), sent only alongside a
+    transcript from the Sarvam-STT retry — views_transcribe.py's own
+    `detected_language` field, forwarded verbatim by useVoiceCommand.ts.
+    Only 'en'/'hi' are accepted; anything else is dropped rather than
+    forwarded, same defensive normalization language.detect_language()
+    itself already applies. Used by handle_transcript to pick the accurate
+    EN/HI signal for text/voice selection — it plays no part in the
+    STT-confirmation gate, which still reads only stt_used_language_hint/
+    stt_language_probability above.
     """
 
     permission_classes = [IsAuthenticated]
@@ -80,6 +91,9 @@ class VoiceParseView(APIView):
         # instead always confirms (see its own docstring).
         stt_used_language_hint = bool(request.data.get('stt_used_language_hint'))
 
+        raw_detected_language = request.data.get('stt_detected_language')
+        stt_detected_language = raw_detected_language if raw_detected_language in (LANG_EN, LANG_HI) else None
+
         lang = (request.data.get('lang') or 'en').strip() or 'en'
         payload = handle_transcript(
             request, transcript, lang=lang,
@@ -90,6 +104,7 @@ class VoiceParseView(APIView):
             capture_session_id=request.data.get('capture_session_id') or '',
             stt_language_probability=stt_language_probability,
             stt_used_language_hint=stt_used_language_hint,
+            stt_detected_language=stt_detected_language,
         )
 
         return success(payload['message'], payload)

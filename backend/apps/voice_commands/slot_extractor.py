@@ -8,6 +8,8 @@ from dateutil import parser as dateutil_parser
 
 from apps.hrms.models import LEAVE_TYPE_CHOICES
 
+from apps.voice_commands.language import text
+
 REQUIRED_SLOTS = ['leave_type', 'start_date', 'end_date', 'reason']
 
 # Spoken synonyms -> the canonical LEAVE_TYPE_CHOICES key the API expects.
@@ -29,6 +31,23 @@ _LEAVE_TYPE_SYNONYMS = {
 _VALID_LEAVE_TYPES = frozenset(key for key, _ in LEAVE_TYPE_CHOICES)
 
 LEAVE_TYPE_CHOICES_PROMPT = ', '.join(label for _, label in LEAVE_TYPE_CHOICES[:-1]) + f', or {LEAVE_TYPE_CHOICES[-1][1]}'
+# Hindi label per LEAVE_TYPE_CHOICES code — this app's own addition (Phase
+# 3.1), kept local to voice_commands rather than touching the hrms app's
+# model, mirroring executor_payroll._STATUS_LABELS_HI's own reasoning for the
+# same kind of model-choices label map.
+_LEAVE_TYPE_LABELS_HI = {
+    'casual': 'आकस्मिक छुट्टी',
+    'earned': 'अर्जित छुट्टी',
+    'sick': 'बीमारी की छुट्टी',
+    'lwp': 'अवैतनिक छुट्टी',
+    'maternity': 'मातृत्व छुट्टी',
+    'paternity': 'पितृत्व छुट्टी',
+}
+_LEAVE_TYPE_CHOICES_PROMPT_HI = (
+    ', '.join(_LEAVE_TYPE_LABELS_HI[key] for key, _ in LEAVE_TYPE_CHOICES[:-1])
+    + f', या {_LEAVE_TYPE_LABELS_HI[LEAVE_TYPE_CHOICES[-1][0]]}'
+)
+_LEAVE_TYPE_CHOICES_PROMPT_TEXT = {'en': LEAVE_TYPE_CHOICES_PROMPT, 'hi': _LEAVE_TYPE_CHOICES_PROMPT_HI}
 
 _MIN_REASON_LENGTH = 10  # mirrors LeaveRequestCreateSerializer.validate_reason
 
@@ -161,16 +180,56 @@ def next_missing_slot(slots: dict) -> Optional[str]:
     return None
 
 
+# Bilingual pairs (Phase 3.1 — Gap 1), selected through text() at every call
+# site — same pattern executor_*.py's own messages already use.
+_LEAVE_TYPE_QUESTION_TEMPLATE = {
+    'en': 'What type of leave would you like to apply for — {choices}?',
+    'hi': 'आप किस प्रकार की छुट्टी के लिए आवेदन करना चाहेंगे — {choices}?',
+}
+_START_DATE_QUESTION = {
+    'en': 'What date would you like your leave to start?',
+    'hi': 'आप अपनी छुट्टी किस तारीख से शुरू करना चाहेंगे?',
+}
+_END_DATE_QUESTION = {
+    'en': 'What date would you like your leave to end?',
+    'hi': 'आप अपनी छुट्टी किस तारीख को समाप्त करना चाहेंगे?',
+}
+_REASON_QUESTION = {
+    'en': 'What is the reason for this leave?',
+    'hi': 'इस छुट्टी का कारण क्या है?',
+}
+_GENERIC_SLOT_QUESTION_TEMPLATE = {
+    'en': 'Could you provide {slot_name}?',
+    'hi': 'क्या आप {slot_name} बता सकते हैं?',
+}
+_UNRECOGNIZED_LEAVE_TYPE_TEMPLATE = {
+    'en': "That's not a leave type I recognize. Please say one of: {choices}.",
+    'hi': 'यह मेरे लिए पहचाना जाने वाला छुट्टी का प्रकार नहीं है। कृपया इनमें से कोई एक कहें: {choices}।',
+}
+_DATE_NOT_UNDERSTOOD_MESSAGE = {
+    'en': "I didn't catch a date there — could you say the date again?",
+    'hi': 'मुझे वहां कोई तारीख समझ नहीं आई — क्या आप तारीख फिर से बता सकते हैं?',
+}
+_REASON_TOO_SHORT_MESSAGE = {
+    'en': 'The reason needs to be at least 10 characters — could you say a bit more?',
+    'hi': 'कारण कम से कम 10 अक्षरों का होना चाहिए — क्या आप थोड़ा और बता सकते हैं?',
+}
+_GENERIC_SLOT_PROMPT_TEMPLATE = {
+    'en': 'Please provide {slot_name}.',
+    'hi': 'कृपया {slot_name} बताएं।',
+}
+
+
 def question_for_slot(slot_name: str) -> str:
     if slot_name == 'leave_type':
-        return f'What type of leave would you like to apply for — {LEAVE_TYPE_CHOICES_PROMPT}?'
+        return text(_LEAVE_TYPE_QUESTION_TEMPLATE).format(choices=text(_LEAVE_TYPE_CHOICES_PROMPT_TEXT))
     if slot_name == 'start_date':
-        return 'What date would you like your leave to start?'
+        return text(_START_DATE_QUESTION)
     if slot_name == 'end_date':
-        return 'What date would you like your leave to end?'
+        return text(_END_DATE_QUESTION)
     if slot_name == 'reason':
-        return 'What is the reason for this leave?'
-    return f'Could you provide {slot_name}?'
+        return text(_REASON_QUESTION)
+    return text(_GENERIC_SLOT_QUESTION_TEMPLATE).format(slot_name=slot_name)
 
 
 def parse_slot_answer(slot_name: str, answer: str) -> tuple[Optional[object], Optional[str]]:
@@ -185,20 +244,18 @@ def parse_slot_answer(slot_name: str, answer: str) -> tuple[Optional[object], Op
     if slot_name == 'leave_type':
         leave_type = extract_leave_type(answer)
         if leave_type is None or leave_type not in _VALID_LEAVE_TYPES:
-            return None, (
-                f"That's not a leave type I recognize. Please say one of: {LEAVE_TYPE_CHOICES_PROMPT}."
-            )
+            return None, text(_UNRECOGNIZED_LEAVE_TYPE_TEMPLATE).format(choices=text(_LEAVE_TYPE_CHOICES_PROMPT_TEXT))
         return leave_type, None
 
     if slot_name in ('start_date', 'end_date'):
         parsed = _parse_single_date(answer, date.today())
         if parsed is None:
-            return None, "I didn't catch a date there — could you say the date again?"
+            return None, text(_DATE_NOT_UNDERSTOOD_MESSAGE)
         return parsed, None
 
     if slot_name == 'reason':
         if len(answer) < _MIN_REASON_LENGTH:
-            return None, 'The reason needs to be at least 10 characters — could you say a bit more?'
+            return None, text(_REASON_TOO_SHORT_MESSAGE)
         return answer, None
 
-    return None, f'Please provide {slot_name}.'
+    return None, text(_GENERIC_SLOT_PROMPT_TEMPLATE).format(slot_name=slot_name)

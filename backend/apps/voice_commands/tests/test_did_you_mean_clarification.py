@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 from apps.voice_commands import clarification
 from apps.voice_commands.conversation import _NO_MATCH_MESSAGE, handle_transcript
 from apps.voice_commands.executor import INTENT_CHECK_LEAVE_BALANCE, ExecutionResult
+from apps.voice_commands.language import text
 from apps.voice_commands.matcher import NO_MATCH_INTENT, MatchResult
 
 
@@ -124,7 +125,7 @@ class LowConfidenceStillNoMatchTests(SimpleTestCase):
         self.assertLess(result['confidence'], 60)
         self.assertFalse(result['awaiting_input'])
         self.assertFalse(result['conversational'])
-        self.assertEqual(result['message'], _NO_MATCH_MESSAGE)
+        self.assertEqual(result['message'], text(_NO_MATCH_MESSAGE))
         self.assertFalse(result['success'])
 
     @patch('apps.voice_commands.conversation.get_pending', return_value=None)
@@ -135,7 +136,7 @@ class LowConfidenceStillNoMatchTests(SimpleTestCase):
 
         self.assertEqual(result['intent'], NO_MATCH_INTENT)
         self.assertLess(result['confidence'], 60)
-        self.assertEqual(result['message'], _NO_MATCH_MESSAGE)
+        self.assertEqual(result['message'], text(_NO_MATCH_MESSAGE))
 
 
 class ClarificationConfirmationTests(SimpleTestCase):
@@ -206,7 +207,7 @@ class ClarificationConfirmationTests(SimpleTestCase):
 
         self.mock_execute.assert_not_called()
         self.assertNotEqual(result['intent'], NO_MATCH_INTENT)
-        self.assertNotEqual(result['message'], _NO_MATCH_MESSAGE)
+        self.assertNotEqual(result['message'], text(_NO_MATCH_MESSAGE))
         self.assertEqual(result['message'], "Okay, is there anything else I can help you with?")
         self.assertTrue(result['success'])
         self.assertFalse(result['awaiting_input'])

@@ -1,6 +1,35 @@
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
+export interface TranscribeFallbackResult {
+  transcript: string;
+  languageProbability: number | null;
+  wasLanguageHinted: boolean;
+  detectedLanguage: "en" | "hi" | null;
+}
+
+// Pure response-shaping step, split out of captureAndTranscribeViaSarvam so
+// it's testable without mocking getUserMedia/MediaRecorder/AudioContext —
+// this is the one part of that function with real branching logic to get
+// wrong; the rest is browser-API plumbing. Returns null exactly when the
+// response carries no usable transcript (same "this retry didn't help"
+// outcome captureAndTranscribeViaSarvam's own docstring documents).
+export function parseTranscribeFallbackResponseData(data: {
+  transcript?: string; language_probability?: number | null; was_language_hinted?: boolean;
+  detected_language?: string | null;
+} | undefined): TranscribeFallbackResult | null {
+  const transcript = data?.transcript;
+  if (typeof transcript !== "string" || !transcript.trim()) return null;
+  return {
+    transcript: transcript.trim(),
+    languageProbability: typeof data?.language_probability === "number" ? data.language_probability : null,
+    wasLanguageHinted: data?.was_language_hinted === true,
+    detectedLanguage: data?.detected_language === "en" || data?.detected_language === "hi"
+      ? data.detected_language
+      : null,
+  };
+}
+
 // A retry clip only needs to cover one short spoken command — long enough
 // that a full sentence fits, short enough that the fixed-duration capture
 // (there's no live transcript here to key a silence timeout off, unlike the
@@ -67,12 +96,20 @@ const MIC_HANDOFF_SETTLE_MS = 800;
  * gets no languageProbability from Sarvam at all, so the caller threads this
  * through too, as stt_used_language_hint, telling conversation.py's gate to
  * always confirm rather than skip confirmation for lack of a signal.
+ *
+ * detectedLanguage (Phase 4 — completes Phase 3.1's Gap 2) is the ACCURATE
+ * signal wasLanguageHinted alone can't provide: which of the two tiers
+ * (hi-IN vs en-IN) actually produced this transcript, forwarded verbatim
+ * from views_transcribe.py's own `detected_language` field (already known
+ * server-side from which sequential attempt survived — no new call). The
+ * caller threads this through to /voice/parse/ as stt_detected_language,
+ * which conversation.py's handle_transcript prefers over the
+ * wasLanguageHinted-derived approximation for EN/HI text/voice selection —
+ * it plays no part in the STT-confirmation gate, which still reads only
+ * languageProbability/wasLanguageHinted (unchanged, still load-bearing there
+ * per Phase 3.1's own finding).
  */
-export async function captureAndTranscribeViaSarvam(): Promise<{
-  transcript: string;
-  languageProbability: number | null;
-  wasLanguageHinted: boolean;
-} | null> {
+export async function captureAndTranscribeViaSarvam(): Promise<TranscribeFallbackResult | null> {
   if (
     typeof navigator === "undefined" ||
     !navigator.mediaDevices?.getUserMedia ||
@@ -184,15 +221,12 @@ export async function captureAndTranscribeViaSarvam(): Promise<{
     // budget for the same class of problem on the sibling endpoint.
     const res = await clientApi.post(API.voice.transcribeFallback, formData, { timeout: 25000 });
     const data = (res.data as {
-      data?: { transcript?: string; language_probability?: number | null; was_language_hinted?: boolean };
+      data?: {
+        transcript?: string; language_probability?: number | null; was_language_hinted?: boolean;
+        detected_language?: string | null;
+      };
     })?.data;
-    const transcript = data?.transcript;
-    if (typeof transcript !== "string" || !transcript.trim()) return null;
-    return {
-      transcript: transcript.trim(),
-      languageProbability: typeof data?.language_probability === "number" ? data.language_probability : null,
-      wasLanguageHinted: data?.was_language_hinted === true,
-    };
+    return parseTranscribeFallbackResponseData(data);
   } catch {
     return null;
   } finally {

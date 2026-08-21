@@ -10,6 +10,7 @@ from apps.voice_commands.correction_slot_extractor import (
     question_for_slot,
 )
 from apps.voice_commands.executor import INTENT_REQUEST_ATTENDANCE_CORRECTION, execute_intent
+from apps.voice_commands.language import get_current_language
 from apps.voice_commands.matcher import get_conversational
 
 # Split out of conversation.py (already close to this project's 300-line
@@ -80,7 +81,8 @@ def _payload(
     (avoiding a circular import back into conversation.py). speech_message is
     always None here — request_attendance_correction doesn't speak figures or
     a third party's personal details; included for shape-consistency with
-    every other _payload builder (see conversation.py's own _payload)."""
+    every other _payload builder (see conversation.py's own _payload).
+    language (Phase 3): see conversation.py's own _payload docstring."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -90,4 +92,5 @@ def _payload(
         'conversational': get_conversational(intent),
         'awaiting_input': awaiting_input,
         'success': success,
+        'language': get_current_language(),
     }
