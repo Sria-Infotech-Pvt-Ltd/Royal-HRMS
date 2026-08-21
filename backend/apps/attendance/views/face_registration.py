@@ -83,6 +83,37 @@ class FaceRegistrationSubmitView(APIView):
             )
 
         data = serializer.validated_data
+
+        # The client's own multi-frame liveness/motion check already ran
+        # before this request was ever sent (see useFaceLivenessCapture) —
+        # there is no path through the normal UI that submits with this
+        # False. A request that does is either a bug in that client or one
+        # bypassing it entirely; either way there is no reason to accept a
+        # self-reported liveness failure. (This does not, and cannot on its
+        # own, stop a client from simply lying and always sending True —
+        # that would need server-side frame analysis, which this endpoint
+        # deliberately never receives; see the "never a raw image" note on
+        # FaceRegistrationSubmitSerializer.)
+        if not data['liveness_passed']:
+            return error(
+                'Liveness check did not pass. Please try again in good lighting, facing the camera directly.',
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        # One pending request per employee at a time — otherwise repeatedly
+        # clicking "Register Again" while HR hasn't yet reviewed the first
+        # one (most likely during onboarding) floods the approval queue with
+        # duplicates that only the newest is ever reachable to act on from
+        # the employee's own side.
+        if FaceRegistrationRequest.objects.filter(
+            employee=request.user, status=FaceRegistrationRequest.STATUS_PENDING,
+        ).exists():
+            return error(
+                'You already have a face registration request awaiting approval. '
+                'Please wait for it to be reviewed before submitting another.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
         # consent_acknowledged is validated True-or-reject by the serializer;
         # the timestamp/version actually persisted are stamped here, server-side
         # — never taken from the client — so the recorded consent moment can't

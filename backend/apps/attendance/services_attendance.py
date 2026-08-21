@@ -127,6 +127,24 @@ class PunchService:
                 'You are not currently clocked in. Please clock in first.'
             )
 
+        # ── Geofence validation ───────────────────────────────────────────────
+        # Runs BEFORE face verification (matches apps/voice_commands
+        # /conversation_clock_in_face.py's already-reasoned ordering — see
+        # that module's docstring). A punch from outside an office branch's
+        # geofence is rejected for that reason specifically, rather than an
+        # employee who's simply in the wrong place also having their face
+        # capture attempted/fail first and seeing a confusing face-related
+        # error that has nothing to do with the actual blocker.
+        geo = GeofencingService.validate(
+            employee=employee,
+            attendance_mode=mode,
+            employee_lat=punch_data.get('latitude'),
+            employee_lon=punch_data.get('longitude'),
+            employee_accuracy=punch_data.get('accuracy'),
+        )
+        if not geo.is_allowed:
+            raise PermissionError(geo.rejection_message)
+
         # ── Face verification (web/voice only, only when employee has an
         #    approved registration) ────────────────────────────────────────────
         face = FaceVerificationService.verify_for_punch(
@@ -140,17 +158,6 @@ class PunchService:
             raise ValueError(face.rejection_message)
         if face.required and face.embedding_provided and not face.is_match:
             raise PermissionError(face.rejection_message)
-
-        # ── Geofence validation ───────────────────────────────────────────────
-        geo = GeofencingService.validate(
-            employee=employee,
-            attendance_mode=mode,
-            employee_lat=punch_data.get('latitude'),
-            employee_lon=punch_data.get('longitude'),
-            employee_accuracy=punch_data.get('accuracy'),
-        )
-        if not geo.is_allowed:
-            raise PermissionError(geo.rejection_message)
 
         # ── Persist punch with full audit trail ───────────────────────────────
         with transaction.atomic():

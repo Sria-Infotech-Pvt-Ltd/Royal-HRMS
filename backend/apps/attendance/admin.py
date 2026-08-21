@@ -15,6 +15,7 @@ from apps.attendance.models import (
     AttendanceSettings,
     AttendanceWeeklyOff,
     AttendanceWorkingHours,
+    FaceVerificationAttempt,
     InvalidPunch,
     LateMarkLOPPolicy,
     MissingPunchNotification,
@@ -193,6 +194,32 @@ class AttendanceAuditLogAdmin(admin.ModelAdmin):
     search_fields = ('employee__email', 'employee__employee_id')
     readonly_fields = ('id', 'created_at', 'updated_at')
     date_hierarchy = 'date'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(FaceVerificationAttempt)
+class FaceVerificationAttemptAdmin(admin.ModelAdmin):
+    """
+    Read-only audit trail of every face-verification attempt at punch time,
+    matched or not — see the model's own docstring for why every attempt is
+    recorded, not just failures. This is the "HR/security review of repeated
+    failed attempts" surface the model was built for; before this admin
+    registration existed, that data had no reachable UI or API view at all.
+    """
+    list_display   = ('employee', 'source', 'is_match', 'distance', 'rejection_reason', 'liveness_passed', 'created_at')
+    list_filter     = ('source', 'is_match', 'rejection_reason', 'liveness_passed')
+    search_fields   = ('employee__email', 'employee__employee_id', 'capture_session_id', 'embedding_fingerprint')
+    readonly_fields = (
+        'id', 'employee', 'source', 'capture_session_id', 'embedding_fingerprint',
+        'liveness_passed', 'liveness_score', 'is_match', 'distance', 'rejection_reason',
+        'created_at', 'updated_at',
+    )
+    date_hierarchy  = 'created_at'
 
     def has_add_permission(self, request):
         return False

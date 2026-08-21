@@ -148,6 +148,15 @@ class FaceRegistrationHRRegisterView(APIView):
         except (User.DoesNotExist, ValueError, TypeError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        # Same rule as the self-service submit path — an HR witness present
+        # in person is not a substitute for the capture's own liveness/motion
+        # check actually passing.
+        if not data['liveness_passed']:
+            return error(
+                'Liveness check did not pass. Please try again in good lighting, facing the camera directly.',
+                http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
         # consent_acknowledged (validated True-or-reject by the serializer)
         # confirms HR obtained the employee's consent in person before this
         # witnessed capture — stamped server-side, same as the self-service path.

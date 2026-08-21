@@ -1876,6 +1876,14 @@ class FaceVerificationAttempt(models.Model):
     # so a second draw didn't meaningfully lower the odds. No amount of
     # retrying turns this rejection into an accept anymore.
     REJECTION_LOW_CONFIDENCE_PENDING = 'low_confidence_pending'
+    # The client's own multi-frame liveness/motion check reported failure —
+    # rejected before the distance match runs at all, same trust level as
+    # REJECTION_REPLAY/REJECTION_CAP. See services_face_matching's own note:
+    # this stops an honest client from proceeding after reporting its own
+    # failure, it is not a defense against a client that always lies and
+    # reports True — that would need server-side frame analysis, which this
+    # endpoint deliberately never receives.
+    REJECTION_LIVENESS_FAILED = 'liveness_failed'
     REJECTION_CHOICES    = [
         ('',                              'Matched'),
         (REJECTION_MISMATCH,              'Face Mismatch'),
@@ -1883,6 +1891,7 @@ class FaceVerificationAttempt(models.Model):
         (REJECTION_CAP,                   'Attempt Cap Exceeded'),
         (REJECTION_INSECURE,              'Insecure Transport'),
         (REJECTION_LOW_CONFIDENCE_PENDING, 'Low-Confidence Match Rejected'),
+        (REJECTION_LIVENESS_FAILED,       'Liveness Check Failed'),
     ]
     rejection_reason     = models.CharField(max_length=30, choices=REJECTION_CHOICES, blank=True, default='')
 

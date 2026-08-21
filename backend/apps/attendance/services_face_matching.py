@@ -97,6 +97,9 @@ _REPLAY_MESSAGE = (
 _INSECURE_TRANSPORT_MESSAGE = (
     'Face verification requires a secure connection. Please reload the page and try again.'
 )
+_LIVENESS_FAILED_MESSAGE = (
+    'Liveness check did not pass. Please try again in good lighting, facing the camera directly.'
+)
 
 
 @transaction.atomic
@@ -223,9 +226,22 @@ class FaceVerificationService:
         cls, employee, source: str, capture_session_id: str, fingerprint: str,
         liveness_passed: Optional[bool], liveness_score: Optional[float],
     ) -> Optional[FaceVerificationOutcome]:
-        """Attempt cap, then replay detection (services_face_antispoofing.py) —
-        both record their own audit row on rejection. Returns the terminal
-        outcome, or None to continue on to the actual distance match."""
+        """Liveness, then attempt cap, then replay detection
+        (services_face_antispoofing.py) — all record their own audit row on
+        rejection. Returns the terminal outcome, or None to continue on to
+        the actual distance match."""
+        if liveness_passed is False:
+            # Only gates an explicit False — None means the caller (e.g. an
+            # older client build) never reported a liveness result at all,
+            # which is not the same claim as "the check ran and failed."
+            FaceAntiSpoofingGuard.record_attempt(
+                employee, source, capture_session_id, fingerprint, liveness_passed, liveness_score,
+                is_match=False, distance=None, rejection_reason=FaceVerificationAttempt.REJECTION_LIVENESS_FAILED,
+            )
+            return FaceVerificationOutcome(
+                required=True, embedding_provided=True, is_match=False,
+                distance=None, rejection_message=_LIVENESS_FAILED_MESSAGE,
+            )
         if FaceAntiSpoofingGuard.check_attempt_cap(employee):
             FaceAntiSpoofingGuard.record_attempt(
                 employee, source, capture_session_id, fingerprint, liveness_passed, liveness_score,
