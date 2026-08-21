@@ -118,7 +118,7 @@ a {
   width: 42px;
   height: 42px;
   flex-shrink: 0;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center center;
   border-radius: 8px;
   display: block;
@@ -1941,20 +1941,6 @@ textarea.field-input {
   text-align: center;
   margin-top: 20px;
   color: var(--outline);
-}
-
-/* ── Login: link to the separate platform-admin login ── */
-.login-platform-admin-link {
-  display: block;
-  font-size: 11px;
-  text-align: center;
-  margin-top: 8px;
-  color: var(--outline);
-  text-decoration: underline;
-}
-
-.login-platform-admin-link:hover {
-  color: var(--primary);
 }
 
 /* ── Login: button spinner ── */
