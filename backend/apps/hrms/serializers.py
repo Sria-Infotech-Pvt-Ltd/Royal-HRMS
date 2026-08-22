@@ -10,6 +10,7 @@ from .models import (
     Holiday,
     LeaveBalance, LeavePolicy, LeaveRequest,
     LEAVE_TYPE_CHOICES, DURATION_CHOICES,
+    WorkFromHomeRequest,
     SeparationRequest,
     SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_CANCELLED,
     SEP_STAGE_HR, SEP_STAGE_MANAGER, SEP_STAGE_BRANCH_ADMIN,
@@ -392,6 +393,85 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
 
 MAX_DOCUMENT_SIZE  = 5 * 1024 * 1024
 ALLOWED_DOC_TYPES  = {'image/jpeg', 'image/png', 'application/pdf'}
+
+
+# ─── Work From Home serializers ───────────────────────────────────────────────
+
+class WorkFromHomeRequestSerializer(serializers.ModelSerializer):
+    employee_name    = serializers.SerializerMethodField()
+    employee_code    = serializers.SerializerMethodField()
+    employee_dept    = serializers.SerializerMethodField()
+    employee_branch  = serializers.SerializerMethodField()
+    l1_approver_name = serializers.SerializerMethodField()
+    l2_approver_name = serializers.SerializerMethodField()
+    can_approve      = serializers.SerializerMethodField()
+    can_cancel       = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = WorkFromHomeRequest
+        fields = [
+            'id', 'start_date', 'end_date', 'reason', 'location_label',
+            'latitude', 'longitude', 'status',
+            'employee_name', 'employee_code', 'employee_dept', 'employee_branch',
+            'l1_approver_name', 'l1_status', 'l1_remarks', 'l1_actioned_at',
+            'l2_approver_name', 'l2_status', 'l2_remarks', 'l2_actioned_at',
+            'created_at',
+            'can_approve', 'can_cancel',
+        ]
+
+    def get_employee_name(self, obj):
+        return obj.employee.full_name if obj.employee_id else ''
+
+    def get_employee_code(self, obj):
+        return obj.employee.employee_id if obj.employee_id else ''
+
+    def get_employee_dept(self, obj):
+        return obj.employee.department if obj.employee_id else ''
+
+    def get_employee_branch(self, obj):
+        return obj.employee.branch if obj.employee_id else ''
+
+    def get_l1_approver_name(self, obj):
+        return obj.l1_approver.full_name if obj.l1_approver_id else ''
+
+    def get_l2_approver_name(self, obj):
+        return obj.l2_approver.full_name if obj.l2_approver_id else ''
+
+    def get_can_approve(self, obj):
+        """True only for approvers viewing someone else's pending request."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        user = request.user
+        is_own = obj.employee_id == user.id
+        is_pending = obj.status in ('pending', 'l2_pending')
+        has_perm = (
+            user.role is not None
+            and user.role.role_permissions.filter(permission__codename='wfh.approve').exists()
+        )
+        return has_perm and not is_own and is_pending
+
+    def get_can_cancel(self, obj):
+        """True only for the employee who submitted the request, while still pending."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        is_own = obj.employee_id == request.user.id
+        is_pending = obj.status in ('pending', 'l2_pending')
+        return is_own and is_pending
+
+
+class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = WorkFromHomeRequest
+        fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude']
+
+    def validate(self, data):
+        start = data.get('start_date')
+        end   = data.get('end_date')
+        if start and end and end < start:
+            raise serializers.ValidationError({'end_date': 'End date must be on or after start date.'})
+        return data
 
 
 class LeaveRequestCreateSerializer(serializers.ModelSerializer):

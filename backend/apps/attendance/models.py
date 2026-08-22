@@ -1192,6 +1192,13 @@ class AttendanceRecord(models.Model):
         STATUS_INCOMPLETE: 'Incomplete',
     }
 
+    WORK_MODE_OFFICE = 'office'
+    WORK_MODE_WFH    = 'wfh'
+    WORK_MODE_CHOICES = [
+        (WORK_MODE_OFFICE, 'Office'),
+        (WORK_MODE_WFH,    'Work From Home'),
+    ]
+
     id                     = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee               = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -1200,6 +1207,11 @@ class AttendanceRecord(models.Model):
     )
     date                   = models.DateField()
     status                 = models.CharField(max_length=12, choices=STATUS_CHOICES)
+    # Separate from `status` (presence/absence) — a day can be "present" AND
+    # "wfh" at the same time. Written by _sync_wfh_attendance on approval,
+    # same write-through-at-approval-time pattern leave already uses for
+    # `status = on_leave` (see apps/hrms/views/workfromhome.py).
+    work_mode              = models.CharField(max_length=10, choices=WORK_MODE_CHOICES, default=WORK_MODE_OFFICE)
     first_punch_in         = models.TimeField(null=True, blank=True)
     last_punch_out         = models.TimeField(null=True, blank=True)
     total_working_minutes  = models.PositiveIntegerField(

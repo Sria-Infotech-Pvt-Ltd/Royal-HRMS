@@ -2,10 +2,26 @@
 
 import { useState } from "react";
 import { useClockWidget } from "@/hooks/useClockWidget";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
 import FaceVerificationModal from "@/components/FaceVerificationModal";
-import type { AttendanceMode, PunchLocation } from "@/types/attendance";
+import type { PunchLocation } from "@/types/attendance";
+import type { WorkFromHomeRequest } from "@/types/workFromHome";
 
-const MODE: AttendanceMode = "office";
+// Local calendar date, not UTC (Date.toISOString() would misdate the hours
+// just after local midnight, e.g. 12:30 AM IST is still UTC "yesterday" —
+// the exact case an employee clocking in right after midnight would hit).
+function localDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isTodayWithin(r: WorkFromHomeRequest): boolean {
+  const today = localDateString(new Date());
+  return r.start_date <= today && today <= r.end_date;
+}
 
 function fmtTimer(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -30,6 +46,16 @@ export default function ClockWidget() {
   const { session, isLoading, isPunching, isLocating, faceVerificationRequired, prepareLocation, punch } = useClockWidget();
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<PunchLocation | null>(null);
+
+  // No manual office/WFH toggle — mode is derived automatically from whether
+  // today falls inside one of the employee's own approved WFH requests.
+  // Server-side validation (services_geofencing.py's wfh strategy) is the
+  // real gate either way; this only decides which validation path a punch
+  // goes through, so it doesn't need to be authoritative.
+  const { data: wfhData } = useFetch<{ results: WorkFromHomeRequest[] }>(
+    `${API.workFromHome.requests}?status=approved&page_size=5`,
+  );
+  const MODE = (wfhData?.results ?? []).some(isTodayWithin) ? "wfh" : "office";
 
   const isClockedIn = session?.is_clocked_in ?? false;
 
@@ -83,6 +109,18 @@ export default function ClockWidget() {
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block", animation: isClockedIn ? "clockPulse 2s ease-in-out infinite" : "none" }} />
             {isClockedIn ? "Clocked In" : "Clocked Out"}
           </span>
+          {MODE === "wfh" && (
+            <span
+              title="You have an approved Work From Home request for today"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5, marginLeft: 8,
+                padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+                background: "var(--primary-c)", color: "var(--primary)",
+              }}
+            >
+              <i className="ti ti-home-2" style={{ fontSize: 11 }} /> WFH Today
+            </span>
+          )}
         </div>
 
         <div style={{ marginBottom: 16 }}>

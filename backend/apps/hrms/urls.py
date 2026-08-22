@@ -37,6 +37,9 @@ from .views import (
     SeparationRequestDetailView,
     SeparationRequestListCreateView,
     SeparationTypeListView,
+    WorkFromHomeApprovalView,
+    WorkFromHomeRequestDetailView,
+    WorkFromHomeRequestListCreateView,
 )
 
 urlpatterns = [
@@ -67,6 +70,11 @@ urlpatterns = [
     path('leave/requests/',                          LeaveRequestListCreateView.as_view(), name='leave-request-list'),
     path('leave/requests/<str:request_id>/',         LeaveRequestDetailView.as_view(),     name='leave-request-detail'),
     path('leave/requests/<str:request_id>/approve/', LeaveApprovalView.as_view(),          name='leave-request-approve'),
+
+    # Work From Home
+    path('wfh/requests/',                          WorkFromHomeRequestListCreateView.as_view(), name='wfh-request-list'),
+    path('wfh/requests/<str:request_id>/',         WorkFromHomeRequestDetailView.as_view(),     name='wfh-request-detail'),
+    path('wfh/requests/<str:request_id>/approve/', WorkFromHomeApprovalView.as_view(),          name='wfh-request-approve'),
 
     # Leave — stats & calendar
     path('leave/stats/',    LeaveStatsView.as_view(),    name='leave-stats'),

@@ -612,3 +612,79 @@ class LeaveRequest(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.leave_type} ({self.start_date})'
+
+
+# ─── Work From Home Request ────────────────────────────────────────────────────
+
+class WorkFromHomeRequest(models.Model):
+    """
+    Employee-submitted request to work from a declared location for a date
+    range. Approval follows the same L1/L2 chain as LeaveRequest (see
+    apps.accounts.services_approval) — deliberately shaped like LeaveRequest
+    minus the leave-specific fields (balance, policy, document, handover).
+
+    latitude/longitude are captured via the browser's own Geolocation API at
+    submit time, not a typed address — this app has no geocoding integration
+    anywhere (Branch geofencing itself is plain manually-entered lat/long,
+    see apps/branch/models.py), so there's no existing "address -> coordinates"
+    path to reuse, and adding one would be new infrastructure for a feature
+    that doesn't need it. The saved point is what a later WFH punch's GPS is
+    validated against (services_geofencing.py's wfh strategy), the same way
+    an office punch is validated against its Branch's saved point.
+    """
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee     = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='wfh_requests')
+    start_date   = models.DateField()
+    end_date     = models.DateField()
+    reason       = models.TextField(blank=True, default='')
+    location_label = models.CharField(max_length=150, blank=True, default='')
+    latitude     = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude    = models.DecimalField(max_digits=9, decimal_places=6)
+    status       = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default=REQ_PENDING, db_index=True)
+
+    # L1 approval
+    l1_approver    = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='l1_wfh_approvals',
+    )
+    l1_status      = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, null=True, blank=True)
+    l1_remarks     = models.TextField(blank=True, default='')
+    l1_actioned_at = models.DateTimeField(null=True, blank=True)
+
+    # L2 approval
+    l2_approver    = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='l2_wfh_approvals',
+    )
+    l2_status      = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, null=True, blank=True)
+    l2_remarks     = models.TextField(blank=True, default='')
+    l2_actioned_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_wfh_requests'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['employee', 'status', 'start_date', 'end_date'],
+                name='wfh_emp_status_dates_idx',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — WFH ({self.start_date} to {self.end_date})'
+
+    @classmethod
+    def approved_for(cls, employee, for_date):
+        """The approved WFH request (if any) covering this employee on this
+        date. Single lookup shared by punch-time geofence validation
+        (services_geofencing.py) and day processing (services_attendance.py)
+        so both agree on what "today is a WFH day" means."""
+        return (
+            cls.objects
+            .filter(employee=employee, status=REQ_APPROVED, start_date__lte=for_date, end_date__gte=for_date)
+            .order_by('-created_at')
+            .first()
+        )

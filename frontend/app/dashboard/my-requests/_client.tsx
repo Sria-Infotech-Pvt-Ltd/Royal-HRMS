@@ -10,10 +10,11 @@ import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModa
 import type { Expense } from "../expenses/_components/ExpenseClaims";
 import ExpenseDetailModal from "../expenses/_components/ExpenseDetailModal";
 import MyCorrectionDetailModal from "./_components/MyCorrectionDetailModal";
+import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import {
   DisplayStatus, MyCorrectionRequest, MyRequestItem, MyRequestKind, PaginatedResponse,
   REQUEST_TABS, STATUS_BADGE_CLASS, STATUS_FILTERS, STATUS_LABEL, TYPE_META,
-  correctionToMyItem, expenseToMyItem, fmtSubmitted, leaveToMyItem, toSortableTime,
+  correctionToMyItem, expenseToMyItem, fmtSubmitted, leaveToMyItem, toSortableTime, wfhToMyItem,
 } from "./_data";
 
 type SortKey = "submittedAt" | "lastUpdated" | "status";
@@ -56,18 +57,22 @@ export default function MyRequestsClient({ initialTab }: Props) {
     useFetch<PaginatedResponse<Expense>>(`${API.expenses.list}?page_size=100`);
   const { data: correctionRaw, loading: correctionLoading, error: correctionError } =
     useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
+  const { data: wfhRaw,        loading: wfhLoading,        error: wfhError } =
+    useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
 
   const allItems: MyRequestItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToMyItem),
     ...(expenseRaw?.results ?? []).map(expenseToMyItem),
     ...(correctionRaw?.results ?? []).map(correctionToMyItem),
-  ], [leaveRaw, expenseRaw, correctionRaw]);
+    ...(wfhRaw?.results ?? []).map(wfhToMyItem),
+  ], [leaveRaw, expenseRaw, correctionRaw, wfhRaw]);
 
   const tabCounts = useMemo(() => ({
     all: allItems.length,
     leave: allItems.filter(i => i.kind === "leave").length,
     expense: allItems.filter(i => i.kind === "expense").length,
     attendance_correction: allItems.filter(i => i.kind === "attendance_correction").length,
+    wfh: allItems.filter(i => i.kind === "wfh").length,
   }), [allItems]);
 
   const filtered = useMemo(() => {
@@ -123,8 +128,8 @@ export default function MyRequestsClient({ initialTab }: Props) {
     }
   }
 
-  const loading = leaveLoading || expenseLoading || correctionLoading;
-  const loadError = leaveError || expenseError || correctionError;
+  const loading = leaveLoading || expenseLoading || correctionLoading || wfhLoading;
+  const loadError = leaveError || expenseError || correctionError || wfhError;
 
   return (
     <div>

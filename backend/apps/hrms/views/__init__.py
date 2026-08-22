@@ -34,3 +34,8 @@ from .leave import (
     LeaveStatsView,
     LeaveCalendarView,
 )
+from .workfromhome import (
+    WorkFromHomeRequestListCreateView,
+    WorkFromHomeRequestDetailView,
+    WorkFromHomeApprovalView,
+)

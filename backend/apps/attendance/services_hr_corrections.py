@@ -34,44 +34,19 @@ User = get_user_model()
 _IST = ZoneInfo('Asia/Kolkata')
 
 
-# ── Approval chain resolution (mirrors apps/hrms/views/leave.py) ──────────────
+# ── Approval chain resolution ──────────────────────────────────────────────────
 
 def _user_branch(user) -> str:
     return (getattr(user, 'branch', '') or '').strip()
 
 
-def _resolve_approver(role, employee):
-    """Resolve a Role FK to the actual User approver for a given employee."""
-    if role is None:
-        return None
-    if role.can_manage_team:
-        return getattr(employee, 'reporting_manager', None)
-    return getattr(employee, 'hr', None)
-
-
 def _resolve_approval_chain(employee):
-    """
-    Return (l1_approver, l2_approver) for an attendance correction request.
-    Checks EmployeeApprovalOverride first, falls back to ApprovalWorkflowRule.
-    """
-    from apps.accounts.models import ApprovalWorkflowRule, EmployeeApprovalOverride
-
-    workflow_type = ApprovalWorkflowRule.WORKFLOW_ATTENDANCE_CORRECTION
-
-    override = EmployeeApprovalOverride.objects.filter(
-        employee=employee, workflow_type=workflow_type
-    ).first()
-    if override:
-        return override.l1_override, override.l2_override
-
-    from core.cache_service import ApprovalWorkflowCacheService
-    rule = ApprovalWorkflowCacheService.get_rule(workflow_type)
-    if not rule:
-        return None, None
-
-    l1 = _resolve_approver(rule.l1_approver_role, employee) if rule.l1_approver_role else None
-    l2 = _resolve_approver(rule.l2_approver_role, employee) if rule.l2_approver_role else None
-    return l1, l2
+    """Return (l1_approver, l2_approver) for an attendance correction
+    request. See apps.accounts.services_approval for the shared
+    implementation — also used by leave and work-from-home requests."""
+    from apps.accounts.models import ApprovalWorkflowRule
+    from apps.accounts.services_approval import resolve_approval_chain
+    return resolve_approval_chain(employee, ApprovalWorkflowRule.WORKFLOW_ATTENDANCE_CORRECTION)
 
 
 

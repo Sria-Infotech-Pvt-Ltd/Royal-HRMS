@@ -1,5 +1,6 @@
 import { LeaveRequest, fmtDate as fmtDateOnly } from "../leave/_data";
 import type { SeparationRequest } from "@/types/separation";
+import type { WorkFromHomeRequest } from "@/types/workFromHome";
 
 // ─── Kind-specific request shapes (as returned by their own list endpoints) ───
 
@@ -64,10 +65,11 @@ export type LeaveListResponse      = PaginatedResponse<LeaveRequest>;
 export type ExpenseListResponse    = PaginatedResponse<ExpenseRequest>;
 export type CorrectionListResponse = PaginatedResponse<CorrectionRequest>;
 export type SeparationListResponse = PaginatedResponse<SeparationRequest>;
+export type WfhListResponse        = PaginatedResponse<WorkFromHomeRequest>;
 
 // ─── Unified shape the table / drawer / toolbar actually work with ────────────
 
-export type ApprovalKind = "leave" | "expense" | "attendance_correction" | "separation";
+export type ApprovalKind = "leave" | "expense" | "attendance_correction" | "separation" | "wfh";
 export type DisplayStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface ApprovalItem {
@@ -85,7 +87,7 @@ export interface ApprovalItem {
   detailSecondary: string;
   detailTertiary?: string;
   canAction:      boolean;
-  raw:            LeaveRequest | ExpenseRequest | CorrectionRequest | SeparationRequest;
+  raw:            LeaveRequest | ExpenseRequest | CorrectionRequest | SeparationRequest | WorkFromHomeRequest;
 }
 
 // ─── Tabs / badges / chips config ──────────────────────────────────────────────
@@ -93,6 +95,7 @@ export interface ApprovalItem {
 export const TYPE_TABS: { key: "all" | ApprovalKind; label: string; icon: string }[] = [
   { key: "all",                    label: "All Requests",          icon: "ti-list-details"    },
   { key: "leave",                  label: "Leave",                 icon: "ti-beach"            },
+  { key: "wfh",                    label: "Work From Home",        icon: "ti-home-2"           },
   { key: "expense",                label: "Expense",                icon: "ti-receipt"          },
   { key: "attendance_correction",  label: "Attendance Correction",  icon: "ti-calendar-time"    },
   { key: "separation",             label: "Separation",             icon: "ti-logout"           },
@@ -100,6 +103,7 @@ export const TYPE_TABS: { key: "all" | ApprovalKind; label: string; icon: string
 
 export const TYPE_BADGE: Record<ApprovalKind, { label: string; cls: string }> = {
   leave:                  { label: "Leave",                 cls: "ta-type-leave"                 },
+  wfh:                    { label: "Work From Home",        cls: "ta-type-wfh"                    },
   expense:                { label: "Expense",               cls: "ta-type-expense"               },
   attendance_correction:  { label: "Attendance Correction", cls: "ta-type-attendance_correction"  },
   separation:             { label: "Separation",            cls: "ta-type-separation"            },
@@ -191,6 +195,27 @@ export function leaveToItem(r: LeaveRequest): ApprovalItem {
     detailPrimary:  r.leave_type_display,
     detailSecondary: `${fmtDateOnly(r.start_date)} - ${fmtDateOnly(r.end_date)}`,
     detailTertiary: `${r.total_days} Day${r.total_days === 1 ? "" : "s"}`,
+    canAction:      r.can_approve ?? (r.status === "pending" || r.status === "l2_pending"),
+    raw:            r,
+  };
+}
+
+export function wfhToItem(r: WorkFromHomeRequest): ApprovalItem {
+  const days = Math.round((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / 86_400_000) + 1;
+  return {
+    key:            `wfh:${r.id}`,
+    kind:           "wfh",
+    id:             r.id,
+    employeeName:   r.employee_name,
+    employeeCode:   r.employee_code || "—",
+    department:     r.employee_dept,
+    branch:         r.employee_branch,
+    status:         r.status,
+    displayStatus:  toDisplayStatus(r.status),
+    submittedAt:    r.created_at,
+    detailPrimary:  "Work From Home",
+    detailSecondary: `${fmtDateOnly(r.start_date)} - ${fmtDateOnly(r.end_date)}`,
+    detailTertiary: `${days} Day${days === 1 ? "" : "s"}`,
     canAction:      r.can_approve ?? (r.status === "pending" || r.status === "l2_pending"),
     raw:            r,
   };

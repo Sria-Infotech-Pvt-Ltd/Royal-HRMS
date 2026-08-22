@@ -331,6 +331,17 @@ class AttendanceProcessorService:
         else:
             record_data = cls._calculate(punches, for_date, cfg)
 
+        # work_mode is orthogonal to status (presence/absence) — a day can be
+        # "present" and "wfh" at once — so it's derived here on every
+        # (re)build of the record, not just set once at leave-style approval
+        # time, the same lookup punch-time geofence validation uses.
+        from apps.hrms.models import WorkFromHomeRequest
+        record_data['work_mode'] = (
+            AttendanceRecord.WORK_MODE_WFH
+            if WorkFromHomeRequest.approved_for(employee, for_date)
+            else AttendanceRecord.WORK_MODE_OFFICE
+        )
+
         record, _ = AttendanceRecord.objects.update_or_create(
             employee=employee,
             date=for_date,

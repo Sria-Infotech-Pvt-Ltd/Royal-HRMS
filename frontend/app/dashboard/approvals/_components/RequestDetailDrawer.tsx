@@ -4,6 +4,7 @@ import { useState } from "react";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import { LeaveRequest } from "../../leave/_data";
 import { ApprovalItem, CorrectionRequest, ExpenseRequest, fmtAmount, fmtSubmitted, initials } from "../_data";
+import type { WorkFromHomeRequest } from "@/types/workFromHome";
 import { TypeBadge, StatusChip } from "./Badges";
 
 interface Props {
@@ -33,6 +34,9 @@ function isExpense(item: ApprovalItem): item is ApprovalItem & { raw: ExpenseReq
 }
 function isCorrection(item: ApprovalItem): item is ApprovalItem & { raw: CorrectionRequest } {
   return item.kind === "attendance_correction";
+}
+function isWfh(item: ApprovalItem): item is ApprovalItem & { raw: WorkFromHomeRequest } {
+  return item.kind === "wfh";
 }
 
 type StageStatus = "approved" | "rejected" | null;
@@ -69,6 +73,7 @@ function reasonText(item: ApprovalItem): string {
   if (isExpense(item)) return item.raw.description || "—";
   if (isLeave(item)) return item.raw.reason || "—";
   if (isCorrection(item)) return item.raw.reason || "—";
+  if (isWfh(item)) return item.raw.reason || "—";
   return "—";
 }
 
@@ -131,6 +136,16 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                     <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Category</span><span style={{ fontWeight: 600, fontSize: 13, textTransform: "capitalize" }}>{item.raw.category}</span></div>
                     <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Amount</span><span style={{ fontWeight: 700, fontSize: 14 }}>{fmtAmount(item.raw.amount)}</span></div>
                     <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Expense Date</span><span style={{ fontWeight: 600, fontSize: 13 }}>{fmtSubmitted(item.raw.expense_date)}</span></div>
+                  </>
+                )}
+
+                {isWfh(item) && (
+                  <>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Dates</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailSecondary}</span></div>
+                    <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Total Days</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.detailTertiary}</span></div>
+                    {item.raw.location_label && (
+                      <div className="ta-drawer-row"><span style={{ color: "var(--ta-text-muted)", fontSize: 13 }}>Location</span><span style={{ fontWeight: 600, fontSize: 13 }}>{item.raw.location_label}</span></div>
+                    )}
                   </>
                 )}
 
@@ -205,6 +220,15 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
                   </>
                 )}
 
+                {isWfh(item) && (
+                  <>
+                    <TimelineRow label="Manager Approval" status={item.raw.l1_status} sub={item.raw.l1_approver_name || undefined} />
+                    {item.raw.l2_approver_name && (
+                      <TimelineRow label="HR Approval" status={item.raw.l2_status} sub={item.raw.l2_approver_name || undefined} />
+                    )}
+                  </>
+                )}
+
                 {isExpense(item) && item.displayStatus !== "pending" && (
                   <TimelineRow label="Decision" status={item.displayStatus === "approved" ? "approved" : "rejected"} />
                 )}
@@ -213,7 +237,7 @@ export default function RequestDetailDrawer({ item, onClose, onApprove, onReject
               {/* Comments */}
               {(() => {
                 const comments: { label: string; text: string }[] = [];
-                if (isLeave(item) || isCorrection(item)) {
+                if (isLeave(item) || isCorrection(item) || isWfh(item)) {
                   if (item.raw.l1_remarks) comments.push({ label: item.raw.l1_approver_name || "Manager", text: item.raw.l1_remarks });
                   if (item.raw.l2_remarks) comments.push({ label: item.raw.l2_approver_name || "HR", text: item.raw.l2_remarks });
                 }

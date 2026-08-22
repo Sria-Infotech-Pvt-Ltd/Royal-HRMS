@@ -1,5 +1,6 @@
 import { LeaveRequest } from "../leave/_data";
 import type { Expense } from "../expenses/_components/ExpenseClaims";
+import type { WorkFromHomeRequest } from "@/types/workFromHome";
 
 // ─── Correction request shape (own corrections, /attendance/corrections/my/) ──
 // The single source of truth for "my attendance correction" rows — used by
@@ -39,7 +40,7 @@ export interface PaginatedResponse<T> {
 
 // ─── Unified "my request" shape ───────────────────────────────────────────────
 
-export type MyRequestKind = "leave" | "expense" | "attendance_correction";
+export type MyRequestKind = "leave" | "expense" | "attendance_correction" | "wfh";
 export type DisplayStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface MyRequestItem {
@@ -55,7 +56,7 @@ export interface MyRequestItem {
   approver:       string;
   lastUpdated:    string;
   canCancel:      boolean;
-  raw:            LeaveRequest | Expense | MyCorrectionRequest;
+  raw:            LeaveRequest | Expense | MyCorrectionRequest | WorkFromHomeRequest;
 }
 
 // ─── Tabs / badges ──────────────────────────────────────────────────────────────
@@ -63,12 +64,14 @@ export interface MyRequestItem {
 export const REQUEST_TABS: { key: "all" | MyRequestKind; label: string; icon: string }[] = [
   { key: "all",                   label: "All Requests",         icon: "ti-list-details" },
   { key: "leave",                 label: "Leave",                icon: "ti-beach"         },
+  { key: "wfh",                   label: "Work From Home",       icon: "ti-home-2"        },
   { key: "expense",               label: "Expense",               icon: "ti-receipt"       },
   { key: "attendance_correction", label: "Attendance Correction", icon: "ti-clock-edit"    },
 ];
 
 export const TYPE_META: Record<MyRequestKind, { label: string; icon: string; color: string; bg: string }> = {
   leave:                 { label: "Leave",                 icon: "ti-beach",     color: "var(--success)", bg: "rgba(22,163,74,0.10)"  },
+  wfh:                   { label: "Work From Home",        icon: "ti-home-2",    color: "var(--primary)", bg: "rgba(30,78,140,0.10)"  },
   expense:               { label: "Expense",               icon: "ti-receipt",   color: "var(--warn)",    bg: "rgba(217,119,6,0.10)"  },
   attendance_correction: { label: "Attendance Correction", icon: "ti-clock-edit", color: "var(--info)",    bg: "rgba(14,124,134,0.10)" },
 };
@@ -181,6 +184,25 @@ export function expenseToMyItem(r: Expense): MyRequestItem {
     approver:        "—",
     lastUpdated:     r.created_at,
     canCancel:       false,
+    raw:             r,
+  };
+}
+
+export function wfhToMyItem(r: WorkFromHomeRequest): MyRequestItem {
+  const days = Math.round((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / 86_400_000) + 1;
+  return {
+    key:             `wfh:${r.id}`,
+    kind:            "wfh",
+    id:              r.id,
+    requestCode:     `WFH-${r.id.slice(0, 6).toUpperCase()}`,
+    title:           r.location_label || "Work From Home",
+    detailSecondary: `${fmtShort(r.start_date)} - ${fmtShort(r.end_date)} · ${days} day${days === 1 ? "" : "s"}`,
+    submittedAt:     r.created_at,
+    status:          r.status,
+    displayStatus:   toDisplayStatus(r.status),
+    approver:        r.l2_approver_name || r.l1_approver_name || "—",
+    lastUpdated:     r.l2_actioned_at || r.l1_actioned_at || r.created_at,
+    canCancel:       r.can_cancel ?? (r.status === "pending" || r.status === "l2_pending"),
     raw:             r,
   };
 }

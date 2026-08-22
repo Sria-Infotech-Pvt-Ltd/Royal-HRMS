@@ -10,8 +10,8 @@ import { ApprovalModal } from "../ApprovalModal";
 import { LeaveRequest } from "../../leave/_data";
 import {
   ApprovalItem, ApprovalKind, CorrectionListResponse,
-  DisplayStatus, ExpenseListResponse, ExpenseRequest, LeaveListResponse, SeparationListResponse,
-  TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, separationToItem, toSortableTime,
+  DisplayStatus, ExpenseListResponse, ExpenseRequest, LeaveListResponse, SeparationListResponse, WfhListResponse,
+  TYPE_TABS, correctionToItem, expenseToItem, leaveAutoVars, leaveToItem, separationToItem, toSortableTime, wfhToItem,
 } from "../_data";
 import SummaryCards from "./SummaryCards";
 import ApprovalsToolbar from "./ApprovalsToolbar";
@@ -44,6 +44,8 @@ export default function TeamApprovalsSection() {
     useFetch<CorrectionListResponse>(`${API.attendance.corrections}?page_size=100`);
   const { data: separationRaw, loading: separationLoading, error: separationError, refetch: refetchSeparation } =
     useFetch<SeparationListResponse>(`${API.separation.list}?scope=team&page_size=100`);
+  const { data: wfhRaw,        loading: wfhLoading,        error: wfhError,        refetch: refetchWfh } =
+    useFetch<WfhListResponse>(`${API.approvals.wfhRequests}?scope=team&page_size=100`);
 
   useEffect(() => {
     function handleLeaveUpdate() { refetchLeave(); }
@@ -51,14 +53,15 @@ export default function TeamApprovalsSection() {
     return () => window.removeEventListener("leave:updated", handleLeaveUpdate);
   }, [refetchLeave]);
 
-  function refetchAll() { refetchLeave(); refetchExpense(); refetchCorrections(); refetchSeparation(); }
+  function refetchAll() { refetchLeave(); refetchExpense(); refetchCorrections(); refetchSeparation(); refetchWfh(); }
 
   const allItems: ApprovalItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToItem),
     ...(expenseRaw?.results ?? []).map(expenseToItem),
     ...(correctionRaw?.results ?? []).map(correctionToItem),
     ...(separationRaw?.results ?? []).map(separationToItem),
-  ], [leaveRaw, expenseRaw, correctionRaw, separationRaw]);
+    ...(wfhRaw?.results ?? []).map(wfhToItem),
+  ], [leaveRaw, expenseRaw, correctionRaw, separationRaw, wfhRaw]);
 
   const counts = useMemo(() => {
     const pendingOf = (kind: ApprovalKind) => allItems.filter(i => i.kind === kind && i.displayStatus === "pending").length;
@@ -66,7 +69,8 @@ export default function TeamApprovalsSection() {
     const expense = pendingOf("expense");
     const correction = pendingOf("attendance_correction");
     const separation = pendingOf("separation");
-    return { leave, expense, correction, separation, pending: leave + expense + correction + separation };
+    const wfh = pendingOf("wfh");
+    return { leave, expense, correction, separation, wfh, pending: leave + expense + correction + separation + wfh };
   }, [allItems]);
 
   const tabCounts = useMemo(() => ({
@@ -75,6 +79,7 @@ export default function TeamApprovalsSection() {
     expense: counts.expense,
     attendance_correction: counts.correction,
     separation: counts.separation,
+    wfh: counts.wfh,
   }), [counts]);
 
   // ── Tabs + toolbar filter state ──
@@ -155,6 +160,14 @@ export default function TeamApprovalsSection() {
       runCorrectionAction(item.id, action);
       return;
     }
+    // WFH has no email-template step configured (out of scope for now) — a
+    // direct action, same simpler no-modal path as attendance correction,
+    // rather than forcing it through ApprovalModal's leave/expense template
+    // picker with nothing relevant to select.
+    if (item.kind === "wfh") {
+      runWfhAction(item.id, action);
+      return;
+    }
     if (item.kind === "leave") {
       const r = item.raw as LeaveRequest;
       setModal({
@@ -177,6 +190,17 @@ export default function TeamApprovalsSection() {
       refetchCorrections();
     } catch (err: unknown) {
       const message = (err as { message?: string })?.message ?? "Failed to review correction.";
+      showToast(message, "error");
+    }
+  }
+
+  async function runWfhAction(id: string, action: "approve" | "reject") {
+    try {
+      await clientApi.post(API.approvals.approveWfh(id), { action });
+      showToast(action === "approve" ? "Work from home request approved." : "Work from home request rejected.", "success");
+      refetchWfh();
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to review request.";
       showToast(message, "error");
     }
   }
@@ -226,6 +250,9 @@ export default function TeamApprovalsSection() {
           status: bulkAction === "approve" ? "approved" : "rejected", remarks,
         });
       }
+      if (item.kind === "wfh") {
+        return clientApi.post(API.approvals.approveWfh(item.id), { action: bulkAction });
+      }
       return clientApi.patch(API.attendance.correctionReview(item.id), { action: bulkAction });
     }));
 
@@ -245,9 +272,9 @@ export default function TeamApprovalsSection() {
     refetchAll();
   }
 
-  const initialLoading = (leaveLoading || expenseLoading || correctionLoading || separationLoading) && allItems.length === 0;
-  const refreshing     = leaveLoading || expenseLoading || correctionLoading || separationLoading;
-  const loadError      = leaveError || expenseError || correctionError || separationError;
+  const initialLoading = (leaveLoading || expenseLoading || correctionLoading || separationLoading || wfhLoading) && allItems.length === 0;
+  const refreshing     = leaveLoading || expenseLoading || correctionLoading || separationLoading || wfhLoading;
+  const loadError      = leaveError || expenseError || correctionError || separationError || wfhError;
 
   return (
     <div className="ta-root">

@@ -303,7 +303,7 @@ def _validate_no_geofence(
     employee_accuracy: Optional[float] = None,
 ) -> GeofenceResult:
     """
-    WFH / Field / Client Location / Remote Office modes:
+    Field / Client Location / Remote Office modes:
     Record GPS coordinates for audit but do not validate against any office.
     Always allowed.
     """
@@ -314,10 +314,87 @@ def _validate_no_geofence(
     )
 
 
+# WFH punches are validated against the location saved on that day's
+# approved WorkFromHomeRequest — the radius mirrors a typical office's
+# default (see BranchManagement.tsx's own 150m default), just not
+# per-request configurable since nothing has asked for that yet.
+_WFH_DEFAULT_RADIUS_M = 200
+
+WFH_NO_APPROVED_REQUEST_MESSAGE = (
+    'You need an approved work-from-home request covering today before you '
+    'can clock in as WFH. Submit a request from the Work From Home page.'
+)
+
+
+def _validate_wfh(
+    employee,
+    employee_lat: Optional[float],
+    employee_lon: Optional[float],
+    employee_accuracy: Optional[float] = None,
+) -> GeofenceResult:
+    """
+    WFH mode: unlike office (validated against a Branch) or field/client/
+    remote (never validated), a WFH punch is gated on an approved
+    WorkFromHomeRequest covering today, and validated against that
+    request's saved GPS point — the same Haversine + accuracy-tolerance
+    check _validate_office uses, just against a request instead of a
+    Branch. No approved request at all → rejected outright, closing the
+    gap where attendance_mode='wfh' used to be honored unconditionally.
+    """
+    from django.utils import timezone
+    from apps.hrms.models import WorkFromHomeRequest
+
+    today = timezone.localdate()
+    wfh_request = WorkFromHomeRequest.approved_for(employee, today)
+    if not wfh_request:
+        return GeofenceResult(
+            is_allowed=False, is_inside_geofence=False,
+            calculated_distance=None, branch=None,
+            rejection_message=WFH_NO_APPROVED_REQUEST_MESSAGE,
+        )
+
+    if employee_lat is None or employee_lon is None:
+        return GeofenceResult(
+            is_allowed=False, is_inside_geofence=False,
+            calculated_distance=None, branch=None,
+            rejection_message=GPS_REQUIRED_MESSAGE,
+        )
+
+    tolerance_m = min(employee_accuracy, _MAX_ACCURACY_TOLERANCE_M) if employee_accuracy else 0
+    employee_coord = GpsCoordinate(latitude=float(employee_lat), longitude=float(employee_lon))
+    request_coord = GpsCoordinate(
+        latitude=float(wfh_request.latitude), longitude=float(wfh_request.longitude),
+    )
+    distance_m = haversine_distance(employee_coord, request_coord)
+    effective_radius = _WFH_DEFAULT_RADIUS_M + tolerance_m
+
+    if distance_m <= effective_radius:
+        return GeofenceResult(
+            is_allowed=True, is_inside_geofence=True,
+            calculated_distance=round(distance_m, 2), branch=None, rejection_message=None,
+        )
+
+    logger.warning(
+        'WFH geofence reject: employee %s at (%.6f, %.6f) is %.1fm from their '
+        'approved WFH location "%s" (radius %sm + accuracy tolerance %.1fm = '
+        'effective %.1fm; device-reported accuracy %s).',
+        employee.pk, employee_coord.latitude, employee_coord.longitude, distance_m,
+        wfh_request.location_label or 'unnamed', _WFH_DEFAULT_RADIUS_M, tolerance_m,
+        effective_radius, employee_accuracy,
+    )
+    return GeofenceResult(
+        is_allowed=False, is_inside_geofence=False,
+        calculated_distance=round(distance_m, 2), branch=None,
+        rejection_message=(
+            'You are outside your declared work-from-home location. Punch In is not permitted.'
+        ),
+    )
+
+
 # Strategy map — add a new mode here to support it
 _MODE_VALIDATORS = {
     'office':          _validate_office,
-    'wfh':             _validate_no_geofence,
+    'wfh':             _validate_wfh,
     'field':           _validate_no_geofence,
     'client_location': _validate_no_geofence,
     'remote_office':   _validate_no_geofence,

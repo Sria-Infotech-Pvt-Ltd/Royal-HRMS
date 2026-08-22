@@ -51,36 +51,12 @@ def _current_year() -> int:
     return get_fy_start_year(date.today(), config.get('financial_year_start_month', 'April'))
 
 
-def _resolve_approver(role, employee) -> 'User | None':
-    """Resolve a Role FK to the actual User approver for a given employee."""
-    if role is None:
-        return None
-    if role.can_manage_team:
-        return getattr(employee, 'reporting_manager', None)
-    return getattr(employee, 'hr', None)
-
-
 def _resolve_approval_chain(employee):
-    """
-    Return (l1_approver, l2_approver) for a leave request.
-    Checks EmployeeApprovalOverride first, falls back to ApprovalWorkflowRule.
-    """
-    from apps.accounts.models import EmployeeApprovalOverride
-    override = EmployeeApprovalOverride.objects.filter(
-        employee=employee, workflow_type='leave'
-    ).first()
-
-    if override:
-        return override.l1_override, override.l2_override
-
-    from core.cache_service import ApprovalWorkflowCacheService
-    rule = ApprovalWorkflowCacheService.get_rule('leave')
-    if not rule:
-        return None, None
-
-    l1 = _resolve_approver(rule.l1_approver_role, employee) if rule.l1_approver_role else None
-    l2 = _resolve_approver(rule.l2_approver_role, employee) if rule.l2_approver_role else None
-    return l1, l2
+    """Return (l1_approver, l2_approver) for a leave request. See
+    apps.accounts.services_approval for the shared implementation — also
+    used by attendance corrections and work-from-home requests."""
+    from apps.accounts.services_approval import resolve_approval_chain
+    return resolve_approval_chain(employee, 'leave')
 
 
 def _user_branch(user) -> str:
@@ -850,6 +826,25 @@ class LeaveRequestListCreateView(APIView):
             return error(
                 'You already have a leave request for the selected date(s). '
                 'Please modify or cancel the existing request before applying again.'
+            )
+
+        # Symmetric with the check apps/hrms/views/workfromhome.py's create
+        # runs against LeaveRequest — a day can't be both "on leave" and
+        # "working from home"; without this, approving both independently
+        # leaves AttendanceRecord in a contradictory state (status=on_leave,
+        # work_mode=wfh) since the two write-throughs don't know about
+        # each other.
+        from ..models import WorkFromHomeRequest
+        wfh_overlap = WorkFromHomeRequest.objects.filter(
+            employee=request.user,
+            status__in=_ACTIVE_STATUSES,
+            start_date__lte=end,
+            end_date__gte=start,
+        ).exists()
+        if wfh_overlap:
+            return error(
+                'You have a work-from-home request overlapping the selected date(s). '
+                'Cancel or wait for it to resolve before applying for leave on the same dates.'
             )
 
         year = start.year
