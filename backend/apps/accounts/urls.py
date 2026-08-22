@@ -35,6 +35,7 @@ from apps.accounts.views import (
     EmployeeStatsView,
     LoginView,
     LogoutView,
+    OrgChartView,
     PublicCompanyBrandingView,
     TokenRefreshAPIView,
     ForgotPasswordView,
@@ -108,6 +109,7 @@ urlpatterns = [
     path('departments/',           DepartmentListCreateView.as_view(), name='department-list'),
     path('departments/<int:pk>/',  DepartmentDetailView.as_view(),     name='department-detail'),
     path('designations/',          DesignationListCreateView.as_view(), name='designation-list'),
+    path('org-chart/',             OrgChartView.as_view(),              name='org-chart'),
     path('designations/<int:pk>/', DesignationDetailView.as_view(),     name='designation-detail'),
 
     # Roles

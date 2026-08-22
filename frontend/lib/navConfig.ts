@@ -29,13 +29,14 @@ const ALL_NAV: NavEntry[] = [
 
   { section: "Workforce" },
   { id: "employees", icon: "ti-id-badge", label: "Employees", path: "/dashboard/employees", permission: "employees.view" },
-  { id: "org-chart", icon: "ti-sitemap", label: "Org Chart", path: "/dashboard/org-chart", permission: "employees.view" },
+  { id: "org-chart", icon: "ti-sitemap", label: "Org Chart", path: "/dashboard/org-chart", permission: "org_chart.view" },
   { id: "branches", icon: "ti-building-skyscraper", label: "Branches", path: "/dashboard/branches", permission: "branches.view" },
 
   { section: "Time & Pay" },
   { id: "attendance", icon: "ti-clock", label: "Attendance", path: "/dashboard/attendance", permission: "attendance.create" },
   { id: "payroll", icon: "ti-report-money", label: "Payroll", path: "/dashboard/payroll", permission: "payroll.view" },
   { id: "leave", icon: "ti-beach", label: "Leave Management", path: "/dashboard/leave", permission: "leave.view" },
+  { id: "work-from-home", icon: "ti-home-2", label: "Work From Home", path: "/dashboard/work-from-home", permission: "wfh.view" },
   { id: "expenses", icon: "ti-wallet", label: "Expenses", path: "/dashboard/expenses", permission: "expenses.view" },
 
   { section: "HR Ops" },

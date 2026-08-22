@@ -1371,6 +1371,141 @@ class DepartmentDetailView(APIView):
         return self.put(request, pk)
 
 
+def _build_org_chart_group(users_qs, branch_label: str) -> dict:
+    """
+    Build one branch's {root, departments} tree from an already branch-
+    filtered (or unfiltered, for the "no branch set" bucket) active-user
+    queryset.
+
+    Department head is derived per branch group, not from the single
+    company-wide Department.manager field — a real multi-branch company has
+    a different Engineering Manager per branch, which one global FK can't
+    represent. Head = the sole can_manage_team-role person in this
+    department within this branch; ambiguous (0 or 2+ such people) falls
+    back to Department.manager only if that person actually belongs to this
+    branch, and otherwise leaves head unset rather than guessing.
+    """
+    roots = list(users_qs.filter(reporting_manager__isnull=True).order_by('full_name')[:2])
+    root = None
+    if len(roots) == 1:
+        root = {
+            'id': str(roots[0].id), 'employee_id': roots[0].employee_id,
+            'name': roots[0].full_name, 'designation': roots[0].designation,
+        }
+
+    members_by_dept: dict = defaultdict(list)
+    managers_by_dept: dict = defaultdict(list)
+    for u in (
+        users_qs.exclude(department='')
+        .select_related('role')
+        .only('id', 'employee_id', 'full_name', 'designation', 'department', 'role__can_manage_team')
+        .order_by('full_name')
+    ):
+        entry = {'id': str(u.id), 'employee_id': u.employee_id, 'name': u.full_name, 'designation': u.designation}
+        members_by_dept[u.department].append(entry)
+        if u.role and u.role.can_manage_team:
+            managers_by_dept[u.department].append(entry)
+
+    depts = (
+        Department.objects
+        .filter(is_active=True, name__in=list(members_by_dept.keys()))
+        .select_related('manager')
+    )
+    departments = []
+    for dept in depts:
+        members = members_by_dept.get(dept.name, [])
+        managers = managers_by_dept.get(dept.name, [])
+        head = managers[0] if len(managers) == 1 else None
+        if head is None and dept.manager_id and dept.manager and (dept.manager.branch or '').strip().lower() == (branch_label or '').strip().lower():
+            head = {
+                'id': str(dept.manager_id), 'employee_id': dept.manager.employee_id,
+                'name': dept.manager.full_name, 'designation': dept.manager.designation,
+            }
+        if head is not None:
+            members = [m for m in members if m['id'] != head['id']]
+        departments.append({'id': dept.pk, 'label': dept.name, 'head': head, 'members': members})
+
+    return {'branch': branch_label, 'root': root, 'departments': departments}
+
+
+class OrgChartView(APIView):
+    """
+    GET /org-chart/ — read-only company structure for the Organisation Chart
+    page. Built entirely from existing data (Department.manager,
+    User.reporting_manager, User.department, Role.can_manage_team) — no
+    dedicated org-chart model.
+
+    Gated on org_chart.view, not employees.view — an org chart is
+    company-directory information (industry-standard: visible to every
+    employee), not employee-management data, so it's deliberately a
+    separate, broader permission (seeded on every role, see migration 0086)
+    rather than reusing the admin-tier "can browse/manage the employee list"
+    gate.
+
+    Response is always a list of per-branch {branch, root, departments}
+    groups, never a single flat structure — a real multi-branch company has
+    a different manager (and often the same department name) per branch, so
+    merging them into one tree would misrepresent who actually manages whom.
+
+    - settings.edit (system_admin-tier): unrestricted. ?branch=<name> scopes
+      to one branch's group; omitted or "all" returns one group per branch
+      (only branches that actually have people), for the "All Branches"
+      dropdown option — plus an "Unassigned" group for anyone with no
+      branch set at all, so a data gap doesn't just silently vanish them.
+    - Everyone else (HR included — deliberately widened past its normal
+      "only my assigned employees" rule; see _can_manage_employee_documents
+      above, a structural chart needs the full shape of what a role
+      oversees, not a personal caseload): always exactly one group, their
+      own branch. Any ?branch= they send is ignored — branch access is a
+      permission decision, never a client-supplied one.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.branch.models import Branch
+
+        user = request.user
+        if not _has_perm(user, 'org_chart.view'):
+            return error('You do not have permission to view the org chart.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
+        if not _has_perm(user, 'settings.edit'):
+            own_branch = (getattr(user, 'branch', '') or '').strip()
+            users_qs = User.objects.filter(is_active=True)
+            if own_branch:
+                users_qs = users_qs.filter(branch__iexact=own_branch)
+            group = _build_org_chart_group(users_qs, own_branch)
+            return success('Org chart retrieved.', data={'scope': 'branch', 'groups': [group]})
+
+        # The branch list itself is NOT returned here — the frontend's branch
+        # dropdown reads it from the existing BranchListCreateView (/branches/),
+        # the one place that already lists branches company-wide. This query
+        # is only for building the groups below, not for exposing a second,
+        # duplicate "what branches exist" source in this endpoint's response.
+        all_branches = list(
+            Branch.objects.filter(status=Branch.STATUS_ACTIVE).order_by('branch_name').values_list('branch_name', flat=True)
+        )
+        requested = (request.query_params.get('branch') or '').strip()
+
+        if requested and requested.lower() != 'all':
+            matched = next((b for b in all_branches if b.lower() == requested.lower()), requested)
+            group = _build_org_chart_group(User.objects.filter(is_active=True, branch__iexact=matched), matched)
+            return success('Org chart retrieved.', data={'scope': 'company', 'groups': [group]})
+
+        groups = []
+        for b in all_branches:
+            group = _build_org_chart_group(User.objects.filter(is_active=True, branch__iexact=b), b)
+            if group['departments']:
+                groups.append(group)
+        unassigned = _build_org_chart_group(
+            User.objects.filter(is_active=True).filter(Q(branch='') | Q(branch__isnull=True)), 'Unassigned',
+        )
+        if unassigned['departments']:
+            groups.append(unassigned)
+
+        return success('Org chart retrieved.', data={'scope': 'company', 'groups': groups})
+
+
 class DesignationListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3212,6 +3347,13 @@ _PROFILE_FIELD_KEYS = frozenset({
     'account_holder_name', 'account_type', 'account_number', 'ifsc_code',
     'bank_name', 'bank_branch_name',
     'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
+    # uan_number/name_as_per_aadhar/esi_number were already declared on
+    # EmployeeProfileSerializer and (for the first two) already rendered as
+    # editable fields on this page's EPF/Statutory tab — but missing from
+    # this whitelist meant they were silently dropped on every save via the
+    # normal Edit flow. Only writable here going forward via
+    # OnboardingApprovalView (HR approval time) or bulk import before this.
+    'uan_number', 'name_as_per_aadhar', 'esi_number',
     'custom_field_values',
 })
 
