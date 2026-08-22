@@ -59,6 +59,10 @@ export const API = {
     detail: (id: string | number) => `/designations/${id}/`,
   },
 
+  orgChart: {
+    get: (branch?: string) => branch ? `/org-chart/?branch=${encodeURIComponent(branch)}` : "/org-chart/",
+  },
+
   employees: {
     list: "/employees/",
     stats: "/employees/stats/",
@@ -157,6 +161,8 @@ export const API = {
   approvals: {
     leaveRequests: "/leave/requests/",
     approveLeave: (id: string) => `/leave/requests/${id}/approve/`,
+    wfhRequests: "/wfh/requests/",
+    approveWfh: (id: string) => `/wfh/requests/${id}/approve/`,
     expenseList: "/expenses/",
     approveExpense: (id: string) => `/expenses/${id}/approve/`,
   },
@@ -226,6 +232,12 @@ export const API = {
       run:     "/leave/carry-forward/run/",
       history: "/leave/carry-forward/history/",
     },
+  },
+
+  workFromHome: {
+    requests:       "/wfh/requests/",
+    requestDetail:  (id: string) => `/wfh/requests/${id}/`,
+    approve:        (id: string) => `/wfh/requests/${id}/approve/`,
   },
 
   attendance: {
@@ -352,8 +364,10 @@ export const API = {
     eligibleEmployees: (id: string) => `/payroll/cycles/${id}/eligible-employees/`,
     markPaid: (id: string) => `/payroll/cycles/${id}/mark-paid/`,
     cancelCycle: (id: string) => `/payroll/cycles/${id}/cancel/`,
-    cycleEcr:    (id: string) => `/payroll/cycles/${id}/ecr/`,
-    cycleEcrPdf: (id: string) => `/payroll/cycles/${id}/ecr/pdf/`,
+    cycleEcr:     (id: string) => `/payroll/cycles/${id}/ecr/`,
+    cycleEcrPdf:  (id: string) => `/payroll/cycles/${id}/ecr/pdf/`,
+    cycleEcrText: (id: string) => `/payroll/cycles/${id}/ecr-text/`,
+    cycleEsic:    (id: string) => `/payroll/cycles/${id}/esic/`,
 
     // Payslips (HR)
     cyclePayslips: (cycleId: string) => `/payroll/cycles/${cycleId}/payslips/`,

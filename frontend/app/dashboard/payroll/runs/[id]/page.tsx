@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
@@ -48,6 +49,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
   const router  = useRouter();
   const [downloading, setDownloading] = useState(false);
   const [dlError,     setDlError]     = useState<string | null>(null);
+  const [missingEsi,  setMissingEsi]  = useState<{ employee_name: string; employee_code: string }[] | null>(null);
 
   const { data: cycle,    loading: loadCycle } = useFetch<PayrollCycle>(API.payroll.cycle(id));
   const { data: psData,   loading: loadPs    } = useFetch<PaginatedPayslips>(
@@ -68,6 +70,7 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
     if (!cycle) return;
     setDownloading(true);
     setDlError(null);
+    setMissingEsi(null);
     try {
       const response = await clientApi.get(API.payroll.cycleEcr(id), { responseType: "blob" });
       const url  = URL.createObjectURL(response.data as Blob);
@@ -84,6 +87,88 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       setDlError("Failed to download ECR. Please try again.");
     } finally {
       setDownloading(false);
+    }
+  }, [cycle, id]);
+
+  const [downloadingText, setDownloadingText] = useState(false);
+
+  const downloadEcrText = useCallback(async () => {
+    if (!cycle) return;
+    setDownloadingText(true);
+    setDlError(null);
+    setMissingEsi(null);
+    try {
+      const response = await clientApi.get(API.payroll.cycleEcrText(id), { responseType: "blob" });
+      const url  = URL.createObjectURL(response.data as Blob);
+      const link = document.createElement("a");
+      link.href  = url;
+      const per  = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "short", year: "numeric" }).replace(" ", "_");
+      const branch = (cycle.branch_name ?? "All").replace(/ /g, "_");
+      link.download = `ECR_${per}_${branch}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      // responseType: "blob" means an error response's JSON body arrives as
+      // a Blob too, not parsed data — has to be read as text and parsed
+      // manually to surface e.g. the "employees have no UAN on file" message.
+      const blob = (err as { response?: { data?: Blob } })?.response?.data;
+      let msg: string | undefined;
+      if (blob instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await blob.text());
+          msg = parsed?.message;
+        } catch { /* non-JSON error body — fall through to the generic message */ }
+      }
+      setDlError(msg || "Failed to download the ECR text file. Please try again.");
+    } finally {
+      setDownloadingText(false);
+    }
+  }, [cycle, id]);
+
+  const [downloadingEsic, setDownloadingEsic] = useState(false);
+
+  const downloadEsic = useCallback(async () => {
+    if (!cycle) return;
+    setDownloadingEsic(true);
+    setDlError(null);
+    setMissingEsi(null);
+    try {
+      const response = await clientApi.get(API.payroll.cycleEsic(id), { responseType: "blob" });
+      const url  = URL.createObjectURL(response.data as Blob);
+      const link = document.createElement("a");
+      link.href  = url;
+      const per  = new Date(cycle.cycle_start).toLocaleDateString("en-IN", { month: "2-digit", year: "numeric" }).replace("/", "_");
+      link.download = `ESIC_Challan_${per}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      // responseType: "blob" means an error response's JSON body arrives as
+      // a Blob too — read as text and parsed manually to surface e.g. the
+      // "no ESI number on file" validation message.
+      const blob = (err as { response?: { data?: Blob } })?.response?.data;
+      let msg: string | undefined;
+      let missing: { employee_name: string; employee_code: string }[] | undefined;
+      if (blob instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await blob.text());
+          msg = parsed?.message;
+          missing = parsed?.data?.missing_esi_number;
+        } catch { /* non-JSON error body — fall through to the generic message */ }
+      }
+      if (missing && missing.length > 0) {
+        // Structured list takes over the display entirely — the plain
+        // sentence version of this same message is redundant once we can
+        // show each employee as a clickable link to go fix it directly.
+        setMissingEsi(missing);
+      } else {
+        setDlError(msg || "Failed to download the ESIC Challan. Please try again.");
+      }
+    } finally {
+      setDownloadingEsic(false);
     }
   }, [cycle, id]);
 
@@ -140,16 +225,40 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {canDownloadEcr && (
-            <button
-              className="btn btn-primary"
-              onClick={downloadEcr}
-              disabled={downloading}
-              style={{ display: "flex", alignItems: "center", gap: 6 }}
-            >
-              {downloading
-                ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
-                : <><i className="ti ti-file-spreadsheet" /> Download ECR</>}
-            </button>
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={downloadEcr}
+                disabled={downloading}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                {downloading
+                  ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
+                  : <><i className="ti ti-file-spreadsheet" /> Download ECR</>}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={downloadEcrText}
+                disabled={downloadingText}
+                title="EPFO Unified Portal ECR upload file (#~# delimited .txt)"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                {downloadingText
+                  ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
+                  : <><i className="ti ti-file-text" /> Download ECR (Text)</>}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={downloadEsic}
+                disabled={downloadingEsic}
+                title="ESIC Challan — per-employee contribution report (internal, not the government upload file)"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                {downloadingEsic
+                  ? <><i className="ti ti-loader-2 spin" /> Downloading…</>
+                  : <><i className="ti ti-file-spreadsheet" /> Download ESIC Challan</>}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -157,6 +266,28 @@ export default function PayrollRunDetailPage({ params }: { params: Promise<{ id:
       {dlError && (
         <div className="alert alert-error" style={{ marginBottom: 16 }}>
           <i className="ti ti-alert-circle" /> {dlError}
+        </div>
+      )}
+
+      {missingEsi && missingEsi.length > 0 && (
+        <div className="alert alert-error" style={{ marginBottom: 16, display: "block" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+            <i className="ti ti-alert-circle" />
+            {missingEsi.length} ESI-eligible employee{missingEsi.length === 1 ? "" : "s"} {missingEsi.length === 1 ? "has" : "have"} no ESI number on file — add it before filing:
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 20, listStyle: "disc" }}>
+            {missingEsi.map(m => (
+              <li key={m.employee_code || m.employee_name} style={{ marginBottom: 2 }}>
+                {m.employee_code ? (
+                  <Link href={`/dashboard/employees/${m.employee_code}`} style={{ color: "inherit", textDecoration: "underline" }}>
+                    {m.employee_name}
+                  </Link>
+                ) : (
+                  m.employee_name
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

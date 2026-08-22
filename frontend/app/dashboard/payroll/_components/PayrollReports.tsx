@@ -14,7 +14,7 @@ interface Branch { id: string; branch_name: string; branch_code: string; }
 // show a clear reason, not to duplicate any business logic.
 const ECR_READY_STATUSES = ["payslips_generated", "query_window_open", "paid", "closed"];
 
-type EcrFormat = "xlsx" | "pdf";
+type EcrFormat = "xlsx" | "pdf" | "txt";
 
 export default function PayrollReports() {
   const [selectedCycle, setSelectedCycle] = useState<string>("");
@@ -42,7 +42,9 @@ export default function PayrollReports() {
     setDownloadingFormat(format);
     setDlError(null);
     try {
-      const url = format === "pdf" ? API.payroll.cycleEcrPdf(cycle.id) : API.payroll.cycleEcr(cycle.id);
+      const url = format === "pdf" ? API.payroll.cycleEcrPdf(cycle.id)
+        : format === "txt" ? API.payroll.cycleEcrText(cycle.id)
+        : API.payroll.cycleEcr(cycle.id);
       const response = await clientApi.get(url, { responseType: "blob" });
       const blobUrl = URL.createObjectURL(response.data as Blob);
       const link = document.createElement("a");
@@ -54,8 +56,20 @@ export default function PayrollReports() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
-    } catch {
-      setDlError(`Failed to download ECR ${format === "pdf" ? "PDF" : "Excel"}. Please try again.`);
+    } catch (err: unknown) {
+      // responseType: "blob" means an error response's JSON body arrives as
+      // a Blob too — read as text and parsed manually to surface e.g. the
+      // text export's "employees have no UAN on file" validation message.
+      const blob = (err as { response?: { data?: Blob } })?.response?.data;
+      let msg: string | undefined;
+      if (blob instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await blob.text());
+          msg = parsed?.message;
+        } catch { /* non-JSON error body — fall through to the generic message */ }
+      }
+      const formatLabel = format === "pdf" ? "PDF" : format === "txt" ? "text file" : "Excel";
+      setDlError(msg || `Failed to download ECR ${formatLabel}. Please try again.`);
     } finally {
       setDownloadingFormat(null);
     }
@@ -161,6 +175,20 @@ export default function PayrollReports() {
                   {downloadingFormat === "xlsx"
                     ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
                     : <><i className="ti ti-table-export" /> Export Excel</>}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={!canDownloadEcr || downloadingFormat !== null}
+                  onClick={() => downloadEcr("txt")}
+                  title={
+                    !cycle ? "Select a period to export."
+                    : !canDownloadEcr ? "ECR is only available once payslips have been generated for this period."
+                    : "EPFO Unified Portal ECR upload file (#~# delimited .txt)"
+                  }
+                >
+                  {downloadingFormat === "txt"
+                    ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Exporting…</>
+                    : <><i className="ti ti-file-text" /> Export Text (EPFO Upload)</>}
                 </button>
               </div>
             </div>

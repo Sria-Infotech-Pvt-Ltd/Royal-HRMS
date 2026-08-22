@@ -48,7 +48,7 @@ interface ApiProfile {
   bank_branch_name?: string; account_holder_name?: string; account_type?: string;
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
-  uan_number?: string; name_as_per_aadhar?: string;
+  uan_number?: string; name_as_per_aadhar?: string; esi_number?: string;
   custom_field_values?: Record<string, string>;
 }
 
@@ -178,6 +178,7 @@ function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeConfig[] 
       // EPF / Statutory
       uanNumber:       p.uan_number          || "",
       nameAsPerAadhar: p.name_as_per_aadhar  || "",
+      esiNumber:       p.esi_number          || "",
       // HR-created custom fields (Settings > Onboarding Fields) — keyed by
       // their own snake_case field_key, never collides with the camelCase
       // keys above.
@@ -429,6 +430,7 @@ export default function EmployeeProfilePage({
         // EPF / Statutory
         uan_number:          values.uanNumber       || "",
         name_as_per_aadhar:  values.nameAsPerAadhar || "",
+        esi_number:          values.esiNumber       || "",
         // HR-created custom fields (Settings > Onboarding Fields) — this page
         // edits any category's custom fields under the same isEditing/
         // employees.edit gate as their section's built-ins.

@@ -224,6 +224,7 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     fields: [
       { key: "uanNumber",       label: "UAN Number",           type: "text", placeholder: "12-digit Universal Account Number" },
       { key: "nameAsPerAadhar", label: "Name as per Aadhar",   type: "text", placeholder: "Exactly as printed on Aadhaar card" },
+      { key: "esiNumber",       label: "ESI Number",           type: "text", placeholder: "10-digit ESI Insurance Number (IP Number)" },
     ],
   },
   {

@@ -22,25 +22,31 @@ def _round_int(value: Decimal) -> int:
     return int(value.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
 
 
-def _get_authorized_cycle(request, cycle_pk):
+def _get_authorized_cycle(request, cycle_pk, resource_label: str = 'ECR file'):
     """
-    Resolve + authorize a payroll cycle for ECR export — the permission,
-    existence, branch-scoping, and status checks shared by every ECR export
-    format (Excel, PDF), extracted so they can't drift between formats.
+    Resolve + authorize a payroll cycle for a statutory export — the
+    permission, existence, branch-scoping, and status checks shared by
+    every such export (ECR Excel/PDF/text, and the ESIC Challan in
+    esic.py, which imports this rather than duplicating it), extracted so
+    they can't drift between formats or file types.
+
+    resource_label customizes the permission/status error text only (e.g.
+    'ESIC Challan') — every other check and message stays identical
+    regardless of caller.
 
     Returns (cycle, None) on success, or (None, error_response) if access
     should be denied — same checks, same order, same messages the Excel
     download already used before this was extracted.
     """
     if not (_has_perm(request.user, 'payroll.view') or _has_perm(request.user, 'payroll.edit')):
-        return None, error('You do not have permission to download the ECR file.', http_status=403)
+        return None, error(f'You do not have permission to download the {resource_label}.', http_status=403)
 
     try:
         cycle = PayrollCycle.objects.select_related('branch').get(pk=cycle_pk)
     except PayrollCycle.DoesNotExist:
         return None, error('Payroll cycle not found.', http_status=404)
 
-    # Branch-scoped access: a non-superuser can only download ECR for their own branch.
+    # Branch-scoped access: a non-superuser can only download for their own branch.
     # Users with no branch assigned (global admins) may access any cycle.
     if not getattr(request.user, 'is_superuser', False):
         user_branch_id = getattr(request.user, 'branch_id', None)
@@ -49,7 +55,7 @@ def _get_authorized_cycle(request, cycle_pk):
 
     if cycle.status not in ('payslips_generated', 'query_window_open', 'paid', 'closed'):
         return None, error(
-            'ECR is only available after payslips have been generated.',
+            f'{resource_label} is only available after payslips have been generated.',
             http_status=400,
         )
 
@@ -321,9 +327,18 @@ def _build_ecr_text(rows: list) -> str:
     """
     lines = []
     for row in rows:
+        # EPFO's Unified Portal expects the name exactly as registered against
+        # the UAN (Aadhaar-linked KYC) — unlike the xlsx/pdf exports (which
+        # show employee_name and name_as_per_aadhar as two separate columns
+        # for HR's own cross-checking), the actual upload file must use the
+        # Aadhaar name; a mismatch against full_name (nicknames, casing,
+        # middle-name differences) is a real cause of portal upload rejection.
+        # Falls back to employee_name only when name_as_per_aadhar was never
+        # captured, so the row isn't left blank.
+        member_name = row['name_as_per_aadhar'] or row['employee_name']
         lines.append('#~#'.join(str(v) for v in [
             row['uan'],
-            row['employee_name'],
+            member_name,
             row['gross_wages'],
             row['basic_wages'],
             row['pension_wages'],

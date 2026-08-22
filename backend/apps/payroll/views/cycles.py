@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
@@ -56,6 +57,22 @@ class PayrollAlreadyProcessing(Exception):
     already processed, or a concurrent request already claimed it."""
 
 
+def _esi_contribution_period(for_date: date) -> tuple:
+    """
+    ESIC's contribution periods are fixed halves of the financial year —
+    April to September, and October to March — not calendar months.
+    Returns (period_start, period_end) for whichever period `for_date`
+    falls in. Used so ESI eligibility can be checked against "was this
+    employee covered anywhere earlier in the current period", not just
+    the current month in isolation (see _compute_employee_payslip).
+    """
+    if 4 <= for_date.month <= 9:
+        return date(for_date.year, 4, 1), date(for_date.year, 9, 30)
+    if for_date.month >= 10:
+        return date(for_date.year, 10, 1), date(for_date.year + 1, 3, 31)
+    return date(for_date.year - 1, 10, 1), date(for_date.year, 3, 31)
+
+
 def _lwf_due_this_cycle(statutory, cycle_month) -> bool:
     """Whether the configured LWF amount should be charged in a cycle whose
     payroll month is `cycle_month` (1-12, cycle.cycle_start's month — the
@@ -77,6 +94,7 @@ def _lwf_due_this_cycle(statutory, cycle_month) -> bool:
 def _compute_employee_payslip(
     salary_config, components, branch_config, statutory, adjustments, structure,
     lop_days=Decimal('0'), total_working_days=26, cycle_month=None,
+    esi_covered_earlier_this_period=False,
 ) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
@@ -146,9 +164,22 @@ def _compute_employee_payslip(
     # ESI, PT, LWF: from the branch's state statutory config
     esi_employee = Decimal('0')
     esi_employer = Decimal('0')
-    if statutory and statutory.esi_applicable and gross <= statutory.esi_wage_ceiling:
-        esi_employee = gross * statutory.esi_employee_rate / 100
+    # Coverage doesn't lapse the instant gross crosses the ceiling in a
+    # single month — once ESI-covered, an employee stays covered for the
+    # rest of the current contribution period (Apr-Sep / Oct-Mar), per
+    # ESIC rules. esi_covered_earlier_this_period is bulk-checked by the
+    # caller against prior payslips this period (see _run_payroll_processing).
+    if statutory and statutory.esi_applicable and (
+        gross <= statutory.esi_wage_ceiling or esi_covered_earlier_this_period
+    ):
         esi_employer = gross * statutory.esi_employer_rate / 100
+        # An employee averaging <=₹176/day is exempt from their OWN 0.75%
+        # share — the employer's 3.25% share is still due regardless; this
+        # is a deliberate asymmetric exemption, not a skip of both sides.
+        days_paid = max(Decimal('1'), Decimal(total_working_days) - lop_days)
+        daily_wage = gross / days_paid
+        if daily_wage > Decimal('176'):
+            esi_employee = gross * statutory.esi_employee_rate / 100
 
     # PT
     pt = Decimal(str(statutory.compute_pt(gross))) if statutory else Decimal('0')
@@ -348,6 +379,20 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             else Decimal('0.5')
         )
 
+    # ── Bulk fetch: ESI coverage earlier in the current contribution period ──
+    period_start, _period_end = _esi_contribution_period(cycle.cycle_start)
+    esi_covered_earlier_ids = set(
+        EmployeePayslip.objects
+        .filter(
+            employee_id__in=employee_ids,
+            cycle__cycle_start__gte=period_start,
+            cycle__cycle_start__lt=cycle.cycle_start,
+            esi_employer__gt=0,
+        )
+        .values_list('employee_id', flat=True)
+        .distinct()
+    )
+
     # ── Bulk fetch: daily attendance for LOP calculation ──────────────────
     _NON_WORKING = {AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY}
     absent_count_by_emp:   dict = defaultdict(int)
@@ -427,6 +472,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             lop_days=emp_lop,
             total_working_days=emp_working_days,
             cycle_month=cycle.cycle_start.month,
+            esi_covered_earlier_this_period=employee.id in esi_covered_earlier_ids,
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──
