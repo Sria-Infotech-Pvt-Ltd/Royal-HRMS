@@ -60,6 +60,13 @@ export default function DocumentCenterPage() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside a modal and releasing past its edge would otherwise land on the
+  // overlay and close it mid-input. Only close when the gesture both started
+  // AND ended on the backdrop itself. Shared across all 3 modals below since
+  // only one is ever open at a time.
+  const mouseDownOnOverlay = useRef(false);
+
   // ── Toast ──────────────────────────────────────────────────────────────────
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -400,7 +407,11 @@ export default function DocumentCenterPage() {
 
       {/* ── Document detail modal ── */}
       {selected && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
+        <div
+          className="modal-overlay open"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setSelected(null); }}
+        >
           <div className="modal" style={{ width: "min(560px, 96vw)", maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
             <div className="modal-header" style={{ flexShrink: 0 }}>
@@ -486,7 +497,11 @@ export default function DocumentCenterPage() {
 
       {/* ── Preview modal ── */}
       {previewDoc && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) closePreview(); }}>
+        <div
+          className="modal-overlay open"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) closePreview(); }}
+        >
           <div className="modal" style={{ width: "min(1100px, 97vw)", height: "94vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
             {/* Header */}
@@ -540,7 +555,11 @@ export default function DocumentCenterPage() {
 
       {/* ── Upload modal ── */}
       {showUpload && (
-        <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) closeUpload(); }}>
+        <div
+          className="modal-overlay open"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) closeUpload(); }}
+        >
           <div className="modal" style={{ width: "min(520px, 96vw)", maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
             <div className="modal-header" style={{ flexShrink: 0 }}>

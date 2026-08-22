@@ -4556,3 +4556,90 @@ The one-off `create_platform_admin` management command is gone; `manage.py creat
 - **HR and Employee have no capability flag** (unlike `can_manage_branch` / `can_manage_team`) — they're identified by name-variant matching only. If you rename either role's underlying `name` value outside a migration, update the variant sets in `0076`/`0077` and anywhere else that matches on name.
 - **Frontend role/permission cache is login-scoped** — `useCurrentUser()` reads the cached user from login, not a live refetch, so a role's permission changes take effect on the backend immediately but a logged-in user's menus/buttons won't reflect it until they log out and back in (existing, documented behavior — not new this session).
 - **Still no automated tests** around any of the role/branch/payroll scoping changes in this entry — all verified manually against the running dev server with disposable test accounts.
+
+---
+
+# Team Context — Cloudinary Storage Regression, Provisioning Reliability, Branch Admin Onboarding Exemption, Modal Backdrop-Click Bug
+
+**Author:** G.Durga Prasad
+**Date:** 21 August 2026
+**Branch:** Backend-21/08/2026
+
+---
+
+## Overview
+
+Merged two rounds of upstream `demo` changes into this branch (including an independent fix for the forgot-password tenant-resolution bug, face-recognition liveness/encryption work, and a dead-code pass), then spent most of this session chasing regressions that surfaced from that merge and from the platform's own use: every file upload silently landing on local disk instead of Cloudinary, company provisioning crashing outright on a fresh company, Branch Admin being forced through the new-hire onboarding wizard, an employee-invite email failure being reported to the caller as a success, and a shared Modal component closing itself mid-input whenever a text selection was dragged past its edge. Also extended the Platform Admin "Add company" form with real account-management fields (contact info, address, GSTIN, expected headcount, contract start date).
+
+---
+
+## 1. Cloudinary Storage Silently Broken — `STORAGES` Setting Missing
+
+Django 5.1 (pulled in by the `demo` merge's `requirements.txt` change) fully removed the legacy `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` settings' automatic-translation shim — the codebase already knew about the `STATICFILES_STORAGE` half of this (see the comment in `settings.py`), but not the `DEFAULT_FILE_STORAGE` half. Without the modern `STORAGES` dict, every `FileField`/`ImageField` (company logos, employee documents, profile photos — everything) was silently falling back to the built-in local-disk `DefaultStorage` instead of the configured `RawMediaCloudinaryStorage`. Symptom: a company logo requested at `/media/media/company/...` 404ing (the doubled `media/` came from Django's local `MEDIA_URL` being applied on top of a path that was really a Cloudinary object key).
+
+Fixed by adding an explicit `STORAGES` dict in `config/settings.py`, built from the existing `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` values so nothing else had to change. Verified: `company.logo.storage.__class__` now correctly resolves to `RawMediaCloudinaryStorage`, and the existing logo's Cloudinary URL returns `200`. No files were actually lost — nothing had been written to local disk during the broken window.
+
+## 2. Company Provisioning Crash — `seed_reference_data` Missing Its New Required Argument
+
+The `demo` merge also refactored five one-off management commands (`seed_reference_data`, `gen_hyderabad_test_data`, `seed_dummy_onboarding`, `sync_leave_attendance`, `migrate_files_to_cloudinary`) onto a new shared `core/tenant_command.py::TenantCommand` base class requiring one of `--schema`/`--company-code`/`--all` — but `apps/tenants/services.py`'s `_seed_company_data()` still called `call_command('seed_reference_data')` with no arguments, crashing every single new-company provisioning run right after schema creation with `CommandError: one of the arguments --schema --company-code --all is required`. Fixed by passing `schema=client.schema_name` — safe to nest inside the caller's own `with client:` block since `django_tenants.TenantMixin`'s `_previous_tenant` is a real stack, not a single remembered value.
+
+Checked the other four refactored commands for the same latent bug — none are invoked via `call_command()` anywhere, so this was the only live breakage.
+
+## 3. Provisioning Reliability — Neon Connection Drops Mid-Migration
+
+Separately, a fresh company's full migration history (accounts alone is 85+ migrations, plus reference-data seeding) can take several minutes over this project's Neon (serverless/autosuspend Postgres) connection — long enough for a compute-scaling event to drop the connection mid-DDL, surfacing as `psycopg2.InterfaceError: cursor already closed`. Added `_create_schema_with_retry()` in `services.py` (3 attempts, closes the dead connection and retries) — safe because each migration runs in its own atomic transaction and `django_migrations` tracks what's already applied, so `create_schema(check_if_exists=True)` resumes cleanly rather than redoing work.
+
+## 4. Branch Admin — No Department, No Onboarding Wizard, No Assessments
+
+Two related fixes, both matched by the `can_manage_branch` capability flag rather than a hardcoded role name (same convention as the branch-admin role lookup added on 20 August):
+
+- **Department no longer required for Branch Admin.** `EmployeeListCreateView.post()` required `department` for every role, including Branch Admin — who oversees every department in the branch, not one. Made it conditional on the target role's `can_manage_branch` flag (checked via a lightweight early `Role` lookup, before the existing full validation runs). Removed the now-pointless Department field from `BranchManagement.tsx`'s `LeaderFields` component entirely (it only ever assigns Branch Admin), along with the now-dead `depts` state/fetch/`ApiDept` type.
+- **Branch Admin exempted from the onboarding wizard and pre-onboarding assessments**, same treatment System Admin (superuser) already gets — a Branch Admin is assigned at branch-creation time, not hired through the candidate pipeline. `can_manage_branch` wasn't even in the JWT; added it to `_volatile_claims()` in `apps/accounts/tokens.py`, then added the exemption to both `frontend/proxy.ts` (server-side route gate) and `login/page.tsx` (client-side post-login redirect). Verified live: a `can_manage_branch=True` account with `onboarding_status: "pending"` now lands on `/dashboard`, not `/onboarding`.
+
+## 5. Employee Invite — Welcome Email Failure Was Reported as Success
+
+`EmployeeListCreateView.post()` caught any exception from sending the new-hire welcome email, logged it, and then **unconditionally** returned `"{name} added successfully. Login credentials sent to {email}."` — even when the email genuinely failed. Root-caused via `logs/errors.log`: a company with no SMTP configured (`SMTPSettings.get_active()` returns `None`) gets this exact silent failure on every single invite, with the platform admin having no way to know from the API response. Fixed: the response message now reads `"...but the welcome email could not be sent... check Settings → SMTP."` when the send actually fails, while still returning `201` (the account itself is created either way).
+
+## 6. Modal Backdrop-Click-to-Close — Drag-to-Select Bug, 11 Files
+
+Reported as "Add Company modal closes without clicking Create" — root cause: every backdrop-click-to-close implementation in the codebase checked `e.target === e.currentTarget` on the `click` event alone. A `click` event's target is resolved at **mouseup**, not mousedown — selecting text inside a field and releasing the drag past the modal's edge lands the mouseup on the backdrop, closing the modal mid-input. Fixed by tracking whether the *mousedown* also started on the backdrop (a `useRef` flag set in a new `onMouseDown` handler, checked alongside the existing `onClick` check) in the shared `components/Modal.tsx` and, since 10 other places hand-roll this exact pattern instead of using the shared component, in all of them too: `AttendanceDetailDrawer.tsx`, `EmployeeMonthView.tsx`, `PromotionTab.tsx`, `SeparationFormModal.tsx`, `DecisionModal.tsx`, `ConfirmModal.tsx`, `documents/page.tsx` (3 separate overlays), `StatutoryConfigTab.tsx`, `SalaryStructuresTab.tsx`, `EditTemplateModal.tsx` (2 overlays).
+
+## 7. Platform Admin — "Add Company" Account-Management Fields
+
+The form only asked for company code/name/admin email. Added, all optional so a quick trial signup is never blocked:
+
+- Contact name, contact phone
+- Address, GSTIN (validated against the same 15-character format already used for the tenant-level `Company.gstin`, e.g. `22AAAAA0000A1Z5`)
+- Expected employee count, contract start date
+
+(A `plan` trial/standard/enterprise field was added and then removed again per direction before this branch was pushed — mentioned only because the migration history reflects both the add and the removal.)
+
+New `Client` fields are editable afterward too via the existing `CompanyDetailView.patch()`, not just at creation.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/config/settings.py` | Added `STORAGES` dict — fixes the Cloudinary/local-disk storage regression |
+| `backend/apps/tenants/services.py` | Fixed `seed_reference_data` call site; added `_create_schema_with_retry()` |
+| `backend/apps/accounts/views.py` | `EmployeeListCreateView.post()` — conditional department requirement, accurate welcome-email success/failure message |
+| `backend/apps/accounts/tokens.py` | Added `can_manage_branch` to `_volatile_claims()` |
+| `backend/apps/tenants/models.py`, `serializers.py`, `views.py` | New `Client` fields: `contact_name`, `contact_phone`, `address`, `gstin`, `expected_employee_count`, `contract_start_date` (create + `PATCH`) |
+| `backend/apps/tenants/migrations/0010_...py`, `0011_...py` (new) | Schema changes for the above |
+| `frontend/components/Modal.tsx` | Backdrop-click-to-close fix (mousedown-tracked) |
+| `frontend/app/dashboard/attendance/_components/AttendanceDetailDrawer.tsx`, `EmployeeMonthView.tsx`, `frontend/app/dashboard/employees/[id]/_components/PromotionTab.tsx`, `frontend/app/dashboard/separation/_components/{SeparationFormModal,DecisionModal,ConfirmModal}.tsx`, `frontend/app/dashboard/documents/page.tsx`, `frontend/app/dashboard/settings/payroll-config/_components/{StatutoryConfigTab,SalaryStructuresTab}.tsx`, `frontend/app/dashboard/settings/email-templates/_components/EditTemplateModal.tsx` | Same backdrop-click-to-close fix, hand-rolled instances |
+| `frontend/proxy.ts`, `frontend/app/login/page.tsx` | Branch Admin exempted from onboarding-wizard/assessment redirects |
+| `frontend/app/dashboard/branches/_components/BranchManagement.tsx` | Removed Department field/state from the Branch Admin assignment flow |
+| `frontend/app/platform-admin/_components/AddCompanyModal.tsx`, `frontend/types/platformAdmin.ts` | New account-management fields on the Add Company form |
+| `frontend/app/login/page.tsx`, `frontend/app/globals.css` | Removed the Platform Admin login link from the tenant login page (and its now-unused CSS) |
+
+---
+
+## Notes for Next Developer
+
+- **SMTP is not configured for every tenant** — Royal HRMS has an active `SMTPSettings` row; newly-provisioned companies do not, by design (each company sets up its own). Employee invites will silently fail to email (though the response now says so clearly) until a company's own admin configures one in Settings → SMTP. There is currently no in-app way for a platform admin to notice this proactively — worth a dashboard indicator.
+- **This Neon project's compute can drop connections mid-migration** on a fresh company provision — `_create_schema_with_retry()` covers the schema-creation step specifically (proven safe to retry); the later steps in `_seed_company_data()` (`Company.objects.create()`, `User.objects.create_superuser()`) are not idempotent and are not covered by the same retry — a failure there still requires `cleanup_failed_tenants` + a fresh attempt.
+- **The Add Company form's new fields are all optional and unvalidated for business meaning** (e.g. nothing stops a nonsensical contract date) — deliberately minimal since this is account-management context, not provisioning input.
+- **Still no automated tests** around any of this session's changes — everything was verified manually against the running dev server with disposable test accounts, all cleaned up afterward.

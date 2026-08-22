@@ -1,8 +1,14 @@
+import re
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.tenants.models import ALL_MODULES, Client, PlatformAdmin, PlatformAdminAuditLog, PlatformSMTPSettings
+
+# Same pattern as apps.accounts.serializers._GSTIN_RE — kept in sync manually
+# since this is the public/shared schema and that one is tenant-scoped.
+_GSTIN_RE = re.compile(r'^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z1-9]Z[A-Z\d]$')
 
 
 class PlatformAdminLoginSerializer(serializers.Serializer):
@@ -113,6 +119,8 @@ class ClientSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'company_code', 'company_name', 'enabled_modules',
             'is_active', 'provisioning_status',
+            'contact_name', 'contact_phone', 'address', 'gstin',
+            'expected_employee_count', 'contract_start_date',
             'has_pending_password', 'created_at', 'updated_at',
         ]
 
@@ -126,6 +134,15 @@ class ClientCreateSerializer(serializers.Serializer):
     admin_email  = serializers.EmailField()
     modules      = serializers.ListField(child=serializers.CharField(), required=False, allow_null=True, default=None)
 
+    # Account-management context, not provisioning input — all optional so a
+    # quick trial signup is never blocked on them.
+    contact_name            = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
+    contact_phone           = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
+    address                 = serializers.CharField(required=False, allow_blank=True, default='')
+    gstin                   = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
+    expected_employee_count = serializers.IntegerField(required=False, allow_null=True, min_value=1, default=None)
+    contract_start_date     = serializers.DateField(required=False, allow_null=True, default=None)
+
     def validate_modules(self, value):
         if value is None:
             return None
@@ -133,6 +150,12 @@ class ClientCreateSerializer(serializers.Serializer):
         if unknown:
             raise serializers.ValidationError(f'Unknown module(s): {", ".join(sorted(unknown))}. Valid: {", ".join(ALL_MODULES)}')
         return value
+
+    def validate_gstin(self, value: str) -> str:
+        v = value.strip().upper()
+        if v and not _GSTIN_RE.match(v):
+            raise serializers.ValidationError('Enter a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).')
+        return v
 
 
 class PlatformSMTPSettingsSerializer(serializers.ModelSerializer):

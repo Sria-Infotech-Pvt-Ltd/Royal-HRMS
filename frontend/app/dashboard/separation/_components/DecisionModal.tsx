@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 interface Props {
   action:       "approve" | "reject";
@@ -13,9 +13,18 @@ interface Props {
 export default function DecisionModal({ action, employeeName, onClose, onConfirm, saving }: Props) {
   const isApprove = action === "approve";
   const [comment, setComment] = useState("");
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside the comment field and releasing past the modal's edge would
+  // otherwise land on the overlay and close it mid-input. Only close when
+  // the gesture both started AND ended on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
 
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="modal-overlay open"
+      onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onClose(); }}
+    >
       <div className="modal" style={{ width: "min(480px, 95vw)" }}>
         <div className="modal-header">
           <div className="modal-title">

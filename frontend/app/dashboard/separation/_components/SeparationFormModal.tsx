@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
@@ -130,8 +130,18 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
   const noticeDays = form.requestDate && form.proposedLastWorkingDay
     ? daysBetween(form.requestDate, form.proposedLastWorkingDay) : null;
 
+  // A click's target is resolved at mouseup, not mousedown — selecting text
+  // inside a field and releasing past the modal's edge would otherwise land
+  // on the overlay and close it mid-input. Only close when the gesture both
+  // started AND ended on the backdrop itself.
+  const mouseDownOnOverlay = useRef(false);
+
   return (
-    <div className="modal-overlay open" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="modal-overlay open"
+      onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) onClose(); }}
+    >
       <div className="modal modal-lg" style={{ maxHeight: "92vh", overflowY: "auto" }}>
         <div className="modal-header">
           <div className="modal-title">

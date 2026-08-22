@@ -17,14 +17,19 @@ Two entry points share the core logic in _seed_company_data:
     A Celery worker's lifecycle is independent of the web server, so a
     restart there can no longer reach into an in-flight provisioning run.
 """
+import logging
 import secrets
 import string
+import time
 
 from django.core.management import call_command
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
+from django.db.utils import InterfaceError, OperationalError
 
 from apps.tenants.models import ALL_MODULES, Client, Domain
 from apps.tenants.utils import send_company_provisioned_email
+
+logger = logging.getLogger(__name__)
 
 
 class CompanyCodeTaken(Exception):
@@ -90,8 +95,12 @@ def _seed_company_data(client: Client, admin_email: str) -> str:
 
         # Email templates, states/cities, employee code settings, etc. —
         # permissions/roles themselves are seeded by data migrations, so
-        # they already exist from the schema migration above.
-        call_command('seed_reference_data')
+        # they already exist from the schema migration above. seed_reference_data
+        # now extends TenantCommand, which requires one of
+        # --schema/--company-code/--all — nesting `with client:` again inside
+        # its own `with client:` is safe (TenantMixin's _previous_tenant is a
+        # real stack), so this just re-selects the same tenant already active.
+        call_command('seed_reference_data', schema=client.schema_name)
 
         Company.objects.create(company_name=client.company_name)
 
@@ -145,12 +154,20 @@ def provision_company(*, company_code: str, company_name: str, admin_email: str,
     return {'client': client, 'password': password}
 
 
-def create_pending_client(*, company_code: str, company_name: str, modules=None) -> Client:
+def create_pending_client(
+    *, company_code: str, company_name: str, modules=None,
+    contact_name: str = '', contact_phone: str = '', address: str = '', gstin: str = '',
+    expected_employee_count: int | None = None, contract_start_date=None,
+) -> Client:
     """
     Validates and creates only the registry row — schema creation and
     everything after it happen later, out-of-process (see
     finish_pending_provisioning + apps.tenants.tasks.finish_provisioning_task),
     so the web request calling this returns almost instantly.
+
+    contact_name/contact_phone/address/gstin/expected_employee_count/
+    contract_start_date are account-management context only, captured for
+    the platform admin's own reference — none of them affect provisioning.
     """
     company_code, modules = _validate_new_company(company_code, modules)
     company_name = company_name.strip()
@@ -163,10 +180,43 @@ def create_pending_client(*, company_code: str, company_name: str, modules=None)
         enabled_modules=modules,
         is_active=True,
         provisioning_status=Client.PROVISIONING_PENDING,
+        contact_name=contact_name.strip(),
+        contact_phone=contact_phone.strip(),
+        address=address.strip(),
+        gstin=gstin,
+        expected_employee_count=expected_employee_count,
+        contract_start_date=contract_start_date,
     )
     client.auto_create_schema = False  # deferred — finish_pending_provisioning creates it
     _save_new_client(client)
     return client
+
+
+def _create_schema_with_retry(client: Client, max_attempts: int = 3) -> None:
+    """
+    A fresh schema's full migration history (accounts alone is 85+
+    migrations, plus reference-data seeding) can take several minutes — long
+    enough for the DB provider (Neon, a serverless/autosuspend Postgres) to
+    drop the connection mid-operation on a compute scaling event, surfacing
+    as psycopg2.InterfaceError: cursor already closed. Safe to retry with a
+    fresh connection: each migration runs in its own atomic transaction and
+    django_migrations tracks what's already applied, so create_schema()
+    (check_if_exists=True) resumes from wherever it left off instead of
+    redoing completed work or leaving a half-applied migration behind.
+    """
+    for attempt in range(1, max_attempts + 1):
+        try:
+            client.create_schema(check_if_exists=True, verbosity=1)
+            return
+        except (InterfaceError, OperationalError):
+            connection.close()
+            if attempt == max_attempts:
+                raise
+            logger.warning(
+                'Schema creation for %s lost its DB connection (attempt %d/%d) — retrying.',
+                client.company_code, attempt, max_attempts,
+            )
+            time.sleep(2)
 
 
 def finish_pending_provisioning(*, client: Client, admin_email: str, modules: list[str]) -> dict:
@@ -178,7 +228,7 @@ def finish_pending_provisioning(*, client: Client, admin_email: str, modules: li
     then the rest, then flips the row to 'active' and stashes the
     password for one-time viewing via CompanyRevealPasswordView.
     """
-    client.create_schema(check_if_exists=True, verbosity=1)
+    _create_schema_with_retry(client)
 
     Domain.objects.get_or_create(
         tenant=client, defaults={'domain': f'{client.company_code.lower()}.internal', 'is_primary': True},

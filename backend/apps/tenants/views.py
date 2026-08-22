@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -199,6 +199,12 @@ class CompanyListCreateView(APIView):
                 company_code=data['company_code'],
                 company_name=data['company_name'],
                 modules=data['modules'],
+                contact_name=data['contact_name'],
+                contact_phone=data['contact_phone'],
+                address=data['address'],
+                gstin=data['gstin'],
+                expected_employee_count=data['expected_employee_count'],
+                contract_start_date=data['contract_start_date'],
             )
         except InvalidModules as exc:
             return error(f'{exc} Valid: {", ".join(ALL_MODULES)}')
@@ -254,9 +260,54 @@ class CompanyDetailView(APIView):
             client.enabled_modules = modules
             update_fields.append('enabled_modules')
 
+        # Account-management context — optional, none of it affects
+        # provisioning or login, so a blank value just clears the field.
+        if 'contact_name' in request.data:
+            client.contact_name = (request.data['contact_name'] or '').strip()
+            update_fields.append('contact_name')
+        if 'contact_phone' in request.data:
+            client.contact_phone = (request.data['contact_phone'] or '').strip()
+            update_fields.append('contact_phone')
+        if 'address' in request.data:
+            client.address = (request.data['address'] or '').strip()
+            update_fields.append('address')
+        if 'gstin' in request.data:
+            from apps.tenants.serializers import _GSTIN_RE
+            gstin = (request.data['gstin'] or '').strip().upper()
+            if gstin and not _GSTIN_RE.match(gstin):
+                return error('Enter a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).')
+            client.gstin = gstin
+            update_fields.append('gstin')
+        if 'expected_employee_count' in request.data:
+            raw = request.data['expected_employee_count']
+            if raw in (None, ''):
+                client.expected_employee_count = None
+            else:
+                try:
+                    count = int(raw)
+                    if count < 1:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    return error('expected_employee_count must be a positive whole number.')
+                client.expected_employee_count = count
+            update_fields.append('expected_employee_count')
+        if 'contract_start_date' in request.data:
+            raw = request.data['contract_start_date']
+            if raw in (None, ''):
+                client.contract_start_date = None
+            else:
+                try:
+                    client.contract_start_date = date.fromisoformat(raw)
+                except (TypeError, ValueError):
+                    return error('contract_start_date must be in YYYY-MM-DD format.')
+            update_fields.append('contract_start_date')
+
         client.save(update_fields=update_fields)
         _log_platform_action(request, 'company_updated', target_company=client, changes={
-            f: request.data[f] for f in ('is_active', 'enabled_modules') if f in request.data
+            f: request.data[f] for f in (
+                'is_active', 'enabled_modules', 'contact_name', 'contact_phone',
+                'address', 'gstin', 'expected_employee_count', 'contract_start_date',
+            ) if f in request.data
         })
         logger.info('Company %s updated by platform admin %s', client.company_code, request.user.email)
         return success('Company updated.', ClientSerializer(client).data)

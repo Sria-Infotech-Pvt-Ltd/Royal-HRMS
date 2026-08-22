@@ -13,12 +13,13 @@ def _volatile_claims(user) -> dict:
     (every subsequent /token/refresh/) derive them the exact same way.
     frontend/proxy.ts reads these straight off the signed access token for
     its onboarding/assessment/superuser route gates — see that file's
-    getOnboardingStatus/getAssessmentStatus/getCanManageTeam/getIsSuperuser.
+    getOnboardingStatus/getAssessmentStatus/getCanManageTeam/getCanManageBranch/getIsSuperuser.
     """
     return {
         'onboarding_status': user.onboarding_status,
         'assessment_status': user.assessment_status,
         'can_manage_team':   bool(user.role and user.role.can_manage_team),
+        'can_manage_branch': bool(user.role and user.role.can_manage_branch),
         'is_superuser':      user.is_superuser,
     }
 
@@ -56,8 +57,8 @@ class FreshClaimsTokenRefreshSerializer(TokenRefreshSerializer):
     read these straight off the access token, that staleness would either
     wrongly keep bouncing an already-onboarded user back to /onboarding,
     or (going the other way) fail to promote a newly-approved/completed
-    status until the user logs in again. Re-derives just these four
-    volatile claims from the current User row on every refresh; everything
+    status until the user logs in again. Re-derives just these volatile
+    claims from the current User row on every refresh; everything
     else (role, permissions, email, ...) is left as SimpleJWT's default
     copy-from-refresh-token behaviour, since those rarely change mid-session
     and a role/permission change already forces re-login in this app.

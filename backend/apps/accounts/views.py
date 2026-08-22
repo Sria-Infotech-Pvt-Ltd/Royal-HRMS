@@ -2945,12 +2945,27 @@ class EmployeeListCreateView(APIView):
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
         reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
 
+        # A Branch Admin oversees every department in the branch, not one —
+        # unlike every other role, they aren't scoped to a single department,
+        # so it isn't required for them. Matched by capability, not a
+        # hardcoded role name, same as everywhere else this distinction is
+        # made (see applyLeaderRole on the frontend). The full "is this role
+        # even valid" check still happens below at its usual point — this is
+        # just a cheap early look to decide whether department is optional.
+        role_for_dept_check = None
+        if role_id:
+            try:
+                role_for_dept_check = Role.objects.filter(pk=role_id).first()
+            except (ValueError, ValidationError):
+                role_for_dept_check = None
+        department_required = not (role_for_dept_check and role_for_dept_check.can_manage_branch)
+
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
         if not last_name:       errs['last_name']       = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
         if not role_id:         errs['role']            = 'Role is required.'
-        if not department:      errs['department']      = 'Department is required.'
+        if department_required and not department: errs['department'] = 'Department is required.'
         if not designation:     errs['designation']     = 'Designation is required.'
         if not branch:          errs['branch']          = 'Branch is required.'
         if not date_of_joining: errs['date_of_joining'] = 'Date of joining is required.'
@@ -3016,7 +3031,7 @@ class EmployeeListCreateView(APIView):
         # with lookups elsewhere (HR/manager auto-assignment, geofencing, the
         # department dropdown's branch filter, reports).
         branch     = branch_obj.branch_name
-        department = dept_obj.name
+        department = dept_obj.name if dept_obj else ''
 
         existing_user = User.objects.filter(email__iexact=email).first()
         if existing_user:
@@ -3185,12 +3200,25 @@ class EmployeeListCreateView(APIView):
             )
             msg.send(fail_silently=False)
             logger.info('Welcome email sent to %s', email)
+            email_sent = True
         except Exception as exc:
             logger.error('Welcome email failed for %s: %s', email, exc)
+            email_sent = False
 
         logger.info('Employee %s (%s) created by %s', employee_id, email, request.user.email)
+        # The account itself was created successfully either way — only the
+        # message differs, so whoever's reading the response knows whether
+        # they still need to share the credentials with the new hire
+        # themselves (email failures are silent otherwise: this request
+        # still returns 201, and the account is fully usable).
+        message = (
+            f'{full_name} added successfully. Login credentials sent to {email}.'
+            if email_sent else
+            f'{full_name} added successfully, but the welcome email could not be sent. '
+            f'Share their login credentials manually — check Settings → SMTP.'
+        )
         return success(
-            f'{full_name} added successfully. Login credentials sent to {email}.',
+            message,
             data=_employee_dict(user),
             http_status=status.HTTP_201_CREATED,
         )

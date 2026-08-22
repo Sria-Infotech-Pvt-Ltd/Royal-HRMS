@@ -201,6 +201,22 @@ SARVAM_API_KEY = env('SARVAM_API_KEY', default='')
 # RawMediaCloudinaryStorage handles PDFs, DOCs, XLS, images — every file type
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
 
+# Django 5.1 fully removed the DEFAULT_FILE_STORAGE/STATICFILES_STORAGE
+# automatic-translation shim (deprecated since 4.2) — STORAGES is now the
+# only setting Django itself reads for FileField/ImageField.storage and
+# collectstatic, so setting the legacy names above alone left every upload
+# silently falling back to the built-in local-disk DefaultStorage instead of
+# Cloudinary. Kept the legacy names too: django-cloudinary-storage's own
+# collectstatic override still reads STATICFILES_STORAGE as a raw attribute.
+STORAGES = {
+    'default': {
+        'BACKEND': DEFAULT_FILE_STORAGE,
+    },
+    'staticfiles': {
+        'BACKEND': STATICFILES_STORAGE,
+    },
+}
+
 # ─── Cache ───────────────────────────────────────────────────────────────────
 # rediss:// (SSL) requires ssl_cert_reqs; append it when the URL uses that scheme.
 # redis-py only accepts the lowercase strings "none"/"optional"/"required" here,
