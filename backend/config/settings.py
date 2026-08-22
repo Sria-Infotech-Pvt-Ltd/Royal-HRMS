@@ -175,14 +175,6 @@ MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Django 5.1+ dropped the implicit default for this setting entirely (no more
-# automatic fallback to StaticFilesStorage) — django-cloudinary-storage's
-# collectstatic override reads settings.STATICFILES_STORAGE as a raw attribute,
-# so leaving it unset 500s collectstatic with AttributeError on Django 5.2.
-# Static assets stay on local disk at STATIC_ROOT; only MEDIA (see
-# DEFAULT_FILE_STORAGE below) goes to Cloudinary.
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
-
 # ─── Cloudinary (all FileField / ImageField uploads) ─────────────────────────
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME':             env('CLOUDINARY_CLOUD_NAME'),
@@ -198,22 +190,32 @@ CLOUDINARY_STORAGE = {
 # sarvam_client) rather than crashing settings import in environments that
 # haven't added it yet.
 SARVAM_API_KEY = env('SARVAM_API_KEY', default='')
-# RawMediaCloudinaryStorage handles PDFs, DOCs, XLS, images — every file type
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
 
-# Django 5.1 fully removed the DEFAULT_FILE_STORAGE/STATICFILES_STORAGE
-# automatic-translation shim (deprecated since 4.2) — STORAGES is now the
+# Django 5.1+ dropped the automatic DEFAULT_FILE_STORAGE/STATICFILES_STORAGE
+# -> STORAGES translation shim (deprecated since 4.2) — STORAGES is now the
 # only setting Django itself reads for FileField/ImageField.storage and
-# collectstatic, so setting the legacy names above alone left every upload
-# silently falling back to the built-in local-disk DefaultStorage instead of
-# Cloudinary. Kept the legacy names too: django-cloudinary-storage's own
-# collectstatic override still reads STATICFILES_STORAGE as a raw attribute.
+# collectstatic. Setting the legacy names as real module-level settings
+# instead of (or alongside) STORAGES silently sent every upload to the
+# built-in local-disk DefaultStorage rather than Cloudinary, since Django
+# never applied them.
+#
+# Values are held in underscore-prefixed names, not the real
+# DEFAULT_FILE_STORAGE/STATICFILES_STORAGE settings — Django raises
+# ImproperlyConfigured ("mutually exclusive") the moment both a legacy
+# storage setting AND STORAGES are defined at once. Django still resolves
+# settings.STATICFILES_STORAGE / settings.DEFAULT_FILE_STORAGE as computed
+# attributes derived FROM STORAGES when the legacy names themselves are left
+# unset, which is what django-cloudinary-storage's own collectstatic
+# override needs (it reads settings.STATICFILES_STORAGE as a raw attribute).
+_DEFAULT_FILE_STORAGE_BACKEND = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
+_STATICFILES_STORAGE_BACKEND  = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
 STORAGES = {
     'default': {
-        'BACKEND': DEFAULT_FILE_STORAGE,
+        'BACKEND': _DEFAULT_FILE_STORAGE_BACKEND,
     },
     'staticfiles': {
-        'BACKEND': STATICFILES_STORAGE,
+        'BACKEND': _STATICFILES_STORAGE_BACKEND,
     },
 }
 
