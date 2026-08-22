@@ -200,13 +200,29 @@ def _create_schema_with_retry(client: Client, max_attempts: int = 3) -> None:
     drop the connection mid-operation on a compute scaling event, surfacing
     as psycopg2.InterfaceError: cursor already closed. Safe to retry with a
     fresh connection: each migration runs in its own atomic transaction and
-    django_migrations tracks what's already applied, so create_schema()
-    (check_if_exists=True) resumes from wherever it left off instead of
-    redoing completed work or leaving a half-applied migration behind.
+    django_migrations tracks what's already applied.
+
+    Retries (attempt 2+) deliberately do NOT call client.create_schema()
+    again. CREATE SCHEMA commits immediately (outside any transaction,
+    django_tenants/models.py's create_schema), so by the time a retry runs
+    the schema already exists — create_schema(check_if_exists=True) would
+    see that and return early WITHOUT calling migrate_schemas at all
+    (django_tenants/models.py: `if check_if_exists and schema_exists(...):
+    return False`), silently leaving whatever migrations had run before the
+    connection dropped as the final state. Calling migrate_schemas directly
+    on retry resumes migration from wherever django_migrations says it
+    stopped, which is the actual fix this function's docstring originally
+    claimed create_schema(check_if_exists=True) already did.
     """
     for attempt in range(1, max_attempts + 1):
         try:
-            client.create_schema(check_if_exists=True, verbosity=1)
+            if attempt == 1:
+                client.create_schema(check_if_exists=True, verbosity=1)
+            else:
+                call_command(
+                    'migrate_schemas', tenant=True,
+                    schema_name=client.schema_name, interactive=False, verbosity=1,
+                )
             return
         except (InterfaceError, OperationalError):
             connection.close()

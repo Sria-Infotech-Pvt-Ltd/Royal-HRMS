@@ -8,7 +8,7 @@ import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
 
 /* ── Types ────────────────────────────────────────────────────── */
-interface ApiRole   { id: number; name: string; display_name: string; permissions: string[] }
+interface ApiRole   { id: number; name: string; display_name: string; permissions: string[]; can_manage_branch: boolean }
 interface ApiDept   { id: number; name: string }
 interface ApiDesig  { id: number; name: string; department_name: string }
 interface ApiBranch { id: number; branch_name: string; branch_code: string }
@@ -131,6 +131,13 @@ export default function AddEmployeeModal({
   const [desigLoading, setDesigLoading] = useState(false);
   const [peopleLoading, setPeopleLoading] = useState(false);
 
+  // A Branch Admin isn't scoped to a department (matches the backend's own
+  // conditional requirement in EmployeeListCreateView.post — see
+  // apps/accounts/views.py) — matched by capability, not role name, same
+  // reasoning as the settings.edit filter above.
+  const selectedRole = roles.find(r => String(r.id) === form.role);
+  const isBranchAdmin = !!selectedRole?.can_manage_branch;
+
   /* fetch roles, departments, branches on mount */
   useEffect(() => {
     // allSettled — one endpoint failing must not wipe out the others' dropdowns.
@@ -211,6 +218,15 @@ export default function AddEmployeeModal({
     setForm(f => {
       const next = { ...f, [k]: v };
       if (k === "department") next.designation = "";
+      if (k === "role") {
+        const nextRole = roles.find(r => String(r.id) === v);
+        // Mirrors BranchManagement.tsx's "Assign Branch Admin" flow, which
+        // has no department-filtered designation dropdown to pick from.
+        if (nextRole?.can_manage_branch) {
+          next.department = "";
+          if (!next.designation.trim()) next.designation = "Branch Manager";
+        }
+      }
       return next;
     });
     setErrs(e => ({ ...e, [k]: undefined }));
@@ -228,7 +244,7 @@ export default function AddEmployeeModal({
     if (form.phone.trim() && !PHONE_RE.test(form.phone.trim().replace(/[\s\-()./]/g, "")))
                                      e.phone         = "Enter a valid 10-digit phone number (optionally prefixed with +91)";
     if (!form.role)                 e.role          = "Required";
-    if (!form.department)           e.department    = "Required";
+    if (!isBranchAdmin && !form.department) e.department = "Required";
     if (!form.designation.trim())   e.designation   = "Required";
     if (!form.branch)               e.branch        = "Required";
     if (!form.date_of_joining)      e.date_of_joining = "Required";
@@ -375,28 +391,40 @@ export default function AddEmployeeModal({
                         </div>
                       )}
                     </Field>
-                    <Field label="Department" required error={errs.department}>
-                      <Sel v={form.department} set={v => set("department", v)} err={!!errs.department}>
-                        <option value="">— Select Department —</option>
-                        {depts.map(d => (
-                          <option key={d.id} value={d.name}>{d.name}</option>
-                        ))}
-                      </Sel>
+                    <Field label="Department" required={!isBranchAdmin} error={errs.department}>
+                      {isBranchAdmin ? (
+                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                          title="A Branch Admin manages the whole branch, not a single department">
+                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                          Not applicable — Branch Admin
+                        </div>
+                      ) : (
+                        <Sel v={form.department} set={v => set("department", v)} err={!!errs.department}>
+                          <option value="">— Select Department —</option>
+                          {depts.map(d => (
+                            <option key={d.id} value={d.name}>{d.name}</option>
+                          ))}
+                        </Sel>
+                      )}
                     </Field>
                     <Field label="Designation" required error={errs.designation}>
-                      <Sel
-                        v={form.designation}
-                        set={v => set("designation", v)}
-                        err={!!errs.designation}
-                        disabled={!form.department || desigLoading}
-                      >
-                        <option value="">
-                          {!form.department ? "Select department first" : desigLoading ? "Loading…" : desigs.length === 0 ? "No designations available" : "— Select Designation —"}
-                        </option>
-                        {desigs.map(d => (
-                          <option key={d.id} value={d.name}>{d.name}</option>
-                        ))}
-                      </Sel>
+                      {isBranchAdmin ? (
+                        <Inp v={form.designation} set={v => set("designation", sanitizeName(v))} ph="e.g. Branch Manager" err={!!errs.designation} />
+                      ) : (
+                        <Sel
+                          v={form.designation}
+                          set={v => set("designation", v)}
+                          err={!!errs.designation}
+                          disabled={!form.department || desigLoading}
+                        >
+                          <option value="">
+                            {!form.department ? "Select department first" : desigLoading ? "Loading…" : desigs.length === 0 ? "No designations available" : "— Select Designation —"}
+                          </option>
+                          {desigs.map(d => (
+                            <option key={d.id} value={d.name}>{d.name}</option>
+                          ))}
+                        </Sel>
+                      )}
                     </Field>
                     <Field label="Employee Type">
                       <Sel v={form.employee_type} set={v => set("employee_type", v)}>
