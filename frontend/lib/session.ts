@@ -11,8 +11,6 @@ export interface SessionPayload {
   role:              string;
   permissions:       string[];
   companyName?:      string;
-  companyLogoUrl?:   string | null;
-  companyBrandColor?: string;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

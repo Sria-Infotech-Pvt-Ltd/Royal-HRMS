@@ -162,6 +162,9 @@ export interface ManagerApprovalStatus {
 export interface EmployeePayslip {
   id: string;
   cycle: string;
+  cycle_start: string;
+  cycle_end: string;
+  pay_date: string;
   employee: string;
   employee_name: string;
   employee_id_code: string;

@@ -143,10 +143,16 @@ DATABASES = {
     'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR}/db.sqlite3')
 }
 DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
-# Neon (and any SSL Postgres) requires sslmode to be forwarded to psycopg2
+# Neon (and any managed cloud Postgres) requires sslmode to be forwarded to
+# psycopg2 — but a local PostgreSQL server (e.g. pgAdmin) almost never has
+# SSL configured, so hardcoding 'require' here would break local setups.
+# DB_SSL_MODE lets both be served by the same settings file: leave unset
+# (defaults to 'require') for Neon/cloud, or set DB_SSL_MODE=disable in
+# .env when pointing DATABASE_URL at a local server. Only applied as a
+# default — a sslmode already present in DATABASE_URL's query string wins.
 if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
     DATABASES['default'].setdefault('OPTIONS', {})
-    DATABASES['default']['OPTIONS'].setdefault('sslmode', 'require')
+    DATABASES['default']['OPTIONS'].setdefault('sslmode', env('DB_SSL_MODE', default='require'))
     # Multi-tenancy (see SHARED_APPS/TENANT_APPS above) is PostgreSQL-schema
     # based — django-tenants needs its own backend, a thin wrapper around
     # psycopg2 that sets the connection's search_path per request/tenant.

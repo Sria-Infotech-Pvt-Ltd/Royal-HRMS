@@ -55,12 +55,6 @@ const RELATIONSHIP_OPTIONS = [
   "Other",
 ];
 
-const BONUS_STAGES = [
-  { stage: "Referral Accepted",  bonus: "—",       note: "Candidate enters the hiring pipeline" },
-  { stage: "Candidate Selected", bonus: "—",       note: "No payout at the offer stage"         },
-  { stage: "90-Day Milestone",   bonus: "₹10,000", note: "Full bonus in next payroll cycle"      },
-];
-
 const EMPTY_FORM = {
   name: "", email: "", phone: "", position_applied: "", branch: "", relationship: "", notes: "",
 };
@@ -190,8 +184,14 @@ export default function ReferralsPage() {
     useFetch<ReferralListResponse>(API.referrals.list);
   const { data: allData, loading: allLoading, error: allError } =
     useFetch<ReferralListResponse>(isAdmin ? API.referrals.all : null);
+  // Only admins (recruitment.view) see the branch-select dropdown and need
+  // the full org-wide branch list — regular employees only see their own
+  // branch name (from currentUser.branch, already a name not an ID) as a
+  // read-only label, and the backend never even accepts a submitted branch
+  // from a non-admin referrer (see ReferralSubmitSerializer). Gating this
+  // fetch on isAdmin avoids a 403 for every other role.
   const { data: branchData } =
-    useFetch<{ results: Branch[] }>(`${API.branches.list}?status=active&page_size=100`);
+    useFetch<{ results: Branch[] }>(isAdmin ? `${API.branches.list}?status=active&page_size=100` : null);
   const { data: rulesData, loading: rulesLoading } =
     useFetch<{ results: ReferralRule[] }>(API.referralRules.list);
 
@@ -375,26 +375,6 @@ export default function ReferralsPage() {
                     </div>
                   ))}
                 </div>
-
-                {/* Bonus breakdown */}
-                <div style={{ border: "1px solid var(--outline-v)", borderRadius: 14, overflow: "hidden" }}>
-                  <div style={{ background: "var(--primary)", padding: "14px 22px" }}>
-                    <p style={{ fontWeight: 700, fontSize: 14, color: "#fff", margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-                      <i className="ti ti-award" /> Referral Bonus Breakdown
-                    </p>
-                  </div>
-                  <div style={{ padding: 20 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-                      {BONUS_STAGES.map(item => (
-                        <div key={item.stage} style={{ textAlign: "center", padding: 16, borderRadius: 10, background: "var(--bg)", border: "1px solid var(--outline-v)" }}>
-                          <p style={{ fontSize: 11, color: "var(--on-variant)", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.stage}</p>
-                          <p style={{ fontSize: 22, fontWeight: 800, color: item.bonus === "—" ? "var(--on-variant)" : "#16a34a", margin: "0 0 6px" }}>{item.bonus}</p>
-                          <p style={{ fontSize: 11, color: "var(--on-variant)", margin: 0 }}>{item.note}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               </>
             )}
           </div>
@@ -461,7 +441,7 @@ export default function ReferralsPage() {
                     ) : (
                       <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
                         <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
-                        {branches.find(b => String(b.id) === String(myBranch))?.branch_name ?? (myBranch ? "Your Branch" : "Not assigned")}
+                        {myBranch || "Not assigned"}
                       </div>
                     )}
                   </div>

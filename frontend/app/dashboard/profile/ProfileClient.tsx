@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -147,6 +147,21 @@ function ReadField({ label, value }: { label: string; value: string | number | n
   );
 }
 
+// Blue section header — matches the Employee Profile page's ProfileForm.tsx
+// (app/dashboard/employees/[id]/_components/ProfileForm.tsx) so this
+// self-service page shares the same visual language as its HR counterpart.
+function SectionHeader({ icon, title, action }: { icon: string; title: string; action?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-3" style={{ background: "var(--primary)" }}>
+      <div className="flex items-center gap-2">
+        <i className={`ti ${icon} text-[16px] text-white`} />
+        <h3 className="text-[14px] font-semibold text-white m-0">{title}</h3>
+      </div>
+      {action}
+    </div>
+  );
+}
+
 // Built-in field visible unless the settings-driven config explicitly says
 // otherwise — while fieldConfig is still loading (empty {}), nothing here
 // has an entry yet, so this defaults to "show it" rather than a hide-then-show
@@ -210,7 +225,17 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   const [uploadingFileKey, setUploadingFileKey] = useState<string | null>(null);
 
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
-  const { state: faceCardState, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
+  const { state: faceCardState, loading: faceCardLoading, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
+  // Hide the whole "Face ID" section once we know the org has the feature
+  // switched off entirely — a nav entry whose only content is "this feature
+  // is disabled" is just clutter. Kept visible while loading (defaults to
+  // showing) so it doesn't flash hidden-then-shown for orgs where it's on.
+  const faceTabHidden = !faceCardLoading && faceCardState === "disabled";
+  const visibleTabs = TABS.filter(tab => tab.id !== "face" || !faceTabHidden);
+
+  useEffect(() => {
+    if (faceTabHidden && active === "face") setActive("personal");
+  }, [faceTabHidden, active]);
 
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [photoOverride,  setPhotoOverride]  = useState<string | null | undefined>(undefined);
@@ -430,18 +455,44 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
         </div>
       </div>
 
-      <div className="tabs">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            className={`tab${active === tab.id ? " active" : ""}`}
-            onClick={() => setActive(tab.id)}
-            suppressHydrationWarning
-          >
-            <i className={`ti ${tab.icon}`} style={{ marginRight: 5 }} />{tab.label}
-          </button>
-        ))}
-      </div>
+      <div className="flex items-start gap-5">
+
+        {/* ── Section sidebar — same visual pattern as the Employee Profile
+            page's ProfileSidebar.tsx, so this self-service page matches
+            its HR counterpart. ── */}
+        <nav
+          className="rounded-xl border p-1 sticky top-4 self-start flex-shrink-0 w-[220px]"
+          style={{ background: "#fff", borderColor: "var(--outline-v)" }}
+        >
+          <ul className="flex flex-col gap-0.5">
+            {visibleTabs.map(tab => {
+              const isActive = active === tab.id;
+              return (
+                <li key={tab.id}>
+                  <button
+                    onClick={() => setActive(tab.id)}
+                    suppressHydrationWarning
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium text-left whitespace-nowrap transition-all"
+                    style={{
+                      background: isActive ? "var(--bg-mid)" : "transparent",
+                      color: isActive ? "var(--primary)" : "var(--on-variant)",
+                      borderLeft: isActive ? "3px solid var(--primary)" : "3px solid transparent",
+                    }}
+                  >
+                    <i
+                      className={`ti ${tab.icon} text-[15px] flex-shrink-0`}
+                      style={{ color: isActive ? "var(--primary)" : "var(--outline)" }}
+                    />
+                    {tab.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* ── Section content ── */}
+        <div className="flex-1 min-w-0">
 
       {active === "personal" && (
       <div className="grid-2">
@@ -451,9 +502,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
           {/* Personal Information */}
           <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-user-circle" />Personal Information</span>
-            </div>
+            <SectionHeader icon="ti-user-circle" title="Personal Information" />
             <div className="card-body">
               <div className="form-row cols-2">
                 <ReadField label="Full Name"  value={profile?.full_name} />
@@ -490,9 +539,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
           {/* Address */}
           <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-map-pin" />Address</span>
-            </div>
+            <SectionHeader icon="ti-map-pin" title="Address" />
             <div className="card-body">
               {isBuiltinVisible(fieldConfig, 0, "current_address") && (
                 <div className="field-group">
@@ -520,9 +567,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
           {/* Emergency Contact */}
           <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-phone" />Emergency Contact</span>
-            </div>
+            <SectionHeader icon="ti-phone" title="Emergency Contact" />
             <div className="card-body">
               <div className="form-row cols-2">
                 {isBuiltinVisible(fieldConfig, 3, "emergency_name") && (
@@ -596,12 +641,10 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       )}
 
       {active === "work" && (
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <div>
           {/* Work Information */}
           <div className="card mb-16">
-            <div className="card-header">
-              <span className="card-title"><i className="ti ti-briefcase" />Work Information</span>
-            </div>
+            <SectionHeader icon="ti-briefcase" title="Work Information" />
             <div className="card-body">
               <div className="form-row cols-2">
                 <ReadField label="Employee ID"  value={profile?.employee_id} />
@@ -651,10 +694,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       )}
 
       {active === "education" && (
-      <div className="card mb-16" style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div className="card-header">
-          <span className="card-title"><i className="ti ti-school" />Education &amp; Experience</span>
-        </div>
+      <div className="card mb-16">
+        <SectionHeader icon="ti-school" title="Education & Experience" />
         <div className="card-body">
           <div className="form-row cols-2">
             {isBuiltinVisible(fieldConfig, 1, "highest_qualification") && <ReadField label="Qualification" value={p?.highest_qualification} />}
@@ -688,13 +729,16 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       )}
 
       {active === "bank" && (
-      <div className="card mb-16" style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div className="card-header">
-          <span className="card-title"><i className="ti ti-building-bank" />Bank Details</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--on-variant)" }}>
-            <i className="ti ti-lock" style={{ fontSize: 11 }} /> Contact HR to update
-          </div>
-        </div>
+      <div className="card mb-16">
+        <SectionHeader
+          icon="ti-building-bank"
+          title="Bank Details"
+          action={
+            <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+              <i className="ti ti-lock" style={{ fontSize: 11 }} /> Contact HR to update
+            </div>
+          }
+        />
         <div className="card-body">
           <div className="form-row cols-2">
             {isBuiltinVisible(fieldConfig, 2, "bank_name")    && <ReadField label="Bank Name"    value={p?.bank_name} />}
@@ -724,10 +768,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       )}
 
       {active === "documents" && (
-      <div className="card" style={{ maxWidth: 700, margin: "0 auto" }}>
-        <div className="card-header">
-          <span className="card-title"><i className="ti ti-file-description" />Documents</span>
-        </div>
+      <div className="card">
+        <SectionHeader icon="ti-file-description" title="Documents" />
             <div className="card-body" style={{ padding: 0 }}>
               {docEntries.map((doc, i) => {
                 const uploaded  = !!doc.fileUrl;
@@ -790,10 +832,8 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       )}
 
       {active === "face" && (
-      <div className="card" style={{ maxWidth: 700, margin: "0 auto" }}>
-        <div className="card-header">
-          <span className="card-title"><i className="ti ti-face-id" />Face Registration</span>
-        </div>
+      <div className="card">
+        <SectionHeader icon="ti-face-id" title="Face Registration" />
             <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
               <i className="ti ti-face-id" style={{ fontSize: 22, color: "var(--on-variant)" }} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -827,7 +867,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                   <>
                     <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID not yet registered</div>
                     <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                      Face ID is registered during onboarding. Contact HR to register your face ID.
+                      Usually done during onboarding — register it below if you missed that step.
                     </div>
                   </>
                 )}
@@ -842,23 +882,37 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                   <i className="ti ti-camera" /> Update My Face
                 </button>
               )}
+              {faceCardState === "not_registered" && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  suppressHydrationWarning
+                  onClick={() => setShowFaceRegistration(true)}
+                >
+                  <i className="ti ti-camera" /> Register My Face
+                </button>
+              )}
             </div>
       </div>
       )}
 
       {active === "security" && (
-      <div className="card" style={{ maxWidth: 500, margin: "0 auto" }}>
-        <div className="card-header">
-          <span className="card-title"><i className="ti ti-lock" />Change Password</span>
-        </div>
-        <div className="card-body">
+      <div className="card">
+        <SectionHeader icon="ti-lock" title="Change Password" />
+        <div className="card-body" style={{ maxWidth: 500 }}>
           <ChangePasswordForm />
         </div>
       </div>
       )}
 
+        </div>
+      </div>
+
         {showFaceRegistration && (
-          <FaceRegistrationModal mode="update" onClose={() => { setShowFaceRegistration(false); refetchFaceStatus(); }} />
+          <FaceRegistrationModal
+            mode={faceCardState === "not_registered" ? "register" : "update"}
+            onClose={() => { setShowFaceRegistration(false); refetchFaceStatus(); }}
+          />
         )}
 
         {showPhotoModal && (

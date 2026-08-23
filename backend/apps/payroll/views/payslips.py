@@ -20,6 +20,8 @@ from apps.payroll.models import (
     PayrollSettings,
 )
 from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySerializer
+from apps.payroll.views.cycles import _is_admin
+from apps.payroll.views.employee_salary import _resolve_employee
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,35 @@ def _resolve_user_branch(user):
     if not user.branch:
         return None
     return Branch.objects.filter(branch_name=user.branch, status=Branch.STATUS_ACTIVE).first()
+
+
+class EmployeePayslipHistoryView(APIView):
+    """All payslips for a specific employee across every cycle (HR view) —
+    powers the Payroll tab on the Employee Profile page. Mirrors
+    EmployeeSalaryHistoryView's identifier resolution and branch scoping."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, employee_pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view payslips.', http_status=403)
+
+        employee = _resolve_employee(employee_pk)
+        if not employee:
+            return error('Employee not found.', http_status=404)
+        if not _is_admin(request.user) and employee.branch != request.user.branch:
+            return error('Access denied.', http_status=403)
+
+        payslips = EmployeePayslip.objects.filter(
+            employee=employee,
+        ).select_related('cycle', 'salary_structure').order_by('-cycle__cycle_start')
+
+        page_obj, paginator = paginate(payslips, request)
+        serializer = EmployeePayslipSerializer(page_obj.object_list, many=True)
+        return success(
+            'Payslips retrieved.',
+            paginated_data(paginator, page_obj, serializer.data),
+        )
 
 
 class CyclePayslipListView(APIView):

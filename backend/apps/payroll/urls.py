@@ -40,6 +40,7 @@ from apps.payroll.views.attendance_approval import (
 )
 from apps.payroll.views.payslips import (
     CyclePayslipListView,
+    EmployeePayslipHistoryView,
     PayslipDetailView,
     UpdatePayslipReimbBonusView,
     DispatchPayslipsView,
@@ -124,6 +125,7 @@ urlpatterns = [
     path('cycles/<uuid:cycle_pk>/referral-bonus-summary/', ReferralBonusSummaryForCycleView.as_view(), name='cycle-referral-bonus-summary'),
     path('payslips/<uuid:pk>/', PayslipDetailView.as_view(), name='payslip-detail'),
     path('payslips/<uuid:pk>/reimb-bonus/', UpdatePayslipReimbBonusView.as_view(), name='payslip-reimb-bonus'),
+    path('employees/<str:employee_pk>/payslips/', EmployeePayslipHistoryView.as_view(), name='employee-payslip-history'),
 
     # ── Employee self-service ────────────────────────────────────────────────
     path('my-payslips/', MyPayslipsView.as_view(), name='my-payslips'),

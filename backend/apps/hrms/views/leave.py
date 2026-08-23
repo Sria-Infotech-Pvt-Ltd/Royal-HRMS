@@ -694,8 +694,8 @@ def _leave_preview(request):
         if bal:
             available = float(bal.total_days - bal.used_days)
 
-    lop_days    = round(max(0.0, actual_days - available), 1) if convert_to_lop and leave_type != LEAVE_LWP else 0.0
-    earned_used = round(actual_days - lop_days, 1)
+    lop_days        = round(max(0.0, actual_days - available), 1) if convert_to_lop and leave_type != LEAVE_LWP else 0.0
+    leave_days_used = round(actual_days - lop_days, 1)
 
     warning = None
     max_consec = getattr(policy, 'maximum_consecutive_days', None)
@@ -722,7 +722,7 @@ def _leave_preview(request):
         'sandwich_leave_enabled': getattr(policy, 'sandwich_leave_enabled', False),
         'actual_leave_days':      actual_days,
         'available_balance':      available,
-        'earned_leave_used':      earned_used,
+        'leave_days_used':        leave_days_used,
         'lop_days':               lop_days,
         'lop_enabled':            convert_to_lop,
         'sufficient_balance':     actual_days <= available,
@@ -986,7 +986,18 @@ class LeaveApprovalView(APIView):
             ).get(id=request_id)
         except LeaveRequest.DoesNotExist:
             return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
-        if _has_perm(request.user, 'leave.approve') and not _can_hr_access_request(request.user, leave_request):
+        # Viewing isn't tied to one stage the way acting is — authorised if
+        # the user could act at *either* stage (designated L1 approver,
+        # designated L2 approver, or the branch fallback when no L2 is
+        # assigned). Checking only l2_approver_id here (as this used to)
+        # hid the request entirely from its own designated L1 approver
+        # whenever an L2 approver was also assigned — see the matching fix
+        # in post() below.
+        can_view = (
+            _can_approve_at_stage(request.user, leave_request, 'l1')
+            or _can_approve_at_stage(request.user, leave_request, 'l2')
+        )
+        if not can_view:
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         return success(
             'Leave request retrieved.',
@@ -1004,8 +1015,14 @@ class LeaveApprovalView(APIView):
 
         if leave_request.employee_id == request.user.id:
             return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
-        if _has_perm(request.user, 'leave.approve') and not _can_hr_access_request(request.user, leave_request):
-            return error('You can only approve leave requests for employees in your branch.', http_status=status.HTTP_403_FORBIDDEN)
+        # No blanket branch/HR-assignment gate here — _can_approve_at_stage
+        # below already authorises both stages correctly (l1: designated
+        # reporting manager; l2: designated HR, or any leave.approve holder
+        # in-branch when no HR is assigned). A gate like the one this
+        # replaced, keyed only on l2_approver_id, rejected every legitimate
+        # L1 (manager) approver outright whenever the request also had an
+        # L2 approver assigned — i.e. on almost every real request, since
+        # HR is normally always configured as the L2 fallback.
 
         action  = request.data.get('action')
         remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()

@@ -643,11 +643,6 @@ class Company(models.Model):
                          max_length=255, blank=True,
                          help_text='Employee onboarding portal URL sent in invitation emails.',
                      )
-    brand_color    = models.CharField(
-                         max_length=7, blank=True, default='',
-                         help_text='Hex accent color (e.g. "#1e4e8c") applied to this '
-                                    'company\'s own login page and dashboard. Blank uses the default.',
-                     )
     financial_year_start_month = models.CharField(
                          max_length=10,
                          choices=MONTH_CHOICES,
@@ -675,7 +670,7 @@ class Company(models.Model):
 
 class EmployeeCodeSettings(models.Model):
     """Singleton row (pk=1) that governs how employee IDs are generated."""
-    prefix        = models.CharField(max_length=10, default='RSS')
+    prefix        = models.CharField(max_length=10, default='EMP')
     padding       = models.PositiveSmallIntegerField(default=5)
     next_sequence = models.PositiveIntegerField(default=1)
     updated_at    = models.DateTimeField(auto_now=True)
@@ -697,7 +692,7 @@ class EmployeeCodeSettings(models.Model):
     def get(cls) -> 'EmployeeCodeSettings':
         obj, _ = cls.objects.get_or_create(
             pk=1,
-            defaults={'prefix': 'RSS', 'padding': 5, 'next_sequence': 1},
+            defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
         )
         return obj
 
@@ -718,9 +713,9 @@ class EmployeeCodeSettings(models.Model):
         with _tx.atomic():
             cfg = cls.objects.select_for_update().get_or_create(
                 pk=1,
-                defaults={'prefix': 'RSS', 'padding': 5, 'next_sequence': 1},
+                defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
             )[0]
-            prefix   = cfg.prefix or 'RSS'
+            prefix   = cfg.prefix or 'EMP'
             seq      = str(cfg.next_sequence).zfill(cfg.padding)
             emp_id   = f'{prefix}{seq}'
             cfg.next_sequence += 1

@@ -26,6 +26,14 @@ export interface WorkFromHomeRequest {
   can_cancel:       boolean;
 }
 
+export interface WFHSavedLocation {
+  id:         string;
+  label:      string;
+  latitude:   string;
+  longitude:  string;
+  created_at: string;
+}
+
 export const WFH_STATUS_LABELS: Record<WorkFromHomeRequest["status"], string> = {
   pending:    "Pending",
   l2_pending: "L2 Pending",

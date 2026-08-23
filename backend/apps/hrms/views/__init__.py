@@ -39,3 +39,7 @@ from .workfromhome import (
     WorkFromHomeRequestDetailView,
     WorkFromHomeApprovalView,
 )
+from .wfh_saved_locations import (
+    WFHSavedLocationListCreateView,
+    WFHSavedLocationDetailView,
+)

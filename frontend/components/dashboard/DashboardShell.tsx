@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
@@ -70,18 +70,6 @@ export default function DashboardShell({
 
   const brandName = session.companyName || "Royal HRMS";
 
-  // This company's own accent color (Company.brand_color, set on their
-  // settings page) overrides the shared --primary token app-wide for the
-  // lifetime of this dashboard session. Applied to documentElement rather
-  // than a wrapping div since --primary is read by styles throughout the
-  // whole app (buttons, active nav state, etc.), not just this component.
-  useEffect(() => {
-    if (session.companyBrandColor) {
-      document.documentElement.style.setProperty("--primary", session.companyBrandColor);
-    }
-    return () => { document.documentElement.style.removeProperty("--primary"); };
-  }, [session.companyBrandColor]);
-
   const pageTitle = PAGE_TITLES[pathname]
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
     : pathname.startsWith("/dashboard/separation/") ? "Separation Request"
@@ -144,15 +132,15 @@ export default function DashboardShell({
             {collapsed ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src={session.companyLogoUrl || "/logo.png"}
-                alt={brandName}
+                src="/logo.png"
+                alt="Royal HRMS"
                 className="sidebar-logo-collapsed"
               />
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src={session.companyLogoUrl || "/logo.png"}
-                alt={brandName}
+                src="/logo.png"
+                alt="Royal HRMS"
                 className="sidebar-logo-expanded"
               />
             )}
@@ -261,7 +249,7 @@ export default function DashboardShell({
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Top header */}
-        <header className="h-14 px-3 md:px-6 flex items-center gap-2 md:gap-4 bg-white border-b border-[var(--outline-v)] flex-shrink-0">
+        <header className="h-[68px] px-3 md:px-6 flex items-center gap-2 md:gap-4 bg-white border-b border-[var(--outline-v)] flex-shrink-0">
 
           {/* Mobile menu toggle */}
           <button

@@ -11,7 +11,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/onboarding-approvals": "employees.approve",
   "/dashboard/email-logs": "recruitment.view",
   "/dashboard/employees": "employees.view",
-  "/dashboard/org-chart": "employees.view",
+  "/dashboard/org-chart": "org_chart.view",
   "/dashboard/branches": "settings.view",
   "/dashboard/attendance": "attendance.view",
   "/dashboard/payroll": "payroll.view",

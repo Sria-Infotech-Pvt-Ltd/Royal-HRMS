@@ -146,7 +146,7 @@ export interface LeavePreview {
   sandwich_leave_enabled: boolean;
   actual_leave_days:      number;
   available_balance:      number;
-  earned_leave_used:      number;
+  leave_days_used:        number;
   lop_days:               number;
   lop_enabled:            boolean;
   sufficient_balance:     boolean;

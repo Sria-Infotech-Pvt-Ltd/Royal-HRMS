@@ -9,9 +9,9 @@ import type { PaginatedResponse, SeparationRequest } from "@/types/separation";
 import type { HRActionQueue, LeaveUpdatePayload } from "@/types/dashboard";
 
 const ROWS: { key: keyof Omit<HRActionQueue, "total_pending">; label: string; icon: string; href: string }[] = [
-  { key: "candidate_reviews",      label: "Candidate Reviews",       icon: "ti-user-search",  href: "/dashboard/recruitment"     },
-  { key: "leave_approvals",        label: "Leave Approvals",         icon: "ti-calendar-off", href: "/dashboard/leave"           },
-  { key: "attendance_corrections", label: "Attendance Corrections",  icon: "ti-clock-edit",   href: "/dashboard/attendance"      },
+  { key: "candidate_reviews",      label: "Candidate Reviews",       icon: "ti-user-search",  href: "/dashboard/candidate-review" },
+  { key: "leave_approvals",        label: "Leave Approvals",         icon: "ti-calendar-off", href: "/dashboard/approvals"        },
+  { key: "attendance_corrections", label: "Attendance Corrections",  icon: "ti-clock-edit",   href: "/dashboard/approvals"        },
   { key: "expense_claims",         label: "Expense Claims",          icon: "ti-receipt",      href: "/dashboard/expenses"        },
   { key: "onboarding_reviews",     label: "Onboarding Reviews",      icon: "ti-id-badge",     href: "/dashboard/employees"       },
   { key: "separation_requests",    label: "Separation Requests",     icon: "ti-user-minus",   href: "/dashboard/separation"       },

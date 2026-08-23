@@ -12,9 +12,11 @@ import {
 } from "../../_data";
 import Avatar from "../../_components/Avatar";
 import StatusBadge from "../../_components/StatusBadge";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 export default function ProfileHeader({ employee }: { employee: Employee }) {
   const router = useRouter();
+  const user = useCurrentUser();
   const exp = experienceFrom(employee.dateOfJoining);
 
   return (
@@ -23,7 +25,7 @@ export default function ProfileHeader({ employee }: { employee: Employee }) {
       <div className="flex items-start justify-between flex-wrap gap-3 mb-3">
         <div>
           <nav className="flex items-center gap-1 text-[12px] mb-1.5" style={{ color: "var(--on-variant)" }}>
-            <span className="font-medium" style={{ color: "var(--primary)" }}>Royal Staffing Services LLP</span>
+            <span className="font-medium" style={{ color: "var(--primary)" }}>{user?.companyName}</span>
             <i className="ti ti-chevron-right text-[11px]" style={{ color: "var(--outline)" }} />
             <Link
               href="/dashboard/employees"

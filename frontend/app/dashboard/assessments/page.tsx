@@ -58,9 +58,8 @@ export interface AssessmentCandidate {
   assignee_email: string;
   status: "pending" | "in_progress" | "complete";
   attempt_count: number;
-  pass_score: number;
-  score_awarded: number;
-  pass_percentage: string;
+  score_percentage: string;
+  pass_percentage: number;
   passed: boolean | null;
   sections_breakdown: SectionBreakdown[];
   completed_at: string | null;
@@ -423,7 +422,7 @@ export default function AssessmentsPage() {
                           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                             <thead>
                               <tr style={{ background: "var(--bg-mid, #f8fafc)" }}>
-                                {["Candidate", "Status", "Result", "Pass %", "Attempts", "Assigned", "Completed", ""].map(h => (
+                                {["Candidate", "Status", "Result", "Score %", "Attempts", "Assigned", "Completed", ""].map(h => (
                                   <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "var(--on-variant)", whiteSpace: "nowrap", fontSize: 12 }}>{h}</th>
                                 ))}
                               </tr>
@@ -449,8 +448,8 @@ export default function AssessmentsPage() {
                                     }
                                   </td>
                                   <td style={{ padding: "10px 12px" }}>
-                                    <span style={{ fontWeight: 600, color: c.pass_percentage === "N/A" ? "var(--on-variant)" : parseInt(c.pass_percentage) >= 100 ? "#16a34a" : "#dc2626" }}>
-                                      {c.pass_percentage}
+                                    <span style={{ fontWeight: 600, color: c.score_percentage === "N/A" ? "var(--on-variant)" : c.passed ? "#16a34a" : "#dc2626" }}>
+                                      {c.score_percentage}
                                     </span>
                                   </td>
                                   <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 500 }}>{c.attempt_count}</td>

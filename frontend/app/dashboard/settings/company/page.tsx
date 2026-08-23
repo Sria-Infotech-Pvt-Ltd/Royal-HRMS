@@ -37,7 +37,6 @@ type CompanyData = {
   pin_code:       string;
   website:        string;
   official_phone: string;
-  brand_color:    string;
   updated_at?:    string;
 };
 
@@ -51,7 +50,7 @@ const EMPTY: CompanyData = {
   company_name: "", trade_name: "",
   gstin: "", cin: "", pan: "", tan: "",
   address: "", city: "", state: "", pin_code: "",
-  website: "", official_phone: "", brand_color: "",
+  website: "", official_phone: "",
 };
 
 // ─── Validators ───────────────────────────────────────────────────────────────
@@ -126,7 +125,6 @@ export default function CompanyInfoPage() {
             pin_code:       d.pin_code       ?? "",
             website:        d.website        ?? "",
             official_phone: d.official_phone ?? "",
-            brand_color:    d.brand_color     ?? "",
             logo_url:       d.logo_url       ?? null,
           });
           if (d.updated_at) setSavedAt(d.updated_at);
@@ -197,7 +195,6 @@ export default function CompanyInfoPage() {
       fd.append("pin_code",       form.pin_code.trim());
       fd.append("website",        form.website.trim());
       fd.append("official_phone", form.official_phone.trim());
-      fd.append("brand_color",    form.brand_color.trim());
 
       if (logoFile) {
         fd.append("logo", logoFile);
@@ -307,7 +304,7 @@ export default function CompanyInfoPage() {
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>Company Logo</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 10 }}>
-                JPEG, PNG, WebP or SVG · Max 5 MB
+                Used on payslips and other documents issued in your name · JPEG, PNG, WebP or SVG · Max 5 MB
               </div>
               {canEdit && (
                 <div style={{ display: "flex", gap: 8 }}>
@@ -487,36 +484,6 @@ export default function CompanyInfoPage() {
               type="tel"
             />
             {errors.official_phone && <div className="field-error-msg">{errors.official_phone}</div>}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Section 5: Branding ─────────────────────────────────────────── */}
-      <div className="card mb-24">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-palette" /> Branding</div>
-        </div>
-        <div className="form-row cols-2" style={{ padding: "20px 24px" }}>
-          <div className="field-group">
-            <label className="field-label">Accent color</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="color"
-                value={form.brand_color || "#1e4e8c"}
-                onChange={e => handleField("brand_color", e.target.value)}
-                style={{ width: 44, height: 36, padding: 2, border: "1.5px solid var(--outline-v)", borderRadius: "var(--radius)", cursor: "pointer" }}
-              />
-              <input
-                className="field-input"
-                value={form.brand_color}
-                onChange={e => handleField("brand_color", e.target.value)}
-                placeholder="#1e4e8c"
-                style={{ flex: 1 }}
-              />
-            </div>
-            <p style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-              Used on your own login page and dashboard in place of the default color. Leave blank to use the default.
-            </p>
           </div>
         </div>
       </div>

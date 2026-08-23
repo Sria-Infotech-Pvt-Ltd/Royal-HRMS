@@ -211,7 +211,28 @@ class CompanyListCreateView(APIView):
         except CompanyCodeTaken as exc:
             return error(f'Company code "{exc}" is already in use.')
 
-        finish_provisioning_task.delay(str(client.id), data['admin_email'], client.enabled_modules)
+        # Every other .delay()/apply_async() call site in this codebase wraps
+        # dispatch in try/except (see apps/recruitment/views.py's comment on
+        # the same pattern) because CELERY_BROKER_TRANSPORT_OPTIONS bounds a
+        # dead broker to ~1.2s, not zero — it still raises. Unlike those
+        # fire-and-forget email dispatches, this one is the entire point of
+        # the request, so a broker failure here must flip the just-created
+        # row to 'failed' and tell the platform admin, not 500 silently while
+        # leaving an orphaned 'pending' row nothing will ever pick up (the
+        # 15-minute sweep only recovers a task that was queued and then lost,
+        # not one that was never queued at all).
+        try:
+            finish_provisioning_task.delay(str(client.id), data['admin_email'], client.enabled_modules)
+        except Exception:
+            Client.objects.filter(pk=client.pk).update(provisioning_status=Client.PROVISIONING_FAILED)
+            logger.exception(
+                'Failed to queue provisioning task for %s — broker unreachable.', client.company_code,
+            )
+            return error(
+                'Company was registered but provisioning could not be started — the background '
+                'task queue is unreachable. Please try again in a moment.',
+                http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         _log_platform_action(request, 'company_created', target_company=client, changes={
             'company_name': client.company_name, 'modules': client.enabled_modules,

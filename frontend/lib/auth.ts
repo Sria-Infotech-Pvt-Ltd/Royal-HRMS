@@ -9,8 +9,6 @@ export interface UserInfo {
   userId:              string;
   companyCode:         string;
   companyName:         string;
-  companyLogoUrl:      string | null;
-  companyBrandColor:   string;
   email:             string;
   name:              string;
   role:              string;

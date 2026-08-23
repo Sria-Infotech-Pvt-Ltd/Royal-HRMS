@@ -688,3 +688,32 @@ class WorkFromHomeRequest(models.Model):
             .order_by('-created_at')
             .first()
         )
+
+
+# ─── WFH Saved Location ─────────────────────────────────────────────────────────
+
+class WFHSavedLocation(models.Model):
+    """
+    An employee's own reusable WFH location (e.g. "Home", "Co-working space"),
+    so they don't have to re-run the browser's Geolocation API and re-capture
+    the same coordinates on every request. Purely a per-employee convenience
+    list — has no bearing on WorkFromHomeRequest's own latitude/longitude,
+    which is still copied in as plain values at submit time (see
+    WorkFromHomeRequest's docstring for why there's no live address/geocoding
+    integration to hook into instead).
+    """
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee   = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='wfh_saved_locations')
+    label      = models.CharField(max_length=100)
+    latitude   = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude  = models.DecimalField(max_digits=9, decimal_places=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'hrms_wfh_saved_locations'
+        ordering        = ['label']
+        unique_together = ('employee', 'label')
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.label}'

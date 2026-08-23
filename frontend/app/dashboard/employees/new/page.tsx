@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DEPARTMENT_OPTIONS } from "../_data";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 /* ══════════════════════════════════════════════════════════════
    CONSTANTS & OPTIONS
@@ -771,6 +772,7 @@ function validateStep(step: number, form: FormData): Record<string, string> {
 ══════════════════════════════════════════════════════════════ */
 export default function NewEmployeePage() {
   const router = useRouter();
+  const user = useCurrentUser();
   const [step,   setStep]   = useState(1);
   const [form,   setForm]   = useState<FormData>(EMPTY);
   const [errs,   setErrs]   = useState<StepErrors>({});
@@ -915,7 +917,7 @@ export default function NewEmployeePage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-[16px] font-bold text-[var(--on-bg)] leading-tight">Welcome, {displayName}</h1>
           <p className="text-[12.5px] text-[var(--on-variant)] mt-0.5 truncate">
-            {displayRole} at Royal Staffing Services LLP
+            {displayRole} at {user?.companyName}
           </p>
         </div>
         <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold flex-shrink-0"

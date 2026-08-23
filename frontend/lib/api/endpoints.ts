@@ -6,7 +6,6 @@ export const API = {
     verifyOtp: "/verify-otp/",
     resetPassword: "/reset-password/",
     changePassword: "/change-password/",
-    companyBranding: (companyCode: string) => `/public/company-branding/${companyCode}/`,
   },
 
   platformAdmin: {
@@ -235,9 +234,11 @@ export const API = {
   },
 
   workFromHome: {
-    requests:       "/wfh/requests/",
-    requestDetail:  (id: string) => `/wfh/requests/${id}/`,
-    approve:        (id: string) => `/wfh/requests/${id}/approve/`,
+    requests:            "/wfh/requests/",
+    requestDetail:       (id: string) => `/wfh/requests/${id}/`,
+    approve:             (id: string) => `/wfh/requests/${id}/approve/`,
+    savedLocations:      "/wfh/saved-locations/",
+    savedLocationDetail: (id: string) => `/wfh/saved-locations/${id}/`,
   },
 
   attendance: {
@@ -351,6 +352,7 @@ export const API = {
     employeeSalary: "/payroll/employee-salary/",
     employeeSalaryDetail: (id: string) => `/payroll/employee-salary/${id}/`,
     employeeSalaryHistory: (employeeId: string) => `/payroll/employee-salary/history/${employeeId}/`,
+    employeePayslipHistory: (employeeId: string) => `/payroll/employees/${employeeId}/payslips/`,
 
     // Payroll cycles
     cycles: "/payroll/cycles/",

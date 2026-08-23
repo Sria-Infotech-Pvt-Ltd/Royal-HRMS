@@ -34,6 +34,7 @@ import { WishesTab } from "./_components/WishesTab";
 import { LeaveTab } from "./_components/LeaveTab";
 import { AttendanceTab } from "./_components/AttendanceTab";
 import SalaryTab from "./_components/SalaryTab";
+import PayrollTab from "./_components/PayrollTab";
 import PromotionTab from "./_components/PromotionTab";
 
 interface ApiProfile {
@@ -699,6 +700,8 @@ export default function EmployeeProfilePage({
         </div>
       ) : tab === "salary" ? (
         <SalaryTab employeeId={employeeUuid} />
+      ) : tab === "payroll" ? (
+        <PayrollTab employeeId={employeeUuid} />
       ) : tab === "leave" ? (
         <LeaveTab employeeId={id} />
       ) : tab === "attendance" ? (

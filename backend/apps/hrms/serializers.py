@@ -11,6 +11,7 @@ from .models import (
     LeaveBalance, LeavePolicy, LeaveRequest,
     LEAVE_TYPE_CHOICES, DURATION_CHOICES,
     WorkFromHomeRequest,
+    WFHSavedLocation,
     SeparationRequest,
     SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_CANCELLED,
     SEP_STAGE_HR, SEP_STAGE_MANAGER, SEP_STAGE_BRANCH_ADMIN,
@@ -466,12 +467,54 @@ class WorkFromHomeRequestCreateSerializer(serializers.ModelSerializer):
         model  = WorkFromHomeRequest
         fields = ['start_date', 'end_date', 'reason', 'location_label', 'latitude', 'longitude']
 
+    def to_internal_value(self, data):
+        # The browser's Geolocation API returns far more decimal precision
+        # than the model's decimal_places=6 (e.g. 17.3850445674382) — DRF's
+        # DecimalField validates the raw digit count before any rounding, so
+        # an unrounded reading fails max_digits even though the value itself
+        # is a perfectly valid coordinate. Round here so any client's raw
+        # GPS precision is accepted; 6 decimal places is already ~0.11m
+        # resolution, far tighter than a WFH geofence check needs.
+        data = data.copy()
+        for field in ('latitude', 'longitude'):
+            if data.get(field) is not None:
+                try:
+                    data[field] = round(float(data[field]), 6)
+                except (TypeError, ValueError):
+                    pass  # let the field's own validation report the bad value
+        return super().to_internal_value(data)
+
     def validate(self, data):
         start = data.get('start_date')
         end   = data.get('end_date')
         if start and end and end < start:
             raise serializers.ValidationError({'end_date': 'End date must be on or after start date.'})
         return data
+
+
+class WFHSavedLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = WFHSavedLocation
+        fields = ['id', 'label', 'latitude', 'longitude', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def to_internal_value(self, data):
+        # Same raw-GPS-precision issue as WorkFromHomeRequestCreateSerializer
+        # above — round before DRF's own DecimalField validation runs.
+        data = data.copy()
+        for field in ('latitude', 'longitude'):
+            if data.get(field) is not None:
+                try:
+                    data[field] = round(float(data[field]), 6)
+                except (TypeError, ValueError):
+                    pass
+        return super().to_internal_value(data)
+
+    def validate_label(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Label is required.')
+        return value
 
 
 class LeaveRequestCreateSerializer(serializers.ModelSerializer):

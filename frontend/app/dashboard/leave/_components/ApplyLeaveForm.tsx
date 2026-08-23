@@ -349,8 +349,8 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                     <span className="font-semibold text-[var(--on-bg)] text-right">{preview.actual_leave_days}</span>
                     <span className="text-[var(--on-variant)]">Available Balance</span>
                     <span className="font-semibold text-[var(--on-bg)] text-right">{preview.available_balance}</span>
-                    <span className="text-[var(--on-variant)]">Earned Leave Used</span>
-                    <span className="font-semibold text-[var(--on-bg)] text-right">{preview.earned_leave_used}</span>
+                    <span className="text-[var(--on-variant)]">Leave Days Used</span>
+                    <span className="font-semibold text-[var(--on-bg)] text-right">{preview.leave_days_used}</span>
                     <span className="text-[var(--on-variant)]">LOP Days</span>
                     <span className={["font-semibold text-right", preview.lop_days > 0 ? "text-amber-700" : "text-[var(--on-bg)]"].join(" ")}>
                       {preview.lop_days}
