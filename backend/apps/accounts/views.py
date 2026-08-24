@@ -4841,6 +4841,24 @@ class EmployeeDocumentView(APIView):
                 logger.error('Employee doc download error doc=%s: %s', doc_id, exc, exc_info=True)
                 return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
 
+            # Audit who actually opened this specific sensitive document (PAN
+            # card, Aadhaar, bank proof, etc.) — separate from and in addition
+            # to the existing permission check above, which only records who
+            # is *allowed* to view it, not who actually did and when. Logged
+            # only once the fetch from Cloudinary has actually succeeded, so
+            # a 404/permission-denied/upstream-error attempt above never
+            # creates a misleading "viewed" record.
+            AuditLog.objects.create(
+                user=request.user, action='document_viewed', module='accounts',
+                object_id=str(doc.id),
+                changes={
+                    'document_type': doc.document_type,
+                    'document_owner': doc.user.email,
+                    'file_name': doc.file_name,
+                },
+                ip_address=get_client_ip(request),
+            )
+
             content_type = 'application/pdf' if fmt == 'pdf' else r.headers.get('content-type', 'application/octet-stream')
             response = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)
             response['Content-Disposition'] = f'inline; filename="{doc.file_name}"'

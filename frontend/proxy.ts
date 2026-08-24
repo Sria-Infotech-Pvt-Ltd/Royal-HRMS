@@ -7,7 +7,11 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/announcements": "announcements.view",
   "/dashboard/interview-list": "recruitment.view",
   "/dashboard/candidate-review": "recruitment.view",
-  "/dashboard/assessments": "assessments.view",
+  // /dashboard/assessments intentionally absent — every employee can view
+  // their own assigned assessments here, not just assessments.* holders
+  // (same self-service reasoning as /dashboard/separation below). The page
+  // itself picks admin management vs. EmployeeMyAssessments based on
+  // permission (see app/dashboard/assessments/page.tsx's isAdminView check).
   "/dashboard/onboarding-approvals": "employees.approve",
   "/dashboard/email-logs": "recruitment.view",
   "/dashboard/employees": "employees.view",

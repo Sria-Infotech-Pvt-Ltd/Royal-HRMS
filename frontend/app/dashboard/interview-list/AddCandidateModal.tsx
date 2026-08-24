@@ -96,7 +96,12 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
       setError("Interview date cannot be in the past.");
       return;
     }
-    if (!form.branch) {
+    // Only unrestricted users actually pick a branch here — everyone else's
+    // field is locked/read-only and the backend resolves their branch itself
+    // (CandidateListCreateView.post), so this required-check would otherwise
+    // block a legitimate submission whenever the best-effort name-match below
+    // hasn't resolved form.branch yet (branches list still loading, etc.).
+    if (unrestricted && !form.branch) {
       setError("Please select a branch.");
       return;
     }
