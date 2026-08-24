@@ -31,6 +31,8 @@ _MODULE_DEFAULT_CATEGORY = {
     'attendance':     'attendance',
     'regularization': 'attendance',
     'permission':     'attendance',
+    'expense':        'expense',
+    'separation':     'separation',
 }
 
 
@@ -50,6 +52,24 @@ def _category_enabled(user, category: str | None) -> bool:
         return getattr(settings_row, field)
     except Exception:
         return True
+
+
+def _category_enabled_user_ids(user_ids: list, category: str) -> list:
+    """Bulk version of _category_enabled for a broadcast notification (e.g.
+    a new Document Center upload going to many users at once) — one query
+    instead of one per recipient. Same "no row = enabled" default as the
+    single-user check above."""
+    try:
+        from .models import NotificationSettings
+        field = f'is_{category}_enabled'
+        disabled_ids = set(
+            NotificationSettings.objects
+            .filter(user_id__in=user_ids, **{field: False})
+            .values_list('user_id', flat=True)
+        )
+        return [uid for uid in user_ids if uid not in disabled_ids]
+    except Exception:
+        return user_ids
 
 
 def _notify(user, title: str, message: str, notification_type: str,
@@ -415,3 +435,174 @@ def _on_promotion_record_created(sender, instance, created, **kwargs):
             logger.exception('Failed to send promotion notification for employee %s', employee.id)
 
     transaction.on_commit(_send)
+
+
+# ─── Expense ────────────────────────────────────────────────────────────────────
+
+def _resolve_expense_approver(employee):
+    """One specific person to ping about a new expense, mirroring the priority
+    apps.hrms.views.expenses._can_access_expense already uses to decide who
+    may act on it: the reporting manager first, then assigned HR — but only
+    if that specific person actually holds expenses.approve, since
+    can_manage_team/HR-assignment alone don't imply approval rights (see that
+    view's own ExpenseListCreateView.get scoping). Returns None rather than
+    guessing when neither resolves, same as leave's l1_approver-less case."""
+    from core.permissions import has_perm
+    manager = employee.reporting_manager
+    if manager and has_perm(manager, 'expenses.approve'):
+        return manager
+    hr = employee.hr
+    if hr and has_perm(hr, 'expenses.approve'):
+        return hr
+    return None
+
+
+@receiver(pre_save, sender='hrms.Expense')
+def _capture_expense_status(sender, instance, **kwargs):
+    instance._old_status = None
+    if instance.pk:
+        try:
+            instance._old_status = (
+                sender.objects.values_list('status', flat=True).get(pk=instance.pk)
+            )
+        except sender.DoesNotExist:
+            pass
+
+
+@receiver(post_save, sender='hrms.Expense')
+def _on_expense_save(sender, instance, created, **kwargs):
+    employee = instance.employee
+    ref_id   = str(instance.id)
+
+    if created:
+        _notify(employee, 'Expense Submitted',
+                f'Your expense "{instance.title}" has been submitted for approval.',
+                'expense_submitted', 'expense', ref_id, employee)
+        approver = _resolve_expense_approver(employee)
+        if approver:
+            _notify(approver, 'New Expense Pending Approval',
+                    f'{employee.full_name} submitted an expense — "{instance.title}".',
+                    'expense_submitted', 'expense', ref_id, employee, category='approval')
+        return
+
+    old_status = getattr(instance, '_old_status', None)
+    if old_status == instance.status:
+        return
+    if instance.status == 'approved':
+        _notify(employee, 'Expense Approved',
+                f'Your expense "{instance.title}" has been approved.',
+                'expense_status', 'expense', ref_id)
+    elif instance.status == 'rejected':
+        _notify(employee, 'Expense Rejected',
+                f'Your expense "{instance.title}" has been rejected.',
+                'expense_status', 'expense', ref_id)
+
+
+# ─── Separation ─────────────────────────────────────────────────────────────────
+
+@receiver(pre_save, sender='hrms.SeparationRequest')
+def _capture_separation_status(sender, instance, **kwargs):
+    instance._old_status = None
+    if instance.pk:
+        try:
+            instance._old_status = (
+                sender.objects.values_list('status', flat=True).get(pk=instance.pk)
+            )
+        except sender.DoesNotExist:
+            pass
+
+
+@receiver(post_save, sender='hrms.SeparationRequest')
+def _on_separation_save(sender, instance, created, **kwargs):
+    if created:
+        # The approval chain (instance.approval_stages) is bulk_created right
+        # after SeparationRequest.objects.create() in the same atomic block
+        # (see SeparationRequestListCreateView.post) — querying it now, before
+        # that block commits, would always find zero stages. Deferred to
+        # on_commit, same reasoning as the PromotionRecord notification above.
+        transaction.on_commit(lambda pk=instance.pk: _notify_separation_created(pk))
+        return
+
+    old_status = getattr(instance, '_old_status', None)
+    if old_status == instance.status:
+        return
+    _dispatch_separation_status(instance, instance.employee, str(instance.id), instance.status)
+
+
+def _notify_separation_created(sep_request_id) -> None:
+    from apps.hrms.models import SeparationRequest
+    try:
+        sep_request = (
+            SeparationRequest.objects
+            .select_related('employee')
+            .prefetch_related('approval_stages')
+            .get(pk=sep_request_id)
+        )
+    except SeparationRequest.DoesNotExist:
+        return
+    employee, ref_id = sep_request.employee, str(sep_request.id)
+    _notify(employee, 'Separation Request Submitted',
+            'Your separation request has been submitted successfully.',
+            'separation_submitted', 'separation', ref_id, employee)
+    first_stage = sep_request.approval_stages.order_by('sequence').first()
+    if first_stage and first_stage.approver:
+        _notify(first_stage.approver, 'Separation Request Pending Your Approval',
+                f'{employee.full_name}’s separation request needs your approval.',
+                'separation_submitted', 'separation', ref_id, employee, category='approval')
+
+
+def _dispatch_separation_status(instance, employee, ref_id, new_status) -> None:
+    from apps.hrms.models import APPROVAL_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_STAGE2_PENDING
+
+    if new_status == SEP_STAGE2_PENDING:
+        _notify(employee, 'Separation Request — Stage Approved',
+                'Your separation request has moved to the next approval stage.',
+                'separation_status', 'separation', ref_id)
+        next_stage = instance.approval_stages.filter(status=APPROVAL_PENDING).order_by('sequence').first()
+        if next_stage and next_stage.approver:
+            _notify(next_stage.approver, 'Separation Request Pending Your Approval',
+                    f'{employee.full_name}’s separation request needs your approval.',
+                    'separation_status', 'separation', ref_id, employee, category='approval')
+    elif new_status == SEP_APPROVED:
+        _notify(employee, 'Separation Request Approved',
+                'Your separation request has been fully approved.',
+                'separation_status', 'separation', ref_id)
+    elif new_status == SEP_REJECTED:
+        _notify(employee, 'Separation Request Rejected',
+                'Your separation request has been rejected.',
+                'separation_status', 'separation', ref_id)
+
+
+# ─── Document Center ────────────────────────────────────────────────────────────
+
+@receiver(post_save, sender='accounts.Document')
+def _on_document_save(sender, instance, created, **kwargs):
+    """Broadcasts a new Document Center upload — same shape as the
+    Announcement broadcast above, but gated by is_document_enabled since,
+    unlike an announcement, a document upload is exactly the kind of
+    notification the settings page already promises users control over."""
+    if not created:
+        return
+    from apps.accounts.models import User
+    from .models import Notification
+
+    users = User.objects.filter(is_active=True)
+    if instance.branch_id:
+        users = users.filter(branch=instance.branch.branch_name)
+    user_ids = _category_enabled_user_ids(list(users.values_list('id', flat=True)), 'document')
+
+    notifications = [
+        Notification(
+            user_id=uid,
+            title='New Document Available',
+            message=f'"{instance.title}" was added to the Document Center.',
+            notification_type='document_uploaded',
+            module='documents',
+            reference_id=str(instance.id),
+            created_by=instance.uploaded_by,
+        )
+        for uid in user_ids
+    ]
+    Notification.objects.bulk_create(notifications, ignore_conflicts=True)
+    for notification in notifications:
+        _push_live(notification)
