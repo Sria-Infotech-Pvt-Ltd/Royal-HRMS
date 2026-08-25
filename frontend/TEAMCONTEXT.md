@@ -4728,3 +4728,57 @@ Walked through `core/encrypted_fields.py`'s `EncryptedCharField`/`EncryptedJSONF
 - **Voice clock-in retry counts as a resource** — anywhere a new `FaceVerificationOutcome` terminal state is added, set `blocked=True` if a retry genuinely cannot help this cycle, or the voice flow will burn the employee's remaining attempts on something that can't succeed.
 - **Notification Settings self-service gap identified but not fixed this round** — the backend is already per-user, no-permission-required, but the frontend page and its toggles are gated behind `settings.edit` and only reachable via Settings. Flagged to the user; fix offered, not yet confirmed.
 - **Still no automated tests** around this round's changes — the existing `apps.attendance.tests_face_verification` / `apps.voice_commands.tests.test_clock_in_face_verification` suites could not be run to confirm no regression: the local test database is missing tables (`hrms_roles`) unrelated to this change, most likely the same tenant-schema/Neon flakiness documented in the 21 August entry above. Verified instead by full manual trace of `_match_and_record` → `PunchService.record_punch` → `AttendancePunchView` → `useClockWidget.ts`'s toast, and `manage.py check` passes clean.
+
+---
+
+# Team Context — Bulbul TTS/Hindi Voice Rollout Completion + FR/VC Bug-Fix Round
+
+**Branch:** ai (merged into demo 24 August 2026)
+
+---
+
+## Overview
+
+Merged from the `ai` branch — this entry documents it here since that branch's own commit never touched TEAMCONTEXT.md. Wraps up Phases 1–5 of the Bulbul TTS + Hindi language-matched voice rollout, plus a follow-up FR-1/FR-2/VC-1/VC-2/VC-3 fix round: face-match liveness/quality-gate hardening, voice clock-in/out face-verification message correctness, auto-listen scheduling, a new `QuickActionChips` component, and a stale WFH geofencing test fix. Merged alongside this same day's `Backend/24/08/2026` work — the two branches independently fixed the same Face ID mismatch-message bug from different angles (see item 1) and combined cleanly with no conflicts.
+
+---
+
+## 1. Face ID Mismatch Message — Complementary Fix to the Same-Day Low-Confidence Fix
+
+**File:** `apps/attendance/services_face_matching.py`
+
+Rewrote `_EMBEDDING_MISMATCH_MESSAGE` itself (the outright-mismatch case) to drop the same misleading "try again in good lighting" wording this session's `Backend/24/08/2026` branch also flagged — reworded to "We couldn't match your face to your registered Face ID. You can try again, or contact your HR representative if this keeps happening," framed as "we couldn't match" rather than "your face didn't match" since a marginal registration reference could equally be the cause. This branch's own comment explicitly anticipated `_LOW_CONFIDENCE_MESSAGE` ("unlike `_LOW_CONFIDENCE_MESSAGE`'s hard reject below") before that constant existed on this branch — the two fixes were clearly aimed at the exact same three-way message problem from different angles, and merge cleanly into one coherent result: a specific message for outright mismatch (retry is genuinely useful), a separate one for the low-confidence hard-reject (retry is not), unchanged from either branch's own logic.
+
+Also updated `conversation_clock_in_face.py`'s ordinary (non-blocked, under-attempt-cap) voice retry path to surface `outcome.rejection_message` instead of always showing the generic bilingual `_RETRY_MESSAGE` — matching how the `blocked` branch already worked, so a voice retry now shows the same distinct, case-specific message the web flow does (English-only, since `services_face_matching.py` has no Hindi variants — an accepted existing tradeoff, not new).
+
+## 2. Face Capture Quality Gate — Multi-Face and Eye-Occlusion Detection
+
+**File:** `frontend/lib/faceApi/qualityGate.ts`, `frameCapture.ts`, `hooks/useFaceLivenessCapture.ts`
+
+Added `classifyDetectedFaceCount()` (0/1/multiple faces in frame — more than one is now rejected with a distinct `MULTIPLE_FACES_MESSAGE`) and an eye-occlusion check (`EYE_OCCLUSION_MESSAGE`, backed by `frameCapture.ts`'s `assessEyeOcclusion`), both pulled out of `useFaceLivenessCapture.ts` as pure, independently unit-tested functions rather than inline logic. Also added `selectFailureMessage()` — when a multi-attempt capture fails for different reasons across attempts (a shadow passes, then the person turns their head), shows the most recent attempt's specific reason rather than an arbitrary or generic one.
+
+## 3. Voice Auto-Listen After Speaking — Race-Safe Scheduling
+
+**File:** `frontend/lib/voiceAutoListen.ts` (new)
+
+Extracted the "reopen the mic after a mid-conversation question finishes speaking" logic out of `useVoiceCommand.ts` into a pure, DOM-free module specifically so its race-prone half (a delayed timer that must yield to a manual mic click, and must not fire for a response a newer one has already superseded) is unit-testable with fake timers. `shouldAutoListenAfterSpeaking()` only auto-reopens for a genuine voice-answer follow-up turn — not the face-proof camera turn, which expects a captured descriptor, not speech.
+
+## 4. Quick Action Chips — Tap-to-Submit Bilingual Shortcuts
+
+**File:** `frontend/components/QuickActionChips.tsx` (new, extracted from `VoiceConversationPanel.tsx`)
+
+One tap submits the exact phrase through the same `/voice/parse/` pipeline as typing it — every phrase is copied verbatim from `backend/apps/voice_commands/registry/intents_en.yaml`, and every intent used has `required_permission: null` so the chips need no per-user filtering. Bilingual labels (English + Hindi) on every chip rather than behind a language toggle; the Hindi labels are new translations (chosen to match existing backend Hindi vocabulary where concepts overlap) since the backend's own Hindi strings only ever covered spoken/displayed response text, not UI button labels — **not yet confirmed against a native speaker**, same open item Phases 3/3.1 already flagged for their own new Hindi text.
+
+## 5. Stale WFH Geofencing Test Fixed
+
+**File:** `apps/voice_commands/tests/test_mode_geofencing.py`
+
+`test_wfh_mode_allowed_without_gps` asserted WFH mode was allowed with no approved WFH request and no GPS — no longer true; the real `_validate_wfh` contract requires both an approved `WorkFromHomeRequest` for today AND matching GPS. Replaced with `test_wfh_mode_without_approved_request_is_rejected` and `test_wfh_mode_with_approved_request_requires_gps`, mocking `WorkFromHomeRequest.approved_for` instead of the branch resolver.
+
+---
+
+## Notes for Next Developer
+
+- **The new Hindi labels on `QuickActionChips` have not been reviewed by a native speaker** — same standing gap as the Phase 3/3.1 Hindi response text elsewhere in voice_commands.
+- **`services_face_matching.py` has no Hindi message variants at all** — voice clock-in's rejection messages surface in English even mid-Hindi-conversation; an accepted, pre-existing tradeoff, not something this round introduced or fixed.
+- This entry was written after the fact, from the merged diff — the `ai` branch's own commit carried no TEAMCONTEXT.md update, so implementation details beyond what's visible in the code/tests aren't captured here.
