@@ -4728,3 +4728,88 @@ Walked through `core/encrypted_fields.py`'s `EncryptedCharField`/`EncryptedJSONF
 - **Voice clock-in retry counts as a resource** — anywhere a new `FaceVerificationOutcome` terminal state is added, set `blocked=True` if a retry genuinely cannot help this cycle, or the voice flow will burn the employee's remaining attempts on something that can't succeed.
 - **Notification Settings self-service gap identified but not fixed this round** — the backend is already per-user, no-permission-required, but the frontend page and its toggles are gated behind `settings.edit` and only reachable via Settings. Flagged to the user; fix offered, not yet confirmed.
 - **Still no automated tests** around this round's changes — the existing `apps.attendance.tests_face_verification` / `apps.voice_commands.tests.test_clock_in_face_verification` suites could not be run to confirm no regression: the local test database is missing tables (`hrms_roles`) unrelated to this change, most likely the same tenant-schema/Neon flakiness documented in the 21 August entry above. Verified instead by full manual trace of `_match_and_record` → `PunchService.record_punch` → `AttendancePunchView` → `useClockWidget.ts`'s toast, and `manage.py check` passes clean.
+
+---
+
+# Team Context — Multi-Tenancy Removal, Aira HRMS Rebrand, Cloudinary → ImageKit
+
+**Author:** G.Durga Prasad
+**Date:** 25 August 2026
+**Branch:** Backend/24/08/2026 → merged with `ai` → pushed as `New-AI`
+
+---
+
+## Overview
+
+Three large, independent pieces of work in one session: reverted the entire schema-per-tenant `django-tenants` conversion back to a plain single-tenant app, rebranded the product from Royal HRMS to Aira HRMS, and replaced Cloudinary (account got disabled mid-session, breaking every upload) with ImageKit.io. Also merged in the separate `ai` branch's Sarvam TTS/voice-command work, and fixed two real bugs the tenant removal incidentally surfaced. Local dev environment turned out to have its own problem worth documenting: a venv that silently ran packages from a different, older project folder.
+
+---
+
+## 1. Multi-Tenancy Removal
+
+**Files:** `backend/apps/tenants/` (deleted entirely), `backend/config/settings.py`, `backend/core/{storage,tenant_command,notification_groups,cache_keys}.py`, `backend/apps/accounts/{views,serializers,models,throttles,tasks}.py`, ~13 Celery task signatures across `recruitment`/`hrms`/`payroll`/`attendance`/`notifications`/`assessments`/`announcements`, `backend/apps/notifications/ws_auth.py`, `backend/apps/voice_commands/executor.py`, 5 management commands, `frontend/app/platform-admin/**` (deleted), `frontend/proxy.ts`, `frontend/lib/auth.ts`, `frontend/lib/session.ts`, `frontend/app/login/page.tsx`, `frontend/components/auth/ForgotPasswordForm.tsx`
+
+The app was schema-per-tenant (`django-tenants`): a shared `public` schema held a `Client`/`Domain` registry plus a fully separate `PlatformAdmin` operator layer, and every business table got its own copy per company schema. Reverted to a single shared schema. `apps/tenants` (middleware, auth, tokens, provisioning views/services, feature-gate, 11 migrations) is gone outright. `INSTALLED_APPS`/`TENANT_MODEL`/`DATABASE_ROUTERS`/`TenantSchemaMiddleware` collapsed into a plain Django setup. Login no longer takes a `company_code`; the JWT no longer carries a `company_schema` claim.
+
+The most repetitive part: ~13 Celery tasks across 7 apps all followed the same idiom — a view/signal captures `connection.schema_name`, passes it as the task's first arg, and the task calls `apps.tenants.utils.run_in_tenant(schema_name, fn)` to reactivate that schema in the worker (a fresh Celery connection defaults to `public` otherwise). Every one of those lost the `schema_name` param and the wrapper; 5 Beat-scheduled tasks that used `run_for_all_tenants(...)` to loop over every company became a single direct run. WebSocket auth (`ws_auth.py`) had its own copy of the same schema-activation pattern for the Channels handshake (which bypasses HTTP middleware) — simplified to plain JWT auth.
+
+Per-company module enable/disable (`Client.enabled_modules`) is gone entirely per explicit decision — every module is always available now; `apps/voice_commands/executor.py`'s `connection.tenant.has_module(...)` re-check (it bypassed the HTTP middleware's gate) was deleted outright.
+
+Database: the live Neon Postgres had one real tenant schema (`tenant_qatest`, confirmed test data) plus `public`. Both dropped; fresh `migrate` on an empty `public` schema landed everything in one place, confirmed via `manage.py check` + `makemigrations --check --dry-run` both clean, zero migration needed for the model-field changes below since Django compares storage classes by resolved identity, not name.
+
+**Two real bugs found during this work, unrelated to tenancy itself:**
+- `config/settings.py`'s `LOGGING` config registered a logger named `'accounts'`, but every file in that app logs via `logging.getLogger(__name__)`, which resolves to `apps.accounts.*` — never literally `accounts`. Every `logger.info(...)` call in the whole app (login success, OTP sent, onboarding approved, etc.) was silently falling through to the root logger's `WARNING` threshold and vanishing. Fixed the key to `'apps.accounts'` — the exact mistake the neighboring `apps.voice_commands` logger entry's own comment already warned about, just never applied to `accounts` itself.
+- `apps/accounts/utils.py` built the SMTP "From" header via raw f-string (`f'{sender_name} <{from_email}>'`) instead of `email.utils.formataddr()`. Any sender name containing `@` (or a comma) needs RFC 5322 quoting that the f-string never did — Django's mail sanitizer correctly rejected it as malformed the moment a user set their Sender Name to an email address. Fixed in both `_get_smtp_connection()` and `send_test_email()`.
+
+## 2. Rebrand — Royal HRMS → Aira HRMS
+
+**Files:** ~14 files with hardcoded "Royal HRMS"/"Royal Staffing" text (`layout.tsx`, `login/page.tsx`, `DashboardShell.tsx`, onboarding pages, settings pages, `SmtpModal.tsx`, `settings.py`, `utils.py`, `views.py`, `recruitment/views.py`'s ICS `PRODID`, `.env.example`), plus a new data-fix migration for historical seed content, plus the logo asset itself
+
+Straightforward text swap everywhere it's user-visible — **left the 4 protected auth cookie names (`royal_hrms_auth`, `royal_hrms_user`, `royal_access_token`, `royal_refresh_token`) and the `royal_hrms_voice_muted` localStorage key completely untouched**, per explicit decision — those are internal technical identifiers, not branding, and renaming them would be a much larger, riskier change touching the whole auth flow for zero user-visible benefit.
+
+One thing the text-grep alone wouldn't have caught: 8 of the original built-in `EmailTemplate` rows (`payslip`, `onboarding`, `birthday`, etc., seeded by the old `0006_email_templates` migration) had "Royal Staffing"/"Royal Staffing Services" hardcoded directly into their subject/body, even though every one of them already lists `{COMPANY}` in `available_variables` and every real caller already passes it. Rather than hand-edit that already-applied historical migration (against project convention) or swap one hardcoded name for another, added a new migration (`0095_fix_hardcoded_company_name_in_email_templates.py`, a `RunPython` data fix in the same style as the existing `0090`/`0073` precedents) that replaces the literal text with `{COMPANY}` in those 8 rows — the correct fix, not just a rename.
+
+**Also found a second stale-cookie bug the same shape as the logger one above**: `DashboardShell.tsx`'s sidebar brand text read `session.companyName || "Aira HRMS"` — but login no longer writes `companyName` into the session cookie at all (removed as part of the tenant work), so any browser with an old cookie from before this rebrand kept showing whatever stale value was cached there, since a truthy stale value never falls through to the new default. Removed the dead `companyName` field from `SessionPayload` entirely and hardcoded the brand name in `DashboardShell.tsx` — no cookie, stale or fresh, can reintroduce this.
+
+**Logo**: went through several rounds of direct feedback settling on: the exact source image, background-removed via a real ML segmentation model (`rembg`, installed for this — a from-black brightness-based cutout doesn't work on a non-black gradient background and was explicitly rejected once a color-shift was noticed at the blend edges), badge + "AIRA" wordmark kept together (the two small taglines get dropped — the segmentation treated them as background). One derived asset, `frontend/public/logo-icon.png`, is used for every space-constrained spot (collapsed/expanded sidebar, favicon, onboarding header) since the full image is illegible below ~150px; the master `frontend/public/logo.png` (background-removed, no crop) is used wherever there's room. `favicon.ico` must be regenerated as **RGBA** — Pillow can write a non-alpha ICO that looks fine everywhere except Next.js's own dev-overlay image decoder, which rejects it outright.
+
+## 3. Cloudinary → ImageKit.io
+
+**Files:** `backend/core/storage.py` (rewritten), `backend/config/settings.py`, `backend/apps/accounts/{models,views,serializers}.py`, `backend/apps/hrms/models.py`, `backend/apps/dashboard/views/overview.py`, `backend/requirements.txt`, `.env`/`.env.example`
+
+The configured Cloudinary account got disabled by Cloudinary itself mid-session (`AuthorizationRequired: cloud_name is disabled` / `disabled customer`, confirmed via a direct `cloudinary.api.ping()` call) — broke every upload in the app. Replaced with ImageKit.io (SDK `imagekitio==5.9.0`, a Stainless-generated client — its actual method names (`client.files.upload/delete`, `client.helper.build_url`) differ from what's documented in most search results for this package, which describe an older flat API; verified directly via `inspect.signature()` rather than trusting docs).
+
+`core/storage.py` now has `ImageKitStorage` (public, matches the old default `RawMediaCloudinaryStorage` behavior) and `AuthenticatedImageKitStorage(ImageKitStorage)` (`is_private_file=True` at upload + a signed/expiring `build_url()` for reads — same security property the old `type='authenticated'` Cloudinary path had, verified end-to-end: an unsigned URL for a private file genuinely 403s, a signed one works). The one real architectural wrinkle: **ImageKit's delete API takes a `file_id`, not a path** — there's no delete-by-path endpoint — so `delete(name)` first resolves the file via `client.assets.list(path=..., search_query='name="..."')`, with a short retry-with-backoff since that search index lags a moment behind both fresh uploads and fresh deletes (confirmed the delete itself is instant via a direct `files.get(file_id)` — only the *search* index used for the id lookup is eventually-consistent). Historical migrations (`accounts` 0079-0082, `hrms` 0023) still reference `AuthenticatedRawMediaCloudinaryStorage` by name in their frozen `field=` kwargs — rather than edit already-applied migrations, `core/storage.py` keeps that name as a plain alias to the new class, which also means Django's migration autodetector sees no field change to migrate at all (same class object either way).
+
+Six call sites in `views.py`/`serializers.py` bypassed the storage abstraction entirely to mint Cloudinary signed URLs by hand (`cloudinary.utils.private_download_url`/`cloudinary_url`) — all six now just use `file_field.url`, which already does the exact same signing via the storage class, so the manual SDK calls (and the `_cloudinary_signed_url` helper) were deleted rather than ported.
+
+## 4. Merged `ai` Branch
+
+`origin/ai` had exactly one commit beyond the point our branch and it shared: "Bulbul TTS/Hindi voice rollout completion + FR/VC bug-fix round" (Sarvam TTS/Hindi voice, face-verification liveness hardening, new `QuickActionChips` component). Zero file overlap with any of the above — merged clean with one auto-merge (`services_face_matching.py`, where a pre-existing commit already on this branch and the `ai` branch's commit touched different messaging in the same file). Confirmed no tenant-related content anywhere in that branch or its own `TEAMCONTEXT.md` before merging.
+
+## 5. Dev Environment — Cross-Venv Contamination
+
+Not a code bug, but cost real debugging time and will hit anyone else on this machine: `backend/H` (the venv) was originally created under an old `Royal-HRMS` folder path before the project got renamed/copied to `Aira Hrms`. **Windows console-script `.exe` launchers embed an absolute interpreter path at install time** — a folder rename doesn't update that. `celery.exe`, `daphne.exe`, `django-admin.exe`, `gunicorn.exe`, and even `pip.exe` itself were all silently running against the old `Royal-HRMS\backend\H` site-packages (which obviously never had `imagekitio` installed), while plain `python manage.py runserver` invocations were unaffected since those go through PATH-resolved `python.exe` directly, not a stub. Fixed by `pip install --force-reinstall --no-deps <pkg>` for each affected package — regenerates the stub with the correct path. A handful of never-directly-invoked transitive-dependency CLI tools (`cbor2`, `idna`, `cffi`, etc.) still have stale stubs; not worth fixing since nothing in this project calls them by name.
+
+Separately, an earlier broad `pip install --force-reinstall -r <freeze>` attempt (trying to fix the above for *every* installed package at once) hit a 3-minute timeout mid-run and left `numpy`, `psycopg2`, and `pydantic_core` in a half-uninstalled state (visible as stray `~umpy`/`~sycopg2`/`~ydantic_core` directories in site-packages — the `~` prefix is pip's own in-progress-uninstall rename). `numpy` was genuinely broken (`ModuleNotFoundError: No module named 'numpy._utils'`, surfaced via `daphne` → `autobahn`'s flatbuffers code importing numpy); `psycopg2`/`pydantic_core` still worked despite the leftover debris. Reinstalled `numpy` clean, deleted all three stray directories, confirmed via `pip check`.
+
+---
+
+## Key Files Changed
+
+| Area | Representative files |
+|------|------|
+| Tenant removal (backend) | `apps/tenants/**` (deleted), `config/settings.py`, `core/storage.py`, `apps/accounts/{views,serializers,models,throttles,tasks}.py`, 7 apps' `tasks.py` |
+| Tenant removal (frontend) | `app/platform-admin/**` (deleted), `proxy.ts`, `lib/auth.ts`, `lib/session.ts`, `app/login/page.tsx` |
+| Rebrand | `app/layout.tsx`, `DashboardShell.tsx`, `apps/accounts/migrations/0095_fix_hardcoded_company_name_in_email_templates.py`, `public/logo.png`, `public/logo-icon.png` |
+| ImageKit | `core/storage.py`, `config/settings.py`, `.env`/`.env.example`, `apps/accounts/{views,serializers}.py` |
+
+---
+
+## Notes for Next Developer
+
+- **Don't re-add per-tenant anything without re-reading this entry first** — `apps/tenants` is gone by explicit decision, not oversight, including module enable/disable. If multi-tenancy is ever needed again it should be designed fresh, not resurrected from git history piecemeal.
+- **The `AuthenticatedRawMediaCloudinaryStorage` alias in `core/storage.py` must stay** until migrations `accounts/0079-0082` and `hrms/0023` are squashed — it's a real dependency, not dead code, despite the name.
+- **If a future package install silently "does nothing" or a command errors with an import that should obviously be installed**, check whether its `.exe` stub in `backend/H/Scripts/` is pointing at the wrong venv before assuming the package itself is broken (`grep`/inspect the exe for a stale absolute path) — this cost real time twice in one session.
+- **The two tiny taglines under the "AIRA" wordmark aren't in `logo-icon.png`** — the background-removal model dropped them as non-foreground. If they matter later, re-crop from the master `logo.png` by hand rather than re-running segmentation.
+- **No automated test run this session** — verified everything (tenant removal, rebrand, ImageKit) via direct API-level scripts and `manage.py check`/`tsc --noEmit`, not the project's own test suites (same pre-existing local test-DB gap noted in the entry above this one).
