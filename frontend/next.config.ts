@@ -29,6 +29,12 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "res.cloudinary.com",
       },
+      {
+        // Actual media provider (see backend .env.example IMAGEKIT_* vars) -
+        // without this, next/image refuses to render any uploaded file.
+        protocol: "https",
+        hostname: "ik.imagekit.io",
+      },
     ],
   },
   async headers() {
