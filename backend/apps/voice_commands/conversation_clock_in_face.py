@@ -187,8 +187,21 @@ def continue_voice_clock_punch(
     # false on the frontend — the camera silently never reopened for a
     # retry, surfaced when the 2026-08-13 step-up/threshold fixes produced
     # the first genuine voice mismatch this flow had ever hit in practice.
+    #
+    # outcome.rejection_message (not the generic _RETRY_MESSAGE) — this
+    # branch used to always show _RETRY_MESSAGE regardless of why
+    # verify_for_punch actually rejected the attempt, discarding the same
+    # distinct per-case messages (mismatch, low-confidence, ...) that
+    # already reach the user correctly on web (see FR-1's audit). The
+    # `blocked` branch above already does this; this makes the ordinary
+    # (non-blocked, under the attempt cap) retry case consistent with it.
+    # rejection_message is English-only (services_face_matching.py has no
+    # Hindi variants) — same tradeoff the `blocked` branch above already
+    # accepts, not a new one introduced here. Falls back to the bilingual
+    # _RETRY_MESSAGE only for the type-declared-but-practically-unreachable
+    # case where rejection_message is None on a non-match outcome.
     return _payload(
-        intent, None, {'awaiting_face_proof': True}, text(_RETRY_MESSAGE),
+        intent, None, {'awaiting_face_proof': True}, outcome.rejection_message or text(_RETRY_MESSAGE),
         awaiting_input=True, conversational=True,
     )
 

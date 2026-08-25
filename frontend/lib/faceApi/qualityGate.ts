@@ -179,3 +179,54 @@ export function euclideanDistance(a: number[], b: number[]): number {
   }
   return Math.sqrt(sumSquares);
 }
+
+// ─── Failure messages beyond the per-frame quality gate ────────────────────
+// assessFrameQuality's own `reasons` above already double as user-facing
+// copy for its 6 checks (distinct and polite as written — see the FR-1 audit
+// this responds to). These two cover the two capture-time failures that
+// aren't part of that gate: more than one face in frame, and a best-effort
+// guess that the eyes are covered (see frameCapture.ts's assessEyeOcclusion
+// for the actual signal). Named as constants, not inlined, so every caller
+// that needs to recognize "this specific message" (tests included) has one
+// place to reference instead of a repeated string literal.
+export const MULTIPLE_FACES_MESSAGE =
+  'Multiple faces detected — please make sure only your face is in frame.';
+export const EYE_OCCLUSION_MESSAGE =
+  "We couldn't clearly detect your eyes — please remove sunglasses or anything covering your face and try again.";
+
+export type DetectedFaceCount = 'none' | 'single' | 'multiple';
+
+/**
+ * What a detectAllFaces() call's result count means for a capture attempt —
+ * pulled out of useFaceLivenessCapture.ts's captureOneQualityGatedFrame as
+ * its own pure function so "0 faces retries silently, exactly 1 face
+ * proceeds to the quality gate, more than 1 face is rejected with
+ * MULTIPLE_FACES_MESSAGE" is unit-testable without mocking face-api.js, the
+ * camera, or the DOM.
+ */
+export function classifyDetectedFaceCount(count: number): DetectedFaceCount {
+  if (count === 0) return 'none';
+  if (count === 1) return 'single';
+  return 'multiple';
+}
+
+/**
+ * A quality-gated multi-frame capture can fail several attempts in a row for
+ * DIFFERENT reasons (a shadow passes, then the person turns their head) —
+ * picking any single attempt's reason arbitrarily would be misleading, and
+ * showing all of them at once would read as a wall of text. This takes the
+ * most RECENT attempt that had a specific, identifiable reason (as opposed
+ * to "no face detected this instant", which isn't attributable to anything
+ * the person can act on) — the most recent read of conditions is the most
+ * relevant one by the time the whole capture gives up and surfaces a
+ * message. Returns null when no attempt ever produced a specific reason
+ * (e.g. a face was never detected at all), so the caller can fall back to
+ * its own generic message instead of showing nothing.
+ */
+export function selectFailureMessage(reasonsPerAttempt: string[][]): string | null {
+  let lastReason: string | null = null;
+  for (const reasons of reasonsPerAttempt) {
+    if (reasons.length > 0) lastReason = reasons[0];
+  }
+  return lastReason;
+}

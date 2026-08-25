@@ -230,10 +230,11 @@ def handle_transcript(
     matching_text = strip_correction_slot_phrases(stripped_text)
     fresh_match = match_intent(matching_text, lang=lang)
 
-    if pending and fresh_match.intent != NO_MATCH_INTENT and fresh_match.intent != pending['intent']:
+    if pending and _should_abandon_pending(pending, fresh_match):
         logger.info(
             'Voice: abandoning pending %s clarification for user=%s — matched %s instead',
-            pending['intent'], user.pk, fresh_match.intent,
+            pending['intent'], user.pk,
+            fresh_match.intent if fresh_match.intent != NO_MATCH_INTENT else fresh_match.candidate_intent,
         )
         clear_pending(user.id)
         pending = None
@@ -302,6 +303,43 @@ def handle_transcript(
         request, fresh_match.intent, intent_text, fresh_match.confidence,
         attendance_mode=attendance_mode, lang=lang, latitude=latitude, longitude=longitude,
     )
+
+
+def _should_abandon_pending(pending: dict, fresh_match) -> bool:
+    """
+    True when a fresh utterance should override still-pending state rather
+    than being read as its continuation.
+
+    Two distinct cases:
+    1. fresh_match resolved CONFIDENTLY to a different intent than pending's
+       — the existing rule, covers every pending stage including mid-slot-
+       filling (apply_leave's date/type answers, leave-approval's name/
+       confirm steps, ...): a clean, confident match to something else means
+       the user has moved on.
+    2. pending is itself an unanswered "confirm this" turn (did-you-mean /
+       was-that-what-you-said — CLARIFICATION_STAGE or STT_CONFIRMATION_STAGE)
+       AND fresh_match is at least a middle-confidence candidate for a
+       DIFFERENT intent. Both of those stages only ever expect a yes/no
+       answer (see continue_clarification/continue_stt_confirmation's own
+       parse_yes_no calls) — neither recognizes a brand-new command as
+       anything but an unparseable non-answer, so without this, a user who
+       ignores the question and says something else entirely (which then
+       ALSO happens to land in the clarification band for its own, different
+       candidate) gets that new command silently swallowed: parse_yes_no
+       returns None and the stale question gets re-asked verbatim, reading
+       to the user as "did you mean <the OLD command>?" for something they
+       never said. Deliberately NOT extended to slot-filling stages (a slot
+       answer's shape — a date, a leave type, free text — makes a stray
+       clarification-band coincidence far more likely and far less
+       meaningful than it is for a plain yes/no turn).
+    """
+    if fresh_match.intent != NO_MATCH_INTENT:
+        return fresh_match.intent != pending['intent']
+
+    stage = pending['slots'].get('stage')
+    if stage not in (CLARIFICATION_STAGE, STT_CONFIRMATION_STAGE):
+        return False
+    return fresh_match.candidate_intent is not None and fresh_match.candidate_intent != pending['intent']
 
 
 def _dispatch_pending(

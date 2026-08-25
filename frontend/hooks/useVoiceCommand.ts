@@ -6,6 +6,7 @@ import { useToast } from "@/components/ToastProvider";
 import { API } from "@/lib/api/endpoints";
 import { captureAndTranscribeViaSarvam } from "@/lib/voiceSttFallback";
 import { fetchSpeechAudio, type TtsLanguage } from "@/lib/voiceTts";
+import { createAutoListenScheduler, shouldAutoListenAfterSpeaking } from "@/lib/voiceAutoListen";
 import type { VoiceCommandStatus, VoiceParseResult } from "@/types/voice";
 
 type NormalisedError = { message?: string };
@@ -27,6 +28,18 @@ const CONVERSATION_AUTO_CLOSE_MS = 4000;
 // itself, faster than the conversational auto-close above. Same
 // muted/unsupported-only fallback caveat as CONVERSATION_AUTO_CLOSE_MS.
 const IMMEDIATE_RESULT_AUTO_CLOSE_MS = 2500;
+
+// VC-3: how long to wait, after a mid-conversation question actually
+// finishes playing, before automatically reopening the mic for the user's
+// answer — a follow-up turn (slot-filling, "did you mean X?", "is that
+// right?") shouldn't need a manual mic click every single turn the way a
+// brand-new command does. Timed off speak()'s onEnd (the <audio> element's
+// real 'ended' event — see speak() below), never a fixed guess at how long
+// speech takes: onEnd already fires at the correct moment regardless of
+// utterance length or language, so this constant only needs to cover the
+// "give the user a beat before we start listening" pause, not speech
+// duration itself.
+const AUTO_LISTEN_DELAY_MS = 1000;
 
 // If the assistant hasn't been used in this long, the next exchange starts
 // a fresh chat transcript instead of tacking onto a stale one from a much
@@ -473,6 +486,29 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     [clearAutoCloseTimer]
   );
 
+  // VC-3: the pending "reopen the mic" delay armed after a mid-conversation
+  // question finishes playing — see AUTO_LISTEN_DELAY_MS and
+  // shouldAutoListenAfterSpeaking's own call sites below. The race-prone
+  // scheduling/staleness logic itself lives in lib/voiceAutoListen.ts (pure,
+  // independently unit-tested); this hook only supplies what it alone
+  // knows — the current utterance token, and how to actually start
+  // listening. Built in an effect (below), not during render or inside a
+  // useState/useMemo initializer — react-hooks/refs flags ANY closure that
+  // reads a ref's .current constructed synchronously during render, even
+  // one-time lazy-init patterns, so an effect (which by definition runs
+  // after render/commit, never during it) is the correct place for this,
+  // not a lint-rule workaround. Every call site below reads it via optional
+  // chaining, so the one render before this effect runs is a harmless no-op
+  // rather than a crash.
+  const autoListenSchedulerRef = useRef<ReturnType<typeof createAutoListenScheduler> | null>(null);
+  useEffect(() => {
+    autoListenSchedulerRef.current = createAutoListenScheduler(
+      () => utteranceTokenRef.current,
+      () => startListeningRef.current?.(),
+      AUTO_LISTEN_DELAY_MS,
+    );
+  }, []);
+
   // Tears down the VAD tap's OWN resources only — deliberately does not
   // touch isTtsPlayingRef. Called both when TTS ends normally (nothing left
   // to interrupt) and as part of cancelSpeech (something else is stopping
@@ -606,6 +642,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     }
     isTtsPlayingRef.current = false;
     stopVadTap();
+    // VC-3: whatever this utterance was building toward (including a
+    // scheduled auto-listen for its OWN onEnd, already fired or not) is
+    // moot the instant something else cancels it — the token bump above
+    // already makes the scheduler's own re-check a no-op if it fires
+    // later, but cancelling outright here means a genuinely new response
+    // that arrives WHILE the 1s wait is running (e.g. a typed command)
+    // doesn't have to wait out a dead timer doing nothing.
+    autoListenSchedulerRef.current?.cancel();
   }, [stopVadTap]);
 
   // Speaks the same message text shown in the panel/toast, via POST
@@ -861,7 +905,18 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           if (awaitingInput) {
             // Still mid-dialogue — the question is spoken, but the panel
             // stays open waiting for the user's answer, no dismissal to time.
-            speak(spokenText, outcome.language);
+            // VC-3: a genuine voice-answer turn reopens the mic on its own
+            // ~AUTO_LISTEN_DELAY_MS after the question actually finishes
+            // playing — see shouldAutoListenAfterSpeaking (excludes the
+            // face-proof camera turn) and lib/voiceAutoListen.ts. Token
+            // captured fresh inside onEnd (not before speak() runs) since
+            // that's the value settle() already validated as still current
+            // the instant this callback fires.
+            if (shouldAutoListenAfterSpeaking(awaitingInput, awaitingFaceProof)) {
+              speak(spokenText, outcome.language, () => autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current));
+            } else {
+              speak(spokenText, outcome.language);
+            }
           } else {
             // Conversational flows get the slower fixed-delay fallback (used
             // only when muted or /voice/speak/ failed); a one-shot result's
@@ -963,7 +1018,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         });
         appendHistory(transcript, message, isSuccess ? "success" : "error");
         if (awaitingInput) {
-          speak(spokenText, outcome.language);
+          // VC-3: same rule as submitTranscript's own awaitingInput branch —
+          // a face-proof retry turn still expects a captured descriptor, not
+          // speech, so it never auto-listens; any other voice-answer turn does.
+          if (shouldAutoListenAfterSpeaking(awaitingInput, awaitingFaceProof)) {
+            speak(spokenText, outcome.language, () => autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current));
+          } else {
+            speak(spokenText, outcome.language);
+          }
         } else {
           speakThenDismiss(
             spokenText, conversational ? CONVERSATION_AUTO_CLOSE_MS : IMMEDIATE_RESULT_AUTO_CLOSE_MS, message,
@@ -998,6 +1060,16 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
   const startListening = useCallback(() => {
     if (recognitionRef.current || pendingStartTimerRef.current) return; // already listening / about to
+
+    // VC-3: whatever called this — a manual click, or this hook's own
+    // auto-listen scheduler — is the thing acting on "start listening now",
+    // so any OTHER still-pending auto-listen intent is superseded. Without
+    // this, a manual click here wouldn't double-start (the guard above
+    // already prevents that), but the earlier scheduled auto-listen would
+    // still be sitting there and could fire LATER, after this manual
+    // session has already run its own course — spuriously reopening the
+    // mic a second time for a turn the user already answered.
+    autoListenSchedulerRef.current?.cancel();
 
     const Recognition = getSpeechRecognitionConstructor();
     if (!Recognition) {

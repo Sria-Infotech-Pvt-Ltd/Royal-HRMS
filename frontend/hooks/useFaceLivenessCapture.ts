@@ -10,10 +10,11 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { faceapi, loadFaceApiModels } from "@/lib/faceApi/loadModels";
 import { LivenessTracker } from "@/lib/faceApi/liveness";
 import { syncCanvasSize, drawDetectionBox, clearOverlay, OVERLAY_COLOR } from "@/lib/faceApi/overlay";
-import { grabVideoFrame, putImageData, meanLuminanceOfBox } from "@/lib/faceApi/frameCapture";
+import { grabVideoFrame, putImageData, meanLuminanceOfBox, assessEyeOcclusion } from "@/lib/faceApi/frameCapture";
 import { applyClahe } from "@/lib/faceApi/clahe";
 import {
   assessFrameQuality, computeFrontality, assessCaptureConsistency, averageDescriptors,
+  selectFailureMessage, classifyDetectedFaceCount, MULTIPLE_FACES_MESSAGE, EYE_OCCLUSION_MESSAGE,
   type FrameQualityMetrics,
 } from "@/lib/faceApi/qualityGate";
 
@@ -78,6 +79,17 @@ type DetectionWithLandmarks = faceapi.WithFaceLandmarks<faceapi.WithFaceDetectio
 export interface CaptureQualityMeta {
   frameCount: number;
   variance: number;
+}
+
+/** Result of one captureOneQualityGatedFrame attempt. `reasons` is only ever
+ *  non-empty when a face WAS found but the attempt was rejected for an
+ *  identifiable cause (quality-gate check, multiple faces, suspected
+ *  occlusion) — it stays empty for "no face detected this instant", which
+ *  isn't attributable to anything specific. See qualityGate.ts's
+ *  selectFailureMessage for how a sequence of these becomes one message. */
+interface QualityGatedFrameAttempt {
+  descriptor: number[] | null;
+  reasons: string[];
 }
 
 interface UseFaceLivenessCaptureOptions {
@@ -181,12 +193,27 @@ export function useFaceLivenessCapture(
   // CLAHE-normalizes it, runs detection+descriptor on THAT canvas (not the
   // raw video — this is what makes the lighting normalization actually
   // reach face-api.js instead of just existing for nothing), and scores it.
-  // Returns null for "no usable frame this attempt" (no face detected, or
-  // detected but rejected by the quality gate) — callers retry rather than
-  // treating this as fatal.
-  const captureOneQualityGatedFrame = useCallback(async (): Promise<number[] | null> => {
+  //
+  // Uses detectAllFaces (not detectSingleFace) specifically HERE — the still
+  // frame that's actually a candidate to become the descriptor — rather than
+  // in the continuous live-preview loop below (runDetectionLoop), which only
+  // draws the overlay box and feeds the liveness tracker and never produces
+  // anything that gets stored or matched. Checking face count on every
+  // preview frame (~60/s) would be wasted work for no benefit and would
+  // false-trigger on anyone briefly passing through the background during
+  // the "hold still" framing stage; checking it only on the handful of
+  // frames actually sampled here means a transient second face self-heals
+  // across retries (see captureMultipleFrames) exactly like a transient bad
+  // angle or shadow already does, and only becomes a surfaced message if it
+  // persists through every attempt.
+  //
+  // Returns descriptor: null for "no usable frame this attempt" (no face
+  // detected, multiple faces, quality-gate rejection, or suspected
+  // occlusion) — callers retry rather than treating this as fatal. `reasons`
+  // carries the specific, user-facing cause when one is known.
+  const captureOneQualityGatedFrame = useCallback(async (): Promise<QualityGatedFrameAttempt> => {
     const video = videoRef.current;
-    if (!video) return null;
+    if (!video) return { descriptor: null, reasons: [] };
     if (!workingCanvasRef.current) workingCanvasRef.current = document.createElement("canvas");
     const workingCanvas = workingCanvasRef.current;
 
@@ -194,16 +221,19 @@ export function useFaceLivenessCapture(
     try {
       imageData = grabVideoFrame(video, workingCanvas);
     } catch {
-      return null; // video not ready this instant — try again next attempt
+      return { descriptor: null, reasons: [] }; // video not ready this instant — try again next attempt
     }
     if (normalizeLighting) {
       applyClahe(imageData);
       putImageData(workingCanvas, imageData);
     }
 
-    const result = await faceapi.detectSingleFace(workingCanvas, DETECTOR_OPTIONS).withFaceLandmarks().withFaceDescriptor();
-    if (!result) return null;
+    const results = await faceapi.detectAllFaces(workingCanvas, DETECTOR_OPTIONS).withFaceLandmarks().withFaceDescriptors();
+    const faceCount = classifyDetectedFaceCount(results.length);
+    if (faceCount === 'none') return { descriptor: null, reasons: [] };
+    if (faceCount === 'multiple') return { descriptor: null, reasons: [MULTIPLE_FACES_MESSAGE] };
 
+    const result = results[0];
     const nose = result.landmarks.getNose();
     const metrics: FrameQualityMetrics = {
       detectionScore: result.detection.score,
@@ -211,9 +241,17 @@ export function useFaceLivenessCapture(
       frontality: computeFrontality(result.landmarks.getLeftEye(), result.landmarks.getRightEye(), nose[3]),
       meanLuminance: meanLuminanceOfBox(imageData, result.detection.box),
     };
-    if (!assessFrameQuality(metrics).passed) return null;
+    const quality = assessFrameQuality(metrics);
+    if (!quality.passed) return { descriptor: null, reasons: quality.reasons };
 
-    return Array.from(result.descriptor);
+    // Only reached once the frame otherwise looks acceptable (good
+    // confidence, well-framed, well-lit overall) — see assessEyeOcclusion's
+    // own docstring for why running this only after the rest of the gate
+    // already passed is what keeps it conservative.
+    const occlusion = assessEyeOcclusion(imageData, result.landmarks.getLeftEye(), result.landmarks.getRightEye());
+    if (occlusion.suspected) return { descriptor: null, reasons: [EYE_OCCLUSION_MESSAGE] };
+
+    return { descriptor: Array.from(result.descriptor), reasons: [] };
   }, [normalizeLighting]);
 
   // After liveness already passed once, collect `framesToCapture`
@@ -230,18 +268,26 @@ export function useFaceLivenessCapture(
     setPhase("capturing_multi");
 
     const collected: number[][] = [];
+    const reasonsPerAttempt: string[][] = [];
     const maxAttempts = framesToCapture * MULTI_FRAME_ATTEMPTS_PER_TARGET_FRAME;
     for (let attempt = 0; attempt < maxAttempts && collected.length < framesToCapture; attempt++) {
       if (attempt > 0) await sleep(MULTI_FRAME_INTERVAL_MS);
-      const descriptor = await captureOneQualityGatedFrame();
+      const { descriptor, reasons } = await captureOneQualityGatedFrame();
       if (descriptor) collected.push(descriptor);
+      else reasonsPerAttempt.push(reasons);
     }
 
     if (collected.length < framesToCapture) {
+      // The most recent attempt with an identifiable cause wins (see
+      // selectFailureMessage) — falls back to the old generic copy only
+      // when no attempt ever pinned down a specific reason (e.g. a face was
+      // never detected at all).
+      const specificReason = selectFailureMessage(reasonsPerAttempt);
       setErrorMessage(
-        framesToCapture > 1
+        specificReason
+        ?? (framesToCapture > 1
           ? "Couldn't get enough clear captures — make sure you're well-lit, centered, and holding still, then try again."
-          : "Couldn't get a clear capture — make sure you're well-lit, centered, and holding still, then try again.",
+          : "Couldn't get a clear capture — make sure you're well-lit, centered, and holding still, then try again."),
       );
       setPhase("quality_failed");
       return;

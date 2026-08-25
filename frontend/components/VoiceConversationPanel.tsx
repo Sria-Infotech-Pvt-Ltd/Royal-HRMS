@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { VoiceHistoryEntry, VoicePanelPhase, VoiceResultStatus } from "@/hooks/useVoiceCommand";
 import VoiceInputControls from "@/components/VoiceInputControls";
+import QuickActionChips from "@/components/QuickActionChips";
 
 // Static placeholder shown only in the "greeting" phase, before any command
 // has been typed or spoken yet — never sent through speak() (see
@@ -12,21 +13,6 @@ import VoiceInputControls from "@/components/VoiceInputControls";
 // when the user actually says "hi"/"hello"/"good morning" etc.) — this
 // string is pure frontend UI and never reaches /api/voice/parse/.
 const GREETING_MESSAGE = "Hi, how can I help you?";
-
-// One tap submits the phrase exactly like a typed command (onSubmitText),
-// so it goes through the real /voice/parse/ pipeline — not a shortcut, not
-// a different code path. Every phrase here is copied verbatim from
-// backend/apps/voice_commands/registry/intents_en.yaml so a tap is
-// guaranteed to match, and every one of these intents has
-// required_permission: null — available to literally every authenticated
-// employee, so the chips never need per-user permission filtering.
-const QUICK_ACTIONS: { label: string; phrase: string; icon: string }[] = [
-  { label: "Clock In",           phrase: "clock in",                   icon: "ti-login-2" },
-  { label: "Clock Out",          phrase: "clock out",                  icon: "ti-logout-2" },
-  { label: "Leave Balance",      phrase: "check my leave balance",     icon: "ti-calendar-stats" },
-  { label: "Apply for Leave",    phrase: "apply for leave",            icon: "ti-calendar-plus" },
-  { label: "My Attendance",      phrase: "show my attendance summary", icon: "ti-clipboard-list" },
-];
 
 const BOT_AVATAR_SRC = "/bot.png";
 
@@ -94,29 +80,6 @@ function HistoryList({ history }: { history: VoiceHistoryEntry[] }) {
             </div>
           </div>
         </div>
-      ))}
-    </div>
-  );
-}
-
-function QuickActionChips({ onPick }: { onPick: (phrase: string) => void }) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {QUICK_ACTIONS.map(action => (
-        <button
-          key={action.phrase}
-          onClick={() => onPick(action.phrase)}
-          data-testid={`voice-quick-action-${action.phrase.replace(/\s+/g, "-")}`}
-          style={{
-            display: "flex", alignItems: "center", gap: 5,
-            padding: "6px 10px", borderRadius: 16, border: "1px solid var(--outline-v)",
-            background: "var(--surface)", color: "var(--on-bg)", fontSize: 11.5, fontWeight: 500,
-            cursor: "pointer", whiteSpace: "nowrap",
-          }}
-        >
-          <i className={`ti ${action.icon}`} style={{ fontSize: 13, color: "var(--primary)" }} />
-          {action.label}
-        </button>
       ))}
     </div>
   );

@@ -133,7 +133,10 @@ class FaceVerificationPunchTests(TestCase):
         _make_approved_request(self.employee)
         resp = self._punch(face_embedding=MISMATCHED_EMBEDDING)
         self.assertEqual(resp.status_code, 403, resp.data)
-        self.assertIn('face verification failed', resp.data['message'].lower())
+        # FR-2: a clean mismatch message, not the old lighting-flavored
+        # wording — see services_face_matching.py's _EMBEDDING_MISMATCH_MESSAGE.
+        self.assertIn("couldn't match your face", resp.data['message'].lower())
+        self.assertNotIn('lighting', resp.data['message'].lower())
         self.assertFalse(AttendancePunch.objects.filter(employee=self.employee).exists())
 
     def test_pending_registration_does_not_require_verification_when_toggle_off(self):
