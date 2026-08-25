@@ -82,6 +82,16 @@ _EMBEDDING_REQUIRED_MESSAGE = (
 _EMBEDDING_MISMATCH_MESSAGE = (
     'Face verification failed. Please try again in good lighting, facing the camera directly.'
 )
+# Distinct from _EMBEDDING_MISMATCH_MESSAGE on purpose — the low-confidence
+# band (see FACE_MATCH_LOW_CONFIDENCE_MARGIN above) is a hard reject with no
+# escalation path for this specific employee/reference pair, so telling them
+# to retry in better lighting is actively false: the frontend's own capture
+# flow already enforces lighting/quality before an embedding is ever
+# submitted, and a fresh capture right now cannot change the outcome.
+_LOW_CONFIDENCE_MESSAGE = (
+    'Face verification failed and trying again right now won’t change the result. '
+    'Please contact your HR representative to review or refresh your Face ID registration.'
+)
 _REGISTRATION_REQUIRED_MESSAGE = (
     'Face ID registration is mandatory and you don’t have one yet. Please contact your '
     'HR representative or manager — they can register your face ID for you from the Face ID '
@@ -151,10 +161,10 @@ class FaceVerificationOutcome:
     distance:           Optional[float]
     rejection_message:  Optional[str]
     # True for a terminal rejection a retry can never fix this cycle (attempt
-    # cap or replay) — as opposed to a normal mismatch, which a fresh capture
-    # can still resolve. Voice's conversational retry loop (see
-    # apps.voice_commands.conversation_clock_in_face) uses this to decide
-    # whether "try again" is even worth offering.
+    # cap, replay, or a low-confidence match) — as opposed to a normal
+    # mismatch, which a fresh capture can still resolve. Voice's conversational
+    # retry loop (see apps.voice_commands.conversation_clock_in_face) uses
+    # this to decide whether "try again" is even worth offering.
     blocked:            bool = False
 
 
@@ -312,7 +322,7 @@ class FaceVerificationService:
             )
             return FaceVerificationOutcome(
                 required=True, embedding_provided=True, is_match=False,
-                distance=distance, rejection_message=_EMBEDDING_MISMATCH_MESSAGE,
+                distance=distance, rejection_message=_LOW_CONFIDENCE_MESSAGE, blocked=True,
             )
 
         FaceAntiSpoofingGuard.record_attempt(

@@ -74,7 +74,12 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
       setError("Position applied can only contain letters, spaces, and & / . - — no numbers or other special characters.");
       return;
     }
-    if (!branch) {
+    // Only unrestricted users actually pick a branch here — everyone else's
+    // field is locked/read-only and the backend resolves their branch itself
+    // (CandidateDetailView.put), so this required-check would otherwise block
+    // a legitimate submission whenever the best-effort name-match above
+    // hasn't resolved `branch` yet (branches list still loading, etc.).
+    if (unrestricted && !branch) {
       setError("Please select a branch.");
       return;
     }

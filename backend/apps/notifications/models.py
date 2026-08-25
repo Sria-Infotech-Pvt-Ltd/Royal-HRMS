@@ -18,6 +18,12 @@ NOTIFICATION_TYPE_CHOICES = [
     ('birthday',               'Birthday'),
     ('promotion',              'Promotion'),
     ('security_alert',         'Security Alert'),
+    ('expense_submitted',      'Expense Submitted'),
+    ('expense_status',         'Expense Status Update'),
+    ('separation_submitted',   'Separation Request Submitted'),
+    ('separation_status',      'Separation Status Update'),
+    ('document_uploaded',      'Document Uploaded'),
+    ('password_reset',         'Password Reset'),
 ]
 
 MODULE_CHOICES = [
@@ -30,6 +36,9 @@ MODULE_CHOICES = [
     ('birthday',       'Birthday'),
     ('promotion',      'Promotion'),
     ('security',       'Security'),
+    ('expense',        'Expense'),
+    ('separation',     'Separation'),
+    ('documents',      'Documents'),
 ]
 
 

@@ -4643,3 +4643,88 @@ New `Client` fields are editable afterward too via the existing `CompanyDetailVi
 - **This Neon project's compute can drop connections mid-migration** on a fresh company provision — `_create_schema_with_retry()` covers the schema-creation step specifically (proven safe to retry); the later steps in `_seed_company_data()` (`Company.objects.create()`, `User.objects.create_superuser()`) are not idempotent and are not covered by the same retry — a failure there still requires `cleanup_failed_tenants` + a fresh attempt.
 - **The Add Company form's new fields are all optional and unvalidated for business meaning** (e.g. nothing stops a nonsensical contract date) — deliberately minimal since this is account-management context, not provisioning input.
 - **Still no automated tests** around any of this session's changes — everything was verified manually against the running dev server with disposable test accounts, all cleaned up afterward.
+
+---
+
+# Team Context — Face ID Message Bug, Candidate Branch-Scoping, PAN Upload, Assessments Access, Platform Admin Login Polish
+
+**Author:** G.Durga Prasad
+**Date:** 24 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+A batch of reported bugs, each traced to a root cause rather than patched at the symptom: a misleading Face ID rejection message that told employees to fix their lighting for a failure lighting had nothing to do with, a candidate-creation race condition that could silently drop the branch field, a completely inert "Upload PAN card" button, a hidden Assessments module for employees, and a document-view audit gap. Also finished the Platform Admin visual pass and re-verified the PII field encryption already in place.
+
+---
+
+## 1. Face ID Verification — Wrong Rejection Message for a Borderline Match
+
+**File:** `apps/attendance/services_face_matching.py`
+
+Reported as: employees seeing a "try again in good lighting" message together with what was really a face-mismatch rejection. Root cause: `_match_and_record()` had three structurally different rejection paths — a malformed-embedding error, a genuine mismatch, and a **low-confidence borderline match** (within `FACE_MATCH_LOW_CONFIDENCE_MARGIN` of the accept threshold) — all returning the identical `_EMBEDDING_MISMATCH_MESSAGE`. The low-confidence case is documented in this same file (from a 2026-08-13 false-accept incident) as a **hard reject with no escalation path**: retrying can never turn it into an accept for that specific employee/reference pair, and by the time the backend even runs this check, the frontend's own capture flow has already enforced lighting/quality — so "go to better lighting" was actively false guidance at that point.
+
+Added a distinct `_LOW_CONFIDENCE_MESSAGE` for that branch only, directing the employee to contact HR to review/refresh their Face ID registration instead of retrying, and set `blocked=True` on that outcome (the same flag already used for attempt-cap/replay rejections). That flag fix also stops the voice clock-in conversational flow (`apps/voice_commands/conversation_clock_in_face.py`) from offering repeated retries for a case that can never succeed. The outright-mismatch message is unchanged — retrying is genuinely useful there.
+
+## 2. Candidate Branch Assignment — Race Condition Could Drop the Branch
+
+**File:** `apps/recruitment/views.py`
+
+Reported as: `[Please select a branch]` appearing while adding a candidate, even though a branch was visibly shown as selected. The displayed branch name comes from the JWT and renders immediately; the actual `form.branch` id it's supposed to resolve to depends on a separate branch-list fetch completing and matching by name first — a race the client doesn't always win. Rather than harden the frontend timing, made the backend authoritative: new `_scoped_candidate_branch()` helper resolves the caller's own branch server-side and overrides whatever (possibly still-empty) branch id the client sent, for anyone without `settings.edit`. Used by `CandidateListCreateView.post()` (required) and both `CandidateDetailView.put()`/`.patch()` (not required, matching `_can_access_candidate`'s existing leniency for a branchless non-admin). The frontend's own client-side "branch required" check (`AddCandidateModal.tsx`, `EditCandidateModal.tsx`) now only applies to unrestricted (admin) users, who don't get the server-side override.
+
+## 3. Onboarding — "Upload PAN Card" Button Did Nothing
+
+**File:** `app/onboarding/page.tsx`
+
+The button was `disabled` whenever the entered PAN failed format validation, which silently swallowed the click before it ever reached `handlePanCardUpload` — a function that already had the correct, clear validation messages, just no path to run. Moved the check into the `onClick` handler itself (new `onPanValidationError` prop) so an invalid or empty PAN now shows the existing message instead of the button just not responding.
+
+## 4. Employee Self-Service — "My Assessments" Was Unreachable
+
+**Files:** `lib/navConfig.ts`, `proxy.ts`
+
+An employee with a pending assessment had no sidebar link to it at all — `assessments` in `navConfig.ts` was gated behind `assessments.view` (an admin/HR-only permission), and the page itself already branches into an employee self-service view based on permission (`app/dashboard/assessments/page.tsx`'s `isAdminView` check), but nothing surfaced that branch. Added a second `my-assessments` nav entry pointing at the same `/dashboard/assessments` path with `permission: null`, matching the existing `my-attendance`/`my-payslip` self-service pattern. First attempt only fixed the sidebar — clicking it still bounced to `/dashboard`, because `proxy.ts`'s separate `ROUTE_PERMISSIONS` server-side gate still required `assessments.view` for that path. Removed the entry from `ROUTE_PERMISSIONS` entirely, the same treatment `/dashboard/separation` already documents there.
+
+## 5. Document Access — No Record of Who Actually Viewed a Sensitive Document
+
+**File:** `apps/accounts/views.py`
+
+`EmployeeDocumentView.get()` already checked *permission* to view a document (PAN, Aadhaar, bank proof, etc.) but kept no record of who actually opened one or when — only who was allowed to. Added an `AuditLog.objects.create(action='document_viewed', ...)` call, logged only after the Cloudinary fetch has already succeeded so a 404/permission-denied/upstream failure never creates a misleading "viewed" record.
+
+## 6. Platform Admin Login — Final Visual Pass
+
+**Files:** `app/platform-admin/layout.tsx`, `app/platform-admin/login/page.tsx`, `app/globals.css`
+
+Went through three rounds of direct feedback on the placeholder shield-icon branding: first added the real Royal HRMS logo to the sidebar and login panel, then reworked it to a white-knockout logo directly on the gradient (no icon box) per "make it more professional," then replaced the entire left panel — gradient, headline copy, and logo — with the exact same `/login.jpg` photo the tenant/employee login page uses, with no text or logo overlay at all, for one consistent look across every login surface. Removed the now-dead `FEATURES` array and `.login-brand-panel`/`.pa-login-feature` CSS.
+
+## 7. PII Field Encryption — Re-Verified, `.env.example` Gap Closed
+
+**File:** `.env.example`
+
+Walked through `core/encrypted_fields.py`'s `EncryptedCharField`/`EncryptedJSONField` (Fernet, application-layer) and `blind_index()` (separate deterministic HMAC key, for exact-match lookups without decrypting) end to end, and confirmed live against the database that PAN/UAN/ESI/bank account/IFSC columns store `gAAAAA...`-prefixed ciphertext, not plaintext. Separately, `.env.example` shipped placeholder `FIELD_ENCRYPTION_KEY`/`FIELD_INDEX_HMAC_KEY` values with no instructions — added the exact key-generation commands and a warning that losing `FIELD_ENCRYPTION_KEY` makes every encrypted record permanently unrecoverable, with no regeneration path.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/attendance/services_face_matching.py` | New `_LOW_CONFIDENCE_MESSAGE`; low-confidence outcome now `blocked=True` |
+| `backend/apps/recruitment/views.py` | New `_scoped_candidate_branch()` helper, used by candidate create/edit |
+| `backend/apps/accounts/views.py` | `EmployeeDocumentView.get()` — `document_viewed` audit log entry |
+| `backend/.env.example` | Key-generation instructions + backup warning for the encryption keys |
+| `frontend/app/onboarding/page.tsx` | PAN upload button validates on click instead of via `disabled` |
+| `frontend/lib/navConfig.ts` | New `my-assessments` nav entry (`permission: null`) |
+| `frontend/proxy.ts` | Removed `/dashboard/assessments` from `ROUTE_PERMISSIONS` |
+| `frontend/app/dashboard/interview-list/AddCandidateModal.tsx`, `EditCandidateModal.tsx` | Client-side branch-required check now admin-only |
+| `frontend/app/platform-admin/layout.tsx`, `login/page.tsx`, `frontend/app/globals.css` | Login left panel now the same photo as the tenant login page; sidebar uses the real logo |
+
+---
+
+## Notes for Next Developer
+
+- **The Face ID low-confidence band is a hard reject by design, not a bug to "fix" by loosening the threshold** — see the 2026-08-13 incident comment in `services_face_matching.py`. If this surfaces again, the fix is in messaging/registration flow, not the distance math.
+- **Voice clock-in retry counts as a resource** — anywhere a new `FaceVerificationOutcome` terminal state is added, set `blocked=True` if a retry genuinely cannot help this cycle, or the voice flow will burn the employee's remaining attempts on something that can't succeed.
+- **Notification Settings self-service gap identified but not fixed this round** — the backend is already per-user, no-permission-required, but the frontend page and its toggles are gated behind `settings.edit` and only reachable via Settings. Flagged to the user; fix offered, not yet confirmed.
+- **Still no automated tests** around this round's changes — the existing `apps.attendance.tests_face_verification` / `apps.voice_commands.tests.test_clock_in_face_verification` suites could not be run to confirm no regression: the local test database is missing tables (`hrms_roles`) unrelated to this change, most likely the same tenant-schema/Neon flakiness documented in the 21 August entry above. Verified instead by full manual trace of `_match_and_record` → `PunchService.record_punch` → `AttendancePunchView` → `useClockWidget.ts`'s toast, and `manage.py check` passes clean.

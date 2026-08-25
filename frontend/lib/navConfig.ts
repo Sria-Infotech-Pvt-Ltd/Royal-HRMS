@@ -55,6 +55,13 @@ const ALL_NAV: NavEntry[] = [
   // backend actually adds that codename (see the payroll-permissions request
   // sent to the backend team) — until then, null is what's actually correct.
   { id: "my-payslip", icon: "ti-receipt", label: "My Payslips", path: "/dashboard/my-payslip", permission: null },
+  // Same path as the admin "Assessments" entry above (Recruitment section) —
+  // the page itself picks admin management vs. EmployeeMyAssessments based on
+  // permission (see app/dashboard/assessments/page.tsx's isAdminView check),
+  // but without this separate entry an employee with no assessments.* grant
+  // (i.e. everyone assigned an onboarding assessment) had no sidebar link to
+  // it at all, matching the my-attendance/my-payslip self-service pattern.
+  { id: "my-assessments", icon: "ti-clipboard-check", label: "My Assessments", path: "/dashboard/assessments", permission: null },
   { id: "referrals", icon: "ti-user-plus", label: "My Referrals", path: "/dashboard/referrals", permission: null },
   { id: "profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 

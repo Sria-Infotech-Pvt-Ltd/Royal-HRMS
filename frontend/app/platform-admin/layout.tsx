@@ -44,19 +44,14 @@ export default function PlatformAdminLayout({ children }: { children: React.Reac
           display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh",
         }}
       >
-        <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 32, height: 32, borderRadius: 8, background: "var(--primary)",
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}
-          >
-            <i className="ti ti-shield-lock" style={{ color: "#fff", fontSize: 17 }} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>Royal HRMS</div>
-            <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Platform Admin</div>
-          </div>
+        <div style={{ padding: "20px 20px 16px" }}>
+          {/* Same sizing convention as the tenant dashboard sidebar's own logo
+              (see components/dashboard/DashboardShell.tsx / .sidebar-logo-expanded
+              in globals.css) — contained within a max-height, not squished into
+              a square, since the real logo is a wordmark, not an icon glyph. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Royal HRMS" className="sidebar-logo-expanded" style={{ maxHeight: 36 }} />
+          <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>Platform Admin</div>
         </div>
 
         <nav style={{ flex: 1, padding: "8px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
