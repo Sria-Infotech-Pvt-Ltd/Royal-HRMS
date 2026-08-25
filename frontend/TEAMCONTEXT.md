@@ -4728,3 +4728,57 @@ Walked through `core/encrypted_fields.py`'s `EncryptedCharField`/`EncryptedJSONF
 - **Voice clock-in retry counts as a resource** — anywhere a new `FaceVerificationOutcome` terminal state is added, set `blocked=True` if a retry genuinely cannot help this cycle, or the voice flow will burn the employee's remaining attempts on something that can't succeed.
 - **Notification Settings self-service gap identified but not fixed this round** — the backend is already per-user, no-permission-required, but the frontend page and its toggles are gated behind `settings.edit` and only reachable via Settings. Flagged to the user; fix offered, not yet confirmed.
 - **Still no automated tests** around this round's changes — the existing `apps.attendance.tests_face_verification` / `apps.voice_commands.tests.test_clock_in_face_verification` suites could not be run to confirm no regression: the local test database is missing tables (`hrms_roles`) unrelated to this change, most likely the same tenant-schema/Neon flakiness documented in the 21 August entry above. Verified instead by full manual trace of `_match_and_record` → `PunchService.record_punch` → `AttendancePunchView` → `useClockWidget.ts`'s toast, and `manage.py check` passes clean.
+
+---
+
+# Team Context — Default Role Permissions Not Reliably Granted on Fresh Company Migration
+
+**Author:** G.Durga Prasad
+**Date:** 24 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+Reported as: HR Admin and Branch Admin should default to holding `facial_recognition.approve` and the `assessments.*` permissions on every newly provisioned company, without needing a manual grant afterward. Traced to the same structural bug in two unrelated places — a migration that grants a permission to a role has no explicit dependency on the earlier migration that actually creates that permission row, so on a fresh company the grant silently no-ops if Django's cross-app migration order happens to run the grant first. Verified against a real fresh company provision (`tenant_qatest`, recreated this session) via the actual `django_migrations.applied` timestamps, not just static reading of the migration files.
+
+---
+
+## 1. `facial_recognition.approve` — Role-Name Typo Plus Ordering Risk
+
+**Files:** `apps/attendance/migrations/0023_seed_face_registration_permission.py`, `apps/accounts/migrations/0094_add_facial_recognition_approve.py`, new `apps/accounts/migrations/0095_ensure_facial_recognition_approve_defaults.py`
+
+Two pre-existing migrations were each supposed to cover this and didn't, for different reasons:
+
+- `attendance.0023` creates the permission and grants it to a role named `'hr'` — that role name has **never existed** (the role has always been `hr_admin`, confirmed all the way back to `accounts.0002_seed_roles_permissions`). Dead code since it was written; only `system_admin` was ever actually granted by this migration.
+- `accounts.0094` correctly targets `hr_admin`/`branch_admin` by name, but only runs its grant loop if the permission already exists (`if not permission: return`) — and has no `dependencies` entry on `attendance.0023`, the migration that actually creates it. Confirmed via `tenant_qatest`'s real applied timestamps that `0094` ran a full minute *before* `0023` in this exact provisioning run, meaning its early-return fired and the grant loop never executed at all.
+
+New `accounts.0095` explicitly depends on both `0094` and `attendance.0023`, get_or_creates the permission as a defensive safety net, and unconditionally grants it to `system_admin`, `hr_admin`, and `branch_admin` — no longer dependent on cross-app ordering luck.
+
+## 2. `assessments.*` — Same Ordering Bug, Different Migrations
+
+**Files:** `apps/accounts/migrations/0052_seed_branch_admin_role.py`, `0093_branch_admin_assessments_no_branches_mgmt.py`, new `0096_ensure_assessments_permissions_defaults.py`
+
+Identical pattern: `assessments.0002_seed_permissions` is what actually creates `assessments.view/create/edit/delete` (and correctly self-grants them to `hr_admin`/`system_admin` in that same migration — no risk there). Both `accounts.0052` (branch_admin's original permission list) and `accounts.0093` (a dedicated later fix specifically for this gap) try to grant these to `branch_admin`, but neither declares a dependency on `assessments.0002` — confirmed via the same tenant's applied timestamps that both ran *before* `assessments.0002`, so both grant attempts should have no-opped for `branch_admin`.
+
+(On the specific `tenant_qatest` re-provision checked this session, `branch_admin` ended up holding all four permissions anyway — the exact mechanism behind that wasn't fully pinned down despite the timestamp evidence, but it doesn't change that the migration logic itself is fragile and not something to rely on for every future company.)
+
+New `accounts.0096` explicitly depends on `0095` and `assessments.0002`, and unconditionally (re-)grants `branch_admin` all four `assessments.*` permissions.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/migrations/0095_ensure_facial_recognition_approve_defaults.py` (new) | Guarantees `system_admin`/`hr_admin`/`branch_admin` hold `facial_recognition.approve` |
+| `backend/apps/accounts/migrations/0096_ensure_assessments_permissions_defaults.py` (new) | Guarantees `branch_admin` holds all four `assessments.*` permissions |
+
+---
+
+## Notes for Next Developer
+
+- **This is a pattern, not a one-off** — any migration that grants a permission by looking it up (`Permission.objects.filter(codename=...).first()` or `.get(codename=...)`) instead of creating it in the same migration must declare an explicit `dependencies` entry on whichever migration actually creates that permission row. Silently skipping via `if not permission: return`/`except DoesNotExist: continue` hides the failure instead of surfacing it — worth auditing other permission-grant migrations across the codebase for the same risk.
+- **Applied to `tenant_qatest` only** — the sole tenant schema that currently exists (see the data-loss incident earlier this session). Any company restored or provisioned after this point picks these up automatically; nothing needed for `tenant_qatest` itself since it was migrated directly.
+- Not yet committed/pushed at the time of writing — pending confirmation of which branch(es) to push to.
