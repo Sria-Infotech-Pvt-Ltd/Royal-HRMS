@@ -79,8 +79,17 @@ FACE_MATCH_LOW_CONFIDENCE_MARGIN = 0.05
 _EMBEDDING_REQUIRED_MESSAGE = (
     'Face verification is required for clock-in. Please allow camera access and try again.'
 )
+# Deliberately not lighting-flavored (the pre-FR-2 text said "try again in
+# good lighting" for a genuine embedding mismatch — misleading, per the FR-1
+# audit). Still allows a retry, unlike _LOW_CONFIDENCE_MESSAGE's hard
+# reject below — an outright mismatch can be a real different-person
+# attempt a registered employee's own next capture would simply pass.
+# Framed as "we couldn't match", not "your face didn't match", since the
+# cause could equally be a marginal registration reference, not the
+# employee's fault.
 _EMBEDDING_MISMATCH_MESSAGE = (
-    'Face verification failed. Please try again in good lighting, facing the camera directly.'
+    "We couldn't match your face to your registered Face ID. You can try again, or contact "
+    "your HR representative if this keeps happening."
 )
 # Distinct from _EMBEDDING_MISMATCH_MESSAGE on purpose — the low-confidence
 # band (see FACE_MATCH_LOW_CONFIDENCE_MARGIN above) is a hard reject with no

@@ -68,7 +68,8 @@ _MATCH_OUTCOME = FaceVerificationOutcome(
 )
 _MISMATCH_OUTCOME = FaceVerificationOutcome(
     required=True, embedding_provided=True, is_match=False, distance=0.9,
-    rejection_message='Face verification failed. Please try again in good lighting, facing the camera directly.',
+    rejection_message="We couldn't match your face to your registered Face ID. You can try again, or "
+                       "contact your HR representative if this keeps happening.",
 )
 _BLOCKED_OUTCOME = FaceVerificationOutcome(
     required=True, embedding_provided=True, is_match=False, distance=None,
@@ -164,6 +165,17 @@ class ClockOutFacialProofTurnTests(SimpleTestCase):
         self.assertTrue(result['result']['awaiting_face_proof'])
         pending = self.store.get(42)
         self.assertEqual(pending['slots']['attempt'], 1)
+
+    def test_mismatch_retry_message_is_the_backend_specific_reason_not_a_generic_string(self):
+        """FR-2: this used to always show a hardcoded generic retry line
+        regardless of why verify_for_punch actually rejected the attempt —
+        the same distinct rejection_message that already reaches the user
+        correctly on web must now reach them on voice too."""
+        with patch('apps.voice_commands.conversation_clock_in_face.FaceVerificationService.verify_for_punch', return_value=_MISMATCH_OUTCOME):
+            result = handle_transcript(self.request, 'clock out', face_embedding=[0.1, 0.2])
+
+        self.assertEqual(result['message'], _MISMATCH_OUTCOME.rejection_message)
+        self.assertNotIn('lighting', result['message'].lower())
 
     def test_third_mismatch_gives_up_and_suggests_manual_clock_in(self):
         self.store.set(42, 'clock_out', {

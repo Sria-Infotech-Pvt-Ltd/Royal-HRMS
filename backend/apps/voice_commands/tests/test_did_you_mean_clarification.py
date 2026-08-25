@@ -4,7 +4,13 @@ from django.test import SimpleTestCase
 
 from apps.voice_commands import clarification
 from apps.voice_commands.conversation import _NO_MATCH_MESSAGE, handle_transcript
-from apps.voice_commands.executor import INTENT_CHECK_LEAVE_BALANCE, ExecutionResult
+from apps.voice_commands.executor import (
+    INTENT_APPLY_LEAVE,
+    INTENT_CHECK_ATTENDANCE_STATS,
+    INTENT_CHECK_LEAVE_BALANCE,
+    INTENT_CHECK_MY_PAYSLIP,
+    ExecutionResult,
+)
 from apps.voice_commands.language import text
 from apps.voice_commands.matcher import NO_MATCH_INTENT, MatchResult
 
@@ -265,3 +271,109 @@ class ClarificationWithNonConversationalCandidateTests(SimpleTestCase):
         self.assertTrue(result['awaiting_input'])
         self.assertTrue(result['conversational'])
         mock_execute.assert_not_called()  # awaiting confirmation, nothing dispatched yet
+
+
+class StaleClarificationDoesNotSwallowNewCommandTests(SimpleTestCase):
+    """
+    Root cause of the reported "did you mean [previous command]" state-leak
+    bug (VC-1): CLARIFICATION_STAGE/STT_CONFIRMATION_STAGE only ever expect a
+    yes/no answer (see continue_clarification/continue_stt_confirmation's own
+    parse_yes_no calls) — a user who ignores an unanswered "did you mean X?"
+    question and says something else entirely got that new command silently
+    swallowed whenever it ALSO happened to land in the clarification band
+    for its own, different candidate: parse_yes_no couldn't recognize it as
+    yes/no either, so continue_clarification just re-asked the STALE
+    question, reading as "did you mean X?" for a command the user never
+    said. Confirmed general (not specific to check_leave_balance/apply_leave)
+    by test_generalizes_to_a_different_intent_pair below. Fixed in
+    conversation._should_abandon_pending — see its own docstring.
+    """
+
+    def setUp(self):
+        self.store = _FakePendingStore()
+        for p in _patch_pending_store(self.store):
+            p.start()
+            self.addCleanup(p.stop)
+        self.request = _fake_request()
+
+    def test_leave_balance_then_apply_leave_starts_apply_leave_fresh(self):
+        """The exact reported sequence: check-leave-balance's own unanswered
+        clarification must not resurface for a brand new "apply leave"."""
+        with patch('apps.voice_commands.conversation.match_intent') as mock_match:
+            mock_match.return_value = MatchResult(
+                intent=NO_MATCH_INTENT, confidence=75.0,
+                matched_phrase='check my leave balance', candidate_intent=INTENT_CHECK_LEAVE_BALANCE,
+            )
+            first = handle_transcript(self.request, 'garbled leave balance text')
+            self.assertTrue(first['awaiting_input'])
+            self.assertEqual(first['intent'], INTENT_CHECK_LEAVE_BALANCE)
+
+            mock_match.return_value = MatchResult(
+                intent=NO_MATCH_INTENT, confidence=70.0,
+                matched_phrase='apply for leave', candidate_intent=INTENT_APPLY_LEAVE,
+            )
+            second = handle_transcript(self.request, 'apply leave')
+
+        self.assertEqual(second['intent'], INTENT_APPLY_LEAVE)
+        self.assertTrue(second['awaiting_input'])
+        self.assertIn('apply for leave', second['message'].lower())
+        self.assertNotIn('leave balance', second['message'].lower())
+        # A fresh pending state for apply_leave now exists — not the stale one.
+        self.assertEqual(self.store.get(42)['intent'], INTENT_APPLY_LEAVE)
+
+    def test_generalizes_to_a_different_intent_pair(self):
+        """Same bug shape with unrelated intents — proves the fix addresses
+        the general mechanism, not just leave_balance/apply_leave."""
+        with patch('apps.voice_commands.conversation.match_intent') as mock_match:
+            mock_match.return_value = MatchResult(
+                intent=NO_MATCH_INTENT, confidence=72.0,
+                matched_phrase='how is my attendance', candidate_intent=INTENT_CHECK_ATTENDANCE_STATS,
+            )
+            first = handle_transcript(self.request, 'garbled attendance text')
+            self.assertEqual(first['intent'], INTENT_CHECK_ATTENDANCE_STATS)
+
+            mock_match.return_value = MatchResult(
+                intent=NO_MATCH_INTENT, confidence=68.0,
+                matched_phrase='check my payslip', candidate_intent=INTENT_CHECK_MY_PAYSLIP,
+            )
+            second = handle_transcript(self.request, 'garbled payslip text')
+
+        self.assertEqual(second['intent'], INTENT_CHECK_MY_PAYSLIP)
+        self.assertNotIn('attendance', second['message'].lower())
+        self.assertEqual(self.store.get(42)['intent'], INTENT_CHECK_MY_PAYSLIP)
+
+    def test_genuinely_ambiguous_new_input_still_triggers_did_you_mean(self):
+        """Regression guard for the fix itself: with no pre-existing pending
+        state at all, a fresh clarification-band utterance must still ask
+        its own "did you mean X?" question exactly as before."""
+        with patch('apps.voice_commands.conversation.match_intent') as mock_match:
+            mock_match.return_value = MatchResult(
+                intent=NO_MATCH_INTENT, confidence=70.0,
+                matched_phrase='apply for leave', candidate_intent=INTENT_APPLY_LEAVE,
+            )
+            result = handle_transcript(self.request, 'apply leave')
+
+        self.assertEqual(result['intent'], INTENT_APPLY_LEAVE)
+        self.assertTrue(result['awaiting_input'])
+        self.assertIn('did you mean', result['message'].lower())
+
+    def test_unclear_answer_with_no_alternate_candidate_still_re_asks_the_pending_question(self):
+        """A genuinely unclear yes/no answer — not itself a plausible
+        candidate for anything else — must still re-ask the SAME pending
+        question rather than being treated as an abandonment. Guards against
+        an overly-broad fix that abandons on ANY non-yes/no text."""
+        with patch('apps.voice_commands.conversation.match_intent') as mock_match:
+            mock_match.return_value = MatchResult(
+                intent=NO_MATCH_INTENT, confidence=75.0,
+                matched_phrase='check my leave balance', candidate_intent=INTENT_CHECK_LEAVE_BALANCE,
+            )
+            handle_transcript(self.request, 'garbled leave balance text')
+
+            mock_match.return_value = MatchResult(intent=NO_MATCH_INTENT, confidence=20.0)
+            result = handle_transcript(self.request, 'umm maybe')
+
+        self.assertEqual(result['intent'], INTENT_CHECK_LEAVE_BALANCE)
+        self.assertTrue(result['awaiting_input'])
+        self.assertIn('yes or a no', result['message'].lower())
+        # Still the SAME pending clarification, not reset/replaced.
+        self.assertEqual(self.store.get(42)['intent'], INTENT_CHECK_LEAVE_BALANCE)
