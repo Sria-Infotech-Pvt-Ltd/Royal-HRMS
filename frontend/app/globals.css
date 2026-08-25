@@ -105,13 +105,21 @@ a {
 
 /* Sidebar Logo */
 .sidebar-logo-expanded {
-  width: 100%;
-  height: auto;
-  max-height: 64px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   object-position: left center;
   flex-shrink: 0;
   display: block;
+}
+
+.sidebar-brand-text {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--on-bg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-logo-collapsed {

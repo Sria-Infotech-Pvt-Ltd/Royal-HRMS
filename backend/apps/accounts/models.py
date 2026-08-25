@@ -8,13 +8,13 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password as _check_hash
 from django.contrib.auth.hashers import make_password as _make_hash
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from django.db import connection, models, transaction
+from django.db import models, transaction
 from django.db.models import F
 from django.utils import timezone
 
 from core.encrypted_fields import EncryptedCharField, blind_index
 from core.storage import (
-    AuthenticatedRawMediaCloudinaryStorage,
+    AuthenticatedImageKitStorage,
     company_logo_upload_path,
     document_center_upload_path,
     email_template_attachment_upload_path,
@@ -804,7 +804,7 @@ class Document(models.Model):
     title       = models.CharField(max_length=200)
     description = models.TextField(blank=True, default='')
     category    = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER)
-    file        = models.FileField(upload_to=document_center_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage())
+    file        = models.FileField(upload_to=document_center_upload_path, storage=AuthenticatedImageKitStorage())
     file_name   = models.CharField(max_length=255)
     file_type   = models.CharField(max_length=10)       # PDF / DOCX / XLSX …
     file_size   = models.PositiveBigIntegerField()       # bytes
@@ -1049,11 +1049,9 @@ def find_conflicting_pan_profile(pan_number: str, exclude_profile_pk=None) -> 'E
 
 class OnboardingFieldConfig(models.Model):
     """
-    Per-company configuration for the self-onboarding wizard's steps 0-3
-    (Personal, Education, Bank, Emergency — step 4/Documents is a separate,
-    file-upload-based flow and isn't covered here). One row per field, tenant-
-    scoped like everything else in this app — each company's configuration is
-    independent by construction (separate schema), no extra scoping needed.
+    Configuration for the self-onboarding wizard's steps 0-3 (Personal,
+    Education, Bank, Emergency — step 4/Documents is a separate,
+    file-upload-based flow and isn't covered here). One row per field.
 
     is_custom=False rows describe a real EmployeeProfile column (field_key
     matches the model field name exactly) — visible/required/order/label can
@@ -1159,23 +1157,19 @@ class DocumentTypeConfig(models.Model):
 
 def _employee_doc_path(instance, filename):
     import os
-    schema = getattr(connection, 'schema_name', None) or 'public'
     uid = (
         getattr(instance.user, 'employee_id', None)
         or str(instance.user_id)
     )
-    # employee_id is only unique within a company, not globally — the schema
-    # prefix stops two tenants' employee "EMP001" from ever landing in the
-    # same Cloudinary path.
-    return os.path.join(schema, 'employee_documents', str(uid), os.path.basename(filename))
+    return os.path.join('employee_documents', str(uid), os.path.basename(filename))
 
 
 class EmployeeDocument(models.Model):
     # Plain string identifiers for the 7 built-in types seeded by
     # DocumentTypeConfig (see below) — no longer a `choices=` enum on the
     # field itself. What document types actually exist/are allowed is now
-    # configurable per tenant via DocumentTypeConfig; these constants just
-    # keep the seeded built-ins' type_key values readable in code.
+    # configurable via DocumentTypeConfig; these constants just keep the
+    # seeded built-ins' type_key values readable in code.
     TYPE_PAN               = 'pan_card'
     TYPE_AADHAAR           = 'aadhaar_card'
     TYPE_DEGREE            = 'degree_certificate'
@@ -1195,7 +1189,7 @@ class EmployeeDocument(models.Model):
     # Django's FileField max_length defaults to 100 — _employee_doc_path() embeds
     # the original filename into the stored path, so anything beyond a short name
     # overflows that default (matches file_name's own width for the same reason).
-    file          = models.FileField(upload_to=_employee_doc_path, storage=AuthenticatedRawMediaCloudinaryStorage(), max_length=255)
+    file          = models.FileField(upload_to=_employee_doc_path, storage=AuthenticatedImageKitStorage(), max_length=255)
     file_name     = models.CharField(max_length=255)
     file_size     = models.PositiveBigIntegerField()
     uploaded_at   = models.DateTimeField(auto_now_add=True)
@@ -1213,15 +1207,13 @@ class EmployeeDocument(models.Model):
 
 def _custom_field_file_path(instance, filename):
     import os
-    schema = getattr(connection, 'schema_name', None) or 'public'
     uid = (
         getattr(instance.user, 'employee_id', None)
         or str(instance.user_id)
     )
-    # Same tenant-prefix reasoning as _employee_doc_path() above; a separate
-    # subfolder just keeps ad-hoc custom-field uploads out of the real
-    # employee_documents tree rather than mixing the two file families.
-    return os.path.join(schema, 'custom_field_files', str(uid), os.path.basename(filename))
+    # Separate subfolder just keeps ad-hoc custom-field uploads out of the
+    # real employee_documents tree rather than mixing the two file families.
+    return os.path.join('custom_field_files', str(uid), os.path.basename(filename))
 
 
 class CustomFieldFileValue(models.Model):
@@ -1230,7 +1222,7 @@ class CustomFieldFileValue(models.Model):
     (see OnboardingFieldConfig.TYPE_FILE). Deliberately not folded into
     EmployeeProfile.custom_field_values (a plain JSONField) — that dict holds
     only JSON-primitive values for every other custom field type, and a real
-    upload needs its own storage row (Cloudinary path, size, mime validation)
+    upload needs its own storage row (file path, size, mime validation)
     the same way EmployeeDocument does, not a blob of bytes stuffed into JSON.
 
     No unique_together on (user, field_key): cardinality is controlled by
@@ -1241,7 +1233,7 @@ class CustomFieldFileValue(models.Model):
     """
     user        = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_field_files')
     field_key   = models.CharField(max_length=64)
-    file        = models.FileField(upload_to=_custom_field_file_path, storage=AuthenticatedRawMediaCloudinaryStorage(), max_length=255)
+    file        = models.FileField(upload_to=_custom_field_file_path, storage=AuthenticatedImageKitStorage(), max_length=255)
     file_name   = models.CharField(max_length=255)
     file_size   = models.PositiveBigIntegerField()
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -1358,7 +1350,7 @@ class EmailTemplateAttachment(models.Model):
     }
 
     template    = models.ForeignKey(EmailTemplate, on_delete=models.CASCADE, related_name='attachments')
-    file        = models.FileField(upload_to=email_template_attachment_upload_path, storage=AuthenticatedRawMediaCloudinaryStorage())
+    file        = models.FileField(upload_to=email_template_attachment_upload_path, storage=AuthenticatedImageKitStorage())
     filename    = models.CharField(max_length=255)
     mime_type   = models.CharField(max_length=100)
     size        = models.PositiveIntegerField(help_text='File size in bytes')

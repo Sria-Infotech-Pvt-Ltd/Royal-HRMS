@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def reset_annual_leave_balances(self):
     """
-    Annual task: runs on 1st Jan at 00:01 IST, once per active company (see
-    apps.tenants.utils.run_for_all_tenants — this task has no single tenant
-    of its own, it's scheduled, not dispatched from a request).
+    Annual task: runs on 1st Jan at 00:01 IST.
 
     For every active employee:
     - Checks each active LeavePolicy for eligibility (branch, dept, designation, service period).
@@ -29,14 +27,11 @@ def reset_annual_leave_balances(self):
 
     Idempotent: get_or_create — safe to re-run if the task fires twice.
     """
-    from apps.tenants.models import MODULE_LEAVE
-    from apps.tenants.utils import run_for_all_tenants
+    from decimal import Decimal
+    from apps.accounts.models import User
+    from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
 
-    def _run_for_one_tenant():
-        from decimal import Decimal
-        from apps.accounts.models import User
-        from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
-
+    try:
         today    = timezone.localdate()
         new_year = today.year
         prev_year = new_year - 1
@@ -107,12 +102,7 @@ def reset_annual_leave_balances(self):
                 else:
                     skipped_total += 1
 
-        return {'year': new_year, 'created': created_total, 'skipped': skipped_total}
-
-    try:
-        result = run_for_all_tenants(
-            _run_for_one_tenant, task_name='reset_annual_leave_balances', required_module=MODULE_LEAVE,
-        )
+        result = {'year': new_year, 'created': created_total, 'skipped': skipped_total}
         logger.info('reset_annual_leave_balances completed: %s', result)
         return result
     except Exception as exc:
@@ -132,22 +122,19 @@ def send_birthday_wishes(self):
       - record an AuditLog row (module='birthday') for delivery visibility
         in Settings -> Audit Logs
 
-    Runs at 00:05 IST (configured in CELERY_BEAT_SCHEDULE), once per active
-    company (see apps.tenants.utils.run_for_all_tenants).
+    Runs at 00:05 IST (configured in CELERY_BEAT_SCHEDULE).
     Gated by BirthdaySettings.is_enabled — the whole feature is a no-op
     when disabled.
     Idempotent — skips employees whose birthday_wish_sent_year already
     equals the current year, so retries and duplicate runs are safe. That
     same guard also prevents duplicate notifications/audit rows on retry.
     """
-    from apps.tenants.utils import run_for_all_tenants
+    from apps.accounts.models import BirthdaySettings, Company, EmployeeProfile
+    from apps.accounts.utils import send_template_email
+    from apps.hrms.birthday_utils import get_peers
+    from apps.notifications.signals import _notify
 
-    def _run_for_one_tenant():
-        from apps.accounts.models import BirthdaySettings, Company, EmployeeProfile
-        from apps.accounts.utils import send_template_email
-        from apps.hrms.birthday_utils import get_peers
-        from apps.notifications.signals import _notify
-
+    try:
         birthday_settings = BirthdaySettings.get()
         if not birthday_settings.is_enabled:
             logger.info('send_birthday_wishes skipped: feature disabled in BirthdaySettings.')
@@ -226,15 +213,12 @@ def send_birthday_wishes(self):
                     'birthday', 'birthday', str(employee.id),
                 )
 
-        return {
+        result = {
             'date':    today.isoformat(),
             'sent':    sent_count,
             'skipped': skipped_count,
             'failed':  failed_count,
         }
-
-    try:
-        result = run_for_all_tenants(_run_for_one_tenant, task_name='send_birthday_wishes')
         logger.info('send_birthday_wishes completed: %s', result)
         return result
     except Exception as exc:

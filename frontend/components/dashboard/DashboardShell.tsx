@@ -68,7 +68,7 @@ export default function DashboardShell({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const brandName = session.companyName || "Royal HRMS";
+  const brandName = "Aira HRMS";
 
   const pageTitle = PAGE_TITLES[pathname]
     ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
@@ -128,21 +128,24 @@ export default function DashboardShell({
       >
         {/* Sidebar header */}
         <div className="h-[68px] px-3 pr-2 flex items-center gap-2 border-b border-[var(--outline-v)] flex-shrink-0">
-          <div className="flex items-center flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
             {collapsed ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src="/logo.png"
-                alt="Royal HRMS"
+                src="/logo-icon.png"
+                alt="Aira HRMS"
                 className="sidebar-logo-collapsed"
               />
             ) : (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src="/logo.png"
-                alt="Royal HRMS"
-                className="sidebar-logo-expanded"
-              />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/logo-icon.png"
+                  alt="Aira HRMS"
+                  className="sidebar-logo-expanded"
+                />
+                <span className="sidebar-brand-text">{brandName}</span>
+              </>
             )}
           </div>
           <button

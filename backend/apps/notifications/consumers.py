@@ -16,11 +16,10 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         user = self.scope.get('user')
-        schema_name = self.scope.get('tenant_schema')
-        if not user or not user.is_authenticated or not schema_name:
+        if not user or not user.is_authenticated:
             await self.close(code=4401)
             return
-        self.group_name = notification_group_name(user.id, schema_name)
+        self.group_name = notification_group_name(user.id)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 

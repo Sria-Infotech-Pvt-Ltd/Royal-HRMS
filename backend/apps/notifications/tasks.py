@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_lifecycle_email_task(self, schema_name, user_id, template_name: str, context: dict):
+def send_lifecycle_email_task(self, user_id, template_name: str, context: dict):
     """
     Background delivery for a single lifecycle-event email (leave
-    submitted/approved/rejected/forwarded/cancelled, etc.) `schema_name` is
-    the dispatching company's schema (see apps.tenants.utils.run_in_tenant).
+    submitted/approved/rejected/forwarded/cancelled, etc.)
 
     Takes the recipient's user id (not a User instance) and re-fetches it
     fresh in the worker. `context` is plain lifecycle-event data captured at
@@ -37,9 +36,8 @@ def send_lifecycle_email_task(self, schema_name, user_id, template_name: str, co
     from apps.accounts.models import User
     from apps.accounts.utils import send_template_email
     from apps.notifications.signals import _company_name
-    from apps.tenants.utils import run_in_tenant
 
-    def _do():
+    try:
         try:
             user = User.objects.get(pk=user_id)
         except User.DoesNotExist:
@@ -63,9 +61,6 @@ def send_lifecycle_email_task(self, schema_name, user_id, template_name: str, co
             return {'user_id': user_id, 'status': 'send_failed'}
 
         return {'user_id': user_id, 'status': 'sent'}
-
-    try:
-        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_lifecycle_email_task setup failed for user %s: %s',

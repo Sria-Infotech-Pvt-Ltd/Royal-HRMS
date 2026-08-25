@@ -172,10 +172,9 @@ class AnnouncementListCreateView(APIView):
         )
 
         if announcement.send_email:
-            from django.db import connection
             from apps.announcements.tasks import send_announcement_email_task
 
-            def _queue_announcement_email(ann_id=announcement.id, schema_name=connection.schema_name):
+            def _queue_announcement_email(ann_id=announcement.id):
                 # Runs after the transaction actually commits, so the worker
                 # (a separate DB connection) is guaranteed to find the row.
                 # Queuing failure (e.g. broker down) is logged, not raised —
@@ -189,7 +188,7 @@ class AnnouncementListCreateView(APIView):
                     # result backend if Redis is unreachable and blocking
                     # this request for well past any frontend timeout.
                     send_announcement_email_task.apply_async(
-                        args=[schema_name, ann_id], retry=False, ignore_result=True,
+                        args=[ann_id], retry=False, ignore_result=True,
                     )
                 except Exception as exc:
                     logger.error(

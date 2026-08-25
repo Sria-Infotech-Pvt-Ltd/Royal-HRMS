@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { AxiosInstance } from "axios";
 import clientApi from "@/lib/clientApi";
 
 interface FetchState<T> {
@@ -14,11 +13,7 @@ interface FetchState<T> {
   refetch: () => void;
 }
 
-// Defaults to the tenant-user axios instance (clientApi) — pass `client` to
-// point at a different authenticated instance, e.g. the fully isolated
-// platformAdminApi (see lib/platformAdminApi.ts), which must never share
-// clientApi's tenant-session refresh/logout machinery.
-export function useFetch<T>(url: string | null, client: AxiosInstance = clientApi): FetchState<T> {
+export function useFetch<T>(url: string | null): FetchState<T> {
   const [data,    setData]    = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(!!url);
   const [error,   setError]   = useState<string | null>(null);
@@ -31,7 +26,7 @@ export function useFetch<T>(url: string | null, client: AxiosInstance = clientAp
     setLoading(true);
     setError(null);
     setStatus(null);
-    client
+    clientApi
       .get<{ data: T }>(url)
       .then(r => {
         if (ticket !== counter.current) return;
@@ -49,7 +44,7 @@ export function useFetch<T>(url: string | null, client: AxiosInstance = clientAp
       .finally(() => {
         if (ticket === counter.current) setLoading(false);
       });
-  }, [url, client]);
+  }, [url]);
 
   useEffect(() => { run(); }, [run]);
 

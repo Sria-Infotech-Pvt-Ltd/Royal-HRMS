@@ -15,12 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_onboarding_submitted_notification_task(self, schema_name, user_id):
+def send_onboarding_submitted_notification_task(self, user_id):
     """
     Notify HR that the user identified by `user_id` submitted their
-    onboarding wizard. `schema_name` is the dispatching company's schema
-    (captured at request time — the worker executing this task has no
-    tenant of its own, see apps.tenants.utils.run_in_tenant).
+    onboarding wizard.
 
     Re-derives the HR recipient list fresh in the worker — same rule the
     synchronous path used (the submitter's assigned HR if set, otherwise
@@ -35,9 +33,8 @@ def send_onboarding_submitted_notification_task(self, schema_name, user_id):
     """
     from apps.accounts.models import Company, User
     from apps.accounts.utils import send_template_email
-    from apps.tenants.utils import run_in_tenant
 
-    def _do():
+    try:
         try:
             submitter = User.objects.get(pk=user_id)
 
@@ -87,9 +84,6 @@ def send_onboarding_submitted_notification_task(self, schema_name, user_id):
         result = {'user_id': user_id, 'targets': len(hr_targets), 'sent': sent}
         logger.info('send_onboarding_submitted_notification_task completed: %s', result)
         return result
-
-    try:
-        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_onboarding_submitted_notification_task failed for %s: %s',
@@ -99,11 +93,10 @@ def send_onboarding_submitted_notification_task(self, schema_name, user_id):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_onboarding_approved_notification_task(self, schema_name, user_id, assigned_assessment_ids=None, has_pending=False):
+def send_onboarding_approved_notification_task(self, user_id, assigned_assessment_ids=None, has_pending=False):
     """
     Background delivery for the "onboarding approved" email plus one
-    "assessment assigned" email per newly-assigned assessment. `schema_name`
-    is the dispatching company's schema (see apps.tenants.utils.run_in_tenant).
+    "assessment assigned" email per newly-assigned assessment.
 
     Split out of OnboardingApprovalView.post() so 1-3 sequential SMTP
     round-trips (one per email) never sit in the request/response path —
@@ -118,9 +111,8 @@ def send_onboarding_approved_notification_task(self, schema_name, user_id, assig
     from apps.accounts.models import Company, User
     from apps.accounts.utils import send_template_email
     from apps.assessments.models import Assessment
-    from apps.tenants.utils import run_in_tenant
 
-    def _do():
+    try:
         try:
             target       = User.objects.get(pk=user_id)
             company      = Company.objects.first()
@@ -180,9 +172,6 @@ def send_onboarding_approved_notification_task(self, schema_name, user_id, assig
         result = {'user_id': user_id, 'assessments': len(assessments), 'sent': sent}
         logger.info('send_onboarding_approved_notification_task completed: %s', result)
         return result
-
-    try:
-        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_onboarding_approved_notification_task failed for %s: %s',

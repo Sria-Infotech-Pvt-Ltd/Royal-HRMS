@@ -21,11 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_interview_scheduled_emails_task(self, schema_name, candidate_id):
+def send_interview_scheduled_emails_task(self, candidate_id):
     """
     Background delivery for "interview scheduled" notification email(s).
-    `schema_name` is the dispatching company's schema (see
-    apps.tenants.utils.run_in_tenant).
 
     Retries (up to 3, 5 min apart) only cover fetching the candidate —
     nothing has been sent yet at that point. Once the existing send
@@ -35,9 +33,8 @@ def send_interview_scheduled_emails_task(self, schema_name, candidate_id):
     retrying the whole function again could re-send those.
     """
     from apps.recruitment.models import Candidate
-    from apps.tenants.utils import run_in_tenant
 
-    def _do():
+    try:
         try:
             candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
         except Candidate.DoesNotExist:
@@ -62,9 +59,6 @@ def send_interview_scheduled_emails_task(self, schema_name, candidate_id):
             return {'candidate_id': candidate_id, 'status': 'error'}
 
         return {'candidate_id': candidate_id, 'status': 'sent'}
-
-    try:
-        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_interview_scheduled_emails_task setup failed for %s: %s',
@@ -74,17 +68,15 @@ def send_interview_scheduled_emails_task(self, schema_name, candidate_id):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_referral_submission_emails_task(self, schema_name, candidate_id):
+def send_referral_submission_emails_task(self, candidate_id):
     """
     Background delivery for the referral-submitted notification email(s)
-    (referrer + candidate). `schema_name` is the dispatching company's
-    schema (see apps.tenants.utils.run_in_tenant). Same retry semantics as
+    (referrer + candidate). Same retry semantics as
     send_interview_scheduled_emails_task above.
     """
     from apps.recruitment.models import Candidate
-    from apps.tenants.utils import run_in_tenant
 
-    def _do():
+    try:
         try:
             candidate = Candidate.objects.select_related('branch', 'referral_by').get(pk=candidate_id)
         except Candidate.DoesNotExist:
@@ -106,9 +98,6 @@ def send_referral_submission_emails_task(self, schema_name, candidate_id):
             return {'candidate_id': candidate_id, 'status': 'error'}
 
         return {'candidate_id': candidate_id, 'status': 'sent'}
-
-    try:
-        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_referral_submission_emails_task setup failed for %s: %s',

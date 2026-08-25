@@ -11,7 +11,6 @@ import string
 from collections import defaultdict
 from datetime import datetime
 
-import cloudinary.utils
 import requests as http_req
 
 PHONE_RE = re.compile(r'^(?:\+?91)?\d{10}$')
@@ -32,7 +31,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse, StreamingHttpResponse
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, F, Max, Q
@@ -191,24 +190,14 @@ def _auto_assign_managers(employee: 'User') -> list:
     return changed
 
 
-def _cloudinary_signed_url(file_field) -> str:
-    """Return a short-lived signed Cloudinary download URL for a private file."""
-    import os as _os
-    import cloudinary.utils as _cu
-    name  = file_field.name
-    parts = _os.path.basename(name).rsplit('.', 1)
-    fmt   = parts[1].lower() if len(parts) == 2 else 'raw'
-    return _cu.private_download_url(name, fmt, resource_type='raw', type='authenticated', attachment=False)
-
-
 def _document_dict(doc) -> dict:
     """Shared shape for a single EmployeeDocument, used by _employee_dict() and
     EmployeeProfileDocumentView so the profile page and the upload response always
     match the ApiDocument shape the frontend expects."""
     try:
-        file_url = _cloudinary_signed_url(doc.file) if doc.file else ''
+        file_url = doc.file.url if doc.file else ''
     except Exception:
-        logger.warning('Cloudinary signed URL failed for employee document %s', doc.id, exc_info=True)
+        logger.warning('Signed URL failed for employee document %s', doc.id, exc_info=True)
         file_url = ''
     from core.cache_service import DocumentTypeConfigCacheService
     return {
@@ -228,9 +217,9 @@ def _custom_field_file_dict(v) -> dict:
     the HR Employee Detail page gets every step's file-type custom values in
     the one existing GET, same as `documents` today."""
     try:
-        file_url = _cloudinary_signed_url(v.file) if v.file else ''
+        file_url = v.file.url if v.file else ''
     except Exception:
-        logger.warning('Cloudinary signed URL failed for custom field file %s', v.id, exc_info=True)
+        logger.warning('Signed URL failed for custom field file %s', v.id, exc_info=True)
         file_url = ''
     return {
         'id':          v.id,
@@ -401,23 +390,12 @@ class LoginView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        company_code = serializer.validated_data['company_code']
-        email        = serializer.validated_data['email']
-        password     = serializer.validated_data['password']
+        email    = serializer.validated_data['email']
+        password = serializer.validated_data['password']
 
-        from apps.tenants.models import Client
-        try:
-            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
-        except Client.DoesNotExist:
-            return error('Invalid company code, email, or password.', http_status=status.HTTP_401_UNAUTHORIZED)
+        return self._authenticate(request, email, password)
 
-        # Everything from here on must run against THIS company's schema —
-        # activated for the rest of this view (user lookup, password check,
-        # audit log, token generation), reset automatically on the way out.
-        with client:
-            return self._authenticate(request, client, email, password)
-
-    def _authenticate(self, request, client, email, password):
+    def _authenticate(self, request, email, password):
         try:
             user = (
                 User.objects
@@ -455,12 +433,6 @@ class LoginView(APIView):
         user.reset_failed_login(ip_address=ip)
 
         refresh = RoleBasedRefreshToken.for_user(user)
-        # Carried through to every access token derived from this refresh
-        # token (SimpleJWT copies custom claims on refresh) — this is what
-        # apps.tenants.middleware.TenantSchemaMiddleware reads to scope every
-        # later request to this company's schema.
-        refresh['company_schema'] = client.schema_name
-        refresh['company_code']   = client.company_code
 
         AuditLog.objects.create(
             user=user, action='login', module='accounts', ip_address=ip,
@@ -475,8 +447,6 @@ class LoginView(APIView):
         resp = success('Login successful.', data={
             'user': {
                 'id':                  str(user.id),
-                'company_code':        client.company_code,
-                'company_name':        client.company_name,
                 'email':               user.email,
                 'full_name':           user.full_name,
                 'role':                user.role.name if user.role else None,
@@ -529,39 +499,6 @@ class TokenRefreshAPIView(APIView):
         if not refresh_str:
             return error('Session expired. Please log in again.', http_status=status.HTTP_401_UNAUTHORIZED)
 
-        # TenantSchemaMiddleware reads company_schema off the *access* token
-        # and — by design — leaves the connection on 'public' when that
-        # token fails to decode (apps/tenants/middleware.py). Every call
-        # here is precisely the case where the access token has just
-        # expired, so the connection always arrives on 'public'. The
-        # refresh token carries the same company_schema claim (see
-        # LoginView) and lives 7 days vs. the access token's 15 minutes, so
-        # it's the one still guaranteed valid here — resolve the tenant
-        # from it before touching FreshClaimsTokenRefreshSerializer, which
-        # queries the tenant-only token_blacklist tables and would 500
-        # against 'public' otherwise.
-        #
-        # Read via token_backend directly (verify=False), NOT
-        # RefreshToken(refresh_str) — RefreshToken mixes in BlacklistMixin,
-        # whose verify() checks BlacklistedToken as part of construction,
-        # which itself needs the tenant schema already active. Decoding
-        # unverified here only decides which schema to activate; the real
-        # signature+blacklist check still happens right below, unchanged,
-        # once the correct schema is active.
-        from rest_framework_simplejwt.exceptions import TokenBackendError
-        from rest_framework_simplejwt.state import token_backend
-        try:
-            schema_name = token_backend.decode(refresh_str, verify=False).get('company_schema')
-        except TokenBackendError:
-            schema_name = None
-        if schema_name:
-            from apps.tenants.models import Client
-            try:
-                tenant = Client.objects.get(schema_name=schema_name, is_active=True)
-                connection.set_tenant(tenant)
-            except Client.DoesNotExist:
-                return error('Session expired. Please log in again.', http_status=status.HTTP_401_UNAUTHORIZED)
-
         serializer = FreshClaimsTokenRefreshSerializer(data={'refresh': refresh_str})
         try:
             serializer.is_valid(raise_exception=True)
@@ -611,20 +548,9 @@ class ForgotPasswordView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        company_code = serializer.validated_data['company_code']
-        email        = serializer.validated_data['email']
+        email = serializer.validated_data['email']
 
-        from apps.tenants.models import Client
-        try:
-            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
-        except Client.DoesNotExist:
-            return error('Invalid company code.', http_status=status.HTTP_404_NOT_FOUND)
-
-        # Everything from here on must run against THIS company's schema —
-        # User/OTPVerification both live per-tenant, same reasoning as
-        # LoginView.
-        with client:
-            return self._send_otp(email)
+        return self._send_otp(email)
 
     def _send_otp(self, email):
         user = User.objects.filter(email__iexact=email, is_active=True).first()
@@ -665,19 +591,10 @@ class VerifyOTPView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        company_code = serializer.validated_data['company_code']
-        email        = serializer.validated_data['email']
-        otp_input    = serializer.validated_data['otp']
+        email     = serializer.validated_data['email']
+        otp_input = serializer.validated_data['otp']
 
-        from apps.tenants.models import Client
-        try:
-            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
-        except Client.DoesNotExist:
-            return error('Invalid company code.', http_status=status.HTTP_404_NOT_FOUND)
-
-        # User/OTPVerification/PasswordResetToken all live per-tenant.
-        with client:
-            return self._verify(email, otp_input)
+        return self._verify(email, otp_input)
 
     def _verify(self, email, otp_input):
         try:
@@ -724,19 +641,10 @@ class ResetPasswordView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
-        company_code    = serializer.validated_data['company_code']
         reset_token_id  = serializer.validated_data['reset_token']
         new_password    = serializer.validated_data['new_password']
 
-        from apps.tenants.models import Client
-        try:
-            client = Client.objects.get(company_code__iexact=company_code, is_active=True)
-        except Client.DoesNotExist:
-            return error('Invalid company code.', http_status=status.HTTP_404_NOT_FOUND)
-
-        # PasswordResetToken/User both live per-tenant.
-        with client:
-            return self._reset(request, reset_token_id, new_password)
+        return self._reset(request, reset_token_id, new_password)
 
     def _reset(self, request, reset_token_id, new_password):
         try:
@@ -2498,23 +2406,14 @@ class DocumentDetailView(APIView):
         except Document.DoesNotExist:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        name  = doc.file.name
-        parts = os.path.basename(name).rsplit('.', 1)
-        fmt   = parts[1].lower() if len(parts) == 2 else ''
-
         try:
-            # private_download_url signs the request with API key + secret,
-            # bypassing any CDN-level access restrictions on the Cloudinary account.
-            dl_url = cloudinary.utils.private_download_url(
-                name, fmt,
-                resource_type='raw',
-                type='authenticated',
-                attachment=False,
-            )
+            # doc.file.url signs the request with the storage's private key,
+            # bypassing any CDN-level access restrictions on the account.
+            dl_url = doc.file.url
             r = http_req.get(dl_url, stream=True, timeout=30)
             r.raise_for_status()
         except http_req.exceptions.HTTPError as exc:
-            logger.error('Cloudinary download failed pk=%s status=%s', pk, exc.response.status_code)
+            logger.error('Document storage download failed pk=%s status=%s', pk, exc.response.status_code)
             return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
         except Exception as exc:
             logger.error('Document download error pk=%s: %s', pk, exc, exc_info=True)
@@ -3179,24 +3078,15 @@ class EmployeeListCreateView(APIView):
                 _get_smtp_connection, _build_message, _company_email_wrapper,
                 _get_company_branding,
             )
-            from apps.tenants.utils import get_current_company_code
 
             company_name, logo_url, website, address = _get_company_branding()
-            company_name = company_name or 'Royal HRMS'
-            # Captured before `connection` below is reassigned to the SMTP
-            # connection object — get_current_company_code() needs the real
-            # (Django DB) `connection` name, not this local shadow of it.
-            company_code = get_current_company_code()
-            company_code_line = (
-                f'<strong>Company ID:</strong> {company_code}<br>' if company_code else ''
-            )
+            company_name = company_name or 'Aira HRMS'
 
             body = (
                 f'<p>Hi <strong>{full_name}</strong>,</p>'
-                f'<p>Your Royal HRMS account has been created.'
+                f'<p>Your {company_name} account has been created.'
                 f' Use the credentials below to log in:</p>'
                 f'<p>'
-                f'{company_code_line}'
                 f'<strong>Employee ID:</strong> {employee_id}<br>'
                 f'<strong>Login Email:</strong> {email}<br>'
                 f'<strong>Temporary Password:</strong> {temp_password}'
@@ -3208,7 +3098,7 @@ class EmployeeListCreateView(APIView):
 
             connection, from_email = _get_smtp_connection()
             msg = _build_message(
-                subject='Welcome to Royal HRMS — Your Login Credentials',
+                subject=f'Welcome to {company_name} — Your Login Credentials',
                 html_body=html_body,
                 from_email=from_email,
                 to=[email],
@@ -4361,16 +4251,15 @@ class OnboardingView(APIView):
         logger.info('User %s submitted onboarding wizard', request.user.email)
 
         # Notify HR via Celery so SMTP latency doesn't delay the response.
-        from django.db import connection
         from apps.accounts.tasks import send_onboarding_submitted_notification_task
 
-        def _queue_hr_notification(user_id=request.user.pk, schema_name=connection.schema_name):
+        def _queue_hr_notification(user_id=request.user.pk):
             try:
                 # retry=False + ignore_result=True — bounds broker/backend
                 # retries so a down Redis can't block this request; see the
                 # referral-submission dispatch in recruitment/views.py.
                 send_onboarding_submitted_notification_task.apply_async(
-                    args=[schema_name, user_id], retry=False, ignore_result=True,
+                    args=[user_id], retry=False, ignore_result=True,
                 )
             except Exception as exc:
                 logger.error(
@@ -4803,7 +4692,7 @@ class EmployeeDocumentView(APIView):
     """
     GET  /onboarding/documents/           → list all documents for this user
     POST /onboarding/documents/           → upload a document
-    GET  /onboarding/documents/<doc_id>/  → stream the file (Cloudinary signed proxy)
+    GET  /onboarding/documents/<doc_id>/  → stream the file (signed storage proxy)
     DELETE /onboarding/documents/<doc_id>/ → delete a document
     """
     permission_classes = [IsAuthenticated]
@@ -4823,7 +4712,7 @@ class EmployeeDocumentView(APIView):
         from apps.accounts.models import EmployeeDocument as ED
         from apps.accounts.serializers import EmployeeDocumentSerializer
 
-        # ── Detail: stream the file through a signed Cloudinary URL ─────────
+        # ── Detail: stream the file through a signed storage URL ─────────────
         if doc_id:
             doc, err = self._get_doc(request, doc_id)
             if err:
@@ -4834,16 +4723,11 @@ class EmployeeDocumentView(APIView):
             fmt   = parts[1].lower() if len(parts) == 2 else ''
 
             try:
-                dl_url = cloudinary.utils.private_download_url(
-                    name, fmt,
-                    resource_type='raw',
-                    type='authenticated',
-                    attachment=False,
-                )
+                dl_url = doc.file.url
                 r = http_req.get(dl_url, stream=True, timeout=30)
                 r.raise_for_status()
             except http_req.exceptions.HTTPError as exc:
-                logger.error('Employee doc Cloudinary fetch failed doc=%s status=%s',
+                logger.error('Employee doc storage fetch failed doc=%s status=%s',
                              doc_id, exc.response.status_code)
                 return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
             except Exception as exc:
@@ -4854,7 +4738,7 @@ class EmployeeDocumentView(APIView):
             # card, Aadhaar, bank proof, etc.) — separate from and in addition
             # to the existing permission check above, which only records who
             # is *allowed* to view it, not who actually did and when. Logged
-            # only once the fetch from Cloudinary has actually succeeded, so
+            # only once the fetch from storage has actually succeeded, so
             # a 404/permission-denied/upstream-error attempt above never
             # creates a misleading "viewed" record.
             AuditLog.objects.create(
@@ -5058,7 +4942,7 @@ class CustomFieldFileValueView(APIView):
     """
     GET    /onboarding/custom-file-fields/           → list all of this user's file-type custom values
     POST   /onboarding/custom-file-fields/           → upload a value for {field_key, file}
-    GET    /onboarding/custom-file-fields/<value_id>/ → stream the file (Cloudinary signed proxy)
+    GET    /onboarding/custom-file-fields/<value_id>/ → stream the file (signed storage proxy)
     DELETE /onboarding/custom-file-fields/<value_id>/ → delete a value
 
     Reads are unrestricted by step (Personal/Education/Bank file fields still
@@ -5095,16 +4979,11 @@ class CustomFieldFileValueView(APIView):
             fmt   = parts[1].lower() if len(parts) == 2 else ''
 
             try:
-                dl_url = cloudinary.utils.private_download_url(
-                    name, fmt,
-                    resource_type='raw',
-                    type='authenticated',
-                    attachment=False,
-                )
+                dl_url = value.file.url
                 r = http_req.get(dl_url, stream=True, timeout=30)
                 r.raise_for_status()
             except http_req.exceptions.HTTPError as exc:
-                logger.error('Custom field file Cloudinary fetch failed id=%s status=%s',
+                logger.error('Custom field file storage fetch failed id=%s status=%s',
                              value_id, exc.response.status_code)
                 return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
             except Exception as exc:
@@ -5541,18 +5420,16 @@ class OnboardingApprovalView(APIView):
             # Dispatch via Celery so 1-3 sequential SMTP round-trips never sit in
             # this request's response path — see send_onboarding_submitted_notification_task's
             # dispatch (onboarding wizard submission, above) for the same rationale.
-            from django.db import connection
             from apps.accounts.tasks import send_onboarding_approved_notification_task
 
             def _queue_approval_notification(
                 user_id=target.pk,
                 assessment_ids=[a.id for a in assigned_assessments],
                 has_pending_=has_pending,
-                schema_name=connection.schema_name,
             ):
                 try:
                     send_onboarding_approved_notification_task.apply_async(
-                        args=[schema_name, user_id, assessment_ids, has_pending_], retry=False, ignore_result=True,
+                        args=[user_id, assessment_ids, has_pending_], retry=False, ignore_result=True,
                     )
                 except Exception as exc:
                     logger.error(
@@ -5687,7 +5564,7 @@ class OnboardingApprovalView(APIView):
                 context={
                     'request': request,
                     'candidates_by_user': candidates_by_user,
-                    'use_cloudinary_url': True,
+                    'use_direct_url': True,
                 },
             ).data,
         ))
@@ -5721,7 +5598,7 @@ class OnboardingApprovalView(APIView):
                 context={
                     'request': request,
                     'candidates_by_user': candidates_by_user,
-                    'use_cloudinary_url': True,
+                    'use_direct_url': True,
                 },
             ).data,
         )

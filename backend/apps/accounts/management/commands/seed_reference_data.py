@@ -4,12 +4,10 @@ Management command: seed_reference_data
 Re-seeds all reference / configuration data that was delivered via Django
 data migrations but is not re-applied if those rows are deleted at runtime.
 
-Run:  python manage.py seed_reference_data --schema tenant_royalhrms
-      python manage.py seed_reference_data --all
+Run:  python manage.py seed_reference_data
 """
+from django.core.management.base import BaseCommand
 from django.db import transaction
-
-from core.tenant_command import TenantCommand
 
 
 # ── States & Cities ────────────────────────────────────────────────────────────
@@ -238,10 +236,6 @@ EMAIL_TEMPLATES = [
             '    <td style="padding:6px 12px;">{portal_url}</td>\n'
             '  </tr>\n'
             '  <tr>\n'
-            '    <td style="padding:6px 12px;font-weight:600;color:#555;">Company ID</td>\n'
-            '    <td style="padding:6px 12px;">{company_code}</td>\n'
-            '  </tr>\n'
-            '  <tr>\n'
             '    <td style="padding:6px 12px;font-weight:600;color:#555;">Login Email</td>\n'
             '    <td style="padding:6px 12px;">{login_email}</td>\n'
             '  </tr>\n'
@@ -259,7 +253,7 @@ EMAIL_TEMPLATES = [
             '<p>Warm regards,<br/><strong>HR Team — {company_name}</strong></p>'
         ),
         'is_builtin': False,
-        'available_variables': ['candidate_name','position','company_name','company_code','login_email','temp_password','portal_url'],
+        'available_variables': ['candidate_name','position','company_name','login_email','temp_password','portal_url'],
     },
     {
         'name': 'onboarding_approved',
@@ -423,18 +417,18 @@ EMAIL_TEMPLATES = [
 ]
 
 
-class Command(TenantCommand):
+class Command(BaseCommand):
     help = (
         'Re-seeds states, cities, email template categories, email templates, and '
-        'EmployeeCodeSettings. Requires --schema/--company-code/--all.'
+        'EmployeeCodeSettings.'
     )
 
-    def handle_tenant(self, client, *args, **options):
+    def handle(self, *args, **options):
         with transaction.atomic():
             self._seed_states_cities()
             self._seed_email_categories()
             self._seed_email_templates()
-            self._seed_employee_code_settings(client.company_code)
+            self._seed_employee_code_settings()
             self._seed_default_weekly_off_policy()
         self.stdout.write(self.style.SUCCESS('\nAll reference data seeded successfully.'))
 
@@ -490,16 +484,11 @@ class Command(TenantCommand):
 
     # ── EmployeeCodeSettings ───────────────────────────────────────────────────
 
-    def _seed_employee_code_settings(self, company_code):
+    def _seed_employee_code_settings(self):
         from apps.accounts.models import EmployeeCodeSettings
-        # Derived from this tenant's own company_code — never a fixed literal
-        # (see CLAUDE.md: never hardcode a specific company's identity into
-        # shared code), so every new company gets IDs that read as theirs
-        # (e.g. "QATEST" -> QAT00001) instead of some other tenant's initials.
-        prefix = ''.join(ch for ch in company_code.upper() if ch.isalpha())[:3] or 'EMP'
         _, created = EmployeeCodeSettings.objects.get_or_create(
             id=1,
-            defaults={'prefix': prefix, 'padding': 5, 'next_sequence': 1},
+            defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
         )
         self.stdout.write(f'  EmployeeCodeSettings: {"created" if created else "already exists"}')
 

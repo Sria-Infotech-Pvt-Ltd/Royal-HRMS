@@ -17,11 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def send_assessment_assignment_emails_task(self, schema_name: str, assignment_ids: list, template_name: str = 'assessment_assigned'):
+def send_assessment_assignment_emails_task(self, assignment_ids: list, template_name: str = 'assessment_assigned'):
     """
     Background delivery for "assessment assigned" notification emails.
-    `schema_name` is the dispatching company's schema (see
-    apps.tenants.utils.run_in_tenant).
 
     Takes only CandidateAssignment ids (not serialized objects) and
     re-fetches them fresh in the worker, per this project's task convention.
@@ -36,9 +34,8 @@ def send_assessment_assignment_emails_task(self, schema_name: str, assignment_id
     from apps.accounts.models import Company
     from apps.assessments.models import CandidateAssignment
     from apps.assessments.views.admin import _send_assessment_email
-    from apps.tenants.utils import run_in_tenant
 
-    def _do():
+    try:
         assignments = list(
             CandidateAssignment.objects
             .select_related('candidate', 'employee', 'assessment')
@@ -89,9 +86,6 @@ def send_assessment_assignment_emails_task(self, schema_name: str, assignment_id
         }
         logger.info('send_assessment_assignment_emails_task completed: %s', result)
         return result
-
-    try:
-        return run_in_tenant(schema_name, _do)
     except Exception as exc:
         logger.error(
             'send_assessment_assignment_emails_task setup failed for %s: %s',

@@ -1,5 +1,4 @@
 import logging
-import os
 
 from django.conf import settings as django_settings
 from django.core.cache import cache
@@ -136,10 +135,7 @@ class SystemAdminKPIView(APIView):
             database_status = False
 
         mail_status    = SMTPSettings.get_active() is not None
-        storage_status = bool(
-            os.environ.get('CLOUDINARY_URL') or
-            os.path.isdir(str(getattr(django_settings, 'MEDIA_ROOT', '')))
-        )
+        storage_status = bool(getattr(django_settings, 'IMAGEKIT_PRIVATE_KEY', ''))
 
         return success('KPIs retrieved.', data={
             'total_employees':      total_employees,

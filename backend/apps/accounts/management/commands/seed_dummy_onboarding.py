@@ -12,18 +12,18 @@ document uploads are skipped entirely since a real PAN/Aadhaar/degree file
 cannot be faked). Approval does not require documents, so onboarding_status
 is set straight to "complete" without creating any EmployeeDocument rows.
 
-Run:  python manage.py seed_dummy_onboarding --schema tenant_royalhrms --dry-run
-      python manage.py seed_dummy_onboarding --schema tenant_royalhrms
-      python manage.py seed_dummy_onboarding --schema tenant_royalhrms --department "Sales" --branch "Hyderabad"
-      python manage.py seed_dummy_onboarding --schema tenant_royalhrms --emails a@x.com b@x.com
+Run:  python manage.py seed_dummy_onboarding --dry-run
+      python manage.py seed_dummy_onboarding
+      python manage.py seed_dummy_onboarding --department "Sales" --branch "Hyderabad"
+      python manage.py seed_dummy_onboarding --emails a@x.com b@x.com
 """
 import random
 from datetime import date
 
+from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.accounts.models import AuditLog, EmployeeProfile, User
-from core.tenant_command import TenantCommand
 
 FATHER_NAMES = [
     'Ramesh Kumar', 'Suresh Babu', 'Mahesh Reddy', 'Venkat Rao', 'Anil Sharma',
@@ -111,14 +111,13 @@ def _fill_profile(user, rng) -> list:
     return changed
 
 
-class Command(TenantCommand):
+class Command(BaseCommand):
     help = (
         'Fills placeholder EmployeeProfile data and marks onboarding complete for '
-        'employees stuck at "pending" after a bulk import. DEMO/TEST DATA ONLY. '
-        'Requires --schema/--company-code/--all.'
+        'employees stuck at "pending" after a bulk import. DEMO/TEST DATA ONLY.'
     )
 
-    def add_tenant_arguments(self, parser):
+    def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true',
                              help='Report what would change without saving anything.')
         parser.add_argument('--emails', nargs='*', default=None,
@@ -130,7 +129,7 @@ class Command(TenantCommand):
         parser.add_argument('--branch', default=None,
                              help='Restrict to employees in this branch.')
 
-    def handle_tenant(self, client, *args, **options):
+    def handle(self, *args, **options):
         emails = list(options['emails'] or [])
         if options['emails_file']:
             with open(options['emails_file'], encoding='utf-8') as fh:

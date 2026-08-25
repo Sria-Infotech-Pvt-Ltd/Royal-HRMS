@@ -508,7 +508,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   emp(
     {
       id: "RSS00001D", code: "RSS00001D", firstName: "Arjun", middleName: "", lastName: "Mehta",
-      email: "manager@royal.com", phone: "+91 98765 10011", department: "Engineering",
+      email: "manager@airahrms.com", phone: "+91 98765 10011", department: "Engineering",
       designation: "Sr. Manager", dateOfJoining: "2022-01-15", dateOfBirth: "1985-04-15",
       location: "Bengaluru, KA", gender: "male", status: "active"
     },
@@ -536,7 +536,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   emp(
     {
       id: "RSS00002D", code: "RSS00002D", firstName: "Kavitha", middleName: "", lastName: "Rajan",
-      email: "hr@royal.com", phone: "+91 98765 20022", department: "HR",
+      email: "hr@airahrms.com", phone: "+91 98765 20022", department: "HR",
       designation: "HR Admin", dateOfJoining: "2021-03-01", dateOfBirth: "1990-07-22",
       location: "Chennai, TN", gender: "female", status: "active"
     },
@@ -548,7 +548,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   emp(
     {
       id: "RSS00003D", code: "RSS00003D", firstName: "Ravi", middleName: "", lastName: "Shankar",
-      email: "admin@royal.com", phone: "+91 98765 30033", department: "IT",
+      email: "admin@airahrms.com", phone: "+91 98765 30033", department: "IT",
       designation: "System Admin", dateOfJoining: "2020-06-10", dateOfBirth: "1988-11-05",
       location: "Hyderabad, TS", gender: "male", status: "active"
     },
@@ -560,7 +560,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   emp(
     {
       id: "RSS00004D", code: "RSS00004D", firstName: "Priya", middleName: "", lastName: "Sharma",
-      email: "employee@royal.com", phone: "+91 98765 40044", department: "Engineering",
+      email: "employee@airahrms.com", phone: "+91 98765 40044", department: "Engineering",
       designation: "Software Engineer", dateOfJoining: "2025-06-20", dateOfBirth: "1998-02-18",
       location: "Bengaluru, KA", gender: "female", status: "active"
     },
@@ -572,7 +572,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   emp(
     {
       id: "RSS00005D", code: "RSS00005D", firstName: "Meena", middleName: "", lastName: "Iyer",
-      email: "meena@royal.com", phone: "+91 98765 50055", department: "Finance",
+      email: "meena@airahrms.com", phone: "+91 98765 50055", department: "Finance",
       designation: "Finance Manager", dateOfJoining: "2021-08-05", dateOfBirth: "1986-12-30",
       location: "Mumbai, MH", gender: "female", status: "active"
     },
@@ -585,7 +585,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   emp(
     {
       id: "RSS00006D", code: "RSS00006D", firstName: "Suresh", middleName: "", lastName: "Kumar",
-      email: "suresh@royal.com", phone: "+91 98765 60066", department: "Sales",
+      email: "suresh@airahrms.com", phone: "+91 98765 60066", department: "Sales",
       designation: "Sales Executive", dateOfJoining: "2025-06-18", dateOfBirth: "1995-05-09",
       location: "Pune, MH", gender: "male", status: "onboarding"
     },

@@ -16,7 +16,6 @@ urlpatterns = [
     path('api/dashboard/',     include('apps.dashboard.urls')),
     path('api/payroll/',       include('apps.payroll.urls')),
     path('api/voice/',         include('apps.voice_commands.urls')),
-    path('api/platform-admin/', include('apps.tenants.urls')),
 ]
  
 if settings.DEBUG:

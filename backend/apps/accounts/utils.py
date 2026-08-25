@@ -5,6 +5,7 @@ import re
 import secrets
 import string
 from datetime import date, datetime
+from email.utils import formataddr
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
@@ -90,11 +91,7 @@ def _get_smtp_connection() -> tuple[object, str]:
         use_tls=smtp.use_tls,
         fail_silently=False,
     )
-    from_email = (
-        f'{smtp.sender_name} <{smtp.from_email}>'
-        if smtp.sender_name
-        else smtp.from_email
-    )
+    from_email = formataddr((smtp.sender_name, smtp.from_email))
     return connection, from_email
 
 
@@ -131,7 +128,7 @@ def send_otp_email(email: str, otp: str, full_name: str) -> None:
     connection, from_email = _get_smtp_connection()
     expiry  = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
     branding = _get_company_branding()
-    company_name = branding[0] or 'Royal HRMS'
+    company_name = branding[0] or 'Aira HRMS'
 
     html_body = (
         f'<p>Hi <strong>{full_name}</strong>,</p>'
@@ -162,7 +159,7 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
     
     sender_name = smtp_config.get('sender_name', '').strip()
     raw_from    = smtp_config.get('from_email', smtp_config['username'])
-    from_email  = f'{sender_name} <{raw_from}>' if sender_name else raw_from
+    from_email  = formataddr((sender_name, raw_from))
 
     connection = get_connection(
         backend='django.core.mail.backends.smtp.EmailBackend',
@@ -175,7 +172,7 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
     )
 
     branding = _get_company_branding()
-    company_name = branding[0] or 'Royal HRMS'
+    company_name = branding[0] or 'Aira HRMS'
     html_body = (
         f'<p>This is a test email from <strong>{company_name}</strong>.</p>'
         '<p style="color:#16a34a;font-weight:bold;font-size:18px;">'
@@ -185,7 +182,7 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
     html_body = _company_email_wrapper(html_body, *branding)
 
     msg = _build_message(
-        subject='Royal HRMS — SMTP Configuration Test',
+        subject='Aira HRMS — SMTP Configuration Test',
         html_body=html_body,
         from_email=from_email,
         to=[recipient_email],

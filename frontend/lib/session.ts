@@ -10,7 +10,6 @@ export interface SessionPayload {
   name:              string;
   role:              string;
   permissions:       string[];
-  companyName?:      string;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

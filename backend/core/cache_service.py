@@ -518,8 +518,7 @@ class OnboardingFieldConfigCacheService:
     """
     All OnboardingFieldConfig rows, grouped by step — read on every onboarding
     GET/save and every settings-page load, so worth caching same as the other
-    per-company config lists above. tenant_aware_key_func (config/settings.py)
-    already scopes this cache key per company automatically.
+    config lists above.
     """
     _ALL_KEY = 'onboarding_field_config:all'
 

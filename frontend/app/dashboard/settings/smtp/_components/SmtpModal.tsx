@@ -247,7 +247,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
             {/* Sender Name */}
             <div className="field-group">
               <label className="field-label">Sender Name</label>
-              <input className="field-input" placeholder="Royal HRMS"
+              <input className="field-input" placeholder="Aira HRMS"
                 value={form.senderName}
                 onChange={e => patch({ senderName: e.target.value })}
                 suppressHydrationWarning />

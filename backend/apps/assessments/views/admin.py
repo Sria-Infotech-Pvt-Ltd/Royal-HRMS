@@ -45,16 +45,15 @@ def _queue_assignment_emails(assignment_ids: list, template_name: str) -> None:
     """
     if not assignment_ids:
         return
-    from django.db import connection
     from apps.assessments.tasks import send_assessment_assignment_emails_task
 
-    def _dispatch(ids=list(assignment_ids), tpl=template_name, schema_name=connection.schema_name):
+    def _dispatch(ids=list(assignment_ids), tpl=template_name):
         try:
             # retry=False + ignore_result=True — bounds broker/backend
             # retries so a down Redis can't block this request; see the
             # referral-submission dispatch in recruitment/views.py.
             send_assessment_assignment_emails_task.apply_async(
-                args=[schema_name, ids, tpl], retry=False, ignore_result=True,
+                args=[ids, tpl], retry=False, ignore_result=True,
             )
         except Exception as exc:
             logger.error(

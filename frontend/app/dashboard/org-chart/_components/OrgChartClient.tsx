@@ -2,7 +2,6 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useFetch } from "@/hooks/useFetch";
 import { useOrgChart } from "@/hooks/useOrgChart";
 import { API } from "@/lib/api/endpoints";
@@ -230,8 +229,6 @@ function ZoomableChart({ zoom, children }: { zoom: number; children: React.React
 }
 
 export default function OrgChartClient() {
-  const currentUser = useCurrentUser();
-  const companyName = currentUser?.companyName ?? "";
   const [selectedBranch, setSelectedBranch] = useState("");
   const [zoom, setZoom] = useState(100);
   const { orgChart, loading, error, refetch } = useOrgChart(selectedBranch || undefined);
@@ -398,7 +395,7 @@ export default function OrgChartClient() {
                 boxShadow: "var(--shadow)",
               }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>
-                  {companyName || "Company"}
+                  Company
                 </div>
               </div>
               <div style={{ width: 1, height: 28, background: LINE }} />

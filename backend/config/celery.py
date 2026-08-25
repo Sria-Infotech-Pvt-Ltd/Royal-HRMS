@@ -1,5 +1,5 @@
 """
-Celery application entry point for Royal HRMS.
+Celery application entry point for Aira HRMS.
 
 CELERY_BEAT_SCHEDULE (config/settings.py) is a plain dict, read by Celery's
 built-in default scheduler — django-celery-beat is NOT installed in this

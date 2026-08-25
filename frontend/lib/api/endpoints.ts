@@ -8,29 +8,6 @@ export const API = {
     changePassword: "/change-password/",
   },
 
-  platformAdmin: {
-    login: "/platform-admin/login/",
-    logout: "/platform-admin/logout/",
-    refresh: "/platform-admin/token/refresh/",
-    me: "/platform-admin/me/",
-    forgotPassword: "/platform-admin/forgot-password/",
-    verifyOtp: "/platform-admin/verify-otp/",
-    resetPassword: "/platform-admin/reset-password/",
-    changePassword: "/platform-admin/change-password/",
-    companies: {
-      list: "/platform-admin/companies/",
-      detail: (id: string) => `/platform-admin/companies/${id}/`,
-      revealPassword: (id: string) => `/platform-admin/companies/${id}/reveal-password/`,
-    },
-    admins: {
-      list: "/platform-admin/admins/",
-      detail: (id: string) => `/platform-admin/admins/${id}/`,
-    },
-    auditLogs: "/platform-admin/audit-logs/",
-    dashboardStats: "/platform-admin/dashboard-stats/",
-    smtpSettings: "/platform-admin/smtp-settings/",
-  },
-
   announcements: {
     list: "/announcements/",
     detail: (id: string | number) => `/announcements/${id}/`,

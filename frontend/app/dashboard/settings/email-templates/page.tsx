@@ -335,7 +335,7 @@ export default function EmailTemplatesPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Email Templates</div>
-          <div className="page-sub">Customize transactional email messages sent by Royal HRMS</div>
+          <div className="page-sub">Customize transactional email messages sent by Aira HRMS</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} suppressHydrationWarning>

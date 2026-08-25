@@ -357,7 +357,7 @@ export default function AddEmployeeModal({
                       <Inp v={form.last_name} set={v => set("last_name", sanitizeName(v))} ph="e.g. Sharma" err={!!errs.last_name} />
                     </Field>
                     <Field label="Work Email" required error={errs.email}>
-                      <Inp v={form.email} set={v => set("email", sanitizeEmail(v))} ph="anjali@royal.com" type="email" err={!!errs.email} />
+                      <Inp v={form.email} set={v => set("email", sanitizeEmail(v))} ph="anjali@airahrms.com" type="email" err={!!errs.email} />
                     </Field>
                     <Field label="Phone" error={errs.phone}>
                       <Inp v={form.phone} set={v => set("phone", sanitizePhone(v))} ph="+91 98765 43210" type="tel" err={!!errs.phone} />

@@ -645,7 +645,6 @@ class HRAttendanceReprocessView(APIView):
         scoped_ids = _manager_scope_employee_ids(request.user)
         employee_ids = [str(i) for i in scoped_ids] if scoped_ids is not None else None
 
-        from django.db import connection
         from apps.attendance.tasks import reprocess_attendance_task
         try:
             # retry=False + ignore_result=True — bounds broker/backend
@@ -654,11 +653,8 @@ class HRAttendanceReprocessView(APIView):
             # reads this task's result via Celery — .id is still available
             # on the returned AsyncResult immediately, independent of
             # whether the broker publish itself succeeds.
-            # connection.schema_name (this request's active company) is
-            # passed through — the worker executing this task has no
-            # tenant of its own (see apps.tenants.utils).
             async_result = reprocess_attendance_task.apply_async(
-                args=[connection.schema_name, target_date.isoformat(), branch, department, str(request.user.pk), employee_ids],
+                args=[target_date.isoformat(), branch, department, str(request.user.pk), employee_ids],
                 retry=False, ignore_result=True,
             )
         except Exception as exc:

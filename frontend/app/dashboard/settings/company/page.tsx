@@ -469,7 +469,7 @@ export default function CompanyInfoPage() {
               className={`field-input${errors.website ? " field-error" : ""}`}
               value={form.website}
               onChange={e => handleField("website", e.target.value)}
-              placeholder="https://royalstaffing.in"
+              placeholder="https://airahrms.com"
               type="url"
             />
             {errors.website && <div className="field-error-msg">{errors.website}</div>}

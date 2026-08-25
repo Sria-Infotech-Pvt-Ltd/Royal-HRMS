@@ -425,8 +425,8 @@ export default function OnboardingPage() {
         <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo.png"
-            alt="Royal HRMS"
+            src="/logo-icon.png"
+            alt="Aira HRMS"
             style={{ height: 56, width: "auto", objectFit: "contain", margin: "0 auto 1.25rem", display: "block" }}
           />
           <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--on-bg)", marginBottom: ".5rem", letterSpacing: "-.02em" }}>

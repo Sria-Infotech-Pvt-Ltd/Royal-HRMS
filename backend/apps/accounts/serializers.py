@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import os
 import re
-import time
 
-import cloudinary.utils
 from django.core import signing
 
 from django.contrib.auth.password_validation import validate_password
@@ -142,26 +140,15 @@ class RoleSerializer(serializers.ModelSerializer):
 # ─── Auth serializers ─────────────────────────────────────────────────────────
 
 class LoginSerializer(serializers.Serializer):
-    # One common login for every role — always required, since it's what
-    # tells the system which tenant schema to check for this email.
-    company_code = serializers.CharField(max_length=50)
     email        = serializers.EmailField()
     password     = serializers.CharField(min_length=1, max_length=128)
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
-    # Required so the view knows which tenant schema to look the email up
-    # in — same reasoning as LoginSerializer.company_code. The actual User
-    # lookup can't happen here in a validate_email hook any more: it has to
-    # run only after the view has activated that schema (see
-    # ForgotPasswordView.post), never against whatever schema happens to be
-    # active when this serializer is validated.
-    company_code = serializers.CharField(max_length=50)
     email        = serializers.EmailField()
 
 
 class VerifyOTPSerializer(serializers.Serializer):
-    company_code = serializers.CharField(max_length=50)
     email = serializers.EmailField()
     otp   = serializers.CharField(min_length=6, max_length=6)
 
@@ -172,7 +159,6 @@ class VerifyOTPSerializer(serializers.Serializer):
 
 
 class ResetPasswordSerializer(serializers.Serializer):
-    company_code     = serializers.CharField(max_length=50)
     reset_token      = serializers.UUIDField()
     new_password     = serializers.CharField(min_length=8, max_length=128, write_only=True)
     confirm_password = serializers.CharField(min_length=8, max_length=128, write_only=True)
@@ -341,22 +327,11 @@ class EmailTemplateAttachmentSerializer(serializers.ModelSerializer):
     def get_url(self, obj):
         if not obj.file or not obj.file.name:
             return ''
-        try:
-            signed_url, _ = cloudinary.utils.cloudinary_url(
-                obj.file.name,
-                resource_type='raw',
-                type='authenticated',
-                sign_url=True,
-                expires_at=int(time.time()) + 7200,
-                secure=True,
-            )
-            return signed_url
-        except Exception:
-            url = obj.file.url
-            request = self.context.get('request')
-            if request and not url.startswith(('http://', 'https://')):
-                return request.build_absolute_uri(url)
-            return url
+        url = obj.file.url
+        request = self.context.get('request')
+        if request and not url.startswith(('http://', 'https://')):
+            return request.build_absolute_uri(url)
+        return url
 
 
 class EmailTemplateSerializer(serializers.ModelSerializer):
@@ -1120,8 +1095,8 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
     # any more — resolved via the same config cache the settings/upload views
     # already read.
     document_type_display = serializers.SerializerMethodField()
-    # file_url points to our backend proxy which signs the Cloudinary request —
-    # the raw Cloudinary URL requires authentication and cannot be opened directly.
+    # file_url points to our backend proxy which signs the storage request —
+    # the raw storage URL requires authentication and cannot be opened directly.
     file_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -1138,26 +1113,16 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         return DocumentTypeConfigCacheService.label_for(obj.document_type)
 
     def get_file_url(self, obj):
-        # HR approval context: return a signed Cloudinary URL so admins can
+        # HR approval context: return a signed storage URL so admins can
         # open the file directly without routing through the employee proxy.
-        if self.context.get('use_cloudinary_url') and obj.file:
+        if self.context.get('use_direct_url') and obj.file:
             try:
-                import os as _os
-                import cloudinary.utils as _cu
-                name  = obj.file.name
-                parts = _os.path.basename(name).rsplit('.', 1)
-                fmt   = parts[1].lower() if len(parts) == 2 else 'raw'
-                return _cu.private_download_url(
-                    name, fmt,
-                    resource_type='raw',
-                    type='authenticated',
-                    attachment=False,
-                )
+                return obj.file.url
             except Exception:
                 pass
 
         # Default: backend proxy URL (signs the request server-side so the
-        # browser never hits Cloudinary directly — required for employee flow).
+        # browser never hits storage directly — required for employee flow).
         request = self.context.get('request')
         if not request:
             return None
@@ -1183,7 +1148,7 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
 
 class CustomFieldFileValueSerializer(serializers.ModelSerializer):
     # Same signed-proxy reasoning as EmployeeDocumentSerializer.file_url above —
-    # the raw Cloudinary URL requires authentication the browser doesn't have.
+    # the raw storage URL requires authentication the browser doesn't have.
     file_url = serializers.SerializerMethodField()
 
     class Meta:

@@ -40,49 +40,19 @@ FIELD_INDEX_HMAC_KEY = env('FIELD_INDEX_HMAC_KEY')
 IS_LOCAL_OR_TEST_ENV = DEBUG
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
-# ─── Multi-tenancy (django-tenants, PostgreSQL schema-per-company) ───────────
-# SHARED_APPS live in the public schema — apps.tenants is the company
-# registry (which schema each company maps to, which modules it has
-# enabled); everything else is a TENANT_APP, meaning every company gets its
-# own complete, isolated copy of those tables in its own schema. Isolation
-# is enforced by which schema the DB connection is pointed at for a given
-# request (see apps/tenants/middleware.py), not by an application-level
-# `.filter(company=...)` added to every query — so none of the existing
-# business logic (payroll, attendance, encryption, permissions, ...) needed
-# to change for this. django.contrib.contenttypes/auth appear in BOTH lists
-# per django-tenants' own convention: their tables need to exist in every
-# tenant schema (TENANT_APPS, since AUTH_USER_MODEL is a tenant app) AND in
-# the public schema (SHARED_APPS, for objects created before any tenant
-# exists, e.g. during the very first `migrate_schemas --shared`).
-# django.contrib.admin and rest_framework_simplejwt.token_blacklist are
-# TENANT-ONLY (not shared): LogEntry and OutstandingToken/BlacklistedToken
-# each have a FK to AUTH_USER_MODEL (accounts.User, a tenant app), which
-# can't be satisfied in the public schema — each company gets its own admin
-# log and token blacklist alongside its own users, which is the right
-# behavior anyway (both are inherently per-company data).
-SHARED_APPS = (
-    'django_tenants',              # must be first
-    'apps.tenants',
-
-    'daphne',                      # first of the rest: replaces runserver with an ASGI-aware one
+INSTALLED_APPS = [
+    'daphne',                      # first: replaces runserver with an ASGI-aware one
     'channels',
+    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'cloudinary_storage',          # must come before staticfiles
     'django.contrib.staticfiles',
-    'cloudinary',
     'rest_framework',
     'rest_framework_simplejwt',
-    'corsheaders',
-)
-
-TENANT_APPS = (
-    'django.contrib.admin',
     'rest_framework_simplejwt.token_blacklist',
-    'django.contrib.contenttypes',
-    'django.contrib.auth',
+    'corsheaders',
 
     'apps.accounts',
     'apps.branch',
@@ -95,19 +65,10 @@ TENANT_APPS = (
     'apps.dashboard',
     'apps.payroll',
     'apps.voice_commands',
-)
-
-INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
-
-TENANT_MODEL = 'tenants.Client'
-TENANT_DOMAIN_MODEL = 'tenants.Domain'
-DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    # Resolves which company schema this request runs against — must run
-    # before anything else that touches the ORM (every app view included).
-    'apps.tenants.middleware.TenantSchemaMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -153,11 +114,6 @@ DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
 if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
     DATABASES['default'].setdefault('OPTIONS', {})
     DATABASES['default']['OPTIONS'].setdefault('sslmode', env('DB_SSL_MODE', default='require'))
-    # Multi-tenancy (see SHARED_APPS/TENANT_APPS above) is PostgreSQL-schema
-    # based — django-tenants needs its own backend, a thin wrapper around
-    # psycopg2 that sets the connection's search_path per request/tenant.
-    # There is no SQLite equivalent: multi-tenancy requires Postgres.
-    DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -181,14 +137,10 @@ MEDIA_URL  = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ─── Cloudinary (all FileField / ImageField uploads) ─────────────────────────
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME':             env('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY':                env('CLOUDINARY_API_KEY'),
-    'API_SECRET':             env('CLOUDINARY_API_SECRET'),
-    'SECURE':                 True,   # always serve over HTTPS
-    'DELETE_CLOUDINARY_MEDIA': True,  # delete from Cloudinary when model instance is deleted
-}
+# ─── ImageKit (all FileField / ImageField uploads) ────────────────────────────
+IMAGEKIT_PUBLIC_KEY   = env('IMAGEKIT_PUBLIC_KEY')
+IMAGEKIT_PRIVATE_KEY  = env('IMAGEKIT_PRIVATE_KEY')
+IMAGEKIT_URL_ENDPOINT = env('IMAGEKIT_URL_ENDPOINT').rstrip('/')
 
 # ─── Sarvam AI (voice_commands LLM fallback + Hindi STT) ─────────────────────
 # Server-side only — never exposed to the frontend, never a NEXT_PUBLIC_ var.
@@ -201,19 +153,11 @@ SARVAM_API_KEY = env('SARVAM_API_KEY', default='')
 # -> STORAGES translation shim (deprecated since 4.2) — STORAGES is now the
 # only setting Django itself reads for FileField/ImageField.storage and
 # collectstatic. Setting the legacy names as real module-level settings
-# instead of (or alongside) STORAGES silently sent every upload to the
-# built-in local-disk DefaultStorage rather than Cloudinary, since Django
-# never applied them.
-#
-# Values are held in underscore-prefixed names, not the real
-# DEFAULT_FILE_STORAGE/STATICFILES_STORAGE settings — Django raises
-# ImproperlyConfigured ("mutually exclusive") the moment both a legacy
-# storage setting AND STORAGES are defined at once. Django still resolves
-# settings.STATICFILES_STORAGE / settings.DEFAULT_FILE_STORAGE as computed
-# attributes derived FROM STORAGES when the legacy names themselves are left
-# unset, which is what django-cloudinary-storage's own collectstatic
-# override needs (it reads settings.STATICFILES_STORAGE as a raw attribute).
-_DEFAULT_FILE_STORAGE_BACKEND = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
+# instead of (or alongside) STORAGES silently sends every upload to the
+# built-in local-disk DefaultStorage instead, since Django never applies
+# them; kept as underscore-prefixed names here rather than the real
+# DEFAULT_FILE_STORAGE/STATICFILES_STORAGE settings for the same reason.
+_DEFAULT_FILE_STORAGE_BACKEND = 'core.storage.ImageKitStorage'
 _STATICFILES_STORAGE_BACKEND  = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 STORAGES = {
@@ -257,11 +201,6 @@ if _REDIS_URL:
                 'IGNORE_EXCEPTIONS': True,
             },
             'KEY_PREFIX': 'hrms',
-            # Prepends the active tenant's schema name to every cache key —
-            # see core/cache_keys.py. Without this, this shared Redis
-            # instance would serve one company's cached data (KPIs, leave
-            # policy, branch/department lists, etc.) to every other company.
-            'KEY_FUNCTION': 'core.cache_keys.tenant_aware_key_func',
         }
     }
     # Logs a WARNING (via the django_redis.cache logger) each time
@@ -272,10 +211,6 @@ else:
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            # Same cross-tenant reasoning as the Redis KEY_FUNCTION above —
-            # LocMemCache is a single in-process dict shared by every
-            # request this worker process handles, tenant or not.
-            'KEY_FUNCTION': 'core.cache_keys.tenant_aware_key_func',
         }
     }
 
@@ -357,13 +292,6 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.attendance.tasks.check_missing_clockouts',
         'schedule': 300.0,  # seconds
     },
-    # Runs every 5 minutes — flips any company provisioning stuck at
-    # 'pending' (worker died mid-task) to 'failed' so the platform-admin
-    # UI doesn't show "Provisioning..." forever with no recovery path.
-    'sweep-stale-provisioning': {
-        'task':     'apps.tenants.tasks.sweep_stale_provisioning',
-        'schedule': 300.0,  # seconds
-    },
     # Runs once daily at 09:00 IST — fires absence alerts for employees absent N+ consecutive days.
     'check-absence-alerts': {
         'task':     'apps.attendance.tasks.check_absence_alerts',
@@ -408,9 +336,6 @@ REST_FRAMEWORK = {
         'login':                '20/hour',
         'forgot_password':      '5/hour',
         'otp_verify':           '10/hour',
-        'platform_admin_login': '20/hour',
-        'platform_admin_forgot_password': '5/hour',
-        'platform_admin_otp_verify':      '10/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
 }
@@ -430,18 +355,12 @@ EMAIL_BACKEND      = (
     if DEBUG
     else 'django.core.mail.backends.smtp.EmailBackend'
 )
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Royal Staffing HRMS <noreply@hrms.com>')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Aira HRMS <noreply@hrms.com>')
 
 OTP_EXPIRY_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 30
-
-# The one shared frontend URL every company signs in through (no per-company
-# subdomains) — used to build a clickable login link in the provisioning
-# welcome email. Must NOT have a trailing slash (see apps.tenants.utils
-# send_company_provisioned_email, which appends '/login').
-FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000').rstrip('/')
 
 CORS_ALLOWED_ORIGINS = env.list(
     'CORS_ALLOWED_ORIGINS',
@@ -564,7 +483,14 @@ LOGGING = {
         },
     },
     'loggers': {
-        'accounts': {
+        # Keyed 'apps.accounts' (not a bare 'accounts' string) — every module
+        # in this app logs via logging.getLogger(__name__), which resolves to
+        # 'apps.accounts.<module>' (e.g. 'apps.accounts.views'). A bare
+        # 'accounts' key doesn't match that hierarchy (see the
+        # 'apps.voice_commands' entry below for the same reasoning) and
+        # silently catches nothing — every INFO-level login/logout/OTP event
+        # fell through to the root logger's WARNING threshold and vanished.
+        'apps.accounts': {
             'handlers': ['auth_file', 'console'],
             'level': 'INFO',
             'propagate': False,

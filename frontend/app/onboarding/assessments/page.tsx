@@ -348,7 +348,7 @@ export default function AssessmentsPage() {
           </div>
           <div>
             <h1 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", margin: 0 }}>Assessment Portal</h1>
-            <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>Royal HRMS — Pre-Onboarding</p>
+            <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>Aira HRMS — Pre-Onboarding</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

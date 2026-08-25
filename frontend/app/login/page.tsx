@@ -15,8 +15,6 @@ interface LoginApiResponse {
   data: {
     user: {
       id: string;
-      company_code: string;
-      company_name: string;
       email: string;
       full_name: string;
       role: string;
@@ -32,15 +30,11 @@ interface LoginApiResponse {
   };
 }
 
-// Royal HRMS is a single product licensed to many companies as tenants —
-// the sign-in page's own name/logo never varies per tenant. Only the
-// company's own documents (e.g. payslips) carry their logo.
-const BRAND_NAME = "Royal HRMS";
-const BRAND_LOGO = "/logo.png";
+const BRAND_NAME = "Aira HRMS";
+const BRAND_LOGO = "/logo-icon.png";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [companyCode, setCompanyCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,13 +49,11 @@ export default function LoginPage() {
     setError("");
     try {
       const { data } = await clientApi.post<LoginApiResponse>(API.auth.login, {
-        company_code: companyCode, email, password,
+        email, password,
       });
       const d = data.data;
       const user: UserInfo = {
         userId: d.user.id,
-        companyCode: d.user.company_code,
-        companyName: d.user.company_name,
         email: d.user.email,
         name: d.user.full_name,
         role: d.user.role,
@@ -152,31 +144,9 @@ export default function LoginPage() {
                 onBack={() => { setShowForgot(false); setForgotSent(false); }}
                 sent={forgotSent}
                 onSend={() => setForgotSent(true)}
-                initialCompanyCode={companyCode}
               />
             ) : (
               <form onSubmit={handleSubmit} noValidate>
-
-                {/* Company code field — always required, for every role.
-                    It's what tells the backend which tenant schema to check
-                    for this email (see backend LoginSerializer/LoginView). */}
-                <div className="login-field">
-                  <label htmlFor="login-company-code" className="login-label">
-                    Company ID
-                  </label>
-                  <input
-                    id="login-company-code"
-                    type="text"
-                    className="login-input"
-                    placeholder="e.g. ROYALHRMS"
-                    value={companyCode}
-                    onChange={e => setCompanyCode(e.target.value)}
-                    onFocus={() => setError("")}
-                    required
-                    autoComplete="organization"
-                    suppressHydrationWarning
-                  />
-                </div>
 
                 {/* Email field */}
                 <div className="login-field">
