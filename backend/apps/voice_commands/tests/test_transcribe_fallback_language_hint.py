@@ -43,7 +43,7 @@ class LanguageHintRetryTests(SimpleTestCase):
             'language_probability': None, 'was_language_hinted': True,
         }
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(mock_transcribe.call_count, 1)
         self.assertEqual(mock_transcribe.call_args.kwargs.get('language_code'), 'hi-IN')
@@ -63,7 +63,7 @@ class LanguageHintRetryTests(SimpleTestCase):
             },
         ]
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(mock_transcribe.call_count, 2)
         first_call, second_call = mock_transcribe.call_args_list
@@ -89,7 +89,7 @@ class LanguageHintRetryTests(SimpleTestCase):
             },
         ]
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(mock_transcribe.call_count, 2)
         self.assertEqual(response.data['data']['transcript'], 'check my leave balance')
@@ -98,7 +98,7 @@ class LanguageHintRetryTests(SimpleTestCase):
     def test_both_tiers_failing_is_still_a_plain_failure(self, mock_transcribe):
         mock_transcribe.side_effect = [None, None]
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(mock_transcribe.call_count, 2)
         self.assertEqual(response.status_code, 400)
@@ -117,7 +117,7 @@ class LanguageHintRetryTests(SimpleTestCase):
             },
         ]
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(mock_transcribe.call_count, 2)
         self.assertEqual(response.status_code, 400)
@@ -143,7 +143,7 @@ class DetectedLanguageFieldTests(SimpleTestCase):
             'language_probability': None, 'was_language_hinted': True,
         }
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(response.data['data']['detected_language'], 'hi')
         # was_language_hinted is unchanged/still present — additive, not replaced.
@@ -161,7 +161,7 @@ class DetectedLanguageFieldTests(SimpleTestCase):
             },
         ]
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(response.data['data']['detected_language'], 'en')
         # was_language_hinted is STILL True here too — the exact ambiguity
@@ -181,7 +181,7 @@ class DetectedLanguageFieldTests(SimpleTestCase):
             },
         ]
 
-        response = VoiceTranscribeFallbackView().post(_fake_request())
+        response = VoiceTranscribeFallbackView()._post_sync(_fake_request())
 
         self.assertEqual(response.data['data']['detected_language'], 'en')
 
