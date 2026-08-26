@@ -29,6 +29,8 @@ interface Branch {
   state_name:     string;
   city:           number;
   city_name:      string;
+  gst_registration:       string | null;
+  gst_registration_gstin: string | null;
   employees_count: number;
   status:         string;
   geofencing_enabled:    boolean;
@@ -234,9 +236,10 @@ export default function BranchManagement() {
   
   const [states, setStates] = useState<StateObj[]>([]);
   const [cities, setCities] = useState<CityObj[]>([]);
-  // States that already have a GST registration on file (Company Profile) —
-  // used only to warn "no GSTIN for this state yet", not to block anything.
-  const [gstStates, setGstStates] = useState<Set<string>>(new Set());
+  // Full GST Registrations list (Company Profile) — used both to warn "no
+  // GSTIN for this state yet" and, when a state has more than one, to let
+  // the admin pick exactly which one this branch should use.
+  const [gstRegistrations, setGstRegistrations] = useState<GSTRegistration[]>([]);
   const [newCityName, setNewCityName] = useState("");
   const newCityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -275,6 +278,7 @@ export default function BranchManagement() {
     address:        "",
     state:          "",
     city:           "",
+    gst_registration: "",
     status:         "Active",
     is_headquarter: false,
     geofencing_enabled:    false,
@@ -303,7 +307,7 @@ export default function BranchManagement() {
       // outside the critical Promise.all above.
       clientApi
         .get<Envelope<Paginated<GSTRegistration>>>(API.settings.gstRegistrations.list, { params: { page_size: 100 } })
-        .then(res => setGstStates(new Set((res.data.data?.results ?? []).map(r => r.state))))
+        .then(res => setGstRegistrations(res.data.data?.results ?? []))
         .catch(() => {});
     } catch (err: unknown) {
       const e = err as { message?: string };
@@ -329,6 +333,18 @@ export default function BranchManagement() {
       setCities([]);
     }
   }, [editForm.state]);
+
+  // Auto-fill the GST Registration when the selected state has exactly one
+  // match — no ambiguity, so no need to make the admin pick it explicitly.
+  // Never overrides an existing explicit selection (checked inside the
+  // updater, not the effect body, so it stays out of the dependency array).
+  useEffect(() => {
+    const stateName = states.find(s => String(s.id) === editForm.state)?.name;
+    if (!stateName) return;
+    const matches = gstRegistrations.filter(r => r.state === stateName);
+    if (matches.length !== 1) return;
+    setEditForm(prev => (prev.gst_registration ? prev : { ...prev, gst_registration: matches[0].id }));
+  }, [editForm.state, gstRegistrations, states]);
 
   useEffect(() => {
     if (modalMode === "add" && editForm.city && editForm.city !== OTHER_CITY) {
@@ -384,6 +400,14 @@ export default function BranchManagement() {
                                 errs.branch_name = "Branch name may only contain letters, numbers, spaces, & - and . characters.";
     if (!addr)                 errs.address     = "Address is required.";
     if (codeLoading)           errs.branch_code = "Branch code is still generating, please wait.";
+
+    if (editForm.state && !editForm.gst_registration) {
+      const stateName = states.find(s => String(s.id) === editForm.state)?.name;
+      const matchCount = stateName ? gstRegistrations.filter(r => r.state === stateName).length : 0;
+      if (matchCount > 1) {
+        errs.gst_registration = `${stateName} has ${matchCount} GST registrations on file — select which one this branch uses.`;
+      }
+    }
     if (modalMode === "add" && !editForm.branch_code && !codeLoading)
                                errs.branch_code = "Branch code could not be generated. Try re-selecting the city.";
 
@@ -477,6 +501,7 @@ export default function BranchManagement() {
       branch_name:    editForm.branch_name.trim(),
       address:        editForm.address.trim(),
       state:          editForm.state,
+      gst_registration: editForm.gst_registration || null,
       status:         editForm.status,
       is_headquarter: editForm.is_headquarter,
       geofencing_enabled:    editForm.geofencing_enabled,
@@ -609,7 +634,13 @@ export default function BranchManagement() {
     : branches;
 
   const selectedStateName = states.find(s => String(s.id) === editForm.state)?.name;
-  const missingGstForState = !!selectedStateName && !gstStates.has(selectedStateName);
+  const gstOptionsForState = selectedStateName
+    ? gstRegistrations.filter(r => r.state === selectedStateName)
+    : [];
+  const missingGstForState = !!selectedStateName && gstOptionsForState.length === 0;
+  // Only force a choice when it's genuinely ambiguous — one match can be
+  // used without making the admin pick it explicitly.
+  const gstChoiceRequired = gstOptionsForState.length > 1;
 
   if (isLoading && branches.length === 0) {
     return <div className="p-8 text-center text-[var(--on-variant)]">Loading branches...</div>;
@@ -633,7 +664,7 @@ export default function BranchManagement() {
               setTransferConfirm(null);
               setNewCityName("");
               setEditForm({
-                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", status: "active", is_headquarter: false,
+                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", gst_registration: "", status: "active", is_headquarter: false,
                 geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
               });
               Promise.allSettled([
@@ -734,6 +765,12 @@ export default function BranchManagement() {
                     <i className="ti ti-flag" style={{ fontSize: "14px", color: "var(--outline)" }} />
                     <span>{branch.city_name}, {branch.state_name}</span>
                   </div>
+                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--on-variant)", alignItems: "center" }}>
+                    <i className="ti ti-receipt-tax" style={{ fontSize: "14px", color: "var(--outline)" }} />
+                    <span style={{ fontFamily: branch.gst_registration_gstin ? "monospace" : undefined }}>
+                      {branch.gst_registration_gstin || "No GST registration linked"}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ display: "flex", gap: "16px", padding: "12px 16px", background: "var(--bg-low)", borderRadius: "var(--radius)", marginBottom: "16px" }}>
@@ -780,6 +817,7 @@ export default function BranchManagement() {
                           address:        branch.address,
                           state:          branch.state.toString(),
                           city:           branch.city.toString(),
+                          gst_registration: branch.gst_registration ?? "",
                           status:         branch.status.toLowerCase(),
                           is_headquarter: branch.is_headquarter,
                           geofencing_enabled:    branch.geofencing_enabled ?? false,
@@ -901,9 +939,9 @@ export default function BranchManagement() {
                     className={`field-input${fieldErrors.state ? " field-error" : ""}`}
                     value={editForm.state}
                     onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; delete n.new_city_name; return n; });
+                      setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; delete n.new_city_name; delete n.gst_registration; return n; });
                       setNewCityName("");
-                      setEditForm({ ...editForm, state: e.target.value, city: "" });
+                      setEditForm({ ...editForm, state: e.target.value, city: "", gst_registration: "" });
                     }}
                   >
                     <option value="">Select State</option>
@@ -963,6 +1001,44 @@ export default function BranchManagement() {
                       Add one in Company Profile
                     </a>
                   </div>
+                </div>
+              )}
+
+              {gstOptionsForState.length > 0 && (
+                <div className="field-group mb-16">
+                  <label className="field-label">
+                    GST Registration {gstChoiceRequired && <span style={{ color: "var(--error)" }}>*</span>}
+                  </label>
+                  {gstOptionsForState.length === 1 ? (
+                    <div style={{ fontSize: 13, color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 6 }}>
+                      <i className="ti ti-receipt-tax" style={{ fontSize: 14 }} />
+                      <span style={{ fontFamily: "monospace" }}>{gstOptionsForState[0].gstin}</span>
+                      <span>({selectedStateName}{gstOptionsForState[0].place_of_business ? ` — ${gstOptionsForState[0].place_of_business}` : ""}) — only one on file, used automatically</span>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        className={`field-input${fieldErrors.gst_registration ? " field-error" : ""}`}
+                        value={editForm.gst_registration}
+                        onChange={e => {
+                          setFieldErrors(prev => { const n = {...prev}; delete n.gst_registration; return n; });
+                          setEditForm({ ...editForm, gst_registration: e.target.value });
+                        }}
+                      >
+                        <option value="">Select which GST registration this branch uses…</option>
+                        {gstOptionsForState.map(r => (
+                          <option key={r.id} value={r.id}>
+                            {r.gstin}{r.place_of_business ? ` — ${r.place_of_business}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 4 }}>
+                        <i className="ti ti-info-circle" style={{ marginRight: 4 }} />
+                        {selectedStateName} has {gstOptionsForState.length} GST registrations on file — pick the one this branch&apos;s invoices/documents should use.
+                      </div>
+                      {fieldErrors.gst_registration && <p className="field-error-msg">{fieldErrors.gst_registration}</p>}
+                    </>
+                  )}
                 </div>
               )}
 

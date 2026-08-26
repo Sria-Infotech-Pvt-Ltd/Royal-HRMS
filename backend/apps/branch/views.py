@@ -104,7 +104,7 @@ class BranchListCreateView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'branches.view'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
-        qs = Branch.objects.select_related('state', 'city').all()
+        qs = Branch.objects.select_related('state', 'city', 'gst_registration').all()
         # Same scoping already applied to editing a branch (_branch_out_of_scope)
         # and to every other module (employees, leave, attendance) — a
         # non-org-wide user (no settings.edit) only sees their own branch,
@@ -187,7 +187,7 @@ class BranchDetailView(APIView):
 
     def _get_branch(self, pk):
         try:
-            return Branch.objects.select_related('state', 'city').get(pk=pk)
+            return Branch.objects.select_related('state', 'city', 'gst_registration').get(pk=pk)
         except Branch.DoesNotExist:
             return None
 

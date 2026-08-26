@@ -3,6 +3,7 @@ import re
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.accounts.models import CompanyGSTRegistration
 from apps.branch.models import Branch, City, EmployeeBranchAccess, State
 from apps.branch.utils import generate_branch_code
 
@@ -36,6 +37,11 @@ class BranchSerializer(serializers.ModelSerializer):
     # the selected state instead of requiring `city` to already exist.
     new_city_name = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=100)
 
+    gst_registration      = serializers.PrimaryKeyRelatedField(
+        queryset=CompanyGSTRegistration.objects.all(), required=False, allow_null=True,
+    )
+    gst_registration_gstin = serializers.CharField(source='gst_registration.gstin', read_only=True, default=None)
+
     def get_employees_count(self, obj):
         branch_counts = self.context.get('branch_counts')
         if branch_counts is not None:
@@ -49,6 +55,7 @@ class BranchSerializer(serializers.ModelSerializer):
             'id', 'branch_code', 'branch_name', 'address',
             'state', 'state_name', 'city', 'city_name', 'new_city_name',
             'hr', 'hr_name',
+            'gst_registration', 'gst_registration_gstin',
             'employees_count', 'status', 'is_headquarter',
             'latitude', 'longitude', 'allowed_radius_meters', 'geofencing_enabled',
             'has_coordinates',
@@ -107,6 +114,12 @@ class BranchSerializer(serializers.ModelSerializer):
         if state and city.state_id != state.pk:
             raise serializers.ValidationError(
                 {'city': 'Selected city does not belong to the selected state.'}
+            )
+
+        gst_registration = data.get('gst_registration', getattr(self.instance, 'gst_registration', None))
+        if gst_registration and state and gst_registration.state != state.name:
+            raise serializers.ValidationError(
+                {'gst_registration': f'This GST registration is for {gst_registration.state}, not {state.name}.'}
             )
 
         # Geofencing: enabling requires coordinates either in this request or already on the branch

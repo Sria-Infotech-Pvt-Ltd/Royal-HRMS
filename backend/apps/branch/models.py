@@ -55,6 +55,16 @@ class Branch(models.Model):
     employees_count = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     is_headquarter = models.BooleanField(default=False)
+    # Which of the company's (state-wise) GST registrations this branch's own
+    # invoices/documents should use — needed once a state has more than one
+    # GSTIN on file (e.g. two branches in the same state registered under
+    # separate GSTINs) so the correct one is unambiguous per branch.
+    gst_registration = models.ForeignKey(
+        'accounts.CompanyGSTRegistration',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='branches',
+    )
 
     # ── Geofencing ────────────────────────────────────────────────────────────
     latitude = models.DecimalField(
