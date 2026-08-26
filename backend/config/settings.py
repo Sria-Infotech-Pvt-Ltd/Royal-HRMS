@@ -411,6 +411,15 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB files
 
 # ─── Security (production only) ───────────────────────────────────────────────
 if not DEBUG:
+    # Daphne is always reached over plain HTTP internally (Nginx terminates
+    # TLS and forwards to 127.0.0.1) - without this, Django has no way to
+    # know the original request was HTTPS, so SECURE_SSL_REDIRECT below
+    # would redirect every request to HTTPS and then see the redirected
+    # request as insecure too, looping forever. Nginx sets X-Forwarded-Proto
+    # on every proxied request (both the direct /admin/, /ws/ paths and the
+    # Next.js server's own internal /api/* rewrite, which forwards the
+    # headers of the original request it received) - trust it.
+    SECURE_PROXY_SSL_HEADER         = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT             = True
     SECURE_HSTS_SECONDS             = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS  = True

@@ -1,42 +1,65 @@
-name: Deploy → royalhrms.nxsys.in
+name: Deploy Aira HRMS
 
 on:
   push:
-    branches: [demo]
+    branches: [New-AI]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
-    name: SSH deploy to server
     runs-on: ubuntu-latest
-
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host:     ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key:      ${{ secrets.DEPLOY_KEY }}
-          script: |
-            set -e
-            cd /var/www/royalhrms
-            git pull origin demo
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 20m
+          script: bash /srv/apps/aira/repo/deploy/deploy.sh
 
-            # ── Backend ──────────────────────────────────────────
-            cd backend
-            source venv/bin/activate
-            pip install -r requirements.txt --quiet
-            python manage.py migrate --noinput
-            python manage.py collectstatic --noinput
-            deactivate
+      - name: Notify success
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "[Aira HRMS] Deploy succeeded - ${{ github.sha }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: Aira HRMS Deploy Bot
+          body: |
+            Aira HRMS was deployed successfully.
 
-            # ── Frontend ─────────────────────────────────────────
-            cd ../frontend
-            npm install --prefer-offline
-            npm run build
-            pm2 restart royalhrms-frontend
-            pm2 save
+            Branch: New-AI
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Message: ${{ github.event.head_commit.message }}
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            # ── Restart Django service ────────────────────────────
-            sudo systemctl restart gunicorn-royalhrms.service
+      - name: Notify failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "[Aira HRMS] Deploy FAILED - ${{ github.sha }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: Aira HRMS Deploy Bot
+          body: |
+            Aira HRMS deployment failed. The live site was NOT necessarily
+            updated and may need manual attention.
 
-            echo "✅ Deploy complete"
+            Branch: New-AI
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Message: ${{ github.event.head_commit.message }}
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            See the workflow run log above for the exact error - the deploy
+            script fails loudly (and does not touch running services) on
+            git divergence, migration errors, or a failed post-deploy health
+            check.
