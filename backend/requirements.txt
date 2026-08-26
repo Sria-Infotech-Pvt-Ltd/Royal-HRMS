@@ -1,4 +1,6 @@
+adrf==0.1.14
 asgiref==3.11.1
+async-property==0.2.2
 celery==5.4.0
 certifi==2026.6.17
 channels==4.1.0

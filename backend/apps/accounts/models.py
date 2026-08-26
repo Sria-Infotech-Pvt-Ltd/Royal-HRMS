@@ -482,6 +482,12 @@ class AuditLog(models.Model):
             # ever-growing, unbounded table — the standalone created_at index
             # alone can't serve the module-scoped queries efficiently.
             models.Index(fields=['module', 'created_at'], name='auditlog_module_created_idx'),
+            # apps.voice_commands.audit._check_anomaly filters by user first
+            # (then module/action as cheap post-filters within an already
+            # per-user, time-windowed row set) — the index above leads with
+            # module instead, so it can't serve this query. Runs on every
+            # permission-denied/no-match voice event.
+            models.Index(fields=['user', 'created_at'], name='auditlog_user_created_idx'),
         ]
 
     def __str__(self) -> str:

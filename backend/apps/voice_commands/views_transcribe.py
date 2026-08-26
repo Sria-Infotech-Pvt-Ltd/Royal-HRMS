@@ -30,11 +30,12 @@ from __future__ import annotations
 import logging
 import re
 
+from adrf.views import APIView
+from asgiref.sync import sync_to_async
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from core.responses import error, success
 
@@ -152,7 +153,17 @@ class VoiceTranscribeFallbackView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request) -> Response:
+    async def post(self, request: Request) -> Response:
+        """Scale-1 (2026-08-25 scalability-audit fix) — see
+        views_speak.VoiceSpeakView.post's docstring for the full reasoning:
+        dispatches the unchanged, fully-synchronous _post_sync to a
+        dedicated per-request thread rather than running it inline. This
+        view's own worst case is up to two sequential Sarvam STT calls
+        (~20s) in one request."""
+        return await sync_to_async(self._post_sync, thread_sensitive=True)(request)
+
+    def _post_sync(self, request: Request) -> Response:
+        """The real, unchanged view logic — see post()'s docstring."""
         uploaded = request.FILES.get('audio')
         if not uploaded:
             return error('Attach a short audio clip as "audio".', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
