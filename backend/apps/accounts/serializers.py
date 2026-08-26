@@ -13,6 +13,8 @@ from rest_framework import serializers
 from apps.accounts.models import (
     AuditLog,
     Company,
+    CompanyDirector,
+    CompanyGSTRegistration,
     CustomFieldFileValue,
     Department,
     Designation,
@@ -528,6 +530,37 @@ _CIN_RE   = re.compile(r'^[UL]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}$')
 _TAN_RE   = re.compile(r'^[A-Z]{4}\d{5}[A-Z]$')
 _PIN_RE   = re.compile(r'^\d{6}$')
 _PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+_DIN_RE   = re.compile(r'^\d{8}$')
+
+# 2-digit GSTIN state code, keyed by the state names used elsewhere in this
+# app — lets a GST registration row be cross-checked against its own
+# `state` field without a government lookup.
+GST_STATE_CODES = {
+    'Jammu and Kashmir': '01', 'Himachal Pradesh': '02', 'Punjab': '03',
+    'Chandigarh': '04', 'Uttarakhand': '05', 'Haryana': '06', 'Delhi': '07',
+    'Rajasthan': '08', 'Uttar Pradesh': '09', 'Bihar': '10', 'Sikkim': '11',
+    'Arunachal Pradesh': '12', 'Nagaland': '13', 'Manipur': '14', 'Mizoram': '15',
+    'Tripura': '16', 'Meghalaya': '17', 'Assam': '18', 'West Bengal': '19',
+    'Jharkhand': '20', 'Odisha': '21', 'Chhattisgarh': '22', 'Madhya Pradesh': '23',
+    'Gujarat': '24', 'Dadra and Nagar Haveli and Daman and Diu': '26',
+    'Maharashtra': '27', 'Karnataka': '29', 'Goa': '30', 'Lakshadweep': '31',
+    'Kerala': '32', 'Tamil Nadu': '33', 'Puducherry': '34',
+    'Andaman and Nicobar Islands': '35', 'Telangana': '36', 'Andhra Pradesh': '37',
+    'Ladakh': '38',
+}
+
+_CIN_ENTITY_TYPES = {'private_limited', 'public_limited', 'opc'}
+
+
+def _gstin_pan_mismatch_error(gstin: str, pan: str) -> str | None:
+    # A GSTIN's characters 3-12 are always the PAN it was issued against —
+    # this is free, offline arithmetic (no government lookup needed) that
+    # still catches the common real mistake of a mistyped GSTIN or a
+    # leftover GSTIN from a different PAN, without pretending to verify
+    # the GSTIN is actually registered with the government.
+    if gstin and pan and gstin[2:12] != pan:
+        return f"This GSTIN belongs to PAN {gstin[2:12]}, not the company PAN ({pan})."
+    return None
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -536,10 +569,18 @@ class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model  = Company
         fields = [
-            'id', 'company_name', 'trade_name', 'logo', 'logo_url',
-            'gstin', 'cin', 'pan', 'tan',
+            'id', 'jurisdiction', 'entity_type', 'company_name', 'trade_name',
+            'logo', 'logo_url', 'date_of_incorporation', 'is_listed', 'holding_company_info',
+            'cin', 'roc_jurisdiction', 'pan', 'tan',
+            'country_of_registration', 'registration_number', 'ein',
+            'udyam_msme', 'msme_class', 'iec', 'epfo_code', 'esic_code', 'professional_tax_reg',
+            'signatory_full_name', 'signatory_designation', 'signatory_din_pan',
+            'signatory_email', 'signatory_appears_on_invoices',
+            'bank_account_holder', 'bank_account_number', 'bank_ifsc', 'bank_account_type',
+            'industry', 'nic_code', 'nature_of_business',
             'address', 'city', 'state', 'pin_code',
-            'website', 'official_phone', 'portal_url', 'updated_at',
+            'default_currency', 'date_format', 'timezone',
+            'primary_email', 'website', 'official_phone', 'portal_url', 'updated_at',
         ]
         read_only_fields = ['id', 'updated_at', 'logo_url']
         extra_kwargs     = {'logo': {'required': False, 'allow_null': True}}
@@ -577,39 +618,40 @@ class CompanySerializer(serializers.ModelSerializer):
         return value
 
     def validate_state(self, value: str) -> str:
-        if value is not None:
-            value = value.strip()
         if not value:
-            raise serializers.ValidationError('State is required.')
-        if len(value) > 100:
+            return value
+        v = value.strip()
+        if len(v) > 100:
             raise serializers.ValidationError('State must be 100 characters or fewer.')
-        return value
-
-    def validate_gstin(self, value: str) -> str:
-        v = value.strip().upper()
-        if not _GSTIN_RE.match(v):
-            raise serializers.ValidationError('Enter a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).')
         return v
 
     def validate_cin(self, value: str) -> str:
+        if not value:
+            return value
         v = value.strip().upper()
         if not _CIN_RE.match(v):
             raise serializers.ValidationError('Enter a valid CIN (e.g. U74999MH2020PTC123456).')
         return v
 
     def validate_pan(self, value: str) -> str:
+        if not value:
+            return value
         v = value.strip().upper()
         if not _PAN_RE.match(v):
             raise serializers.ValidationError('Enter a valid 10-character PAN (e.g. AAAAA0000A).')
         return v
 
     def validate_tan(self, value: str) -> str:
+        if not value:
+            return value
         v = value.strip().upper()
         if not _TAN_RE.match(v):
             raise serializers.ValidationError('Enter a valid 10-character TAN (e.g. PNEA12345B).')
         return v
 
     def validate_pin_code(self, value: str) -> str:
+        if not value:
+            return value
         v = value.strip()
         if not _PIN_RE.match(v):
             raise serializers.ValidationError('PIN code must be exactly 6 digits.')
@@ -631,6 +673,12 @@ class CompanySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Enter a valid phone number.')
         return v
 
+    def validate_primary_email(self, value: str) -> str:
+        return value.strip() if value else value
+
+    def validate_signatory_email(self, value: str) -> str:
+        return value.strip() if value else value
+
     def validate_portal_url(self, value: str) -> str:
         if not value:
             return value
@@ -648,6 +696,95 @@ class CompanySerializer(serializers.ModelSerializer):
         if hasattr(value, 'content_type') and value.content_type not in allowed:
             raise serializers.ValidationError('Only JPEG, PNG, WebP, or SVG files are allowed.')
         return value
+
+    def validate(self, attrs):
+        def _val(field):
+            return attrs.get(field, getattr(self.instance, field, ''))
+
+        jurisdiction = _val('jurisdiction') or Company.JURISDICTION_INDIA
+        entity_type  = _val('entity_type')
+        errors: dict[str, str] = {}
+
+        if jurisdiction == Company.JURISDICTION_INDIA:
+            if not _val('pan'):
+                errors['pan'] = 'PAN is required for an Indian entity.'
+            if not _val('tan'):
+                errors['tan'] = 'TAN is required for an Indian entity.'
+            if entity_type in _CIN_ENTITY_TYPES and not _val('cin'):
+                errors['cin'] = 'CIN is required for this entity type.'
+        else:
+            if not _val('country_of_registration'):
+                errors['country_of_registration'] = 'Country of registration is required for a foreign entity.'
+            if not _val('registration_number'):
+                errors['registration_number'] = 'Registration number is required for a foreign entity.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class CompanyGSTRegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = CompanyGSTRegistration
+        fields = ['id', 'company', 'gstin', 'state', 'registration_type', 'place_of_business', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'company', 'created_at', 'updated_at']
+
+    def validate_gstin(self, value: str) -> str:
+        v = value.strip().upper()
+        if not _GSTIN_RE.match(v):
+            raise serializers.ValidationError('Enter a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).')
+        return v
+
+    def validate_state(self, value: str) -> str:
+        v = value.strip() if value else value
+        if not v:
+            raise serializers.ValidationError('State is required.')
+        return v
+
+    def validate(self, attrs):
+        gstin   = attrs.get('gstin', getattr(self.instance, 'gstin', None))
+        state   = attrs.get('state', getattr(self.instance, 'state', None))
+        company = self.context.get('company') or getattr(self.instance, 'company', None)
+        errors: dict[str, str] = {}
+
+        if gstin and company and company.pan:
+            mismatch = _gstin_pan_mismatch_error(gstin, company.pan)
+            if mismatch:
+                errors['gstin'] = mismatch
+
+        if gstin and state:
+            expected_code = GST_STATE_CODES.get(state)
+            if expected_code and gstin[:2] != expected_code and 'gstin' not in errors:
+                errors['gstin'] = f"This GSTIN's state code ({gstin[:2]}) doesn't match the selected state ({state})."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class CompanyDirectorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = CompanyDirector
+        fields = ['id', 'company', 'din', 'name', 'designation', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'company', 'created_at', 'updated_at']
+
+    def validate_din(self, value: str) -> str:
+        v = value.strip()
+        if not _DIN_RE.match(v):
+            raise serializers.ValidationError('DIN must be exactly 8 digits.')
+        return v
+
+    def validate_name(self, value: str) -> str:
+        v = value.strip() if value else value
+        if not v:
+            raise serializers.ValidationError('Director name is required.')
+        return v
+
+    def validate_designation(self, value: str) -> str:
+        v = value.strip() if value else value
+        if not v:
+            raise serializers.ValidationError('Designation is required.')
+        return v
 
 
 # ─── Audit Log ────────────────────────────────────────────────────────────────

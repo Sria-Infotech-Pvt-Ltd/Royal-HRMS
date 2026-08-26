@@ -21,7 +21,11 @@ from apps.accounts.views import (
     OnboardingFieldConfigView,
     OnboardingView,
     OnboardingApprovalView,
+    CompanyDirectorDetailView,
+    CompanyDirectorListCreateView,
     CompanyFinancialYearView,
+    CompanyGSTRegistrationDetailView,
+    CompanyGSTRegistrationListCreateView,
     CompanyRetrieveUpdateView,
     EmployeeBulkImportSampleView,
     DepartmentDetailView,
@@ -121,6 +125,10 @@ urlpatterns = [
     # Company (singleton)
     path('settings/company/',                     CompanyRetrieveUpdateView.as_view(),     name='company'),
     path('settings/company/financial-year/',      CompanyFinancialYearView.as_view(),      name='company-financial-year'),
+    path('settings/company/gst-registrations/',           CompanyGSTRegistrationListCreateView.as_view(), name='company-gst-registration-list'),
+    path('settings/company/gst-registrations/<uuid:pk>/', CompanyGSTRegistrationDetailView.as_view(),     name='company-gst-registration-detail'),
+    path('settings/company/directors/',                   CompanyDirectorListCreateView.as_view(),        name='company-director-list'),
+    path('settings/company/directors/<uuid:pk>/',          CompanyDirectorDetailView.as_view(),            name='company-director-detail'),
     path('settings/employee-code/',    EmployeeCodeSettingsView.as_view(),   name='employee-code-settings'),
     path('settings/approval-rules/',   ApprovalWorkflowRuleView.as_view(),   name='approval-workflow-rules'),
 

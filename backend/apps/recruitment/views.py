@@ -927,7 +927,10 @@ class CandidateHRDecisionView(APIView):
                 title='HR requested revision',
                 description=f'Remarks: {remarks or "Please recheck documents"}',
             )
-            msg = 'Revision requested. Candidate notified.'
+            # No email is actually sent on this branch — the message must not
+            # claim otherwise (this endpoint has no candidate-facing template
+            # for a revision request, unlike the approve branch above).
+            msg = 'Revision requested.'
 
         AuditLog.objects.create(
             user=request.user, action=f'candidate_hr_{decision}d', module='recruitment',
@@ -2118,6 +2121,7 @@ class CandidateBulkImportView(APIView):
                     })
                     continue
 
+            has_interview_date = bool(data.get('interview_date'))
             to_create.append(Candidate(
                 name             = data['name'],
                 email            = email,
@@ -2127,7 +2131,10 @@ class CandidateBulkImportView(APIView):
                 interview_date   = data.get('interview_date'),
                 interview_mode   = data.get('interview_mode') or '',
                 notes            = data.get('notes') or '',
-                status           = 'pending',
+                # Mirrors _advance_status_on_interview_scheduled — a row that
+                # already carries an interview_date must not sit at "Pending"
+                # once imported, same as a candidate created one at a time.
+                status           = Candidate.STATUS_INTERVIEW_SCHEDULED if has_interview_date else Candidate.STATUS_PENDING,
                 added_by         = request.user,
             ))
             to_create_meta.append({'row': i, 'identifier': email})
@@ -2142,6 +2149,14 @@ class CandidateBulkImportView(APIView):
                 Candidate.objects.bulk_create(to_create)
                 created_count = len(to_create)
                 created_rows  = to_create_meta
+
+                # bulk_create() bypasses .save(), so none of the normal
+                # per-row hooks ran — fire the interview-scheduled email for
+                # every imported row that already has an interview_date, same
+                # as a candidate created one at a time via CandidateListCreateView.
+                for candidate in to_create:
+                    if candidate.interview_date:
+                        _fire_interview_date_emails_if_needed(candidate, old_interview_date=None)
 
         total         = len(rows)
         skipped_count = len(skipped_rows)

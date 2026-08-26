@@ -626,17 +626,156 @@ class Company(models.Model):
         ('October',   'October'),   ('November',  'November'), ('December', 'December'),
     ]
 
+    JURISDICTION_INDIA   = 'india'
+    JURISDICTION_FOREIGN = 'foreign'
+    JURISDICTION_CHOICES = [
+        (JURISDICTION_INDIA,   'India'),
+        (JURISDICTION_FOREIGN, 'Foreign (outside India)'),
+    ]
+
+    # Covers both jurisdictions in one field — validated against `jurisdiction`
+    # at the serializer level rather than split into two DB columns, since
+    # only one of the two sets is ever meaningful for a given company.
+    ENTITY_TYPE_CHOICES = [
+        # India
+        ('private_limited',    'Private Limited — Pvt Ltd'),
+        ('public_limited',     'Public Limited — Ltd'),
+        ('llp',                'Limited Liability Partnership — LLP'),
+        ('partnership',        'Partnership Firm'),
+        ('sole_proprietorship','Sole Proprietorship'),
+        ('opc',                'One Person Company — OPC'),
+        # Foreign
+        ('corporation',        'Corporation (Inc.) — Body corporate'),
+        ('llc',                'Limited Liability Company — LLC'),
+        ('foreign_partnership','Partnership'),
+        ('branch_office',      'Branch Office'),
+        ('other',              'Other'),
+    ]
+
+    MSME_CLASS_MICRO  = 'micro'
+    MSME_CLASS_SMALL  = 'small'
+    MSME_CLASS_MEDIUM = 'medium'
+    MSME_CLASS_NONE   = 'not_registered'
+    MSME_CLASS_CHOICES = [
+        (MSME_CLASS_MICRO,  'Micro'),
+        (MSME_CLASS_SMALL,  'Small'),
+        (MSME_CLASS_MEDIUM, 'Medium'),
+        (MSME_CLASS_NONE,   'Not registered'),
+    ]
+
+    BANK_ACCOUNT_SAVINGS = 'savings'
+    BANK_ACCOUNT_CURRENT = 'current'
+    BANK_ACCOUNT_TYPE_CHOICES = [
+        (BANK_ACCOUNT_SAVINGS, 'Savings'),
+        (BANK_ACCOUNT_CURRENT, 'Current'),
+    ]
+
+    # Small, curated lists rather than exhaustive ISO/IANA data — covers the
+    # currencies/timezones/date formats this app's actual users need, not
+    # every possibility in existence.
+    CURRENCY_CHOICES = [
+        ('INR', 'INR — Indian Rupee (₹)'), ('USD', 'USD — US Dollar ($)'),
+        ('EUR', 'EUR — Euro (€)'),         ('GBP', 'GBP — British Pound (£)'),
+        ('AED', 'AED — UAE Dirham'),       ('SGD', 'SGD — Singapore Dollar'),
+        ('AUD', 'AUD — Australian Dollar'),('CAD', 'CAD — Canadian Dollar'),
+        ('JPY', 'JPY — Japanese Yen'),     ('CNY', 'CNY — Chinese Yuan'),
+    ]
+    DATE_FORMAT_CHOICES = [
+        ('DD-MM-YYYY', 'DD-MM-YYYY (31-03-2026)'),
+        ('MM-DD-YYYY', 'MM-DD-YYYY (03-31-2026)'),
+        ('YYYY-MM-DD', 'YYYY-MM-DD (2026-03-31)'),
+        ('DD/MM/YYYY', 'DD/MM/YYYY (31/03/2026)'),
+    ]
+    TIMEZONE_CHOICES = [
+        ('Asia/Kolkata',    'Asia/Kolkata — IST (UTC+5:30)'),
+        ('Asia/Dubai',      'Asia/Dubai — GST (UTC+4:00)'),
+        ('Asia/Singapore',  'Asia/Singapore — SGT (UTC+8:00)'),
+        ('Europe/London',   'Europe/London — GMT/BST'),
+        ('America/New_York','America/New_York — ET'),
+        ('America/Chicago', 'America/Chicago — CT'),
+        ('America/Los_Angeles', 'America/Los_Angeles — PT'),
+        ('Australia/Sydney','Australia/Sydney — AET'),
+    ]
+    INDUSTRY_CHOICES = [
+        ('it_services',      'Information Technology & Services'),
+        ('manufacturing',    'Manufacturing'),
+        ('healthcare',       'Healthcare'),
+        ('finance',          'Financial Services'),
+        ('retail',           'Retail & E-commerce'),
+        ('education',        'Education'),
+        ('construction',     'Construction & Real Estate'),
+        ('hospitality',      'Hospitality & Travel'),
+        ('logistics',        'Logistics & Transportation'),
+        ('other',            'Other'),
+    ]
+    COUNTRY_CHOICES = [
+        ('US', 'United States'), ('GB', 'United Kingdom'), ('AE', 'United Arab Emirates'),
+        ('SG', 'Singapore'),     ('AU', 'Australia'),      ('CA', 'Canada'),
+        ('DE', 'Germany'),       ('FR', 'France'),         ('NL', 'Netherlands'),
+        ('other', 'Other'),
+    ]
+
+    jurisdiction   = models.CharField(max_length=10, choices=JURISDICTION_CHOICES, default=JURISDICTION_INDIA)
+    entity_type    = models.CharField(max_length=30, choices=ENTITY_TYPE_CHOICES, blank=True)
     company_name   = models.CharField(max_length=200)
     trade_name     = models.CharField(max_length=200, blank=True)
     logo           = models.ImageField(upload_to=company_logo_upload_path, null=True, blank=True)
-    gstin          = models.CharField(max_length=15)
-    cin            = models.CharField(max_length=21)
-    pan            = models.CharField(max_length=10)
-    tan            = models.CharField(max_length=10)
+    date_of_incorporation = models.DateField(null=True, blank=True)
+    is_listed      = models.BooleanField(default=False, help_text='Whether shares are publicly listed on a stock exchange.')
+    holding_company_info = models.CharField(
+                         max_length=255, blank=True,
+                         help_text='Parent company name and CIN, if this is a subsidiary.',
+                     )
+
+    # ── India ──
+    cin            = models.CharField(max_length=21, blank=True)
+    roc_jurisdiction = models.CharField(max_length=100, blank=True)
+    pan            = models.CharField(max_length=10, blank=True)
+    tan            = models.CharField(max_length=10, blank=True)
+
+    # ── Foreign ──
+    country_of_registration = models.CharField(max_length=10, choices=COUNTRY_CHOICES, blank=True)
+    registration_number     = models.CharField(max_length=50, blank=True)
+    ein                      = models.CharField(max_length=20, blank=True)
+
+    # ── Other registrations (all optional, India-specific but harmless if blank elsewhere) ──
+    udyam_msme          = models.CharField(max_length=20, blank=True)
+    msme_class          = models.CharField(max_length=20, choices=MSME_CLASS_CHOICES, default=MSME_CLASS_NONE, blank=True)
+    iec                 = models.CharField(max_length=20, blank=True)
+    epfo_code           = models.CharField(max_length=30, blank=True)
+    esic_code           = models.CharField(max_length=30, blank=True)
+    professional_tax_reg = models.CharField(max_length=30, blank=True)
+
+    # ── Directors / signatory / bank ──
+    signatory_full_name  = models.CharField(max_length=150, blank=True)
+    signatory_designation = models.CharField(max_length=100, blank=True)
+    signatory_din_pan    = models.CharField(max_length=20, blank=True)
+    signatory_email      = models.EmailField(blank=True)
+    signatory_appears_on_invoices = models.BooleanField(default=True)
+
+    bank_account_holder  = models.CharField(max_length=200, blank=True)
+    bank_account_number  = models.CharField(max_length=30, blank=True)
+    bank_ifsc            = models.CharField(max_length=11, blank=True)
+    bank_account_type    = models.CharField(max_length=10, choices=BANK_ACCOUNT_TYPE_CHOICES, blank=True)
+
+    # ── Business profile ──
+    industry            = models.CharField(max_length=30, choices=INDUSTRY_CHOICES, blank=True)
+    nic_code            = models.CharField(max_length=10, blank=True)
+    nature_of_business  = models.TextField(blank=True)
+
+    # ── Registered office ──
     address        = models.TextField(max_length=500)
     city           = models.CharField(max_length=100)
-    state          = models.CharField(max_length=100)
-    pin_code       = models.CharField(max_length=6)
+    state          = models.CharField(max_length=100, blank=True)
+    pin_code       = models.CharField(max_length=6, blank=True)
+
+    # ── Regional & formats ──
+    default_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='INR')
+    date_format      = models.CharField(max_length=10, choices=DATE_FORMAT_CHOICES, default='DD-MM-YYYY')
+    timezone         = models.CharField(max_length=40, choices=TIMEZONE_CHOICES, default='Asia/Kolkata')
+
+    # ── Contact & branding ──
+    primary_email  = models.EmailField(blank=True)
     website        = models.CharField(max_length=255, blank=True)
     official_phone = models.CharField(max_length=15, blank=True)
     portal_url     = models.CharField(
@@ -663,6 +802,60 @@ class Company(models.Model):
 
     def __str__(self) -> str:
         return self.company_name
+
+
+class CompanyGSTRegistration(models.Model):
+    """One row per state the company holds a GST registration in — replaces
+    the old single Company.gstin field, since GST law requires a separate
+    GSTIN per state of operation."""
+
+    REGISTRATION_REGULAR     = 'regular'
+    REGISTRATION_COMPOSITION = 'composition'
+    REGISTRATION_CASUAL      = 'casual'
+    REGISTRATION_OTHER       = 'other'
+    REGISTRATION_TYPE_CHOICES = [
+        (REGISTRATION_REGULAR,     'Regular'),
+        (REGISTRATION_COMPOSITION, 'Composition'),
+        (REGISTRATION_CASUAL,      'Casual'),
+        (REGISTRATION_OTHER,       'Other'),
+    ]
+
+    id                = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company           = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='gst_registrations')
+    gstin             = models.CharField(max_length=15)
+    state             = models.CharField(max_length=100)
+    registration_type = models.CharField(max_length=20, choices=REGISTRATION_TYPE_CHOICES, default=REGISTRATION_REGULAR)
+    place_of_business = models.CharField(max_length=200, blank=True)
+    created_at        = models.DateTimeField(auto_now_add=True)
+    updated_at        = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_company_gst_registration'
+        ordering = ['state']
+        unique_together = [('company', 'gstin')]
+
+    def __str__(self) -> str:
+        return f'{self.gstin} ({self.state})'
+
+
+class CompanyDirector(models.Model):
+    """One row per director — DIN, name, designation."""
+
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company      = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='directors')
+    din          = models.CharField(max_length=8)
+    name         = models.CharField(max_length=150)
+    designation  = models.CharField(max_length=100)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_company_director'
+        ordering = ['name']
+        unique_together = [('company', 'din')]
+
+    def __str__(self) -> str:
+        return f'{self.name} ({self.din})'
 
 
 # ─── Employee Code Settings (singleton) ──────────────────────────────────────

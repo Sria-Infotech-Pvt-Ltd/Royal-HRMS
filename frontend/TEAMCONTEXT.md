@@ -4813,3 +4813,82 @@ Separately, an earlier broad `pip install --force-reinstall -r <freeze>` attempt
 - **If a future package install silently "does nothing" or a command errors with an import that should obviously be installed**, check whether its `.exe` stub in `backend/H/Scripts/` is pointing at the wrong venv before assuming the package itself is broken (`grep`/inspect the exe for a stale absolute path) — this cost real time twice in one session.
 - **The two tiny taglines under the "AIRA" wordmark aren't in `logo-icon.png`** — the background-removal model dropped them as non-foreground. If they matter later, re-crop from the master `logo.png` by hand rather than re-running segmentation.
 - **No automated test run this session** — verified everything (tenant removal, rebrand, ImageKit) via direct API-level scripts and `manage.py check`/`tsc --noEmit`, not the project's own test suites (same pre-existing local test-DB gap noted in the entry above this one).
+
+---
+
+# Team Context — Company Profile Expansion, Branch/GST Linkage, Recruitment Email Audit
+
+**Author:** G.Durga Prasad
+**Date:** 26 August 2026
+**Branch:** New-AI
+
+---
+
+## Overview
+
+Expanded the single-field "Company Information" settings page into a full Company Profile matching a mockup the user's senior had proposed (jurisdiction-driven India/Foreign form, state-wise GST registrations, directors, authorised signatory, bank details, business profile, regional formats), fixed a stale-cache bug that surfaced while building it, added a lightweight cross-link so creating a branch in a state with no GST registration doesn't go unnoticed, and ran a full audit of every email notification in the recruitment/interview pipeline — which turned up two real gaps, both fixed.
+
+---
+
+## 1. Company Profile — Full Expansion
+
+**Files:** `apps/accounts/models.py`, `apps/accounts/migrations/0096_...py` (new), `apps/accounts/serializers.py`, `apps/accounts/views.py`, `apps/accounts/urls.py`, `apps/accounts/admin.py`, `frontend/types/company.ts`, `frontend/lib/api/endpoints.ts`, `frontend/app/dashboard/settings/company/` (restructured — `page.tsx` + 14 new files under `_components/` and a new `_data.ts`)
+
+The old `Company` model was a flat singleton with a single `gstin` CharField and a handful of registered-address fields — nowhere near what the mockup asked for. `Company` gained ~30 new fields (jurisdiction toggle, entity type, incorporation details, India vs. Foreign statutory fields, MSME/IEC/EPFO/ESIC/professional-tax registrations, authorised signatory, bank details, business profile, regional currency/date-format/timezone), and `gstin` was removed outright in favor of two new child models: `CompanyGSTRegistration` (one row per state — GST law is state-wise, not company-wide, see §2 below) and `CompanyDirector`, both UUID-PK per the project's own-model convention. Confirmed via a direct DB check before writing the migration that `Company.gstin` was never referenced anywhere outside its own model/serializer/migration/admin `list_display` (no email templates, no PDF generation), and the `hrms_company` table itself was empty — so migration `0096` needed no data-preservation step for the old field's value.
+
+Serializer-level validation is jurisdiction-conditional (`CompanySerializer.validate()`): PAN/TAN required for `jurisdiction=india`, `country_of_registration`/`registration_number` required for `jurisdiction=foreign`, and CIN is only required for entity types actually incorporated under the Companies Act (`private_limited`/`public_limited`/`opc`) rather than blindly required for every Indian entity type — LLPs/partnerships/sole proprietorships don't carry one. `CompanyGSTRegistrationSerializer` reuses the existing GSTIN-format regex plus two free, offline cross-checks that need no government API: characters 3–12 of a GSTIN are always the PAN it was issued against (`_gstin_pan_mismatch_error`, shared with the earlier PAN cross-match work), and the GSTIN's first two digits must match its own `state` field via a hardcoded `GST_STATE_CODES` map (mirrored client-side in `_data.ts` for instant feedback, server-side is authoritative).
+
+New CRUD endpoints for both child models (`settings/company/gst-registrations/`, `settings/company/directors/`, both list+detail) follow the exact same shape as every other list view in this app — `_has_perm(request.user, 'settings.edit')` gate on writes, `AuditLog` entry per create/update/delete, `core.pagination.paginate`/`paginated_data` on the list GET. GET on both is intentionally open to any authenticated user (no `_has_perm` check), matching how `CompanyRetrieveUpdateView.get()` already worked — GSTIN isn't secret data, only editing it is gated.
+
+Frontend: the single 520-line `page.tsx` would have blown well past this project's 200-line-component / 300-line-file conventions if the new fields were bolted on directly, so it's now an orchestrator (state, fetch, save) delegating to 11 focused card/table components under `_components/` — `EntityIdentityCard`, `StatutoryCard` (India/Foreign conditional), `OtherRegistrationsCard` (India-only), `GSTRegistrationsSection`/`DirectorsSection` (each: `useFetch` + a table + an add/edit modal, mirroring the existing `onboarding-fields` page's table+modal pattern rather than inventing a new one), `SignatoryCard`, `BankDetailsCard`, `BusinessProfileCard`, `RegionalFormatsCard`, `AddressCard`, `ContactBrandingCard` (logo moved here per the mockup, alongside the new `primary_email`). `FinancialYearSection.tsx` — a separate card with its own endpoint and its own edit-gate — was left completely untouched throughout.
+
+Verified live end-to-end via the Django test client with a real JWT cookie (not Django session auth — this app's `CookieJWTAuthentication` reads `royal_access_token` directly, session login doesn't authenticate DRF requests here): India-jurisdiction create/update, Foreign-jurisdiction create/update, GST registration create/update/delete with both the PAN-mismatch and state-code-mismatch rejections firing correctly, director create/delete. `manage.py check` and `makemigrations --check --dry-run` both clean, `tsc --noEmit` and `eslint` both clean on every new/changed frontend file.
+
+## 2. Company Info Cache Never Invalidated on Save
+
+**File:** `apps/accounts/views.py`
+
+Found while re-verifying the feature above: `CompanyRetrieveUpdateView.get()` reads through `CompanyCacheService.get()` (caches the actual model instance, not a dict), but `.put()` never called `CompanyCacheService.invalidate()` after saving — every reader, including the very next GET on the same endpoint, would keep seeing the pre-edit instance until the cache's TTL expired on its own. Fixed with one `CompanyCacheService.invalidate()` call right after the save's `transaction.atomic()` block. Verified live: create → GET (cache primed) → rename via PUT → GET again now correctly returns the new name instead of the stale cached one.
+
+## 3. Branch Creation — No Signal When a State Has No GST Registration
+
+**File:** `frontend/app/dashboard/branches/_components/BranchManagement.tsx`
+
+User's own question: GST registration is state-wise (one GSTIN can cover many branches in the same state; a branch in a *new* state needs its own GSTIN), but the "Add Branch" form has no GSTIN field at all, and Company Profile — where GSTINs actually live — is a separate page. Rather than let Branch Admins edit GSTINs directly (it's company-wide legal/tax data, correctly gated behind `settings.edit`, and — checked directly — the "Add Branch" button itself is already hidden from anyone without that same permission, so no new access would even be needed), added a purely informational fix: `fetchData()` now also fetches the live GST Registrations list (best-effort, wrapped in its own `.catch(() => {})` so a failure there can never block the Branches page itself), and if the state picked in the Add/Edit Branch modal has no matching row, a small warning banner appears under the State/City fields with a link to Company Profile (opens in a new tab, so the in-progress branch form isn't lost). Purely a reminder — doesn't block branch creation, doesn't require Company Profile to exist first, doesn't change who can edit what.
+
+## 4. Recruitment Email Audit — Two Real Gaps Found and Fixed
+
+**Files:** `apps/recruitment/views.py`
+
+User asked for a full audit of every email notification across the candidate/interview pipeline, not just "does scheduling an interview email the candidate" (confirmed already working, referral + general variants, including reschedules). Walked every `Candidate.status` transition end to end. Confirmed working: referral submitted, interview scheduled/rescheduled, Selected, Rejected, portal-login/offer-sent, final hire approval and send-back-for-corrections (both of those last two actually live in `apps/accounts`, not `apps/recruitment` — the Candidate Review page drives `OnboardingApprovalView`, not `apps/recruitment`'s own `CandidateHRDecisionView`). Also surfaced, but left alone as out of scope for this round: a whole "HR Decision" approve/reject flow (`welcome_employee`/`assessment_assigned` templates, a `CandidateHRDecisionView` endpoint, a `HRDecisionModal.tsx` component) that exists in both backend and frontend but is never actually wired to any reachable page — dead code, not a live bug; referral-bonus approved/paid never emails the referring employee; Screening/Interview-Done status changes never email anyone; no multi-round-interview concept exists anywhere in the model.
+
+Two gaps were real and got fixed:
+- **Bulk-imported candidates with an interview date already set were silently stranded.** `CandidateBulkImportView.post()` builds rows with `Candidate.objects.bulk_create(...)`, which bypasses `.save()` entirely — so neither `_advance_status_on_interview_scheduled` nor `_fire_interview_date_emails_if_needed` ever ran for these rows, and every imported row was hardcoded to `status='pending'` regardless of whether an interview date was supplied. A bulk-imported candidate with a future interview date would sit at "Pending" with no email sent, until someone happened to open and re-save them individually. Fixed by setting `status` correctly at row-construction time (`Candidate.STATUS_INTERVIEW_SCHEDULED` when an interview date is present, mirroring `_advance_status_on_interview_scheduled`'s own logic instead of a wasteful second per-row `.save()` after `bulk_create`) and calling `_fire_interview_date_emails_if_needed(candidate, old_interview_date=None)` for each such row right after `bulk_create` — reusing the exact same dispatch path a one-at-a-time candidate creation already uses. Verified live via a real CSV upload through the test client: the imported row now lands as `interview_scheduled`, not `pending`.
+- **A misleading success message.** `CandidateHRDecisionView.patch()`'s reject/request-revision branch only ever wrote a `CandidateLog` entry — no email is sent on that path, and never was — but the response text unconditionally said `"Revision requested. Candidate notified."` Corrected to `"Revision requested."` Currently unreachable from the UI (see the dead-code note above), but a real, exploitable gap if that endpoint is ever called directly or the frontend modal gets wired up later.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/models.py` | `Company` — ~30 new fields, `gstin` removed; new `CompanyGSTRegistration`/`CompanyDirector` models |
+| `backend/apps/accounts/migrations/0096_...py` (new) | Schema for the above |
+| `backend/apps/accounts/serializers.py` | `CompanySerializer` rebuilt (jurisdiction-conditional `validate()`); new `CompanyGSTRegistrationSerializer` (PAN + state-code cross-checks), `CompanyDirectorSerializer` |
+| `backend/apps/accounts/views.py` | New GST-registration/director CRUD views; `CompanyRetrieveUpdateView.put()` now invalidates the company cache; bulk-import status/email fix; HR-decision reject message fix |
+| `backend/apps/accounts/urls.py`, `admin.py` | New routes for the two child resources; `gstin` dropped from `CompanyAdmin.list_display` |
+| `backend/apps/recruitment/views.py` | `CandidateBulkImportView` — correct status + interview-scheduled email dispatch for rows imported with a date; false "Candidate notified" message corrected |
+| `frontend/types/company.ts` | `CompanyData`, `GSTRegistration`, `Director` + payload/props types added alongside the pre-existing Financial Year types |
+| `frontend/lib/api/endpoints.ts` | `settings.gstRegistrations`, `settings.directors` |
+| `frontend/app/dashboard/settings/company/page.tsx` + 14 new files under `_components/`, new `_data.ts` | Full page restructure into an orchestrator + focused cards/tables |
+| `frontend/app/dashboard/branches/_components/BranchManagement.tsx` | Best-effort GST-state fetch; missing-GSTIN warning banner in Add/Edit Branch |
+
+---
+
+## Notes for Next Developer
+
+- **The HR Decision flow (`CandidateHRDecisionView`, `welcome_employee`/`assessment_assigned` templates, `HRDecisionModal.tsx`) is shipped but completely unreachable from the UI** — `candidate-review/page.tsx` renders `OnboardingDrawer` instead, which drives a different endpoint (`apps/accounts`'s `OnboardingApprovalView`) entirely. Don't assume either of those two templates is what candidates actually receive at the "hired" stage — `onboarding_approved` (via `OnboardingApprovalView`) is the one that's actually live.
+- **Referral bonus approval/payment never notifies the referring employee** — flagged during the email audit, not fixed this round (user didn't prioritize it). `ReferralBonusApproveView`/`ReferralBonusPayView` in `apps/recruitment/views.py` are the two call sites if this gets picked up later; no `referral_bonus_approved`/`referral_bonus_paid` template exists yet either.
+- **No multi-round-interview concept exists anywhere in this app** — one `interview_date`/`interview_time`/`meeting_link` per candidate, full stop. "Round 2" today just means overwriting those same fields, which re-fires the same generic "interview scheduled" email. If round-based interviewing is ever requested, it's new schema, not a tweak.
+- **The company logo shown in every outgoing email is automatic, not a per-template variable** — `_company_email_wrapper()` in `apps/accounts/utils.py` injects `Company.logo` into a shared header on every templated/OTP/test email at send time; there's no `{company_logo_url}`-style placeholder for admins to drop into a template body, and none is needed. As of this session's end, the `Company` table is empty in this environment (confirmed directly) — every email will show a blank/text-only header until someone actually fills in Company Profile.
+- **No automated test run this session either** — same pre-existing local test-DB gap as every prior entry; everything above was verified live against the real dev database via the Django test client with a real JWT cookie, and cleaned up (test rows deleted) after each check.

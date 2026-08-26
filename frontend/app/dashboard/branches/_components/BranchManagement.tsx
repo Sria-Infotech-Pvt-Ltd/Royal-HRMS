@@ -7,6 +7,7 @@ import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
+import type { GSTRegistration } from "@/types/company";
 
 interface StateObj {
   id: number;
@@ -233,6 +234,9 @@ export default function BranchManagement() {
   
   const [states, setStates] = useState<StateObj[]>([]);
   const [cities, setCities] = useState<CityObj[]>([]);
+  // States that already have a GST registration on file (Company Profile) —
+  // used only to warn "no GSTIN for this state yet", not to block anything.
+  const [gstStates, setGstStates] = useState<Set<string>>(new Set());
   const [newCityName, setNewCityName] = useState("");
   const newCityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -293,6 +297,14 @@ export default function BranchManagement() {
       setStats(statsRes.data.data ?? { total_branches: 0, total_employees: 0, total_active_branches: 0, total_inactive_branches: 0, total_cities: 0 });
       setDistribution(distRes.data.data ?? []);
       setStates(statesRes.data.data ?? []);
+
+      // Best-effort only — a GST registration list issue must never block
+      // the branches page itself, so this is fetched and failed silently
+      // outside the critical Promise.all above.
+      clientApi
+        .get<Envelope<Paginated<GSTRegistration>>>(API.settings.gstRegistrations.list, { params: { page_size: 100 } })
+        .then(res => setGstStates(new Set((res.data.data?.results ?? []).map(r => r.state))))
+        .catch(() => {});
     } catch (err: unknown) {
       const e = err as { message?: string };
       setError(e.message ?? "Failed to load branch data.");
@@ -595,6 +607,9 @@ export default function BranchManagement() {
   const visibleBranches = isHrAdmin
     ? branches.filter(b => b.branch_name === user?.branch)
     : branches;
+
+  const selectedStateName = states.find(s => String(s.id) === editForm.state)?.name;
+  const missingGstForState = !!selectedStateName && !gstStates.has(selectedStateName);
 
   if (isLoading && branches.length === 0) {
     return <div className="p-8 text-center text-[var(--on-variant)]">Loading branches...</div>;
@@ -937,6 +952,20 @@ export default function BranchManagement() {
                   )}
                 </div>
               </div>
+
+              {missingGstForState && (
+                <div className="alert alert-warn mb-16" style={{ alignItems: "flex-start" }}>
+                  <i className="ti ti-alert-triangle" />
+                  <div>
+                    No GST registration found for <strong>{selectedStateName}</strong> yet — GST registration is
+                    state-wise, so this branch will need one on file.{" "}
+                    <a href="/dashboard/settings/company" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+                      Add one in Company Profile
+                    </a>
+                  </div>
+                </div>
+              )}
+
               <div className="form-row cols-2">
                 <div className="field-group">
                   <label className="field-label">Branch Code <span style={{ fontSize: "11px", color: "var(--outline)", fontWeight: 400 }}>(auto-generated)</span></label>

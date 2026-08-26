@@ -177,7 +177,7 @@ class EmailTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
-    list_display  = ('company_name', 'gstin', 'pan', 'city', 'state', 'updated_at')
+    list_display  = ('company_name', 'jurisdiction', 'pan', 'city', 'state', 'updated_at')
     readonly_fields = ('updated_at', 'updated_by')
 
 

@@ -59,6 +59,8 @@ from apps.accounts.models import (
     ApprovalWorkflowRule,
     AuditLog,
     Company,
+    CompanyDirector,
+    CompanyGSTRegistration,
     Department,
     Designation,
     Document,
@@ -81,6 +83,8 @@ from apps.accounts.serializers import (
     ApprovalWorkflowRuleUpdateSerializer,
     AuditLogSerializer,
     ChangePasswordSerializer,
+    CompanyDirectorSerializer,
+    CompanyGSTRegistrationSerializer,
     CompanySerializer,
     DepartmentSerializer,
     DesignationSerializer,
@@ -404,7 +408,7 @@ class LoginView(APIView):
                     .get(email__iexact=email)
             )
         except User.DoesNotExist:
-            return error('Invalid company code, email, or password.', http_status=status.HTTP_401_UNAUTHORIZED)
+            return error('Invalid email or password.', http_status=status.HTTP_401_UNAUTHORIZED)
 
         if not user.is_active:
             return error(
@@ -427,7 +431,7 @@ class LoginView(APIView):
                 'Failed login attempt for %s from %s (attempt %d)',
                 email, get_client_ip(request), user.failed_login_attempts,
             )
-            return error('Invalid company code, email, or password.', http_status=status.HTTP_401_UNAUTHORIZED)
+            return error('Invalid email or password.', http_status=status.HTTP_401_UNAUTHORIZED)
 
         ip = get_client_ip(request)
         user.reset_failed_login(ip_address=ip)
@@ -2632,6 +2636,13 @@ class CompanyRetrieveUpdateView(APIView):
                 instance.logo = None
                 instance.save(update_fields=['logo'])
 
+        # CompanyCacheService.get() caches the model instance itself — without
+        # this, a save here would leave every reader (including the very next
+        # GET on this endpoint) looking at the pre-edit instance until the
+        # cache TTL expires.
+        from core.cache_service import CompanyCacheService
+        CompanyCacheService.invalidate()
+
         AuditLog.objects.create(
             user=request.user,
             action='create' if is_new else 'update',
@@ -2723,6 +2734,184 @@ class CompanyFinancialYearView(APIView):
         FinancialYearCacheService.set(data)
 
         return success('Financial year configuration updated.', data)
+
+
+# ─── Company GST Registrations ────────────────────────────────────────────────
+
+class CompanyGSTRegistrationListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = CompanyGSTRegistration.objects.select_related('company').all()
+        page_obj, paginator = paginate(qs, request, default_page_size=20)
+        return success(
+            'GST registrations retrieved.',
+            data=paginated_data(
+                paginator, page_obj,
+                CompanyGSTRegistrationSerializer(page_obj.object_list, many=True).data,
+            ),
+        )
+
+    def post(self, request):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to update company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+        company = Company.objects.first()
+        if not company:
+            return error('Company record not found. Set up company info first.', http_status=404)
+
+        serializer = CompanyGSTRegistrationSerializer(data=request.data, context={'company': company})
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        try:
+            instance = serializer.save(company=company)
+        except IntegrityError:
+            return error('A GST registration with this GSTIN already exists.', http_status=status.HTTP_409_CONFLICT)
+
+        AuditLog.objects.create(
+            user=request.user, action='create', module='company_gst_registration',
+            object_id=str(instance.pk), ip_address=get_client_ip(request),
+        )
+        return success('GST registration added.', data=CompanyGSTRegistrationSerializer(instance).data)
+
+
+class CompanyGSTRegistrationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk) -> CompanyGSTRegistration | None:
+        try:
+            return CompanyGSTRegistration.objects.select_related('company').get(pk=pk)
+        except CompanyGSTRegistration.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to update company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+        reg = self._get(pk)
+        if not reg:
+            return error('GST registration not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = CompanyGSTRegistrationSerializer(
+            reg, data=request.data, partial=True, context={'company': reg.company},
+        )
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        try:
+            instance = serializer.save()
+        except IntegrityError:
+            return error('A GST registration with this GSTIN already exists.', http_status=status.HTTP_409_CONFLICT)
+
+        AuditLog.objects.create(
+            user=request.user, action='update', module='company_gst_registration',
+            object_id=str(instance.pk), ip_address=get_client_ip(request),
+        )
+        return success('GST registration updated.', data=CompanyGSTRegistrationSerializer(instance).data)
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to update company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+        reg = self._get(pk)
+        if not reg:
+            return error('GST registration not found.', http_status=status.HTTP_404_NOT_FOUND)
+        reg_id = str(reg.pk)
+        reg.delete()
+        AuditLog.objects.create(
+            user=request.user, action='delete', module='company_gst_registration',
+            object_id=reg_id, ip_address=get_client_ip(request),
+        )
+        return success('GST registration removed.', data={})
+
+
+# ─── Company Directors ─────────────────────────────────────────────────────────
+
+class CompanyDirectorListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = CompanyDirector.objects.select_related('company').all()
+        page_obj, paginator = paginate(qs, request, default_page_size=20)
+        return success(
+            'Directors retrieved.',
+            data=paginated_data(
+                paginator, page_obj,
+                CompanyDirectorSerializer(page_obj.object_list, many=True).data,
+            ),
+        )
+
+    def post(self, request):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to update company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+        company = Company.objects.first()
+        if not company:
+            return error('Company record not found. Set up company info first.', http_status=404)
+
+        serializer = CompanyDirectorSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        try:
+            instance = serializer.save(company=company)
+        except IntegrityError:
+            return error('A director with this DIN already exists.', http_status=status.HTTP_409_CONFLICT)
+
+        AuditLog.objects.create(
+            user=request.user, action='create', module='company_director',
+            object_id=str(instance.pk), ip_address=get_client_ip(request),
+        )
+        return success('Director added.', data=CompanyDirectorSerializer(instance).data)
+
+
+class CompanyDirectorDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk) -> CompanyDirector | None:
+        try:
+            return CompanyDirector.objects.select_related('company').get(pk=pk)
+        except CompanyDirector.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to update company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+        director = self._get(pk)
+        if not director:
+            return error('Director not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = CompanyDirectorSerializer(director, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        try:
+            instance = serializer.save()
+        except IntegrityError:
+            return error('A director with this DIN already exists.', http_status=status.HTTP_409_CONFLICT)
+
+        AuditLog.objects.create(
+            user=request.user, action='update', module='company_director',
+            object_id=str(instance.pk), ip_address=get_client_ip(request),
+        )
+        return success('Director updated.', data=CompanyDirectorSerializer(instance).data)
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to update company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+        director = self._get(pk)
+        if not director:
+            return error('Director not found.', http_status=status.HTTP_404_NOT_FOUND)
+        director_id = str(director.pk)
+        director.delete()
+        AuditLog.objects.create(
+            user=request.user, action='delete', module='company_director',
+            object_id=director_id, ip_address=get_client_ip(request),
+        )
+        return success('Director removed.', data={})
 
 
 # ─── Audit Log ────────────────────────────────────────────────────────────────

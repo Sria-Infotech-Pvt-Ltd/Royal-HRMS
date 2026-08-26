@@ -85,6 +85,14 @@ export const API = {
       list: "/settings/document-types/",
       detail: (typeKey: string) => `/settings/document-types/${typeKey}/`,
     },
+    gstRegistrations: {
+      list: "/settings/company/gst-registrations/",
+      detail: (id: string) => `/settings/company/gst-registrations/${id}/`,
+    },
+    directors: {
+      list: "/settings/company/directors/",
+      detail: (id: string) => `/settings/company/directors/${id}/`,
+    },
   },
 
   hrms: {
