@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import logging
 
+from adrf.views import APIView
+from asgiref.sync import sync_to_async
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from core.responses import error
 
@@ -82,7 +83,28 @@ class VoiceSpeakView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request) -> Response:
+    async def post(self, request: Request) -> Response:
+        """
+        Scale-1 (2026-08-25 scalability-audit fix): dispatches the entire
+        request — unchanged, still fully synchronous — to a dedicated
+        per-request thread via sync_to_async(thread_sensitive=True), rather
+        than running it inline. Under WSGI (this project's current
+        deployment — see deploy.yml) this changes nothing observable: Django
+        wraps the whole coroutine in async_to_sync and runs it to completion
+        on the same calling worker thread regardless. It only pays off once
+        HTTP traffic is actually served over ASGI (daphne today only serves
+        the separate websocket path — see config/asgi.py) — a deployment
+        change outside this repo's application code. At that point, a slow/
+        rate-limited Sarvam call here (this module's own retry/backoff can
+        run up to ~46.5s worst case) ties up only its own dedicated thread,
+        not the shared event loop/worker other requests need. See
+        _post_sync's docstring — business logic is byte-for-byte unchanged.
+        """
+        return await sync_to_async(self._post_sync, thread_sensitive=True)(request)
+
+    def _post_sync(self, request: Request) -> Response:
+        """The real, unchanged view logic — see post()'s docstring for why
+        this is a separate method rather than post()'s own body."""
         text = (request.data.get('text') or '').strip()
         if not text:
             return error('text is required.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)

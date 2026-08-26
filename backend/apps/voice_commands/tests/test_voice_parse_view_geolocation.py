@@ -29,7 +29,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
             'latitude': 17.385044, 'longitude': 78.486671,
         })
 
-        VoiceParseView().post(request)
+        VoiceParseView()._post_sync(request)
 
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=17.385044, longitude=78.486671,
@@ -42,7 +42,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
         mock_handle_transcript.return_value = {'message': 'ok'}
         request = _fake_request({'transcript': 'clock in', 'lang': 'en'})
 
-        VoiceParseView().post(request)
+        VoiceParseView()._post_sync(request)
 
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=None, longitude=None,
@@ -55,7 +55,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
         mock_handle_transcript.return_value = {'message': 'ok'}
         request = _fake_request({'transcript': 'clock in', 'lang': 'en', 'stt_detected_language': 'hi'})
 
-        VoiceParseView().post(request)
+        VoiceParseView()._post_sync(request)
 
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=None, longitude=None,
@@ -68,7 +68,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
         mock_handle_transcript.return_value = {'message': 'ok'}
         request = _fake_request({'transcript': 'clock in', 'lang': 'en', 'stt_detected_language': 'fr'})
 
-        VoiceParseView().post(request)
+        VoiceParseView()._post_sync(request)
 
         mock_handle_transcript.assert_called_once_with(
             request, 'clock in', lang='en', latitude=None, longitude=None,
@@ -86,7 +86,7 @@ class VoiceParseViewGeolocationTests(SimpleTestCase):
         mock_handle_transcript.return_value = payload
         request = _fake_request({'transcript': 'clock in', 'lang': 'en'})
 
-        response = VoiceParseView().post(request)
+        response = VoiceParseView()._post_sync(request)
 
         self.assertEqual(response.data['data'], payload)
         self.assertEqual(response.data['message'], payload['message'])

@@ -4836,3 +4836,57 @@ New `accounts.0096` explicitly depends on `0095` and `assessments.0002`, and unc
 - **This is a pattern, not a one-off** — any migration that grants a permission by looking it up (`Permission.objects.filter(codename=...).first()` or `.get(codename=...)`) instead of creating it in the same migration must declare an explicit `dependencies` entry on whichever migration actually creates that permission row. Silently skipping via `if not permission: return`/`except DoesNotExist: continue` hides the failure instead of surfacing it — worth auditing other permission-grant migrations across the codebase for the same risk.
 - **Applied to `tenant_qatest` only** — the sole tenant schema that currently exists (see the data-loss incident earlier this session). Any company restored or provisioned after this point picks these up automatically; nothing needed for `tenant_qatest` itself since it was migrated directly.
 - Committed and merged into `demo` via `Backend/24/08/2026`.
+
+---
+
+# Team Context — Voice Endpoints Converted to Async (Selective Merge from `ai`)
+
+**Branch:** Backend/24/08/2026 (cherry-picked from `ai`'s `6e50210 "fixed bugs raised while testing."`)
+
+---
+
+## Overview
+
+`ai` branch pushed a new commit after its previous one was already merged into `demo`. That commit mixed two unrelated things: a voice-command scalability fix, and a general attendance/geofencing query-efficiency pass (duplicate WFH-approval query, holiday-check caching, a `FaceVerificationAttempt` anti-spoofing index). Only the voice-command half was requested for this merge — deliberately **not** a full merge of the commit. TEAMCONTEXT.md wasn't touched by that commit either (same gap as the previous `ai` merge), so this was written from the actual diff, same as before.
+
+---
+
+## 1. `VoiceParseView` / `VoiceSpeakView` / `VoiceTranscribeFallbackView` — Converted to Async
+
+**Files:** `apps/voice_commands/views.py`, `views_speak.py`, `views_transcribe.py`, `requirements.txt`
+
+Each view's `post()` now dispatches the unchanged, fully-synchronous business logic (renamed `_post_sync`) to a dedicated thread via `sync_to_async(thread_sensitive=True)`, using `adrf.views.APIView` (new dependency: `adrf==0.1.14`, `async-property==0.2.2`) instead of DRF's own `APIView`. Per the migrated-in code comments: under this project's current WSGI deployment this changes nothing observable — Django wraps the coroutine in `async_to_sync` and runs it on the same worker thread regardless. It only pays off once HTTP traffic is served over ASGI (today only the websocket path runs under daphne — see `config/asgi.py`), at which point a slow/rate-limited Sarvam call (`VoiceSpeakView`'s own retry/backoff can run up to ~46.5s worst case) ties up only its own thread instead of the shared event loop.
+
+## 2. New `AuditLog` Index for Voice Anomaly Checks
+
+**File:** `apps/accounts/models.py`, new `apps/accounts/migrations/0097_auditlog_user_created_idx.py`
+
+New index on `AuditLog(user, created_at)` — the existing `(module, created_at)` index can't serve `apps.voice_commands.audit._check_anomaly`'s user-first filter, which runs on every voice permission-denied/no-match event.
+
+**Renumbered from `ai`'s own `0095_auditlog_auditlog_user_created_idx.py`** — that file also depended directly on `0094_add_facial_recognition_approve`, forking the migration graph against this session's own `0095_ensure_facial_recognition_approve_defaults`/`0096_ensure_assessments_permissions_defaults` (also children of `0094`). Re-pointed at `0096` instead, keeping one linear chain rather than requiring a separate Django merge migration. Operations are otherwise unchanged from the original.
+
+## 3. Deliberately Left Out
+
+**Files (not merged):** `apps/attendance/services_attendance.py`, `services_geofencing.py`, `apps/attendance/models.py` (new `FaceVerificationAttempt` index), `apps/attendance/migrations/0041_faceverificationattempt_fva_emp_fingerprint_time_idx.py`, `apps/attendance/tests_query_efficiency.py`
+
+Part of the same upstream commit's scalability-audit work, but not voice-command-specific — a duplicate `WorkFromHomeRequest.approved_for()` query per WFH punch, a holiday check routed through cache instead of a direct query, and an anti-spoofing replay-detection index used by Face ID generally (web and voice alike). Held back at the user's explicit direction to bring in only the bot fixes from this commit; revisit separately if wanted.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/voice_commands/views.py`, `views_speak.py`, `views_transcribe.py` | `post()` now async, dispatches to `_post_sync` via `sync_to_async` |
+| `backend/requirements.txt` | Added `adrf==0.1.14`, `async-property==0.2.2` |
+| `backend/apps/accounts/models.py`, `migrations/0097_auditlog_user_created_idx.py` (new) | New `AuditLog(user, created_at)` index |
+| `backend/apps/voice_commands/tests/test_async_view_conversion.py` (new), `test_transcribe_fallback_language_hint.py`, `test_views_speak.py`, `test_voice_parse_view_geolocation.py` | Updated/new tests for the async conversion |
+
+---
+
+## Notes for Next Developer
+
+- **This async conversion has no observable effect until the deployment itself moves off WSGI for HTTP traffic** — see item 1. Don't expect a latency/throughput change from this alone.
+- **`adrf`/`async-property` must be installed in every environment that runs this code** — added to `requirements.txt` here; confirm any deploy pipeline actually reinstalls from it.
+- **The excluded attendance/geofencing/FaceVerificationAttempt changes are still sitting on `ai` (commit `6e50210`), unmerged** — pull them in separately if/when wanted; they're independent of everything in this entry.
+- Verified: `manage.py check` clean, `makemigrations --check` clean, migration applied to `tenant_qatest` and the new index confirmed present, all 38 tests across the 4 touched voice_commands test files pass.

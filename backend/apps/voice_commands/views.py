@@ -6,11 +6,12 @@ Endpoints:
 """
 from __future__ import annotations
 
+from adrf.views import APIView
+from asgiref.sync import sync_to_async
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from core.responses import error, success
 
@@ -71,7 +72,20 @@ class VoiceParseView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request) -> Response:
+    async def post(self, request: Request) -> Response:
+        """Scale-1 (2026-08-25 scalability-audit fix) — see
+        views_speak.VoiceSpeakView.post's docstring for the full reasoning:
+        dispatches the unchanged, fully-synchronous _post_sync to a
+        dedicated per-request thread rather than running it inline. This
+        view's call graph (handle_transcript -> ... -> execute_intent) is
+        the one that reaches every DB/Redis touchpoint in this app, plus —
+        only on a genuine rule-engine no-match — a single Sarvam
+        chat-completion call (see llm_fallback.py); all of that stays on
+        this one dedicated thread, unchanged."""
+        return await sync_to_async(self._post_sync, thread_sensitive=True)(request)
+
+    def _post_sync(self, request: Request) -> Response:
+        """The real, unchanged view logic — see post()'s docstring."""
         transcript = (request.data.get('transcript') or '').strip()
         if not transcript:
             return error('transcript is required.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
