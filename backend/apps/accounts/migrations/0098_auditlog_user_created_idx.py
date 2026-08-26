@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0094_add_facial_recognition_approve'),
+        ('accounts', '0097_drop_orphaned_gstin_column'),
     ]
 
     operations = [
