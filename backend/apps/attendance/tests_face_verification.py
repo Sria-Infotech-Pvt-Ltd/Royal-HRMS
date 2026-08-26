@@ -90,7 +90,11 @@ class FaceVerificationPunchTests(TestCase):
         cache.clear()
 
     def _punch(self, **overrides):
-        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        # 'office', not 'wfh' — these tests exercise face verification, not
+        # WFH approval, and this employee has no real Branch row resolvable
+        # from their branch string, so 'office' mode no-ops (unassigned →
+        # allowed) instead of requiring an approved WorkFromHomeRequest.
+        payload = {'punch_type': 'IN', 'attendance_mode': 'office'}
         payload.update(overrides)
         return self.client.post(reverse('attendance-punch'), payload, format='json')
 
@@ -213,7 +217,11 @@ class FaceVerificationLowConfidenceFailClosedTests(TestCase):
         cache.clear()
 
     def _punch(self, **overrides):
-        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        # 'office', not 'wfh' — these tests exercise face verification, not
+        # WFH approval, and this employee has no real Branch row resolvable
+        # from their branch string, so 'office' mode no-ops (unassigned →
+        # allowed) instead of requiring an approved WorkFromHomeRequest.
+        payload = {'punch_type': 'IN', 'attendance_mode': 'office'}
         payload.update(overrides)
         return self.client.post(reverse('attendance-punch'), payload, format='json')
 
@@ -362,12 +370,12 @@ class FaceRegistrationHRRegisterTests(TestCase):
         _login(employee_client, 'hrregister-employee@test.com')
 
         old_face_resp = employee_client.post(reverse('attendance-punch'), {
-            'punch_type': 'IN', 'attendance_mode': 'wfh', 'face_embedding': REGISTERED_EMBEDDING,
+            'punch_type': 'IN', 'attendance_mode': 'office', 'face_embedding': REGISTERED_EMBEDDING,
         }, format='json')
         self.assertEqual(old_face_resp.status_code, 403, old_face_resp.data)
 
         new_face_resp = employee_client.post(reverse('attendance-punch'), {
-            'punch_type': 'IN', 'attendance_mode': 'wfh', 'face_embedding': new_embedding,
+            'punch_type': 'IN', 'attendance_mode': 'office', 'face_embedding': new_embedding,
         }, format='json')
         self.assertEqual(new_face_resp.status_code, 200, new_face_resp.data)
 
