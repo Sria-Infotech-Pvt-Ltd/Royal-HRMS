@@ -324,6 +324,9 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
   } else {
     if (!f.country_of_registration.trim()) e.country_of_registration = "Country of registration is required for a foreign entity.";
     if (!f.registration_number.trim())     e.registration_number     = "Registration number is required for a foreign entity.";
+    // EIN is a US IRS-issued tax ID — only required for US-registered
+    // entities, same idea as CIN only applying to certain India entity types.
+    if (f.country_of_registration === "US" && !f.ein.trim()) e.ein = "EIN is required for a US entity.";
   }
 
   if (!f.communication_address_same_as_registered) {

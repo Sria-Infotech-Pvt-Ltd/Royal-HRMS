@@ -4974,6 +4974,18 @@ Deliberately did **not** touch the several fields elsewhere on the page that sho
 
 ---
 
+## 13. EIN — Required, But Only for US-Registered Entities (Same Idea as CIN)
+
+**Files:** `backend/apps/accounts/serializers.py`, `frontend/app/dashboard/settings/company/_data.ts`, `frontend/app/dashboard/settings/company/_components/EntityIdentityCard.tsx`
+
+User followed up on §12 asking why CIN and EIN weren't marked required. CIN turned out to already be correct — `EntityIdentityCard.tsx` conditionally shows `*` (and both `validateCompany()` and `CompanySerializer.validate()` conditionally require it) only for `CIN_ENTITY_TYPES` (Private/Public Ltd, OPC, Section 8) — deliberately not universal, since HUF/LLP/Partnership/Proprietorship/Trust-Society legitimately have no CIN (this was confirmed business logic from §9's Entity Type dropdown fix, not something to undo).
+
+EIN was a genuine gap, but making it universally required for every foreign entity would have introduced the exact same class of bug CIN's entity-type-conditional logic exists to avoid — **EIN is a US IRS-issued tax ID, not a general foreign-company identifier**; a company registered in the UK, Germany, UAE, etc. (all real options in `COUNTRY_OPTIONS`/`COUNTRY_CHOICES`) has no EIN at all. Made it conditionally required on `country_of_registration === 'US'` instead, mirroring CIN's `CIN_ENTITY_TYPES.has(entity_type)` pattern exactly: `*` shown only when `US` is selected, `validateCompany()` and `CompanySerializer.validate()` both raise only in that case. Backend's `ein` field already has `blank=True` at the model level, so no DRF `allow_blank` gotcha (§9's note) applied here — the cross-field `validate()` check was the only piece missing.
+
+Verified via the serializer directly (not the live dummy Company row, to avoid disturbing its India-jurisdiction data): US + no EIN → 400 (`"EIN is required for a US entity."`); US + EIN present → valid; non-US foreign country (`GB`) + no EIN → still valid, confirming the conditional doesn't over-fire.
+
+---
+
 ## Key Files Changed
 
 | File | Change |
@@ -5016,6 +5028,8 @@ Deliberately did **not** touch the several fields elsewhere on the page that sho
 | `frontend/app/dashboard/settings/company/_components/{AddressCard,SignatoryCard,EntityIdentityCard}.tsx` | 4 checkboxes → `ToggleSwitch` (communication address, signatory-on-invoices, publicly-listed ×2) |
 | `frontend/app/dashboard/org-chart/_components/{OrgDetail,AddPositionModal}.tsx` | `is_chief` checkbox → `ToggleSwitch` in both the position detail pane and the Add Position modal |
 | `frontend/app/dashboard/settings/company/_components/{GSTRegistrationsSection,DirectorsSection}.tsx` | Added `*` to the 5 genuinely-required table column headers (GSTIN, State, DIN/Director ID, Name, Designation) |
+| `backend/apps/accounts/serializers.py` | `CompanySerializer.validate()` — EIN now required when `country_of_registration == 'US'` |
+| `frontend/app/dashboard/settings/company/_data.ts`, `_components/EntityIdentityCard.tsx` | `validateCompany()` + conditional `*` for EIN, mirroring CIN's entity-type conditional pattern |
 
 ---
 

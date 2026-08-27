@@ -200,14 +200,15 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
             </div>
           </div>
           <div className="field-group mb-16">
-            <label className="field-label">EIN</label>
+            <label className="field-label">EIN {form.country_of_registration === "US" && <span style={{ color: "var(--error)" }}>*</span>}</label>
             <input
-              className="field-input"
+              className={`field-input${errors.ein ? " field-error" : ""}`}
               value={form.ein}
               disabled={!canEdit}
               onChange={e => onFieldChange("ein", e.target.value)}
               placeholder="Employer Identification Number"
             />
+            {errors.ein && <div className="field-error-msg">{errors.ein}</div>}
           </div>
           <div className="mb-16">
             <ToggleSwitch

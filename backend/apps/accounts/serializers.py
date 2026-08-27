@@ -878,6 +878,11 @@ class CompanySerializer(serializers.ModelSerializer):
                     errors['country_of_registration'] = 'Country of registration is required for a foreign entity.'
                 if not _val('registration_number'):
                     errors['registration_number'] = 'Registration number is required for a foreign entity.'
+                # EIN is a US IRS-issued tax ID — only meaningful (and only
+                # required) for entities registered in the US, same idea as
+                # CIN only applying to certain India entity types above.
+                if _val('country_of_registration') == 'US' and not _val('ein'):
+                    errors['ein'] = 'EIN is required for a US entity.'
 
         if errors:
             raise serializers.ValidationError(errors)
