@@ -37,9 +37,15 @@ from apps.accounts.views import (
     DocumentStatsView,
     EmployeeListCreateView,
     EmployeeStatsView,
+    JobTemplateListView,
     LoginView,
     LogoutView,
-    OrgChartView,
+    OrgUnitDetailView,
+    OrgUnitListCreateView,
+    PositionAssignHolderView,
+    PositionDetailView,
+    PositionListCreateView,
+    PositionVacateView,
     TokenRefreshAPIView,
     ForgotPasswordView,
     VerifyOTPView,
@@ -111,8 +117,17 @@ urlpatterns = [
     path('departments/',           DepartmentListCreateView.as_view(), name='department-list'),
     path('departments/<int:pk>/',  DepartmentDetailView.as_view(),     name='department-detail'),
     path('designations/',          DesignationListCreateView.as_view(), name='designation-list'),
-    path('org-chart/',             OrgChartView.as_view(),              name='org-chart'),
     path('designations/<int:pk>/', DesignationDetailView.as_view(),     name='designation-detail'),
+
+    # Org Structure — the frontend /dashboard/org-chart page now calls these
+    # instead of the old computed-from-User.department endpoint (removed)
+    path('org-structure/units/',           OrgUnitListCreateView.as_view(),   name='org-unit-list'),
+    path('org-structure/units/<uuid:pk>/', OrgUnitDetailView.as_view(),       name='org-unit-detail'),
+    path('org-structure/positions/',                    PositionListCreateView.as_view(),  name='position-list'),
+    path('org-structure/positions/<uuid:pk>/',          PositionDetailView.as_view(),      name='position-detail'),
+    path('org-structure/positions/<uuid:pk>/assign/',   PositionAssignHolderView.as_view(), name='position-assign'),
+    path('org-structure/positions/<uuid:pk>/vacate/',   PositionVacateView.as_view(),      name='position-vacate'),
+    path('org-structure/job-templates/',   JobTemplateListView.as_view(),     name='job-template-list'),
 
     # Roles
     path('roles/',         RoleListCreateView.as_view(), name='role-list-create'),

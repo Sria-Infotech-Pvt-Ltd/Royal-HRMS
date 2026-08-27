@@ -333,6 +333,84 @@ class Designation(models.Model):
         return f'{self.name} ({self.department.name})'
 
 
+class OrgUnit(models.Model):
+    """
+    A node in the formal organisation structure (e.g. "SAP Consulting &
+    Delivery" → "S/4HANA Practice"). Deliberately separate from `Department`
+    — that model is flat (no parent field) and matched to `User.department`
+    by plain string equality; this is a genuine hierarchy with its own
+    Position/holder model underneath, used only by the Org Structure page.
+    Doesn't touch `User.department`/`reporting_manager` or any approval
+    routing, which keep working exactly as before.
+    """
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name       = models.CharField(max_length=150)
+    code       = models.CharField(max_length=30, blank=True)
+    parent     = models.ForeignKey(
+                     'self', on_delete=models.PROTECT, null=True, blank=True,
+                     related_name='children',
+                 )
+    cost_center = models.CharField(max_length=30, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_org_units'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class JobTemplate(models.Model):
+    """Reusable job title + grade band a Position can reference — e.g. "SAP
+    Architect · L5", shared across org units. Seeded once via migration;
+    read-only from the API (no admin CRUD needed for v1)."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name       = models.CharField(max_length=150, unique=True)
+    band       = models.CharField(max_length=20, blank=True)
+    is_active  = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_job_templates'
+        ordering = ['name']
+
+    def __str__(self) -> str:
+        return f'{self.name} ({self.band})' if self.band else self.name
+
+
+class Position(models.Model):
+    """A seat within an OrgUnit — may be vacant (`holder` null). Exactly one
+    position per OrgUnit may have `is_chief=True`; that position's holder is
+    the unit's head. Enforced in the serializer (unsets any other chief in
+    the same unit), not a DB constraint, matching how Branch.is_headquarter
+    is handled elsewhere in this app."""
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    org_unit      = models.ForeignKey(OrgUnit, on_delete=models.CASCADE, related_name='positions')
+    job_template  = models.ForeignKey(
+                        JobTemplate, on_delete=models.SET_NULL, null=True, blank=True,
+                        related_name='positions',
+                    )
+    title         = models.CharField(max_length=150)
+    grade         = models.CharField(max_length=20, blank=True)
+    is_chief      = models.BooleanField(default=False)
+    holder        = models.ForeignKey(
+                        'User', on_delete=models.SET_NULL, null=True, blank=True,
+                        related_name='held_positions',
+                    )
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_positions'
+        ordering = ['title']
+
+    def __str__(self) -> str:
+        return f'{self.title} — {self.org_unit.name}'
+
+
 class PromotionRecord(models.Model):
     """Immutable audit trail of designation/role changes made through
     EmployeeDetailView.put(). One row per PUT call that actually changed

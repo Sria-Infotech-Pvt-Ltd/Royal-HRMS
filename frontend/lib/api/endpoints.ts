@@ -35,8 +35,18 @@ export const API = {
     detail: (id: string | number) => `/designations/${id}/`,
   },
 
-  orgChart: {
-    get: (branch?: string) => branch ? `/org-chart/?branch=${encodeURIComponent(branch)}` : "/org-chart/",
+  orgStructure: {
+    units: {
+      list: "/org-structure/units/",
+      detail: (id: string) => `/org-structure/units/${id}/`,
+    },
+    positions: {
+      list: "/org-structure/positions/",
+      detail: (id: string) => `/org-structure/positions/${id}/`,
+      assign: (id: string) => `/org-structure/positions/${id}/assign/`,
+      vacate: (id: string) => `/org-structure/positions/${id}/vacate/`,
+    },
+    jobTemplates: "/org-structure/job-templates/",
   },
 
   employees: {

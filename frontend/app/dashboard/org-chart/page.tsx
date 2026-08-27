@@ -1,9 +1,9 @@
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
-import OrgChartClient from "./_components/OrgChartClient";
+import OrgStructureClient from "./_components/OrgStructureClient";
 
 export default async function OrgChartPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  return <OrgChartClient />;
+  return <OrgStructureClient />;
 }

@@ -69,10 +69,13 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSettings,
+    JobTemplate,
     OnboardingFieldConfig,
+    OrgUnit,
     OTPVerification,
     PasswordResetToken,
     Permission,
+    Position,
     PromotionRecord,
     Role,
     RolePermission,
@@ -96,8 +99,11 @@ from apps.accounts.serializers import (
     EmployeeBulkImportRowSerializer,
     EmployeeCodeSettingsSerializer,
     ForgotPasswordSerializer,
+    JobTemplateSerializer,
     LoginSerializer,
+    OrgUnitSerializer,
     PermissionSerializer,
+    PositionSerializer,
     ResetPasswordSerializer,
     RoleSerializer,
     SMTPSettingsSerializer,
@@ -1280,139 +1286,231 @@ class DepartmentDetailView(APIView):
         return self.put(request, pk)
 
 
-def _build_org_chart_group(users_qs, branch_label: str) -> dict:
-    """
-    Build one branch's {root, departments} tree from an already branch-
-    filtered (or unfiltered, for the "no branch set" bucket) active-user
-    queryset.
+# ─── Org Structure (units, positions, job templates) ──────────────────────────
+# Replaces the old computed-from-User.department org chart above (removed —
+# see TEAMCONTEXT.md for what it used to do) with a real, admin-editable
+# hierarchy. Read access reuses org_chart.view (already granted to every
+# role by migration 0086); writes need org_structure.create/edit/delete
+# (migration 0101, granted to whichever roles already hold departments.edit).
+# Deliberately independent of User.department/reporting_manager — those keep
+# driving real approval routing exactly as before; Position.holder and the
+# derived "reports_to" here are a separate, purely structural view.
 
-    Department head is derived per branch group, not from the single
-    company-wide Department.manager field — a real multi-branch company has
-    a different Engineering Manager per branch, which one global FK can't
-    represent. Head = the sole can_manage_team-role person in this
-    department within this branch; ambiguous (0 or 2+ such people) falls
-    back to Department.manager only if that person actually belongs to this
-    branch, and otherwise leaves head unset rather than guessing.
-    """
-    roots = list(users_qs.filter(reporting_manager__isnull=True).order_by('full_name')[:2])
-    root = None
-    if len(roots) == 1:
-        root = {
-            'id': str(roots[0].id), 'employee_id': roots[0].employee_id,
-            'name': roots[0].full_name, 'designation': roots[0].designation,
-        }
-
-    members_by_dept: dict = defaultdict(list)
-    managers_by_dept: dict = defaultdict(list)
-    for u in (
-        users_qs.exclude(department='')
-        .select_related('role')
-        .only('id', 'employee_id', 'full_name', 'designation', 'department', 'role__can_manage_team')
-        .order_by('full_name')
-    ):
-        entry = {'id': str(u.id), 'employee_id': u.employee_id, 'name': u.full_name, 'designation': u.designation}
-        members_by_dept[u.department].append(entry)
-        if u.role and u.role.can_manage_team:
-            managers_by_dept[u.department].append(entry)
-
-    depts = (
-        Department.objects
-        .filter(is_active=True, name__in=list(members_by_dept.keys()))
-        .select_related('manager')
-    )
-    departments = []
-    for dept in depts:
-        members = members_by_dept.get(dept.name, [])
-        managers = managers_by_dept.get(dept.name, [])
-        head = managers[0] if len(managers) == 1 else None
-        if head is None and dept.manager_id and dept.manager and (dept.manager.branch or '').strip().lower() == (branch_label or '').strip().lower():
-            head = {
-                'id': str(dept.manager_id), 'employee_id': dept.manager.employee_id,
-                'name': dept.manager.full_name, 'designation': dept.manager.designation,
-            }
-        if head is not None:
-            members = [m for m in members if m['id'] != head['id']]
-        departments.append({'id': dept.pk, 'label': dept.name, 'head': head, 'members': members})
-
-    return {'branch': branch_label, 'root': root, 'departments': departments}
-
-
-class OrgChartView(APIView):
-    """
-    GET /org-chart/ — read-only company structure for the Organisation Chart
-    page. Built entirely from existing data (Department.manager,
-    User.reporting_manager, User.department, Role.can_manage_team) — no
-    dedicated org-chart model.
-
-    Gated on org_chart.view, not employees.view — an org chart is
-    company-directory information (industry-standard: visible to every
-    employee), not employee-management data, so it's deliberately a
-    separate, broader permission (seeded on every role, see migration 0086)
-    rather than reusing the admin-tier "can browse/manage the employee list"
-    gate.
-
-    Response is always a list of per-branch {branch, root, departments}
-    groups, never a single flat structure — a real multi-branch company has
-    a different manager (and often the same department name) per branch, so
-    merging them into one tree would misrepresent who actually manages whom.
-
-    - settings.edit (system_admin-tier): unrestricted. ?branch=<name> scopes
-      to one branch's group; omitted or "all" returns one group per branch
-      (only branches that actually have people), for the "All Branches"
-      dropdown option — plus an "Unassigned" group for anyone with no
-      branch set at all, so a data gap doesn't just silently vanish them.
-    - Everyone else (HR included — deliberately widened past its normal
-      "only my assigned employees" rule; see _can_manage_employee_documents
-      above, a structural chart needs the full shape of what a role
-      oversees, not a personal caseload): always exactly one group, their
-      own branch. Any ?branch= they send is ignored — branch access is a
-      permission decision, never a client-supplied one.
-    """
+class JobTemplateListView(APIView):
+    """Read-only — no admin CRUD for v1, matching the mockup (a fixed
+    dropdown of job templates when creating a position, no "add new job"
+    affordance). Seeded once via migration 0101."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.branch.models import Branch
+        if not _has_perm(request.user, 'org_chart.view'):
+            return error('You do not have permission to view this.', http_status=status.HTTP_403_FORBIDDEN)
+        qs = JobTemplate.objects.filter(is_active=True)
+        return success('Job templates retrieved.', data=JobTemplateSerializer(qs, many=True).data)
 
-        user = request.user
-        if not _has_perm(user, 'org_chart.view'):
-            return error('You do not have permission to view the org chart.',
-                         http_status=status.HTTP_403_FORBIDDEN)
 
-        if not _has_perm(user, 'settings.edit'):
-            own_branch = (getattr(user, 'branch', '') or '').strip()
-            users_qs = User.objects.filter(is_active=True)
-            if own_branch:
-                users_qs = users_qs.filter(branch__iexact=own_branch)
-            group = _build_org_chart_group(users_qs, own_branch)
-            return success('Org chart retrieved.', data={'scope': 'branch', 'groups': [group]})
+class OrgUnitListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
 
-        # The branch list itself is NOT returned here — the frontend's branch
-        # dropdown reads it from the existing BranchListCreateView (/branches/),
-        # the one place that already lists branches company-wide. This query
-        # is only for building the groups below, not for exposing a second,
-        # duplicate "what branches exist" source in this endpoint's response.
-        all_branches = list(
-            Branch.objects.filter(status=Branch.STATUS_ACTIVE).order_by('branch_name').values_list('branch_name', flat=True)
+    def get(self, request):
+        if not _has_perm(request.user, 'org_chart.view'):
+            return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
+        qs = OrgUnit.objects.all()
+        page_obj, paginator = paginate(qs, request, default_page_size=200)
+        return success('Org units retrieved.', data=paginated_data(
+            paginator, page_obj, OrgUnitSerializer(page_obj.object_list, many=True).data,
+        ))
+
+    def post(self, request):
+        if not _has_perm(request.user, 'org_structure.create'):
+            return error('You do not have permission to create org units.', http_status=status.HTTP_403_FORBIDDEN)
+        serializer = OrgUnitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        instance = serializer.save()
+        AuditLog.objects.create(
+            user=request.user, action='create', module='org_structure',
+            object_id=str(instance.pk), changes={'name': instance.name},
+            ip_address=get_client_ip(request),
         )
-        requested = (request.query_params.get('branch') or '').strip()
+        return success('Org unit created.', data=OrgUnitSerializer(instance).data)
 
-        if requested and requested.lower() != 'all':
-            matched = next((b for b in all_branches if b.lower() == requested.lower()), requested)
-            group = _build_org_chart_group(User.objects.filter(is_active=True, branch__iexact=matched), matched)
-            return success('Org chart retrieved.', data={'scope': 'company', 'groups': [group]})
 
-        groups = []
-        for b in all_branches:
-            group = _build_org_chart_group(User.objects.filter(is_active=True, branch__iexact=b), b)
-            if group['departments']:
-                groups.append(group)
-        unassigned = _build_org_chart_group(
-            User.objects.filter(is_active=True).filter(Q(branch='') | Q(branch__isnull=True)), 'Unassigned',
+class OrgUnitDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk):
+        try:
+            return OrgUnit.objects.select_related('parent').get(pk=pk)
+        except OrgUnit.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit org units.', http_status=status.HTTP_403_FORBIDDEN)
+        unit = self._get(pk)
+        if not unit:
+            return error('Org unit not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = OrgUnitSerializer(unit, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        instance = serializer.save()
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(instance.pk), changes={'name': instance.name},
+            ip_address=get_client_ip(request),
         )
-        if unassigned['departments']:
-            groups.append(unassigned)
+        return success('Org unit updated.', data=OrgUnitSerializer(instance).data)
 
-        return success('Org chart retrieved.', data={'scope': 'company', 'groups': groups})
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.delete'):
+            return error('You do not have permission to delete org units.', http_status=status.HTTP_403_FORBIDDEN)
+        unit = self._get(pk)
+        if not unit:
+            return error('Org unit not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if unit.children.exists():
+            return error(
+                f'Cannot delete "{unit.name}" — it has sub-units. Remove or move those first.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        if unit.positions.exists():
+            return error(
+                f'Cannot delete "{unit.name}" — it still has positions. Remove those first.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        name = unit.name
+        unit_id = str(unit.pk)
+        unit.delete()
+        AuditLog.objects.create(
+            user=request.user, action='delete', module='org_structure',
+            object_id=unit_id, changes={'name': name},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'"{name}" deleted.', data={})
+
+
+class PositionListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'org_chart.view'):
+            return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
+        qs = Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder')
+        page_obj, paginator = paginate(qs, request, default_page_size=200)
+        return success('Positions retrieved.', data=paginated_data(
+            paginator, page_obj, PositionSerializer(page_obj.object_list, many=True).data,
+        ))
+
+    def post(self, request):
+        if not _has_perm(request.user, 'org_structure.create'):
+            return error('You do not have permission to create positions.', http_status=status.HTTP_403_FORBIDDEN)
+        serializer = PositionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        instance = serializer.save()
+        AuditLog.objects.create(
+            user=request.user, action='create', module='org_structure',
+            object_id=str(instance.pk), changes={'title': instance.title},
+            ip_address=get_client_ip(request),
+        )
+        return success('Position created.', data=PositionSerializer(instance).data)
+
+
+class PositionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk):
+        try:
+            return Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder').get(pk=pk)
+        except Position.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit positions.', http_status=status.HTTP_403_FORBIDDEN)
+        position = self._get(pk)
+        if not position:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = PositionSerializer(position, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        instance = serializer.save()
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(instance.pk), changes={'title': instance.title},
+            ip_address=get_client_ip(request),
+        )
+        return success('Position updated.', data=PositionSerializer(instance).data)
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.delete'):
+            return error('You do not have permission to delete positions.', http_status=status.HTTP_403_FORBIDDEN)
+        position = self._get(pk)
+        if not position:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        title = position.title
+        position_id = str(position.pk)
+        position.delete()
+        AuditLog.objects.create(
+            user=request.user, action='delete', module='org_structure',
+            object_id=position_id, changes={'title': title},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'"{title}" deleted.', data={})
+
+
+class PositionAssignHolderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to assign position holders.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            position = Position.objects.select_related('org_unit').get(pk=pk)
+        except Position.DoesNotExist:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        employee_id = request.data.get('employee')
+        if not employee_id:
+            return error('employee is required.')
+        try:
+            employee = User.objects.get(pk=employee_id, is_active=True)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        position.holder = employee
+        position.save(update_fields=['holder', 'updated_at'])
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(position.pk),
+            changes={'title': position.title, 'holder': employee.full_name},
+            ip_address=get_client_ip(request),
+        )
+        return success('Holder assigned.', data=PositionSerializer(position).data)
+
+
+class PositionVacateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to vacate positions.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            position = Position.objects.select_related('org_unit').get(pk=pk)
+        except Position.DoesNotExist:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        position.holder = None
+        position.save(update_fields=['holder', 'updated_at'])
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(position.pk), changes={'title': position.title, 'holder': None},
+            ip_address=get_client_ip(request),
+        )
+        return success('Position vacated.', data=PositionSerializer(position).data)
 
 
 class DesignationListCreateView(APIView):

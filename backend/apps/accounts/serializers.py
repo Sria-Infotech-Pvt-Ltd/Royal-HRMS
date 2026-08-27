@@ -26,8 +26,11 @@ from apps.accounts.models import (
     EmployeeCodeSettings,
     EmployeeDocument,
     EmployeeProfile,
+    JobTemplate,
     OnboardingFieldConfig,
+    OrgUnit,
     Permission,
+    Position,
     Role,
     RolePermission,
     SMTPSettings,
@@ -509,6 +512,116 @@ class DepartmentSerializer(serializers.ModelSerializer):
         if len(value) > 300:
             raise serializers.ValidationError('Description must be under 300 characters.')
         return value
+
+
+# ─── Org Structure (units, positions, job templates) ──────────────────────────
+# Separate from Department/Designation above — a real hierarchy with its own
+# Position/holder model, used only by the Org Structure page. Doesn't touch
+# User.department/reporting_manager or any approval routing.
+
+class JobTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = JobTemplate
+        fields = ('id', 'name', 'band', 'is_active')
+        read_only_fields = ('id',)
+
+
+class OrgUnitSerializer(serializers.ModelSerializer):
+    position_count = serializers.SerializerMethodField()
+    child_count    = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = OrgUnit
+        fields = (
+            'id', 'name', 'code', 'parent', 'cost_center',
+            'position_count', 'child_count', 'created_at', 'updated_at',
+        )
+        read_only_fields = ('id', 'position_count', 'child_count', 'created_at', 'updated_at')
+
+    def get_position_count(self, obj: OrgUnit) -> int:
+        return obj.positions.count()
+
+    def get_child_count(self, obj: OrgUnit) -> int:
+        return obj.children.count()
+
+    def validate_name(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Unit name is required.')
+        if len(value) > 150:
+            raise serializers.ValidationError('Unit name must be under 150 characters.')
+        return value
+
+    def validate_parent(self, value):
+        if value and self.instance:
+            node = value
+            while node is not None:
+                if node.pk == self.instance.pk:
+                    raise serializers.ValidationError('This would create a circular reporting structure.')
+                node = node.parent
+        return value
+
+
+class PositionSerializer(serializers.ModelSerializer):
+    org_unit_name       = serializers.CharField(source='org_unit.name', read_only=True)
+    job_template_name   = serializers.CharField(source='job_template.name', read_only=True, default=None)
+    holder_name         = serializers.CharField(source='holder.full_name', read_only=True, default=None)
+    holder_employee_id  = serializers.CharField(source='holder.employee_id', read_only=True, default=None)
+    reports_to          = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Position
+        fields = (
+            'id', 'org_unit', 'org_unit_name', 'job_template', 'job_template_name',
+            'title', 'grade', 'is_chief', 'holder', 'holder_name', 'holder_employee_id',
+            'reports_to', 'created_at', 'updated_at',
+        )
+        read_only_fields = (
+            'id', 'org_unit_name', 'job_template_name', 'holder_name',
+            'holder_employee_id', 'reports_to', 'created_at', 'updated_at',
+        )
+
+    def validate_title(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Position title is required.')
+        if len(value) > 150:
+            raise serializers.ValidationError('Position title must be under 150 characters.')
+        return value
+
+    def get_reports_to(self, obj: Position) -> dict | None:
+        """Mirrors the mockup's own reportsToName() logic: a chief reports to
+        the parent unit's chief; anyone else reports to their own unit's
+        chief. Purely a computed display value — never a new source of truth
+        for approval routing, which stays on User.reporting_manager."""
+        if obj.is_chief:
+            target = (
+                obj.org_unit.parent.positions.filter(is_chief=True).first()
+                if obj.org_unit.parent else None
+            )
+        else:
+            target = obj.org_unit.positions.filter(is_chief=True).first()
+        if not target or target.pk == obj.pk:
+            return None
+        return {
+            'position_id': str(target.pk),
+            'title': target.title,
+            'holder_name': target.holder.full_name if target.holder else None,
+        }
+
+    def _unset_other_chiefs(self, instance: Position) -> None:
+        if instance.is_chief:
+            Position.objects.filter(org_unit=instance.org_unit).exclude(pk=instance.pk).update(is_chief=False)
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        self._unset_other_chiefs(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        self._unset_other_chiefs(instance)
+        return instance
 
     def validate(self, attrs: dict) -> dict:
         name = attrs.get('name', getattr(self.instance, 'name', None))
