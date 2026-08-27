@@ -5069,12 +5069,25 @@ User asked to start Phase 3 (retiring `Department`/`Designation`) after being gi
 
 **Verified the priority genuinely holds, not just coincidentally agrees**: the obvious first test (Ananya Rao, whose `User.department` string already happened to match her linked unit's department from §14's earlier dummy-data work) couldn't actually prove which source fired, since both agreed. Re-tested by temporarily pointing her `OrgUnit` at a *different* Department than her legacy string said — `resolve_employee_department()` correctly followed the new Position-derived source, not the string, then restored the original link. Also verified the pure legacy-fallback path with a throwaway employee (real department string, no Position at all) resolving correctly via the old match. Then verified the whole chain live through the actual API, not just the helper in isolation: created a real separation request for an employee with a linked Department+manager, confirmed the Manager approval stage resolved to the right person, then deleted the test request afterward (unlike the session's dummy Org Structure data, a fake pending resignation isn't something worth leaving behind). Full `apps.accounts` + `apps.hrms` suites (41 tests) re-run clean — same one pre-existing, unrelated `PasswordResetFlowTests` failure, nothing new. `tsc --noEmit`/`eslint` clean.
 
-**Deliberately not built this pass — staged as Phase 3's remaining work**:
-- Stage 2: apply the same `resolve_employee_department()`-preferring pattern to leave-policy eligibility (`applicable_departments`/`applicable_designations`, live in `hrms/views/leave.py` at 3 call sites plus the annual `reset_annual_leave_balances` Celery task) — a JSON-list-of-strings model, not a drop-in swap like separation was.
+**Stage 2 done same session, immediately after** (see below) — Stages 3–6 remain:
 - Stage 3: `announcements` already has a real `target_department` FK — re-point its recipient-resolution bridge (`notifications/signals.py`, `announcements/tasks.py`) to also consider Position-derived membership.
 - Stage 4: payroll display, attendance dashboards/filters, `dashboard/views/{overview,people}.py` headcount widgets — ~8 lower-risk, read-only display/filter files.
 - Stage 5: frontend unification — the still-missing shared `types/department.ts`/`designation.ts`, then the ~30 consuming files in logical groups.
-- Stage 6 (only after 2–5 are verified): the actual data migration (every `Department` → `OrgUnit` link, every employee backfilled onto a `Position`/`Placement`), then remove Settings → Departments, retire `Department`/`Designation`, rename the nav item "Organisation Chart" → "Organization Management" per the spec's final instruction.
+- Stage 6 (only after 3–5 are verified): the actual data migration (every `Department` → `OrgUnit` link, every employee backfilled onto a `Position`/`Placement`), then remove Settings → Departments, retire `Department`/`Designation`, rename the nav item "Organisation Chart" → "Organization Management" per the spec's final instruction.
+
+---
+
+## 18. Phase 3, Stage 2 — Leave-Policy Eligibility Bridged the Same Way
+
+**Files:** `backend/apps/accounts/services_approval.py`, `backend/apps/hrms/{views/leave,tasks}.py`
+
+Turned out simpler than §17 flagged it would be. `LeavePolicy.applicable_departments` is a `JSONField` list of plain **Department name strings** — the exact same shape `resolve_employee_department()` already compares against for the legacy fallback — so this wasn't the "real shape change" §17 worried about; it just needed a name-returning sibling of that function.
+
+**New `resolve_employee_department_name(employee)`** — deliberately does **not** just call `resolve_employee_department(employee).name`. That function re-validates the legacy string against the real `Department` table and returns `None` if nothing matches — which would have silently changed eligibility for any employee whose `department` string doesn't correspond to a real `Department` row (a known, real possibility per this session's own Piece A note on `User.department` being unvalidated). The 4 call sites being bridged were already comparing the *raw string* directly, with no such validation — so the new helper preserves that: prefers the Position-derived name when a `Placement`→`OrgUnit`→`department` link exists, otherwise returns `employee.department` exactly as-is, untouched. Verified this distinction concretely, not just reasoned about: a throwaway employee with `department='NoSuchDeptXYZ'` (matching no real `Department` row) correctly got back the raw string, not an empty one.
+
+Updated all 4 call sites — `apps/hrms/views/leave.py`'s `_allocate_leaves_for_employee`, `_validate_leave_policy`, `_eligible_for_policy`, and `apps/hrms/tasks.py`'s `reset_annual_leave_balances` — swapping `employee.department` for `resolve_employee_department_name(employee)` (computed once per employee outside any per-policy loop, not re-queried per policy). Deliberately preserved each function's own pre-existing null-handling quirk exactly as found rather than "fixing" it in passing — `_validate_leave_policy` already treated "no department" as *eligible* (permissive) while the other two treat it as *not eligible* (restrictive); that inconsistency predates this change and is out of scope here.
+
+Verified live: created a real `LeavePolicy` restricted to `applicable_departments=['SAP Consulting & Delivery']`, confirmed an employee with a Position in that (linked) unit resolves eligible via the new source, and an employee in a different linked department resolves ineligible — then deleted the test policy. Full `apps.accounts` + `apps.hrms` suites (41 tests) re-run clean, same one pre-existing unrelated failure.
 
 ---
 
@@ -5141,6 +5154,8 @@ User asked to start Phase 3 (retiring `Department`/`Designation`) after being gi
 | `backend/apps/accounts/models.py`, `migrations/0110_orgunit_department.py` (new) | `OrgUnit.department` — nullable `ForeignKey('Department')`, the Phase 3 migration bridge |
 | `backend/apps/hrms/{serializers,views/separation,views/separation_workflow}.py` | 3 duplicate `Department.objects.filter(name=employee.department)` lookups consolidated to `resolve_employee_department()` |
 | `frontend/types/orgStructure.ts`, `app/dashboard/org-chart/_components/{OrgStructureClient,OrgDetail}.tsx` | `OrgUnit.department`/`department_name`; Department select on the unit detail view |
+| `backend/apps/accounts/services_approval.py` | New `resolve_employee_department_name()` — string-returning sibling of `resolve_employee_department()`, preserves raw string on fallback |
+| `backend/apps/hrms/{views/leave,tasks}.py` | 4 leave-eligibility call sites bridged to the new Position-derived department source |
 
 ---
 

@@ -45,11 +45,14 @@ def reset_annual_leave_balances(self):
         created_total = 0
         skipped_total = 0
 
+        from apps.accounts.services_approval import resolve_employee_department_name
+
         for employee in active_employees:
             doj           = getattr(employee, 'date_of_joining', None)
             months_served = 0
             if doj:
                 months_served = (today.year - doj.year) * 12 + (today.month - doj.month)
+            emp_dept_name = resolve_employee_department_name(employee)
 
             for policy in policies:
                 if policy.minimum_service_period > 0 and months_served < policy.minimum_service_period:
@@ -61,7 +64,7 @@ def reset_annual_leave_balances(self):
                     continue
 
                 if policy.applicable_departments and (
-                    not employee.department or employee.department not in policy.applicable_departments
+                    not emp_dept_name or emp_dept_name not in policy.applicable_departments
                 ):
                     continue
 

@@ -76,3 +76,34 @@ def resolve_employee_department(employee: 'User') -> 'Department | None':
     if not employee.department:
         return None
     return Department.objects.filter(name=employee.department).first()
+
+
+def resolve_employee_department_name(employee: 'User') -> str:
+    """Best available department NAME for this employee, for callers that
+    compare against a plain string list rather than a Department FK — e.g.
+    LeavePolicy.applicable_departments (a JSON list of Department name
+    strings). Prefers the Position-derived OrgUnit.department link's name,
+    same as resolve_employee_department(); falls back to the raw
+    employee.department string AS-IS otherwise.
+
+    Deliberately does NOT fall back through resolve_employee_department()
+    itself for the legacy case — that function re-validates the string
+    against the Department table and returns None if nothing matches,
+    which would silently change eligibility results for any employee whose
+    department string doesn't correspond to a real Department row (a real,
+    known possibility — see this session's own Piece A note on
+    User.department being an unvalidated free string). The string-list
+    callers this feeds were already comparing the raw string directly and
+    must keep doing so in the fallback case."""
+    from apps.accounts.models import Placement
+
+    today = timezone.localdate()
+    placement = (
+        Placement.objects.filter(employee=employee, effective_from__lte=today)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+        .select_related('position__org_unit__department')
+        .first()
+    )
+    if placement and placement.position.org_unit.department_id:
+        return placement.position.org_unit.department.name
+    return employee.department or ''

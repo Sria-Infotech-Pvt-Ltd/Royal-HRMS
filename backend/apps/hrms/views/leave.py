@@ -236,6 +236,9 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
     except Exception:
         emp_gender = 'all'
 
+    from apps.accounts.services_approval import resolve_employee_department_name
+    emp_dept_name = resolve_employee_department_name(employee)
+
     created_count = 0
 
     for policy in LeavePolicy.objects.filter(is_active=True):
@@ -248,7 +251,7 @@ def _allocate_leaves_for_employee(employee, joining_date=None) -> int:
             continue
 
         if policy.applicable_departments and (
-            not employee.department or employee.department not in policy.applicable_departments
+            not emp_dept_name or emp_dept_name not in policy.applicable_departments
         ):
             continue
 
@@ -421,7 +424,8 @@ def _validate_leave_policy(policy, employee, duration, total_days, start, end, d
         if emp_branch and emp_branch not in policy.applicable_branches:
             return 'You are not eligible for this leave type (branch restriction).'
     if policy.applicable_departments:
-        emp_dept = (getattr(employee, 'department', '') or '').strip()
+        from apps.accounts.services_approval import resolve_employee_department_name
+        emp_dept = (resolve_employee_department_name(employee) or '').strip()
         if emp_dept and emp_dept not in policy.applicable_departments:
             return 'You are not eligible for this leave type (department restriction).'
     if policy.applicable_gender != 'all':
@@ -1267,10 +1271,11 @@ def _eligible_for_policy(employee, policy, today) -> bool:
         not employee.branch or employee.branch not in policy.applicable_branches
     ):
         return False
-    if policy.applicable_departments and (
-        not employee.department or employee.department not in policy.applicable_departments
-    ):
-        return False
+    if policy.applicable_departments:
+        from apps.accounts.services_approval import resolve_employee_department_name
+        emp_dept_name = resolve_employee_department_name(employee)
+        if not emp_dept_name or emp_dept_name not in policy.applicable_departments:
+            return False
     if policy.applicable_designations and (
         not employee.designation or employee.designation not in policy.applicable_designations
     ):
