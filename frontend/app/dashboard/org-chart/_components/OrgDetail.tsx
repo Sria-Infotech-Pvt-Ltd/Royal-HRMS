@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { JobTemplate, OrgUnit, Position } from "@/types/orgStructure";
 import type { Selected } from "./OrgStructureClient";
+import ToggleSwitch from "@/components/ToggleSwitch";
 
 interface Props {
   selected: Selected;
@@ -258,10 +259,14 @@ export default function OrgDetail({
             </select>
           </div>
         </div>
-        <label className="module-check" style={{ marginTop: 4 }}>
-          <input type="checkbox" checked={p.is_chief} disabled={!canEdit} onChange={() => onToggleChief(p)} />
-          <span>This position is the <b>head</b> of {p.org_unit_name}.</span>
-        </label>
+        <div style={{ marginTop: 4 }}>
+          <ToggleSwitch
+            checked={p.is_chief}
+            disabled={!canEdit}
+            onChange={() => onToggleChief(p)}
+            label={<>This position is the <b>head</b> of {p.org_unit_name}.</>}
+          />
+        </div>
       </div>
     );
   }

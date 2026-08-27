@@ -2,6 +2,7 @@
 
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import ToggleSwitch from "@/components/ToggleSwitch";
 import { STATES } from "../_data";
 
 export default function AddressCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
@@ -77,15 +78,14 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange }: Co
         </div>
       </div>
 
-      <label className="module-check mb-16">
-        <input
-          type="checkbox"
+      <div className="mb-16">
+        <ToggleSwitch
           checked={sameAsRegistered}
           disabled={!canEdit}
-          onChange={e => onFieldChange("communication_address_same_as_registered", e.target.checked)}
+          onChange={checked => onFieldChange("communication_address_same_as_registered", checked)}
+          label="Communication address is the same as registered office"
         />
-        <span>Communication address is the same as registered office</span>
-      </label>
+      </div>
 
       {!sameAsRegistered && (
         <>

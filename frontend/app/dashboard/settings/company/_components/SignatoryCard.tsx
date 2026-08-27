@@ -2,6 +2,7 @@
 
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import ToggleSwitch from "@/components/ToggleSwitch";
 
 export default function SignatoryCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
   return (
@@ -53,15 +54,12 @@ export default function SignatoryCard({ form, errors, canEdit, onFieldChange }: 
           {errors.signatory_email && <div className="field-error-msg">{errors.signatory_email}</div>}
         </div>
       </div>
-      <label className="module-check">
-        <input
-          type="checkbox"
-          checked={form.signatory_appears_on_invoices}
-          disabled={!canEdit}
-          onChange={e => onFieldChange("signatory_appears_on_invoices", e.target.checked)}
-        />
-        <span>This signatory&apos;s name appears on issued invoices</span>
-      </label>
+      <ToggleSwitch
+        checked={form.signatory_appears_on_invoices}
+        disabled={!canEdit}
+        onChange={checked => onFieldChange("signatory_appears_on_invoices", checked)}
+        label={<>This signatory&apos;s name appears on issued invoices</>}
+      />
     </ProfileCard>
   );
 }

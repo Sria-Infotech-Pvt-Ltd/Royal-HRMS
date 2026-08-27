@@ -7,6 +7,7 @@ import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
+import ToggleSwitch from "@/components/ToggleSwitch";
 import type { GSTRegistration } from "@/types/company";
 
 interface StateObj {
@@ -44,29 +45,6 @@ function geofenceBadge(branch: Branch): { label: string; cls: string } {
   if (!branch.geofencing_enabled) return { label: "Disabled", cls: "badge-neutral" };
   if (!branch.has_coordinates)    return { label: "No Coordinates", cls: "badge-warn" };
   return { label: "Active", cls: "badge-success" };
-}
-
-function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
-  return (
-    <label style={{ display: "inline-flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-      <span
-        onClick={() => onChange(!checked)}
-        style={{
-          position: "relative", width: "38px", height: "22px", borderRadius: "11px", flexShrink: 0,
-          background: checked ? "var(--primary)" : "var(--outline-v)", transition: "background 0.15s",
-        }}
-      >
-        <span
-          style={{
-            position: "absolute", top: "2px", left: checked ? "18px" : "2px",
-            width: "18px", height: "18px", borderRadius: "50%", background: "#fff",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.3)", transition: "left 0.15s",
-          }}
-        />
-      </span>
-      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--on-bg)" }}>{label}</span>
-    </label>
-  );
 }
 
 function LeaderFields({

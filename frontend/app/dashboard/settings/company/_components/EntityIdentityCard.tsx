@@ -2,6 +2,7 @@
 
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import ToggleSwitch from "@/components/ToggleSwitch";
 import {
   CIN_ENTITY_TYPES, COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
   entityComplianceHint, parseCin, parsePan,
@@ -166,15 +167,14 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
             </div>
           )}
 
-          <label className="module-check mb-16">
-            <input
-              type="checkbox"
+          <div className="mb-16">
+            <ToggleSwitch
               checked={form.is_listed}
               disabled={!canEdit}
-              onChange={e => onFieldChange("is_listed", e.target.checked)}
+              onChange={checked => onFieldChange("is_listed", checked)}
+              label="Publicly listed company"
             />
-            <span>Publicly listed company</span>
-          </label>
+          </div>
         </>
       ) : (
         <>
@@ -209,15 +209,14 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
               placeholder="Employer Identification Number"
             />
           </div>
-          <label className="module-check mb-16">
-            <input
-              type="checkbox"
+          <div className="mb-16">
+            <ToggleSwitch
               checked={form.is_listed}
               disabled={!canEdit}
-              onChange={e => onFieldChange("is_listed", e.target.checked)}
+              onChange={checked => onFieldChange("is_listed", checked)}
+              label="Publicly listed company"
             />
-            <span>Publicly listed company</span>
-          </label>
+          </div>
         </>
       )}
 

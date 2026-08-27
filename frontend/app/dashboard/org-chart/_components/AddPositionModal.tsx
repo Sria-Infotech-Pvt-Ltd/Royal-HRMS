@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import ToggleSwitch from "@/components/ToggleSwitch";
 import type { JobTemplate, OrgUnit, Position, PositionPayload } from "@/types/orgStructure";
 
 interface Props {
@@ -93,10 +94,13 @@ export default function AddPositionModal({ unit, jobs, hasChief, onClose, onCrea
         <input className="field-input" style={{ fontFamily: "monospace" }} value={grade} onChange={e => setGrade(e.target.value)} placeholder="L4" />
       </div>
 
-      <label className="module-check mb-8">
-        <input type="checkbox" checked={isChief} onChange={e => setIsChief(e.target.checked)} />
-        <span>Make this the <b>head</b> of the unit.</span>
-      </label>
+      <div className="mb-8">
+        <ToggleSwitch
+          checked={isChief}
+          onChange={checked => setIsChief(checked)}
+          label={<>Make this the <b>head</b> of the unit.</>}
+        />
+      </div>
       <div style={{ fontSize: 11.5, color: "var(--outline)", marginBottom: 16 }}>
         {hasChief ? "This unit already has a chief; turning this on will replace it." : "This unit has no head yet."}
       </div>
