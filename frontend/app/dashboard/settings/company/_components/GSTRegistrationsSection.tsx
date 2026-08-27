@@ -110,8 +110,8 @@ export default function GSTRegistrationsSection({ canEdit, companyPan }: { canEd
           <table>
             <thead>
               <tr>
-                <th>GSTIN</th>
-                <th>State</th>
+                <th>GSTIN <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>State <span style={{ color: "var(--error)" }}>*</span></th>
                 <th>Type</th>
                 <th>Place of business</th>
                 <th style={{ width: 36 }} />

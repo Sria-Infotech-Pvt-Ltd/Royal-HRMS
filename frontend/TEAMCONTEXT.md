@@ -4964,6 +4964,16 @@ Converted checkboxes: `AddressCard.tsx`'s "Communication address is the same as 
 
 ---
 
+## 12. GST Registrations / Directors Tables Missing Required-Field Markers
+
+**Files:** `frontend/app/dashboard/settings/company/_components/{GSTRegistrationsSection,DirectorsSection}.tsx`
+
+User flagged that some genuinely-required fields on the Company Profile page weren't visually marked required. Audited every field on the page against both `validateCompany()` (`_data.ts`) and the backend `CompanySerializer`/`CompanyGSTRegistrationSerializer`/`CompanyDirectorSerializer` (`apps/accounts/serializers.py`) — every card-style field (`field-label` + red `*`) already matched what's actually enforced. The gap was specific to the two sections rebuilt as inline-editable **tables** during §9 (replacing the old modal-based GST/Director UI): their `<th>` column headers never got the asterisk convention the rest of the page uses, even though `gstin`/`state` (`CompanyGSTRegistration`) and `din`/`name`/`designation` (`CompanyDirector`) are all plain `CharField`s with no `blank=True` on the backend — genuinely required, and each table's own `saveRow()` already silently declines to persist a row until they're filled. Added `*` to those 5 column headers only; `Type`, `Place of business` (has `blank=True`), `registration_type` (has a default, never actually blank client-side) stay unmarked, correctly.
+
+Deliberately did **not** touch the several fields elsewhere on the page that show a `*` but aren't actually enforced by either `validateCompany()` or the backend serializer (e.g. `BankDetailsCard`'s three fields, `SignatoryCard`'s four fields, `RegionalFormatsCard`'s three, `BusinessProfileCard`'s Industry — all soft/UX-only "required" markers today) — that's the opposite direction (over-marked, not under-marked) from what was reported, and fixing it would mean a scope decision (add real validation vs. remove the asterisk) the user didn't ask for here. Worth a follow-up conversation if it comes up again.
+
+---
+
 ## Key Files Changed
 
 | File | Change |
@@ -5005,6 +5015,7 @@ Converted checkboxes: `AddressCard.tsx`'s "Communication address is the same as 
 | `frontend/app/dashboard/branches/_components/BranchManagement.tsx` | Duplicate local `ToggleSwitch` removed, now imports the shared one |
 | `frontend/app/dashboard/settings/company/_components/{AddressCard,SignatoryCard,EntityIdentityCard}.tsx` | 4 checkboxes → `ToggleSwitch` (communication address, signatory-on-invoices, publicly-listed ×2) |
 | `frontend/app/dashboard/org-chart/_components/{OrgDetail,AddPositionModal}.tsx` | `is_chief` checkbox → `ToggleSwitch` in both the position detail pane and the Add Position modal |
+| `frontend/app/dashboard/settings/company/_components/{GSTRegistrationsSection,DirectorsSection}.tsx` | Added `*` to the 5 genuinely-required table column headers (GSTIN, State, DIN/Director ID, Name, Designation) |
 
 ---
 
@@ -5025,3 +5036,4 @@ Converted checkboxes: `AddressCard.tsx`'s "Communication address is the same as 
 - **The old branch-grouped Org Chart (`Department.manager`/`User.reporting_manager`/`User.department`-derived) is completely gone** — §10 replaces it with a real `OrgUnit`/`Position` hierarchy at the same route. If a future ask is "show me who reports to whom operationally" rather than "show me the formal structure," that's still `User.reporting_manager` (unaffected, still driving real approval routing) — don't assume the new Org Structure page is now the place to look for that; it's a separate, admin-curated view that can drift from actual reporting lines if nobody keeps it updated.
 - **`JobTemplate` has no create/edit/delete endpoint on purpose** — v1 only exposes `GET /org-structure/job-templates/` for the Add Position dropdown, seeded once via migration 0101 (9 rows, matching the mockup's own list). If someone needs a job template that isn't in that seeded list, there's currently no UI or API to add one — would need a new `JobTemplateListCreateView`-style endpoint plus permission wiring, deliberately deferred since the mockup itself never showed an "add job" flow.
 - **`OrgUnit.parent` is `on_delete=PROTECT`** — deleting a unit that still has sub-units raises at the DB level if the view-level check (409, "has sub-units") is ever bypassed (e.g. a future bulk-delete script). This is intentional defense-in-depth, not a bug — confirmed directly while writing this session's own cleanup script for test data, which had to delete leaf-first.
+- **Several `*` "required" markers on the Company Profile page are cosmetic only — not backed by real validation on either side** (§12): `BankDetailsCard`'s Account Holder/Account Number/IFSC, `SignatoryCard`'s all four fields, `RegionalFormatsCard`'s Currency/Date Format/Time Zone, `BusinessProfileCard`'s Industry, `ContactBrandingCard`'s Primary Email, and `AddressCard`'s State/PIN. `validateCompany()` (`_data.ts`) and the backend `CompanySerializer.validate()` agree with each other on what's truly required — neither enforces these. Left as-is in §12 since fixing it means picking a direction (wire up real validation, or drop the asterisk) that wasn't asked for; flag it back to the user before touching it.

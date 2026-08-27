@@ -98,9 +98,9 @@ export default function DirectorsSection({ canEdit, dinLabel }: { canEdit: boole
           <table>
             <thead>
               <tr>
-                <th>{dinLabel}</th>
-                <th>Name</th>
-                <th>Designation</th>
+                <th>{dinLabel} <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>Name <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>Designation <span style={{ color: "var(--error)" }}>*</span></th>
                 <th style={{ width: 36 }} />
               </tr>
             </thead>
