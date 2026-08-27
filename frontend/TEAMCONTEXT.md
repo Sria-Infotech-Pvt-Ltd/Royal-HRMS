@@ -5069,11 +5069,10 @@ User asked to start Phase 3 (retiring `Department`/`Designation`) after being gi
 
 **Verified the priority genuinely holds, not just coincidentally agrees**: the obvious first test (Ananya Rao, whose `User.department` string already happened to match her linked unit's department from §14's earlier dummy-data work) couldn't actually prove which source fired, since both agreed. Re-tested by temporarily pointing her `OrgUnit` at a *different* Department than her legacy string said — `resolve_employee_department()` correctly followed the new Position-derived source, not the string, then restored the original link. Also verified the pure legacy-fallback path with a throwaway employee (real department string, no Position at all) resolving correctly via the old match. Then verified the whole chain live through the actual API, not just the helper in isolation: created a real separation request for an employee with a linked Department+manager, confirmed the Manager approval stage resolved to the right person, then deleted the test request afterward (unlike the session's dummy Org Structure data, a fake pending resignation isn't something worth leaving behind). Full `apps.accounts` + `apps.hrms` suites (41 tests) re-run clean — same one pre-existing, unrelated `PasswordResetFlowTests` failure, nothing new. `tsc --noEmit`/`eslint` clean.
 
-**Stage 2 done same session, immediately after** (see below) — Stages 3–6 remain:
-- Stage 3: `announcements` already has a real `target_department` FK — re-point its recipient-resolution bridge (`notifications/signals.py`, `announcements/tasks.py`) to also consider Position-derived membership.
+**Stages 2 and 3 done same session, immediately after** (see §18/§19 below) — Stages 4–6 remain:
 - Stage 4: payroll display, attendance dashboards/filters, `dashboard/views/{overview,people}.py` headcount widgets — ~8 lower-risk, read-only display/filter files.
 - Stage 5: frontend unification — the still-missing shared `types/department.ts`/`designation.ts`, then the ~30 consuming files in logical groups.
-- Stage 6 (only after 3–5 are verified): the actual data migration (every `Department` → `OrgUnit` link, every employee backfilled onto a `Position`/`Placement`), then remove Settings → Departments, retire `Department`/`Designation`, rename the nav item "Organisation Chart" → "Organization Management" per the spec's final instruction.
+- Stage 6 (only after 4–5 are verified): the actual data migration (every `Department` → `OrgUnit` link, every employee backfilled onto a `Position`/`Placement`), then remove Settings → Departments, retire `Department`/`Designation`, rename the nav item "Organisation Chart" → "Organization Management" per the spec's final instruction.
 
 ---
 
@@ -5088,6 +5087,20 @@ Turned out simpler than §17 flagged it would be. `LeavePolicy.applicable_depart
 Updated all 4 call sites — `apps/hrms/views/leave.py`'s `_allocate_leaves_for_employee`, `_validate_leave_policy`, `_eligible_for_policy`, and `apps/hrms/tasks.py`'s `reset_annual_leave_balances` — swapping `employee.department` for `resolve_employee_department_name(employee)` (computed once per employee outside any per-policy loop, not re-queried per policy). Deliberately preserved each function's own pre-existing null-handling quirk exactly as found rather than "fixing" it in passing — `_validate_leave_policy` already treated "no department" as *eligible* (permissive) while the other two treat it as *not eligible* (restrictive); that inconsistency predates this change and is out of scope here.
 
 Verified live: created a real `LeavePolicy` restricted to `applicable_departments=['SAP Consulting & Delivery']`, confirmed an employee with a Position in that (linked) unit resolves eligible via the new source, and an employee in a different linked department resolves ineligible — then deleted the test policy. Full `apps.accounts` + `apps.hrms` suites (41 tests) re-run clean, same one pre-existing unrelated failure.
+
+---
+
+## 19. Phase 3, Stage 3 — Announcements Bridged (Both Directions)
+
+**Files:** `backend/apps/accounts/services_approval.py`, `backend/apps/notifications/signals.py`, `backend/apps/announcements/{tasks,views}.py`
+
+Announcements needed a genuinely different helper shape than §17/§18 — those both resolve *one employee's* department (`resolve_employee_department[_name](employee)`). Announcements need the reverse: *given a department, who are its members* — for recipient resolution (in-app notification fan-out, email delivery). New **`filter_users_by_department(users_qs, department)`** narrows a `User` queryset to members via either source: current `Placement`→`Position`→`OrgUnit.department` (new) unioned with the legacy exact-string match (`Q(id__in=position_user_ids) | Q(department=department.name)`), de-duplicated.
+
+Four real call sites, two different directions:
+- **Recipient resolution** (`notifications/signals.py`'s `_on_announcement_save`, `announcements/tasks.py`'s `_resolve_recipients`) — both now call `filter_users_by_department()` on the "who should receive this" queryset.
+- **Visibility check** ("can *this* user see this announcement" — `announcements/views.py`'s `_visible_qs()` and `AnnouncementReactView.post()`, both previously hardcoded `target_department__name=request.user.department`) — these are the single-employee direction, so they reuse §18's `resolve_employee_department_name(request.user)` instead of a new helper.
+
+Verified live: created a real department-visibility `Announcement`, confirmed `_resolve_recipients()` returned exactly the 4 Position-placed employees in that department (not zero, not everyone), confirmed `_visible_qs()` correctly includes it for a member (resolved via the new source, not a matching legacy string this time — a genuinely different employee combination than §17's test) and excludes it for a non-member — then deleted the test announcement. Full `apps.accounts`+`apps.hrms`+`apps.announcements`+`apps.notifications` suite re-run clean on a second pass (a `django.db.utils.InterfaceError: connection already closed` on the first pass was a transient Neon pooler timeout on this long-running suite, not a regression — same one pre-existing `PasswordResetFlowTests` failure both times, nothing new; `apps.announcements`/`apps.notifications` contribute no tests of their own, confirmed by the unchanged 41-test count).
 
 ---
 
@@ -5156,6 +5169,8 @@ Verified live: created a real `LeavePolicy` restricted to `applicable_department
 | `frontend/types/orgStructure.ts`, `app/dashboard/org-chart/_components/{OrgStructureClient,OrgDetail}.tsx` | `OrgUnit.department`/`department_name`; Department select on the unit detail view |
 | `backend/apps/accounts/services_approval.py` | New `resolve_employee_department_name()` — string-returning sibling of `resolve_employee_department()`, preserves raw string on fallback |
 | `backend/apps/hrms/{views/leave,tasks}.py` | 4 leave-eligibility call sites bridged to the new Position-derived department source |
+| `backend/apps/accounts/services_approval.py` | New `filter_users_by_department()` — reverse-direction (department → members) queryset helper |
+| `backend/apps/notifications/signals.py`, `apps/announcements/{tasks,views}.py` | 4 call sites bridged — 2 recipient-resolution (new helper), 2 per-user visibility (`resolve_employee_department_name`) |
 
 ---
 

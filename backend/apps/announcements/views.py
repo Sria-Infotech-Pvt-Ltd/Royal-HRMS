@@ -72,10 +72,11 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
     if _has_perm(request.user, 'announcements.edit'):
         qs = Announcement.objects.all()
     else:
+        from apps.accounts.services_approval import resolve_employee_department_name
         qs = Announcement.objects.filter(
             Q(visibility=Announcement.VISIBILITY_ALL)
             | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                target_department__name=request.user.department)
+                target_department__name=resolve_employee_department_name(request.user))
             | Q(visibility=Announcement.VISIBILITY_BRANCH,
                 target_branch__branch_name=request.user.branch)
         )
@@ -308,11 +309,12 @@ class AnnouncementReactView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk: int):
+        from apps.accounts.services_approval import resolve_employee_department_name
         announcement = get_object_or_404(
             Announcement.objects.filter(
                 Q(visibility=Announcement.VISIBILITY_ALL)
                 | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                    target_department__name=request.user.department)
+                    target_department__name=resolve_employee_department_name(request.user))
                 | Q(visibility=Announcement.VISIBILITY_BRANCH,
                     target_branch__branch_name=request.user.branch)
             ) if not _has_perm(request.user, 'announcements.edit')

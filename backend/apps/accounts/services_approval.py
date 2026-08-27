@@ -107,3 +107,23 @@ def resolve_employee_department_name(employee: 'User') -> str:
     if placement and placement.position.org_unit.department_id:
         return placement.position.org_unit.department.name
     return employee.department or ''
+
+
+def filter_users_by_department(users_qs, department: 'Department'):
+    """Narrow a User queryset to only members of `department` — the
+    reverse direction of resolve_employee_department() (that resolves ONE
+    employee's department; this finds every User belonging to a GIVEN
+    department, for recipient-resolution callers like announcement
+    delivery). Includes both the Position-derived membership (current
+    Placement -> Position -> OrgUnit.department) and the legacy exact
+    string match, since not every employee has been placed on a Position
+    yet and both sets of members should be reachable."""
+    from apps.accounts.models import Placement
+
+    today = timezone.localdate()
+    position_user_ids = (
+        Placement.objects.filter(effective_from__lte=today, position__org_unit__department=department)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+        .values_list('employee_id', flat=True)
+    )
+    return users_qs.filter(Q(id__in=position_user_ids) | Q(department=department.name)).distinct()

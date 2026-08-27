@@ -30,10 +30,9 @@ def _resolve_recipients(announcement) -> list[str]:
             email=''
         ).values_list('email', flat=True))
     if announcement.visibility == Announcement.VISIBILITY_DEPARTMENT and announcement.target_department_id:
-        return list(User.objects.filter(
-            is_active=True,
-            department=announcement.target_department.name,
-        ).exclude(email='').values_list('email', flat=True))
+        from apps.accounts.services_approval import filter_users_by_department
+        users = filter_users_by_department(User.objects.filter(is_active=True), announcement.target_department)
+        return list(users.exclude(email='').values_list('email', flat=True))
     if announcement.visibility == Announcement.VISIBILITY_BRANCH and announcement.target_branch_id:
         return list(User.objects.filter(
             is_active=True,
