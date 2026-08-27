@@ -114,14 +114,24 @@ class PunchServiceTests(TestCase):
         _login(self.client, 'puncher@test.com')
 
     def _punch(self, **overrides):
-        payload = {'punch_type': 'IN', 'attendance_mode': 'wfh'}
+        # 'office', not 'wfh' — most of this class tests double-clock-in/out
+        # logic that's mode-agnostic, and this employee has no real Branch
+        # row resolvable from their branch string, so 'office' mode no-ops
+        # (unassigned → allowed) rather than requiring an approved
+        # WorkFromHomeRequest.
+        payload = {'punch_type': 'IN', 'attendance_mode': 'office'}
         payload.update(overrides)
         return self.client.post(reverse('attendance-punch'), payload, format='json')
 
-    def test_clock_in_succeeds_in_wfh_mode_without_gps(self):
-        resp = self._punch(punch_type='IN')
-        self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertTrue(
+    def test_wfh_clock_in_without_approved_request_is_rejected(self):
+        # Replaces an older test asserting the opposite (WFH succeeded
+        # unconditionally, even with no GPS) — see services_geofencing.
+        # _validate_wfh's own docstring: that unconditional-success behavior
+        # was the exact gap a later WFH-approval feature deliberately closed.
+        resp = self._punch(punch_type='IN', attendance_mode='wfh')
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self.assertIn('approved work-from-home request', resp.data['message'].lower())
+        self.assertFalse(
             AttendancePunch.objects.filter(
                 employee=self.employee, punch_type=AttendancePunch.PUNCH_IN,
             ).exists()
@@ -255,11 +265,14 @@ class AttendanceGeofenceCheckViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertIn('location is required', resp.data['message'].lower())
 
-    def test_wfh_mode_does_not_require_gps(self):
+    def test_wfh_mode_without_approved_request_is_rejected(self):
+        # Replaces an older test asserting WFH mode never needed GPS at
+        # all — see PunchServiceTests.test_wfh_clock_in_without_approved_
+        # request_is_rejected for the same fix and the reasoning behind it.
         resp = self.client.post(
             reverse('attendance-geofence-check'),
             {'attendance_mode': 'wfh'},
             format='json',
         )
-        self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertTrue(resp.data['data']['is_allowed'])
+        self.assertEqual(resp.status_code, 403, resp.data)
+        self.assertIn('approved work-from-home request', resp.data['message'].lower())
