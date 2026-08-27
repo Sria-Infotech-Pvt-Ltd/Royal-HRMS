@@ -59,9 +59,15 @@ export interface CompanyData {
   city: string;
   state: string;
   pin_code: string;
+  communication_address_same_as_registered: boolean;
+  communication_address: string;
+  communication_city: string;
+  communication_state: string;
+  communication_pin_code: string;
   default_currency: string;
   date_format: string;
   timezone: string;
+  financial_year_start_month: MonthName;
   primary_email: string;
   website: string;
   official_phone: string;

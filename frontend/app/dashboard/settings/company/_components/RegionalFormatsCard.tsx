@@ -1,17 +1,15 @@
 "use client";
 
 import type { CompanySectionProps } from "@/types/company";
+import ProfileCard from "./ProfileCard";
 import { CURRENCY_OPTIONS, DATE_FORMAT_OPTIONS, TIMEZONE_OPTIONS } from "../_data";
 
 export default function RegionalFormatsCard({ form, canEdit, onFieldChange }: CompanySectionProps) {
   return (
-    <div className="card mb-24">
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-world" /> Regional &amp; Formats</div>
-      </div>
-      <div className="form-row cols-3" style={{ padding: "20px 24px" }}>
+    <ProfileCard icon="ti-world" title="Regional & formats" subtitle="How amounts, dates, and times display across the app and on documents.">
+      <div className="form-row cols-3 mb-8">
         <div className="field-group">
-          <label className="field-label">Default Currency</label>
+          <label className="field-label">Default Currency <span style={{ color: "var(--error)" }}>*</span></label>
           <select
             className="field-input"
             value={form.default_currency}
@@ -22,7 +20,7 @@ export default function RegionalFormatsCard({ form, canEdit, onFieldChange }: Co
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Date Format</label>
+          <label className="field-label">Date Format <span style={{ color: "var(--error)" }}>*</span></label>
           <select
             className="field-input"
             value={form.date_format}
@@ -33,7 +31,7 @@ export default function RegionalFormatsCard({ form, canEdit, onFieldChange }: Co
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">Timezone</label>
+          <label className="field-label">Time Zone <span style={{ color: "var(--error)" }}>*</span></label>
           <select
             className="field-input"
             value={form.timezone}
@@ -44,6 +42,9 @@ export default function RegionalFormatsCard({ form, canEdit, onFieldChange }: Co
           </select>
         </div>
       </div>
-    </div>
+      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
+        Defaults follow the jurisdiction and country above. Override any of them if your reporting needs differ.
+      </div>
+    </ProfileCard>
   );
 }

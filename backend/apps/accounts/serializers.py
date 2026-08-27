@@ -565,6 +565,13 @@ def _gstin_pan_mismatch_error(gstin: str, pan: str) -> str | None:
 
 class CompanySerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField(read_only=True)
+    # Write-only, never persisted (popped in validate()) — when true, skips
+    # the cross-field "required for this jurisdiction/entity type" checks
+    # below so an in-progress profile can be saved without being complete.
+    # Field-level validators (company_name/address/city) also read it via
+    # self.initial_data, since is_draft itself isn't available yet when
+    # those individual field validators run.
+    is_draft = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model  = Company
@@ -579,11 +586,28 @@ class CompanySerializer(serializers.ModelSerializer):
             'bank_account_holder', 'bank_account_number', 'bank_ifsc', 'bank_account_type',
             'industry', 'nic_code', 'nature_of_business',
             'address', 'city', 'state', 'pin_code',
-            'default_currency', 'date_format', 'timezone',
+            'communication_address_same_as_registered', 'communication_address',
+            'communication_city', 'communication_state', 'communication_pin_code',
+            'default_currency', 'date_format', 'timezone', 'financial_year_start_month',
             'primary_email', 'website', 'official_phone', 'portal_url', 'updated_at',
+            'is_draft',
         ]
         read_only_fields = ['id', 'updated_at', 'logo_url']
-        extra_kwargs     = {'logo': {'required': False, 'allow_null': True}}
+        extra_kwargs     = {
+            'logo': {'required': False, 'allow_null': True},
+            # DRF's own CharField(allow_blank=False) — the default for a
+            # non-blank=True model field — rejects an empty string before
+            # validate_company_name/address/city ever runs, which is what
+            # actually enforces "required unless is_draft". allow_blank=True
+            # here just moves the blank-check into those methods instead.
+            'company_name': {'allow_blank': True},
+            'address':      {'allow_blank': True},
+            'city':         {'allow_blank': True},
+        }
+
+    def _is_draft_request(self) -> bool:
+        raw = self.initial_data.get('is_draft', False) if hasattr(self, 'initial_data') else False
+        return str(raw).strip().lower() in ('true', '1', 'yes')
 
     def get_logo_url(self, obj: Company) -> str | None:
         if not obj.logo:
@@ -593,7 +617,7 @@ class CompanySerializer(serializers.ModelSerializer):
 
     def validate_company_name(self, value: str) -> str:
         value = value.strip()
-        if not value:
+        if not value and not self._is_draft_request():
             raise serializers.ValidationError('Company name is required.')
         if len(value) > 255:
             raise serializers.ValidationError('Company name must be 255 characters or fewer.')
@@ -602,18 +626,18 @@ class CompanySerializer(serializers.ModelSerializer):
     def validate_address(self, value: str) -> str:
         if value is not None:
             value = value.strip()
-        if not value:
+        if not value and not self._is_draft_request():
             raise serializers.ValidationError('Company address is required.')
-        if len(value) > 500:
+        if value and len(value) > 500:
             raise serializers.ValidationError('Address must be 500 characters or fewer.')
         return value
 
     def validate_city(self, value: str) -> str:
         if value is not None:
             value = value.strip()
-        if not value:
+        if not value and not self._is_draft_request():
             raise serializers.ValidationError('City is required.')
-        if len(value) > 100:
+        if value and len(value) > 100:
             raise serializers.ValidationError('City must be 100 characters or fewer.')
         return value
 
@@ -650,6 +674,14 @@ class CompanySerializer(serializers.ModelSerializer):
         return v
 
     def validate_pin_code(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip()
+        if not _PIN_RE.match(v):
+            raise serializers.ValidationError('PIN code must be exactly 6 digits.')
+        return v
+
+    def validate_communication_pin_code(self, value: str) -> str:
         if not value:
             return value
         v = value.strip()
@@ -698,25 +730,41 @@ class CompanySerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        # Never persisted — read above in the field-level validators via
+        # self.initial_data, popped here so it never reaches .save().
+        is_draft = attrs.pop('is_draft', False)
+
         def _val(field):
             return attrs.get(field, getattr(self.instance, field, ''))
 
-        jurisdiction = _val('jurisdiction') or Company.JURISDICTION_INDIA
-        entity_type  = _val('entity_type')
         errors: dict[str, str] = {}
 
-        if jurisdiction == Company.JURISDICTION_INDIA:
-            if not _val('pan'):
-                errors['pan'] = 'PAN is required for an Indian entity.'
-            if not _val('tan'):
-                errors['tan'] = 'TAN is required for an Indian entity.'
-            if entity_type in _CIN_ENTITY_TYPES and not _val('cin'):
-                errors['cin'] = 'CIN is required for this entity type.'
-        else:
-            if not _val('country_of_registration'):
-                errors['country_of_registration'] = 'Country of registration is required for a foreign entity.'
-            if not _val('registration_number'):
-                errors['registration_number'] = 'Registration number is required for a foreign entity.'
+        comm_same = attrs.get(
+            'communication_address_same_as_registered',
+            getattr(self.instance, 'communication_address_same_as_registered', True),
+        )
+        if not comm_same and not is_draft:
+            if not _val('communication_address'):
+                errors['communication_address'] = 'Communication address is required when it differs from the registered office.'
+            if not _val('communication_city'):
+                errors['communication_city'] = 'Communication city is required when it differs from the registered office.'
+
+        if not is_draft:
+            jurisdiction = _val('jurisdiction') or Company.JURISDICTION_INDIA
+            entity_type  = _val('entity_type')
+
+            if jurisdiction == Company.JURISDICTION_INDIA:
+                if not _val('pan'):
+                    errors['pan'] = 'PAN is required for an Indian entity.'
+                if not _val('tan'):
+                    errors['tan'] = 'TAN is required for an Indian entity.'
+                if entity_type in _CIN_ENTITY_TYPES and not _val('cin'):
+                    errors['cin'] = 'CIN is required for this entity type.'
+            else:
+                if not _val('country_of_registration'):
+                    errors['country_of_registration'] = 'Country of registration is required for a foreign entity.'
+                if not _val('registration_number'):
+                    errors['registration_number'] = 'Registration number is required for a foreign entity.'
 
         if errors:
             raise serializers.ValidationError(errors)

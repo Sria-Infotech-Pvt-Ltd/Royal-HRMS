@@ -1,78 +1,155 @@
 "use client";
 
 import type { CompanySectionProps } from "@/types/company";
+import ProfileCard from "./ProfileCard";
 import { STATES } from "../_data";
 
 export default function AddressCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
+  const isIndia = form.jurisdiction === "india";
+  const sameAsRegistered = form.communication_address_same_as_registered;
+
   return (
-    <div className="card mb-24">
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-map-pin" /> Registered Address</div>
+    <ProfileCard
+      icon="ti-map-pin"
+      title="Registered office"
+      subtitle={isIndia ? "The statutory address on record. Must be in India." : "The registered address in the company's home country."}
+    >
+      <div className="field-group mb-16">
+        <label className="field-label">Address Line 1 <span style={{ color: "var(--error)" }}>*</span></label>
+        <textarea
+          className={`field-input${errors.address ? " field-error" : ""}`}
+          value={form.address}
+          disabled={!canEdit}
+          onChange={e => onFieldChange("address", e.target.value)}
+          placeholder="Street address, building, floor…"
+          rows={2}
+        />
+        {errors.address && <div className="field-error-msg">{errors.address}</div>}
       </div>
-      <div style={{ padding: "20px 24px" }}>
-        <div className="field-group mb-16">
-          <label className="field-label">Address <span style={{ color: "var(--error)" }}>*</span></label>
-          <textarea
-            className={`field-input${errors.address ? " field-error" : ""}`}
-            value={form.address}
+      <div className="form-row cols-3 mb-16">
+        <div className="field-group">
+          <label className="field-label">City <span style={{ color: "var(--error)" }}>*</span></label>
+          <input
+            className={`field-input${errors.city ? " field-error" : ""}`}
+            value={form.city}
             disabled={!canEdit}
-            onChange={e => onFieldChange("address", e.target.value)}
-            placeholder="Street address, building, floor…"
-            rows={2}
+            onChange={e => onFieldChange("city", e.target.value)}
+            placeholder="Hyderabad"
           />
-          {errors.address && <div className="field-error-msg">{errors.address}</div>}
+          {errors.city && <div className="field-error-msg">{errors.city}</div>}
         </div>
-        <div className="form-row cols-3">
-          <div className="field-group">
-            <label className="field-label">City <span style={{ color: "var(--error)" }}>*</span></label>
-            <input
-              className={`field-input${errors.city ? " field-error" : ""}`}
-              value={form.city}
+        <div className="field-group">
+          <label className="field-label">State <span style={{ color: "var(--error)" }}>*</span></label>
+          {isIndia ? (
+            <select
+              className="field-input"
+              value={form.state}
               disabled={!canEdit}
-              onChange={e => onFieldChange("city", e.target.value)}
-              placeholder="Mumbai"
+              onChange={e => onFieldChange("state", e.target.value)}
+            >
+              <option value="">Select…</option>
+              {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          ) : (
+            <input
+              className="field-input"
+              value={form.state}
+              disabled={!canEdit}
+              onChange={e => onFieldChange("state", e.target.value)}
+              placeholder="State / Province"
             />
-            {errors.city && <div className="field-error-msg">{errors.city}</div>}
-          </div>
-          <div className="field-group">
-            <label className="field-label">State / UT</label>
-            {form.jurisdiction === "india" ? (
-              <select
-                className="field-input"
-                value={form.state}
-                disabled={!canEdit}
-                onChange={e => onFieldChange("state", e.target.value)}
-              >
-                <option value="">Select…</option>
-                {STATES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            ) : (
-              <input
-                className="field-input"
-                value={form.state}
-                disabled={!canEdit}
-                onChange={e => onFieldChange("state", e.target.value)}
-                placeholder="State / Province"
-              />
+          )}
+        </div>
+        <div className="field-group">
+          <label className="field-label">PIN <span style={{ color: "var(--error)" }}>*</span></label>
+          <input
+            className={`field-input${errors.pin_code ? " field-error" : ""}`}
+            value={form.pin_code}
+            disabled={!canEdit}
+            onChange={e => onFieldChange(
+              "pin_code",
+              isIndia ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value,
             )}
-          </div>
-          <div className="field-group">
-            <label className="field-label">PIN / Postal Code</label>
-            <input
-              className={`field-input${errors.pin_code ? " field-error" : ""}`}
-              value={form.pin_code}
-              disabled={!canEdit}
-              onChange={e => onFieldChange(
-                "pin_code",
-                form.jurisdiction === "india" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value,
-              )}
-              placeholder={form.jurisdiction === "india" ? "400001" : "Postal code"}
-              maxLength={form.jurisdiction === "india" ? 6 : 12}
-            />
-            {errors.pin_code && <div className="field-error-msg">{errors.pin_code}</div>}
-          </div>
+            placeholder={isIndia ? "500081" : "Postal code"}
+            maxLength={isIndia ? 6 : 12}
+          />
+          {errors.pin_code && <div className="field-error-msg">{errors.pin_code}</div>}
         </div>
       </div>
-    </div>
+
+      <label className="module-check mb-16">
+        <input
+          type="checkbox"
+          checked={sameAsRegistered}
+          disabled={!canEdit}
+          onChange={e => onFieldChange("communication_address_same_as_registered", e.target.checked)}
+        />
+        <span>Communication address is the same as registered office</span>
+      </label>
+
+      {!sameAsRegistered && (
+        <>
+          <div className="field-group mb-16">
+            <label className="field-label">Communication Address <span style={{ color: "var(--error)" }}>*</span></label>
+            <textarea
+              className={`field-input${errors.communication_address ? " field-error" : ""}`}
+              value={form.communication_address}
+              disabled={!canEdit}
+              onChange={e => onFieldChange("communication_address", e.target.value)}
+              placeholder="Street address, building, floor…"
+              rows={2}
+            />
+            {errors.communication_address && <div className="field-error-msg">{errors.communication_address}</div>}
+          </div>
+          <div className="form-row cols-3">
+            <div className="field-group">
+              <label className="field-label">City <span style={{ color: "var(--error)" }}>*</span></label>
+              <input
+                className={`field-input${errors.communication_city ? " field-error" : ""}`}
+                value={form.communication_city}
+                disabled={!canEdit}
+                onChange={e => onFieldChange("communication_city", e.target.value)}
+              />
+              {errors.communication_city && <div className="field-error-msg">{errors.communication_city}</div>}
+            </div>
+            <div className="field-group">
+              <label className="field-label">State</label>
+              {isIndia ? (
+                <select
+                  className="field-input"
+                  value={form.communication_state}
+                  disabled={!canEdit}
+                  onChange={e => onFieldChange("communication_state", e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : (
+                <input
+                  className="field-input"
+                  value={form.communication_state}
+                  disabled={!canEdit}
+                  onChange={e => onFieldChange("communication_state", e.target.value)}
+                />
+              )}
+            </div>
+            <div className="field-group">
+              <label className="field-label">PIN</label>
+              <input
+                className={`field-input${errors.communication_pin_code ? " field-error" : ""}`}
+                value={form.communication_pin_code}
+                disabled={!canEdit}
+                onChange={e => onFieldChange(
+                  "communication_pin_code",
+                  isIndia ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value,
+                )}
+                maxLength={isIndia ? 6 : 12}
+              />
+              {errors.communication_pin_code && <div className="field-error-msg">{errors.communication_pin_code}</div>}
+            </div>
+          </div>
+        </>
+      )}
+    </ProfileCard>
   );
 }

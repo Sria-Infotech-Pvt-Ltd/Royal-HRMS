@@ -1,17 +1,17 @@
 "use client";
 
 import type { CompanySectionProps } from "@/types/company";
-import { BANK_ACCOUNT_TYPE_OPTIONS } from "../_data";
+import ProfileCard from "./ProfileCard";
+import { BANK_ACCOUNT_TYPE_OPTIONS, resolveIfsc } from "../_data";
 
 export default function BankDetailsCard({ form, canEdit, onFieldChange }: CompanySectionProps) {
+  const ifsc = resolveIfsc(form.bank_ifsc);
+
   return (
-    <div className="card mb-24">
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-building-bank" /> Bank Details</div>
-      </div>
-      <div className="form-row cols-2" style={{ padding: "20px 24px" }}>
+    <ProfileCard icon="ti-building-bank" title="Bank details" subtitle="Used for payouts and on invoices. IFSC resolves bank and branch.">
+      <div className="form-row cols-2">
         <div className="field-group">
-          <label className="field-label">Account Holder Name</label>
+          <label className="field-label">Account Holder <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             className="field-input"
             value={form.bank_account_holder}
@@ -20,7 +20,7 @@ export default function BankDetailsCard({ form, canEdit, onFieldChange }: Compan
           />
         </div>
         <div className="field-group">
-          <label className="field-label">Account Number</label>
+          <label className="field-label">Account Number <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             className="field-input"
             value={form.bank_account_number}
@@ -29,7 +29,7 @@ export default function BankDetailsCard({ form, canEdit, onFieldChange }: Compan
           />
         </div>
         <div className="field-group">
-          <label className="field-label">IFSC Code</label>
+          <label className="field-label">IFSC <span style={{ color: "var(--error)" }}>*</span></label>
           <input
             className="field-input"
             value={form.bank_ifsc}
@@ -51,6 +51,24 @@ export default function BankDetailsCard({ form, canEdit, onFieldChange }: Compan
           </select>
         </div>
       </div>
-    </div>
+      {ifsc && (
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <div style={{
+            padding: "6px 12px", borderRadius: 6, fontSize: 11,
+            background: "var(--bg-low)", border: "1px solid var(--outline-v)",
+          }}>
+            <div style={{ color: "var(--on-variant)", marginBottom: 2 }}>Bank</div>
+            <div style={{ fontWeight: 600 }}>{ifsc.bank ?? "Unrecognized bank code"}</div>
+          </div>
+          <div style={{
+            padding: "6px 12px", borderRadius: 6, fontSize: 11,
+            background: "var(--bg-low)", border: "1px solid var(--outline-v)",
+          }}>
+            <div style={{ color: "var(--on-variant)", marginBottom: 2 }}>Branch code</div>
+            <div style={{ fontWeight: 600 }}>{ifsc.branchCode}</div>
+          </div>
+        </div>
+      )}
+    </ProfileCard>
   );
 }

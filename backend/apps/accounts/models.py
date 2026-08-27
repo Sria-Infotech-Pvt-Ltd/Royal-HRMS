@@ -775,6 +775,15 @@ class Company(models.Model):
     state          = models.CharField(max_length=100, blank=True)
     pin_code       = models.CharField(max_length=6, blank=True)
 
+    # ── Communication address ── defaults to the registered office; only
+    # populated when it genuinely differs (e.g. a correspondence/billing
+    # address separate from the statutory registered office).
+    communication_address_same_as_registered = models.BooleanField(default=True)
+    communication_address = models.TextField(max_length=500, blank=True)
+    communication_city    = models.CharField(max_length=100, blank=True)
+    communication_state   = models.CharField(max_length=100, blank=True)
+    communication_pin_code = models.CharField(max_length=6, blank=True)
+
     # ── Regional & formats ──
     default_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='INR')
     date_format      = models.CharField(max_length=10, choices=DATE_FORMAT_CHOICES, default='DD-MM-YYYY')

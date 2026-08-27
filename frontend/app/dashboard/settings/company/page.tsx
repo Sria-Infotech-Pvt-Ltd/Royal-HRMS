@@ -6,9 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import type { CompanyData } from "@/types/company";
-import FinancialYearSection from "./_components/FinancialYearSection";
 import EntityIdentityCard from "./_components/EntityIdentityCard";
-import StatutoryCard from "./_components/StatutoryCard";
 import OtherRegistrationsCard from "./_components/OtherRegistrationsCard";
 import GSTRegistrationsSection from "./_components/GSTRegistrationsSection";
 import DirectorsSection from "./_components/DirectorsSection";
@@ -18,7 +16,10 @@ import BusinessProfileCard from "./_components/BusinessProfileCard";
 import RegionalFormatsCard from "./_components/RegionalFormatsCard";
 import AddressCard from "./_components/AddressCard";
 import ContactBrandingCard from "./_components/ContactBrandingCard";
-import { EMPTY_COMPANY, validateCompany } from "./_data";
+import {
+  EMPTY_COMPANY, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
+  profileCompletionPercent, validateCompany,
+} from "./_data";
 
 export default function CompanyInfoPage() {
   const router  = useRouter();
@@ -28,7 +29,7 @@ export default function CompanyInfoPage() {
   const [errors,      setErrors]      = useState<ReturnType<typeof validateCompany>>({});
   const [apiError,    setApiError]    = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
-  const [saving,      setSaving]      = useState(false);
+  const [saving,      setSaving]      = useState<"draft" | "validate" | null>(null);
   const [savedAt,     setSavedAt]     = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -91,15 +92,16 @@ export default function CompanyInfoPage() {
     setLogoRemoved(true);
   }
 
-  async function handleSave() {
-    const errs = validateCompany(form);
+  async function handleSave(mode: "draft" | "validate") {
+    const isDraft = mode === "draft";
+    const errs = validateCompany(form, isDraft);
     if (Object.keys(errs).length) {
       setErrors(errs);
       return;
     }
     setApiError(null);
     setSaveSuccess(false);
-    setSaving(true);
+    setSaving(mode);
 
     try {
       const fd = new FormData();
@@ -108,6 +110,7 @@ export default function CompanyInfoPage() {
         if (typeof value === "boolean") { fd.append(key, value ? "true" : "false"); return; }
         fd.append(key, (value ?? "").toString().trim());
       });
+      fd.append("is_draft", isDraft ? "true" : "false");
 
       if (logoFile) {
         fd.append("logo", logoFile);
@@ -129,7 +132,7 @@ export default function CompanyInfoPage() {
       const e = err as { message?: string };
       setApiError(e.message ?? "Failed to save company info. Please try again.");
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
 
@@ -137,6 +140,8 @@ export default function CompanyInfoPage() {
 
   const displayLogo = logoPreview ?? (logoRemoved ? null : (form.logo_url ?? null));
   const isIndia = form.jurisdiction === "india";
+  const entityOptions = isIndia ? ENTITY_TYPE_OPTIONS_INDIA : ENTITY_TYPE_OPTIONS_FOREIGN;
+  const completion = profileCompletionPercent(form);
 
   // ─── Loading ──────────────────────────────────────────────────────────────
 
@@ -152,6 +157,7 @@ export default function CompanyInfoPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const sectionProps = { form, errors, canEdit, onFieldChange: handleField };
+  const dinLabel = isIndia ? "DIN" : "Director ID";
 
   return (
     <>
@@ -159,7 +165,7 @@ export default function CompanyInfoPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Company Profile</div>
-          <div className="page-sub">Legal entity details, statutory identifiers, registrations, and registered address</div>
+          <div className="page-sub">Statutory and business details. The form adapts to your entity type, so you only see what applies to you.</div>
         </div>
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
@@ -189,19 +195,48 @@ export default function CompanyInfoPage() {
         </div>
       )}
 
-      {/* ── Financial Year Configuration (saved independently of the form below) ── */}
-      <FinancialYearSection />
+      {/* ── Jurisdiction + entity type — page-level, drives the whole form ── */}
+      <div className="field-group mb-16">
+        <label className="field-label"><i className="ti ti-world" style={{ marginRight: 4 }} /> Jurisdiction — where is this company registered?</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          {(["india", "foreign"] as const).map(j => (
+            <button
+              key={j}
+              type="button"
+              className={`btn btn-sm ${form.jurisdiction === j ? "btn-filled" : "btn-ghost"}`}
+              disabled={!canEdit}
+              onClick={() => {
+                handleField("jurisdiction", j);
+                handleField("entity_type", "");
+              }}
+            >
+              {j === "india" ? "India" : "Foreign (outside India)"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="field-group mb-24">
+        <label className="field-label"><i className="ti ti-lock" style={{ marginRight: 4 }} /> Entity type — this drives the rest of the form</label>
+        <select
+          className="field-input"
+          value={form.entity_type}
+          disabled={!canEdit}
+          onChange={e => handleField("entity_type", e.target.value)}
+        >
+          <option value="">Select…</option>
+          {entityOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
 
       <EntityIdentityCard {...sectionProps} />
-      <StatutoryCard {...sectionProps} />
+      {isIndia && <GSTRegistrationsSection canEdit={canEdit} companyPan={form.pan} />}
       {isIndia && <OtherRegistrationsCard {...sectionProps} />}
-      {isIndia && <GSTRegistrationsSection canEdit={canEdit} />}
-      <DirectorsSection canEdit={canEdit} />
+      <AddressCard {...sectionProps} />
+      <DirectorsSection canEdit={canEdit} dinLabel={dinLabel} />
       <SignatoryCard {...sectionProps} />
       <BankDetailsCard {...sectionProps} />
       <BusinessProfileCard {...sectionProps} />
       <RegionalFormatsCard {...sectionProps} />
-      <AddressCard {...sectionProps} />
       <ContactBrandingCard
         {...sectionProps}
         displayLogo={displayLogo}
@@ -211,24 +246,45 @@ export default function CompanyInfoPage() {
       />
 
       {/* ── Bottom save bar ──────────────────────────────────────────────── */}
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, paddingBottom: 32 }}>
-        {savedAt && (
-          <span style={{ fontSize: 12, color: "var(--on-variant)", marginRight: "auto", display: "flex", alignItems: "center", gap: 5 }}>
-            <i className="ti ti-clock" style={{ fontSize: 13 }} />
-            Last saved: {new Date(savedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
-          </span>
-        )}
-        <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} disabled={saving}>
-          {canEdit ? "Cancel" : "Back"}
-        </button>
-        {canEdit && (
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving}>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-              : <><i className="ti ti-device-floppy" /> Save Changes</>
-            }
+      <div style={{
+        position: "sticky", bottom: 0, display: "flex", justifyContent: "space-between",
+        alignItems: "center", gap: 10, padding: "14px 0", marginTop: 8,
+        background: "var(--surface)", borderTop: "1px solid var(--outline-v)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)" }}>
+          <div style={{ position: "relative", width: 22, height: 22 }}>
+            <svg width="22" height="22" viewBox="0 0 22 22">
+              <circle cx="11" cy="11" r="9" fill="none" stroke="var(--outline-v)" strokeWidth="3" />
+              <circle
+                cx="11" cy="11" r="9" fill="none" stroke="var(--primary)" strokeWidth="3"
+                strokeDasharray={`${(completion / 100) * 56.5} 56.5`}
+                strokeLinecap="round" transform="rotate(-90 11 11)"
+              />
+            </svg>
+          </div>
+          Profile {completion}% complete
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} disabled={saving !== null}>
+            {canEdit ? "Cancel" : "Back"}
           </button>
-        )}
+          {canEdit && (
+            <>
+              <button className="btn btn-ghost" onClick={() => handleSave("draft")} disabled={saving !== null}>
+                {saving === "draft"
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+                  : "Save draft"
+                }
+              </button>
+              <button className="btn btn-filled" onClick={() => handleSave("validate")} disabled={saving !== null}>
+                {saving === "validate"
+                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+                  : <><i className="ti ti-device-floppy" /> Save &amp; validate</>
+                }
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </>
   );

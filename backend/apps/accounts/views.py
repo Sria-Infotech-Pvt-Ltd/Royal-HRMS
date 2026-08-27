@@ -2640,8 +2640,14 @@ class CompanyRetrieveUpdateView(APIView):
         # this, a save here would leave every reader (including the very next
         # GET on this endpoint) looking at the pre-edit instance until the
         # cache TTL expires.
-        from core.cache_service import CompanyCacheService
+        from core.cache_service import CompanyCacheService, FinancialYearCacheService
         CompanyCacheService.invalidate()
+        # financial_year_start_month now saves through this endpoint too
+        # (merged into the main form) — Payroll/Reports read the FY config
+        # from FinancialYearCacheService, which CompanyFinancialYearView.put()
+        # already kept in sync for its own save path; this endpoint needs the
+        # same invalidation so a change here isn't served stale elsewhere.
+        FinancialYearCacheService.invalidate()
 
         AuditLog.objects.create(
             user=request.user,

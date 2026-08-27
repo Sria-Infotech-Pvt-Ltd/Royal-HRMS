@@ -1,27 +1,25 @@
 "use client";
 
 import type { CompanySectionProps } from "@/types/company";
+import ProfileCard from "./ProfileCard";
 import { MSME_CLASS_OPTIONS } from "../_data";
 
 export default function OtherRegistrationsCard({ form, canEdit, onFieldChange }: CompanySectionProps) {
   return (
-    <div className="card mb-24">
-      <div className="card-header">
-        <div className="card-title"><i className="ti ti-stamp" /> Other Registrations</div>
-      </div>
-      <div className="form-row cols-3" style={{ padding: "20px 24px" }}>
+    <ProfileCard icon="ti-certificate" title="Other registrations" subtitle="Add only what applies. All optional.">
+      <div className="form-row cols-2">
         <div className="field-group">
-          <label className="field-label">Udyam / MSME Registration</label>
+          <label className="field-label">Udyam / MSME <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
           <input
             className="field-input"
             value={form.udyam_msme}
             disabled={!canEdit}
             onChange={e => onFieldChange("udyam_msme", e.target.value)}
-            placeholder="UDYAM-XX-00-0000000"
+            placeholder="UDYAM-TS-00-0000000"
           />
         </div>
         <div className="field-group">
-          <label className="field-label">MSME Class</label>
+          <label className="field-label">MSME Class <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
           <select
             className="field-input"
             value={form.msme_class}
@@ -32,16 +30,17 @@ export default function OtherRegistrationsCard({ form, canEdit, onFieldChange }:
           </select>
         </div>
         <div className="field-group">
-          <label className="field-label">IEC (Import Export Code)</label>
+          <label className="field-label">Import Export Code (IEC) <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
           <input
             className="field-input"
             value={form.iec}
             disabled={!canEdit}
             onChange={e => onFieldChange("iec", e.target.value)}
+            placeholder="PAN-based"
           />
         </div>
         <div className="field-group">
-          <label className="field-label">EPFO Establishment Code</label>
+          <label className="field-label">EPFO Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
           <input
             className="field-input"
             value={form.epfo_code}
@@ -50,7 +49,7 @@ export default function OtherRegistrationsCard({ form, canEdit, onFieldChange }:
           />
         </div>
         <div className="field-group">
-          <label className="field-label">ESIC Code</label>
+          <label className="field-label">ESIC Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
           <input
             className="field-input"
             value={form.esic_code}
@@ -59,7 +58,7 @@ export default function OtherRegistrationsCard({ form, canEdit, onFieldChange }:
           />
         </div>
         <div className="field-group">
-          <label className="field-label">Professional Tax Registration</label>
+          <label className="field-label">Professional Tax Reg. <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(state-wise, optional)</span></label>
           <input
             className="field-input"
             value={form.professional_tax_reg}
@@ -68,6 +67,6 @@ export default function OtherRegistrationsCard({ form, canEdit, onFieldChange }:
           />
         </div>
       </div>
-    </div>
+    </ProfileCard>
   );
 }
