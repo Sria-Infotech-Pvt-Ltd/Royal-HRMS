@@ -3,7 +3,7 @@
 import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import {
-  COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
+  CIN_ENTITY_TYPES, COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
   entityComplianceHint, parseCin, parsePan,
 } from "../_data";
 
@@ -97,7 +97,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
         <>
           <div className="form-row cols-2 mb-8">
             <div className="field-group">
-              <label className="field-label">CIN</label>
+              <label className="field-label">CIN {CIN_ENTITY_TYPES.has(form.entity_type) && <span style={{ color: "var(--error)" }}>*</span>}</label>
               <input
                 className={`field-input${errors.cin ? " field-error" : ""}`}
                 value={form.cin}

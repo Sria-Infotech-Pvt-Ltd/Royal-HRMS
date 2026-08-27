@@ -662,7 +662,7 @@ GST_STATE_CODES = {
     'Ladakh': '38',
 }
 
-_CIN_ENTITY_TYPES = {'private_limited', 'public_limited', 'opc'}
+_CIN_ENTITY_TYPES = {'private_limited', 'public_limited', 'opc', 'section8'}
 
 
 def _gstin_pan_mismatch_error(gstin: str, pan: str) -> str | None:

@@ -724,10 +724,13 @@ class Company(models.Model):
         # India
         ('private_limited',    'Private Limited — Pvt Ltd'),
         ('public_limited',     'Public Limited — Ltd'),
-        ('llp',                'Limited Liability Partnership — LLP'),
-        ('partnership',        'Partnership Firm'),
-        ('sole_proprietorship','Sole Proprietorship'),
         ('opc',                'One Person Company — OPC'),
+        ('llp',                'LLP — Partnership'),
+        ('partnership',        'Partnership Firm — Firm'),
+        ('sole_proprietorship','Proprietorship — Sole owner'),
+        ('huf',                'HUF — Family'),
+        ('section8',           'Section 8 — Non-profit'),
+        ('trust_society',      'Trust / Society — Charitable'),
         # Foreign
         ('corporation',        'Corporation (Inc.) — Body corporate'),
         ('llc',                'Limited Liability Company — LLC'),

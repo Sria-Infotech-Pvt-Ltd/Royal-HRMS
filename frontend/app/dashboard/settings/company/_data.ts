@@ -33,10 +33,13 @@ export const GST_STATE_CODES: Record<string, string> = {
 export const ENTITY_TYPE_OPTIONS_INDIA = [
   { value: "private_limited",     label: "Private Limited — Pvt Ltd" },
   { value: "public_limited",      label: "Public Limited — Ltd" },
-  { value: "llp",                 label: "Limited Liability Partnership — LLP" },
-  { value: "partnership",         label: "Partnership Firm" },
-  { value: "sole_proprietorship", label: "Sole Proprietorship" },
   { value: "opc",                 label: "One Person Company — OPC" },
+  { value: "llp",                 label: "LLP — Partnership" },
+  { value: "partnership",         label: "Partnership Firm — Firm" },
+  { value: "sole_proprietorship", label: "Proprietorship — Sole owner" },
+  { value: "huf",                 label: "HUF — Family" },
+  { value: "section8",            label: "Section 8 — Non-profit" },
+  { value: "trust_society",       label: "Trust / Society — Charitable" },
 ];
 
 export const ENTITY_TYPE_OPTIONS_FOREIGN = [
@@ -48,8 +51,10 @@ export const ENTITY_TYPE_OPTIONS_FOREIGN = [
 ];
 
 // Entity types that are always incorporated under the Companies Act and
-// therefore always carry a CIN — used to conditionally require it.
-export const CIN_ENTITY_TYPES = new Set(["private_limited", "public_limited", "opc"]);
+// therefore always carry a CIN — used to conditionally require it. A
+// Section 8 company is still a company under the Act (just non-profit), so
+// it carries a CIN too; HUF/proprietorship/trust/society don't.
+export const CIN_ENTITY_TYPES = new Set(["private_limited", "public_limited", "opc", "section8"]);
 
 export const INDUSTRY_OPTIONS = [
   { value: "it_services",   label: "Information Technology & Services" },
@@ -178,7 +183,13 @@ export function entityComplianceHint(jurisdiction: string, entityType: string, e
     return `A ${entityLabel.split(" — ")[0]} doesn't file a CIN with the Registrar of Companies. PAN 4th char should be F.`;
   }
   if (entityType === "sole_proprietorship") {
-    return "A Sole Proprietorship uses the proprietor's own PAN (4th char P) — no separate CIN or firm PAN.";
+    return "A Proprietorship uses the proprietor's own PAN (4th char P) — no separate CIN or firm PAN.";
+  }
+  if (entityType === "huf") {
+    return "An HUF isn't registered under the Companies Act — no CIN. It's identified by its own HUF PAN (4th char H) and the karta's details.";
+  }
+  if (entityType === "trust_society") {
+    return "A Trust or Society is registered under trust/society law, not the Companies Act — no CIN. Identified by its own PAN (4th char T for a Trust, A for a Society) and registration certificate.";
   }
   return null;
 }
@@ -209,9 +220,13 @@ const PAN_HOLDER_TYPES: Record<string, string> = {
 // for the "Entity match" hint chip, not a hard validation rule (someone can
 // legitimately hold a personal PAN pending a firm PAN, etc).
 const ENTITY_EXPECTED_PAN_CHAR: Record<string, string> = {
-  private_limited: "C", public_limited: "C", opc: "C",
+  private_limited: "C", public_limited: "C", opc: "C", section8: "C",
   llp: "F", partnership: "F",
   sole_proprietorship: "P",
+  huf: "H",
+  // trust_society deliberately unmapped — a Trust's PAN 4th char is "T" but
+  // a Society's is "A"; this one dropdown option covers both, so there's no
+  // single correct expected character to check against.
 };
 
 export function parsePan(pan: string, entityType: string): { holderChar: string; holderType: string; expectedChar: string | null } | null {
