@@ -338,6 +338,17 @@ const COMPLETION_FIELDS: (keyof CompanyData)[] = [
   "industry", "primary_email",
 ];
 
+// date_of_incorporation (and logo_url) are nullable on the backend — every
+// other field is a plain CharField/TextField that always serializes as ""
+// when unset, never null. Merging a raw API response straight into form
+// state would let a null slip into a controlled <input value=>, which React
+// warns about and half-renders as uncontrolled.
+export function sanitizeCompanyResponse<T extends object>(raw: T): T {
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, v === null ? "" : v]),
+  ) as T;
+}
+
 export function profileCompletionPercent(f: CompanyData): number {
   const jurisdictionFields: (keyof CompanyData)[] = f.jurisdiction === "india"
     ? ["pan", "tan"]

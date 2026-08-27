@@ -18,7 +18,7 @@ import AddressCard from "./_components/AddressCard";
 import ContactBrandingCard from "./_components/ContactBrandingCard";
 import {
   EMPTY_COMPANY, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
-  profileCompletionPercent, validateCompany,
+  profileCompletionPercent, sanitizeCompanyResponse, validateCompany,
 } from "./_data";
 
 export default function CompanyInfoPage() {
@@ -45,8 +45,9 @@ export default function CompanyInfoPage() {
     (async () => {
       try {
         const res = await clientApi.get(API.settings.company);
-        const d: CompanyData & { id?: number } = res.data?.data ?? {};
-        if (d.id) {
+        const raw: CompanyData & { id?: number } = res.data?.data ?? {};
+        if (raw.id) {
+          const d = sanitizeCompanyResponse(raw);
           setForm({ ...EMPTY_COMPANY, ...d });
           if (d.updated_at) setSavedAt(d.updated_at);
         }
@@ -121,7 +122,7 @@ export default function CompanyInfoPage() {
       const res = await clientApi.put(API.settings.company, fd, {
         headers: { "Content-Type": undefined },
       });
-      const saved: CompanyData = res.data?.data ?? {};
+      const saved = sanitizeCompanyResponse<CompanyData>(res.data?.data ?? {});
       setForm(prev => ({ ...prev, ...saved }));
       if (saved.updated_at) setSavedAt(saved.updated_at);
       setLogoFile(null);
