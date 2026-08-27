@@ -9,7 +9,7 @@ import re
 import secrets
 import string
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import requests as http_req
 
@@ -75,6 +75,7 @@ from apps.accounts.models import (
     OTPVerification,
     PasswordResetToken,
     Permission,
+    Placement,
     Position,
     PromotionRecord,
     Role,
@@ -103,6 +104,7 @@ from apps.accounts.serializers import (
     LoginSerializer,
     OrgUnitSerializer,
     PermissionSerializer,
+    PlacementSerializer,
     PositionSerializer,
     ResetPasswordSerializer,
     RoleSerializer,
@@ -1378,7 +1380,7 @@ class OrgUnitDetailView(APIView):
             )
         if unit.positions.exists():
             return error(
-                f'Cannot delete "{unit.name}" — it still has positions. Remove those first.',
+                f'Cannot delete "{unit.name}" — it still has positions. Deactivate the unit instead if it has real history.',
                 http_status=status.HTTP_409_CONFLICT,
             )
         name = unit.name
@@ -1392,16 +1394,51 @@ class OrgUnitDetailView(APIView):
         return success(f'"{name}" deleted.', data={})
 
 
+class OrgUnitDeactivateView(APIView):
+    """Alternative to hard-delete once a unit has real history under it —
+    deleting history is a compliance problem, per this feature's spec."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit org units.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            unit = OrgUnit.objects.get(pk=pk)
+        except OrgUnit.DoesNotExist:
+            return error('Org unit not found.', http_status=status.HTTP_404_NOT_FOUND)
+        unit.is_active = False
+        unit.save(update_fields=['is_active', 'updated_at'])
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(unit.pk), changes={'name': unit.name, 'is_active': False},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'"{unit.name}" deactivated.', data=OrgUnitSerializer(unit).data)
+
+
+def _current_placement(position: 'Position', as_of=None) -> 'Placement | None':
+    as_of = as_of or timezone.localdate()
+    return (
+        position.placements
+        .filter(effective_from__lte=as_of)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of))
+        .select_related('employee')
+        .first()
+    )
+
+
 def _sync_designation_from_position(position: 'Position', *, force: bool = False) -> None:
-    """Push the Position's effective title onto its current holder's
-    User.designation. Deliberately does NOT touch User.department — that
-    needs an explicit OrgUnit<->Department link, a separate future stage.
+    """Push the Position's effective title onto its current holder's (as of
+    today, via the current Placement) User.designation. Deliberately does
+    NOT touch User.department — that needs an explicit OrgUnit<->Department
+    link, a separate future stage.
 
     Respects designation_synced_from_position: skipped unless the flag is
     still True, UNLESS force=True (an explicit assignment always wins)."""
-    holder = position.holder
-    if holder is None:
+    current = _current_placement(position)
+    if current is None:
         return
+    holder = current.employee
     if not force and not holder.designation_synced_from_position:
         return  # HR manually corrected this employee's designation since the last sync
     effective_title = position.job_template.name if position.job_template_id else position.title
@@ -1412,13 +1449,31 @@ def _sync_designation_from_position(position: 'Position', *, force: bool = False
     holder.save(update_fields=['designation', 'designation_synced_from_position', 'updated_at'])
 
 
+def _parse_as_of(request):
+    """Returns (date_or_None, error_response_or_None)."""
+    raw = request.query_params.get('asOf')
+    if not raw:
+        return None, None
+    try:
+        return date.fromisoformat(raw), None
+    except ValueError:
+        return None, error('asOf must be a valid YYYY-MM-DD date.')
+
+
+_POSITION_PREFETCH = ('placements__employee',)
+_POSITION_SELECT = ('org_unit', 'org_unit__parent', 'job_template', 'branch')
+
+
 class PositionListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not _has_perm(request.user, 'org_chart.view'):
             return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
-        qs = Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder', 'branch')
+        as_of, err = _parse_as_of(request)
+        if err:
+            return err
+        qs = Position.objects.select_related(*_POSITION_SELECT).prefetch_related(*_POSITION_PREFETCH)
         if branch_id := request.query_params.get('branch'):
             try:
                 branch_id = int(branch_id)
@@ -1427,7 +1482,8 @@ class PositionListCreateView(APIView):
             qs = qs.filter(branch_id=branch_id)
         page_obj, paginator = paginate(qs, request, default_page_size=200)
         return success('Positions retrieved.', data=paginated_data(
-            paginator, page_obj, PositionSerializer(page_obj.object_list, many=True).data,
+            paginator, page_obj,
+            PositionSerializer(page_obj.object_list, many=True, context={'as_of': as_of}).data,
         ))
 
     def post(self, request):
@@ -1437,8 +1493,10 @@ class PositionListCreateView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         instance = serializer.save()
-        if instance.holder_id:
-            _sync_designation_from_position(instance, force=True)
+        # Positions are always created vacant — a holder is assigned
+        # separately via PositionPlacementListCreateView, which is what
+        # actually creates the first Placement and triggers the designation
+        # sync. Nothing to sync here.
         AuditLog.objects.create(
             user=request.user, action='create', module='org_structure',
             object_id=str(instance.pk), changes={'title': instance.title},
@@ -1452,9 +1510,20 @@ class PositionDetailView(APIView):
 
     def _get(self, pk):
         try:
-            return Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder', 'branch').get(pk=pk)
+            return Position.objects.select_related(*_POSITION_SELECT).prefetch_related(*_POSITION_PREFETCH).get(pk=pk)
         except Position.DoesNotExist:
             return None
+
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'org_chart.view'):
+            return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
+        as_of, err = _parse_as_of(request)
+        if err:
+            return err
+        position = self._get(pk)
+        if not position:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return success('Position retrieved.', data=PositionSerializer(position, context={'as_of': as_of}).data)
 
     def put(self, request, pk):
         if not _has_perm(request.user, 'org_structure.edit'):
@@ -1462,15 +1531,14 @@ class PositionDetailView(APIView):
         position = self._get(pk)
         if not position:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
-        old_holder_id = position.holder_id
         serializer = PositionSerializer(position, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         instance = serializer.save()
-        if instance.holder_id and instance.holder_id != old_holder_id:
-            _sync_designation_from_position(instance, force=True)   # (re)assigned via generic edit
-        elif instance.holder_id and instance.holder_id == old_holder_id:
-            _sync_designation_from_position(instance)                # unchanged holder, title/org_unit/job_template edited
+        # Title/org_unit/job_template can change the position's effective
+        # title — re-sync the current holder's designation if there is one
+        # (non-forced: respects a manual override, same as before).
+        _sync_designation_from_position(instance)
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(instance.pk), changes={'title': instance.title},
@@ -1487,6 +1555,11 @@ class PositionDetailView(APIView):
         position = self._get(pk)
         if not position:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if position.placements.exists():
+            return error(
+                f'Cannot delete "{position.title}" — it has placement history. Deactivate it instead; deleting history is not allowed.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
         title = position.title
         position_id = str(position.pk)
         position.delete()
@@ -1498,8 +1571,43 @@ class PositionDetailView(APIView):
         return success(f'"{title}" deleted.', data={})
 
 
-class PositionAssignHolderView(APIView):
+class PositionDeactivateView(APIView):
+    """Alternative to hard-delete once a position has placement history —
+    see PositionDetailView.delete()'s 409 for the same rationale."""
     permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit positions.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            position = Position.objects.get(pk=pk)
+        except Position.DoesNotExist:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        position.is_active = False
+        position.save(update_fields=['is_active', 'updated_at'])
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(position.pk), changes={'title': position.title, 'is_active': False},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'"{position.title}" deactivated.', data=PositionSerializer(position).data)
+
+
+class PositionPlacementListCreateView(APIView):
+    """Handles both viewing a position's full placement history and
+    assigning/reassigning its holder — POSTing a new placement is how a
+    seat goes from vacant to filled, or from one holder to the next."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'org_chart.view'):
+            return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            position = Position.objects.get(pk=pk)
+        except Position.DoesNotExist:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        qs = position.placements.select_related('employee', 'created_by').all()
+        return success('Placement history retrieved.', data=PlacementSerializer(qs, many=True).data)
 
     def post(self, request, pk):
         if not _has_perm(request.user, 'org_structure.edit'):
@@ -1508,40 +1616,93 @@ class PositionAssignHolderView(APIView):
             position = Position.objects.select_related('org_unit').get(pk=pk)
         except Position.DoesNotExist:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+
         employee_id = request.data.get('employee')
+        effective_from_raw = request.data.get('effective_from')
+        effective_to_raw = request.data.get('effective_to') or None
         if not employee_id:
             return error('employee is required.')
+        if not effective_from_raw:
+            return error('effective_from is required.')
+        try:
+            effective_from = date.fromisoformat(effective_from_raw)
+        except (TypeError, ValueError):
+            return error('effective_from must be a valid YYYY-MM-DD date.')
+        effective_to = None
+        if effective_to_raw:
+            try:
+                effective_to = date.fromisoformat(effective_to_raw)
+            except (TypeError, ValueError):
+                return error('effective_to must be a valid YYYY-MM-DD date.')
+            if effective_to < effective_from:
+                return error('effective_to cannot be before effective_from.')
         try:
             employee = User.objects.get(pk=employee_id, is_active=True)
         except (User.DoesNotExist, ValueError, TypeError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
-        conflict = Position.objects.filter(holder=employee).exclude(pk=position.pk).first()
-        if conflict:
-            return error(f'{employee.full_name} already holds another position: "{conflict.title}".')
-        position.holder = employee
-        position.save(update_fields=['holder', 'updated_at'])
+
+        with transaction.atomic():
+            # Close whichever placement is currently open on this seat, the
+            # day before the new one starts — this is what turns "assign" and
+            # "reassign" into the same operation, and is what keeps the prior
+            # holder queryable in history instead of being silently overwritten.
+            prior_open = position.placements.filter(effective_to__isnull=True).first()
+            if prior_open is not None and prior_open.effective_from < effective_from:
+                prior_open.effective_to = effective_from - timedelta(days=1)
+                prior_open.save(update_fields=['effective_to', 'updated_at'])
+
+            placement = Placement(
+                position=position, employee=employee,
+                effective_from=effective_from, effective_to=effective_to,
+                note=(request.data.get('note') or '').strip(), created_by=request.user,
+            )
+            placement.full_clean()  # friendly-path 400 for an overlap the pre-close above didn't resolve
+            placement.save()
+
         _sync_designation_from_position(position, force=True)
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(position.pk),
-            changes={'title': position.title, 'holder': employee.full_name},
+            changes={'title': position.title, 'placement': str(placement.pk), 'employee': employee.full_name},
             ip_address=get_client_ip(request),
         )
+        position.refresh_from_db()
         return success('Holder assigned.', data=PositionSerializer(position).data)
 
 
-class PositionVacateView(APIView):
+class PositionPlacementEndView(APIView):
+    """Vacates a position by closing its current open placement — the seat
+    is vacant starting the day after effective_to, not immediately, since
+    effective_to is the last day actually worked."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         if not _has_perm(request.user, 'org_structure.edit'):
             return error('You do not have permission to vacate positions.', http_status=status.HTTP_403_FORBIDDEN)
         try:
-            position = Position.objects.select_related('org_unit').get(pk=pk)
+            position = Position.objects.get(pk=pk)
         except Position.DoesNotExist:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
-        position.holder = None
-        position.save(update_fields=['holder', 'updated_at'])
+        placement = position.placements.filter(effective_to__isnull=True).first()
+        if placement is None:
+            return error('This position has no current holder to vacate.', http_status=status.HTTP_409_CONFLICT)
+
+        effective_to_raw = request.data.get('effective_to')
+        effective_to = timezone.localdate()
+        if effective_to_raw:
+            try:
+                effective_to = date.fromisoformat(effective_to_raw)
+            except (TypeError, ValueError):
+                return error('effective_to must be a valid YYYY-MM-DD date.')
+        if effective_to < placement.effective_from:
+            return error('effective_to cannot be before the placement started.')
+
+        placement.effective_to = effective_to
+        note = (request.data.get('note') or '').strip()
+        if note:
+            placement.note = note
+        placement.full_clean()
+        placement.save(update_fields=['effective_to', 'note', 'updated_at'])
         # Deliberately does not touch the former holder's User.designation —
         # vacating a seat means "no longer occupying this org-chart slot,"
         # not "no longer has a job." Blanking or reverting it here would
@@ -1549,10 +1710,63 @@ class PositionVacateView(APIView):
         # for someone who is still employed.
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
-            object_id=str(position.pk), changes={'title': position.title, 'holder': None},
+            object_id=str(position.pk),
+            changes={'title': position.title, 'placement': str(placement.pk), 'effective_to': str(effective_to)},
             ip_address=get_client_ip(request),
         )
+        position.refresh_from_db()
         return success('Position vacated.', data=PositionSerializer(position).data)
+
+
+class PlacementDetailView(APIView):
+    """DELETE only — cancels a scheduled (future) placement outright, or a
+    past/current one if the caller holds org_structure.backdate. There's no
+    generic edit here on purpose: tenure/payroll/gratuity depend on these
+    dates, so touching history is deliberately narrower than "edit a field"."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit placements.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            placement = Placement.objects.select_related('position', 'employee').get(pk=pk)
+        except Placement.DoesNotExist:
+            return error('Placement not found.', http_status=status.HTTP_404_NOT_FOUND)
+        today = timezone.localdate()
+        is_scheduled = placement.effective_from > today
+        if not is_scheduled and not _has_perm(request.user, 'org_structure.backdate'):
+            return error(
+                'Only a scheduled (future) placement can be cancelled without the backdate permission.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+        position = placement.position
+        details = {
+            'title': position.title, 'employee': placement.employee.full_name,
+            'effective_from': str(placement.effective_from), 'effective_to': str(placement.effective_to),
+        }
+        with transaction.atomic():
+            # If this placement's creation auto-closed the one before it
+            # (see PositionPlacementListCreateView.post()'s "close the prior
+            # open placement the day before" step), cancelling it should undo
+            # that too — otherwise the previous holder is left with a bogus
+            # future end-date for a successor who never actually started.
+            # Delete first: the exclusion constraints check immediately, not
+            # deferred, so reopening the prior placement before removing this
+            # one would briefly overlap them and get rejected.
+            reopened = position.placements.filter(
+                effective_to=placement.effective_from - timedelta(days=1),
+            ).exclude(pk=placement.pk).first()
+            placement.delete()
+            if reopened is not None:
+                reopened.effective_to = None
+                reopened.save(update_fields=['effective_to', 'updated_at'])
+                details['reopened_placement'] = str(reopened.pk)
+        AuditLog.objects.create(
+            user=request.user, action='delete', module='org_structure',
+            object_id=str(position.pk), changes=details,
+            ip_address=get_client_ip(request),
+        )
+        return success('Placement cancelled.', data={})
 
 
 class DesignationListCreateView(APIView):

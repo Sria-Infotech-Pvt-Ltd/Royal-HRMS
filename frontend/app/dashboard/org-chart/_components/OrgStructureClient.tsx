@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useAnyPermission } from "@/hooks/usePermission";
-import type { JobTemplate, OrgUnit, Position } from "@/types/orgStructure";
+import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
 import OrgTree from "./OrgTree";
 import OrgDetail from "./OrgDetail";
 import AddUnitModal from "./AddUnitModal";
 import AddPositionModal from "./AddPositionModal";
 import AssignHolderModal from "./AssignHolderModal";
+import EndPlacementModal from "./EndPlacementModal";
 
 export interface EmployeeOption {
   id: string;
@@ -42,6 +43,10 @@ export default function OrgStructureClient() {
   const [addUnitParent,    setAddUnitParent]    = useState<string | null | "new">(null);
   const [addPositionUnit,  setAddPositionUnit]  = useState<string | null>(null);
   const [assignPositionId, setAssignPositionId] = useState<string | null>(null);
+  const [endPositionId,    setEndPositionId]    = useState<string | null>(null);
+
+  const [placementHistory,        setPlacementHistory]        = useState<Placement[]>([]);
+  const [placementHistoryLoading, setPlacementHistoryLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -67,6 +72,17 @@ export default function OrgStructureClient() {
   }
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (selected?.type !== "position") { setPlacementHistory([]); return; }
+    let cancelled = false;
+    setPlacementHistoryLoading(true);
+    clientApi.get(API.orgStructure.positions.placements(selected.id))
+      .then(res => { if (!cancelled) setPlacementHistory(res.data?.data ?? []); })
+      .catch(() => { if (!cancelled) setPlacementHistory([]); })
+      .finally(() => { if (!cancelled) setPlacementHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected]);
 
   const stats = useMemo(() => {
     const vacant = positions.filter(p => !p.holder).length;
@@ -188,12 +204,14 @@ export default function OrgStructureClient() {
           <div style={{ padding: "18px 20px" }}>
             <OrgDetail
               selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} canEdit={canEdit}
+              placementHistory={placementHistory} placementHistoryLoading={placementHistoryLoading}
               onSelect={setSelected}
               onAddSubUnit={unitId => setAddUnitParent(unitId)}
               onAddPosition={unitId => setAddPositionUnit(unitId)}
               onAssign={positionId => setAssignPositionId(positionId)}
-              onVacate={async positionId => {
-                await clientApi.post(API.orgStructure.positions.vacate(positionId));
+              onVacate={positionId => setEndPositionId(positionId)}
+              onCancelScheduled={async placementId => {
+                await clientApi.delete(API.orgStructure.placements.detail(placementId));
                 load();
               }}
               onUnitField={async (unitId, field, value) => {
@@ -237,6 +255,13 @@ export default function OrgStructureClient() {
           employees={employees}
           onClose={() => setAssignPositionId(null)}
           onAssigned={() => { setAssignPositionId(null); load(); }}
+        />
+      )}
+      {endPositionId !== null && (
+        <EndPlacementModal
+          position={positions.find(p => p.id === endPositionId) ?? null}
+          onClose={() => setEndPositionId(null)}
+          onEnded={() => { setEndPositionId(null); load(); }}
         />
       )}
     </>

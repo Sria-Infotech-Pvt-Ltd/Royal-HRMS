@@ -39,12 +39,17 @@ export const API = {
     units: {
       list: "/org-structure/units/",
       detail: (id: string) => `/org-structure/units/${id}/`,
+      deactivate: (id: string) => `/org-structure/units/${id}/deactivate/`,
     },
     positions: {
       list: "/org-structure/positions/",
       detail: (id: string) => `/org-structure/positions/${id}/`,
-      assign: (id: string) => `/org-structure/positions/${id}/assign/`,
-      vacate: (id: string) => `/org-structure/positions/${id}/vacate/`,
+      deactivate: (id: string) => `/org-structure/positions/${id}/deactivate/`,
+      placements: (id: string) => `/org-structure/positions/${id}/placements/`,
+      placementsEnd: (id: string) => `/org-structure/positions/${id}/placements/end/`,
+    },
+    placements: {
+      detail: (id: string) => `/org-structure/placements/${id}/`,
     },
     jobTemplates: "/org-structure/job-templates/",
   },

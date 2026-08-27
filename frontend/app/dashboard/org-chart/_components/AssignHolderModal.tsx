@@ -18,19 +18,30 @@ function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
 }
 
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function AssignHolderModal({ position, employees, onClose, onAssigned }: Props) {
   const [employeeId, setEmployeeId] = useState(position?.holder ?? "");
+  const [effectiveFrom, setEffectiveFrom] = useState(today());
+  const [effectiveTo, setEffectiveTo] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submit() {
     if (!position) return;
     if (!employeeId) { setFieldError("Pick an employee."); return; }
+    if (!effectiveFrom) { setDateError("Effective from is required."); return; }
+    if (effectiveTo && effectiveTo < effectiveFrom) { setDateError("Effective to can't be before effective from."); return; }
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await clientApi.post(API.orgStructure.positions.assign(position.id), { employee: employeeId });
+      await clientApi.post(API.orgStructure.positions.placements(position.id), {
+        employee: employeeId, effective_from: effectiveFrom, effective_to: effectiveTo || null,
+      });
       onAssigned();
     } catch (err: unknown) {
       setSubmitError((err as { message?: string })?.message ?? "Failed to assign holder.");
@@ -43,7 +54,7 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
 
   return (
     <Modal
-      title={<><i className="ti ti-user-question" style={{ marginRight: 8 }} />Assign holder</>}
+      title={<><i className="ti ti-user-question" style={{ marginRight: 8 }} />{position.holder ? "Reassign holder" : "Assign holder"}</>}
       onClose={onClose}
       maxWidth={440}
       footer={
@@ -75,8 +86,39 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
         {fieldError && <p className="field-error-msg">{fieldError}</p>}
       </div>
 
+      <div className="form-row cols-2 mb-16">
+        <div className="field-group">
+          <label className="field-label">Effective from <span style={{ color: "var(--error)" }}>*</span></label>
+          <input
+            className={`field-input${dateError ? " field-error" : ""}`}
+            type="date"
+            value={effectiveFrom}
+            onChange={e => { setEffectiveFrom(e.target.value); setDateError(null); }}
+          />
+        </div>
+        <div className="field-group">
+          <label className="field-label">Effective to <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
+          <input
+            className="field-input"
+            type="date"
+            min={effectiveFrom}
+            value={effectiveTo}
+            onChange={e => { setEffectiveTo(e.target.value); setDateError(null); }}
+          />
+        </div>
+      </div>
+      {dateError && <p className="field-error-msg" style={{ marginTop: -10, marginBottom: 14 }}>{dateError}</p>}
+
+      {position.holder_name && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", background: "var(--bg-low)", border: "1px solid var(--outline-v)", borderRadius: 8, fontSize: 12, color: "var(--on-variant)" }}>
+          <i className="ti ti-info-circle" style={{ marginRight: 6 }} />
+          {position.holder_name}&apos;s placement will be closed the day before the new start date and kept in history.
+        </div>
+      )}
+
       <div style={{ fontSize: 11.5, color: "var(--outline)" }}>
-        Placing a person on a chief position makes them the unit&apos;s head automatically.
+        Placing a person on a chief position makes them the unit&apos;s head automatically, as of the effective date above.
+        A future-dated start schedules the change without affecting today&apos;s holder.
       </div>
     </Modal>
   );

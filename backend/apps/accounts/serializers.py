@@ -8,6 +8,7 @@ from django.core import signing
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.models import (
@@ -30,6 +31,7 @@ from apps.accounts.models import (
     OnboardingFieldConfig,
     OrgUnit,
     Permission,
+    Placement,
     Position,
     Role,
     RolePermission,
@@ -533,10 +535,12 @@ class OrgUnitSerializer(serializers.ModelSerializer):
     class Meta:
         model  = OrgUnit
         fields = (
-            'id', 'name', 'code', 'parent', 'cost_center',
+            'id', 'name', 'code', 'parent', 'cost_center', 'is_active',
             'position_count', 'child_count', 'created_at', 'updated_at',
         )
-        read_only_fields = ('id', 'position_count', 'child_count', 'created_at', 'updated_at')
+        # is_active is set only via the dedicated deactivate action (audit-
+        # logged there), never through a generic field update here.
+        read_only_fields = ('id', 'is_active', 'position_count', 'child_count', 'created_at', 'updated_at')
 
     def get_position_count(self, obj: OrgUnit) -> int:
         return obj.positions.count()
@@ -563,23 +567,35 @@ class OrgUnitSerializer(serializers.ModelSerializer):
 
 
 class PositionSerializer(serializers.ModelSerializer):
+    """`holder`/`holder_name`/`holder_employee_id` are read-only, computed
+    from whichever Placement on this position covers `context['as_of']`
+    (default today) — not a stored field. Assigning/reassigning/ending a
+    holder happens through the dedicated Placement endpoints, not by
+    writing to this serializer. Field names are kept identical to the old
+    stored-FK version on purpose, so every existing frontend consumer
+    (OrgTree, most of OrgDetail, the stats strip) needed zero changes."""
     org_unit_name       = serializers.CharField(source='org_unit.name', read_only=True)
     job_template_name   = serializers.CharField(source='job_template.name', read_only=True, default=None)
-    holder_name         = serializers.CharField(source='holder.full_name', read_only=True, default=None)
-    holder_employee_id  = serializers.CharField(source='holder.employee_id', read_only=True, default=None)
     branch_name         = serializers.CharField(source='branch.branch_name', read_only=True, default=None)
+    holder              = serializers.SerializerMethodField()
+    holder_name         = serializers.SerializerMethodField()
+    holder_employee_id  = serializers.SerializerMethodField()
+    holder_since        = serializers.SerializerMethodField()
+    scheduled           = serializers.SerializerMethodField()
     reports_to          = serializers.SerializerMethodField()
 
     class Meta:
         model  = Position
         fields = (
             'id', 'org_unit', 'org_unit_name', 'job_template', 'job_template_name',
-            'title', 'grade', 'is_chief', 'holder', 'holder_name', 'holder_employee_id',
+            'title', 'grade', 'is_chief', 'is_active',
+            'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
             'branch', 'branch_name', 'reports_to', 'created_at', 'updated_at',
         )
         read_only_fields = (
-            'id', 'org_unit_name', 'job_template_name', 'holder_name',
-            'holder_employee_id', 'branch_name', 'reports_to', 'created_at', 'updated_at',
+            'id', 'org_unit_name', 'job_template_name', 'is_active',
+            'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
+            'branch_name', 'reports_to', 'created_at', 'updated_at',
         )
 
     def validate_title(self, value: str) -> str:
@@ -589,6 +605,58 @@ class PositionSerializer(serializers.ModelSerializer):
         if len(value) > 150:
             raise serializers.ValidationError('Position title must be under 150 characters.')
         return value
+
+    def _as_of(self):
+        return self.context.get('as_of') or timezone.localdate()
+
+    def _all_placements(self, obj: Position) -> list:
+        # If the queryset prefetched `placements` (see PositionListCreateView),
+        # this list comes for free; otherwise it's one query per position —
+        # correct either way, just not equally cheap.
+        return list(obj.placements.all())
+
+    def _current_placement(self, obj: Position):
+        cache_attr = '_current_placement_cache'
+        if not hasattr(obj, cache_attr):
+            as_of = self._as_of()
+            current = next(
+                (p for p in self._all_placements(obj)
+                 if p.effective_from <= as_of and (p.effective_to is None or p.effective_to >= as_of)),
+                None,
+            )
+            setattr(obj, cache_attr, current)
+        return getattr(obj, cache_attr)
+
+    def get_holder(self, obj: Position) -> str | None:
+        p = self._current_placement(obj)
+        return str(p.employee_id) if p else None
+
+    def get_holder_name(self, obj: Position) -> str | None:
+        p = self._current_placement(obj)
+        return p.employee.full_name if p else None
+
+    def get_holder_employee_id(self, obj: Position) -> str | None:
+        p = self._current_placement(obj)
+        return p.employee.employee_id if p else None
+
+    def get_holder_since(self, obj: Position):
+        p = self._current_placement(obj)
+        return p.effective_from if p else None
+
+    def get_scheduled(self, obj: Position) -> dict | None:
+        as_of = self._as_of()
+        upcoming = sorted(
+            (p for p in self._all_placements(obj) if p.effective_from > as_of),
+            key=lambda p: p.effective_from,
+        )
+        if not upcoming:
+            return None
+        p = upcoming[0]
+        return {
+            'placement_id': str(p.pk),
+            'employee_name': p.employee.full_name,
+            'effective_from': p.effective_from,
+        }
 
     def get_reports_to(self, obj: Position) -> dict | None:
         """Mirrors the mockup's own reportsToName() logic: a chief reports to
@@ -604,10 +672,11 @@ class PositionSerializer(serializers.ModelSerializer):
             target = obj.org_unit.positions.filter(is_chief=True).first()
         if not target or target.pk == obj.pk:
             return None
+        target_placement = self._current_placement(target)
         return {
             'position_id': str(target.pk),
             'title': target.title,
-            'holder_name': target.holder.full_name if target.holder else None,
+            'holder_name': target_placement.employee.full_name if target_placement else None,
         }
 
     def _unset_other_chiefs(self, instance: Position) -> None:
@@ -624,18 +693,32 @@ class PositionSerializer(serializers.ModelSerializer):
         self._unset_other_chiefs(instance)
         return instance
 
-    def validate(self, attrs: dict) -> dict:
-        holder = attrs.get('holder', getattr(self.instance, 'holder', None) if self.instance else None)
-        if holder is not None:
-            conflict_qs = Position.objects.filter(holder=holder)
-            if self.instance:
-                conflict_qs = conflict_qs.exclude(pk=self.instance.pk)
-            conflict = conflict_qs.first()
-            if conflict:
-                raise serializers.ValidationError({
-                    'holder': f'{holder.full_name} already holds another position: "{conflict.title}".',
-                })
-        return attrs
+
+class PlacementSerializer(serializers.ModelSerializer):
+    employee_name        = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_employee_id = serializers.CharField(source='employee.employee_id', read_only=True)
+    created_by_name       = serializers.CharField(source='created_by.full_name', read_only=True, default=None)
+    status                = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Placement
+        fields = (
+            'id', 'position', 'employee', 'employee_name', 'employee_employee_id',
+            'effective_from', 'effective_to', 'note', 'status',
+            'created_at', 'created_by', 'created_by_name', 'updated_at',
+        )
+        read_only_fields = (
+            'id', 'employee_name', 'employee_employee_id', 'status',
+            'created_at', 'created_by', 'created_by_name', 'updated_at',
+        )
+
+    def get_status(self, obj: Placement) -> str:
+        today = timezone.localdate()
+        if obj.effective_from > today:
+            return 'scheduled'
+        if obj.effective_to is not None and obj.effective_to < today:
+            return 'ended'
+        return 'current'
 
 
 # ─── Company ──────────────────────────────────────────────────────────────────

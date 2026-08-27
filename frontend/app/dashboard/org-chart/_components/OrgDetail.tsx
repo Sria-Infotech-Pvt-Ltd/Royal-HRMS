@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { JobTemplate, OrgUnit, Position } from "@/types/orgStructure";
+import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
 import type { BranchOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 
@@ -12,15 +12,24 @@ interface Props {
   jobs: JobTemplate[];
   branches: BranchOption[];
   canEdit: boolean;
+  placementHistory: Placement[];
+  placementHistoryLoading: boolean;
   onSelect: (s: Selected) => void;
   onAddSubUnit: (parentUnitId: string) => void;
   onAddPosition: (unitId: string) => void;
   onAssign: (positionId: string) => void;
   onVacate: (positionId: string) => void;
+  onCancelScheduled: (placementId: string) => void;
   onUnitField: (unitId: string, field: string, value: string | null) => void;
   onPositionField: (positionId: string, field: string, value: string | boolean | null) => void;
   onToggleChief: (position: Position) => void;
 }
+
+const STATUS_BADGE: Record<Placement["status"], { label: string; color: string; bg: string }> = {
+  current:   { label: "Current",   color: "var(--success)", bg: "var(--success-c)" },
+  scheduled: { label: "Scheduled", color: "var(--warn)",     bg: "var(--warn-c)" },
+  ended:     { label: "Ended",     color: "var(--on-variant)", bg: "var(--bg-low)" },
+};
 
 function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -100,8 +109,8 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 }
 
 export default function OrgDetail({
-  selected, units, positions, jobs, branches, canEdit, onSelect,
-  onAddSubUnit, onAddPosition, onAssign, onVacate, onUnitField, onPositionField, onToggleChief,
+  selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
+  onAddSubUnit, onAddPosition, onAssign, onVacate, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
     return (
@@ -148,7 +157,9 @@ export default function OrgDetail({
           />
         ) : chief.holder_name ? (
           <HeadBox
-            icon={<Avatar name={chief.holder_name} size={30} />} role={`Head of unit · ${chief.title}`} name={chief.holder_name} vacant={false}
+            icon={<Avatar name={chief.holder_name} size={30} />}
+            role={`Head of unit · ${chief.title}${chief.holder_since ? ` · since ${chief.holder_since}` : ""}`}
+            name={chief.holder_name} vacant={false}
             action={<button className="btn btn-ghost btn-sm" onClick={() => onSelect({ type: "position", id: chief.id })}>Open position</button>}
           />
         ) : (
@@ -217,7 +228,9 @@ export default function OrgDetail({
         <SectionTitle>Holder</SectionTitle>
         {p.holder_name ? (
           <HeadBox
-            icon={<Avatar name={p.holder_name} size={30} />} role="Current holder" name={p.holder_name} vacant={false}
+            icon={<Avatar name={p.holder_name} size={30} />}
+            role={p.holder_since ? `Current holder · since ${p.holder_since}` : "Current holder"}
+            name={p.holder_name} vacant={false}
             action={canEdit && (
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => onAssign(p.id)}>Reassign</button>
@@ -231,6 +244,24 @@ export default function OrgDetail({
             action={canEdit && <button className="linkbtn" onClick={() => onAssign(p.id)} style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Assign holder</button>}
           />
         )}
+
+        {p.scheduled && (() => {
+          const scheduled = p.scheduled;
+          return (
+            <div style={{
+              marginTop: 10, display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+              background: "var(--warn-c)", border: "1px solid var(--warn)", borderRadius: 8, fontSize: 12.5,
+            }}>
+              <i className="ti ti-clock" style={{ color: "var(--warn)", fontSize: 15 }} />
+              <div style={{ flex: 1 }}>
+                <b>{scheduled.employee_name}</b> is scheduled to take this seat on <b>{scheduled.effective_from}</b>.
+              </div>
+              {canEdit && (
+                <button className="btn btn-ghost btn-sm" onClick={() => onCancelScheduled(scheduled.placement_id)}>Cancel</button>
+              )}
+            </div>
+          );
+        })()}
 
         <SectionTitle>Reporting</SectionTitle>
         <div className="field-group">
@@ -277,6 +308,29 @@ export default function OrgDetail({
             label={<>This position is the <b>head</b> of {p.org_unit_name}.</>}
           />
         </div>
+
+        <SectionTitle>Placement history</SectionTitle>
+        {placementHistoryLoading && <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>Loading…</div>}
+        {!placementHistoryLoading && placementHistory.length === 0 && (
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "6px 0" }}>No placements yet on this seat.</div>
+        )}
+        {!placementHistoryLoading && placementHistory.map(pl => {
+          const badge = STATUS_BADGE[pl.status];
+          return (
+            <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", border: "1px solid var(--outline-v)", borderRadius: 8, marginBottom: 7 }}>
+              <Avatar name={pl.employee_name} size={26} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 570 }}>{pl.employee_name}</div>
+                <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 1 }}>
+                  {pl.effective_from} – {pl.effective_to ?? "present"}{pl.note ? ` · ${pl.note}` : ""}
+                </div>
+              </div>
+              <span className="badge" style={{ background: badge.bg, color: badge.color, fontSize: 10.5, fontWeight: 650, padding: "3px 9px", borderRadius: 5, flexShrink: 0 }}>
+                {badge.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
     );
   }

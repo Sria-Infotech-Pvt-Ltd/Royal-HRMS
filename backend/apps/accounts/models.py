@@ -8,8 +8,10 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password as _check_hash
 from django.contrib.auth.hashers import make_password as _make_hash
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateRangeField, RangeBoundary, RangeOperators
 from django.db import models, transaction
-from django.db.models import F
+from django.db.models import CheckConstraint, F, Func, Q, UniqueConstraint
 from django.utils import timezone
 
 from core.encrypted_fields import EncryptedCharField, blind_index
@@ -355,6 +357,9 @@ class OrgUnit(models.Model):
                      related_name='children',
                  )
     cost_center = models.CharField(max_length=30, blank=True)
+    # Deactivate rather than delete once a unit has real history (positions,
+    # placements) under it — deleting history is a compliance problem.
+    is_active  = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -386,11 +391,16 @@ class JobTemplate(models.Model):
 
 
 class Position(models.Model):
-    """A seat within an OrgUnit — may be vacant (`holder` null). Exactly one
-    position per OrgUnit may have `is_chief=True`; that position's holder is
-    the unit's head. Enforced in the serializer (unsets any other chief in
-    the same unit), not a DB constraint, matching how Branch.is_headquarter
-    is handled elsewhere in this app."""
+    """A seat within an OrgUnit — may be vacant. Who holds it, and since when,
+    lives on `Placement` (a dated window), not on this model — a seat's
+    holder history is queryable, and a future-dated change can be scheduled
+    without disturbing today's holder. Exactly one position per OrgUnit may
+    have `is_chief=True`; that position's current holder is the unit's head.
+    Enforced both in the serializer (unsets any other chief in the same
+    unit, for a clean UX) and as a DB-level partial unique constraint
+    (`position_one_chief_per_unit`, below) — the spec for this change
+    explicitly wants the invariant guaranteed at the database, not only in
+    application code."""
     id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     org_unit      = models.ForeignKey(OrgUnit, on_delete=models.CASCADE, related_name='positions')
     job_template  = models.ForeignKey(
@@ -400,10 +410,6 @@ class Position(models.Model):
     title         = models.CharField(max_length=150)
     grade         = models.CharField(max_length=20, blank=True)
     is_chief      = models.BooleanField(default=False)
-    holder        = models.OneToOneField(
-                        'User', on_delete=models.SET_NULL, null=True, blank=True,
-                        related_name='held_positions',
-                    )
     # Optional — most positions live in the one shared, company-wide tree;
     # set this only when a seat is genuinely tied to one physical branch
     # (e.g. "Recruiter — Kondapur"). Lets the same tree be filtered to a
@@ -412,15 +418,106 @@ class Position(models.Model):
                         'branch.Branch', on_delete=models.SET_NULL, null=True, blank=True,
                         related_name='positions',
                     )
+    # Deactivate rather than delete once a position has placement history —
+    # deleting history is a compliance problem (Placement.position is
+    # on_delete=PROTECT for the same reason).
+    is_active     = models.BooleanField(default=True)
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'hrms_positions'
         ordering = ['title']
+        constraints = [
+            UniqueConstraint(fields=['org_unit'], condition=Q(is_chief=True), name='position_one_chief_per_unit'),
+        ]
 
     def __str__(self) -> str:
         return f'{self.title} — {self.org_unit.name}'
+
+
+class Placement(models.Model):
+    """One employee holding one Position across a date window — this is
+    where dates live, replacing the old direct `Position.holder` FK (which
+    could only ever say who holds a seat *right now*, and lost that
+    information the instant someone was reassigned). `effective_from`/
+    `effective_to` are both inclusive; a null `effective_to` means
+    open-ended (still current).
+
+    The two DB-level `ExclusionConstraint`s below are the actual source of
+    truth for "no double-booking" — not application code:
+      - `placement_position_no_overlap`: a seat can't have two people
+        holding it on the same day.
+      - `placement_employee_no_overlap`: one employee can't hold two seats
+        at once, company-wide (confirmed decision — see this feature's
+        design notes; NOT a general SAP-style multi-position model).
+    Both use an inclusive-inclusive Postgres `daterange(...,'[]')` built at
+    the expression level (no stored range column) — Postgres canonicalizes
+    this internally, so callers must never *also* manually shift
+    `effective_to` by a day when reasoning about overlaps. A null
+    `effective_to` becomes unbounded-above automatically inside that
+    `daterange()` call.
+
+    Never hard-delete a Position/employee that has placement rows —
+    `on_delete=PROTECT` on both FKs enforces this; the history itself is a
+    compliance record, not disposable."""
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    position       = models.ForeignKey(Position, on_delete=models.PROTECT, related_name='placements')
+    employee       = models.ForeignKey('User', on_delete=models.PROTECT, related_name='placements')
+    effective_from = models.DateField()
+    effective_to   = models.DateField(null=True, blank=True)
+    note           = models.CharField(max_length=255, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True)
+    created_by     = models.ForeignKey(
+                         'User', on_delete=models.SET_NULL, null=True, blank=True,
+                         related_name='+',
+                     )
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_placements'
+        ordering = ['-effective_from']
+        indexes = [models.Index(fields=['position', 'effective_from'])]
+        constraints = [
+            CheckConstraint(
+                condition=Q(effective_to__isnull=True) | Q(effective_to__gte=F('effective_from')),
+                name='placement_effective_to_gte_from',
+                violation_error_message='The end date cannot be before the start date.',
+            ),
+            ExclusionConstraint(
+                name='placement_position_no_overlap',
+                violation_error_message='This position already has an overlapping placement for that date range.',
+                expressions=[
+                    ('position', RangeOperators.EQUAL),
+                    (
+                        Func(
+                            'effective_from', 'effective_to',
+                            RangeBoundary(inclusive_lower=True, inclusive_upper=True),
+                            function='daterange', output_field=DateRangeField(),
+                        ),
+                        RangeOperators.OVERLAPS,
+                    ),
+                ],
+            ),
+            ExclusionConstraint(
+                name='placement_employee_no_overlap',
+                violation_error_message='This employee already has an overlapping placement for that date range.',
+                expressions=[
+                    ('employee', RangeOperators.EQUAL),
+                    (
+                        Func(
+                            'effective_from', 'effective_to',
+                            RangeBoundary(inclusive_lower=True, inclusive_upper=True),
+                            function='daterange', output_field=DateRangeField(),
+                        ),
+                        RangeOperators.OVERLAPS,
+                    ),
+                ],
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.position.title} ({self.effective_from} – {self.effective_to or "present"})'
 
 
 class PromotionRecord(models.Model):

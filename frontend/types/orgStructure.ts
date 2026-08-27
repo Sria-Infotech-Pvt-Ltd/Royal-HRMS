@@ -10,6 +10,7 @@ export interface OrgUnit {
   code:           string;
   parent:         string | null;
   cost_center:    string;
+  is_active:      boolean;
   position_count: number;
   child_count:    number;
   created_at:     string;
@@ -28,6 +29,12 @@ export interface PositionReportsTo {
   holder_name: string | null;
 }
 
+export interface PositionScheduled {
+  placement_id:   string;
+  employee_name:  string;
+  effective_from: string;
+}
+
 export interface Position {
   id:                  string;
   org_unit:            string;
@@ -37,9 +44,18 @@ export interface Position {
   title:               string;
   grade:               string;
   is_chief:            boolean;
+  is_active:           boolean;
+  // holder/holder_name/holder_employee_id/holder_since are all derived from
+  // whichever Placement currently covers "today" (or ?asOf=), not a stored
+  // field — same field names as before on purpose, so most consumers of
+  // this type need no changes.
   holder:              string | null;
   holder_name:         string | null;
   holder_employee_id:  string | null;
+  holder_since:        string | null;
+  // The next upcoming (future-dated) placement on this seat, if any —
+  // doesn't affect who the current holder is.
+  scheduled:           PositionScheduled | null;
   // Optional — most positions sit in the one shared, company-wide tree;
   // set only when a seat is genuinely tied to one physical branch. Lets
   // the same tree be filtered to a branch-specific view (?branch=<id>)
@@ -49,6 +65,31 @@ export interface Position {
   reports_to:          PositionReportsTo | null;
   created_at:           string;
   updated_at:           string;
+}
+
+export type PlacementStatus = "current" | "scheduled" | "ended";
+
+export interface Placement {
+  id:                    string;
+  position:              string;
+  employee:              string;
+  employee_name:         string;
+  employee_employee_id:  string;
+  effective_from:        string;
+  effective_to:          string | null;
+  note:                  string;
+  status:                PlacementStatus;
+  created_at:            string;
+  created_by:            string | null;
+  created_by_name:       string | null;
+  updated_at:            string;
+}
+
+export interface PlacementPayload {
+  employee:        string;
+  effective_from:  string;
+  effective_to?:   string | null;
+  note?:           string;
 }
 
 export interface OrgUnitPayload {
