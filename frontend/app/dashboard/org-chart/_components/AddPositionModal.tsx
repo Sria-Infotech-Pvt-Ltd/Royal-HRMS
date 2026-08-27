@@ -6,10 +6,12 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import type { JobTemplate, OrgUnit, Position, PositionPayload } from "@/types/orgStructure";
+import type { BranchOption } from "./OrgStructureClient";
 
 interface Props {
   unit: OrgUnit | null;
   jobs: JobTemplate[];
+  branches: BranchOption[];
   hasChief: boolean;
   onClose: () => void;
   onCreated: (position: Position) => void;
@@ -19,10 +21,11 @@ function Spin() {
   return <i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />;
 }
 
-export default function AddPositionModal({ unit, jobs, hasChief, onClose, onCreated }: Props) {
+export default function AddPositionModal({ unit, jobs, branches, hasChief, onClose, onCreated }: Props) {
   const [title, setTitle]       = useState("");
   const [jobTemplate, setJobTemplate] = useState("");
   const [grade, setGrade]       = useState("");
+  const [branch, setBranch]     = useState("");
   const [isChief, setIsChief]   = useState(!hasChief);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -36,6 +39,7 @@ export default function AddPositionModal({ unit, jobs, hasChief, onClose, onCrea
     const payload: PositionPayload = {
       org_unit: unit.id, job_template: jobTemplate || null,
       title: title.trim(), grade: grade.trim().toUpperCase(), is_chief: isChief,
+      branch: branch ? Number(branch) : null,
     };
     try {
       const res = await clientApi.post(API.orgStructure.positions.list, payload);
@@ -92,6 +96,14 @@ export default function AddPositionModal({ unit, jobs, hasChief, onClose, onCrea
       <div className="field-group mb-16">
         <label className="field-label">Grade / Band <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
         <input className="field-input" style={{ fontFamily: "monospace" }} value={grade} onChange={e => setGrade(e.target.value)} placeholder="L4" />
+      </div>
+
+      <div className="field-group mb-16">
+        <label className="field-label">Branch <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
+        <select className="field-input" value={branch} onChange={e => setBranch(e.target.value)}>
+          <option value="">Company-wide</option>
+          {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
+        </select>
       </div>
 
       <div className="mb-8">

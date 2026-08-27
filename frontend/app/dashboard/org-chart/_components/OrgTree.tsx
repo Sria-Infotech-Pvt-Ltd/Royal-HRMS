@@ -8,6 +8,7 @@ interface Props {
   units: OrgUnit[];
   positions: Position[];
   search: string;
+  branchFilter: number | null;
   selected: Selected;
   onSelect: (s: Selected) => void;
 }
@@ -16,12 +17,16 @@ function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
-export default function OrgTree({ units, positions, search, selected, onSelect }: Props) {
+export default function OrgTree({ units, positions, search, branchFilter, selected, onSelect }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const q = search.trim().toLowerCase();
 
+  // A branch-scoped position must match; a position with no branch set is
+  // company-wide and always shows, in every branch view.
+  const matchesBranch = (p: Position) => branchFilter === null || p.branch === null || p.branch === branchFilter;
+
   const childUnits = (parentId: string | null) => units.filter(u => u.parent === parentId);
-  const posInUnit = (unitId: string) => positions.filter(p => p.org_unit === unitId);
+  const posInUnit = (unitId: string) => positions.filter(p => p.org_unit === unitId && matchesBranch(p));
 
   function toggle(key: string) {
     setCollapsed(prev => {
@@ -32,11 +37,23 @@ export default function OrgTree({ units, positions, search, selected, onSelect }
     });
   }
 
-  function matchUnit(u: OrgUnit): boolean {
+  function matchesSearch(u: OrgUnit): boolean {
     if (!q) return true;
     if (u.name.toLowerCase().includes(q) || u.code.toLowerCase().includes(q)) return true;
     if (posInUnit(u.id).some(p => p.title.toLowerCase().includes(q) || (p.holder_name ?? "").toLowerCase().includes(q))) return true;
-    return childUnits(u.id).some(matchUnit);
+    return childUnits(u.id).some(matchesSearch);
+  }
+
+  // posInUnit already applies the branch filter — a unit only "has a branch
+  // match" once it (or a descendant) has at least one visible position left.
+  function hasBranchMatch(u: OrgUnit): boolean {
+    if (branchFilter === null) return true;
+    if (posInUnit(u.id).length > 0) return true;
+    return childUnits(u.id).some(hasBranchMatch);
+  }
+
+  function matchUnit(u: OrgUnit): boolean {
+    return matchesSearch(u) && hasBranchMatch(u);
   }
 
   function renderUnit(u: OrgUnit, depth: number): ReactNode {
@@ -134,7 +151,7 @@ export default function OrgTree({ units, positions, search, selected, onSelect }
       {rendered.length > 0
         ? rendered
         : <div style={{ padding: 24, textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-            {q ? "Nothing matches." : "No org units yet — add one to get started."}
+            {q || branchFilter !== null ? "Nothing matches." : "No org units yet — add one to get started."}
           </div>
       }
     </>

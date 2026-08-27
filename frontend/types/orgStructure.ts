@@ -40,6 +40,12 @@ export interface Position {
   holder:              string | null;
   holder_name:         string | null;
   holder_employee_id:  string | null;
+  // Optional — most positions sit in the one shared, company-wide tree;
+  // set only when a seat is genuinely tied to one physical branch. Lets
+  // the same tree be filtered to a branch-specific view (?branch=<id>)
+  // without duplicating OrgUnit/Position data per branch.
+  branch:              number | null;
+  branch_name:         string | null;
   reports_to:          PositionReportsTo | null;
   created_at:           string;
   updated_at:           string;
@@ -58,4 +64,5 @@ export interface PositionPayload {
   title:        string;
   grade:        string;
   is_chief:     boolean;
+  branch?:      number | null;
 }

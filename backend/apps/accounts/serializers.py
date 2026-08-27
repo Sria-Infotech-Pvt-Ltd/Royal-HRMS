@@ -567,6 +567,7 @@ class PositionSerializer(serializers.ModelSerializer):
     job_template_name   = serializers.CharField(source='job_template.name', read_only=True, default=None)
     holder_name         = serializers.CharField(source='holder.full_name', read_only=True, default=None)
     holder_employee_id  = serializers.CharField(source='holder.employee_id', read_only=True, default=None)
+    branch_name         = serializers.CharField(source='branch.branch_name', read_only=True, default=None)
     reports_to          = serializers.SerializerMethodField()
 
     class Meta:
@@ -574,11 +575,11 @@ class PositionSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'org_unit', 'org_unit_name', 'job_template', 'job_template_name',
             'title', 'grade', 'is_chief', 'holder', 'holder_name', 'holder_employee_id',
-            'reports_to', 'created_at', 'updated_at',
+            'branch', 'branch_name', 'reports_to', 'created_at', 'updated_at',
         )
         read_only_fields = (
             'id', 'org_unit_name', 'job_template_name', 'holder_name',
-            'holder_employee_id', 'reports_to', 'created_at', 'updated_at',
+            'holder_employee_id', 'branch_name', 'reports_to', 'created_at', 'updated_at',
         )
 
     def validate_title(self, value: str) -> str:

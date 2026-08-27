@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { JobTemplate, OrgUnit, Position } from "@/types/orgStructure";
-import type { Selected } from "./OrgStructureClient";
+import type { BranchOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   units: OrgUnit[];
   positions: Position[];
   jobs: JobTemplate[];
+  branches: BranchOption[];
   canEdit: boolean;
   onSelect: (s: Selected) => void;
   onAddSubUnit: (parentUnitId: string) => void;
@@ -77,7 +78,9 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
           {p.title}
           {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13 }} />}
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>{p.job_template_name ?? "—"}{p.grade ? ` · ${p.grade}` : ""}</div>
+        <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
+          {p.job_template_name ?? "—"}{p.grade ? ` · ${p.grade}` : ""}{p.branch_name ? ` · ${p.branch_name}` : ""}
+        </div>
       </div>
       {p.holder_name ? (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 550 }}>
@@ -97,7 +100,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 }
 
 export default function OrgDetail({
-  selected, units, positions, jobs, canEdit, onSelect,
+  selected, units, positions, jobs, branches, canEdit, onSelect,
   onAddSubUnit, onAddPosition, onAssign, onVacate, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
@@ -206,7 +209,7 @@ export default function OrgDetail({
               {p.title} {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 16 }} />}
             </div>
             <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3 }}>
-              Position · {p.org_unit_name}
+              Position · {p.org_unit_name}{p.branch_name ? ` · ${p.branch_name}` : ""}
             </div>
           </div>
         </div>
@@ -256,6 +259,13 @@ export default function OrgDetail({
             <select className="field-input" defaultValue={p.job_template ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "job_template", e.target.value || null)}>
               <option value="">None</option>
               {jobs.map(j => <option key={j.id} value={j.id}>{j.name}{j.band ? ` · ${j.band}` : ""}</option>)}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Branch <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
+            <select className="field-input" defaultValue={p.branch ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "branch", e.target.value || null)}>
+              <option value="">Company-wide</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
             </select>
           </div>
         </div>

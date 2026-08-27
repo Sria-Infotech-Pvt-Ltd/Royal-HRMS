@@ -1418,7 +1418,13 @@ class PositionListCreateView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'org_chart.view'):
             return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
-        qs = Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder')
+        qs = Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder', 'branch')
+        if branch_id := request.query_params.get('branch'):
+            try:
+                branch_id = int(branch_id)
+            except (TypeError, ValueError):
+                return error('branch filter must be a valid integer ID.')
+            qs = qs.filter(branch_id=branch_id)
         page_obj, paginator = paginate(qs, request, default_page_size=200)
         return success('Positions retrieved.', data=paginated_data(
             paginator, page_obj, PositionSerializer(page_obj.object_list, many=True).data,
@@ -1446,7 +1452,7 @@ class PositionDetailView(APIView):
 
     def _get(self, pk):
         try:
-            return Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder').get(pk=pk)
+            return Position.objects.select_related('org_unit', 'org_unit__parent', 'job_template', 'holder', 'branch').get(pk=pk)
         except Position.DoesNotExist:
             return None
 

@@ -5016,6 +5016,25 @@ Verified live end-to-end (test client + minted `RefreshToken.for_user()` JWT, vi
 
 ---
 
+## 15. Org Structure — Optional Branch Attribute on Position (User's Own Design)
+
+**Files:** `backend/apps/accounts/{models,serializers,views}.py`, `backend/apps/accounts/migrations/0104_position_branch.py` (new), `frontend/types/orgStructure.ts`, `frontend/app/dashboard/org-chart/_components/{OrgStructureClient,OrgTree,OrgDetail,AddPositionModal}.tsx`
+
+User asked how the Org Chart currently groups data (answer: by `OrgUnit` functional hierarchy — completely branch-agnostic, confirmed in §14's Fourth update) and then proposed the fix themselves: keep one company-wide tree, add branch as an optional *filter/attribute* on `Position` rather than duplicating the whole tree per branch — explicitly comparing it to the exact duplication problem this session already avoided with `Branch.gst_registration` (an FK link, not copied GST data per branch).
+
+Design choices made before touching schema, confirmed with the user first:
+- **`branch` lives on `Position`, not `OrgUnit`** — a seat like "Recruiter — Kondapur" is branch-specific, but a functional unit like "IT Staffing & Recruitment" legitimately spans multiple branches (already true in the dummy data: Divya at Hyderabad and Meera at Kondapur, same unit).
+- **Nullable** — company-wide roles (Managing Director, Finance Head) shouldn't be forced into one branch. `null` = "company-wide, always visible in every branch view," not "unset/broken."
+- **A real `ForeignKey('branch.Branch', on_delete=SET_NULL)`, not a free-text string** — deliberately not repeating §14 Piece A's root cause (unvalidated free-text `department`/`designation` on `User` caused a real, live bug). Django resolves the app-label string form fine despite `branch` already having its own FK back to `accounts.User` (`Branch.hr`) — no circular-import issue since neither app imports the other's models module directly.
+
+**Backend**: `PositionSerializer` gained `branch`/`branch_name` (read-only, `source='branch.branch_name'`); `PositionListCreateView.get()` gained a `?branch=<id>` integer filter (mirrors the existing `?department=` pattern on `DesignationListCreateView`); `select_related('branch')` added to both list and detail queries to avoid N+1 on `branch_name`.
+
+**Frontend**: `OrgStructureClient.tsx` fetches the branch list (`API.branches.list`, same one `BranchFilterSelect`/`BranchManagement.tsx` already use) and renders a plain branch `<select>` next to the search box — **deliberately not reusing the existing shared `components/BranchFilterSelect.tsx`**, since that component's `value`/`onChange` contract is `branch_name` strings (matching `User.branch`'s looser convention used elsewhere in the app), while this filter is genuinely ID-based to match the new FK; force-fitting the string contract would have meant translating name↔id right back, for no benefit. `OrgTree.tsx`'s existing search-filter mechanism (`matchUnit`/`posInUnit`) was extended with a parallel `hasBranchMatch()` check, combined via AND with the existing text search — a unit only renders under a branch filter if it (or a descendant) has at least one position matching that branch **or with no branch set** (company-wide positions always show, in every branch view — this was a deliberate UX call, not left implicit). `OrgDetail.tsx`'s position edit form and `AddPositionModal.tsx` both gained a "Branch (optional — leave unset for a company-wide seat)" select, using the same generic `onPositionField(id, "branch", value || null)` setter already wired for `org_unit`/`job_template` — no new update handler needed.
+
+Verified live: linked the two branch-specific dummy positions from §14's Fourth update to their real `Branch` rows via `PUT`, confirmed `?branch=<kondapur-id>` and `?branch=<miyapur-id>` each return exactly the one matching position, confirmed the unfiltered company-wide list still returns all 10, confirmed an invalid (non-integer) `branch` param returns a clean 400 rather than a 500. Also verified position creation both with and without a branch, matching `AddPositionModal`'s exact payload shape. `tsc --noEmit`/`eslint` clean across every touched file; `apps.accounts`/`apps.branch` test suites re-run clean (same one pre-existing, unrelated `PasswordResetFlowTests` failure noted in §14, nothing new).
+
+---
+
 ## Key Files Changed
 
 | File | Change |
@@ -5064,6 +5083,10 @@ Verified live end-to-end (test client + minted `RefreshToken.for_user()` JWT, vi
 | `backend/apps/accounts/serializers.py` | `PositionSerializer.validate()` — dead Department-name-check code replaced with real holder-uniqueness validation |
 | `backend/apps/accounts/models.py`, `migrations/0103_...py` (new) | `User.designation_synced_from_position` (new); `Position.holder` `ForeignKey` → `OneToOneField` |
 | `backend/apps/accounts/tests.py` | `OnboardingApprovalReferralBonusTests` fixture now creates real `Department`/`Designation` rows (previously relied on the exact bug Piece A fixes) |
+| `backend/apps/accounts/models.py`, `migrations/0104_position_branch.py` (new) | `Position.branch` — nullable `ForeignKey('branch.Branch')` |
+| `backend/apps/accounts/serializers.py`, `views.py` | `PositionSerializer` gained `branch`/`branch_name`; `PositionListCreateView.get()` gained a `?branch=<id>` filter |
+| `frontend/types/orgStructure.ts` | `Position.branch`/`branch_name`, `PositionPayload.branch` |
+| `frontend/app/dashboard/org-chart/_components/{OrgStructureClient,OrgTree,OrgDetail,AddPositionModal}.tsx` | Branch filter dropdown + branch-aware tree filtering + branch field on create/edit |
 
 ---
 

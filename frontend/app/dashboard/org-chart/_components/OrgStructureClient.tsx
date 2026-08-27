@@ -17,6 +17,11 @@ export interface EmployeeOption {
   employee_id: string;
 }
 
+export interface BranchOption {
+  id: number;
+  branch_name: string;
+}
+
 export type Selected = { type: "unit" | "position" | "person"; id: string } | null;
 
 export default function OrgStructureClient() {
@@ -26,11 +31,13 @@ export default function OrgStructureClient() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [jobs,       setJobs]       = useState<JobTemplate[]>([]);
   const [employees,  setEmployees]  = useState<EmployeeOption[]>([]);
+  const [branches,   setBranches]   = useState<BranchOption[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Selected>(null);
   const [search,   setSearch]   = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
 
   const [addUnitParent,    setAddUnitParent]    = useState<string | null | "new">(null);
   const [addPositionUnit,  setAddPositionUnit]  = useState<string | null>(null);
@@ -40,16 +47,18 @@ export default function OrgStructureClient() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [unitsRes, posRes, jobsRes, empRes] = await Promise.all([
+      const [unitsRes, posRes, jobsRes, empRes, branchRes] = await Promise.all([
         clientApi.get(`${API.orgStructure.units.list}?page_size=200`),
         clientApi.get(`${API.orgStructure.positions.list}?page_size=200`),
         clientApi.get(API.orgStructure.jobTemplates),
         clientApi.get(API.employees.list, { params: { page_size: 200, status: "active" } }),
+        clientApi.get(API.branches.list, { params: { page_size: 200 } }),
       ]);
       setUnits(unitsRes.data?.data?.results ?? []);
       setPositions(posRes.data?.data?.results ?? []);
       setJobs(jobsRes.data?.data ?? []);
       setEmployees(empRes.data?.data?.results ?? []);
+      setBranches(branchRes.data?.data?.results ?? []);
     } catch (err: unknown) {
       setLoadError((err as { message?: string })?.message ?? "Failed to load organisation structure.");
     } finally {
@@ -137,7 +146,7 @@ export default function OrgStructureClient() {
             </div>
           </div>
           <div style={{ padding: 8 }}>
-            <div style={{ position: "relative", margin: "6px 8px 8px" }}>
+            <div style={{ position: "relative", margin: "6px 8px 0" }}>
               <i className="ti ti-search" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "var(--outline)" }} />
               <input
                 className="field-input"
@@ -147,9 +156,21 @@ export default function OrgStructureClient() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+            <div style={{ margin: "8px 8px" }}>
+              <select
+                className="field-input"
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                title="Positions with no branch set always show, in every view"
+              >
+                <option value="">All branches</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
+              </select>
+            </div>
             <div style={{ maxHeight: 640, overflow: "auto" }}>
               <OrgTree
                 units={units} positions={positions} search={search}
+                branchFilter={branchFilter ? Number(branchFilter) : null}
                 selected={selected} onSelect={setSelected}
               />
             </div>
@@ -166,7 +187,7 @@ export default function OrgStructureClient() {
         <div className="card">
           <div style={{ padding: "18px 20px" }}>
             <OrgDetail
-              selected={selected} units={units} positions={positions} jobs={jobs} canEdit={canEdit}
+              selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} canEdit={canEdit}
               onSelect={setSelected}
               onAddSubUnit={unitId => setAddUnitParent(unitId)}
               onAddPosition={unitId => setAddPositionUnit(unitId)}
@@ -204,6 +225,7 @@ export default function OrgStructureClient() {
         <AddPositionModal
           unit={units.find(u => u.id === addPositionUnit) ?? null}
           jobs={jobs}
+          branches={branches}
           hasChief={positions.some(p => p.org_unit === addPositionUnit && p.is_chief)}
           onClose={() => setAddPositionUnit(null)}
           onCreated={position => { setAddPositionUnit(null); setSelected({ type: "position", id: position.id }); load(); }}

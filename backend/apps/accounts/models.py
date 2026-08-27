@@ -404,6 +404,14 @@ class Position(models.Model):
                         'User', on_delete=models.SET_NULL, null=True, blank=True,
                         related_name='held_positions',
                     )
+    # Optional — most positions live in the one shared, company-wide tree;
+    # set this only when a seat is genuinely tied to one physical branch
+    # (e.g. "Recruiter — Kondapur"). Lets the same tree be filtered to a
+    # branch-specific view without duplicating OrgUnit/Position per branch.
+    branch        = models.ForeignKey(
+                        'branch.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+                        related_name='positions',
+                    )
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
