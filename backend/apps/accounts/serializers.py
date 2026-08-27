@@ -529,18 +529,22 @@ class JobTemplateSerializer(serializers.ModelSerializer):
 
 
 class OrgUnitSerializer(serializers.ModelSerializer):
-    position_count = serializers.SerializerMethodField()
-    child_count    = serializers.SerializerMethodField()
+    position_count  = serializers.SerializerMethodField()
+    child_count     = serializers.SerializerMethodField()
+    department_name = serializers.CharField(source='department.name', read_only=True, default=None)
 
     class Meta:
         model  = OrgUnit
         fields = (
             'id', 'name', 'code', 'parent', 'cost_center', 'is_active',
+            'department', 'department_name',
             'position_count', 'child_count', 'created_at', 'updated_at',
         )
         # is_active is set only via the dedicated deactivate action (audit-
-        # logged there), never through a generic field update here.
-        read_only_fields = ('id', 'is_active', 'position_count', 'child_count', 'created_at', 'updated_at')
+        # logged there), never through a generic field update here. department
+        # is writable — an admin links a unit to a legacy Department directly
+        # through the same generic PUT this page already uses for parent/cost_center.
+        read_only_fields = ('id', 'is_active', 'department_name', 'position_count', 'child_count', 'created_at', 'updated_at')
 
     def get_position_count(self, obj: OrgUnit) -> int:
         return obj.positions.count()

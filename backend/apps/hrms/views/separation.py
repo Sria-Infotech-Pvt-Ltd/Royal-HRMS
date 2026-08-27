@@ -106,8 +106,8 @@ def _resolve_separation_chain(employee):
     if is_hr_tier:
         return [(SEP_STAGE_BRANCH_ADMIN, None)]
 
-    from apps.accounts.models import Department
-    dept = Department.objects.filter(name=employee.department).first()
+    from apps.accounts.services_approval import resolve_employee_department
+    dept = resolve_employee_department(employee)
     dept_manager = dept.manager if dept else None
     manager_approver = dept_manager if (dept_manager and dept_manager.id != employee.id) else None
     return [(SEP_STAGE_MANAGER, manager_approver), (SEP_STAGE_HR, employee.hr)]

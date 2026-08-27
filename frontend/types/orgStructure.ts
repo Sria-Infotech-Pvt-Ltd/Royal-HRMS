@@ -5,16 +5,21 @@
 // backend/apps/accounts/models.py's OrgUnit/Position docstrings.
 
 export interface OrgUnit {
-  id:             string;
-  name:           string;
-  code:           string;
-  parent:         string | null;
-  cost_center:    string;
-  is_active:      boolean;
-  position_count: number;
-  child_count:    number;
-  created_at:     string;
-  updated_at:     string;
+  id:              string;
+  name:            string;
+  code:            string;
+  parent:          string | null;
+  cost_center:     string;
+  is_active:       boolean;
+  // Phase 3 migration bridge — optional link to a legacy Department, set
+  // explicitly by an admin. See services_approval.resolve_employee_department
+  // on the backend for how this gets preferred over the old string match.
+  department:      number | null;
+  department_name: string | null;
+  position_count:  number;
+  child_count:     number;
+  created_at:      string;
+  updated_at:      string;
 }
 
 export interface JobTemplate {

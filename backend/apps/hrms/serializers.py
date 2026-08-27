@@ -932,8 +932,8 @@ class SeparationClearanceSerializer(serializers.ModelSerializer):
         ).exists():
             return True
         if obj.clearance_type == SEP_CLEARANCE_MANAGER:
-            from apps.accounts.models import Department
-            dept = Department.objects.filter(name=obj.request.employee.department).first()
+            from apps.accounts.services_approval import resolve_employee_department
+            dept = resolve_employee_department(obj.request.employee)
             return bool(dept and dept.manager_id == user.id)
         return False
 

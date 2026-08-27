@@ -345,9 +345,12 @@ class OrgUnit(models.Model):
     Delivery" → "S/4HANA Practice"). Deliberately separate from `Department`
     — that model is flat (no parent field) and matched to `User.department`
     by plain string equality; this is a genuine hierarchy with its own
-    Position/holder model underneath, used only by the Org Structure page.
-    Doesn't touch `User.department`/`reporting_manager` or any approval
-    routing, which keep working exactly as before.
+    Position/Placement model underneath, used only by the Org Structure
+    page. `department` (below) is the Phase 3 migration bridge — an
+    optional link an admin sets explicitly, letting anything that still
+    reads `Department` (see `services_approval.resolve_employee_department`)
+    prefer this real structure over the legacy string match once a unit is
+    mapped, without requiring every unit to be mapped immediately.
     """
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name       = models.CharField(max_length=150)
@@ -357,6 +360,10 @@ class OrgUnit(models.Model):
                      related_name='children',
                  )
     cost_center = models.CharField(max_length=30, blank=True)
+    department = models.ForeignKey(
+                     'Department', on_delete=models.SET_NULL, null=True, blank=True,
+                     related_name='org_units',
+                 )
     # Deactivate rather than delete once a unit has real history (positions,
     # placements) under it — deleting history is a compliance problem.
     is_active  = models.BooleanField(default=True)
