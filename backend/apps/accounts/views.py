@@ -1392,6 +1392,26 @@ class OrgUnitDetailView(APIView):
         return success(f'"{name}" deleted.', data={})
 
 
+def _sync_designation_from_position(position: 'Position', *, force: bool = False) -> None:
+    """Push the Position's effective title onto its current holder's
+    User.designation. Deliberately does NOT touch User.department — that
+    needs an explicit OrgUnit<->Department link, a separate future stage.
+
+    Respects designation_synced_from_position: skipped unless the flag is
+    still True, UNLESS force=True (an explicit assignment always wins)."""
+    holder = position.holder
+    if holder is None:
+        return
+    if not force and not holder.designation_synced_from_position:
+        return  # HR manually corrected this employee's designation since the last sync
+    effective_title = position.job_template.name if position.job_template_id else position.title
+    if holder.designation == effective_title and holder.designation_synced_from_position:
+        return
+    holder.designation = effective_title
+    holder.designation_synced_from_position = True
+    holder.save(update_fields=['designation', 'designation_synced_from_position', 'updated_at'])
+
+
 class PositionListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1411,6 +1431,8 @@ class PositionListCreateView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         instance = serializer.save()
+        if instance.holder_id:
+            _sync_designation_from_position(instance, force=True)
         AuditLog.objects.create(
             user=request.user, action='create', module='org_structure',
             object_id=str(instance.pk), changes={'title': instance.title},
@@ -1434,10 +1456,15 @@ class PositionDetailView(APIView):
         position = self._get(pk)
         if not position:
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        old_holder_id = position.holder_id
         serializer = PositionSerializer(position, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         instance = serializer.save()
+        if instance.holder_id and instance.holder_id != old_holder_id:
+            _sync_designation_from_position(instance, force=True)   # (re)assigned via generic edit
+        elif instance.holder_id and instance.holder_id == old_holder_id:
+            _sync_designation_from_position(instance)                # unchanged holder, title/org_unit/job_template edited
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(instance.pk), changes={'title': instance.title},
@@ -1482,8 +1509,12 @@ class PositionAssignHolderView(APIView):
             employee = User.objects.get(pk=employee_id, is_active=True)
         except (User.DoesNotExist, ValueError, TypeError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        conflict = Position.objects.filter(holder=employee).exclude(pk=position.pk).first()
+        if conflict:
+            return error(f'{employee.full_name} already holds another position: "{conflict.title}".')
         position.holder = employee
         position.save(update_fields=['holder', 'updated_at'])
+        _sync_designation_from_position(position, force=True)
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(position.pk),
@@ -1505,6 +1536,11 @@ class PositionVacateView(APIView):
             return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
         position.holder = None
         position.save(update_fields=['holder', 'updated_at'])
+        # Deliberately does not touch the former holder's User.designation —
+        # vacating a seat means "no longer occupying this org-chart slot,"
+        # not "no longer has a job." Blanking or reverting it here would
+        # actively break leave-policy eligibility and announcement targeting
+        # for someone who is still employed.
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(position.pk), changes={'title': position.title, 'holder': None},
@@ -3647,6 +3683,12 @@ class EmployeeDetailView(APIView):
                     changes[field] = {'from': old_val, 'to': val}
                 setattr(employee, field, val)
                 update_fields.append(field)
+                if field == 'designation':
+                    # A human just set this by hand — stop future Position
+                    # syncs (accounts/views.py _sync_designation_from_position)
+                    # from silently overwriting it until they're re-assigned.
+                    employee.designation_synced_from_position = False
+                    update_fields.append('designation_synced_from_position')
 
         if 'phone' in data:
             phone = (data.get('phone') or '').strip()
@@ -5511,6 +5553,32 @@ class OnboardingApprovalView(APIView):
                 return error('Department is required to approve onboarding.')
             if not req_designation:
                 return error('Designation is required to approve onboarding.')
+
+            # Unlike "Create Employee" (EmployeeListCreateView.post()) and bulk
+            # import, this hire path previously accepted any free-text
+            # department/designation with no check against the master tables —
+            # silently breaking every place downstream that matches on these
+            # fields by exact equality (separation approval chain,
+            # _cascade_manager, leave-policy eligibility, announcement
+            # targeting) whenever the typed value didn't match a real row.
+            dept_obj = Department.objects.filter(name__iexact=req_department, is_active=True).first()
+            if dept_obj is None:
+                return error(
+                    f'Department "{req_department}" is not a recognized, active department.',
+                    data={'department': 'Select a valid, active department.'},
+                )
+            req_department = dept_obj.name
+
+            desig_obj = Designation.objects.filter(
+                name__iexact=req_designation, department=dept_obj, is_active=True,
+            ).first()
+            if desig_obj is None:
+                return error(
+                    f'Designation "{req_designation}" does not exist under department "{dept_obj.name}".',
+                    data={'designation': 'Select a valid, active designation for this department.'},
+                )
+            req_designation = desig_obj.name
+
             if req_pan_number:
                 # Validated before any state changes below — an invalid/duplicate
                 # PAN must reject the whole approval, not just skip saving it.

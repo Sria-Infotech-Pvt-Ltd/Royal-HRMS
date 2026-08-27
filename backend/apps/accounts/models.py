@@ -161,6 +161,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     employee_id     = models.CharField(max_length=20, blank=True, db_index=True)
     department      = models.CharField(max_length=100, blank=True)
     designation     = models.CharField(max_length=100, blank=True)
+    # True until a human manually edits `designation` (EmployeeDetailView.put()) —
+    # lets Position-driven syncs (accounts/views.py _sync_designation_from_position)
+    # keep writing to it until someone deliberately overrides it by hand.
+    designation_synced_from_position = models.BooleanField(default=True)
     branch          = models.CharField(max_length=100, blank=True)
     phone           = models.CharField(max_length=20, blank=True)
     date_of_joining = models.DateField(null=True, blank=True)
@@ -396,7 +400,7 @@ class Position(models.Model):
     title         = models.CharField(max_length=150)
     grade         = models.CharField(max_length=20, blank=True)
     is_chief      = models.BooleanField(default=False)
-    holder        = models.ForeignKey(
+    holder        = models.OneToOneField(
                         'User', on_delete=models.SET_NULL, null=True, blank=True,
                         related_name='held_positions',
                     )

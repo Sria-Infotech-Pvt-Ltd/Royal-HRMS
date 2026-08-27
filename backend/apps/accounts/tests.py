@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, OTPVerification, User
+from apps.accounts.models import AuditLog, Department, Designation, OTPVerification, User
 from apps.accounts.serializers import ForgotPasswordSerializer
 
 
@@ -268,6 +268,11 @@ class OnboardingApprovalReferralBonusTests(TestCase):
         self.hr_user = make_user('hronboard@test.com', role=hr_role, password='TestPass123!')
 
         self.referrer = make_user('referrer2@test.com', role=make_role('employee'), password='TestPass123!')
+
+        # OnboardingApprovalView now validates department/designation against
+        # the master tables (see Piece A) — real rows required for a 200.
+        dept = Department.objects.create(name='Engineering', is_active=True)
+        Designation.objects.create(name='Software Engineer', department=dept, is_active=True)
 
         from apps.recruitment.models import Candidate, ReferralBonus
         self.Candidate = Candidate

@@ -624,14 +624,16 @@ class PositionSerializer(serializers.ModelSerializer):
         return instance
 
     def validate(self, attrs: dict) -> dict:
-        name = attrs.get('name', getattr(self.instance, 'name', None))
-        qs   = Department.objects.filter(name__iexact=name)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError(
-                {'name': f'A department named "{name}" already exists.'}
-            )
+        holder = attrs.get('holder', getattr(self.instance, 'holder', None) if self.instance else None)
+        if holder is not None:
+            conflict_qs = Position.objects.filter(holder=holder)
+            if self.instance:
+                conflict_qs = conflict_qs.exclude(pk=self.instance.pk)
+            conflict = conflict_qs.first()
+            if conflict:
+                raise serializers.ValidationError({
+                    'holder': f'{holder.full_name} already holds another position: "{conflict.title}".',
+                })
         return attrs
 
 
