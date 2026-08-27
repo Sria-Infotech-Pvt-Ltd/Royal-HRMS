@@ -4836,3 +4836,46 @@ Part of the same upstream commit's scalability-audit work, but not voice-command
 - **`adrf`/`async-property` must be installed in every environment that runs this code** — added to `requirements.txt` here; confirm any deploy pipeline actually reinstalls from it.
 - **The excluded attendance/geofencing/FaceVerificationAttempt changes are still sitting on `ai` (commit `6e50210`), unmerged** — pull them in separately if/when wanted; they're independent of everything in this entry.
 - Verified: `manage.py check` clean, `makemigrations --check` clean, migration applied to `tenant_qatest` and the new index confirmed present, all 38 tests across the 4 touched voice_commands test files pass.
+
+---
+
+# Team Context — `collectstatic` Crash in Production: `AttributeError: STATICFILES_STORAGE`
+
+**Author:** G.Durga Prasad
+**Date:** 26 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+Reported from a live deployment: `python manage.py collectstatic --noinput` crashed with `AttributeError: 'Settings' object has no attribute 'STATICFILES_STORAGE'`, coming from `django-cloudinary-storage`'s own `collectstatic` command override (registered ahead of `django.contrib.staticfiles` in `INSTALLED_APPS`), which reads `settings.STATICFILES_STORAGE` as a raw attribute. Traced to two incorrect assumptions baked into `config/settings.py`'s `STORAGES` block by an earlier fix in this session.
+
+## 1. `config/settings.py` — The `STORAGES`/Legacy-Names Comment Was Wrong
+
+**File:** `backend/config/settings.py`
+
+The comment introduced alongside `STORAGES` (from the Cloudinary storage regression fixed on 21 August) claimed two things about Django 5.1, neither of which holds for the actual installed version (5.1.15):
+
+1. That Django raises `ImproperlyConfigured` ("mutually exclusive") if both a legacy storage setting (`STATICFILES_STORAGE`/`DEFAULT_FILE_STORAGE`) and `STORAGES` are defined at once — grepping the installed `django/` package turns up no such check anywhere; `django.contrib.staticfiles.checks.check_storages` only requires `STORAGES['staticfiles']` to exist.
+2. That Django computes `settings.STATICFILES_STORAGE` as a value derived from `STORAGES` when the legacy name itself is left unset — also false. Django 5.1 removed `STATICFILES_STORAGE` from its own internals entirely (zero references anywhere under `django/`, confirmed by grep), so reading it as a raw attribute when it was never set raises `AttributeError`, not a computed fallback.
+
+Because of assumption 2, the earlier fix deliberately hid the legacy names behind underscore-prefixed variables (`_DEFAULT_FILE_STORAGE_BACKEND`/`_STATICFILES_STORAGE_BACKEND`) so Django would never see them as real settings — which is exactly what broke `django-cloudinary-storage`'s `collectstatic` override, since that package (predating Django 5.1's `STORAGES`-only model) still reads `settings.STATICFILES_STORAGE` directly and has never been updated to check `STORAGES` instead.
+
+**Fix:** set `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` as real, literal settings again (not underscore-prefixed), alongside `STORAGES` — confirmed via `manage.py check` (clean) and `manage.py collectstatic --noinput --dry-run` (completes with no error) that Django 5.1.15 has no actual conflict with this. `STORAGES` remains the setting Django itself uses for `FileField`/`ImageField.storage`; the legacy names exist purely so `django-cloudinary-storage`'s outdated raw-attribute read has something to find. Verified `default_storage` still resolves to `RawMediaCloudinaryStorage` (Cloudinary, not local disk) afterward — the original 21 August fix's actual goal is intact.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/config/settings.py` | `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` set as real settings again, alongside `STORAGES` |
+
+---
+
+## Notes for Next Developer
+
+- **This is the second incorrect fix to this exact `STORAGES` block** — the original (this session, 21 August) kept both settings as real values and broke on the exact `ImproperlyConfigured` this entry's investigation found doesn't actually happen; the team's follow-up "corrected" it by hiding the legacy names entirely, which then broke `collectstatic` in production the way this entry describes. Both prior fixes were based on assumptions about Django 5.1's behavior that were never verified against the actual installed source. This one was verified by grepping the installed `django/` package directly rather than trusting either prior comment.
+- **The real, longer-term fix is upgrading `django-cloudinary-storage`** to a version (if one exists) that reads `settings.STORAGES` instead of the removed `settings.STATICFILES_STORAGE` — not checked in this pass. This entry's fix is a compatibility shim, not a fix to the third-party package itself.
+- **Not yet deployed to the production server** — this was found and fixed in the repo; the server that hit this error still needs `git pull` + a restart of whatever serves the app (see the deploy process) to pick it up.
