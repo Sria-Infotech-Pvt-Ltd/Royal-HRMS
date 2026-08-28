@@ -118,12 +118,12 @@ export default function DashboardShell({
           "bg-white flex flex-col overflow-hidden z-[200] h-screen",
           "border-r border-[var(--outline-v)]",
           // Mobile: fixed overlay drawer, slides in/out via transform
-          "fixed left-0 top-0 w-[220px]",
+          "fixed left-0 top-0 w-[240px]",
           "transition-transform duration-200",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           // Desktop: part of the normal flow, width-transitions
           "md:relative md:translate-x-0 md:flex-shrink-0 md:transition-[width]",
-          collapsed ? "md:w-14" : "md:w-[220px]",
+          collapsed ? "md:w-14" : "md:w-[240px]",
         ].join(" ")}
       >
         {/* Sidebar header */}
@@ -213,7 +213,7 @@ export default function DashboardShell({
                   <i className={`ti ${item.icon} text-[18px] flex-shrink-0`} />
                   {!collapsed && (
                     <>
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap flex-1">{item.label}</span>
+                      <span className="flex-1 whitespace-normal leading-snug">{item.label}</span>
                       {item.badge && (
                         <span className="text-[10px] font-semibold bg-[var(--primary)] text-white px-1.5 py-px rounded-full flex-shrink-0">
                           {item.badge}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useAnyPermission } from "@/hooks/usePermission";
@@ -49,6 +49,27 @@ export default function OrgStructureClient() {
 
   const [placementHistory,        setPlacementHistory]        = useState<Placement[]>([]);
   const [placementHistoryLoading, setPlacementHistoryLoading] = useState(false);
+
+  // OrgDetail's fields auto-save on blur/change (no Save button, by design —
+  // same pattern as Job Templates and the Document Type settings table).
+  // This surfaces that as a brief "Saving…"/"Saved" pill so it doesn't look
+  // like nothing happened, and — as importantly — actually shows the user
+  // when a save silently failed instead of leaving the field looking saved
+  // when it wasn't.
+  const [saveStatus, setSaveStatus] = useState<{ state: "saving" | "saved" | "error"; message?: string } | null>(null);
+  const saveStatusTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function beginFieldSave() {
+    if (saveStatusTimeout.current) clearTimeout(saveStatusTimeout.current);
+    setSaveStatus({ state: "saving" });
+  }
+  function fieldSaveSucceeded() {
+    setSaveStatus({ state: "saved" });
+    saveStatusTimeout.current = setTimeout(() => setSaveStatus(null), 2000);
+  }
+  function fieldSaveFailed(err: unknown) {
+    setSaveStatus({ state: "error", message: (err as { message?: string })?.message ?? "Failed to save — try again." });
+  }
 
   async function load() {
     setLoading(true);
@@ -205,7 +226,37 @@ export default function OrgStructureClient() {
           </div>
         </div>
 
-        <div className="card">
+        <div className="card" style={{ position: "relative" }}>
+          {saveStatus && (
+            <div
+              role="status"
+              style={{
+                position: "absolute", top: 14, right: 16, zIndex: 5,
+                display: "flex", alignItems: "center", gap: 6,
+                fontSize: 12, fontWeight: 600, padding: "5px 11px", borderRadius: 20,
+                ...(saveStatus.state === "saving"
+                  ? { background: "var(--bg-low)", color: "var(--on-variant)", border: "1px solid var(--outline-v)" }
+                  : saveStatus.state === "saved"
+                  ? { background: "var(--success-c)", color: "var(--success)", border: "1px solid var(--success)" }
+                  : { background: "rgba(220,38,38,0.06)", color: "var(--error)", border: "1px solid rgba(220,38,38,0.3)" }),
+              }}
+            >
+              {saveStatus.state === "saving" && <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>}
+              {saveStatus.state === "saved" && <><i className="ti ti-check" /> Saved</>}
+              {saveStatus.state === "error" && (
+                <>
+                  <i className="ti ti-alert-circle" /> {saveStatus.message}
+                  <button
+                    onClick={() => setSaveStatus(null)}
+                    style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, marginLeft: 4, display: "flex" }}
+                    title="Dismiss"
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 12 }} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           <div style={{ padding: "18px 20px" }}>
             <OrgDetail
               selected={selected} units={units} positions={positions} jobs={jobs} branches={branches} canEdit={canEdit}
@@ -220,16 +271,34 @@ export default function OrgStructureClient() {
                 load();
               }}
               onUnitField={async (unitId, field, value) => {
-                await clientApi.put(API.orgStructure.units.detail(unitId), { [field]: value });
-                load();
+                beginFieldSave();
+                try {
+                  await clientApi.put(API.orgStructure.units.detail(unitId), { [field]: value });
+                  await load();
+                  fieldSaveSucceeded();
+                } catch (err) {
+                  fieldSaveFailed(err);
+                }
               }}
               onPositionField={async (positionId, field, value) => {
-                await clientApi.put(API.orgStructure.positions.detail(positionId), { [field]: value });
-                load();
+                beginFieldSave();
+                try {
+                  await clientApi.put(API.orgStructure.positions.detail(positionId), { [field]: value });
+                  await load();
+                  fieldSaveSucceeded();
+                } catch (err) {
+                  fieldSaveFailed(err);
+                }
               }}
               onToggleChief={async position => {
-                await clientApi.put(API.orgStructure.positions.detail(position.id), { is_chief: !position.is_chief });
-                load();
+                beginFieldSave();
+                try {
+                  await clientApi.put(API.orgStructure.positions.detail(position.id), { is_chief: !position.is_chief });
+                  await load();
+                  fieldSaveSucceeded();
+                } catch (err) {
+                  fieldSaveFailed(err);
+                }
               }}
             />
           </div>

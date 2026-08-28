@@ -43,7 +43,7 @@ clientApi.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Refresh mutex — one in-flight refresh, others queue ───────────────────────
+// ── Refresh mutex — one in-flight refresh per tab, others queue ────────────────
 let isRefreshing = false;
 type QueueItem = { resolve: () => void; reject: (err: unknown) => void };
 let refreshQueue: QueueItem[] = [];
@@ -53,6 +53,59 @@ function flushQueue(err: unknown, succeeded: boolean) {
     succeeded ? resolve() : reject(err)
   );
   refreshQueue = [];
+}
+
+// ── Cross-tab refresh coordination ─────────────────────────────────────────────
+// The mutex above only serializes refreshes within one tab's JS context. The
+// backend rotates the refresh token cookie on every use and blacklists the old
+// one (SIMPLE_JWT ROTATE_REFRESH_TOKENS/BLACKLIST_AFTER_ROTATION, settings.py)
+// — with two tabs/windows of the dashboard open, both can have their access
+// token expire around the same moment, both call /token/refresh/, and whichever
+// request the server processes second is carrying a refresh token the first
+// request already rotated out, so it gets rejected with 401 even though the
+// session is genuinely still valid. That looked like a real bug report (a
+// refresh token failing well before its real 7-day lifetime) and traces back
+// to exactly this race, not an actual expired/invalid session.
+//
+// navigator.locks serializes the critical section across every tab of this
+// origin, not just this module instance, so only one tab ever calls
+// /token/refresh/ at a time. A tab that was waiting on the lock then checks
+// whether another tab already refreshed in roughly the last few seconds —
+// if so its own cookie is already fresh (cookies are shared browser-wide), so
+// it skips calling refresh again and just retries the original request.
+const REFRESH_LOCK_NAME = "royal-hrms-token-refresh";
+const LAST_REFRESH_KEY = "royal_hrms_last_token_refresh_at";
+const RECENT_REFRESH_WINDOW_MS = 4000;
+
+function recentlyRefreshedElsewhere(): boolean {
+  try {
+    const last = Number(localStorage.getItem(LAST_REFRESH_KEY) ?? "0");
+    return Date.now() - last < RECENT_REFRESH_WINDOW_MS;
+  } catch {
+    return false; // localStorage unavailable (private mode, etc.) — never skip on its account
+  }
+}
+
+function markRefreshedNow(): void {
+  try { localStorage.setItem(LAST_REFRESH_KEY, String(Date.now())); } catch { /* best-effort */ }
+}
+
+async function callTokenRefresh(): Promise<void> {
+  if (recentlyRefreshedElsewhere()) return;
+  await axios.post(
+    `${API_BASE}/token/refresh/`,
+    {},
+    { withCredentials: true, headers: { "Content-Type": "application/json" } }
+  );
+  markRefreshedNow();
+}
+
+function refreshAccessToken(): Promise<void> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  if (locks) {
+    return locks.request<void>(REFRESH_LOCK_NAME, () => callTokenRefresh());
+  }
+  return callTokenRefresh();
 }
 
 function dispatchSessionExpired() {
@@ -106,11 +159,7 @@ clientApi.interceptors.response.use(
 
     try {
       // The httpOnly refresh token cookie is sent automatically via withCredentials.
-      await axios.post(
-        `${API_BASE}/token/refresh/`,
-        {},
-        { withCredentials: true, headers: { "Content-Type": "application/json" } }
-      );
+      await refreshAccessToken();
 
       flushQueue(null, true);
       return clientApi(original);

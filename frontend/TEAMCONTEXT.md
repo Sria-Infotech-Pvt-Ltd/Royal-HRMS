@@ -5231,6 +5231,20 @@ New `ManageJobTemplatesModal.tsx`, opened via a "Manage job templates" button ne
 
 ---
 
+## 26. Three Small UI/Reliability Fixes — Sidebar Label, Auto-Save Feedback, Cross-Tab Refresh Race
+
+**Files:** `frontend/components/dashboard/DashboardShell.tsx`, `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx`, `frontend/lib/clientApi.ts`
+
+**Sidebar label truncation** — "Organization Management" (§24's renamed nav label) was long enough at 13px in the sidebar's ~220px column to get ellipsis-truncated, same near-miss risk for "Face ID Registrations". First tried letting labels wrap to two lines, but the user wanted it on one line, not wrapped down — so instead widened the sidebar `220px` → `240px` in `DashboardShell.tsx` (icon/padding sizes unchanged, so all the extra width goes to the label) and kept the original single-line-with-ellipsis span as a fallback for any future long label, rather than the wrap.
+
+**OrgDetail auto-save had no feedback, and a real silent-failure bug** — the user assumed a missing "Save" button meant editing was broken; it isn't, every field in the Org Chart detail panel (Unit name/code/parent/cost-center/department-toggle, Position title/grade/org-unit/job-template/branch/chief-toggle) already auto-saves on blur/change, matching the same pattern as Job Templates (§25) and the Document Type settings table. But `OrgStructureClient.tsx`'s three save handlers (`onUnitField`/`onPositionField`/`onToggleChief`) had no `try/catch` — a failed save (e.g. a duplicate code) threw an unhandled rejection with no error shown anywhere, and the field kept displaying the unsaved edit indefinitely with nothing to indicate it never reached the server. Fixed by wrapping all three in `try/catch` and adding a small "Saving…/Saved/error" pill (top-right of the detail card) — green and auto-dismissing after 2s on success, red and dismissible with the real backend error text on failure. Confirmed with the user afterwards that autosave-with-feedback (not switching to an explicit Save button) is the right call for this screen, matching precedent and because these fields are independent facts, not one interdependent form needing a batch-review step.
+
+**A real cross-tab refresh-token race, caught from live server logs the user pasted in** — two `/api/notifications/unread-count/` 401s roughly 15 minutes apart (consistent with the 15-minute access-token lifetime) followed immediately by a 401 on `/api/token/refresh/` itself, meaning a refresh token that should be good for 7 days (`SIMPLE_JWT`, `config/settings.py:345-351`) got rejected almost immediately. Root cause: `ROTATE_REFRESH_TOKENS`/`BLACKLIST_AFTER_ROTATION` are both on, so every refresh consumes and blacklists the old refresh-token cookie — `clientApi.ts`'s existing `isRefreshing` mutex only serializes refreshes within one tab's JS module instance, so two tabs/windows of the dashboard whose access tokens expire around the same moment can both call `/token/refresh/`, and whichever request the server processes second carries an already-rotated, now-blacklisted token and gets rejected even though the session is genuinely still valid. Fixed purely on the frontend, no backend/security logic touched: wrapped the actual refresh call in `navigator.locks.request(...)` (Web Locks API) so only one tab across the whole browser ever calls `/token/refresh/` at a time, with a `localStorage` timestamp so a tab that was queued behind the lock skips calling refresh again if another tab already refreshed in roughly the last 4 seconds (cookies are shared browser-wide, so its own cookie is already fresh) — falls back cleanly to the pre-existing same-tab-only mutex if a browser doesn't support Web Locks.
+
+`tsc --noEmit`/`eslint` clean on all three files; full `npx next build` (55 routes) clean.
+
+---
+
 ## Key Files Changed
 
 | File | Change |
@@ -5334,6 +5348,9 @@ New `ManageJobTemplatesModal.tsx`, opened via a "Manage job templates" button ne
 | `frontend/app/dashboard/org-chart/_components/ManageJobTemplatesModal.tsx` (new) | Add/edit/deactivate/delete UI for job templates, permission-gated by `org_structure.create/edit/delete` |
 | `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx` | "Manage job templates" button + modal wiring |
 | `frontend/app/dashboard/org-chart/_components/AddPositionModal.tsx`, `settings/leave-policy/_components/EligibilitySection.tsx` | Both now filter the job template list to `is_active` client-side (server list is no longer pre-filtered) |
+| `frontend/components/dashboard/DashboardShell.tsx` | Sidebar widened `220px` → `240px` so "Organization Management"/"Face ID Registrations" fit on one line without ellipsis-truncating |
+| `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx` | `onUnitField`/`onPositionField`/`onToggleChief` wrapped in `try/catch` (previously silent on failure); new "Saving…/Saved/error" pill on the detail card |
+| `frontend/lib/clientApi.ts` | Cross-tab `navigator.locks`-based refresh coordination, fixing a real refresh-token-rotation race between multiple open tabs |
 
 ---
 
