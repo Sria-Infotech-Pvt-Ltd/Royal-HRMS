@@ -89,7 +89,7 @@ export default function AddPositionModal({ unit, jobs, branches, hasChief, onClo
         <label className="field-label">Job Template</label>
         <select className="field-input" value={jobTemplate} onChange={e => setJobTemplate(e.target.value)}>
           <option value="">None</option>
-          {jobs.map(j => <option key={j.id} value={j.id}>{j.name}{j.band ? ` · ${j.band}` : ""}</option>)}
+          {jobs.filter(j => j.is_active).map(j => <option key={j.id} value={j.id}>{j.name}{j.band ? ` · ${j.band}` : ""}</option>)}
         </select>
       </div>
 

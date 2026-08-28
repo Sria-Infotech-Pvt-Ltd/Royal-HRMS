@@ -24,9 +24,10 @@ export interface OrgUnit {
 }
 
 export interface JobTemplate {
-  id:   string;
-  name: string;
-  band: string;
+  id:        string;
+  name:      string;
+  band:      string;
+  is_active: boolean;
 }
 
 export interface PositionReportsTo {
@@ -112,4 +113,10 @@ export interface PositionPayload {
   grade:        string;
   is_chief:     boolean;
   branch?:      number | null;
+}
+
+export interface JobTemplatePayload {
+  name:       string;
+  band:       string;
+  is_active?: boolean;
 }

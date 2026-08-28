@@ -33,7 +33,8 @@ from apps.accounts.views import (
     DocumentStatsView,
     EmployeeListCreateView,
     EmployeeStatsView,
-    JobTemplateListView,
+    JobTemplateListCreateView,
+    JobTemplateDetailView,
     LoginView,
     LogoutView,
     OrgUnitDeactivateView,
@@ -123,7 +124,8 @@ urlpatterns = [
     path('org-structure/positions/<uuid:pk>/placements/',     PositionPlacementListCreateView.as_view(), name='position-placement-list'),
     path('org-structure/positions/<uuid:pk>/placements/end/', PositionPlacementEndView.as_view(),      name='position-placement-end'),
     path('org-structure/placements/<uuid:pk>/',           PlacementDetailView.as_view(),          name='placement-detail'),
-    path('org-structure/job-templates/',   JobTemplateListView.as_view(),     name='job-template-list'),
+    path('org-structure/job-templates/',           JobTemplateListCreateView.as_view(), name='job-template-list'),
+    path('org-structure/job-templates/<uuid:pk>/', JobTemplateDetailView.as_view(),     name='job-template-detail'),
 
     # Roles
     path('roles/',         RoleListCreateView.as_view(), name='role-list-create'),

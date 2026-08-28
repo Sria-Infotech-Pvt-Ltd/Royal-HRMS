@@ -38,7 +38,7 @@ interface Props {
 export default function EligibilitySection({ rules, setField }: Props) {
   const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(`${API.branches.list}?page_size=100`);
   const { data: unitData }   = useFetch<OrgUnit[] | { results: OrgUnit[] }>(`${API.orgStructure.units.list}?page_size=200`);
-  const { data: jobData }    = useFetch<JobTemplate[] | { results: JobTemplate[] }>(API.orgStructure.jobTemplates);
+  const { data: jobData }    = useFetch<JobTemplate[] | { results: JobTemplate[] }>(API.orgStructure.jobTemplates.list);
 
   const branches     = Array.isArray(branchData) ? branchData : (branchData?.results ?? []);
   // "Departments" here means org units marked as representing a real
@@ -46,7 +46,7 @@ export default function EligibilitySection({ rules, setField }: Props) {
   // retired. "Designations" sources from JobTemplate, the closest
   // remaining equivalent to a reusable, named title list.
   const departments  = (Array.isArray(unitData) ? unitData : (unitData?.results ?? [])).filter(u => u.is_department_level);
-  const designations = Array.isArray(jobData)   ? jobData  : (jobData?.results ?? []);
+  const designations = (Array.isArray(jobData) ? jobData : (jobData?.results ?? [])).filter(j => j.is_active);
 
   const groups: { key: EligibilityListKey; options: string[] }[] = [
     { key: "applicable_branches",         options: branches.map(b => b.branch_name) },

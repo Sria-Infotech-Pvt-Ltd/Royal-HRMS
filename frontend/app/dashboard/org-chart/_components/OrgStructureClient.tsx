@@ -11,6 +11,7 @@ import AddUnitModal from "./AddUnitModal";
 import AddPositionModal from "./AddPositionModal";
 import AssignHolderModal from "./AssignHolderModal";
 import EndPlacementModal from "./EndPlacementModal";
+import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
 
 export interface EmployeeOption {
   id: string;
@@ -44,6 +45,7 @@ export default function OrgStructureClient() {
   const [addPositionUnit,  setAddPositionUnit]  = useState<string | null>(null);
   const [assignPositionId, setAssignPositionId] = useState<string | null>(null);
   const [endPositionId,    setEndPositionId]    = useState<string | null>(null);
+  const [manageJobsOpen,   setManageJobsOpen]   = useState(false);
 
   const [placementHistory,        setPlacementHistory]        = useState<Placement[]>([]);
   const [placementHistoryLoading, setPlacementHistoryLoading] = useState(false);
@@ -55,7 +57,7 @@ export default function OrgStructureClient() {
       const [unitsRes, posRes, jobsRes, empRes, branchRes] = await Promise.all([
         clientApi.get(`${API.orgStructure.units.list}?page_size=200`),
         clientApi.get(`${API.orgStructure.positions.list}?page_size=200`),
-        clientApi.get(API.orgStructure.jobTemplates),
+        clientApi.get(API.orgStructure.jobTemplates.list),
         clientApi.get(API.employees.list, { params: { page_size: 200, status: "active" } }),
         clientApi.get(API.branches.list, { params: { page_size: 200 } }),
       ]);
@@ -108,6 +110,9 @@ export default function OrgStructureClient() {
         </div>
         {canEdit && (
           <div className="page-actions">
+            <button className="btn btn-ghost" onClick={() => setManageJobsOpen(true)}>
+              <i className="ti ti-briefcase" /> Manage job templates
+            </button>
             <button className="btn btn-filled" onClick={() => setAddUnitParent("new")}>
               <i className="ti ti-plus" /> Add org unit
             </button>
@@ -262,6 +267,14 @@ export default function OrgStructureClient() {
           position={positions.find(p => p.id === endPositionId) ?? null}
           onClose={() => setEndPositionId(null)}
           onEnded={() => { setEndPositionId(null); load(); }}
+        />
+      )}
+      {manageJobsOpen && (
+        <ManageJobTemplatesModal
+          jobs={jobs}
+          canEdit={canEdit}
+          onClose={() => setManageJobsOpen(false)}
+          onChanged={load}
         />
       )}
     </>

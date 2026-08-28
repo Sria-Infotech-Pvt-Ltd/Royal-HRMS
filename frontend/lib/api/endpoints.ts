@@ -41,7 +41,10 @@ export const API = {
     placements: {
       detail: (id: string) => `/org-structure/placements/${id}/`,
     },
-    jobTemplates: "/org-structure/job-templates/",
+    jobTemplates: {
+      list: "/org-structure/job-templates/",
+      detail: (id: string) => `/org-structure/job-templates/${id}/`,
+    },
   },
 
   employees: {

@@ -1081,17 +1081,84 @@ class PermissionDetailView(APIView):
 # driving real approval routing exactly as before; Position.holder and the
 # derived "reports_to" here are a separate, purely structural view.
 
-class JobTemplateListView(APIView):
-    """Read-only — no admin CRUD for v1, matching the mockup (a fixed
-    dropdown of job templates when creating a position, no "add new job"
-    affordance). Seeded once via migration 0101."""
+class JobTemplateListCreateView(APIView):
+    """Seeded once via migration 0101, now also manageable from the UI
+    (Org Chart → "Manage job templates") like OrgUnit/Position. Returns both
+    active and inactive templates — pickers that should only offer active
+    ones (Add Position, Leave Policy eligibility) filter client-side."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not _has_perm(request.user, 'org_chart.view'):
             return error('You do not have permission to view this.', http_status=status.HTTP_403_FORBIDDEN)
-        qs = JobTemplate.objects.filter(is_active=True)
+        qs = JobTemplate.objects.all()
         return success('Job templates retrieved.', data=JobTemplateSerializer(qs, many=True).data)
+
+    def post(self, request):
+        if not _has_perm(request.user, 'org_structure.create'):
+            return error('You do not have permission to create job templates.', http_status=status.HTTP_403_FORBIDDEN)
+        serializer = JobTemplateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        instance = serializer.save()
+        AuditLog.objects.create(
+            user=request.user, action='create', module='org_structure',
+            object_id=str(instance.pk), changes={'name': instance.name},
+            ip_address=get_client_ip(request),
+        )
+        return success('Job template created.', data=JobTemplateSerializer(instance).data)
+
+
+class JobTemplateDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get(self, pk):
+        try:
+            return JobTemplate.objects.get(pk=pk)
+        except JobTemplate.DoesNotExist:
+            return None
+
+    def put(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit job templates.', http_status=status.HTTP_403_FORBIDDEN)
+        template = self._get(pk)
+        if not template:
+            return error('Job template not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = JobTemplateSerializer(template, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        instance = serializer.save()
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(instance.pk), changes={'name': instance.name},
+            ip_address=get_client_ip(request),
+        )
+        return success('Job template updated.', data=JobTemplateSerializer(instance).data)
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    def delete(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.delete'):
+            return error('You do not have permission to delete job templates.', http_status=status.HTTP_403_FORBIDDEN)
+        template = self._get(pk)
+        if not template:
+            return error('Job template not found.', http_status=status.HTTP_404_NOT_FOUND)
+        in_use = template.positions.count()
+        if in_use:
+            return error(
+                f'Cannot delete "{template.name}" — still referenced by {in_use} position(s). Deactivate it instead.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        name = template.name
+        template_id = str(template.pk)
+        template.delete()
+        AuditLog.objects.create(
+            user=request.user, action='delete', module='org_structure',
+            object_id=template_id, changes={'name': name},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'"{name}" deleted.', data={})
 
 
 class OrgUnitListCreateView(APIView):
