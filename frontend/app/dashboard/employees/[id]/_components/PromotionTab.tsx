@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePermission } from "@/hooks/usePermission";
+import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { FieldOption } from "../../_data";
@@ -14,6 +15,10 @@ interface Props {
   desigOptions: FieldOption[];
   roleOptions: FieldOption[];
   onUpdated: (designation: string, role: string) => void;
+  // Reassigning a Position also derives department, unlike a plain
+  // promotion — a separate callback rather than widening onUpdated,
+  // since most callers of "promoted" don't care about department.
+  onPositionReassigned: (designation: string, department: string) => void;
 }
 
 interface PromotionRecord {
@@ -59,13 +64,22 @@ const labelFor = (options: FieldOption[], value: string) =>
   options.find(o => o.value === value)?.label ?? value;
 
 export default function PromotionTab({
-  employeeId, employeeName, currentDesignation, currentRole, desigOptions, roleOptions, onUpdated,
+  employeeId, employeeName, currentDesignation, currentRole, desigOptions, roleOptions, onUpdated, onPositionReassigned,
 }: Props) {
   const canEdit = usePermission("employees.edit");
 
   const [history, setHistory] = useState<PromotionRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [reassignOrgUnit, setReassignOrgUnit] = useState("");
+  const [reassignPosition, setReassignPosition] = useState("");
+  const [reassignDate, setReassignDate] = useState("");
+  const [reassignSubmitting, setReassignSubmitting] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
+  const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
+  const reassignPositionOptions = positionsForUnit(reassignOrgUnit);
+  const reassignSelectedPosition = reassignPositionOptions.find(p => p.id === reassignPosition);
   // A click's target is resolved at mouseup, not mousedown — selecting text
   // inside the modal and releasing past its edge would otherwise land on the
   // overlay and close it. Only close when the gesture both started AND ended
@@ -149,6 +163,44 @@ export default function PromotionTab({
     }
   }
 
+  function openReassignModal() {
+    setReassignOrgUnit("");
+    setReassignPosition("");
+    setReassignDate(new Date().toISOString().split("T")[0]);
+    setReassignError(null);
+    setShowReassignModal(true);
+  }
+
+  async function submitReassign() {
+    if (!reassignPosition) {
+      setReassignError("Select a position.");
+      return;
+    }
+    if (!reassignDate) {
+      setReassignError("Effective date is required.");
+      return;
+    }
+    setReassignSubmitting(true);
+    setReassignError(null);
+    try {
+      const res = await clientApi.put(API.employees.detail(employeeId), {
+        position: reassignPosition, effective_date: reassignDate,
+      });
+      const updated = res.data?.data as { designation?: string; department?: string } | undefined;
+      await fetchHistory();
+      onPositionReassigned(updated?.designation ?? currentDesignation, updated?.department ?? "");
+      setShowReassignModal(false);
+      setSuccessMsg("Position reassigned. Designation and department updated to match.");
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Failed to reassign position. Please try again.";
+      setReassignError(msg);
+    } finally {
+      setReassignSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {successMsg && (
@@ -159,9 +211,14 @@ export default function PromotionTab({
         <div className="card-header">
           <span className="card-title">Current Designation</span>
           {canEdit && (
-            <button className="btn btn-filled btn-sm" onClick={openModal}>
-              <i className="ti ti-award" /> Promote Employee
-            </button>
+            <div className="flex items-center gap-2">
+              <button className="btn btn-ghost btn-sm" onClick={openReassignModal}>
+                <i className="ti ti-sitemap" /> Reassign Position
+              </button>
+              <button className="btn btn-filled btn-sm" onClick={openModal}>
+                <i className="ti ti-award" /> Promote Employee
+              </button>
+            </div>
           )}
         </div>
         <div className="card-body">
@@ -307,6 +364,87 @@ export default function PromotionTab({
               </button>
               <button className="btn btn-filled" onClick={submit} disabled={submitting || !hasChange}>
                 {submitting ? <><i className="ti ti-loader-2 spin" /> Updating…</> : "Update Employee"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReassignModal && (
+        <div
+          className="modal-overlay open"
+          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
+          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setShowReassignModal(false); }}
+        >
+          <div className="modal">
+            <div className="modal-header">
+              <span className="modal-title">Reassign Position</span>
+              <button className="modal-close" onClick={() => setShowReassignModal(false)}><i className="ti ti-x" /></button>
+            </div>
+            <div className="modal-body flex flex-col gap-4">
+              {reassignError && <div className="alert alert-error">{reassignError}</div>}
+
+              <div className="field-group">
+                <label className="field-label">Org Unit</label>
+                <select
+                  className="field-input field-select"
+                  value={reassignOrgUnit}
+                  disabled={positionsLoading}
+                  onChange={e => { setReassignOrgUnit(e.target.value); setReassignPosition(""); setReassignError(null); }}
+                >
+                  <option value="">— Select an org unit —</option>
+                  {units.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">Position</label>
+                <select
+                  className="field-input field-select"
+                  value={reassignPosition}
+                  disabled={!reassignOrgUnit}
+                  onChange={e => { setReassignPosition(e.target.value); setReassignError(null); }}
+                >
+                  <option value="">
+                    {!reassignOrgUnit ? "Select an org unit first" : reassignPositionOptions.length === 0 ? "No active positions in this unit" : "— Select Position —"}
+                  </option>
+                  {reassignPositionOptions.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}{p.holder_name ? ` — currently ${p.holder_name}` : " (vacant)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">Effective date</label>
+                <input
+                  className="field-input"
+                  type="date"
+                  value={reassignDate}
+                  onChange={e => { setReassignDate(e.target.value); setReassignError(null); }}
+                />
+              </div>
+
+              {reassignSelectedPosition?.holder_name && (
+                <div className="alert alert-warn">
+                  <i className="ti ti-info-circle" />
+                  {reassignSelectedPosition.holder_name}&apos;s placement on this position will be closed the day
+                  before the effective date above and kept in history.
+                </div>
+              )}
+
+              <div className="text-[11.5px] text-muted">
+                Designation (and department, if this org unit is linked to one) will update to match the new
+                position. A future-dated effective date schedules the change without affecting today&apos;s values.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setShowReassignModal(false)} disabled={reassignSubmitting}>
+                Cancel
+              </button>
+              <button className="btn btn-filled" onClick={submitReassign} disabled={reassignSubmitting || !reassignPosition}>
+                {reassignSubmitting ? <><i className="ti ti-loader-2 spin" /> Reassigning…</> : "Reassign"}
               </button>
             </div>
           </div>

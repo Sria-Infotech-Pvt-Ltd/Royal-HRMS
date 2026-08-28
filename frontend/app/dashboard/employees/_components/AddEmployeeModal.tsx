@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
+import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import type { DepartmentOption as ApiDept } from "@/types/department";
 import type { DesignationOption as ApiDesig } from "@/types/designation";
 
@@ -19,6 +20,10 @@ interface Form {
   role: string; department: string; designation: string; branch: string;
   employee_type: string; date_of_joining: string;
   hr: string; reporting_manager: string;
+  // Optional — when set, department/designation are derived from this
+  // Position instead of being picked as free text (see the Position
+  // section below and EmployeeListCreateView.post()'s own bridge).
+  position: string;
 }
 type Errs = Partial<Record<keyof Form, string>>;
 
@@ -44,7 +49,7 @@ const EMPTY: Form = {
   first_name: "", last_name: "", email: "", phone: "",
   role: "", department: "", designation: "", branch: "",
   employee_type: "Permanent", date_of_joining: "",
-  hr: "", reporting_manager: "",
+  hr: "", reporting_manager: "", position: "",
 };
 
 /* ── Shared input style (matches app globals) ─────────────────── */
@@ -119,6 +124,12 @@ export default function AddEmployeeModal({
   const [saving, setSaving] = useState(false);
   const [apiErr, setApiErr] = useState("");
   const [done,   setDone]   = useState<string>("");
+  const [orgUnitId, setOrgUnitId] = useState("");
+
+  const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
+  const positionOptions = positionsForUnit(orgUnitId, /* vacantOnly */ true);
+  const selectedUnit     = units.find(u => u.id === orgUnitId);
+  const selectedPosition = positionOptions.find(p => p.id === form.position);
 
   /* dropdown data */
   const [roles,    setRoles]    = useState<ApiRole[]>([]);
@@ -244,8 +255,8 @@ export default function AddEmployeeModal({
     if (form.phone.trim() && !PHONE_RE.test(form.phone.trim().replace(/[\s\-()./]/g, "")))
                                      e.phone         = "Enter a valid 10-digit phone number (optionally prefixed with +91)";
     if (!form.role)                 e.role          = "Required";
-    if (!isBranchAdmin && !form.department) e.department = "Required";
-    if (!form.designation.trim())   e.designation   = "Required";
+    if (!isBranchAdmin && !form.department && !form.position) e.department = "Required";
+    if (!form.designation.trim() && !form.position) e.designation = "Required";
     if (!form.branch)               e.branch        = "Required";
     if (!form.date_of_joining)      e.date_of_joining = "Required";
     setErrs(e);
@@ -391,12 +402,40 @@ export default function AddEmployeeModal({
                         </div>
                       )}
                     </Field>
-                    <Field label="Department" required={!isBranchAdmin} error={errs.department}>
+                    {!isBranchAdmin && (
+                      <>
+                        <Field label="Org Unit (optional)">
+                          <Sel v={orgUnitId} set={v => { setOrgUnitId(v); set("position", ""); }} disabled={positionsLoading}>
+                            <option value="">— No Position (use Department/Designation below) —</option>
+                            {units.filter(u => u.is_active).map(u => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </Sel>
+                        </Field>
+                        <Field label="Position (optional)">
+                          <Sel v={form.position} set={v => set("position", v)} disabled={!orgUnitId || positionsLoading}>
+                            <option value="">
+                              {!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
+                            </option>
+                            {positionOptions.map(p => (
+                              <option key={p.id} value={p.id}>{p.title}</option>
+                            ))}
+                          </Sel>
+                        </Field>
+                      </>
+                    )}
+                    <Field label="Department" required={!isBranchAdmin && !form.position} error={errs.department}>
                       {isBranchAdmin ? (
                         <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
                           title="A Branch Admin manages the whole branch, not a single department">
                           <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
                           Not applicable — Branch Admin
+                        </div>
+                      ) : form.position ? (
+                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                          title="Derived from the selected Position">
+                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                          {selectedUnit?.department_name || "(this org unit has no linked department yet)"}
                         </div>
                       ) : (
                         <Sel v={form.department} set={v => set("department", v)} err={!!errs.department}>
@@ -407,9 +446,15 @@ export default function AddEmployeeModal({
                         </Sel>
                       )}
                     </Field>
-                    <Field label="Designation" required error={errs.designation}>
+                    <Field label="Designation" required={!form.position} error={errs.designation}>
                       {isBranchAdmin ? (
                         <Inp v={form.designation} set={v => set("designation", sanitizeName(v))} ph="e.g. Branch Manager" err={!!errs.designation} />
+                      ) : form.position ? (
+                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                          title="Derived from the selected Position">
+                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                          {selectedPosition?.job_template_name || selectedPosition?.title}
+                        </div>
                       ) : (
                         <Sel
                           v={form.designation}

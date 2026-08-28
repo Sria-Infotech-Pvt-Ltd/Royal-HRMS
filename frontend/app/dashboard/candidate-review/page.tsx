@@ -43,7 +43,7 @@ export default function CandidateReviewPage() {
   async function handleOnboardingAction(
     userId: string,
     decision: "approve" | "reject",
-    extras?: { department: string; designation: string; assessmentId?: string; uanNumber?: string; aadharName?: string; panNumber?: string },
+    extras?: { department: string; designation: string; position?: string; assessmentId?: string; uanNumber?: string; aadharName?: string; panNumber?: string },
   ) {
     setActing(true); setActionErr(null);
     try {
@@ -56,6 +56,7 @@ export default function CandidateReviewPage() {
         remarks,
         department:         extras?.department,
         designation:        extras?.designation,
+        position:           extras?.position      || undefined,
         assessment_id:      extras?.assessmentId,
         uan_number:         extras?.uanNumber    || undefined,
         name_as_per_aadhar: extras?.aadharName   || undefined,

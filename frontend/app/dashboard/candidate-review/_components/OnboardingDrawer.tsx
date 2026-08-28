@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import Modal from "@/components/Modal";
+import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import type { DepartmentOption as ApiDept } from "@/types/department";
 import type { DesignationOption as ApiDesig } from "@/types/designation";
 
@@ -43,7 +44,7 @@ interface Props {
   acting:          boolean;
   actionErr:       string | null;
   onRemarksChange: (v: string) => void;
-  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; assessmentId?: string; uanNumber?: string; aadharName?: string; panNumber?: string }) => void;
+  onAction:        (userId: string, decision: "approve" | "reject", extras?: { department: string; designation: string; position?: string; assessmentId?: string; uanNumber?: string; aadharName?: string; panNumber?: string }) => void;
   onClose:         () => void;
 }
 
@@ -77,6 +78,12 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [selDept,    setSelDept]    = useState(user.department || "");
   const [selDesig,   setSelDesig]   = useState(user.designation || "");
   const [loadDepts,  setLoadDepts]  = useState(false);
+  const [orgUnitId,   setOrgUnitId]   = useState("");
+  const [selPosition, setSelPosition] = useState("");
+  const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
+  const positionOptions  = positionsForUnit(orgUnitId, /* vacantOnly */ true);
+  const selectedUnit     = units.find(u => u.id === orgUnitId);
+  const selectedPosition = positionOptions.find(p => p.id === selPosition);
   const [assignErr,      setAssignErr]      = useState("");
   const [previewDoc,     setPreviewDoc]     = useState<OnboardingDocument | null>(null);
   const [showAssessment, setShowAssessment] = useState(false);
@@ -156,8 +163,8 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   }
 
   function handleConfirm() {
-    if (!selDept || !selDesig) {
-      setAssignErr("Please select both Department and Designation before confirming.");
+    if (!selPosition && (!selDept || !selDesig)) {
+      setAssignErr("Select a Position, or both Department and Designation, before confirming.");
       return;
     }
     const fieldErr = fieldValidationError();
@@ -171,7 +178,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       return;
     }
     onAction(user.id, "approve", {
-      department: selDept, designation: selDesig,
+      department: selDept, designation: selDesig, position: selPosition || undefined,
       uanNumber: uanNumber || undefined, aadharName: aadharName || undefined,
       panNumber: panNumber ? panNumber.toUpperCase() : undefined,
     });
@@ -183,8 +190,8 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     // too — without this, clearing a dropdown or a field after passing that
     // first check would silently submit a bad value and the backend would
     // reject it.
-    if (!selDept || !selDesig) {
-      setAssignErr("Please select both Department and Designation before confirming.");
+    if (!selPosition && (!selDept || !selDesig)) {
+      setAssignErr("Select a Position, or both Department and Designation, before confirming.");
       setShowAssessment(false);
       return;
     }
@@ -196,6 +203,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     onAction(user.id, "approve", {
       department:   selDept,
       designation:  selDesig,
+      position:     selPosition || undefined,
       assessmentId: selAssessment || undefined,
       uanNumber:    uanNumber    || undefined,
       aadharName:   aadharName   || undefined,
@@ -350,8 +358,39 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               )}
 
               <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                <label className="field-label">Department <span style={{ color: "var(--error)" }}>*</span></label>
-                {loadDepts ? (
+                <label className="field-label">Org Unit <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — picks a Position instead of Department/Designation below)</span></label>
+                <select
+                  className="field-input field-select"
+                  value={orgUnitId}
+                  disabled={positionsLoading}
+                  onChange={e => { setOrgUnitId(e.target.value); setSelPosition(""); setAssignErr(""); }}
+                >
+                  <option value="">— No Position —</option>
+                  {units.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+
+              {orgUnitId && (
+                <div className="field-group" style={{ marginBottom: ".75rem" }}>
+                  <label className="field-label">Position</label>
+                  <select
+                    className="field-input field-select"
+                    value={selPosition}
+                    onChange={e => { setSelPosition(e.target.value); setAssignErr(""); }}
+                  >
+                    <option value="">{positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}</option>
+                    {positionOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="field-group" style={{ marginBottom: ".75rem" }}>
+                <label className="field-label">Department {!selPosition && <span style={{ color: "var(--error)" }}>*</span>}</label>
+                {selPosition ? (
+                  <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                    {selectedUnit?.department_name || "(this org unit has no linked department yet)"}
+                  </div>
+                ) : loadDepts ? (
                   <div style={{ fontSize: ".85rem", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> Loading…</div>
                 ) : (
                   <select
@@ -366,18 +405,26 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               </div>
 
               <div className="field-group">
-                <label className="field-label">Designation <span style={{ color: "var(--error)" }}>*</span></label>
-                <select
-                  className="field-input field-select"
-                  value={selDesig}
-                  onChange={e => { setSelDesig(e.target.value); setAssignErr(""); }}
-                  disabled={!selDept}
-                >
-                  <option value="">— Select Designation —</option>
-                  {desigs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
-                {selDept && desigs.length === 0 && !loadDepts && (
-                  <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>No designations found for this department.</div>
+                <label className="field-label">Designation {!selPosition && <span style={{ color: "var(--error)" }}>*</span>}</label>
+                {selPosition ? (
+                  <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                    {selectedPosition?.job_template_name || selectedPosition?.title}
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      className="field-input field-select"
+                      value={selDesig}
+                      onChange={e => { setSelDesig(e.target.value); setAssignErr(""); }}
+                      disabled={!selDept}
+                    >
+                      <option value="">— Select Designation —</option>
+                      {desigs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                    {selDept && desigs.length === 0 && !loadDepts && (
+                      <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginTop: 4 }}>No designations found for this department.</div>
+                    )}
+                  </>
                 )}
               </div>
 

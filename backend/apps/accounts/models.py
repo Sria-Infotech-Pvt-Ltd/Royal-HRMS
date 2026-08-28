@@ -164,9 +164,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     department      = models.CharField(max_length=100, blank=True)
     designation     = models.CharField(max_length=100, blank=True)
     # True until a human manually edits `designation` (EmployeeDetailView.put()) —
-    # lets Position-driven syncs (accounts/views.py _sync_designation_from_position)
+    # lets Position-driven syncs (accounts/services_placement._sync_from_position)
     # keep writing to it until someone deliberately overrides it by hand.
     designation_synced_from_position = models.BooleanField(default=True)
+    # Same idea as designation_synced_from_position, but tracked separately —
+    # a manual correction to one shouldn't silently freeze sync on the other.
+    department_synced_from_position = models.BooleanField(default=True)
     branch          = models.CharField(max_length=100, blank=True)
     phone           = models.CharField(max_length=20, blank=True)
     date_of_joining = models.DateField(null=True, blank=True)

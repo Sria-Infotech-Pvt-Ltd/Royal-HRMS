@@ -112,6 +112,7 @@ from apps.accounts.serializers import (
     SMTPTestSerializer,
     VerifyOTPSerializer,
 )
+from apps.accounts.services_placement import assign_position, sync_from_position
 from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
 from apps.accounts.utils import send_otp_email, send_template_email, send_test_email
@@ -1416,39 +1417,6 @@ class OrgUnitDeactivateView(APIView):
         return success(f'"{unit.name}" deactivated.', data=OrgUnitSerializer(unit).data)
 
 
-def _current_placement(position: 'Position', as_of=None) -> 'Placement | None':
-    as_of = as_of or timezone.localdate()
-    return (
-        position.placements
-        .filter(effective_from__lte=as_of)
-        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=as_of))
-        .select_related('employee')
-        .first()
-    )
-
-
-def _sync_designation_from_position(position: 'Position', *, force: bool = False) -> None:
-    """Push the Position's effective title onto its current holder's (as of
-    today, via the current Placement) User.designation. Deliberately does
-    NOT touch User.department — that needs an explicit OrgUnit<->Department
-    link, a separate future stage.
-
-    Respects designation_synced_from_position: skipped unless the flag is
-    still True, UNLESS force=True (an explicit assignment always wins)."""
-    current = _current_placement(position)
-    if current is None:
-        return
-    holder = current.employee
-    if not force and not holder.designation_synced_from_position:
-        return  # HR manually corrected this employee's designation since the last sync
-    effective_title = position.job_template.name if position.job_template_id else position.title
-    if holder.designation == effective_title and holder.designation_synced_from_position:
-        return
-    holder.designation = effective_title
-    holder.designation_synced_from_position = True
-    holder.save(update_fields=['designation', 'designation_synced_from_position', 'updated_at'])
-
-
 def _parse_as_of(request):
     """Returns (date_or_None, error_response_or_None)."""
     raw = request.query_params.get('asOf')
@@ -1536,9 +1504,10 @@ class PositionDetailView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
         instance = serializer.save()
         # Title/org_unit/job_template can change the position's effective
-        # title — re-sync the current holder's designation if there is one
-        # (non-forced: respects a manual override, same as before).
-        _sync_designation_from_position(instance)
+        # title (and org_unit change can change its linked department) —
+        # re-sync the current holder if there is one (non-forced: respects
+        # a manual override, same as before).
+        sync_from_position(instance)
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(instance.pk), changes={'title': instance.title},
@@ -1641,25 +1610,11 @@ class PositionPlacementListCreateView(APIView):
         except (User.DoesNotExist, ValueError, TypeError):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        with transaction.atomic():
-            # Close whichever placement is currently open on this seat, the
-            # day before the new one starts — this is what turns "assign" and
-            # "reassign" into the same operation, and is what keeps the prior
-            # holder queryable in history instead of being silently overwritten.
-            prior_open = position.placements.filter(effective_to__isnull=True).first()
-            if prior_open is not None and prior_open.effective_from < effective_from:
-                prior_open.effective_to = effective_from - timedelta(days=1)
-                prior_open.save(update_fields=['effective_to', 'updated_at'])
-
-            placement = Placement(
-                position=position, employee=employee,
-                effective_from=effective_from, effective_to=effective_to,
-                note=(request.data.get('note') or '').strip(), created_by=request.user,
-            )
-            placement.full_clean()  # friendly-path 400 for an overlap the pre-close above didn't resolve
-            placement.save()
-
-        _sync_designation_from_position(position, force=True)
+        placement = assign_position(
+            employee, position,
+            effective_from=effective_from, effective_to=effective_to,
+            note=(request.data.get('note') or '').strip(), created_by=request.user,
+        )
         AuditLog.objects.create(
             user=request.user, action='update', module='org_structure',
             object_id=str(position.pk),
@@ -3389,6 +3344,10 @@ class EmployeeListCreateView(APIView):
         phone           = (request.data.get('phone')           or '').strip()
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
         reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
+        # Optional — when a Position is picked, department/designation are
+        # derived from it (via assign_position()'s sync) instead of being
+        # required as free text; see the position_obj validation block below.
+        position_id     = (request.data.get('position')        or '').strip()
 
         # A Branch Admin oversees every department in the branch, not one —
         # unlike every other role, they aren't scoped to a single department,
@@ -3410,8 +3369,8 @@ class EmployeeListCreateView(APIView):
         if not last_name:       errs['last_name']       = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
         if not role_id:         errs['role']            = 'Role is required.'
-        if department_required and not department: errs['department'] = 'Department is required.'
-        if not designation:     errs['designation']     = 'Designation is required.'
+        if department_required and not department and not position_id: errs['department'] = 'Department is required.'
+        if not designation and not position_id: errs['designation']     = 'Designation is required.'
         if not branch:          errs['branch']          = 'Branch is required.'
         if not date_of_joining: errs['date_of_joining'] = 'Date of joining is required.'
 
@@ -3446,6 +3405,15 @@ class EmployeeListCreateView(APIView):
             dept_obj = Department.objects.filter(name__iexact=department, is_active=True).first()
             if dept_obj is None:
                 errs['department'] = 'Select a valid, active department from the list.'
+
+        position_obj = None
+        if position_id:
+            try:
+                position_obj = Position.objects.select_related(
+                    'org_unit__department', 'job_template',
+                ).get(pk=position_id, is_active=True)
+            except (Position.DoesNotExist, ValueError, ValidationError):
+                errs['position'] = 'Select a valid, active position.'
 
         # Name format check — letters with single space/hyphen/apostrophe separators only
         if first_name and 'first_name' not in errs and not NAME_RE.match(first_name):
@@ -3544,6 +3512,21 @@ class EmployeeListCreateView(APIView):
                 must_change_password = True,
                 onboarding_status    = User.ONBOARDING_PENDING,
             )
+            if position_obj is not None:
+                assign_position(
+                    user, position_obj,
+                    effective_from=(
+                        datetime.strptime(date_of_joining, '%Y-%m-%d').date()
+                        if date_of_joining else timezone.localdate()
+                    ),
+                    created_by=request.user,
+                )
+                user.refresh_from_db()
+                # Reflect the position-derived values in the audit log below
+                # and in the welcome-email/response payload, instead of the
+                # blank/manual strings that were submitted alongside it.
+                department, designation = user.department, user.designation
+
             manual_fields = []
             if selected_hr is not None:
                 user.hr = selected_hr
@@ -3905,10 +3888,23 @@ class EmployeeDetailView(APIView):
                 update_fields.append(field)
                 if field == 'designation':
                     # A human just set this by hand — stop future Position
-                    # syncs (accounts/views.py _sync_designation_from_position)
+                    # syncs (accounts/services_placement.sync_from_position)
                     # from silently overwriting it until they're re-assigned.
                     employee.designation_synced_from_position = False
                     update_fields.append('designation_synced_from_position')
+                if field == 'department':
+                    employee.department_synced_from_position = False
+                    update_fields.append('department_synced_from_position')
+
+        position_id = (data.get('position') or '').strip()
+        position_obj = None
+        if position_id:
+            try:
+                position_obj = Position.objects.select_related(
+                    'org_unit__department', 'job_template',
+                ).get(pk=position_id, is_active=True)
+            except (Position.DoesNotExist, ValueError, ValidationError):
+                return error('Select a valid, active position.', data={'position': 'Position not found.'})
 
         if 'phone' in data:
             phone = (data.get('phone') or '').strip()
@@ -3993,7 +3989,7 @@ class EmployeeDetailView(APIView):
             serializer.save()
             profile_saved = True
 
-        if len(update_fields) == 1 and not profile_saved:
+        if len(update_fields) == 1 and not profile_saved and position_obj is None:
             # Check if hr_id, reporting_manager_id, or reporting_approver_id will be set before bailing
             if 'hr_id' not in data and 'reporting_manager_id' not in data and 'reporting_approver_id' not in data:
                 return error('No updatable fields provided.')
@@ -4056,7 +4052,7 @@ class EmployeeDetailView(APIView):
             if 'reporting_approver' not in update_fields:
                 update_fields.append('reporting_approver')
 
-        if len(update_fields) == 1 and not profile_saved:
+        if len(update_fields) == 1 and not profile_saved and position_obj is None:
             return error('No updatable fields provided.')
 
         # Promotion (Employee > Promotion screen) piggybacks on this same
@@ -4072,6 +4068,23 @@ class EmployeeDetailView(APIView):
         else:
             effective_date = timezone.now().date()
         remarks = (data.get('remarks') or '').strip()
+
+        if position_obj is not None:
+            # "Reassign Position" — a dated event like a promotion, not a
+            # plain field edit. assign_position() closes the employee's
+            # prior placement (if any) and this position's prior holder
+            # (if any), then syncs designation/department from the new
+            # position; folded into `changes` here so the existing
+            # PromotionRecord logic below picks up a resulting designation
+            # change exactly as it would for a manual designation edit.
+            old_designation, old_department = employee.designation, employee.department
+            assign_position(employee, position_obj, effective_from=effective_date, created_by=request.user)
+            employee.refresh_from_db()
+            if employee.designation != old_designation:
+                changes['designation'] = {'from': old_designation, 'to': employee.designation}
+            if employee.department != old_department:
+                changes['department'] = {'from': old_department, 'to': employee.department}
+            update_fields = [f for f in update_fields if f not in ('designation', 'department')]
 
         promotion_changed = 'designation' in changes or 'role' in changes
 
@@ -5754,6 +5767,10 @@ class OnboardingApprovalView(APIView):
         remarks            = request.data.get('remarks', '')
         req_designation    = (request.data.get('designation')        or '').strip()
         req_department     = (request.data.get('department')         or '').strip()
+        # Optional — when a Position is picked, department/designation are
+        # derived from it instead of being required as free text (same
+        # bridge as Create Employee's position picker).
+        req_position_id    = (request.data.get('position')           or '').strip()
         # assessment_ids (list) is the current contract; assessment_id (single)
         # is accepted too for any older caller still sending one value.
         req_assessment_ids = request.data.get('assessment_ids')
@@ -5768,36 +5785,45 @@ class OnboardingApprovalView(APIView):
         req_pan_number         = (request.data.get('pan_number')          or '').strip()
         if decision not in ('approve', 'reject'):
             return error('decision must be "approve" or "reject".')
+        req_position_obj = None
         if decision == 'approve':
-            if not req_department:
-                return error('Department is required to approve onboarding.')
-            if not req_designation:
-                return error('Designation is required to approve onboarding.')
+            if req_position_id:
+                try:
+                    req_position_obj = Position.objects.select_related(
+                        'org_unit__department', 'job_template',
+                    ).get(pk=req_position_id, is_active=True)
+                except (Position.DoesNotExist, ValueError, ValidationError):
+                    return error('Select a valid, active position.', data={'position': 'Position not found.'})
+            else:
+                if not req_department:
+                    return error('Department is required to approve onboarding.')
+                if not req_designation:
+                    return error('Designation is required to approve onboarding.')
 
-            # Unlike "Create Employee" (EmployeeListCreateView.post()) and bulk
-            # import, this hire path previously accepted any free-text
-            # department/designation with no check against the master tables —
-            # silently breaking every place downstream that matches on these
-            # fields by exact equality (separation approval chain,
-            # _cascade_manager, leave-policy eligibility, announcement
-            # targeting) whenever the typed value didn't match a real row.
-            dept_obj = Department.objects.filter(name__iexact=req_department, is_active=True).first()
-            if dept_obj is None:
-                return error(
-                    f'Department "{req_department}" is not a recognized, active department.',
-                    data={'department': 'Select a valid, active department.'},
-                )
-            req_department = dept_obj.name
+                # Unlike "Create Employee" (EmployeeListCreateView.post()) and bulk
+                # import, this hire path previously accepted any free-text
+                # department/designation with no check against the master tables —
+                # silently breaking every place downstream that matches on these
+                # fields by exact equality (separation approval chain,
+                # _cascade_manager, leave-policy eligibility, announcement
+                # targeting) whenever the typed value didn't match a real row.
+                dept_obj = Department.objects.filter(name__iexact=req_department, is_active=True).first()
+                if dept_obj is None:
+                    return error(
+                        f'Department "{req_department}" is not a recognized, active department.',
+                        data={'department': 'Select a valid, active department.'},
+                    )
+                req_department = dept_obj.name
 
-            desig_obj = Designation.objects.filter(
-                name__iexact=req_designation, department=dept_obj, is_active=True,
-            ).first()
-            if desig_obj is None:
-                return error(
-                    f'Designation "{req_designation}" does not exist under department "{dept_obj.name}".',
-                    data={'designation': 'Select a valid, active designation for this department.'},
-                )
-            req_designation = desig_obj.name
+                desig_obj = Designation.objects.filter(
+                    name__iexact=req_designation, department=dept_obj, is_active=True,
+                ).first()
+                if desig_obj is None:
+                    return error(
+                        f'Designation "{req_designation}" does not exist under department "{dept_obj.name}".',
+                        data={'designation': 'Select a valid, active designation for this department.'},
+                    )
+                req_designation = desig_obj.name
 
             if req_pan_number:
                 # Validated before any state changes below — an invalid/duplicate
@@ -5875,6 +5901,13 @@ class OnboardingApprovalView(APIView):
                 'reporting_manager', 'hr',
                 *auto_fields,
             ])))
+
+            if req_position_obj is not None:
+                assign_position(
+                    target, req_position_obj,
+                    effective_from=target.date_of_joining or timezone.localdate(),
+                    created_by=request.user,
+                )
 
             # Save UAN / Aadhar name / PAN provided by HR at approval time.
             if req_uan_number or req_name_as_per_aadhar or req_pan_number:
@@ -6643,6 +6676,10 @@ _EMP_IMPORT_COL_MAP = {
     'role': 'role',
     'department': 'department', 'dept': 'department',
     'designation': 'designation',
+    # Optional alternative to department/designation — resolves to a real
+    # Position instead (see EmployeeBulkImportRowSerializer.validate()).
+    'org unit': 'org_unit', 'org_unit': 'org_unit', 'organisation unit': 'org_unit',
+    'position': 'position_title', 'position title': 'position_title', 'position_title': 'position_title',
     'branch': 'branch', 'branch name': 'branch', 'branch_name': 'branch',
     'employee type': 'employee_type', 'employee_type': 'employee_type',
     'emp type': 'employee_type', 'type': 'employee_type',
@@ -6794,6 +6831,15 @@ class EmployeeBulkImportView(APIView):
             role_map[r.name.lower()]         = r
             role_map[r.display_name.lower()] = r
 
+        # (lower org unit name, lower position title) → list of matching
+        # active Position ids — more than one hit (e.g. two same-titled
+        # seats in the same unit) is treated as ambiguous, same as zero.
+        position_map: dict = {}
+        for pos_id, unit_name, title in Position.objects.filter(is_active=True).values_list(
+            'id', 'org_unit__name', 'title',
+        ):
+            position_map.setdefault((unit_name.lower(), title.lower()), []).append(pos_id)
+
         # Pre-load existing emails for DB-level duplicate detection.
         existing_emails: set = set(
             User.objects.values_list('email', flat=True)
@@ -6842,40 +6888,72 @@ class EmployeeBulkImportView(APIView):
                 })
                 continue
 
-            # Department existence check.
-            dept_raw  = vd['department']
-            dept_name = dept_map.get(dept_raw.lower())
-            if dept_name is None:
-                row_errors.append({
-                    'row':        idx,
-                    'field':      'department',
-                    'identifier': email,
-                    'message':    f'Department "{dept_raw}" not found.',
-                })
-                continue
+            position_id_for_row = None
+            dept_name = ''
+            desig_raw = ''
 
-            # Designation existence + belongs-to-department check.
-            desig_raw = vd['designation']
-            dept_set  = desig_dept_map.get(desig_raw.lower(), set())
-            if not dept_set:
-                row_errors.append({
-                    'row':        idx,
-                    'field':      'designation',
-                    'identifier': email,
-                    'message':    f'Designation "{desig_raw}" not found.',
-                })
-                continue
-            if dept_name.lower() not in dept_set:
-                row_errors.append({
-                    'row':        idx,
-                    'field':      'designation',
-                    'identifier': email,
-                    'message':    (
-                        f'Designation "{desig_raw}" does not belong to '
-                        f'department "{dept_name}".'
-                    ),
-                })
-                continue
+            if vd.get('org_unit') or vd.get('position_title'):
+                # Org Unit + Position path — department/designation get
+                # derived from the Position after the employee is created,
+                # same as Create Employee's own Position picker.
+                unit_raw = vd['org_unit']
+                title_raw = vd['position_title']
+                matches = position_map.get((unit_raw.lower(), title_raw.lower()), [])
+                if not matches:
+                    row_errors.append({
+                        'row':        idx,
+                        'field':      'position',
+                        'identifier': email,
+                        'message':    f'No active position "{title_raw}" found in org unit "{unit_raw}".',
+                    })
+                    continue
+                if len(matches) > 1:
+                    row_errors.append({
+                        'row':        idx,
+                        'field':      'position',
+                        'identifier': email,
+                        'message':    (
+                            f'"{title_raw}" in org unit "{unit_raw}" matches more than one position — '
+                            f'use Department/Designation for this row instead.'
+                        ),
+                    })
+                    continue
+                position_id_for_row = matches[0]
+            else:
+                # Department existence check.
+                dept_raw  = vd['department']
+                dept_name = dept_map.get(dept_raw.lower())
+                if dept_name is None:
+                    row_errors.append({
+                        'row':        idx,
+                        'field':      'department',
+                        'identifier': email,
+                        'message':    f'Department "{dept_raw}" not found.',
+                    })
+                    continue
+
+                # Designation existence + belongs-to-department check.
+                desig_raw = vd['designation']
+                dept_set  = desig_dept_map.get(desig_raw.lower(), set())
+                if not dept_set:
+                    row_errors.append({
+                        'row':        idx,
+                        'field':      'designation',
+                        'identifier': email,
+                        'message':    f'Designation "{desig_raw}" not found.',
+                    })
+                    continue
+                if dept_name.lower() not in dept_set:
+                    row_errors.append({
+                        'row':        idx,
+                        'field':      'designation',
+                        'identifier': email,
+                        'message':    (
+                            f'Designation "{desig_raw}" does not belong to '
+                            f'department "{dept_name}".'
+                        ),
+                    })
+                    continue
 
             # Role existence check.
             role_raw = vd['role']
@@ -6924,6 +7002,13 @@ class EmployeeBulkImportView(APIView):
                     must_change_password = True,
                     onboarding_status    = User.ONBOARDING_PENDING,
                 )
+
+                if position_id_for_row is not None:
+                    assign_position(
+                        user, Position.objects.get(pk=position_id_for_row),
+                        effective_from=vd.get('date_of_joining') or timezone.localdate(),
+                        created_by=request.user,
+                    )
 
                 auto_fields = _auto_assign_managers(user)
                 if auto_fields:

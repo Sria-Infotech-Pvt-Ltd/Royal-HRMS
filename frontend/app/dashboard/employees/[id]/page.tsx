@@ -457,6 +457,11 @@ export default function EmployeeProfilePage({
     setBaseValues(v => ({ ...v, designation, ssRole: role }));
     setEmployee(prev => (prev ? { ...prev, designation } : prev));
   }
+  function onPositionReassigned(designation: string, department: string) {
+    setValues(v => ({ ...v, designation, ...(department ? { department } : {}) }));
+    setBaseValues(v => ({ ...v, designation, ...(department ? { department } : {}) }));
+    setEmployee(prev => (prev ? { ...prev, designation, ...(department ? { department } : {}) } : prev));
+  }
   async function onUploadDocument(documentType: string, file: File) {
     setDocUploadError("");
     setUploadingDocType(documentType);
@@ -726,6 +731,7 @@ export default function EmployeeProfilePage({
           desigOptions={desigOptions}
           roleOptions={roleOptions}
           onUpdated={onPromotionUpdated}
+          onPositionReassigned={onPositionReassigned}
         />
       ) : tab === "wishes" ? (
         <WishesTab
