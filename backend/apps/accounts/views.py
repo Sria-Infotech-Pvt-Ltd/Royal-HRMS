@@ -61,8 +61,6 @@ from apps.accounts.models import (
     Company,
     CompanyDirector,
     CompanyGSTRegistration,
-    Department,
-    Designation,
     Document,
     EmailTemplate,
     EmailTemplateAttachment,
@@ -90,8 +88,6 @@ from apps.accounts.serializers import (
     CompanyDirectorSerializer,
     CompanyGSTRegistrationSerializer,
     CompanySerializer,
-    DepartmentSerializer,
-    DesignationSerializer,
     DocumentSerializer,
     EmailTemplateAttachmentSerializer,
     EmailTemplateCategorySerializer,
@@ -170,20 +166,16 @@ def _auto_assign_managers(employee: 'User') -> list:
 
     assigned = None
 
-    # 1. Department manager in same branch (most specific — preferred).
+    # 1. Org Unit chief in same branch (most specific — preferred).
     if emp_dept:
-        dept = (
-            Department.objects.select_related('manager')
-            .filter(name__iexact=emp_dept, is_active=True)
-            .first()
-        )
+        from apps.accounts.services_approval import resolve_employee_org_unit_chief
+        chief = resolve_employee_org_unit_chief(employee)
         if (
-            dept and dept.manager
-            and dept.manager_id != employee.pk
-            and dept.manager.is_active
-            and (dept.manager.branch or '').strip().lower() == emp_branch.lower()
+            chief and chief.pk != employee.pk
+            and chief.is_active
+            and (chief.branch or '').strip().lower() == emp_branch.lower()
         ):
-            assigned = dept.manager
+            assigned = chief
 
     # 2. Fallback: first active manager in the branch (deterministic by id).
     #    Handles branches with multiple managers when no dept-level manager is set.
@@ -1079,216 +1071,6 @@ class PermissionDetailView(APIView):
         return self.put(request, pk)
 
 
-# ─── Organisation Structure ────────────────────────────────────────────────────
-
-class DepartmentListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if not _has_perm(request.user, 'departments.view'):
-            return error('You do not have permission to view departments.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        qs = Department.objects.prefetch_related('designations').all()
-        if is_active := request.query_params.get('is_active'):
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-
-        # Department has no branch FK of its own — it's a company-wide master
-        # list — so "departments at this branch" is derived from which
-        # departments actually have an active employee there.
-        branch = (request.query_params.get('branch') or '').strip()
-        if branch:
-            dept_names_in_branch = (
-                User.objects
-                .filter(is_active=True, branch__iexact=branch)
-                .exclude(department='')
-                .values_list('department', flat=True)
-                .distinct()
-            )
-            qs = qs.filter(name__in=list(dept_names_in_branch))
-
-        # Single query for all user/role data across departments — avoids N+1
-        dept_users = (
-            User.objects
-            .filter(is_active=True)
-            .exclude(department='')
-            .values('department', 'role__name', 'role__display_name')
-        )
-        emp_counts: dict = defaultdict(int)
-        dept_roles: dict = defaultdict(set)
-        for u in dept_users:
-            emp_counts[u['department']] += 1
-            if u['role__name']:
-                dept_roles[u['department']].add((u['role__name'], u['role__display_name']))
-
-        ctx = {
-            'emp_counts': dict(emp_counts),
-            'dept_roles': {k: sorted(v, key=lambda x: x[1]) for k, v in dept_roles.items()},
-        }
-        page_obj, paginator = paginate(qs, request, default_page_size=50)
-        return success(
-            'Departments retrieved successfully.',
-            data=paginated_data(
-                paginator, page_obj,
-                DepartmentSerializer(page_obj.object_list, many=True, context=ctx).data,
-            ),
-        )
-
-    def post(self, request):
-        if not _has_perm(request.user, 'departments.create'):
-            return error('You do not have permission to create departments.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        serializer = DepartmentSerializer(data=request.data)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        try:
-            dept = serializer.save()
-        except IntegrityError:
-            return error(
-                f"Department '{serializer.validated_data['name']}' already exists.",
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        AuditLog.objects.create(
-            user=request.user, action='dept_created', module='accounts',
-            object_id=str(dept.pk), changes={'name': dept.name},
-            ip_address=get_client_ip(request),
-        )
-        return success(
-            'Department created successfully.',
-            data=DepartmentSerializer(dept).data,
-            http_status=status.HTTP_201_CREATED,
-        )
-
-
-class DepartmentDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def _get(self, pk: int) -> Department | None:
-        try:
-            return Department.objects.prefetch_related('designations').get(pk=pk)
-        except Department.DoesNotExist:
-            return None
-
-    def get(self, request, pk: int):
-        if not _has_perm(request.user, 'departments.view'):
-            return error('You do not have permission to view departments.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        dept = self._get(pk)
-        if not dept:
-            return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
-        return success('Department retrieved.', data=DepartmentSerializer(dept).data)
-
-    def _cascade_manager(self, dept: Department, old_manager_id) -> None:
-        """When dept manager changes, update reporting_manager for employees in that dept
-        who are also in the same branch as the new manager (same branch+dept rule)."""
-        if dept.manager_id == old_manager_id:
-            return
-        qs = User.objects.filter(department__iexact=dept.name, is_active=True)
-        if dept.manager_id and dept.manager:
-            manager_branch = (dept.manager.branch or '').strip()
-            if manager_branch:
-                qs = qs.filter(branch__iexact=manager_branch)
-            qs = qs.exclude(pk=dept.manager_id)
-            qs.update(reporting_manager_id=dept.manager_id)
-        else:
-            qs.filter(reporting_manager_id=old_manager_id).update(reporting_manager=None)
-
-    def put(self, request, pk: int):
-        if not _has_perm(request.user, 'departments.edit'):
-            return error('You do not have permission to edit departments.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        dept = self._get(pk)
-        if not dept:
-            return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
-        old_manager_id = dept.manager_id
-        serializer = DepartmentSerializer(dept, data=request.data)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        try:
-            updated = serializer.save()
-        except IntegrityError:
-            return error(
-                f"Department '{serializer.validated_data.get('name', '')}' already exists.",
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        self._cascade_manager(updated, old_manager_id)
-        AuditLog.objects.create(
-            user=request.user, action='dept_updated', module='accounts',
-            object_id=str(updated.pk), changes={'name': updated.name},
-            ip_address=get_client_ip(request),
-        )
-        return success('Department updated successfully.', data=DepartmentSerializer(updated).data)
-
-    def patch(self, request, pk: int):
-        if not _has_perm(request.user, 'departments.edit'):
-            return error('You do not have permission to edit departments.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        dept = self._get(pk)
-        if not dept:
-            return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
-        old_manager_id = dept.manager_id
-        serializer = DepartmentSerializer(dept, data=request.data, partial=True)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        try:
-            updated = serializer.save()
-        except IntegrityError:
-            return error(
-                f"Department '{serializer.validated_data.get('name', '')}' already exists.",
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        self._cascade_manager(updated, old_manager_id)
-        AuditLog.objects.create(
-            user=request.user, action='dept_updated', module='accounts',
-            object_id=str(updated.pk), changes={'name': updated.name},
-            ip_address=get_client_ip(request),
-        )
-        return success('Department updated successfully.', data=DepartmentSerializer(updated).data)
-
-    def delete(self, request, pk: int):
-        if not _has_perm(request.user, 'departments.delete'):
-            return error('You do not have permission to delete departments.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        dept = self._get(pk)
-        if not dept:
-            return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
-
-        active_employees = User.objects.filter(department=dept.name, is_active=True).count()
-        if active_employees:
-            return error(
-                f'Cannot delete department "{dept.name}" — '
-                f'{active_employees} active employee(s) belong to it. '
-                'Reassign them first.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
-
-        if dept.designations.exists():
-            return error(
-                f'Cannot delete department "{dept.name}" — it has designations. '
-                'Remove all designations first.',
-                http_status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        name = dept.name
-        dept_pk = dept.pk
-        try:
-            dept.delete()
-        except ProtectedError:
-            return error(
-                f'Cannot delete department "{name}" — it is referenced by other records.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        AuditLog.objects.create(
-            user=request.user, action='dept_deleted', module='accounts',
-            object_id=str(dept_pk), changes={'name': name},
-            ip_address=get_client_ip(request),
-        )
-        logger.info('Department "%s" deleted by %s', name, request.user.email)
-        return success(f'Department "{name}" deleted successfully.')
-
-    def post(self, request, pk: int):
-        return self.put(request, pk)
-
-
 # ─── Org Structure (units, positions, job templates) ──────────────────────────
 # Replaces the old computed-from-User.department org chart above (removed —
 # see TEAMCONTEXT.md for what it used to do) with a real, admin-editable
@@ -1722,161 +1504,6 @@ class PlacementDetailView(APIView):
             ip_address=get_client_ip(request),
         )
         return success('Placement cancelled.', data={})
-
-
-class DesignationListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if not _has_perm(request.user, 'designations.view'):
-            return error('You do not have permission to view designations.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        qs = Designation.objects.select_related('department').all()
-        if dept_id := request.query_params.get('department'):
-            try:
-                dept_id = int(dept_id)
-            except (TypeError, ValueError):
-                return error('department filter must be a valid integer ID.')
-            if not Department.objects.filter(pk=dept_id).exists():
-                return error('Department not found.', http_status=status.HTTP_404_NOT_FOUND)
-            qs = qs.filter(department_id=dept_id)
-        page_obj, paginator = paginate(qs, request, default_page_size=50)
-        return success(
-            'Designations retrieved successfully.',
-            data=paginated_data(
-                paginator, page_obj,
-                DesignationSerializer(page_obj.object_list, many=True).data,
-            ),
-        )
-
-    def post(self, request):
-        if not _has_perm(request.user, 'designations.create'):
-            return error('You do not have permission to create designations.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        serializer = DesignationSerializer(data=request.data)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        try:
-            desig = serializer.save()
-        except IntegrityError:
-            return error(
-                f"Designation '{serializer.validated_data['name']}' already exists in this department.",
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        AuditLog.objects.create(
-            user=request.user, action='designation_created', module='accounts',
-            object_id=str(desig.pk),
-            changes={'name': desig.name, 'department': desig.department.name},
-            ip_address=get_client_ip(request),
-        )
-        return success(
-            'Designation created successfully.',
-            data=DesignationSerializer(desig).data,
-            http_status=status.HTTP_201_CREATED,
-        )
-
-
-class DesignationDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def _get(self, pk: int) -> Designation | None:
-        try:
-            return Designation.objects.select_related('department').get(pk=pk)
-        except Designation.DoesNotExist:
-            return None
-
-    def get(self, request, pk: int):
-        if not _has_perm(request.user, 'designations.view'):
-            return error('You do not have permission to view designations.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        desig = self._get(pk)
-        if not desig:
-            return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
-        return success('Designation retrieved successfully.', data=DesignationSerializer(desig).data)
-
-    def put(self, request, pk: int):
-        if not _has_perm(request.user, 'designations.edit'):
-            return error('You do not have permission to edit designations.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        desig = self._get(pk)
-        if not desig:
-            return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
-        serializer = DesignationSerializer(desig, data=request.data)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        try:
-            updated = serializer.save()
-        except IntegrityError:
-            return error(
-                f"Designation '{serializer.validated_data.get('name', '')}' already exists in this department.",
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        AuditLog.objects.create(
-            user=request.user, action='designation_updated', module='accounts',
-            object_id=str(updated.pk),
-            changes={'name': updated.name, 'department': updated.department.name},
-            ip_address=get_client_ip(request),
-        )
-        return success('Designation updated successfully.', data=DesignationSerializer(updated).data)
-
-    def patch(self, request, pk: int):
-        if not _has_perm(request.user, 'designations.edit'):
-            return error('You do not have permission to edit designations.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        desig = self._get(pk)
-        if not desig:
-            return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
-        serializer = DesignationSerializer(desig, data=request.data, partial=True)
-        if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
-        try:
-            updated = serializer.save()
-        except IntegrityError:
-            return error(
-                f"Designation '{serializer.validated_data.get('name', '')}' already exists in this department.",
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        AuditLog.objects.create(
-            user=request.user, action='designation_updated', module='accounts',
-            object_id=str(updated.pk),
-            changes={'name': updated.name, 'department': updated.department.name},
-            ip_address=get_client_ip(request),
-        )
-        return success('Designation updated successfully.', data=DesignationSerializer(updated).data)
-
-    def delete(self, request, pk: int):
-        if not _has_perm(request.user, 'designations.delete'):
-            return error('You do not have permission to delete designations.',
-                         http_status=status.HTTP_403_FORBIDDEN)
-        desig = self._get(pk)
-        if not desig:
-            return error('Designation not found.', http_status=status.HTTP_404_NOT_FOUND)
-        active_users = User.objects.filter(designation=desig.name, is_active=True).count()
-        if active_users:
-            return error(
-                f'Cannot delete designation "{desig.name}" — '
-                f'{active_users} active employee(s) hold this designation. '
-                'Reassign them first.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        name = desig.name
-        try:
-            desig.delete()
-        except ProtectedError:
-            return error(
-                f'Cannot delete designation "{name}" — it is referenced by other records.',
-                http_status=status.HTTP_409_CONFLICT,
-            )
-        AuditLog.objects.create(
-            user=request.user, action='designation_deleted', module='accounts',
-            object_id=str(desig.pk),
-            changes={'name': name, 'department': desig.department.name},
-            ip_address=get_client_ip(request),
-        )
-        return success(f'Designation "{name}" deleted successfully.')
-
-    def post(self, request, pk: int):
-        return self.put(request, pk)
 
 
 # ─── SMTP Settings ─────────────────────────────────────────────────────────────
@@ -3397,7 +3024,7 @@ class EmployeeListCreateView(APIView):
         if position_id:
             try:
                 position_obj = Position.objects.select_related(
-                    'org_unit__department', 'job_template',
+                    'org_unit', 'job_template',
                 ).get(pk=position_id, is_active=True)
             except (Position.DoesNotExist, ValueError, ValidationError):
                 errs['position'] = 'Select a valid, active position.'
@@ -3426,9 +3053,9 @@ class EmployeeListCreateView(APIView):
         if errs:
             return error('Please fix the errors below.', data=errs)
 
-        # Store the canonical Branch.branch_name / Department.name casing, not
-        # whatever the client sent — keeps this byte-for-byte consistent with
-        # lookups elsewhere (HR/manager auto-assignment, geofencing, reports).
+        # Store the canonical Branch.branch_name casing, not whatever the
+        # client sent — keeps this byte-for-byte consistent with lookups
+        # elsewhere (HR/manager auto-assignment, geofencing, reports).
         branch     = branch_obj.branch_name
         # Department stays blank at creation for every non-Branch-Admin role —
         # assign_position() below fills it in from the Position.
@@ -3822,7 +3449,7 @@ class EmployeeDetailView(APIView):
         if position_id:
             try:
                 position_obj = Position.objects.select_related(
-                    'org_unit__department', 'job_template',
+                    'org_unit', 'job_template',
                 ).get(pk=position_id, is_active=True)
             except (Position.DoesNotExist, ValueError, ValidationError):
                 return error('Select a valid, active position.', data={'position': 'Position not found.'})
@@ -5716,7 +5343,7 @@ class OnboardingApprovalView(APIView):
                 return error('A position is required to approve onboarding.', data={'position': 'Position is required.'})
             try:
                 req_position_obj = Position.objects.select_related(
-                    'org_unit__department', 'job_template',
+                    'org_unit', 'job_template',
                 ).get(pk=req_position_id, is_active=True)
             except (Position.DoesNotExist, ValueError, ValidationError):
                 return error('Select a valid, active position.', data={'position': 'Position not found.'})
@@ -5771,9 +5398,21 @@ class OnboardingApprovalView(APIView):
                 if linked_candidate and not target.branch and linked_candidate.branch:
                     target.branch = linked_candidate.branch.branch_name
 
-            # designation/department are always set below via assign_position()
-            # (req_position_obj), which unconditionally overwrites both —
-            # nothing to do with them here.
+            # designation/department are derived from the Position — sync
+            # them (and create the Placement) before _auto_assign_managers
+            # below, so its org-unit-chief lookup for reporting_manager can
+            # actually resolve one, and before the final save so nothing
+            # overwrites the synced values with stale in-memory strings.
+            if req_position_obj is not None:
+                assign_position(
+                    target, req_position_obj,
+                    effective_from=target.date_of_joining or timezone.localdate(),
+                    created_by=request.user,
+                )
+                target.refresh_from_db(fields=[
+                    'designation', 'department',
+                    'designation_synced_from_position', 'department_synced_from_position',
+                ])
 
             # Explicit reporting manager override — set before _auto_assign_managers so auto-assign skips it
             if req_manager_id:
@@ -5793,13 +5432,6 @@ class OnboardingApprovalView(APIView):
                 'reporting_manager', 'hr',
                 *auto_fields,
             ])))
-
-            if req_position_obj is not None:
-                assign_position(
-                    target, req_position_obj,
-                    effective_from=target.date_of_joining or timezone.localdate(),
-                    created_by=request.user,
-                )
 
             # Save UAN / Aadhar name / PAN provided by HR at approval time.
             if req_uan_number or req_name_as_per_aadhar or req_pan_number:

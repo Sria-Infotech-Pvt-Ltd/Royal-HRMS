@@ -36,14 +36,17 @@ def current_placement(position: 'Position', as_of=None) -> 'Placement | None':
 
 def sync_from_position(position: 'Position', *, force: bool = False) -> None:
     """Push the Position's effective title onto its current holder's (as of
-    today, via the current Placement) User.designation, and the position's
-    OrgUnit's linked Department name onto User.department when that link
-    exists (the OrgUnit<->Department bridge added in Phase 3 Stage 1).
+    today, via the current Placement) User.designation, and the nearest
+    is_department_level unit in the holder's Org Unit chain (self-first —
+    see services_approval.resolve_employee_department_name()) onto
+    User.department, when one exists in that chain.
 
     Each half respects its own *_synced_from_position flag independently —
     designation_synced_from_position and department_synced_from_position —
     so a manual correction to one doesn't silently freeze sync on the
     other, unless force=True (an explicit assignment always wins for both)."""
+    from apps.accounts.services_approval import resolve_employee_department_name
+
     current = current_placement(position)
     if current is None:
         return
@@ -57,9 +60,9 @@ def sync_from_position(position: 'Position', *, force: bool = False) -> None:
             holder.designation_synced_from_position = True
             update_fields += ['designation', 'designation_synced_from_position']
 
-    if position.org_unit.department_id and (force or holder.department_synced_from_position):
-        dept_name = position.org_unit.department.name
-        if holder.department != dept_name or not holder.department_synced_from_position:
+    if force or holder.department_synced_from_position:
+        dept_name = resolve_employee_department_name(holder)
+        if dept_name and (holder.department != dept_name or not holder.department_synced_from_position):
             holder.department = dept_name
             holder.department_synced_from_position = True
             update_fields += ['department', 'department_synced_from_position']
@@ -80,8 +83,9 @@ def assign_position(
     enforced at the DB level (`placement_employee_no_overlap`), so moving
     someone to a different seat would otherwise collide with their own
     still-open placement on the old one. Then syncs designation (always)
-    and department (when the position's OrgUnit has one linked) from the
-    position. Returns the new Placement."""
+    and department (when the nearest is_department_level unit in the
+    position's Org Unit chain resolves one) from the position. Returns the
+    new Placement."""
     from apps.accounts.models import Placement
 
     with transaction.atomic():

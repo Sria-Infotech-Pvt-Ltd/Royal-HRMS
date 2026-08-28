@@ -11,11 +11,12 @@ export interface OrgUnit {
   parent:          string | null;
   cost_center:     string;
   is_active:       boolean;
-  // Phase 3 migration bridge — optional link to a legacy Department, set
-  // explicitly by an admin. See services_approval.resolve_employee_department
-  // on the backend for how this gets preferred over the old string match.
-  department:      number | null;
-  department_name: string | null;
+  // Marks this unit as representing a real "department" for eligibility/
+  // reporting purposes (LeavePolicy eligibility, attendance/dashboard
+  // department filters) — see the backend's
+  // services_approval.resolve_employee_department_name(), which walks up
+  // to the nearest unit marked this way.
+  is_department_level: boolean;
   position_count:  number;
   child_count:     number;
   created_at:      string;

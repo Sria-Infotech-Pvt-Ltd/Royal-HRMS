@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 const SETTINGS_ITEMS = [
   { id: "company",            cat: "company", icon: "ti-building",        iconClass: "sc-company", label: "Company Info",          desc: "Name, GST, address, registration details" },
-  { id: "departments",        cat: "company", icon: "ti-sitemap",         iconClass: "sc-company", label: "Departments & Designations", desc: "Organisation structure and job titles" },
   { id: "permissions",        cat: "company", icon: "ti-shield-lock",     iconClass: "sc-company", label: "Roles & Permissions",   desc: "Role-based access control for all users" },
   { id: "leave-policy",       cat: "modules", icon: "ti-beach",           iconClass: "sc-modules", label: "Leave Policy",          desc: "Configure leave types, accruals and limits" },
   { id: "approval-rules",     cat: "modules", icon: "ti-sitemap",         iconClass: "sc-modules", label: "Approval Rules",        desc: "Who approves leave, expenses, resignation and loans" },
@@ -35,7 +34,6 @@ type CatId = "all" | "company" | "modules" | "comm" | "system";
 const ITEM_ROUTES: Record<string, string> = {
   company:                "/dashboard/settings/company",
   permissions:            "/dashboard/settings/permissions",
-  departments:            "/dashboard/settings/departments",
   smtp:                   "/dashboard/settings/smtp",
   "email-templates":      "/dashboard/settings/email-templates",
   audit:                  "/dashboard/settings/audit",

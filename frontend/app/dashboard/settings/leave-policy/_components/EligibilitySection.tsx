@@ -3,8 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { MultiCheckRow, type PolicyRuleFields } from "./LeavePoliciesTab";
-import type { DepartmentOption } from "@/types/department";
-import type { DesignationOption } from "@/types/designation";
+import type { JobTemplate, OrgUnit } from "@/types/orgStructure";
 
 interface BranchOption      { id: number; branch_name: string }
 
@@ -38,12 +37,16 @@ interface Props {
 
 export default function EligibilitySection({ rules, setField }: Props) {
   const { data: branchData } = useFetch<BranchOption[] | { results: BranchOption[] }>(`${API.branches.list}?page_size=100`);
-  const { data: deptData }   = useFetch<DepartmentOption[] | { results: DepartmentOption[] }>(API.departments.list);
-  const { data: desigData }  = useFetch<DesignationOption[] | { results: DesignationOption[] }>(API.designations.list);
+  const { data: unitData }   = useFetch<OrgUnit[] | { results: OrgUnit[] }>(`${API.orgStructure.units.list}?page_size=200`);
+  const { data: jobData }    = useFetch<JobTemplate[] | { results: JobTemplate[] }>(API.orgStructure.jobTemplates);
 
   const branches     = Array.isArray(branchData) ? branchData : (branchData?.results ?? []);
-  const departments  = Array.isArray(deptData)   ? deptData   : (deptData?.results ?? []);
-  const designations = Array.isArray(desigData)  ? desigData  : (desigData?.results ?? []);
+  // "Departments" here means org units marked as representing a real
+  // department (OrgUnit.is_department_level) — Department itself is
+  // retired. "Designations" sources from JobTemplate, the closest
+  // remaining equivalent to a reusable, named title list.
+  const departments  = (Array.isArray(unitData) ? unitData : (unitData?.results ?? [])).filter(u => u.is_department_level);
+  const designations = Array.isArray(jobData)   ? jobData  : (jobData?.results ?? []);
 
   const groups: { key: EligibilityListKey; options: string[] }[] = [
     { key: "applicable_branches",         options: branches.map(b => b.branch_name) },

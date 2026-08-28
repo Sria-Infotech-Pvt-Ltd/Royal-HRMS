@@ -73,10 +73,10 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [showAssign, setShowAssign] = useState(false);
   const [orgUnitId,   setOrgUnitId]   = useState("");
   const [selPosition, setSelPosition] = useState("");
-  const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
+  const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
   const positionOptions  = positionsForUnit(orgUnitId, /* vacantOnly */ true);
-  const selectedUnit     = units.find(u => u.id === orgUnitId);
   const selectedPosition = positionOptions.find(p => p.id === selPosition);
+  const derivedDepartmentName = resolveDepartmentName(orgUnitId);
   const [assignErr,      setAssignErr]      = useState("");
   const [previewDoc,     setPreviewDoc]     = useState<OnboardingDocument | null>(null);
   const [showAssessment, setShowAssessment] = useState(false);
@@ -348,7 +348,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                   <div className="field-group" style={{ marginBottom: ".75rem" }}>
                     <label className="field-label">Department</label>
                     <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-                      {selectedUnit?.department_name || "(this org unit has no linked department yet)"}
+                      {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
                     </div>
                   </div>
 

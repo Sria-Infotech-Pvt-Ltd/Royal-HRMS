@@ -70,31 +70,47 @@ def _todays_attendance(employee, today):
 def _headcount_data():
     """Shared department headcount — cached 12 h, used by both dashboards.
 
-    Groups each active user by their *resolved* department name — the
-    Position-derived one (current Placement -> OrgUnit.department) where
-    it exists, falling back to the legacy User.department string
-    otherwise — same bridge used everywhere else in Phase 3 (see
-    apps.accounts.services_approval). A plain `.values('department')`
-    group-by on the raw string alone would undercount anyone placed on a
-    Position whose User.department was never separately kept in sync.
-    Computed as one batched pass (2 queries total), not per-user, since
-    this can run cold against the whole active headcount."""
+    Groups each active user by their *resolved* department name — walking
+    up from their current Position's Org Unit (via Placement) to the
+    nearest ancestor-or-self unit marked `is_department_level` (same rule
+    as apps.accounts.services_approval.resolve_employee_department_name()),
+    falling back to the legacy User.department string otherwise. A plain
+    `.values('department')` group-by on the raw string alone would
+    undercount anyone placed on a Position whose User.department was never
+    separately kept in sync. Computed as one batched pass (3 queries
+    total, not per-user), since this can run cold against the whole
+    active headcount — the unit tree itself is small enough to load whole
+    and walk in Python rather than round-tripping per employee."""
     rows = cache.get('dashboard:hr:headcount')
     if rows is None:
         from collections import Counter
         from django.db.models import Q
-        from apps.accounts.models import Placement, User
+        from apps.accounts.models import OrgUnit, Placement, User
 
         today = timezone.localdate()
-        position_dept_by_employee = dict(
+        position_unit_by_employee = dict(
             Placement.objects.filter(effective_from__lte=today)
             .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
-            .filter(position__org_unit__department__isnull=False)
-            .values_list('employee_id', 'position__org_unit__department__name')
+            .values_list('employee_id', 'position__org_unit_id')
         )
+        units = {u.id: u for u in OrgUnit.objects.only('id', 'parent_id', 'name', 'is_department_level')}
+
+        def _resolve_unit_department(unit_id):
+            seen = set()
+            while unit_id is not None and unit_id not in seen:
+                unit = units.get(unit_id)
+                if unit is None:
+                    return None
+                if unit.is_department_level:
+                    return unit.name
+                seen.add(unit_id)
+                unit_id = unit.parent_id
+            return None
+
         counts = Counter()
         for user_id, legacy_dept in User.objects.filter(is_active=True).values_list('id', 'department'):
-            name = position_dept_by_employee.get(user_id) or legacy_dept
+            unit_id = position_unit_by_employee.get(user_id)
+            name = (_resolve_unit_department(unit_id) if unit_id else None) or legacy_dept
             if name:
                 counts[name] += 1
         rows = [{'department': name, 'count': count} for name, count in counts.most_common()]

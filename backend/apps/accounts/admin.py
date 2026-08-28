@@ -5,8 +5,6 @@ from apps.accounts.models import (
     AuditLog,
     ApprovalWorkflowRule,
     Company,
-    Department,
-    Designation,
     Document,
     EmailTemplate,
     EmailTemplateAttachment,
@@ -77,21 +75,6 @@ class UserAdmin(BaseUserAdmin):
 
 
 # ─── Org Structure ────────────────────────────────────────────────────────────
-
-@admin.register(Department)
-class DepartmentAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'manager', 'is_active')
-    search_fields = ('name',)
-    list_filter   = ('is_active',)
-    autocomplete_fields = ('manager',)
-
-
-@admin.register(Designation)
-class DesignationAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'department', 'is_active')
-    list_filter   = ('is_active', 'department')
-    search_fields = ('name',)
-
 
 @admin.register(PromotionRecord)
 class PromotionRecordAdmin(admin.ModelAdmin):

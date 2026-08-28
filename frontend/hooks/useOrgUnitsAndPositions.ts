@@ -14,6 +14,13 @@ interface Result {
   // "Reassign Position" action, which intentionally allows it (same
   // pattern as the Org Chart's own AssignHolderModal).
   positionsForUnit:   (orgUnitId: string, vacantOnly?: boolean) => Position[];
+  // Preview-only mirror of the backend's
+  // services_approval.resolve_employee_department_name() — walks up from
+  // `orgUnitId` via `parent` and returns the name of the nearest unit
+  // marked is_department_level, or null if none in the chain is marked.
+  // Purely cosmetic (what a picker shows before submitting); the backend
+  // is the actual source of truth once a Position is assigned.
+  resolveDepartmentName: (orgUnitId: string) => string | null;
 }
 
 // Shared source of Org Unit / Position option lists for every Position
@@ -34,5 +41,17 @@ export function useOrgUnitsAndPositions(): Result {
     return positions.filter(p => p.org_unit === orgUnitId && p.is_active && (!vacantOnly || !p.holder));
   }
 
-  return { units, positions, loading: unitsLoading || positionsLoading, positionsForUnit };
+  function resolveDepartmentName(orgUnitId: string): string | null {
+    const byId = new Map(units.map(u => [u.id, u]));
+    let unit = byId.get(orgUnitId) ?? null;
+    const seen = new Set<string>();
+    while (unit && !seen.has(unit.id)) {
+      if (unit.is_department_level) return unit.name;
+      seen.add(unit.id);
+      unit = unit.parent ? (byId.get(unit.parent) ?? null) : null;
+    }
+    return null;
+  }
+
+  return { units, positions, loading: unitsLoading || positionsLoading, positionsForUnit, resolveDepartmentName };
 }

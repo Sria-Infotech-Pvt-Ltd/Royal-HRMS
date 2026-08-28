@@ -17,8 +17,6 @@ from apps.accounts.models import (
     CompanyDirector,
     CompanyGSTRegistration,
     CustomFieldFileValue,
-    Department,
-    Designation,
     Document,
     DocumentTypeConfig,
     EmailTemplate,
@@ -426,100 +424,9 @@ class EmailTemplatePreviewSerializer(serializers.Serializer):
     )
 
 
-# ─── Organisation Structure ────────────────────────────────────────────────────
-
-class DesignationSerializer(serializers.ModelSerializer):
-    department_name = serializers.CharField(source='department.name', read_only=True)
-
-    class Meta:
-        model  = Designation
-        fields = ('id', 'name', 'department', 'department_name', 'level', 'is_active', 'created_at', 'updated_at')
-        read_only_fields = ('id', 'department_name', 'created_at', 'updated_at')
-
-    def validate_name(self, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError('Designation name must not be blank.')
-        if len(value) > 100:
-            raise serializers.ValidationError('Designation name must be under 100 characters.')
-        return value
-
-    def validate_department(self, value):
-        if value is None:
-            raise serializers.ValidationError('Department is required.')
-        return value
-
-    def validate(self, attrs: dict) -> dict:
-        name  = attrs.get('name', getattr(self.instance, 'name', None))
-        dept  = attrs.get('department', getattr(self.instance, 'department', None))
-        if dept is None:
-            raise serializers.ValidationError({'department': 'Department is required.'})
-        qs    = Designation.objects.filter(name__iexact=name, department=dept)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError(
-                {'name': f'A designation named "{name}" already exists in this department.'}
-            )
-        return attrs
-
-
-class DepartmentSerializer(serializers.ModelSerializer):
-    designation_count = serializers.SerializerMethodField()
-    employee_count    = serializers.SerializerMethodField()
-    roles             = serializers.SerializerMethodField()
-    manager_name      = serializers.CharField(source='manager.full_name', read_only=True, default=None)
-
-    class Meta:
-        model  = Department
-        fields = (
-            'id', 'name', 'description', 'is_active', 'created_at',
-            'manager', 'manager_name',
-            'designation_count', 'employee_count', 'roles',
-        )
-        read_only_fields = ('id', 'created_at', 'manager_name', 'designation_count', 'employee_count', 'roles')
-
-    def get_designation_count(self, obj: Department) -> int:
-        return len(obj.designations.all())  # uses prefetch cache — no extra query
-
-    def get_employee_count(self, obj: Department) -> int:
-        counts = self.context.get('emp_counts')
-        if counts is not None:
-            return counts.get(obj.name, 0)
-        return User.objects.filter(department=obj.name).count()
-
-    def get_roles(self, obj: Department) -> list:
-        roles = self.context.get('dept_roles')
-        if roles is not None:
-            return [{'name': r[0], 'display_name': r[1]} for r in roles.get(obj.name, [])]
-        rows = (
-            User.objects.filter(department=obj.name)
-                .select_related('role')
-                .exclude(role=None)
-                .values_list('role__name', 'role__display_name')
-                .distinct()
-                .order_by('role__display_name')
-        )
-        return [{'name': r[0], 'display_name': r[1]} for r in rows]
-
-    def validate_name(self, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError('Department name must not be blank.')
-        if len(value) > 100:
-            raise serializers.ValidationError('Department name must be under 100 characters.')
-        return value
-
-    def validate_description(self, value: str) -> str:
-        if len(value) > 300:
-            raise serializers.ValidationError('Description must be under 300 characters.')
-        return value
-
-
 # ─── Org Structure (units, positions, job templates) ──────────────────────────
-# Separate from Department/Designation above — a real hierarchy with its own
-# Position/holder model, used only by the Org Structure page. Doesn't touch
-# User.department/reporting_manager or any approval routing.
+# Replaced Department/Designation entirely (Stage 6) — a real hierarchy with
+# its own Position/Placement model.
 
 class JobTemplateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -531,20 +438,20 @@ class JobTemplateSerializer(serializers.ModelSerializer):
 class OrgUnitSerializer(serializers.ModelSerializer):
     position_count  = serializers.SerializerMethodField()
     child_count     = serializers.SerializerMethodField()
-    department_name = serializers.CharField(source='department.name', read_only=True, default=None)
 
     class Meta:
         model  = OrgUnit
         fields = (
             'id', 'name', 'code', 'parent', 'cost_center', 'is_active',
-            'department', 'department_name',
+            'is_department_level',
             'position_count', 'child_count', 'created_at', 'updated_at',
         )
         # is_active is set only via the dedicated deactivate action (audit-
-        # logged there), never through a generic field update here. department
-        # is writable — an admin links a unit to a legacy Department directly
-        # through the same generic PUT this page already uses for parent/cost_center.
-        read_only_fields = ('id', 'is_active', 'department_name', 'position_count', 'child_count', 'created_at', 'updated_at')
+        # logged there), never through a generic field update here.
+        # is_department_level is writable — an admin marks a unit as
+        # representing a real department through the same generic PUT this
+        # page already uses for parent/cost_center.
+        read_only_fields = ('id', 'is_active', 'position_count', 'child_count', 'created_at', 'updated_at')
 
     def get_position_count(self, obj: OrgUnit) -> int:
         return obj.positions.count()

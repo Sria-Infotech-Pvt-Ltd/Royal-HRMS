@@ -81,9 +81,9 @@ def _resolve_separation_chain(employee):
     0063) — checking permission first would misroute every manager into the
     single-stage HR-tier branch instead of their own 2-stage one.
 
-    The Department-Manager and HR approver slots are left unresolved (None)
-    whenever they can't be pinned to one specific person (no department
-    manager set, employee IS that manager, no HR assigned, etc.) — an
+    The Manager and HR approver slots are left unresolved (None)
+    whenever they can't be pinned to one specific person (no unit chief
+    resolved, employee IS that chief, no HR assigned, etc.) — an
     unresolved stage then falls back to any separation.approve holder in the
     employee's branch (see _stage_actionable in serializers.py and
     _can_action_stage in views/separation_workflow.py). Branch Admin is
@@ -106,10 +106,9 @@ def _resolve_separation_chain(employee):
     if is_hr_tier:
         return [(SEP_STAGE_BRANCH_ADMIN, None)]
 
-    from apps.accounts.services_approval import resolve_employee_department
-    dept = resolve_employee_department(employee)
-    dept_manager = dept.manager if dept else None
-    manager_approver = dept_manager if (dept_manager and dept_manager.id != employee.id) else None
+    from apps.accounts.services_approval import resolve_employee_org_unit_chief
+    chief = resolve_employee_org_unit_chief(employee)
+    manager_approver = chief if (chief and chief.id != employee.id) else None
     return [(SEP_STAGE_MANAGER, manager_approver), (SEP_STAGE_HR, employee.hr)]
 
 

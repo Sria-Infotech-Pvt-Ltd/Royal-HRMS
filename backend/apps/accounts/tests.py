@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, Department, Designation, OrgUnit, OTPVerification, Position, User
+from apps.accounts.models import AuditLog, OrgUnit, OTPVerification, Position, User
 from apps.accounts.serializers import ForgotPasswordSerializer
 
 

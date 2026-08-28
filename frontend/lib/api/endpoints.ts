@@ -25,16 +25,6 @@ export const API = {
     cities: (stateId: string | number) => `/branch/states/${stateId}/cities/`,
   },
 
-  departments: {
-    list: "/departments/",
-    detail: (id: string | number) => `/departments/${id}/`,
-  },
-
-  designations: {
-    list: "/designations/",
-    detail: (id: string | number) => `/designations/${id}/`,
-  },
-
   orgStructure: {
     units: {
       list: "/org-structure/units/",

@@ -294,66 +294,20 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 # ─── Organisation Structure ───────────────────────────────────────────────────
-
-class Department(models.Model):
-    name        = models.CharField(max_length=100, unique=True)
-    description = models.CharField(max_length=300, blank=True)
-    manager     = models.ForeignKey(
-                      'User',
-                      on_delete=models.SET_NULL,
-                      null=True, blank=True,
-                      related_name='managed_departments',
-                  )
-    is_active   = models.BooleanField(default=True)
-    created_at  = models.DateTimeField(auto_now_add=True)
-    updated_at  = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'hrms_departments'
-        ordering = ['name']
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class Designation(models.Model):
-    name        = models.CharField(max_length=100)
-    department  = models.ForeignKey(
-                      Department, on_delete=models.CASCADE, related_name='designations'
-                  )
-    level       = models.PositiveIntegerField(
-        default=0,
-        help_text=(
-            'Seniority level used to validate promotions (higher = more senior). '
-            '0 means "not yet configured" — promotion hierarchy validation is '
-            'skipped for a designation until it is given a real level > 0.'
-        ),
-    )
-    is_active   = models.BooleanField(default=True)
-    created_at  = models.DateTimeField(auto_now_add=True)
-    updated_at  = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table        = 'hrms_designations'
-        unique_together = ('name', 'department')
-        ordering        = ['name']
-
-    def __str__(self) -> str:
-        return f'{self.name} ({self.department.name})'
-
+# Department/Designation retired here (Stage 6) — OrgUnit/Position/Placement
+# below are the real, single source of truth for org structure and hiring.
 
 class OrgUnit(models.Model):
     """
     A node in the formal organisation structure (e.g. "SAP Consulting &
-    Delivery" → "S/4HANA Practice"). Deliberately separate from `Department`
-    — that model is flat (no parent field) and matched to `User.department`
-    by plain string equality; this is a genuine hierarchy with its own
-    Position/Placement model underneath, used only by the Org Structure
-    page. `department` (below) is the Phase 3 migration bridge — an
-    optional link an admin sets explicitly, letting anything that still
-    reads `Department` (see `services_approval.resolve_employee_department`)
-    prefer this real structure over the legacy string match once a unit is
-    mapped, without requiring every unit to be mapped immediately.
+    Delivery" → "S/4HANA Practice") — a genuine hierarchy with its own
+    Position/Placement model underneath. `is_department_level` (below) is
+    an optional marker an admin sets explicitly on whichever units
+    represent a real "department" for eligibility/reporting purposes (e.g.
+    LeavePolicy.applicable_departments, the attendance/dashboard department
+    filters) — see `services_approval.resolve_employee_department_name()`,
+    which walks up from an employee's own unit to the nearest one marked
+    this way.
     """
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name       = models.CharField(max_length=150)
@@ -363,10 +317,7 @@ class OrgUnit(models.Model):
                      related_name='children',
                  )
     cost_center = models.CharField(max_length=30, blank=True)
-    department = models.ForeignKey(
-                     'Department', on_delete=models.SET_NULL, null=True, blank=True,
-                     related_name='org_units',
-                 )
+    is_department_level = models.BooleanField(default=False)
     # Deactivate rather than delete once a unit has real history (positions,
     # placements) under it — deleting history is a compliance problem.
     is_active  = models.BooleanField(default=True)

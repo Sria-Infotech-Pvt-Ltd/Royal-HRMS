@@ -381,10 +381,12 @@ class SeparationRequest(models.Model):
 #   1. HR Approval        — the employee's assigned HR (User.hr); falls back to
 #                            any separation.approve holder in the employee's
 #                            branch when no HR is assigned (unresolved approver).
-#   2. Manager Approval    — the employee's Department.manager — OR, when the
-#      / Branch Admin Approval  department has no manager or the employee IS
-#                            that department's manager (can't approve their own
-#                            exit), escalates to Branch Admin (role.can_manage_branch,
+#   2. Manager Approval    — the employee's Org Unit chief (nearest chief in
+#      / Branch Admin Approval  their unit chain — see
+#                            services_approval.resolve_employee_org_unit_chief)
+#                            — OR, when no chief resolves or the employee IS
+#                            that chief (can't approve their own exit),
+#                            escalates to Branch Admin (role.can_manage_branch,
 #                            same branch) instead — unresolved approver, any
 #                            matching branch admin may act.
 

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
-import type { BranchOption, DepartmentOption, Selected } from "./OrgStructureClient";
+import type { BranchOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 
 interface Props {
@@ -11,7 +11,6 @@ interface Props {
   positions: Position[];
   jobs: JobTemplate[];
   branches: BranchOption[];
-  departments: DepartmentOption[];
   canEdit: boolean;
   placementHistory: Placement[];
   placementHistoryLoading: boolean;
@@ -21,7 +20,7 @@ interface Props {
   onAssign: (positionId: string) => void;
   onVacate: (positionId: string) => void;
   onCancelScheduled: (placementId: string) => void;
-  onUnitField: (unitId: string, field: string, value: string | null) => void;
+  onUnitField: (unitId: string, field: string, value: string | boolean | null) => void;
   onPositionField: (positionId: string, field: string, value: string | boolean | null) => void;
   onToggleChief: (position: Position) => void;
 }
@@ -110,7 +109,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 }
 
 export default function OrgDetail({
-  selected, units, positions, jobs, branches, departments, canEdit, placementHistory, placementHistoryLoading, onSelect,
+  selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
   onAddSubUnit, onAddPosition, onAssign, onVacate, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
@@ -191,13 +190,14 @@ export default function OrgDetail({
             <label className="field-label">Cost center <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
             <input className="field-input" style={{ fontFamily: "monospace" }} defaultValue={unit.cost_center} disabled={!canEdit} placeholder="CC-…" onBlur={e => onUnitField(unit.id, "cost_center", e.target.value.toUpperCase())} />
           </div>
-          <div className="field-group">
-            <label className="field-label">Department <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — links this unit to the Settings → Departments list)</span></label>
-            <select className="field-input" defaultValue={unit.department ?? ""} disabled={!canEdit} onChange={e => onUnitField(unit.id, "department", e.target.value || null)}>
-              <option value="">Not linked</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
+        </div>
+        <div style={{ marginTop: 4 }}>
+          <ToggleSwitch
+            checked={unit.is_department_level}
+            disabled={!canEdit}
+            onChange={checked => onUnitField(unit.id, "is_department_level", checked)}
+            label={<>This unit counts as a <b>department</b> for leave eligibility and reporting.</>}
+          />
         </div>
 
         <SectionTitle>

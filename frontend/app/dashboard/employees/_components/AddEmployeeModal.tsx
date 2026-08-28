@@ -124,10 +124,10 @@ export default function AddEmployeeModal({
   const [done,   setDone]   = useState<string>("");
   const [orgUnitId, setOrgUnitId] = useState("");
 
-  const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
+  const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
   const positionOptions = positionsForUnit(orgUnitId, /* vacantOnly */ true);
-  const selectedUnit     = units.find(u => u.id === orgUnitId);
   const selectedPosition = positionOptions.find(p => p.id === form.position);
+  const derivedDepartmentName = resolveDepartmentName(orgUnitId);
 
   /* dropdown data */
   const [roles,    setRoles]    = useState<ApiRole[]>([]);
@@ -175,10 +175,10 @@ export default function AddEmployeeModal({
     }
   }, [unrestricted, effectiveBranch]);
 
-  // The selected Org Unit's linked department (if any) narrows the manager
+  // The selected Org Unit's derived department (if any) narrows the manager
   // list the same way a manually-typed department used to — a branch can
   // have one manager per department.
-  const effectiveDeptName = selectedUnit?.department_name || "";
+  const effectiveDeptName = derivedDepartmentName || "";
 
   /* fetch HR + reporting-manager candidates whenever branch (or, for
      managers, the effective department) changes — both endpoints scope by
@@ -426,7 +426,7 @@ export default function AddEmployeeModal({
                               <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
                                 title="Derived from the selected Position">
                                 <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                                {selectedUnit?.department_name || "(this org unit has no linked department yet)"}
+                                {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
                               </div>
                             </Field>
                             <Field label="Designation">

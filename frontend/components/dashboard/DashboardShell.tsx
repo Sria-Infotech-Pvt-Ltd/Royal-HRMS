@@ -38,7 +38,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/assessments":      "Assessment Management",
   "/dashboard/email-logs": "Email Logs",
   "/dashboard/face-id-registrations": "Face ID Registrations",
-  "/dashboard/org-chart": "Organisation Chart",
+  "/dashboard/org-chart": "Organization Management",
   "/dashboard/announcements": "Announcements",
   "/dashboard/my-payslip": "My Payslips",
   "/dashboard/my-requests": "My Requests",

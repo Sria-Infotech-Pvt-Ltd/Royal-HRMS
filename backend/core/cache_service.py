@@ -15,8 +15,6 @@ class CacheTTL:
     ATTENDANCE_SETTINGS = 6  * 3600
     APPROVAL_WORKFLOW   = 6  * 3600
     BRANCHES            = 12 * 3600
-    DEPARTMENTS         = 12 * 3600
-    DESIGNATIONS        = 12 * 3600
     FINANCIAL_YEAR      = 24 * 3600
     COMPANY             = 600
     ONBOARDING_FIELDS   = 6  * 3600
@@ -391,64 +389,6 @@ class BranchCacheService:
             cache.delete(cls._KEY)
         except Exception:
             logger.warning('Cache delete failed for branches:all')
-
-
-# ── Department ────────────────────────────────────────────────────────────────
-
-class DepartmentCacheService:
-    _KEY = 'departments:all'
-
-    @classmethod
-    def get_all(cls) -> list:
-        try:
-            cached = cache.get(cls._KEY)
-            if cached is not None:
-                return cached
-        except Exception:
-            logger.warning('Cache read failed for departments:all')
-        from apps.accounts.models import Department
-        data = list(Department.objects.filter(is_active=True).order_by('name'))
-        try:
-            cache.set(cls._KEY, data, CacheTTL.DEPARTMENTS)
-        except Exception:
-            logger.warning('Cache write failed for departments:all')
-        return data
-
-    @classmethod
-    def invalidate_all(cls) -> None:
-        try:
-            cache.delete(cls._KEY)
-        except Exception:
-            logger.warning('Cache delete failed for departments:all')
-
-
-# ── Designation ───────────────────────────────────────────────────────────────
-
-class DesignationCacheService:
-    _KEY = 'designations:all'
-
-    @classmethod
-    def get_all(cls) -> list:
-        try:
-            cached = cache.get(cls._KEY)
-            if cached is not None:
-                return cached
-        except Exception:
-            logger.warning('Cache read failed for designations:all')
-        from apps.accounts.models import Designation
-        data = list(Designation.objects.filter(is_active=True).order_by('name'))
-        try:
-            cache.set(cls._KEY, data, CacheTTL.DESIGNATIONS)
-        except Exception:
-            logger.warning('Cache write failed for designations:all')
-        return data
-
-    @classmethod
-    def invalidate_all(cls) -> None:
-        try:
-            cache.delete(cls._KEY)
-        except Exception:
-            logger.warning('Cache delete failed for designations:all')
 
 
 # ── Financial Year ─────────────────────────────────────────────────────────────

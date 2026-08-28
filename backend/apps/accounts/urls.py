@@ -28,10 +28,6 @@ from apps.accounts.views import (
     CompanyGSTRegistrationListCreateView,
     CompanyRetrieveUpdateView,
     EmployeeBulkImportSampleView,
-    DepartmentDetailView,
-    DepartmentListCreateView,
-    DesignationDetailView,
-    DesignationListCreateView,
     DocumentDetailView,
     DocumentListCreateView,
     DocumentStatsView,
@@ -115,12 +111,6 @@ urlpatterns = [
     path('settings/onboarding-fields/<str:field_key>/', OnboardingFieldConfigView.as_view(), name='onboarding-field-settings-detail'),
     path('settings/document-types/',                 DocumentTypeConfigView.as_view(), name='document-type-settings'),
     path('settings/document-types/<str:type_key>/',  DocumentTypeConfigView.as_view(), name='document-type-settings-detail'),
-
-    # Organisation structure
-    path('departments/',           DepartmentListCreateView.as_view(), name='department-list'),
-    path('departments/<int:pk>/',  DepartmentDetailView.as_view(),     name='department-detail'),
-    path('designations/',          DesignationListCreateView.as_view(), name='designation-list'),
-    path('designations/<int:pk>/', DesignationDetailView.as_view(),     name='designation-detail'),
 
     # Org Structure — the frontend /dashboard/org-chart page now calls these
     # instead of the old computed-from-User.department endpoint (removed)
