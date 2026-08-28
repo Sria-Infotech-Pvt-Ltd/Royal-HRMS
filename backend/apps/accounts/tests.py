@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import AuditLog, Department, Designation, OTPVerification, User
+from apps.accounts.models import AuditLog, Department, Designation, OrgUnit, OTPVerification, Position, User
 from apps.accounts.serializers import ForgotPasswordSerializer
 
 
@@ -269,10 +269,11 @@ class OnboardingApprovalReferralBonusTests(TestCase):
 
         self.referrer = make_user('referrer2@test.com', role=make_role('employee'), password='TestPass123!')
 
-        # OnboardingApprovalView now validates department/designation against
-        # the master tables (see Piece A) — real rows required for a 200.
-        dept = Department.objects.create(name='Engineering', is_active=True)
-        Designation.objects.create(name='Software Engineer', department=dept, is_active=True)
+        # OnboardingApprovalView now requires a Position on approve (Stage 6,
+        # Part A) — department/designation are derived from it, not passed
+        # as strings.
+        org_unit = OrgUnit.objects.create(name='Engineering')
+        self.position = Position.objects.create(org_unit=org_unit, title='Software Engineer')
 
         from apps.recruitment.models import Candidate, ReferralBonus
         self.Candidate = Candidate
@@ -291,7 +292,7 @@ class OnboardingApprovalReferralBonusTests(TestCase):
     def test_approving_onboarding_creates_referral_bonus(self):
         resp = self.client.post(
             reverse('onboarding-approve', kwargs={'user_id': str(self.new_hire.pk)}),
-            {'decision': 'approve', 'department': 'Engineering', 'designation': 'Software Engineer'},
+            {'decision': 'approve', 'position': str(self.position.pk)},
             format='json',
         )
         self.assertEqual(resp.status_code, 200, resp.data)
@@ -305,7 +306,7 @@ class OnboardingApprovalReferralBonusTests(TestCase):
 
         resp = self.client.post(
             reverse('onboarding-approve', kwargs={'user_id': str(self.new_hire.pk)}),
-            {'decision': 'approve', 'department': 'Engineering', 'designation': 'Software Engineer'},
+            {'decision': 'approve', 'position': str(self.position.pk)},
             format='json',
         )
         self.assertEqual(resp.status_code, 200, resp.data)

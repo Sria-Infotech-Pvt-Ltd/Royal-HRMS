@@ -13,7 +13,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 if TYPE_CHECKING:
-    from apps.accounts.models import Department, Role, User
+    from apps.accounts.models import Department, OrgUnit, Role, User
 
 
 def resolve_approver(role: 'Role | None', employee: 'User') -> 'User | None':
@@ -161,3 +161,57 @@ def filter_queryset_by_department_name(qs, department_name: str, *, department_l
         return qs.filter(id__in=member_ids)
     relation_prefix = department_lookup.rsplit('__', 1)[0]
     return qs.filter(**{f'{relation_prefix}_id__in': member_ids})
+
+
+def resolve_employee_org_unit_chain(employee: 'User') -> list:
+    """The employee's current Position's OrgUnit id, plus every ancestor
+    unit id walking up via OrgUnit.parent — self-inclusive, root-last.
+    Used to check whether an OrgUnit-targeted announcement (or similar)
+    should reach an employee placed in one of that unit's descendant
+    sub-units, without needing to walk the tree downward from the target's
+    side. Returns [] if the employee holds no current Position."""
+    from apps.accounts.models import Placement
+
+    today = timezone.localdate()
+    placement = (
+        Placement.objects.filter(employee=employee, effective_from__lte=today)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+        .select_related('position__org_unit')
+        .first()
+    )
+    if not placement:
+        return []
+    chain = []
+    unit = placement.position.org_unit
+    seen = set()
+    while unit is not None and unit.id not in seen:
+        chain.append(unit.id)
+        seen.add(unit.id)
+        unit = unit.parent
+    return chain
+
+
+def filter_users_by_org_unit(users_qs, org_unit: 'OrgUnit'):
+    """Narrow a User queryset to current members of `org_unit` OR any of
+    its descendant units — the reverse direction of
+    resolve_employee_org_unit_chain() (that resolves ONE employee's chain
+    of units; this finds every User belonging to a GIVEN unit's subtree,
+    for recipient-resolution callers like announcement delivery). Only the
+    Position-derived membership applies here — OrgUnit has no legacy
+    string equivalent to fall back to."""
+    from apps.accounts.models import OrgUnit, Placement
+
+    today = timezone.localdate()
+    unit_ids = {org_unit.id}
+    frontier = [org_unit.id]
+    while frontier:
+        children = list(OrgUnit.objects.filter(parent_id__in=frontier).values_list('id', flat=True))
+        frontier = [c for c in children if c not in unit_ids]
+        unit_ids.update(frontier)
+
+    member_ids = (
+        Placement.objects.filter(position__org_unit_id__in=unit_ids, effective_from__lte=today)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+        .values_list('employee_id', flat=True)
+    )
+    return users_qs.filter(id__in=member_ids)

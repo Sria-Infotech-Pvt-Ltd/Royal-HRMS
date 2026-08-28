@@ -6,7 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
 import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
-import type { DepartmentOption } from "@/types/department";
+import type { OrgUnit } from "@/types/orgStructure";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 import Modal from "@/components/Modal";
@@ -26,8 +26,8 @@ interface Announcement {
   body:                   string;
   category:               Category;
   visibility:             Visibility;
-  target_department:      number | null;
-  target_department_name: string;
+  target_org_unit:        string | null;
+  target_org_unit_name:   string;
   target_branch:          number | null;
   target_branch_name:     string;
   is_pinned:              boolean;
@@ -61,7 +61,7 @@ type FormState = {
   body:              string;
   category:          Category | "";
   visibility:        FormVisibility;
-  target_department: string;
+  target_org_unit:   string;
   target_branch:     string;
   is_pinned:         boolean;
   send_email:        boolean;
@@ -93,7 +93,7 @@ const FILTERS = [
 
 const EMPTY_FORM: FormState = {
   title: "", body: "", category: "", visibility: "all",
-  target_department: "", target_branch: "",
+  target_org_unit: "", target_branch: "",
   is_pinned: false, send_email: true,
 };
 
@@ -187,7 +187,7 @@ export default function AnnouncementsPage() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   // ── Dropdown data ───────────────────────────────────────────────────────────
-  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [orgUnits,    setOrgUnits]    = useState<OrgUnit[]>([]);
   const [branches,    setBranches]    = useState<Branch[]>([]);
 
   // The poster's own branch id, resolved from their branch name — used to lock
@@ -225,18 +225,17 @@ export default function AnnouncementsPage() {
     fetchAnnouncements(page, category);
   }, [page, category, fetchAnnouncements]);
 
-  // Fetch departments + branches from the backend for the modal dropdowns.
-  // Non-org-wide posters get departments scoped to their own branch — org-wide
-  // posters get the full company-wide list (branch param omitted).
+  // Fetch org units + branches from the backend for the modal dropdowns.
+  // OrgUnit has no branch field (it's one shared, branch-agnostic tree for
+  // the whole company — see accounts/models.py's own OrgUnit docstring), so
+  // unlike the old Department list this is always the full company-wide set.
   useEffect(() => {
     if (!canPost) return;
-    const deptUrl = !isOrgWide && currentUser?.branch
-      ? `${API.departments.list}?branch=${encodeURIComponent(currentUser.branch)}`
-      : API.departments.list;
-    clientApi.get(deptUrl).then(r => setDepartments(r.data?.data?.results ?? [])).catch(() => {});
+    clientApi.get(`${API.orgStructure.units.list}?page_size=200`)
+      .then(r => setOrgUnits(r.data?.data?.results ?? [])).catch(() => {});
     clientApi.get(`${API.branches.list}?status=active&page_size=100`)
       .then(r => setBranches(r.data?.data?.results ?? [])).catch(() => {});
-  }, [canPost, isOrgWide, currentUser?.branch]);
+  }, [canPost]);
 
   // Track views once per card per session (non-authors only)
   useEffect(() => {
@@ -280,7 +279,7 @@ export default function AnnouncementsPage() {
       body:              ann.body,
       category:          ann.category,
       visibility:        ann.visibility === "department" ? "department" : "all",
-      target_department: ann.target_department ? String(ann.target_department) : "",
+      target_org_unit:   ann.target_org_unit ?? "",
       target_branch:     isOrgWide
         ? (ann.visibility === "branch" && ann.target_branch ? String(ann.target_branch) : "")
         : defaultBranchField(),
@@ -302,7 +301,7 @@ export default function AnnouncementsPage() {
     setForm(prev => {
       const next = { ...prev, [key]: value };
       if (key === "visibility" && value !== "department") {
-        next.target_department = "";
+        next.target_org_unit = "";
       }
       return next;
     });
@@ -316,8 +315,8 @@ export default function AnnouncementsPage() {
     if (!form.title.trim())    errs.title    = "Title is required.";
     if (!form.body.trim())     errs.body     = "Body is required.";
     if (!form.category)        errs.category = "Category is required.";
-    if (form.visibility === "department" && !form.target_department)
-      errs.target_department = "Select a department.";
+    if (form.visibility === "department" && !form.target_org_unit)
+      errs.target_org_unit = "Select an org unit.";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -338,31 +337,31 @@ export default function AnnouncementsPage() {
       // a selected Branch narrows to that branch, and no branch means company-wide.
       let apiVisibility: Visibility;
       let targetBranch: number | null;
-      let targetDepartment: number | null;
+      let targetOrgUnit: string | null;
 
       if (form.visibility === "department") {
-        apiVisibility    = "department";
-        targetDepartment = form.target_department ? Number(form.target_department) : null;
-        targetBranch     = null;
+        apiVisibility = "department";
+        targetOrgUnit = form.target_org_unit || null;
+        targetBranch  = null;
       } else if (form.target_branch) {
-        apiVisibility    = "branch";
-        targetBranch     = Number(form.target_branch);
-        targetDepartment = null;
+        apiVisibility = "branch";
+        targetBranch  = Number(form.target_branch);
+        targetOrgUnit = null;
       } else {
-        apiVisibility    = "all";
-        targetBranch     = null;
-        targetDepartment = null;
+        apiVisibility = "all";
+        targetBranch  = null;
+        targetOrgUnit = null;
       }
 
       const payload: Record<string, unknown> = {
-        title:             form.title.trim(),
-        body:              form.body.trim(),
-        category:          form.category,
-        visibility:        apiVisibility,
-        is_pinned:         form.is_pinned,
-        send_email:        form.send_email,
-        target_department: targetDepartment,
-        target_branch:     targetBranch,
+        title:           form.title.trim(),
+        body:            form.body.trim(),
+        category:        form.category,
+        visibility:      apiVisibility,
+        is_pinned:       form.is_pinned,
+        send_email:      form.send_email,
+        target_org_unit: targetOrgUnit,
+        target_branch:   targetBranch,
       };
 
       // Longer timeout than the client default — posting/updating an
@@ -567,7 +566,7 @@ export default function AnnouncementsPage() {
                         {ann.visibility !== "all" && (
                           <span className="badge badge-neutral" style={{ fontSize: 10 }}>
                             <i className={`ti ${ann.visibility === "department" ? "ti-sitemap" : "ti-building"}`} />
-                            {" "}{ann.visibility === "department" ? ann.target_department_name : ann.target_branch_name}
+                            {" "}{ann.visibility === "department" ? ann.target_org_unit_name : ann.target_branch_name}
                           </span>
                         )}
                       </div>
@@ -752,19 +751,19 @@ export default function AnnouncementsPage() {
                 </div>
               </div>
 
-              {/* Conditional: Department */}
+              {/* Conditional: Department (targets an Org Unit) */}
               {form.visibility === "department" && (
                 <div className="field-group">
                   <label className="field-label">Department <span style={{ color: "var(--error)" }}>*</span></label>
                   <select
-                    className={`field-input${formErrors.target_department ? " field-error" : ""}`}
-                    value={form.target_department}
-                    onChange={e => setField("target_department", e.target.value)}
+                    className={`field-input${formErrors.target_org_unit ? " field-error" : ""}`}
+                    value={form.target_org_unit}
+                    onChange={e => setField("target_org_unit", e.target.value)}
                   >
-                    <option value="">Select department…</option>
-                    {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+                    <option value="">Select org unit…</option>
+                    {orgUnits.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
-                  {formErrors.target_department && <div className="field-error-msg">{formErrors.target_department}</div>}
+                  {formErrors.target_org_unit && <div className="field-error-msg">{formErrors.target_org_unit}</div>}
                 </div>
               )}
 
@@ -945,7 +944,7 @@ export default function AnnouncementsPage() {
                   </span>
                   <span className="badge badge-neutral">
                     <i className={`ti ${live.visibility === "all" ? "ti-users" : live.visibility === "department" ? "ti-sitemap" : "ti-building"}`} />
-                    {" "}{live.visibility === "all" ? "All Employees" : live.visibility === "department" ? live.target_department_name : live.target_branch_name}
+                    {" "}{live.visibility === "all" ? "All Employees" : live.visibility === "department" ? live.target_org_unit_name : live.target_branch_name}
                   </span>
                 </div>
 

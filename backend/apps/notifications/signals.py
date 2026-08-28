@@ -374,9 +374,9 @@ def _on_announcement_save(sender, instance, created, **kwargs):
     users = User.objects.filter(is_active=True)
     if instance.visibility == 'branch' and instance.target_branch_id:
         users = users.filter(branch=instance.target_branch.branch_name)
-    elif instance.visibility == 'department' and instance.target_department_id:
-        from apps.accounts.services_approval import filter_users_by_department
-        users = filter_users_by_department(users, instance.target_department)
+    elif instance.visibility == 'department' and instance.target_org_unit_id:
+        from apps.accounts.services_approval import filter_users_by_org_unit
+        users = filter_users_by_org_unit(users, instance.target_org_unit)
 
     # Notification.id is a client-side uuid4 default, so each instance
     # already has its real pk before bulk_create — safe to push_live below

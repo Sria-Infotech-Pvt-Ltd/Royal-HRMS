@@ -7,8 +7,6 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
-import type { DepartmentOption as ApiDept } from "@/types/department";
-import type { DesignationOption as ApiDesig } from "@/types/designation";
 
 /* ── Types ────────────────────────────────────────────────────── */
 interface ApiRole   { id: number; name: string; display_name: string; permissions: string[]; can_manage_branch: boolean }
@@ -133,13 +131,10 @@ export default function AddEmployeeModal({
 
   /* dropdown data */
   const [roles,    setRoles]    = useState<ApiRole[]>([]);
-  const [depts,    setDepts]    = useState<ApiDept[]>([]);
-  const [desigs,   setDesigs]   = useState<ApiDesig[]>([]);
   const [branches, setBranches] = useState<ApiBranch[]>([]);
   const [hrs,       setHrs]       = useState<ApiPerson[]>([]);
   const [managers,  setManagers]  = useState<ApiPerson[]>([]);
   const [loading,     setLoading]     = useState(true);
-  const [desigLoading, setDesigLoading] = useState(false);
   const [peopleLoading, setPeopleLoading] = useState(false);
 
   // A Branch Admin isn't scoped to a department (matches the backend's own
@@ -156,10 +151,9 @@ export default function AddEmployeeModal({
     // role-selector dropdowns like this one) — see RoleListCreateView.get().
     Promise.allSettled([
       clientApi.get<{ data: { results: ApiRole[]   } }>(API.roles.list,          { params: { page_size: 100 } }),
-      clientApi.get<{ data: { results: ApiDept[]   } }>(API.departments.list,     { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: ApiBranch[] } }>(API.employees.branches,   { params: { page_size: 100 } }),
     ])
-      .then(([r, d, b]) => {
+      .then(([r, b]) => {
         if (r.status === "fulfilled") {
           // Matched by capability (same signal the backend itself enforces
           // in EmployeeListCreateView.post/EmployeeDetailView.put), not by
@@ -168,7 +162,6 @@ export default function AddEmployeeModal({
           // it the moment they did.
           setRoles(r.value.data.data.results.filter(x => !x.permissions.includes("settings.edit")));
         }
-        if (d.status === "fulfilled") setDepts(d.value.data.data?.results ?? []);
         if (b.status === "fulfilled") setBranches(b.value.data.data.results);
       })
       .finally(() => setLoading(false));
@@ -182,29 +175,21 @@ export default function AddEmployeeModal({
     }
   }, [unrestricted, effectiveBranch]);
 
-  /* fetch designations whenever department changes */
-  useEffect(() => {
-    if (!form.department) { setDesigs([]); return; }
-    const dept = depts.find(d => d.name === form.department);
-    if (!dept) { setDesigs([]); return; }
-    setDesigLoading(true);
-    clientApi.get(API.designations.list, { params: { department: dept.id, page_size: 100 } })
-      .then(r => setDesigs(r.data?.data?.results ?? []))
-      .catch(() => setDesigs([]))
-      .finally(() => setDesigLoading(false));
-  }, [form.department, depts]);
+  // The selected Org Unit's linked department (if any) narrows the manager
+  // list the same way a manually-typed department used to — a branch can
+  // have one manager per department.
+  const effectiveDeptName = selectedUnit?.department_name || "";
 
   /* fetch HR + reporting-manager candidates whenever branch (or, for
-     managers, department) changes — both endpoints scope by branch, and
-     ManagerListView 400s without one; department further narrows the
-     manager list since a branch can have one manager per department. */
+     managers, the effective department) changes — both endpoints scope by
+     branch, and ManagerListView 400s without one. */
   useEffect(() => {
     if (!form.branch) { setHrs([]); setManagers([]); return; }
     setPeopleLoading(true);
     Promise.allSettled([
       clientApi.get<{ data: ApiPerson[] }>(API.employees.hrList,      { params: { branch: form.branch } }),
       clientApi.get<{ data: ApiPerson[] }>(API.employees.managerList, {
-        params: form.department ? { branch: form.branch, department: form.department } : { branch: form.branch },
+        params: effectiveDeptName ? { branch: form.branch, department: effectiveDeptName } : { branch: form.branch },
       }),
     ])
       .then(([h, m]) => {
@@ -212,7 +197,7 @@ export default function AddEmployeeModal({
         setManagers(m.status === "fulfilled" ? (m.value.data?.data ?? []) : []);
       })
       .finally(() => setPeopleLoading(false));
-  }, [form.branch, form.department]);
+  }, [form.branch, effectiveDeptName]);
 
   // A manager/HR picked under one branch (or department, for the manager
   // list) isn't necessarily valid once that changes, so drop the stale
@@ -223,12 +208,11 @@ export default function AddEmployeeModal({
 
   useEffect(() => {
     setForm(f => (f.reporting_manager ? { ...f, reporting_manager: "" } : f));
-  }, [form.department]);
+  }, [effectiveDeptName]);
 
   function set(k: keyof Form, v: string) {
     setForm(f => {
       const next = { ...f, [k]: v };
-      if (k === "department") next.designation = "";
       if (k === "role") {
         const nextRole = roles.find(r => String(r.id) === v);
         // Mirrors BranchManagement.tsx's "Assign Branch Admin" flow, which
@@ -255,8 +239,9 @@ export default function AddEmployeeModal({
     if (form.phone.trim() && !PHONE_RE.test(form.phone.trim().replace(/[\s\-()./]/g, "")))
                                      e.phone         = "Enter a valid 10-digit phone number (optionally prefixed with +91)";
     if (!form.role)                 e.role          = "Required";
-    if (!isBranchAdmin && !form.department && !form.position) e.department = "Required";
-    if (!form.designation.trim() && !form.position) e.designation = "Required";
+    if (isBranchAdmin) {
+      if (!form.designation.trim()) e.designation = "Required";
+    } else if (!form.position)      e.position    = "Required";
     if (!form.branch)               e.branch        = "Required";
     if (!form.date_of_joining)      e.date_of_joining = "Required";
     setErrs(e);
@@ -402,18 +387,31 @@ export default function AddEmployeeModal({
                         </div>
                       )}
                     </Field>
-                    {!isBranchAdmin && (
+                    {isBranchAdmin ? (
                       <>
-                        <Field label="Org Unit (optional)">
+                        <Field label="Department">
+                          <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                            title="A Branch Admin manages the whole branch, not a single department">
+                            <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                            Not applicable — Branch Admin
+                          </div>
+                        </Field>
+                        <Field label="Designation" required error={errs.designation}>
+                          <Inp v={form.designation} set={v => set("designation", sanitizeName(v))} ph="e.g. Branch Manager" err={!!errs.designation} />
+                        </Field>
+                      </>
+                    ) : (
+                      <>
+                        <Field label="Org Unit" required error={errs.position}>
                           <Sel v={orgUnitId} set={v => { setOrgUnitId(v); set("position", ""); }} disabled={positionsLoading}>
-                            <option value="">— No Position (use Department/Designation below) —</option>
+                            <option value="">— Select an org unit —</option>
                             {units.filter(u => u.is_active).map(u => (
                               <option key={u.id} value={u.id}>{u.name}</option>
                             ))}
                           </Sel>
                         </Field>
-                        <Field label="Position (optional)">
-                          <Sel v={form.position} set={v => set("position", v)} disabled={!orgUnitId || positionsLoading}>
+                        <Field label="Position" required error={errs.position}>
+                          <Sel v={form.position} set={v => set("position", v)} err={!!errs.position} disabled={!orgUnitId || positionsLoading}>
                             <option value="">
                               {!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
                             </option>
@@ -422,55 +420,26 @@ export default function AddEmployeeModal({
                             ))}
                           </Sel>
                         </Field>
+                        {form.position && (
+                          <>
+                            <Field label="Department">
+                              <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                                title="Derived from the selected Position">
+                                <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                                {selectedUnit?.department_name || "(this org unit has no linked department yet)"}
+                              </div>
+                            </Field>
+                            <Field label="Designation">
+                              <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                                title="Derived from the selected Position">
+                                <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                                {selectedPosition?.job_template_name || selectedPosition?.title}
+                              </div>
+                            </Field>
+                          </>
+                        )}
                       </>
                     )}
-                    <Field label="Department" required={!isBranchAdmin && !form.position} error={errs.department}>
-                      {isBranchAdmin ? (
-                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                          title="A Branch Admin manages the whole branch, not a single department">
-                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                          Not applicable — Branch Admin
-                        </div>
-                      ) : form.position ? (
-                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                          title="Derived from the selected Position">
-                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                          {selectedUnit?.department_name || "(this org unit has no linked department yet)"}
-                        </div>
-                      ) : (
-                        <Sel v={form.department} set={v => set("department", v)} err={!!errs.department}>
-                          <option value="">— Select Department —</option>
-                          {depts.map(d => (
-                            <option key={d.id} value={d.name}>{d.name}</option>
-                          ))}
-                        </Sel>
-                      )}
-                    </Field>
-                    <Field label="Designation" required={!form.position} error={errs.designation}>
-                      {isBranchAdmin ? (
-                        <Inp v={form.designation} set={v => set("designation", sanitizeName(v))} ph="e.g. Branch Manager" err={!!errs.designation} />
-                      ) : form.position ? (
-                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                          title="Derived from the selected Position">
-                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                          {selectedPosition?.job_template_name || selectedPosition?.title}
-                        </div>
-                      ) : (
-                        <Sel
-                          v={form.designation}
-                          set={v => set("designation", v)}
-                          err={!!errs.designation}
-                          disabled={!form.department || desigLoading}
-                        >
-                          <option value="">
-                            {!form.department ? "Select department first" : desigLoading ? "Loading…" : desigs.length === 0 ? "No designations available" : "— Select Designation —"}
-                          </option>
-                          {desigs.map(d => (
-                            <option key={d.id} value={d.name}>{d.name}</option>
-                          ))}
-                        </Sel>
-                      )}
-                    </Field>
                     <Field label="Employee Type">
                       <Sel v={form.employee_type} set={v => set("employee_type", v)}>
                         {EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}

@@ -229,9 +229,6 @@ export default function EmployeeProfilePage({
   const [rawApiDocuments, setRawApiDocuments] = useState<ApiDocument[]>([]);
   const { data: documentTypeConfigData } = useFetch<DocumentTypeConfig[]>(API.onboarding.documentTypeConfig);
 
-  const [deptOptions,     setDeptOptions]     = useState<FieldOption[]>([]);
-  const [allDesigs,       setAllDesigs]       = useState<{ name: string; department_name: string }[]>([]);
-  const [desigOptions,    setDesigOptions]    = useState<FieldOption[]>([]);
   const [roleOptions,     setRoleOptions]     = useState<FieldOption[]>([]);
   const [branchOptions,   setBranchOptions]   = useState<FieldOption[]>([]);
 
@@ -241,17 +238,9 @@ export default function EmployeeProfilePage({
   // one) — see RoleListCreateView.get().
   useEffect(() => {
     Promise.allSettled([
-      clientApi.get<{ data: { results: { id: number; name: string }[] } }>(API.departments.list),
-      clientApi.get<{ data: unknown }>(API.designations.list),
       clientApi.get<{ data: { results: { id: number; name: string; display_name: string }[] } }>(`${API.roles.list}?page_size=100`),
       clientApi.get<{ data: { results: { id: number; branch_name: string }[] } }>(API.branches.list),
-    ]).then(([depts, desigs, roles, branches]) => {
-      if (depts.status === "fulfilled")
-        setDeptOptions(depts.value.data.data.results.map(d => ({ value: d.name, label: d.name })));
-      if (desigs.status === "fulfilled") {
-        const desigData = desigs.value.data.data as { results?: { name: string; department_name: string }[] } | { name: string; department_name: string }[];
-        setAllDesigs(Array.isArray(desigData) ? desigData : (desigData.results ?? []));
-      }
+    ]).then(([roles, branches]) => {
       if (roles.status === "fulfilled")
         setRoleOptions(
           roles.value.data.data.results
@@ -262,16 +251,6 @@ export default function EmployeeProfilePage({
         setBranchOptions(branches.value.data.data.results.map(b => ({ value: b.branch_name, label: b.branch_name })));
     });
   }, []);
-
-  // filter designations whenever the selected department changes
-  useEffect(() => {
-    const dept = values.department;
-    if (!dept) { setDesigOptions([]); return; }
-    const filtered = allDesigs
-      .filter(d => d.department_name === dept)
-      .map(d => ({ value: d.name, label: d.name }));
-    setDesigOptions(filtered);
-  }, [values.department, allDesigs]);
 
   useEffect(() => {
     setLoading(true);
@@ -386,9 +365,9 @@ export default function EmployeeProfilePage({
     setJustSaved(false);
     try {
       const employeePayload = {
-        // Employment fields
-        department:             values.department            || null,
-        designation:            values.designation           || null,
+        // Employment fields — department/designation are Position-derived
+        // only now (see PromotionTab.tsx's "Reassign Position" action), not
+        // editable through this generic save.
         branch:                 values.branch                || null,
         role:                   values.ssRole                || null,
         is_active:              employee?.status !== "inactive",
@@ -452,14 +431,9 @@ export default function EmployeeProfilePage({
       setSaving(false);
     }
   }
-  function onPromotionUpdated(designation: string, role: string) {
-    setValues(v => ({ ...v, designation, ssRole: role }));
-    setBaseValues(v => ({ ...v, designation, ssRole: role }));
-    setEmployee(prev => (prev ? { ...prev, designation } : prev));
-  }
-  function onPositionReassigned(designation: string, department: string) {
-    setValues(v => ({ ...v, designation, ...(department ? { department } : {}) }));
-    setBaseValues(v => ({ ...v, designation, ...(department ? { department } : {}) }));
+  function onPositionReassigned(designation: string, department: string, role: string) {
+    setValues(v => ({ ...v, designation, ssRole: role, ...(department ? { department } : {}) }));
+    setBaseValues(v => ({ ...v, designation, ssRole: role, ...(department ? { department } : {}) }));
     setEmployee(prev => (prev ? { ...prev, designation, ...(department ? { department } : {}) } : prev));
   }
   async function onUploadDocument(documentType: string, file: File) {
@@ -596,20 +570,6 @@ export default function EmployeeProfilePage({
               uploadingDocType={uploadingDocType}
               docUploadError={docUploadError}
               fieldOptions={{
-                department: [
-                  { value: "", label: "Select department" },
-                  ...(values.department && !deptOptions.find(o => o.value === values.department)
-                    ? [{ value: values.department, label: values.department }]
-                    : []),
-                  ...deptOptions,
-                ],
-                designation: [
-                  { value: "", label: desigOptions.length || values.designation ? "Select designation" : "Select a department first" },
-                  ...(values.designation && !desigOptions.find(o => o.value === values.designation)
-                    ? [{ value: values.designation, label: values.designation }]
-                    : []),
-                  ...desigOptions,
-                ],
                 ssRole: [
                   { value: "", label: "Select role" },
                   ...(values.ssRole && !roleOptions.find(o => o.value === values.ssRole)
@@ -728,9 +688,7 @@ export default function EmployeeProfilePage({
           employeeName={employee.firstName + (employee.lastName ? " " + employee.lastName : "")}
           currentDesignation={values.designation ?? ""}
           currentRole={values.ssRole ?? "employee"}
-          desigOptions={desigOptions}
           roleOptions={roleOptions}
-          onUpdated={onPromotionUpdated}
           onPositionReassigned={onPositionReassigned}
         />
       ) : tab === "wishes" ? (

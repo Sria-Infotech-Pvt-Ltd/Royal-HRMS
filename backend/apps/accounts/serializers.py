@@ -1905,15 +1905,12 @@ _EMP_VALID_BLOOD      = frozenset({'a+', 'a-', 'b+', 'b-', 'o+', 'o-', 'ab+', 'a
 class EmployeeBulkImportRowSerializer(serializers.Serializer):
     """Validates one row from an employee bulk-import CSV/XLSX file.
 
-    Role / department / designation / branch existence checks happen in the view
-    (pre-loaded once per batch), so those fields are plain CharFields here.
-
-    department/designation and org_unit/position_title are two alternative
-    ways to say "where does this hire sit" — the row must fill exactly one
-    pair, not a mix of the two (see validate() below). org_unit/position_title
-    resolves to a real Position (see EmployeeBulkImportView.post()), with
-    department/designation then derived from it, same as Create Employee's
-    own Position picker.
+    Role / org_unit+position_title / branch existence checks happen in the
+    view (pre-loaded once per batch), so those fields are plain CharFields
+    here. org_unit/position_title resolve to a real Position (see
+    EmployeeBulkImportView.post()), with department/designation derived
+    from it — same as Create Employee's own Position picker. Manual
+    department/designation columns are no longer accepted.
     """
 
     first_name      = serializers.CharField(max_length=150)
@@ -1922,10 +1919,8 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
     phone           = serializers.CharField(max_length=20, required=False,
                                              allow_blank=True, default='')
     role            = serializers.CharField(max_length=100)
-    department      = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
-    designation     = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
-    org_unit        = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
-    position_title  = serializers.CharField(max_length=150, required=False, allow_blank=True, default='')
+    org_unit        = serializers.CharField(max_length=150)
+    position_title  = serializers.CharField(max_length=150)
     branch          = serializers.CharField(max_length=100)
     employee_type   = serializers.CharField(max_length=50, required=False,
                                              allow_blank=True, default='Permanent')
@@ -1974,42 +1969,23 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
             raise serializers.ValidationError('Role is required.')
         return value
 
-    def validate_department(self, value: str) -> str:
-        # Required overall, but only in combination with designation OR as
-        # an alternative to org_unit/position_title — see validate() below.
-        return value.strip()
-
     def validate_uan_number(self, value: str) -> str:
         value = value.strip()
         if value and (len(value) != 12 or not value.isdigit()):
             raise serializers.ValidationError('UAN must be exactly 12 digits.')
         return value
 
-    def validate_designation(self, value: str) -> str:
-        return value.strip()
-
     def validate_org_unit(self, value: str) -> str:
-        return value.strip()
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Org Unit is required.')
+        return value
 
     def validate_position_title(self, value: str) -> str:
-        return value.strip()
-
-    def validate(self, attrs: dict) -> dict:
-        has_dept_desig = bool(attrs.get('department')) and bool(attrs.get('designation'))
-        has_position   = bool(attrs.get('org_unit')) and bool(attrs.get('position_title'))
-        if has_dept_desig and has_position:
-            raise serializers.ValidationError(
-                'Fill either Department + Designation, or Org Unit + Position — not both.'
-            )
-        if not has_dept_desig and not has_position:
-            if attrs.get('department') or attrs.get('designation') or attrs.get('org_unit') or attrs.get('position_title'):
-                raise serializers.ValidationError(
-                    'Department and Designation must both be filled, or Org Unit and Position must both be filled.'
-                )
-            raise serializers.ValidationError(
-                'Provide either Department + Designation, or Org Unit + Position.'
-            )
-        return attrs
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Position is required.')
+        return value
 
     def validate_branch(self, value: str) -> str:
         value = value.strip()

@@ -72,11 +72,11 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
     if _has_perm(request.user, 'announcements.edit'):
         qs = Announcement.objects.all()
     else:
-        from apps.accounts.services_approval import resolve_employee_department_name
+        from apps.accounts.services_approval import resolve_employee_org_unit_chain
         qs = Announcement.objects.filter(
             Q(visibility=Announcement.VISIBILITY_ALL)
             | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                target_department__name=resolve_employee_department_name(request.user))
+                target_org_unit_id__in=resolve_employee_org_unit_chain(request.user))
             | Q(visibility=Announcement.VISIBILITY_BRANCH,
                 target_branch__branch_name=request.user.branch)
         )
@@ -93,7 +93,7 @@ def _visible_qs(request) -> 'QuerySet[Announcement]':
             queryset=AnnouncementReaction.objects.filter(user=request.user),
             to_attr='_user_reactions',
         )
-    ).select_related('posted_by', 'posted_by__role', 'target_department', 'target_branch')
+    ).select_related('posted_by', 'posted_by__role', 'target_org_unit', 'target_branch')
 
 
 # ─── Views ────────────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ class AnnouncementListCreateView(APIView):
             body              = data['body'],
             category          = data['category'],
             visibility        = data['visibility'],
-            target_department = data.get('target_department'),
+            target_org_unit   = data.get('target_org_unit'),
             target_branch     = data.get('target_branch'),
             is_pinned         = data.get('is_pinned', False),
             send_email        = data.get('send_email', False),
@@ -234,7 +234,7 @@ class AnnouncementDetailView(APIView):
         ann.body              = data['body']
         ann.category          = data['category']
         ann.visibility        = data['visibility']
-        ann.target_department = data.get('target_department')
+        ann.target_org_unit   = data.get('target_org_unit')
         ann.target_branch     = data.get('target_branch')
         ann.is_pinned         = data.get('is_pinned', False)
         ann.send_email        = data.get('send_email', False)
@@ -264,8 +264,8 @@ class AnnouncementDetailView(APIView):
         for field in ('title', 'body', 'category', 'visibility', 'is_pinned', 'send_email'):
             if field in data:
                 setattr(ann, field, data[field])
-        if 'target_department' in data:
-            ann.target_department = data.get('target_department')
+        if 'target_org_unit' in data:
+            ann.target_org_unit = data.get('target_org_unit')
         if 'target_branch' in data:
             ann.target_branch = data.get('target_branch')
         ann.save()
@@ -309,12 +309,12 @@ class AnnouncementReactView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk: int):
-        from apps.accounts.services_approval import resolve_employee_department_name
+        from apps.accounts.services_approval import resolve_employee_org_unit_chain
         announcement = get_object_or_404(
             Announcement.objects.filter(
                 Q(visibility=Announcement.VISIBILITY_ALL)
                 | Q(visibility=Announcement.VISIBILITY_DEPARTMENT,
-                    target_department__name=resolve_employee_department_name(request.user))
+                    target_org_unit_id__in=resolve_employee_org_unit_chain(request.user))
                 | Q(visibility=Announcement.VISIBILITY_BRANCH,
                     target_branch__branch_name=request.user.branch)
             ) if not _has_perm(request.user, 'announcements.edit')

@@ -153,9 +153,11 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "dateOfJoining", label: "Date of Joining", type: "readonly" },
       { key: "loginEmail",    label: "Login Email",    type: "readonly" },
       { key: "mobileNumber",  label: "Phone",          type: "readonly" },
+      // department/designation are Position-derived only — see the
+      // "Reassign Position" action (PromotionTab.tsx), not editable here.
+      { key: "department",  label: "Department",  type: "readonly" },
+      { key: "designation", label: "Designation", type: "readonly" },
       // ── editable employment fields (options injected at runtime from API) ──
-      { key: "department",  label: "Department",  type: "select", required: true, options: [] },
-      { key: "designation", label: "Designation", type: "select", required: true, options: [] },
       { key: "ssRole",      label: "Role",        type: "select", required: true, options: [] },
       { key: "branch",            label: "Branch",           type: "select",   options: [] },
       { key: "reportingManager",  label: "Reporting Manager",  type: "readonly" },

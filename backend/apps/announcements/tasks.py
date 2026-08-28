@@ -29,9 +29,9 @@ def _resolve_recipients(announcement) -> list[str]:
         return list(User.objects.filter(is_active=True).exclude(
             email=''
         ).values_list('email', flat=True))
-    if announcement.visibility == Announcement.VISIBILITY_DEPARTMENT and announcement.target_department_id:
-        from apps.accounts.services_approval import filter_users_by_department
-        users = filter_users_by_department(User.objects.filter(is_active=True), announcement.target_department)
+    if announcement.visibility == Announcement.VISIBILITY_DEPARTMENT and announcement.target_org_unit_id:
+        from apps.accounts.services_approval import filter_users_by_org_unit
+        users = filter_users_by_org_unit(User.objects.filter(is_active=True), announcement.target_org_unit)
         return list(users.exclude(email='').values_list('email', flat=True))
     if announcement.visibility == Announcement.VISIBILITY_BRANCH and announcement.target_branch_id:
         return list(User.objects.filter(
@@ -62,7 +62,7 @@ def send_announcement_email_task(self, announcement_id: int):
     try:
         try:
             announcement = Announcement.objects.select_related(
-                'target_department', 'target_branch'
+                'target_org_unit', 'target_branch'
             ).get(pk=announcement_id)
         except Announcement.DoesNotExist:
             logger.warning(

@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from core.permissions import has_perm as _has_perm
 
-from apps.accounts.models import Department
+from apps.accounts.models import OrgUnit
 from apps.branch.models import Branch
 
 from .models import Announcement
@@ -17,7 +17,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     posted_by_role        = serializers.SerializerMethodField()
     reactions_count       = serializers.SerializerMethodField()
     has_reacted           = serializers.SerializerMethodField()
-    target_department_name = serializers.SerializerMethodField()
+    target_org_unit_name  = serializers.SerializerMethodField()
     target_branch_name    = serializers.SerializerMethodField()
     can_edit              = serializers.SerializerMethodField()
 
@@ -25,7 +25,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         model  = Announcement
         fields = [
             'id', 'title', 'body', 'category', 'visibility',
-            'target_department', 'target_department_name',
+            'target_org_unit', 'target_org_unit_name',
             'target_branch', 'target_branch_name',
             'is_pinned', 'send_email',
             'posted_by', 'posted_by_name', 'posted_by_role',
@@ -45,8 +45,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
     # ── target labels ─────────────────────────────────────────────────────────
 
-    def get_target_department_name(self, obj: Announcement) -> str:
-        return obj.target_department.name if obj.target_department_id else ''
+    def get_target_org_unit_name(self, obj: Announcement) -> str:
+        return obj.target_org_unit.name if obj.target_org_unit_id else ''
 
     def get_target_branch_name(self, obj: Announcement) -> str:
         return obj.target_branch.branch_name if obj.target_branch_id else ''
@@ -94,8 +94,8 @@ class AnnouncementWriteSerializer(serializers.Serializer):
     visibility        = serializers.ChoiceField(
                             choices=[c[0] for c in Announcement.VISIBILITY_CHOICES]
                         )
-    target_department = serializers.PrimaryKeyRelatedField(
-                            queryset=Department.objects.filter(is_active=True),
+    target_org_unit   = serializers.PrimaryKeyRelatedField(
+                            queryset=OrgUnit.objects.filter(is_active=True),
                             required=False, allow_null=True,
                         )
     target_branch     = serializers.PrimaryKeyRelatedField(
@@ -121,9 +121,9 @@ class AnnouncementWriteSerializer(serializers.Serializer):
         visibility = data.get('visibility', Announcement.VISIBILITY_ALL)
 
         if visibility == Announcement.VISIBILITY_DEPARTMENT:
-            if not data.get('target_department'):
+            if not data.get('target_org_unit'):
                 raise serializers.ValidationError(
-                    {'target_department': 'A department must be selected when visibility is By Department.'}
+                    {'target_org_unit': 'An org unit must be selected when visibility is By Department.'}
                 )
             data['target_branch'] = None
 
@@ -132,10 +132,10 @@ class AnnouncementWriteSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {'target_branch': 'A branch must be selected when visibility is By Branch.'}
                 )
-            data['target_department'] = None
+            data['target_org_unit'] = None
 
         else:  # all
-            data['target_department'] = None
-            data['target_branch']     = None
+            data['target_org_unit'] = None
+            data['target_branch']   = None
 
         return data

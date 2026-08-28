@@ -29,8 +29,17 @@ class Announcement(models.Model):
     body              = models.TextField()
     category          = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     visibility        = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default=VISIBILITY_ALL)
+    # Being retired in favor of target_org_unit below — kept only so
+    # existing rows aren't dropped before the backfill migration runs; no
+    # longer written by any view. See TEAMCONTEXT.md's Stage 6 notes.
     target_department = models.ForeignKey(
                             'accounts.Department',
+                            on_delete=models.SET_NULL,
+                            null=True, blank=True,
+                            related_name='announcements',
+                        )
+    target_org_unit  = models.ForeignKey(
+                            'accounts.OrgUnit',
                             on_delete=models.SET_NULL,
                             null=True, blank=True,
                             related_name='announcements',

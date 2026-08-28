@@ -12,13 +12,12 @@ interface Props {
   employeeName: string;
   currentDesignation: string;
   currentRole: string;
-  desigOptions: FieldOption[];
   roleOptions: FieldOption[];
-  onUpdated: (designation: string, role: string) => void;
-  // Reassigning a Position also derives department, unlike a plain
-  // promotion — a separate callback rather than widening onUpdated,
-  // since most callers of "promoted" don't care about department.
-  onPositionReassigned: (designation: string, department: string) => void;
+  // Position reassignment can change designation, department, and
+  // (optionally, in the same action) role — a single callback covers all
+  // three, unlike the old separate Promote Employee / Reassign Position
+  // split this replaces.
+  onPositionReassigned: (designation: string, department: string, role: string) => void;
 }
 
 interface PromotionRecord {
@@ -49,14 +48,6 @@ const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
   updatedBy: r.promoted_by || "—",
 });
 
-interface PromotionForm {
-  designation: string;
-  role: string;
-  effectiveDate: string;
-  remarks: string;
-  confirmed: boolean;
-}
-
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -64,36 +55,30 @@ const labelFor = (options: FieldOption[], value: string) =>
   options.find(o => o.value === value)?.label ?? value;
 
 export default function PromotionTab({
-  employeeId, employeeName, currentDesignation, currentRole, desigOptions, roleOptions, onUpdated, onPositionReassigned,
+  employeeId, employeeName, currentDesignation, currentRole, roleOptions, onPositionReassigned,
 }: Props) {
   const canEdit = usePermission("employees.edit");
 
   const [history, setHistory] = useState<PromotionRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignOrgUnit, setReassignOrgUnit] = useState("");
   const [reassignPosition, setReassignPosition] = useState("");
   const [reassignDate, setReassignDate] = useState("");
+  const [reassignRole, setReassignRole] = useState(currentRole);
+  const [roleConfirmed, setRoleConfirmed] = useState(false);
   const [reassignSubmitting, setReassignSubmitting] = useState(false);
   const [reassignError, setReassignError] = useState<string | null>(null);
   const { units, positionsForUnit, loading: positionsLoading } = useOrgUnitsAndPositions();
   const reassignPositionOptions = positionsForUnit(reassignOrgUnit);
   const reassignSelectedPosition = reassignPositionOptions.find(p => p.id === reassignPosition);
+  const isElevated = reassignRole !== currentRole;
   // A click's target is resolved at mouseup, not mousedown — selecting text
   // inside the modal and releasing past its edge would otherwise land on the
   // overlay and close it. Only close when the gesture both started AND ended
   // on the backdrop itself.
   const mouseDownOnOverlay = useRef(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [form, setForm] = useState<PromotionForm>({
-    designation: currentDesignation, role: currentRole, effectiveDate: "", remarks: "", confirmed: false,
-  });
-
-  const isElevated = form.role !== currentRole;
-  const hasChange = form.designation !== currentDesignation || form.role !== currentRole;
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -113,60 +98,12 @@ export default function PromotionTab({
     fetchHistory();
   }, [fetchHistory]);
 
-  function openModal() {
-    setForm({
-      designation: currentDesignation,
-      role: currentRole,
-      effectiveDate: new Date().toISOString().split("T")[0],
-      remarks: "",
-      confirmed: false,
-    });
-    setFormError(null);
-    setShowModal(true);
-  }
-
-  async function submit() {
-    if (!hasChange) {
-      setFormError("Choose a new designation or role before submitting.");
-      return;
-    }
-    if (isElevated && !form.confirmed) {
-      setFormError("Confirm the role change before submitting.");
-      return;
-    }
-    if (!form.effectiveDate) {
-      setFormError("Effective date is required.");
-      return;
-    }
-    setSubmitting(true);
-    setFormError(null);
-    try {
-      await clientApi.put(API.employees.detail(employeeId), {
-        designation: form.designation,
-        role: form.role,
-      });
-      await fetchHistory();
-      onUpdated(form.designation, form.role);
-      setShowModal(false);
-      setSuccessMsg(
-        isElevated
-          ? "Designation and role updated. New access applies at the employee's next login."
-          : "Designation updated successfully."
-      );
-      setTimeout(() => setSuccessMsg(null), 5000);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })
-        ?.response?.data?.message ?? "Failed to update. Please try again.";
-      setFormError(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   function openReassignModal() {
     setReassignOrgUnit("");
     setReassignPosition("");
     setReassignDate(new Date().toISOString().split("T")[0]);
+    setReassignRole(currentRole);
+    setRoleConfirmed(false);
     setReassignError(null);
     setShowReassignModal(true);
   }
@@ -180,17 +117,30 @@ export default function PromotionTab({
       setReassignError("Effective date is required.");
       return;
     }
+    if (isElevated && !roleConfirmed) {
+      setReassignError("Confirm the role change before submitting.");
+      return;
+    }
     setReassignSubmitting(true);
     setReassignError(null);
     try {
       const res = await clientApi.put(API.employees.detail(employeeId), {
         position: reassignPosition, effective_date: reassignDate,
+        ...(isElevated ? { role: reassignRole } : {}),
       });
-      const updated = res.data?.data as { designation?: string; department?: string } | undefined;
+      const updated = res.data?.data as { designation?: string; department?: string; role?: string } | undefined;
       await fetchHistory();
-      onPositionReassigned(updated?.designation ?? currentDesignation, updated?.department ?? "");
+      onPositionReassigned(
+        updated?.designation ?? currentDesignation,
+        updated?.department ?? "",
+        updated?.role ?? currentRole,
+      );
       setShowReassignModal(false);
-      setSuccessMsg("Position reassigned. Designation and department updated to match.");
+      setSuccessMsg(
+        isElevated
+          ? "Position and role reassigned. New access applies at the employee's next login."
+          : "Position reassigned. Designation and department updated to match."
+      );
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })
@@ -211,14 +161,9 @@ export default function PromotionTab({
         <div className="card-header">
           <span className="card-title">Current Designation</span>
           {canEdit && (
-            <div className="flex items-center gap-2">
-              <button className="btn btn-ghost btn-sm" onClick={openReassignModal}>
-                <i className="ti ti-sitemap" /> Reassign Position
-              </button>
-              <button className="btn btn-filled btn-sm" onClick={openModal}>
-                <i className="ti ti-award" /> Promote Employee
-              </button>
-            </div>
+            <button className="btn btn-filled btn-sm" onClick={openReassignModal}>
+              <i className="ti ti-sitemap" /> Reassign Position
+            </button>
           )}
         </div>
         <div className="card-body">
@@ -277,99 +222,6 @@ export default function PromotionTab({
         )}
       </div>
 
-      {showModal && (
-        <div
-          className="modal-overlay open"
-          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
-          onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setShowModal(false); }}
-        >
-          <div className="modal">
-            <div className="modal-header">
-              <span className="modal-title">Promote Employee</span>
-              <button className="modal-close" onClick={() => setShowModal(false)}><i className="ti ti-x" /></button>
-            </div>
-            <div className="modal-body flex flex-col gap-4">
-              {formError && <div className="alert alert-error">{formError}</div>}
-
-              <div className="field-group">
-                <label className="field-label">New designation</label>
-                <select
-                  className="field-input field-select"
-                  value={form.designation}
-                  onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
-                >
-                  {!desigOptions.find(o => o.value === currentDesignation) && (
-                    <option value={currentDesignation}>{currentDesignation}</option>
-                  )}
-                  {desigOptions.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">System role</label>
-                <select
-                  className="field-input field-select"
-                  value={form.role}
-                  onChange={e => setForm(f => ({ ...f, role: e.target.value, confirmed: false }))}
-                >
-                  {!roleOptions.find(o => o.value === currentRole) && (
-                    <option value={currentRole}>{currentRole}</option>
-                  )}
-                  {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Effective date</label>
-                <input
-                  className="field-input"
-                  type="date"
-                  value={form.effectiveDate}
-                  onChange={e => setForm(f => ({ ...f, effectiveDate: e.target.value }))}
-                />
-              </div>
-
-              <div className="field-group">
-                <label className="field-label">Remarks <span className="text-muted">(optional)</span></label>
-                <textarea
-                  className="field-input"
-                  placeholder="Reason for promotion"
-                  value={form.remarks}
-                  onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
-                />
-              </div>
-
-              {isElevated && (
-                <>
-                  <div className="alert alert-warn">
-                    <i className="ti ti-shield-lock" />
-                    This grants {labelFor(roleOptions, form.role)} access. New permissions apply at the
-                    employee&apos;s next login.
-                  </div>
-                  <label className="flex items-start gap-2 text-[13px]">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={form.confirmed}
-                      onChange={e => setForm(f => ({ ...f, confirmed: e.target.checked }))}
-                    />
-                    I confirm this role change and its access impact.
-                  </label>
-                </>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setShowModal(false)} disabled={submitting}>
-                Cancel
-              </button>
-              <button className="btn btn-filled" onClick={submit} disabled={submitting || !hasChange}>
-                {submitting ? <><i className="ti ti-loader-2 spin" /> Updating…</> : "Update Employee"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showReassignModal && (
         <div
           className="modal-overlay open"
@@ -426,12 +278,45 @@ export default function PromotionTab({
                 />
               </div>
 
+              <div className="field-group">
+                <label className="field-label">New role <span className="text-muted">(optional)</span></label>
+                <select
+                  className="field-input field-select"
+                  value={reassignRole}
+                  onChange={e => { setReassignRole(e.target.value); setRoleConfirmed(false); setReassignError(null); }}
+                >
+                  {!roleOptions.find(o => o.value === currentRole) && (
+                    <option value={currentRole}>{currentRole}</option>
+                  )}
+                  {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+
               {reassignSelectedPosition?.holder_name && (
                 <div className="alert alert-warn">
                   <i className="ti ti-info-circle" />
                   {reassignSelectedPosition.holder_name}&apos;s placement on this position will be closed the day
                   before the effective date above and kept in history.
                 </div>
+              )}
+
+              {isElevated && (
+                <>
+                  <div className="alert alert-warn">
+                    <i className="ti ti-shield-lock" />
+                    This grants {labelFor(roleOptions, reassignRole)} access. New permissions apply at the
+                    employee&apos;s next login.
+                  </div>
+                  <label className="flex items-start gap-2 text-[13px]">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={roleConfirmed}
+                      onChange={e => setRoleConfirmed(e.target.checked)}
+                    />
+                    I confirm this role change and its access impact.
+                  </label>
+                </>
               )}
 
               <div className="text-[11.5px] text-muted">

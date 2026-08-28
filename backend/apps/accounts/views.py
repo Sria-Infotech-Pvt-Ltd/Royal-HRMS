@@ -3337,40 +3337,38 @@ class EmployeeListCreateView(APIView):
         last_name       = (request.data.get('last_name')       or '').strip()
         email           = (request.data.get('email')           or '').strip().lower()
         role_id         = request.data.get('role')
-        department      = (request.data.get('department')      or '').strip()
-        designation     = (request.data.get('designation')     or '').strip()
         branch          = (request.data.get('branch')          or '').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
         reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
-        # Optional — when a Position is picked, department/designation are
-        # derived from it (via assign_position()'s sync) instead of being
-        # required as free text; see the position_obj validation block below.
+        # Every role is hired onto a Position, department/designation are
+        # always derived from it (via assign_position()'s sync) — except a
+        # Branch Admin, who oversees every department in the branch rather
+        # than sitting in one seat, so they keep the original free-text
+        # designation entry and no department at all. Matched by capability,
+        # not a hardcoded role name, same as everywhere else this distinction
+        # is made (see applyLeaderRole on the frontend).
         position_id     = (request.data.get('position')        or '').strip()
+        designation     = (request.data.get('designation')     or '').strip()
 
-        # A Branch Admin oversees every department in the branch, not one —
-        # unlike every other role, they aren't scoped to a single department,
-        # so it isn't required for them. Matched by capability, not a
-        # hardcoded role name, same as everywhere else this distinction is
-        # made (see applyLeaderRole on the frontend). The full "is this role
-        # even valid" check still happens below at its usual point — this is
-        # just a cheap early look to decide whether department is optional.
         role_for_dept_check = None
         if role_id:
             try:
                 role_for_dept_check = Role.objects.filter(pk=role_id).first()
             except (ValueError, ValidationError):
                 role_for_dept_check = None
-        department_required = not (role_for_dept_check and role_for_dept_check.can_manage_branch)
+        is_branch_admin_role = bool(role_for_dept_check and role_for_dept_check.can_manage_branch)
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
         if not last_name:       errs['last_name']       = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
         if not role_id:         errs['role']            = 'Role is required.'
-        if department_required and not department and not position_id: errs['department'] = 'Department is required.'
-        if not designation and not position_id: errs['designation']     = 'Designation is required.'
+        if is_branch_admin_role:
+            if not designation: errs['designation'] = 'Designation is required.'
+        elif not position_id:
+            errs['position'] = 'Position is required.'
         if not branch:          errs['branch']          = 'Branch is required.'
         if not date_of_joining: errs['date_of_joining'] = 'Date of joining is required.'
 
@@ -3380,7 +3378,6 @@ class EmployeeListCreateView(APIView):
         if email       and len(email)       > 254: errs['email']       = 'Email must be 254 characters or fewer.'
         if phone       and len(phone)       > 20:  errs['phone']       = 'Phone must be 20 characters or fewer.'
         if branch      and len(branch)      > 100: errs['branch']      = 'Branch must be 100 characters or fewer.'
-        if department  and len(department)  > 100: errs['department']  = 'Department must be 100 characters or fewer.'
         if designation and len(designation) > 100: errs['designation'] = 'Designation must be 100 characters or fewer.'
 
         # Branch must match an active branch in the master Branch list. A free-text
@@ -3395,16 +3392,6 @@ class EmployeeListCreateView(APIView):
             ).first()
             if branch_obj is None:
                 errs['branch'] = 'Select a valid, active branch from the list.'
-
-        # Department must match the master Department list for the same reason —
-        # an unrecognized free-text value (e.g. "IT" when no such Department
-        # exists) would silently fall out of every department-scoped dropdown
-        # and report built on this field.
-        dept_obj = None
-        if department and 'department' not in errs:
-            dept_obj = Department.objects.filter(name__iexact=department, is_active=True).first()
-            if dept_obj is None:
-                errs['department'] = 'Select a valid, active department from the list.'
 
         position_obj = None
         if position_id:
@@ -3440,11 +3427,12 @@ class EmployeeListCreateView(APIView):
             return error('Please fix the errors below.', data=errs)
 
         # Store the canonical Branch.branch_name / Department.name casing, not
-        # whatever the client sent — keeps these fields byte-for-byte consistent
-        # with lookups elsewhere (HR/manager auto-assignment, geofencing, the
-        # department dropdown's branch filter, reports).
+        # whatever the client sent — keeps this byte-for-byte consistent with
+        # lookups elsewhere (HR/manager auto-assignment, geofencing, reports).
         branch     = branch_obj.branch_name
-        department = dept_obj.name if dept_obj else ''
+        # Department stays blank at creation for every non-Branch-Admin role —
+        # assign_position() below fills it in from the Position.
+        department = ''
 
         existing_user = User.objects.filter(email__iexact=email).first()
         if existing_user:
@@ -3749,59 +3737,6 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
     return False
 
 
-def _resolve_designation(name: str, department_name: str):
-    """Best-effort lookup of a Designation row by name — Designation.name is
-    only unique per-department, so prefer a match in the given department
-    and fall back to any active match by name (mirrors the department-blind
-    string comparison User.designation already uses elsewhere in this view).
-    Returns None if the name doesn't resolve to any active Designation row
-    at all (e.g. legacy free-text data predating the Designation table)."""
-    if not name:
-        return None
-    return (
-        Designation.objects.filter(name=name, department__name=department_name, is_active=True).first()
-        or Designation.objects.filter(name=name, is_active=True).first()
-    )
-
-
-def _check_promotion_hierarchy(employee, old_designation: str, new_designation: str):
-    """
-    Reject a designation change that isn't a genuine promotion, using
-    Designation.level (higher = more senior). Returns an error Response, or
-    None if the change is allowed.
-
-    level=0 means "not yet configured" for that designation — the check is
-    skipped (not enforced) unless BOTH the old and new designation have a
-    real level assigned, so this validation can't brick every promotion the
-    moment the field is added, before anyone has had a chance to assign
-    real levels.
-
-    Levels are only comparable WITHIN the same department's hierarchy — a
-    level-3 Engineering designation is never treated as outranking a
-    level-1 Finance designation just because 3 > 1. A designation change
-    that crosses departments has no comparable ladder in this data model,
-    so the level check is skipped (not enforced) for it, same as the
-    level=0 "unconfigured" case above.
-    """
-    new_desig = _resolve_designation(new_designation, employee.department)
-    old_desig = _resolve_designation(old_designation, employee.department)
-    if not new_desig or not old_desig or new_desig.level == 0 or old_desig.level == 0:
-        return None
-    if new_desig.department_id != old_desig.department_id:
-        return None
-    if new_desig.level == old_desig.level:
-        return error(
-            f'"{new_designation}" is the same level as the employee\'s current designation '
-            f'"{old_designation}". Select a higher designation to promote this employee.',
-        )
-    if new_desig.level < old_desig.level:
-        return error(
-            f'"{new_designation}" is a lower designation than the employee\'s current designation '
-            f'"{old_designation}". Promotions must move to a higher designation.',
-        )
-    return None
-
-
 # Personal/Education/Bank/Emergency EmployeeProfile fields editable via
 # EmployeeDetailView.put() — see _employee_dict()'s profile_data above for
 # the matching read-side list (date_of_birth/current_address excluded here,
@@ -3871,30 +3806,16 @@ class EmployeeDetailView(APIView):
             employee.role = new_role
             update_fields.append('role')
 
-        for field in ('department', 'designation', 'branch'):
+        # department/designation are Position-derived only — set exclusively
+        # via assign_position() below (position_obj), never by direct edit.
+        for field in ('branch',):
             val = (data.get(field) or '').strip()
             if field in data:
                 old_val = getattr(employee, field, '')
-                if field == 'designation' and val:
-                    if not Designation.objects.filter(name=val, is_active=True).exists():
-                        return error(f'Designation "{val}" does not exist.')
-                    if val != old_val:
-                        hierarchy_error = _check_promotion_hierarchy(employee, old_val, val)
-                        if hierarchy_error:
-                            return hierarchy_error
                 if old_val != val:
                     changes[field] = {'from': old_val, 'to': val}
                 setattr(employee, field, val)
                 update_fields.append(field)
-                if field == 'designation':
-                    # A human just set this by hand — stop future Position
-                    # syncs (accounts/services_placement.sync_from_position)
-                    # from silently overwriting it until they're re-assigned.
-                    employee.designation_synced_from_position = False
-                    update_fields.append('designation_synced_from_position')
-                if field == 'department':
-                    employee.department_synced_from_position = False
-                    update_fields.append('department_synced_from_position')
 
         position_id = (data.get('position') or '').strip()
         position_obj = None
@@ -4079,7 +4000,14 @@ class EmployeeDetailView(APIView):
             # change exactly as it would for a manual designation edit.
             old_designation, old_department = employee.designation, employee.department
             assign_position(employee, position_obj, effective_from=effective_date, created_by=request.user)
-            employee.refresh_from_db()
+            # Only refresh the two fields assign_position's sync may have
+            # changed — a bare refresh_from_db() would also discard the
+            # pending in-memory `role` change (set earlier in this method,
+            # not yet saved) by resetting it back to the stale DB value.
+            employee.refresh_from_db(fields=[
+                'designation', 'department',
+                'designation_synced_from_position', 'department_synced_from_position',
+            ])
             if employee.designation != old_designation:
                 changes['designation'] = {'from': old_designation, 'to': employee.designation}
             if employee.department != old_department:
@@ -5765,11 +5693,8 @@ class OnboardingApprovalView(APIView):
 
         decision           = request.data.get('decision')
         remarks            = request.data.get('remarks', '')
-        req_designation    = (request.data.get('designation')        or '').strip()
-        req_department     = (request.data.get('department')         or '').strip()
-        # Optional — when a Position is picked, department/designation are
-        # derived from it instead of being required as free text (same
-        # bridge as Create Employee's position picker).
+        # Department/designation are always derived from the Position on
+        # approval — see req_position_obj below.
         req_position_id    = (request.data.get('position')           or '').strip()
         # assessment_ids (list) is the current contract; assessment_id (single)
         # is accepted too for any older caller still sending one value.
@@ -5787,43 +5712,14 @@ class OnboardingApprovalView(APIView):
             return error('decision must be "approve" or "reject".')
         req_position_obj = None
         if decision == 'approve':
-            if req_position_id:
-                try:
-                    req_position_obj = Position.objects.select_related(
-                        'org_unit__department', 'job_template',
-                    ).get(pk=req_position_id, is_active=True)
-                except (Position.DoesNotExist, ValueError, ValidationError):
-                    return error('Select a valid, active position.', data={'position': 'Position not found.'})
-            else:
-                if not req_department:
-                    return error('Department is required to approve onboarding.')
-                if not req_designation:
-                    return error('Designation is required to approve onboarding.')
-
-                # Unlike "Create Employee" (EmployeeListCreateView.post()) and bulk
-                # import, this hire path previously accepted any free-text
-                # department/designation with no check against the master tables —
-                # silently breaking every place downstream that matches on these
-                # fields by exact equality (separation approval chain,
-                # _cascade_manager, leave-policy eligibility, announcement
-                # targeting) whenever the typed value didn't match a real row.
-                dept_obj = Department.objects.filter(name__iexact=req_department, is_active=True).first()
-                if dept_obj is None:
-                    return error(
-                        f'Department "{req_department}" is not a recognized, active department.',
-                        data={'department': 'Select a valid, active department.'},
-                    )
-                req_department = dept_obj.name
-
-                desig_obj = Designation.objects.filter(
-                    name__iexact=req_designation, department=dept_obj, is_active=True,
-                ).first()
-                if desig_obj is None:
-                    return error(
-                        f'Designation "{req_designation}" does not exist under department "{dept_obj.name}".',
-                        data={'designation': 'Select a valid, active designation for this department.'},
-                    )
-                req_designation = desig_obj.name
+            if not req_position_id:
+                return error('A position is required to approve onboarding.', data={'position': 'Position is required.'})
+            try:
+                req_position_obj = Position.objects.select_related(
+                    'org_unit__department', 'job_template',
+                ).get(pk=req_position_id, is_active=True)
+            except (Position.DoesNotExist, ValueError, ValidationError):
+                return error('Select a valid, active position.', data={'position': 'Position not found.'})
 
             if req_pan_number:
                 # Validated before any state changes below — an invalid/duplicate
@@ -5875,13 +5771,9 @@ class OnboardingApprovalView(APIView):
                 if linked_candidate and not target.branch and linked_candidate.branch:
                     target.branch = linked_candidate.branch.branch_name
 
-            if req_designation:
-                target.designation = req_designation
-            elif not target.designation and linked_candidate and linked_candidate.position_applied:
-                target.designation = linked_candidate.position_applied
-
-            if req_department:
-                target.department = req_department
+            # designation/department are always set below via assign_position()
+            # (req_position_obj), which unconditionally overwrites both —
+            # nothing to do with them here.
 
             # Explicit reporting manager override — set before _auto_assign_managers so auto-assign skips it
             if req_manager_id:
@@ -6809,22 +6701,6 @@ class EmployeeBulkImportView(APIView):
             if b.branch_code:
                 branch_map[b.branch_code.strip().lower()] = b.branch_name.strip()
 
-        # department: lower_name → exact name
-        dept_map: dict = {
-            d.lower(): d
-            for d in Department.objects.filter(is_active=True).values_list('name', flat=True)
-        }
-
-        # designation: lower_name → set of lower dept names it belongs to
-        desig_dept_map: dict = {}
-        for desig_name, dept_name in (
-            Designation.objects
-            .filter(is_active=True)
-            .select_related('department')
-            .values_list('name', 'department__name')
-        ):
-            desig_dept_map.setdefault(desig_name.lower(), set()).add(dept_name.lower())
-
         # role: lower_name/lower_display → Role obj
         role_map: dict = {}
         for r in Role.objects.filter(is_active=True):
@@ -6888,72 +6764,29 @@ class EmployeeBulkImportView(APIView):
                 })
                 continue
 
-            position_id_for_row = None
-            dept_name = ''
-            desig_raw = ''
-
-            if vd.get('org_unit') or vd.get('position_title'):
-                # Org Unit + Position path — department/designation get
-                # derived from the Position after the employee is created,
-                # same as Create Employee's own Position picker.
-                unit_raw = vd['org_unit']
-                title_raw = vd['position_title']
-                matches = position_map.get((unit_raw.lower(), title_raw.lower()), [])
-                if not matches:
-                    row_errors.append({
-                        'row':        idx,
-                        'field':      'position',
-                        'identifier': email,
-                        'message':    f'No active position "{title_raw}" found in org unit "{unit_raw}".',
-                    })
-                    continue
-                if len(matches) > 1:
-                    row_errors.append({
-                        'row':        idx,
-                        'field':      'position',
-                        'identifier': email,
-                        'message':    (
-                            f'"{title_raw}" in org unit "{unit_raw}" matches more than one position — '
-                            f'use Department/Designation for this row instead.'
-                        ),
-                    })
-                    continue
-                position_id_for_row = matches[0]
-            else:
-                # Department existence check.
-                dept_raw  = vd['department']
-                dept_name = dept_map.get(dept_raw.lower())
-                if dept_name is None:
-                    row_errors.append({
-                        'row':        idx,
-                        'field':      'department',
-                        'identifier': email,
-                        'message':    f'Department "{dept_raw}" not found.',
-                    })
-                    continue
-
-                # Designation existence + belongs-to-department check.
-                desig_raw = vd['designation']
-                dept_set  = desig_dept_map.get(desig_raw.lower(), set())
-                if not dept_set:
-                    row_errors.append({
-                        'row':        idx,
-                        'field':      'designation',
-                        'identifier': email,
-                        'message':    f'Designation "{desig_raw}" not found.',
-                    })
-                    continue
-                if dept_name.lower() not in dept_set:
-                    row_errors.append({
-                        'row':        idx,
-                        'field':      'designation',
-                        'identifier': email,
-                        'message':    (
-                            f'Designation "{desig_raw}" does not belong to '
-                            f'department "{dept_name}".'
-                        ),
-                    })
-                    continue
+            # Org Unit + Position — department/designation get derived from
+            # the Position after the employee is created, same as Create
+            # Employee's own Position picker.
+            unit_raw  = vd['org_unit']
+            title_raw = vd['position_title']
+            matches = position_map.get((unit_raw.lower(), title_raw.lower()), [])
+            if not matches:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'position',
+                    'identifier': email,
+                    'message':    f'No active position "{title_raw}" found in org unit "{unit_raw}".',
+                })
+                continue
+            if len(matches) > 1:
+                row_errors.append({
+                    'row':        idx,
+                    'field':      'position',
+                    'identifier': email,
+                    'message':    f'"{title_raw}" in org unit "{unit_raw}" matches more than one position.',
+                })
+                continue
+            position_id_for_row = matches[0]
 
             # Role existence check.
             role_raw = vd['role']
@@ -6994,8 +6827,6 @@ class EmployeeBulkImportView(APIView):
                     full_name            = full_name,
                     role                 = role_obj,
                     employee_id          = employee_id,
-                    department           = dept_name,
-                    designation          = desig_raw,
                     branch               = branch_name,
                     phone                = vd.get('phone') or '',
                     date_of_joining      = vd.get('date_of_joining'),
@@ -7145,7 +6976,7 @@ class EmployeeBulkImportSampleView(APIView):
 
     _HEADERS = [
         'First Name', 'Last Name', 'Work Email', 'Mobile Number',
-        'Role', 'Department', 'Designation', 'Branch', 'Employee Type',
+        'Role', 'Org Unit', 'Position', 'Branch', 'Employee Type',
         'Date of Joining', 'Gender', 'Date of Birth', 'Blood Group', 'Address',
     ]
     _SAMPLE_ROWS = [

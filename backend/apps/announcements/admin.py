@@ -14,7 +14,7 @@ class AnnouncementReactionInline(admin.TabularInline):
 
 @admin.register(Announcement)
 class AnnouncementAdmin(admin.ModelAdmin):
-    list_display  = ('title', 'category', 'visibility', 'target_department', 'target_branch', 'is_pinned', 'send_email', 'views_count', 'posted_by', 'created_at')
+    list_display  = ('title', 'category', 'visibility', 'target_org_unit', 'target_branch', 'is_pinned', 'send_email', 'views_count', 'posted_by', 'created_at')
     list_filter   = ('category', 'visibility', 'is_pinned', 'send_email')
     search_fields = ('title', 'body')
     readonly_fields = ('views_count', 'created_at', 'updated_at')
