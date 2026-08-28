@@ -127,3 +127,37 @@ def filter_users_by_department(users_qs, department: 'Department'):
         .values_list('employee_id', flat=True)
     )
     return users_qs.filter(Q(id__in=position_user_ids) | Q(department=department.name)).distinct()
+
+
+def filter_queryset_by_department_name(qs, department_name: str, *, department_lookup: str = 'department'):
+    """Narrow `qs` to rows belonging to `department_name` — for the ~9
+    attendance/assessments call sites that take a free-text department
+    name off a filter UI (not a `Department` object) and apply a plain
+    `qs.filter(department=department_name)` (or `employee__department=`
+    for a queryset of a model with an `employee` FK to User).
+
+    Preferred path: if `department_name` matches a real `Department` row
+    (case-insensitively), resolve its members via `filter_users_by_department`
+    (Position-derived + legacy string, unioned) and filter `qs` by that
+    member-id set. Fallback: if no real Department matches — the name was
+    typed free-text and doesn't correspond to any row — filter by the
+    plain string as before (case-insensitively), so a typo'd or
+    since-renamed department name still behaves exactly as it did before
+    this bridge existed, rather than silently matching nothing.
+
+    `department_lookup` is the ORM path to the department string field
+    relative to `qs`'s model: `'department'` when `qs` is a `User`
+    queryset directly, `'employee__department'` when `qs`'s model has an
+    `employee` FK to `User` instead.
+    """
+    from apps.accounts.models import Department, User
+
+    dept = Department.objects.filter(name__iexact=department_name).first()
+    if dept is None:
+        return qs.filter(**{f'{department_lookup}__iexact': department_name})
+
+    member_ids = filter_users_by_department(User.objects.all(), dept).values_list('id', flat=True)
+    if department_lookup == 'department':
+        return qs.filter(id__in=member_ids)
+    relation_prefix = department_lookup.rsplit('__', 1)[0]
+    return qs.filter(**{f'{relation_prefix}_id__in': member_ids})

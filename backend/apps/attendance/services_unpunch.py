@@ -99,7 +99,8 @@ def detect_and_mark_unpunches(
     if branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     # All open sessions not yet marked
     open_records = list(

@@ -72,7 +72,8 @@ def list_overtime(
     elif branch:
         qs = qs.filter(employee__branch=branch)
     if department:
-        qs = qs.filter(employee__department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        qs = filter_queryset_by_department_name(qs, department, department_lookup='employee__department')
 
     rows = []
     for ot in qs:

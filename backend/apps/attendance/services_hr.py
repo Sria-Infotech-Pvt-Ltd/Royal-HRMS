@@ -85,7 +85,8 @@ def get_dashboard_stats(
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     total_employees = employee_qs.count()
 
@@ -171,7 +172,8 @@ def reprocess_date(
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     punched_ids = set(
         AttendancePunch.objects
@@ -254,7 +256,8 @@ def get_attendance_list(filters: dict) -> list[dict]:
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
     if search:
         employee_qs = employee_qs.filter(
             Q(full_name__icontains=search) | Q(employee_id__icontains=search)
@@ -450,7 +453,8 @@ def build_weekly_off_assignment_queryset(filters: dict):
     elif branch:
         qs = qs.filter(branch=branch)
     if department:
-        qs = qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        qs = filter_queryset_by_department_name(qs, department)
     if search:
         qs = qs.filter(Q(full_name__icontains=search) | Q(employee_id__icontains=search))
 

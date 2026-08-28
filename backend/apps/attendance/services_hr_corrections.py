@@ -211,7 +211,8 @@ def list_corrections(
     if branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     qs = (
         AttendanceCorrection.objects

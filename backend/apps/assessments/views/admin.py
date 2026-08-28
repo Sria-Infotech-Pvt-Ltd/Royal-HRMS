@@ -371,7 +371,8 @@ class AssignAssessmentView(APIView):
         from apps.accounts.models import User
         employee_qs = User.objects.filter(is_active=True).exclude(role=None).exclude(employee_id='')
         if department:
-            employee_qs = employee_qs.filter(department__iexact=department)
+            from apps.accounts.services_approval import filter_queryset_by_department_name
+            employee_qs = filter_queryset_by_department_name(employee_qs, department)
             if not employee_qs.exists():
                 return error(f'No active employees found in department "{department}".')
 

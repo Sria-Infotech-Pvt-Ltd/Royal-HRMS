@@ -65,7 +65,8 @@ def get_invalid_punches(
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     # Employees who have an AttendanceRecord for this date (date is a plain DateField)
     employee_ids_with_record = AttendanceRecord.objects.filter(
@@ -157,7 +158,8 @@ def get_unpunch_count(
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     return AttendanceRecord.objects.filter(
         date=target_date,
@@ -199,7 +201,8 @@ def get_unpunches(
     elif branch:
         employee_qs = employee_qs.filter(branch=branch)
     if department:
-        employee_qs = employee_qs.filter(department=department)
+        from apps.accounts.services_approval import filter_queryset_by_department_name
+        employee_qs = filter_queryset_by_department_name(employee_qs, department)
 
     records = (
         AttendanceRecord.objects
