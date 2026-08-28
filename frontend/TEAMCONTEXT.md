@@ -5123,6 +5123,18 @@ Verified live: the shared filter helper directly (real department name via new s
 
 ---
 
+## 21. Phase 3, Stage 5 — Frontend Type Unification
+
+**Files:** `frontend/types/{department,designation}.ts` (new), `frontend/hooks/useDepartmentOptions.ts`, `frontend/app/dashboard/{announcements/page,settings/leave-policy/_components/EligibilitySection,candidate-review/_components/OnboardingDrawer,employees/_components/AddEmployeeModal,settings/departments/page}.tsx`
+
+Re-scoped from the original "~30 consuming files" estimate once actually looked at closely — that number was really about the much broader (and lower-value) surface of `department: string`/`designation: string` as plain fields on employee-shaped types across dashboards/payroll/attendance, which don't benefit from a shared `Department`/`Designation` *reference* type since they're not references to one. The real duplication — the `{id, name}`-shaped picker/reference type re-declared locally under different names (`DepartmentOption`, `ApiDept`, `ApiDesig`, plus the full CRUD shape on the settings page itself) — was actually only **6 files**.
+
+New `types/department.ts`/`types/designation.ts`: a lightweight `DepartmentOption`/`DesignationOption` (`{id, name}`, the latter with an optional `department_name` for callers like onboarding/add-employee that show it) for pickers, plus a full `Department`/`Designation` (extending the lightweight ones) for the Settings → Departments management page's own CRUD table. Updated all 6 files to import from these instead of re-declaring — 3 kept their old local names via `import type { X as LocalName }` to minimize diff churn where the type was used many times in one file (`OnboardingDrawer.tsx`, `AddEmployeeModal.tsx`), 3 renamed usages to the shared name directly where there was only one or two call sites (`useDepartmentOptions.ts`, `announcements/page.tsx`, `EligibilitySection.tsx`, `departments/page.tsx`).
+
+Pure type-level change, no runtime behavior touched — verified via `tsc --noEmit` (clean across the whole project, not just the touched files) and `eslint` (clean on every touched file).
+
+---
+
 ## Key Files Changed
 
 | File | Change |

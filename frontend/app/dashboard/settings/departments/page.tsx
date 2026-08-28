@@ -6,17 +6,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import Modal from "@/components/Modal";
-
-interface RoleInfo    { name: string; display_name: string }
-interface Department  {
-  id: number; name: string; description: string; is_active: boolean;
-  created_at: string; designation_count: number; employee_count: number;
-  roles: RoleInfo[];
-}
-interface Designation {
-  id: number; name: string; department: number;
-  department_name: string; is_active: boolean;
-}
+import type { Department } from "@/types/department";
+import type { Designation } from "@/types/designation";
 
 const BLANK_DEPT  = { name: "", description: "", is_active: true };
 const BLANK_DESIG = { name: "", is_active: true };

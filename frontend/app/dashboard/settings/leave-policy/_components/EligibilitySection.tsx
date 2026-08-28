@@ -3,10 +3,10 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { MultiCheckRow, type PolicyRuleFields } from "./LeavePoliciesTab";
+import type { DepartmentOption } from "@/types/department";
+import type { DesignationOption } from "@/types/designation";
 
 interface BranchOption      { id: number; branch_name: string }
-interface DepartmentOption  { id: number; name: string }
-interface DesignationOption { id: number; name: string }
 
 // No employment-type concept exists anywhere in this system yet (checked
 // accounts.models — no field, no choices). Kept as a static placeholder list

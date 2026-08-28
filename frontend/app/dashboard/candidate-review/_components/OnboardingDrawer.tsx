@@ -5,6 +5,8 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import Modal from "@/components/Modal";
+import type { DepartmentOption as ApiDept } from "@/types/department";
+import type { DesignationOption as ApiDesig } from "@/types/designation";
 
 interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
 
@@ -33,8 +35,6 @@ export interface ApprovalUser {
   documents: OnboardingDocument[];
 }
 
-interface ApiDept       { id: number; name: string; }
-interface ApiDesig      { id: number; name: string; department_name: string; }
 interface AssessmentOption { id: string; title: string; }
 
 interface Props {

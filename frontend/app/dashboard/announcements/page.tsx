@@ -6,6 +6,7 @@ import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
 import { useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
+import type { DepartmentOption } from "@/types/department";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 import Modal from "@/components/Modal";
@@ -53,7 +54,6 @@ interface PageMeta {
   results:         Announcement[];
 }
 
-interface Department { id: number; name: string }
 interface Branch     { id: number; branch_name: string; branch_code: string }
 
 type FormState = {
@@ -187,7 +187,7 @@ export default function AnnouncementsPage() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   // ── Dropdown data ───────────────────────────────────────────────────────────
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [branches,    setBranches]    = useState<Branch[]>([]);
 
   // The poster's own branch id, resolved from their branch name — used to lock

@@ -2,8 +2,8 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import type { DepartmentOption } from "@/types/department";
 
-interface DepartmentOption { id: number; name: string }
 interface EmployeeLite { department: string }
 
 // Unrestricted users (system_admin) see the full company-wide department list.

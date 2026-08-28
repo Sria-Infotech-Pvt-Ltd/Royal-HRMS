@@ -6,11 +6,11 @@ import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
+import type { DepartmentOption as ApiDept } from "@/types/department";
+import type { DesignationOption as ApiDesig } from "@/types/designation";
 
 /* ── Types ────────────────────────────────────────────────────── */
 interface ApiRole   { id: number; name: string; display_name: string; permissions: string[]; can_manage_branch: boolean }
-interface ApiDept   { id: number; name: string }
-interface ApiDesig  { id: number; name: string; department_name: string }
 interface ApiBranch { id: number; branch_name: string; branch_code: string }
 interface ApiPerson { id: string; employee_id: string; full_name: string }
 
