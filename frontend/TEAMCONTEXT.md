@@ -4951,3 +4951,96 @@ Verified: `manage.py check` clean, `makemigrations --check` clean, migration app
 - **The dual-control gap on referral bonus approve/pay is a real process question, not a bug** — currently one `recruitment.edit` holder can both approve and pay a bonus. Needs a business decision (a new `recruitment.pay`-style codename + role grants) before implementing, not something to decide unilaterally.
 - **`LeaveCalendarView`/`PayslipQueryListView` still return unpaginated results** — both are naturally bounded in practice (one month/year of events; open queries only) and changing their response shape requires a coordinated frontend change. Deferred rather than risking a working calendar UI for a low-severity finding.
 - **`apps/accounts/views.py` (6,600+ lines) and `apps/recruitment/views.py` (2,200+ lines) are both far past the CLAUDE.md 300-line file-per-view-domain limit** — not touched in this pass, but noted by one of the audit sub-agents as making future permission audits of these files harder than they should be.
+
+---
+
+# Team Context — Closed All 7 Email Notification Gaps From the Audit
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+The last open item from the full-application audit: 7 lifecycle events that changed real state but never emailed anyone, found by the original email-coverage sub-agent. Fixed all 7 in one pass, reusing (and generalizing) the existing leave-email infrastructure rather than inventing a second pattern.
+
+---
+
+## 0. Infrastructure: `_send_leave_email` → `_send_lifecycle_email`
+
+**File:** `apps/notifications/signals.py`
+
+The existing leave-email helper (Celery-queued via `transaction.on_commit`, delivered by `send_lifecycle_email_task`) was already fully generic under the hood — its own task docstring already said "leave submitted/approved/rejected/forwarded/cancelled, **etc.**". Only its *name* was leave-specific. Renamed it (9 call sites, all within the leave section) and reused it for every fix below instead of writing six near-identical dispatch wrappers.
+
+## 1. Separation Lifecycle (5 templates)
+
+**Files:** `apps/notifications/signals.py`, new `apps/hrms/migrations/0026_seed_separation_email_templates.py`
+
+Now emails on: request submitted (employee + first-stage approver), each stage approval (employee "moved to next stage" + next approver), final approval, and rejection — matching leave's exact coverage. Previously zero emails at any stage, despite leave (a lower-stakes event) emailing on every transition.
+
+## 2. Expense Claims (4 templates)
+
+**Files:** `apps/notifications/signals.py`, new `apps/hrms/migrations/0027_seed_expense_email_templates.py`
+
+Now emails on submit (employee + resolved approver), approve, and reject. Previously the only email was an optional one an approver could manually attach a template name to in the approve/reject request — nothing sent by default.
+
+## 3. Payslip Dispatch/Payment (2 templates)
+
+**Files:** `apps/payroll/views/payslips.py` (`DispatchPayslipsView.post`), `apps/payroll/views/cycles.py` (`MarkCyclePaidView.post`), new `apps/payroll/migrations/0018_seed_payslip_email_templates.py`
+
+Both endpoints do a bulk `queryset.update()` — which fires no Django signal — so the affected payslips are captured in a list *before* the update (the only point at which "which employees were just dispatched to" is still knowable), then each employee is individually notified + emailed after. Previously only L1/L2 manager approval-gate emails existed (`apps/payroll/notifications.py`); the employee whose payslip actually became visible, or who was actually paid, was never told at all.
+
+## 4. Face ID Registration Approve/Reject (2 templates)
+
+**Files:** `apps/attendance/views/face_registration.py` (`FaceRegistrationReviewView.patch`), new `apps/attendance/migrations/0042_seed_face_registration_email_templates.py`
+
+This was **completely silent** — no in-app Notification, no email. Not signal-driven (a direct single-approver review action, not a lifecycle status ladder), so `_notify`/`_send_lifecycle_email` are called directly from the view after the transaction commits, matching the established pattern already used the same way in `accounts/views.py` and `hrms/tasks.py`.
+
+## 5. Attendance Regularization (4 templates)
+
+**Files:** `apps/notifications/signals.py`, new `apps/attendance/migrations/0041_seed_regularization_email_templates.py`
+
+Now emails on submit (employee + assigned HR), approve, and reject — same gap shape as expense.
+
+## 6. Password Reset Confirmation (1 template)
+
+**Files:** `apps/accounts/views.py` (`ResetPasswordView._reset`), new `apps/accounts/migrations/0098_seed_password_reset_email_template.py`
+
+A genuine security-relevant event (password just changed) previously only created an in-app notification the user might never open — now also emails immediately, alongside the existing notification.
+
+## 7. Assessment Deadline Reminders — New Feature (1 template + new periodic task)
+
+**Files:** `apps/assessments/models.py` (new `CandidateAssignment.deadline_reminder_sent_at`), `apps/assessments/tasks.py` (new `send_assessment_deadline_reminders`), `config/settings.py` (new `CELERY_BEAT_SCHEDULE` entry, daily 08:00 IST), new `apps/assessments/migrations/0012_...py` + `0013_seed_deadline_reminder_email_template.py`
+
+Didn't exist as a feature at all — an assignee who never opened the portal got no nudge as their deadline approached. New daily task finds assignments whose deadline falls within the next 24 hours, aren't complete, and haven't already been reminded; sends one email each and stamps `deadline_reminder_sent_at` so it can never repeat for the same assignment. Deliberately a **single** reminder, not a recurring nag — unlike `apps.payroll.tasks.send_payroll_approval_reminders`, which is intentionally an ongoing daily nudge until the manager acts; a deadline reminder is a one-time "heads up," not an escalation.
+
+---
+
+## Supporting Changes
+
+- `apps/notifications/models.py` — new `NOTIFICATION_TYPE_CHOICES`/`MODULE_CHOICES` entries (`face_registration_status`, `payslip_dispatched`, `payslip_paid`, `facial_recognition`, `payroll`), migrated via `apps/notifications/migrations/0009_...py` (metadata-only, same as every prior choices-only migration this session).
+- `apps/notifications/signals.py`'s `_MODULE_DEFAULT_CATEGORY` — added `payroll`, `documents`, `facial_recognition` mappings so notifications created with those modules actually respect the matching `NotificationSettings` toggle instead of silently falling through as always-enabled (a live gap: the payslip/face-ID notifications added here would otherwise have bypassed the user's own notification preferences).
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/notifications/signals.py` | `_send_lifecycle_email` (renamed/generalized); separation, expense, regularization email wiring; `_MODULE_DEFAULT_CATEGORY` additions |
+| `backend/apps/notifications/models.py`, `migrations/0009_...py` (new) | New notification type/module choices |
+| `backend/apps/attendance/views/face_registration.py` | Face ID review now notifies + emails (previously silent) |
+| `backend/apps/payroll/views/payslips.py`, `views/cycles.py` | Payslip dispatch/paid now email the employee |
+| `backend/apps/accounts/views.py` | Password reset now emails, not just in-app notifies |
+| `backend/apps/assessments/models.py`, `tasks.py`, `backend/config/settings.py` | New deadline-reminder field, periodic task, beat schedule entry |
+| `backend/apps/{hrms,attendance,accounts,payroll,assessments}/migrations/*.py` (9 new) | Seed the 19 new email templates + the 2 supporting schema migrations |
+
+---
+
+## Notes for Next Developer
+
+- **Verified live, not just by inspection**: created a real separation request and expense in `tenant_qatest`, walked them through every status transition, and directly executed (`Task.apply()`, not just queued) the resulting email tasks to confirm they render correctly and attempt a real send — `tenant_qatest` has zero SMTP rows configured, so each failed gracefully with "no active SMTP configuration," the exact same failure mode every other email in this codebase already has. All test data cleaned up afterward.
+- **All 19 new templates are admin-editable** via Settings → Email Templates, same as every pre-existing lifecycle email — nothing here is hardcoded HTML outside that system.
+- **This closes every finding from the original email-coverage audit.** Combined with the earlier permission/hardcoded-value fixes, the full 3-part audit requested this session is now fully addressed except the two deliberately-deferred items noted in the previous entry (referral bonus dual-control, calendar/query-list pagination).

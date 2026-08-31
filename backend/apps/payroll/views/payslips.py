@@ -337,6 +337,14 @@ class DispatchPayslipsView(APIView):
         now = timezone.now()
         deadline = now + timedelta(hours=window_hours)
 
+        # Captured before the bulk .update() below — a queryset .update()
+        # doesn't fire post_save signals, and by the time it's applied these
+        # rows are no longer status=STATUS_DRAFT, so this is the only chance
+        # to know which employees were actually just dispatched to.
+        dispatched_payslips = list(
+            cycle.payslips.filter(status=EmployeePayslip.STATUS_DRAFT).select_related('employee')
+        )
+
         cycle.payslips.filter(status=EmployeePayslip.STATUS_DRAFT).update(
             status=EmployeePayslip.STATUS_SENT,
             sent_at=now,
@@ -345,6 +353,19 @@ class DispatchPayslipsView(APIView):
         cycle.status = PayrollCycle.STATUS_QUERY_WINDOW_OPEN
         cycle.query_window_closes_at = deadline
         cycle.save(update_fields=['status', 'query_window_closes_at', 'updated_at'])
+
+        from apps.notifications.signals import _notify, _send_lifecycle_email
+        for payslip in dispatched_payslips:
+            employee = payslip.employee
+            _notify(employee, 'Payslip Ready',
+                    f'Your payslip for {cycle.cycle_start.strftime("%B %Y")} is ready to view.',
+                    'payslip_dispatched', 'payroll', str(payslip.id))
+            _send_lifecycle_email(employee, 'payslip_dispatched', {
+                'employee_name': employee.full_name or employee.email,
+                'cycle_month':   cycle.cycle_start.strftime('%B %Y'),
+                'net_pay':       f'{payslip.net_pay:.2f}',
+                'query_deadline': deadline.strftime('%d %b %Y, %H:%M'),
+            })
 
         logger.info(
             'Payslips dispatched for cycle %s by %s. Query window closes %s',

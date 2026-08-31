@@ -1,11 +1,15 @@
 """
 Assessment Celery tasks.
 
-Dispatched on-demand from AssignAssessmentView.post() (via
-transaction.on_commit, see apps.assessments.views.admin._queue_assignment_emails)
-— not part of CELERY_BEAT_SCHEDULE, since there is nothing periodic here:
-each assign action enqueues its own one-off notification delivery for the
-assignment(s) it just created.
+send_assessment_assignment_emails_task is dispatched on-demand from
+AssignAssessmentView.post() (via transaction.on_commit, see
+apps.assessments.views.admin._queue_assignment_emails) — a one-off
+delivery for the assignment(s) just created.
+
+send_assessment_deadline_reminders is the one periodic task in this
+module, registered in CELERY_BEAT_SCHEDULE (config/settings.py) — an
+assignee who never opens the portal previously got no nudge at all as
+their deadline approached.
 """
 from __future__ import annotations
 
@@ -14,6 +18,9 @@ import logging
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
+
+# How far ahead of an assignment's deadline to send the one-time reminder.
+REMINDER_WINDOW_HOURS = 24
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
@@ -97,4 +104,90 @@ def send_assessment_assignment_emails_task(self, schema_name: str, assignment_id
             'send_assessment_assignment_emails_task setup failed for %s: %s',
             assignment_ids, exc, exc_info=True,
         )
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def send_assessment_deadline_reminders(self):
+    """
+    Daily task: find CandidateAssignments whose deadline falls within the
+    next REMINDER_WINDOW_HOURS, aren't yet complete, and haven't already
+    been reminded — send one reminder email each and stamp
+    deadline_reminder_sent_at so it never repeats for the same assignment
+    (unlike apps.payroll.tasks.send_payroll_approval_reminders, which is
+    deliberately an ongoing daily nag — a deadline reminder is a single
+    "heads up" notice, not a recurring one). Runs once per active company
+    with the assessments module enabled (see apps.tenants.utils.
+    run_for_all_tenants — this task has no single tenant of its own).
+    """
+    from apps.tenants.models import MODULE_ASSESSMENTS
+    from apps.tenants.utils import run_for_all_tenants
+
+    def _run_for_one_tenant():
+        from datetime import timedelta
+
+        from django.db.models import Q
+        from django.utils import timezone
+
+        from apps.accounts.models import Company
+        from apps.assessments.models import CandidateAssignment
+        from apps.assessments.views.admin import _send_assessment_email
+
+        now     = timezone.now()
+        cutoff  = now + timedelta(hours=REMINDER_WINDOW_HOURS)
+        pending = (
+            CandidateAssignment.objects
+            .filter(
+                deadline__isnull=False,
+                deadline__gt=now,
+                deadline__lte=cutoff,
+                deadline_reminder_sent_at__isnull=True,
+            )
+            .exclude(status=CandidateAssignment.STATUS_COMPLETE)
+            .filter(Q(employee__isnull=False) | Q(candidate__isnull=False))
+            .select_related('employee', 'candidate', 'assessment')
+        )
+
+        company      = Company.objects.first()
+        company_name = company.company_name if company else ''
+        portal_url   = (company.portal_url if company else '') or ''
+
+        reminded_ids = []
+        for assignment in pending:
+            if assignment.employee_id:
+                recipient_email = assignment.employee.email
+                recipient_name  = assignment.employee.full_name or assignment.employee.email
+            else:
+                recipient_email = assignment.candidate.email
+                recipient_name  = assignment.candidate.name
+
+            if not recipient_email:
+                continue
+
+            _send_assessment_email(recipient_email, {
+                'candidate_name':   recipient_name,
+                'assessment_title': assignment.assessment.title,
+                'company_name':     company_name,
+                'portal_url':       portal_url,
+                'deadline':         str(assignment.deadline),
+            }, 'assessment_deadline_reminder')
+            reminded_ids.append(assignment.pk)
+
+        if reminded_ids:
+            CandidateAssignment.objects.filter(pk__in=reminded_ids).update(
+                deadline_reminder_sent_at=now,
+            )
+
+        result = {'reminded': len(reminded_ids)}
+        logger.info('send_assessment_deadline_reminders completed: %s', result)
+        return result
+
+    try:
+        return run_for_all_tenants(
+            _run_for_one_tenant,
+            task_name='send_assessment_deadline_reminders',
+            required_module=MODULE_ASSESSMENTS,
+        )
+    except Exception as exc:
+        logger.error('send_assessment_deadline_reminders failed: %s', exc, exc_info=True)
         raise self.retry(exc=exc)

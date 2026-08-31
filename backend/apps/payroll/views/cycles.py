@@ -1107,15 +1107,36 @@ class MarkCyclePaidView(APIView):
         cycle.marked_paid_by = request.user
         cycle.save(update_fields=['status', 'paid_at', 'marked_paid_by', 'updated_at'])
 
+        payable_statuses = [
+            EmployeePayslip.STATUS_DRAFT,
+            EmployeePayslip.STATUS_SENT,
+            EmployeePayslip.STATUS_ACKNOWLEDGED,
+            EmployeePayslip.STATUS_RESOLVED,
+        ]
+        # Captured before the bulk .update() below, same reasoning as
+        # DispatchPayslipsView.post() — a queryset .update() fires no
+        # signal, and these rows won't match payable_statuses anymore once
+        # it's applied.
+        paid_payslips = list(
+            cycle.payslips.filter(status__in=payable_statuses).select_related('employee')
+        )
+
         # Mark all draft/sent/acknowledged payslips as paid
-        cycle.payslips.filter(
-            status__in=[
-                EmployeePayslip.STATUS_DRAFT,
-                EmployeePayslip.STATUS_SENT,
-                EmployeePayslip.STATUS_ACKNOWLEDGED,
-                EmployeePayslip.STATUS_RESOLVED,
-            ],
-        ).update(status=EmployeePayslip.STATUS_PAID, paid_at=now)
+        cycle.payslips.filter(status__in=payable_statuses).update(
+            status=EmployeePayslip.STATUS_PAID, paid_at=now,
+        )
+
+        from apps.notifications.signals import _notify, _send_lifecycle_email
+        for payslip in paid_payslips:
+            employee = payslip.employee
+            _notify(employee, 'Salary Credited',
+                    f'Your salary for {cycle.cycle_start.strftime("%B %Y")} has been credited.',
+                    'payslip_paid', 'payroll', str(payslip.id))
+            _send_lifecycle_email(employee, 'payslip_paid', {
+                'employee_name': employee.full_name or employee.email,
+                'cycle_month':   cycle.cycle_start.strftime('%B %Y'),
+                'net_pay':       f'{payslip.net_pay:.2f}',
+            })
 
         logger.info('Cycle %s marked as paid by %s', pk, request.user.email)
         AuditLog.objects.create(

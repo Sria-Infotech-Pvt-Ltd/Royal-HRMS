@@ -33,6 +33,9 @@ _MODULE_DEFAULT_CATEGORY = {
     'permission':     'attendance',
     'expense':        'expense',
     'separation':     'separation',
+    'payroll':        'payroll',
+    'documents':      'document',
+    'facial_recognition': 'attendance',
 }
 
 
@@ -129,12 +132,17 @@ def _company_name() -> str:
         return ''
 
 
-def _send_leave_email(user, template_name: str, context: dict) -> None:
+def _send_lifecycle_email(user, template_name: str, context: dict) -> None:
     """
-    Fire-and-forget leave lifecycle email, sent alongside the in-app
-    Notification above. Queued to Celery (via transaction.on_commit) rather
-    than sent inline — a failed/slow email must never break the leave save
-    transaction. Queuing failure is logged, not raised, for the same reason.
+    Fire-and-forget lifecycle email (leave, separation, expense, ... — any
+    event whose email should track its in-app Notification 1:1), sent
+    alongside the in-app Notification above. Queued to Celery (via
+    transaction.on_commit) rather than sent inline — a failed/slow email
+    must never break the triggering save's own transaction. Queuing
+    failure is logged, not raised, for the same reason. template_name must
+    already exist as an EmailTemplate row (see the relevant app's
+    seed_*_email_templates migration) — send_lifecycle_email_task logs and
+    swallows a missing/inactive template rather than raising into Celery.
     """
     if not user or not getattr(user, 'email', ''):
         return
@@ -151,7 +159,7 @@ def _send_leave_email(user, template_name: str, context: dict) -> None:
             )
         except Exception as exc:
             logger.error(
-                'Failed to queue leave email "%s" for user %s: %s',
+                'Failed to queue lifecycle email "%s" for user %s: %s',
                 tpl, user_id, exc, exc_info=True,
             )
 
@@ -184,7 +192,7 @@ def _on_leave_save(sender, instance, created, **kwargs):
         _notify(employee, 'Leave Request Submitted',
                 f'Your {label} request has been submitted successfully.',
                 'leave_applied', 'leave', ref_id, employee)
-        _send_leave_email(employee, 'leave_request_submitted', {
+        _send_lifecycle_email(employee, 'leave_request_submitted', {
             'employee_name': employee.full_name or employee.email,
             'leave_type':    label,
             'start_date':    start,
@@ -200,7 +208,7 @@ def _on_leave_save(sender, instance, created, **kwargs):
             _notify(approver, 'New Leave Request',
                     f'{employee.full_name} has submitted a {label} request from {start} to {end}.',
                     'leave_applied', 'leave', ref_id, employee, category='approval')
-            _send_leave_email(approver, 'leave_request_pending_approval', {
+            _send_lifecycle_email(approver, 'leave_request_pending_approval', {
                 'approver_name': approver.full_name or approver.email,
                 'employee_name': employee.full_name or employee.email,
                 'leave_type':    label,
@@ -226,7 +234,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         _notify(employee, 'Leave Forwarded to HR',
                 f'Your {label} request has been forwarded to HR for approval.',
                 'leave_manager_approved', 'leave', ref_id)
-        _send_leave_email(employee, 'leave_forwarded_to_hr', {
+        _send_lifecycle_email(employee, 'leave_forwarded_to_hr', {
             'employee_name': employee.full_name or employee.email,
             'approver_name': approver_name,
             'leave_type':    label,
@@ -237,7 +245,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
             _notify(instance.l2_approver, 'Leave Awaiting Approval',
                     f'Leave request of {employee.full_name} is awaiting your approval.',
                     'leave_manager_approved', 'leave', ref_id, category='approval')
-            _send_leave_email(instance.l2_approver, 'leave_request_pending_approval', {
+            _send_lifecycle_email(instance.l2_approver, 'leave_request_pending_approval', {
                 'approver_name': instance.l2_approver.full_name or instance.l2_approver.email,
                 'employee_name': employee.full_name or employee.email,
                 'leave_type':    label,
@@ -252,7 +260,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         _notify(employee, 'Leave Approved',
                 f'Your {label} request has been approved by {name}.',
                 'leave_manager_approved', 'leave', ref_id)
-        _send_leave_email(employee, 'leave_approved', {
+        _send_lifecycle_email(employee, 'leave_approved', {
             'employee_name': employee.full_name or employee.email,
             'leave_type':    label,
             'start_date':    start,
@@ -267,7 +275,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         _notify(employee, 'Leave Rejected',
                 f'Your {label} request has been rejected by {name} (Reporting Manager).',
                 'leave_manager_rejected', 'leave', ref_id)
-        _send_leave_email(employee, 'leave_rejected', {
+        _send_lifecycle_email(employee, 'leave_rejected', {
             'employee_name': employee.full_name or employee.email,
             'leave_type':    label,
             'start_date':    start,
@@ -282,7 +290,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         _notify(employee, 'Leave Approved',
                 f'Your {label} request has been approved by {name} (HR).',
                 'leave_hr_approved', 'leave', ref_id)
-        _send_leave_email(employee, 'leave_approved', {
+        _send_lifecycle_email(employee, 'leave_approved', {
             'employee_name': employee.full_name or employee.email,
             'leave_type':    label,
             'start_date':    start,
@@ -297,7 +305,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         _notify(employee, 'Leave Rejected',
                 f'Your {label} request has been rejected by {name} (HR).',
                 'leave_hr_rejected', 'leave', ref_id)
-        _send_leave_email(employee, 'leave_rejected', {
+        _send_lifecycle_email(employee, 'leave_rejected', {
             'employee_name': employee.full_name or employee.email,
             'leave_type':    label,
             'start_date':    start,
@@ -311,7 +319,7 @@ def _dispatch_leave_status(instance, employee, label, ref_id, old_st, new_st):
         _notify(employee, 'Leave Cancelled',
                 f'Your {label} request has been cancelled.',
                 'leave_cancelled', 'leave', ref_id)
-        _send_leave_email(employee, 'leave_cancelled', {
+        _send_lifecycle_email(employee, 'leave_cancelled', {
             'employee_name': employee.full_name or employee.email,
             'leave_type':    label,
             'start_date':    start,
@@ -337,16 +345,30 @@ def _capture_correction_status(sender, instance, **kwargs):
 def _on_correction_save(sender, instance, created, **kwargs):
     employee = instance.employee
     ref_id   = str(instance.id)
+    employee_name = employee.full_name or employee.email
+    corr_date = instance.date.strftime('%d %b %Y')
 
     if created:
         _notify(employee, 'Regularization Submitted',
                 'Your attendance regularization request has been submitted.',
                 'regularization', 'attendance', ref_id, employee)
+        _send_lifecycle_email(employee, 'regularization_submitted', {
+            'employee_name': employee_name,
+            'date':          corr_date,
+            'reason':        instance.get_reason_display(),
+        })
+
         hr = getattr(employee, 'hr', None)
         if hr:
             _notify(hr, 'Regularization Request Pending',
                     f'Attendance regularization request from {employee.full_name} is pending approval.',
                     'regularization', 'attendance', ref_id, category='approval')
+            _send_lifecycle_email(hr, 'regularization_pending_approval', {
+                'approver_name': hr.full_name or hr.email,
+                'employee_name': employee_name,
+                'date':          corr_date,
+                'reason':        instance.get_reason_display(),
+            })
         return
 
     old_status = getattr(instance, '_old_status', None)
@@ -357,10 +379,16 @@ def _on_correction_save(sender, instance, created, **kwargs):
         _notify(employee, 'Regularization Approved',
                 'Your attendance regularization request has been approved.',
                 'regularization', 'attendance', ref_id)
+        _send_lifecycle_email(employee, 'regularization_approved', {
+            'employee_name': employee_name, 'date': corr_date,
+        })
     elif instance.status == 'rejected':
         _notify(employee, 'Regularization Rejected',
                 'Your attendance regularization request has been rejected.',
                 'regularization', 'attendance', ref_id)
+        _send_lifecycle_email(employee, 'regularization_rejected', {
+            'employee_name': employee_name, 'date': corr_date,
+        })
 
 
 # ─── Announcements ─────────────────────────────────────────────────────────────
@@ -473,16 +501,33 @@ def _capture_expense_status(sender, instance, **kwargs):
 def _on_expense_save(sender, instance, created, **kwargs):
     employee = instance.employee
     ref_id   = str(instance.id)
+    employee_name = employee.full_name or employee.email
+    amount_str = f'{instance.amount:.2f}'
 
     if created:
         _notify(employee, 'Expense Submitted',
                 f'Your expense "{instance.title}" has been submitted for approval.',
                 'expense_submitted', 'expense', ref_id, employee)
+        _send_lifecycle_email(employee, 'expense_submitted', {
+            'employee_name': employee_name,
+            'title':         instance.title,
+            'category':      instance.get_category_display(),
+            'amount':        amount_str,
+            'expense_date':  instance.expense_date.strftime('%d %b %Y'),
+        })
+
         approver = _resolve_expense_approver(employee)
         if approver:
             _notify(approver, 'New Expense Pending Approval',
                     f'{employee.full_name} submitted an expense — "{instance.title}".',
                     'expense_submitted', 'expense', ref_id, employee, category='approval')
+            _send_lifecycle_email(approver, 'expense_pending_approval', {
+                'approver_name': approver.full_name or approver.email,
+                'employee_name': employee_name,
+                'title':         instance.title,
+                'category':      instance.get_category_display(),
+                'amount':        amount_str,
+            })
         return
 
     old_status = getattr(instance, '_old_status', None)
@@ -492,10 +537,16 @@ def _on_expense_save(sender, instance, created, **kwargs):
         _notify(employee, 'Expense Approved',
                 f'Your expense "{instance.title}" has been approved.',
                 'expense_status', 'expense', ref_id)
+        _send_lifecycle_email(employee, 'expense_approved', {
+            'employee_name': employee_name, 'title': instance.title, 'amount': amount_str,
+        })
     elif instance.status == 'rejected':
         _notify(employee, 'Expense Rejected',
                 f'Your expense "{instance.title}" has been rejected.',
                 'expense_status', 'expense', ref_id)
+        _send_lifecycle_email(employee, 'expense_rejected', {
+            'employee_name': employee_name, 'title': instance.title, 'amount': amount_str,
+        })
 
 
 # ─── Separation ─────────────────────────────────────────────────────────────────
@@ -541,36 +592,67 @@ def _notify_separation_created(sep_request_id) -> None:
     except SeparationRequest.DoesNotExist:
         return
     employee, ref_id = sep_request.employee, str(sep_request.id)
+    sep_type = sep_request.get_separation_type_display()
+    last_day = sep_request.proposed_last_working_day.strftime('%d %b %Y')
+
     _notify(employee, 'Separation Request Submitted',
             'Your separation request has been submitted successfully.',
             'separation_submitted', 'separation', ref_id, employee)
+    _send_lifecycle_email(employee, 'separation_request_submitted', {
+        'employee_name':              employee.full_name or employee.email,
+        'separation_type':            sep_type,
+        'proposed_last_working_day':  last_day,
+        'notice_period_days':         str(sep_request.notice_period_days),
+    })
+
     first_stage = sep_request.approval_stages.order_by('sequence').first()
     if first_stage and first_stage.approver:
         _notify(first_stage.approver, 'Separation Request Pending Your Approval',
                 f'{employee.full_name}’s separation request needs your approval.',
                 'separation_submitted', 'separation', ref_id, employee, category='approval')
+        _send_lifecycle_email(first_stage.approver, 'separation_pending_approval', {
+            'approver_name':              first_stage.approver.full_name or first_stage.approver.email,
+            'employee_name':              employee.full_name or employee.email,
+            'separation_type':            sep_type,
+            'proposed_last_working_day':  last_day,
+        })
 
 
 def _dispatch_separation_status(instance, employee, ref_id, new_status) -> None:
     from apps.hrms.models import APPROVAL_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_STAGE2_PENDING
 
+    employee_name = employee.full_name or employee.email
+
     if new_status == SEP_STAGE2_PENDING:
         _notify(employee, 'Separation Request — Stage Approved',
                 'Your separation request has moved to the next approval stage.',
                 'separation_status', 'separation', ref_id)
+        _send_lifecycle_email(employee, 'separation_stage_approved', {'employee_name': employee_name})
+
         next_stage = instance.approval_stages.filter(status=APPROVAL_PENDING).order_by('sequence').first()
         if next_stage and next_stage.approver:
             _notify(next_stage.approver, 'Separation Request Pending Your Approval',
                     f'{employee.full_name}’s separation request needs your approval.',
                     'separation_status', 'separation', ref_id, employee, category='approval')
+            _send_lifecycle_email(next_stage.approver, 'separation_pending_approval', {
+                'approver_name':              next_stage.approver.full_name or next_stage.approver.email,
+                'employee_name':              employee_name,
+                'separation_type':            instance.get_separation_type_display(),
+                'proposed_last_working_day':  instance.proposed_last_working_day.strftime('%d %b %Y'),
+            })
     elif new_status == SEP_APPROVED:
         _notify(employee, 'Separation Request Approved',
                 'Your separation request has been fully approved.',
                 'separation_status', 'separation', ref_id)
+        _send_lifecycle_email(employee, 'separation_approved', {
+            'employee_name':              employee_name,
+            'proposed_last_working_day':  instance.proposed_last_working_day.strftime('%d %b %Y'),
+        })
     elif new_status == SEP_REJECTED:
         _notify(employee, 'Separation Request Rejected',
                 'Your separation request has been rejected.',
                 'separation_status', 'separation', ref_id)
+        _send_lifecycle_email(employee, 'separation_rejected', {'employee_name': employee_name})
 
 
 # ─── Document Center ────────────────────────────────────────────────────────────

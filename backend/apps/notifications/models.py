@@ -24,6 +24,9 @@ NOTIFICATION_TYPE_CHOICES = [
     ('separation_status',      'Separation Status Update'),
     ('document_uploaded',      'Document Uploaded'),
     ('password_reset',         'Password Reset'),
+    ('face_registration_status', 'Face ID Registration Status'),
+    ('payslip_dispatched',     'Payslip Dispatched'),
+    ('payslip_paid',           'Payslip Paid'),
 ]
 
 MODULE_CHOICES = [
@@ -39,6 +42,8 @@ MODULE_CHOICES = [
     ('expense',        'Expense'),
     ('separation',     'Separation'),
     ('documents',      'Documents'),
+    ('facial_recognition', 'Facial Recognition'),
+    ('payroll',        'Payroll'),
 ]
 
 
