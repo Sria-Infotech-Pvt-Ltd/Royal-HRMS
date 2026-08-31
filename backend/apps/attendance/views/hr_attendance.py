@@ -819,6 +819,8 @@ class HREmployeeMonthView(APIView):
 
         if not employee:
             return error('Employee not found.', http_status=404)
+        if not _manager_can_access_employee(request.user, employee):
+            return error('Permission denied.', http_status=403)
 
         month_start = datetime.date(year, mon, 1)
         month_end   = datetime.date(year, mon, _calendar.monthrange(year, mon)[1])
@@ -1009,5 +1011,14 @@ class WeeklyOffAssignmentHistoryView(APIView):
     def get(self, request, employee_id: str):
         if not _has_perm(request.user, 'attendance.view'):
             return error('Permission denied.', http_status=403)
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        employee = User.objects.filter(employee_id=employee_id, is_active=True).first()
+        if not employee:
+            return error('Employee not found.', http_status=404)
+        if not _manager_can_access_employee(request.user, employee):
+            return error('Permission denied.', http_status=403)
+
         history = get_weekly_off_assignment_history(employee_id)
         return success('Weekly off assignment history retrieved.', {'employee_id': employee_id, 'history': history})

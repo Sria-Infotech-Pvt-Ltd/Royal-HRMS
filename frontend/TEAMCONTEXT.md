@@ -4879,3 +4879,75 @@ Because of assumption 2, the earlier fix deliberately hid the legacy names behin
 - **This is the second incorrect fix to this exact `STORAGES` block** — the original (this session, 21 August) kept both settings as real values and broke on the exact `ImproperlyConfigured` this entry's investigation found doesn't actually happen; the team's follow-up "corrected" it by hiding the legacy names entirely, which then broke `collectstatic` in production the way this entry describes. Both prior fixes were based on assumptions about Django 5.1's behavior that were never verified against the actual installed source. This one was verified by grepping the installed `django/` package directly rather than trusting either prior comment.
 - **The real, longer-term fix is upgrading `django-cloudinary-storage`** to a version (if one exists) that reads `settings.STORAGES` instead of the removed `settings.STATICFILES_STORAGE` — not checked in this pass. This entry's fix is a compatibility shim, not a fix to the third-party package itself.
 - **Not yet deployed to the production server** — this was found and fixed in the repo; the server that hit this error still needs `git pull` + a restart of whatever serves the app (see the deploy process) to pick it up.
+
+---
+
+# Team Context — Full-Application Audit: Permission Gaps + Hardcoded Values
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+A requested full-application review: three parallel audits (email notification coverage, hardcoded values, permission architecture — the latter split across 4 sub-audits covering payroll, accounts+tenants, attendance+hrms, and recruitment/branch/misc) covering ~230 backend views and the whole application for hardcoded company/amount values. ~32 findings total. Per direction, fixed security/correctness first (21 fixes across 11 files) in one round, then the 3 hardcoded-value findings (16 files) in a second round after confirming risk/scope. Email notification gaps (7 found — most notably: separation lifecycle sends zero emails at any stage, payslip dispatch/payment never emails the employee, Face ID registration approve/reject is completely silent) remain unaddressed, queued for a future round.
+
+---
+
+## 1. Permission/Correctness Fixes (21 fixes, 11 files)
+
+**Real bugs (2):** `apps/hrms/views/separation.py` and `apps/announcements/views.py`'s `CanPostAnnouncement` both checked the role-null guard *before* the superuser bypass — a superuser account with no linked Role row was incorrectly denied. Fixed `separation.py` by deleting its local `_has_perm` reimplementation entirely and importing the canonical `core.permissions.has_perm` instead (propagates automatically to `separation_workflow.py`, which imports `_has_perm` from this module — 12 views fixed via one change). Fixed `announcements.py` by removing a redundant, wrongly-ordered `if not request.user.role` guard that ran before its own (already-correct) `_has_perm` call.
+
+**Real access-control bypass (1):** `apps/payroll/views/ecr.py`'s `_get_authorized_cycle()` — shared by every ESIC/ECR statutory download (Aadhaar/UAN/ESI numbers) — treated "no branch assigned" as "must be a global admin," silently letting a branch-less `payroll.view`/`payroll.edit` holder download any branch's file. Fixed by reusing `cycles.py`'s existing `_is_admin()` (superuser or `settings.edit`) instead of the branch-null heuristic — the actual pattern already used everywhere else in payroll.
+
+**Branch/manager-scope bypasses (5, across `attendance/views/hr_attendance.py` and `recruitment/views.py`):** an employee's monthly attendance calendar and weekly-off history could be pulled by ID with no manager-scope check (sibling endpoints in the same files already had one); candidate hire/reject decisions and portal-credential send/resend had no `_can_access_candidate` branch check, unlike every other candidate-mutating endpoint. All four fixed by adding the same guard already used by their siblings.
+
+**Under-permissioned reads (13 views, 6 files):** `SalaryStructureListView`/`DetailView`, `SalaryComponentListView` (structures.py); `StatutoryConfigListView`/`DetailView`/`ByStateView` (statutory.py); `BranchPayrollConfigListView`/`DetailView`/`ByBranchView` (branch_config.py); `PayrollSettingsView.get` (settings.py); `EmailTemplateListCreateView.get`, `DocumentListCreateView.get`, `DocumentDetailView.get` (metadata path only — the signed-token download path is intentionally unauthenticated by a different mechanism), `DocumentStatsView.get` (accounts/views.py) — all readable by any authenticated user while their own write methods were correctly gated. Each fixed with the matching `.view` codename (`payroll.view`, `settings.view`, `documents.view`), verified against real seeded role grants and actual frontend consumers first so no legitimate flow broke.
+
+**Permission-codename mismatches (2):** `ReferralRuleListCreateView.post`/`ReferralRuleDetailView.patch`/`.delete` (recruitment/views.py) required `settings.view` (read) for a *write* action — fixed to `settings.edit`. `BirthdaySettingsView.patch` (hrms/views/birthdays.py) required `employees.view` (read) for an org-wide settings mutation — fixed to `settings.edit`.
+
+**Bonus fix bundled in:** `ReferralRuleListCreateView.get` also had zero permission check at all (not just the wrong write codename) and returned an unpaginated full list — added the `settings.view` check and wrapped in `paginate()`/`paginated_data()` with `default_page_size=100` (the settings page renders the whole list at once, no pagination UI of its own — a deliberately generous cap, not the standard 20).
+
+**Deliberately deferred (not fixed):**
+- `ReferralBonusApproveView`/`ReferralBonusPayView` both gate on the identical `recruitment.edit` codename — no separation between approving and paying out a bonus. A process/business-control decision, not a clear bug; flagged rather than decided unilaterally.
+- Pagination on `LeaveCalendarView`/`PayslipQueryListView` — both currently return a bare array the frontend (`TeamCalendar.tsx`) already expects unwrapped; switching to the standard paginated envelope would need a matching frontend change and risks breaking a working calendar UI, for a low-severity, non-security finding.
+
+Verification note: the local test database hit the same pre-existing `relation "hrms_roles" does not exist` setup failure documented earlier this session (unrelated to these changes — fails in every test's `setUp()` before any modified code runs). Verified instead via `manage.py check`, import-checking all 11 touched modules, and direct logic-level tests confirming both bug fixes (superuser-with-no-Role now passes; a branchless non-admin is now correctly denied) — plus cross-checking every new permission codename against real seeded role grants and actual frontend route/consumer usage in `tenant_qatest` before applying, so nothing currently working gets locked out.
+
+## 2. Hardcoded-Value Fixes (3 fixes, 16 files)
+
+**`apps/accounts/views.py`** — the new-employee welcome email's subject and body hardcoded "Royal HRMS" even though the tenant's actual `company_name` was already fetched two lines above (and correctly used elsewhere in the same email, e.g. the wrapper template) — just never plugged into the subject/body text itself. Now uses `company_name` in both.
+
+**ESI daily-wage exemption threshold** — `apps/payroll/views/cycles.py`'s ESI calculation had a bare `Decimal('176')`, while every sibling ESI parameter in the same function (wage ceiling, employee/employer rates) is a real `StatutoryConfig` field. Added `StatutoryConfig.esi_daily_wage_exemption_threshold` (migration `0017`, default 176.00 — preserves every existing row's current behavior exactly), added it to `StatutoryConfigSerializer`'s explicit field list, updated the view to read from it, and added an actual input field to the Statutory Config settings screen (`StatutoryConfigTab.tsx`) plus the `StatutoryConfig` TypeScript interface — genuinely admin-editable now, not just relocated into a DB default nobody can see.
+
+**"26 working days/month"** — duplicated as a bare literal in `_compute_employee_payslip`'s own default parameter and again at its sole call site's fallback. Added `PayrollSettings.default_working_days_per_month` (same migration `0017`, default 26). Resolved once per payroll run in `_run_payroll_processing` and passed through explicitly; `_compute_employee_payslip` no longer has its own hidden default for this parameter at all (now a required argument) — one source of truth instead of two literals that could drift apart.
+
+Verified: `manage.py check` clean, `makemigrations --check` clean, migration applied to `tenant_qatest` with the new fields confirmed present and correctly defaulted, the changed function signature confirmed safe (its one caller already used keyword arguments), and a full frontend `tsc --noEmit` — zero TypeScript errors.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/separation.py` | Removed buggy local `_has_perm`; imports `core.permissions.has_perm` |
+| `backend/apps/announcements/views.py` | Removed redundant/misordered role-null guard in `CanPostAnnouncement` |
+| `backend/apps/payroll/views/ecr.py` | `_get_authorized_cycle` now uses `_is_admin()` instead of a branch-null heuristic |
+| `backend/apps/attendance/views/hr_attendance.py` | Added manager-scope checks to `HREmployeeMonthView`, `WeeklyOffAssignmentHistoryView` |
+| `backend/apps/recruitment/views.py` | Added `_can_access_candidate` checks; `ReferralRuleListCreateView`/`Detail` permission + codename + pagination fixes |
+| `backend/apps/payroll/views/{structures,statutory,branch_config,settings}.py` | Added `payroll.view` checks to previously-open GET endpoints |
+| `backend/apps/accounts/views.py` | Added `settings.view`/`documents.view` checks; welcome email now uses `company_name` |
+| `backend/apps/hrms/views/birthdays.py` | `BirthdaySettingsView.patch` now requires `settings.edit`, not `employees.view` |
+| `backend/apps/payroll/models.py`, `serializers.py`, `views/cycles.py`, `migrations/0017_...py` (new) | New `StatutoryConfig.esi_daily_wage_exemption_threshold`, `PayrollSettings.default_working_days_per_month` fields |
+| `frontend/app/dashboard/settings/payroll-config/_components/StatutoryConfigTab.tsx`, `frontend/types/payroll.ts` | New editable field for the ESI exemption threshold |
+
+---
+
+## Notes for Next Developer
+
+- **Email notification gaps are still open** — separation (zero emails at any stage), payslip dispatch/payment (employee never notified), expense approve/reject (no automatic email), Face ID registration approve/reject (completely silent, no email or in-app notification), attendance regularization (no email), password reset (no confirmation email), and assessment deadline reminders (feature doesn't exist). Full findings were reported to the user; not yet actioned.
+- **The dual-control gap on referral bonus approve/pay is a real process question, not a bug** — currently one `recruitment.edit` holder can both approve and pay a bonus. Needs a business decision (a new `recruitment.pay`-style codename + role grants) before implementing, not something to decide unilaterally.
+- **`LeaveCalendarView`/`PayslipQueryListView` still return unpaginated results** — both are naturally bounded in practice (one month/year of events; open queries only) and changing their response shape requires a coordinated frontend change. Deferred rather than risking a working calendar UI for a low-severity finding.
+- **`apps/accounts/views.py` (6,600+ lines) and `apps/recruitment/views.py` (2,200+ lines) are both far past the CLAUDE.md 300-line file-per-view-domain limit** — not touched in this pass, but noted by one of the audit sub-agents as making future permission audits of these files harder than they should be.
