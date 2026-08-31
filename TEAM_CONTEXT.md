@@ -3579,3 +3579,21 @@ If Hindi STT accuracy needs to improve beyond today's known-limitation state, th
 ### Also fixed along the way — unrelated schema drift blocking login
 
 `django.db.utils.ProgrammingError: column tenants_client.custom_domain does not exist` — migration `0005_client_custom_domain` was recorded as applied in Django's migration history, but the actual `ADD COLUMN` never took effect against the real Neon dev DB (confirmed: a *later* migration's column, `pending_admin_password` from `0007`, was present; `0005`'s was not — genuine drift, not a missing `migrate` run). Fixed directly against the live DB with an idempotent `ALTER TABLE tenants_client ADD COLUMN IF NOT EXISTS custom_domain varchar(255) NOT NULL DEFAULT ''` matching exactly what the migration would have done. No code/migration file change needed — reality now matches what the migration history already claimed. Already applied; nothing to commit for this one.
+
+---
+
+## Session Log — 2026-08-31
+**Author: Durga Prasad**
+
+### Bug Fixes Shipped
+
+**1. Org Chart — Structure tree broken on mobile**
+
+Reported via a screenshot: the position row for "Marketing Head" showed the title overlapping the chief star and the Vacant badge, and the tree/detail layout didn't reflow at phone width. Two separate root causes, not one:
+- `OrgStructureClient.tsx`'s tree/detail split used a hardcoded inline `gridTemplateColumns: "360px 1fr"` with an `org-split` className that had zero matching CSS anywhere in `globals.css` — so the fixed 360px sidebar never collapsed on narrow viewports.
+- `OrgTree.tsx`'s `.orgnode-name` had `text-overflow: ellipsis` but no `min-width: 0` on the flex item — a standard flexbox gap that stops truncation from ever engaging, so long position titles pushed into (and got clipped behind) the chief crown icon and Vacant badge instead of truncating.
+
+Fixed: added `flex: 1 1 auto; min-width: 0;` to `.orgnode-name`; tagged the tree's scroll box with a new `org-tree-scroll` class; added an `@media (max-width: 768px)` rule in `globals.css` that collapses `.org-split` to one column and shortens `.org-tree-scroll`'s max-height, using `!important` to override the inline style (same pattern already used by `.filter-scroll` in the same file).
+
+Verified in headless Chrome against a CSS/markup reproduction of the exact rules (no login credentials available — the demo-user seed was intentionally removed in `0073_remove_seeded_demo_users.py`) at 375px and 1280px: the two-column desktop layout is unchanged, the tree stacks full-width above the detail panel on mobile, and a long title ("Senior Regional Sales & Partnerships Manager") now truncates cleanly instead of overlapping the badge.
+- Files: `frontend/app/dashboard/org-chart/_components/OrgTree.tsx`, `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx`, `frontend/app/globals.css`.

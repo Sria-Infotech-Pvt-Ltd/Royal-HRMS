@@ -2510,6 +2510,15 @@ body.dark-mode {
   .module-grid {
     grid-template-columns: 1fr 1fr;
   }
+
+  /* Org chart — structure tree stacks above the detail panel on mobile */
+  .org-split {
+    grid-template-columns: 1fr !important;
+  }
+
+  .org-tree-scroll {
+    max-height: 360px !important;
+  }
 }
 
 @media (max-width: 480px) {

@@ -209,7 +209,7 @@ export default function OrgStructureClient() {
                 {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
               </select>
             </div>
-            <div style={{ maxHeight: 640, overflow: "auto" }}>
+            <div className="org-tree-scroll" style={{ maxHeight: 640, overflow: "auto" }}>
               <OrgTree
                 units={units} positions={positions} search={search}
                 branchFilter={branchFilter ? Number(branchFilter) : null}

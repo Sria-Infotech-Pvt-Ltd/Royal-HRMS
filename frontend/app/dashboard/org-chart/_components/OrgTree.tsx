@@ -146,7 +146,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
         .orgnode-sel .orgnode-name { color: var(--primary); font-weight: 600; }
         .orgnode-caret { width:15px; height:15px; flex-shrink:0; font-size:13px; color: var(--outline); }
         .orgnode-glyph { width:21px; height:21px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:750; }
-        .orgnode-name { font-size:13px; font-weight:520; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .orgnode-name { flex: 1 1 auto; min-width: 0; font-size:13px; font-weight:520; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
       `}</style>
       {rendered.length > 0
         ? rendered
