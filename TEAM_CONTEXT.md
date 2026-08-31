@@ -3597,3 +3597,10 @@ Fixed: added `flex: 1 1 auto; min-width: 0;` to `.orgnode-name`; tagged the tree
 
 Verified in headless Chrome against a CSS/markup reproduction of the exact rules (no login credentials available — the demo-user seed was intentionally removed in `0073_remove_seeded_demo_users.py`) at 375px and 1280px: the two-column desktop layout is unchanged, the tree stacks full-width above the detail panel on mobile, and a long title ("Senior Regional Sales & Partnerships Manager") now truncates cleanly instead of overlapping the badge.
 - Files: `frontend/app/dashboard/org-chart/_components/OrgTree.tsx`, `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx`, `frontend/app/globals.css`.
+
+**2. Org Chart — legend swatches didn't match the actual tree glyphs**
+
+Follow-up catch after the fix above: the legend row at the bottom of the Structure card (`Org unit` / `Position` / `Employee` / `Chief` / `Vacant` key) used a plain `ti-square-rounded` icon with no letter inside for the first three, while the real tree nodes show a colored glyph box with `O` (org unit), `S` (position), or the holder's initials. The legend didn't visually key to what the tree actually shows.
+
+Fixed: the three swatches now reuse the same `.orgnode-glyph` styling as the real nodes, with the letters `O`/`S`/`P` (the `P` matching the "Employee" code used in the org-structure change-spec doc, since a legend needs one representative letter, not real initials). Wrapped each swatch+label pair in `display:inline-flex` so the glyph box sits inline with its text instead of blockifying onto its own line.
+- Files: `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx`.

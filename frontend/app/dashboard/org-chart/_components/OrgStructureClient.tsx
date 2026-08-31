@@ -218,9 +218,9 @@ export default function OrgStructureClient() {
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "10px 16px", borderTop: "1px solid var(--outline-v)", background: "var(--bg-low)", fontSize: 11, color: "var(--on-variant)" }}>
-            <span><i className="ti ti-square-rounded" style={{ color: "var(--primary)" }} /> Org unit</span>
-            <span><i className="ti ti-square-rounded" style={{ color: "var(--info)" }} /> Position</span>
-            <span><i className="ti ti-square-rounded" style={{ color: "var(--success)" }} /> Employee</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(30,78,140,0.12))", color: "var(--primary)" }}>O</span> Org unit</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span> Position</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>P</span> Employee</span>
             <span><i className="ti ti-crown" style={{ color: "var(--warn)" }} /> Chief</span>
             <span className="badge badge-warn">Vacant</span>
           </div>
