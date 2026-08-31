@@ -765,12 +765,15 @@ class ResetPasswordView(APIView):
             ip_address=get_client_ip(request),
         )
         try:
-            from apps.notifications.signals import _notify
+            from apps.notifications.signals import _notify, _send_lifecycle_email
             _notify(
                 user, 'Password Reset',
                 'Your password was just reset. If you did not do this, contact HR immediately.',
                 'password_reset', 'security', str(user.id), category='system',
             )
+            _send_lifecycle_email(user, 'password_reset_confirmation', {
+                'employee_name': user.full_name or user.email,
+            })
         except Exception:
             logger.exception('Failed to send password-reset notification for %s', user.email)
         logger.info('Password reset for %s', user.email)

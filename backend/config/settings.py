@@ -399,6 +399,13 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.payroll.tasks.send_payroll_approval_reminders',
         'schedule': crontab(hour=10, minute=0),
     },
+    # Runs daily at 08:00 IST — one-time reminder email for an assessment
+    # assignment whose deadline is within the next 24 hours and hasn't
+    # already been reminded (see REMINDER_WINDOW_HOURS in tasks.py).
+    'send-assessment-deadline-reminders': {
+        'task':     'apps.assessments.tasks.send_assessment_deadline_reminders',
+        'schedule': crontab(hour=8, minute=0),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────
