@@ -5149,3 +5149,27 @@ Verified: `manage.py check` clean, migration applied (via the fake-apply reconci
 
 - **Another session may be concurrently working on this same repo and Neon database** — the stale migration record found in item 2 is the concrete evidence. Worth being aware of when diagnosing anything that looks like it "already happened" without a corresponding commit in this branch's own history — check `django_migrations.applied` timestamps against actual conversation/commit history before assuming a bug, the way this entry's investigation did.
 - **`ai` branch (`6e50210`) is now fully incorporated** — nothing outstanding from it as of this entry.
+
+---
+
+# Team Context — Sarvam Voice Features Down (Account Credits), QATEST Dummy Data Removed
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## 1. Voice Commands (Chat, STT, TTS) All Failing — Sarvam Account Out of Credits
+
+**No code change** — a live-environment finding, documented so nobody re-investigates it as a bug.
+
+Dev-server logs showed `/api/voice/speak/` returning 502, with `apps.voice_commands.sarvam_client` logging `402 Client Error: Payment Required` for every Sarvam call. Traced through `sarvam_client.py`'s `text_to_speech()`: 402 isn't one of the specially-handled statuses (403/400/422/429/500/503), so it falls through to a generic `SarvamTTSServiceError`, which `views_speak.py` maps to `502 Bad Gateway` — exactly the "Sarvam returned HTTP 402" the frontend console showed.
+
+The real cause, confirmed directly from Sarvam's own response body in the logs: `{"error":{"message":"No credits available.","code":"insufficient_quota_error"}}`. Not TTS-specific — chat completions (intent classification) and speech-to-text were failing with the identical `insufficient_quota_error` in the same log window, confirming it's account-wide, not one endpoint. Re-ran a live check directly against `sarvam_client.chat_completion()`/`text_to_speech()` from a `manage.py shell` — still failing as of 17:32, so this had not been topped up yet.
+
+**No action needed in code.** This is a Sarvam account billing state — needs a credits top-up on the Sarvam dashboard. Every layer of this feature already degrades gracefully per its original fail-soft design (chat/STT return `None`/no-match, TTS silently stays unavailable) — nothing else in the app is affected while credits are down.
+
+## 2. QATEST Dummy Data Removed
+
+The light sample of `[DEMODATA]`-tagged test data added earlier this session to `tenant_qatest` (2 announcements, 4 leave requests, 4 expenses, 3 candidates, 1 separation request, 18 attendance punches / 10 records for emp1/emp2/mgr1, plus department/designation/birthday fields on 4 accounts) was deleted on request and verified clean — zero `[DEMODATA]`-tagged rows remain, and the touched fields were reverted to blank/`None`. The 7 real QATEST accounts, branches, and roles were untouched throughout.
