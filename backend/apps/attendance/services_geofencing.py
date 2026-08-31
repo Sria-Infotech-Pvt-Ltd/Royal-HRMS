@@ -69,6 +69,13 @@ class GeofenceResult:
     calculated_distance:  Optional[float]
     branch:               object          # Branch model instance or None
     rejection_message:    Optional[str]
+    # Only ever populated by _validate_wfh (None for every other mode's
+    # validator) — carries the WorkFromHomeRequest.approved_for() lookup it
+    # already had to make, so PunchService.record_punch() can pass it into
+    # AttendanceProcessorService.process_day() and skip that exact same
+    # query running a second time for the same employee/date. See
+    # process_day()'s own wfh_request parameter for the other half of this.
+    wfh_request:          object = None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -132,15 +139,15 @@ def _resolve_all_allowed_branches(employee) -> list:
     """
     from apps.branch.models import Branch, EmployeeBranchAccess
 
-    access_qs = (
+    access_rows = list(
         EmployeeBranchAccess.objects
         .filter(employee=employee)
         .select_related('branch')
     )
 
-    if access_qs.exists():
+    if access_rows:
         return [
-            r.branch for r in access_qs
+            r.branch for r in access_rows
             if r.branch.status == Branch.STATUS_ACTIVE
         ]
 
@@ -351,6 +358,7 @@ def _validate_wfh(
             is_allowed=False, is_inside_geofence=False,
             calculated_distance=None, branch=None,
             rejection_message=WFH_NO_APPROVED_REQUEST_MESSAGE,
+            wfh_request=None,
         )
 
     if employee_lat is None or employee_lon is None:
@@ -358,6 +366,7 @@ def _validate_wfh(
             is_allowed=False, is_inside_geofence=False,
             calculated_distance=None, branch=None,
             rejection_message=GPS_REQUIRED_MESSAGE,
+            wfh_request=wfh_request,
         )
 
     tolerance_m = min(employee_accuracy, _MAX_ACCURACY_TOLERANCE_M) if employee_accuracy else 0
@@ -372,6 +381,7 @@ def _validate_wfh(
         return GeofenceResult(
             is_allowed=True, is_inside_geofence=True,
             calculated_distance=round(distance_m, 2), branch=None, rejection_message=None,
+            wfh_request=wfh_request,
         )
 
     logger.warning(
@@ -388,6 +398,7 @@ def _validate_wfh(
         rejection_message=(
             'You are outside your declared work-from-home location. Punch In is not permitted.'
         ),
+        wfh_request=wfh_request,
     )
 
 

@@ -183,7 +183,16 @@ class PunchService:
                 face_match_distance=face.distance,
             )
 
-        record = AttendanceProcessorService.process_day(employee, today)
+        # WFH-mode punches already resolved WorkFromHomeRequest.approved_for()
+        # once above (via GeofencingService._validate_wfh) — passed straight
+        # through so process_day() doesn't run that same query again for the
+        # same employee/date. Every other mode leaves this unset and
+        # process_day() resolves it itself, unchanged.
+        process_day_kwargs = {}
+        if mode == AttendancePunch.MODE_WFH:
+            process_day_kwargs['wfh_request'] = geo.wfh_request
+
+        record = AttendanceProcessorService.process_day(employee, today, **process_day_kwargs)
         _write_punch_audit(punch, record, employee, today)
         logger.info(
             'Punch %s: employee=%s mode=%s geofence=%s distance=%sm',
@@ -293,8 +302,15 @@ class AttendanceProcessorService:
     process_day() directly from a management command.
     """
 
+    # Sentinel distinct from a real "no approved request" answer (None) —
+    # lets process_day() tell "caller didn't resolve this" (run the query)
+    # apart from "caller already resolved it, and it's None" (skip the
+    # query). See PunchService.record_punch()'s wfh_request_kwargs for the
+    # one caller that passes an already-resolved value.
+    _WFH_REQUEST_NOT_RESOLVED = object()
+
     @classmethod
-    def process_day(cls, employee, for_date: date) -> AttendanceRecord:
+    def process_day(cls, employee, for_date: date, wfh_request=_WFH_REQUEST_NOT_RESOLVED) -> AttendanceRecord:
         """Build or update the AttendanceRecord for this employee on this date."""
         cfg         = _get_settings()
         branch_name = getattr(employee, 'branch', '') or ''
@@ -335,11 +351,11 @@ class AttendanceProcessorService:
         # "present" and "wfh" at once — so it's derived here on every
         # (re)build of the record, not just set once at leave-style approval
         # time, the same lookup punch-time geofence validation uses.
-        from apps.hrms.models import WorkFromHomeRequest
+        if wfh_request is cls._WFH_REQUEST_NOT_RESOLVED:
+            from apps.hrms.models import WorkFromHomeRequest
+            wfh_request = WorkFromHomeRequest.approved_for(employee, for_date)
         record_data['work_mode'] = (
-            AttendanceRecord.WORK_MODE_WFH
-            if WorkFromHomeRequest.approved_for(employee, for_date)
-            else AttendanceRecord.WORK_MODE_OFFICE
+            AttendanceRecord.WORK_MODE_WFH if wfh_request else AttendanceRecord.WORK_MODE_OFFICE
         )
 
         record, _ = AttendanceRecord.objects.update_or_create(
@@ -351,15 +367,14 @@ class AttendanceProcessorService:
 
     @staticmethod
     def _is_holiday(for_date: date, branch_name: str = '') -> bool:
-        """Return True if for_date is an active holiday for this branch."""
-        from apps.hrms.models import Holiday
-        from django.db.models import Q
-        qs = Holiday.objects.filter(date=for_date, is_active=True)
-        if branch_name:
-            qs = qs.filter(Q(branch__isnull=True) | Q(branch__branch_name=branch_name))
-        else:
-            qs = qs.filter(branch__isnull=True)
-        return qs.exists()
+        """Return True if for_date is an active holiday for this branch.
+
+        Routed through HolidayCacheService (same cache _holiday_name already
+        uses right below) instead of querying Holiday directly — this method
+        runs on every punch, and was the one direct DB round-trip left in
+        this class for an otherwise rarely-changing table."""
+        from core.cache_service import HolidayCacheService
+        return for_date in HolidayCacheService.get_holiday_dates(for_date, for_date, branch_name)
 
     @staticmethod
     def _holiday_name(for_date: date, branch_name: str = '') -> str:

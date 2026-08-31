@@ -1925,6 +1925,13 @@ class FaceVerificationAttempt(models.Model):
             models.Index(fields=['employee', 'created_at'], name='fva_emp_time_idx'),
             models.Index(fields=['employee', 'is_match', 'created_at'], name='fva_emp_match_time_idx'),
             models.Index(fields=['embedding_fingerprint', 'created_at'], name='fva_fingerprint_time_idx'),
+            # FaceAntiSpoofingGuard.check_replay filters by employee +
+            # embedding_fingerprint together (then created_at range) — no
+            # index above leads with both, only one or the other.
+            models.Index(
+                fields=['employee', 'embedding_fingerprint', 'created_at'],
+                name='fva_emp_fingerprint_time_idx',
+            ),
         ]
 
     def __str__(self) -> str:
