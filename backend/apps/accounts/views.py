@@ -1942,6 +1942,10 @@ class EmailTemplateListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('You do not have permission to view email templates.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         qs = (
             EmailTemplate.objects
             .select_related('updated_by')
@@ -2373,6 +2377,10 @@ class DocumentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         qs = (
             Document.objects
             .select_related('uploaded_by', 'branch')
@@ -2534,7 +2542,13 @@ class DocumentDetailView(APIView):
     def get(self, request, pk: int):
         token = request.query_params.get('t', '').strip()
         if token:
+            # Signed-token download — authenticated by the token itself
+            # (get_permissions() above bypasses IsAuthenticated for this
+            # exact case), not by the caller's own permission grants.
             return self._stream_file(pk, token)
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         doc = self._get_doc(pk)
         if not doc:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -2670,6 +2684,10 @@ class DocumentStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         rows = (
             Document.objects
             .filter(is_active=True)
@@ -3193,7 +3211,7 @@ class EmployeeListCreateView(APIView):
 
             body = (
                 f'<p>Hi <strong>{full_name}</strong>,</p>'
-                f'<p>Your Royal HRMS account has been created.'
+                f'<p>Your {company_name} account has been created.'
                 f' Use the credentials below to log in:</p>'
                 f'<p>'
                 f'{company_code_line}'
@@ -3208,7 +3226,7 @@ class EmployeeListCreateView(APIView):
 
             connection, from_email = _get_smtp_connection()
             msg = _build_message(
-                subject='Welcome to Royal HRMS — Your Login Credentials',
+                subject=f'Welcome to {company_name} — Your Login Credentials',
                 html_body=html_body,
                 from_email=from_email,
                 to=[email],

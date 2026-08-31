@@ -836,6 +836,8 @@ class CandidateHRDecisionView(APIView):
             candidate = Candidate.objects.get(pk=pk, status=Candidate.STATUS_SELECTED)
         except Candidate.DoesNotExist:
             return error('Candidate not found or not selected.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         decision = request.data.get('decision')
         if decision not in {'approve', 'reject'}:
@@ -1356,6 +1358,8 @@ class SendPortalLoginView(APIView):
             candidate = Candidate.objects.select_for_update().get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if candidate.status not in (
             Candidate.STATUS_SELECTED,
@@ -1494,6 +1498,8 @@ class ResendPortalLoginView(APIView):
             candidate = Candidate.objects.select_for_update().get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if not candidate.portal_credentials_sent or not candidate.portal_user_id:
             return error(
@@ -1695,11 +1701,22 @@ class ReferralRuleListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rules = ReferralRule.objects.all()
-        return success('Rules fetched.', {'results': ReferralRuleSerializer(rules, many=True).data})
+        # default_page_size=100: the settings page renders this whole list
+        # at once (order-ranked bonus tiers, not a growing transactional
+        # table) with no pagination UI of its own — a bounded set, so this
+        # keeps that page's existing "show everything" behavior intact
+        # while still capping the endpoint like every other list view.
+        page_obj, paginator = paginate(rules, request, default_page_size=100)
+        return success(
+            'Rules fetched.',
+            paginated_data(paginator, page_obj, ReferralRuleSerializer(page_obj.object_list, many=True).data),
+        )
 
     def post(self, request):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         serializer = ReferralRuleSerializer(data=request.data)
         if not serializer.is_valid():
@@ -1720,7 +1737,7 @@ class ReferralRuleDetailView(APIView):
             return None
 
     def patch(self, request, pk):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:
@@ -1733,7 +1750,7 @@ class ReferralRuleDetailView(APIView):
         return success('Rule updated.', ReferralRuleSerializer(rule).data)
 
     def delete(self, request, pk):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:

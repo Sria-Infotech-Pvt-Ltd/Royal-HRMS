@@ -82,6 +82,7 @@ class StatutoryConfigSerializer(serializers.ModelSerializer):
             'esi_wage_ceiling',
             'esi_employee_rate',
             'esi_employer_rate',
+            'esi_daily_wage_exemption_threshold',
             'lwf_applicable',
             'lwf_employee_amount',
             'lwf_employer_amount',

@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from core.responses import error
 from core.permissions import has_perm as _has_perm
 from apps.payroll.models import PayrollCycle, EmployeePayslip, PayrollSettings, BranchPayrollConfig
+from apps.payroll.views.cycles import _is_admin
 from apps.branch.models import Branch
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,16 @@ def _get_authorized_cycle(request, cycle_pk, resource_label: str = 'ECR file'):
     except PayrollCycle.DoesNotExist:
         return None, error('Payroll cycle not found.', http_status=404)
 
-    # Branch-scoped access: a non-superuser can only download for their own branch.
-    # Users with no branch assigned (global admins) may access any cycle.
-    if not getattr(request.user, 'is_superuser', False):
+    # Branch-scoped access: a non-admin can only download for their own
+    # branch. _is_admin (superuser or settings.edit) is the actual "global
+    # admin" signal used everywhere else in payroll (see cycles.py) — a
+    # payroll.view/edit holder who simply has no branch assigned is NOT
+    # necessarily an admin, and the previous version of this check silently
+    # let such a user through to every branch's cycle once user_branch_id
+    # was None, since `user_branch_id and ...` short-circuited to False.
+    if not _is_admin(request.user):
         user_branch_id = getattr(request.user, 'branch_id', None)
-        if cycle.branch_id and user_branch_id and cycle.branch_id != user_branch_id:
+        if cycle.branch_id != user_branch_id:
             return None, error('You do not have access to this payroll cycle.', http_status=403)
 
     if cycle.status not in ('payslips_generated', 'query_window_open', 'paid', 'closed'):
