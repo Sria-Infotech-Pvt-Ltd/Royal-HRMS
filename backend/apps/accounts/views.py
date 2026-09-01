@@ -1168,7 +1168,11 @@ class OrgUnitListCreateView(APIView):
         if not _has_perm(request.user, 'org_chart.view'):
             return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
         qs = OrgUnit.objects.all()
-        page_obj, paginator = paginate(qs, request, default_page_size=200)
+        # The frontend fetches the whole tree in one shot (?page_size=200) to
+        # build parent/child relationships client-side — paginate()'s default
+        # max_page_size=100 was silently clamping that below what a real org
+        # chart needs, so it must be raised here too, not just default_page_size.
+        page_obj, paginator = paginate(qs, request, default_page_size=200, max_page_size=1000)
         return success('Org units retrieved.', data=paginated_data(
             paginator, page_obj, OrgUnitSerializer(page_obj.object_list, many=True).data,
         ))
@@ -1297,7 +1301,10 @@ class PositionListCreateView(APIView):
             except (TypeError, ValueError):
                 return error('branch filter must be a valid integer ID.')
             qs = qs.filter(branch_id=branch_id)
-        page_obj, paginator = paginate(qs, request, default_page_size=200)
+        # See the matching comment on OrgUnitListCreateView.get() — same
+        # max_page_size clamp was truncating any org chart bigger than 100
+        # positions (e.g. 223 positions -> only the first 100 ever returned).
+        page_obj, paginator = paginate(qs, request, default_page_size=200, max_page_size=1000)
         return success('Positions retrieved.', data=paginated_data(
             paginator, page_obj,
             PositionSerializer(page_obj.object_list, many=True, context={'as_of': as_of}).data,

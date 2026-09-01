@@ -79,8 +79,8 @@ export default function OrgStructureClient() {
     setLoadError(null);
     try {
       const [unitsRes, posRes, jobsRes, empRes, branchRes] = await Promise.all([
-        clientApi.get(`${API.orgStructure.units.list}?page_size=200`),
-        clientApi.get(`${API.orgStructure.positions.list}?page_size=200`),
+        clientApi.get(`${API.orgStructure.units.list}?page_size=1000`),
+        clientApi.get(`${API.orgStructure.positions.list}?page_size=1000`),
         clientApi.get(API.orgStructure.jobTemplates.list),
         clientApi.get(API.employees.list, { params: { page_size: 200, status: "active" } }),
         clientApi.get(API.branches.list, { params: { page_size: 200 } }),
