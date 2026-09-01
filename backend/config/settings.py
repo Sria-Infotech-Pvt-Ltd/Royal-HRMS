@@ -510,6 +510,13 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB files
 
 # ─── Security (production only) ───────────────────────────────────────────────
 if not DEBUG:
+    # Django sits behind Nginx, which terminates TLS and proxies to this app
+    # over plain HTTP — without this, request.is_secure() is always False
+    # here, and SECURE_SSL_REDIRECT below would redirect every request
+    # (even ones that already arrived over HTTPS) in an infinite loop.
+    # Nginx must set X-Forwarded-Proto to the original scheme for this to
+    # be trustworthy.
+    SECURE_PROXY_SSL_HEADER         = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT             = True
     SECURE_HSTS_SECONDS             = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS  = True
