@@ -19,6 +19,10 @@ interface Props {
   onAddPosition: (unitId: string) => void;
   onAssign: (positionId: string) => void;
   onVacate: (positionId: string) => void;
+  onDeactivate: (positionId: string) => void;
+  onReactivate: (positionId: string) => void;
+  canDelete: boolean;
+  onDelete: (positionId: string) => void;
   onCancelScheduled: (placementId: string) => void;
   onUnitField: (unitId: string, field: string, value: string | boolean | null) => void;
   onPositionField: (positionId: string, field: string, value: string | boolean | null) => void;
@@ -79,13 +83,14 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
   return (
     <div
       onClick={onSelect}
-      style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 13px", border: "1px solid var(--outline-v)", borderRadius: 8, marginBottom: 8, cursor: "pointer" }}
+      style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 13px", border: "1px solid var(--outline-v)", borderRadius: 8, marginBottom: 8, cursor: "pointer", opacity: p.is_active ? 1 : 0.6 }}
     >
       <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--info-c)", color: "var(--info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 750, flexShrink: 0 }}>S</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 580, display: "flex", alignItems: "center", gap: 7 }}>
           {p.title}
           {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13 }} />}
+          {!p.is_active && <span className="badge" style={{ background: "var(--bg-low)", color: "var(--on-variant)", fontSize: 9.5, fontWeight: 650, padding: "2px 7px", borderRadius: 5 }}>Inactive</span>}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>
           {p.job_template_name ?? "—"}{p.grade ? ` · ${p.grade}` : ""}{p.branch_name ? ` · ${p.branch_name}` : ""}
@@ -110,7 +115,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 
 export default function OrgDetail({
   selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
-  onAddSubUnit, onAddPosition, onAssign, onVacate, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
+  onAddSubUnit, onAddPosition, onAssign, onVacate, onDeactivate, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
     return (
@@ -222,14 +227,42 @@ export default function OrgDetail({
     return (
       <div key={p.id}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 13, marginBottom: 6 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 11, flexShrink: 0, background: "var(--info-c)", color: "var(--info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 750 }}>S</div>
-          <div>
+          <div style={{ width: 44, height: 44, borderRadius: 11, flexShrink: 0, background: "var(--info-c)", color: "var(--info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 750, opacity: p.is_active ? 1 : 0.6 }}>S</div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 680, display: "flex", alignItems: "center", gap: 8 }}>
               {p.title} {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 16 }} />}
+              {!p.is_active && <span className="badge" style={{ background: "var(--bg-low)", color: "var(--on-variant)", fontSize: 10.5, fontWeight: 650, padding: "2px 8px", borderRadius: 5 }}>Inactive</span>}
             </div>
             <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-variant)", marginTop: 3 }}>
               Position · {p.org_unit_name}{p.branch_name ? ` · ${p.branch_name}` : ""}
             </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {canEdit && (
+              p.is_active ? (
+                <button className="btn btn-ghost btn-sm" onClick={() => onDeactivate(p.id)}>
+                  <i className="ti ti-eye-off" /> Deactivate
+                </button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" onClick={() => onReactivate(p.id)}>
+                  <i className="ti ti-eye" /> Reactivate
+                </button>
+              )
+            )}
+            {canDelete && (
+              <button
+                className="btn btn-ghost"
+                style={{ width: 32, height: 32, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete "${p.title}"? This can't be undone, and only works if it has never had a holder — if it has any placement history, this will be rejected; deactivate it instead.`)) {
+                    onDelete(p.id);
+                  }
+                }}
+                title="Delete position — only possible if it has no placement history"
+              >
+                <i className="ti ti-trash" style={{ fontSize: 13 }} />
+              </button>
+            )}
           </div>
         </div>
 

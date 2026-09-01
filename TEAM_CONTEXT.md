@@ -3604,3 +3604,38 @@ Follow-up catch after the fix above: the legend row at the bottom of the Structu
 
 Fixed: the three swatches now reuse the same `.orgnode-glyph` styling as the real nodes, with the letters `O`/`S`/`P` (the `P` matching the "Employee" code used in the org-structure change-spec doc, since a legend needs one representative letter, not real initials). Wrapped each swatch+label pair in `display:inline-flex` so the glyph box sits inline with its text instead of blockifying onto its own line.
 - Files: `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx`.
+
+---
+
+## Session Log — 2026-09-01
+**Author: Durga Prasad**
+
+### Features Shipped
+
+**1. Org Chart — Deactivate / Reactivate / Delete a position**
+
+There was previously no way to remove a position from the org chart at all — the backend had a `PositionDeactivateView` (soft, sets `is_active=False`) and a hard-delete `DELETE` verb on `PositionDetailView` (409s if the position has any placement history, per the change-spec's "never destroy history" rule), but neither was wired to any button in the UI.
+
+- **Reversibility gap found and fixed first**: `PositionDeactivateView` only ever set `is_active=False`, with no way back — not production-safe for something meant to be reversible. Added `PositionActivateView` (`POST /org-structure/positions/{id}/activate/`), mirroring the deactivate view exactly but flipping the flag back, same `org_structure.edit` permission and audit-log entry.
+- **Frontend**: new `DeactivatePositionModal.tsx` — warns (not blocks) if the position currently has a live holder ("deactivating won't vacate the seat") or is the unit's chief ("unit loses its visible head"). Position detail header now shows a labeled Deactivate/Reactivate ghost button plus a separate small icon-only Delete button (`ti-trash`, reusing the icon already used for job-template delete in this same folder) gated on the *distinct* `org_structure.delete` permission — not the general `canEdit` — so a user with only edit rights doesn't even see an action that would 403. Delete uses `window.confirm` (matching `ManageJobTemplatesModal`'s existing pattern) since the backend already refuses anything with real history; the 409's message surfaces inline via the existing save-status pill.
+- Inactive positions stay visible (not hidden) in the tree and the unit's position list, muted to ~55% opacity with an `Inactive` badge — history is preserved, nothing disappears.
+- Files: `backend/apps/accounts/views.py`, `backend/apps/accounts/urls.py`, `frontend/app/dashboard/org-chart/_components/DeactivatePositionModal.tsx` (new), `OrgDetail.tsx`, `OrgStructureClient.tsx`, `OrgTree.tsx`, `frontend/lib/api/endpoints.ts`. **Not yet committed.**
+
+### Data operations (dev DB only — not code changes)
+
+**2. Full org-structure reset, then real SRIA structure imported**
+
+At the user's request, wiped all org-structure data from the dev DB (6 units / 11 positions / 10 placements — the test data used above) via a one-off transactional script, confirmed with the user beforehand (scope + "is this really disposable dev data" both confirmed explicitly). Note for anyone doing this again: `OrgUnit.parent` and `Placement.position` are both `on_delete=PROTECT`, so a straight `OrgUnit.objects.all().delete()` fails on the self-referential parent link — units must be deleted leaf-first (repeatedly delete units with no remaining children) and placements deleted before units.
+
+Then imported the real SRIA org structure from a JSON export the user provided (223 positions across 43 org units, full hierarchy from `SRIA` down through 6 divisions to 7-level position ladders per leaf unit — Head/Lead/Senior Specialist/Specialist/Associate/Associate II/Trainee Associate). Notes for next time:
+- Source file had `—` (em dash) mangled to `â` throughout every `"Role — Unit"` title (an encoding round-trip issue in however the export was produced) — fixed with a straight `.replace()` during import, not by asking for a re-export.
+- No holder/employee data in the file at all — everything imported vacant.
+- A `status` field ("Done"/"Verify (likely done)"/"To create") in the source was informational only and not applied — the dev DB was empty at import time regardless of what that column claimed.
+- Hierarchy was derived from each unit's chief position's `reports_to` (a position title string) resolving to another chief position's unit — not from an explicit parent-path column. Validated with a dry-run pass first (duplicate titles/IDs, multiple-or-zero chiefs per unit, unresolved `reports_to`, cost-center conflicts, cycles) before writing anything, and confirmed the resulting tree with the user before running the real import.
+- **Piping a multi-statement script into `manage.py shell < file.py` is unreliable** — it's a REPL reading stdin line-by-line, not a real script executor, and it silently mis-executed a `while` loop mid-script, creating one stray `OrgUnit` outside its intended transaction before erroring out. Always use `manage.py shell -c "..."` with the whole script as one string instead (confirmed reliable — this is what actually ran the real import and the earlier DB wipe).
+
+### Investigated, no code change
+
+**3. Repeated `/api/token/refresh/` 401s after a successful login**
+
+User reported ~7 real (server-received, not just client-side) failed refresh POSTs over 4+ minutes after logging in successfully, well past what the recently-shipped cross-tab refresh-race fix (`644c2c4`) should allow. Root-caused to Next.js Fast Refresh: `clientApi.ts`'s race protection (`_sessionKnownExpired`, `isRefreshing`, `refreshQueue`) is plain in-memory module state, which Fast Refresh resets on every hot-reload — so with multiple tabs open and files being saved/edited during that session, a tab can "forget" it already knows refresh failed and genuinely retry against the server. Confirmed with the user this happened with hot-reload active and multiple tabs open. The `navigator.locks` cross-tab serialization itself is unaffected (locks live in the browser, not the JS heap). Decision: **no code change** — this can't happen in a production build (Fast Refresh never runs there), so hardening it would mean adding complexity (e.g. persisting state to `sessionStorage`) to work around a dev-tooling artifact. Revisit only if it reproduces with hot-reload off.

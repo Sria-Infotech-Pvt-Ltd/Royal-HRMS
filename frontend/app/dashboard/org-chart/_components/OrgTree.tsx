@@ -105,7 +105,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
       <div key={`p${p.id}`}>
         <div
           className={`orgnode${isSel ? " orgnode-sel" : ""}`}
-          style={{ paddingLeft: 9 + depth * 18 }}
+          style={{ paddingLeft: 9 + depth * 18, opacity: p.is_active ? 1 : 0.55 }}
           onClick={() => onSelect({ type: "position", id: p.id })}
         >
           {hasHolder ? (
@@ -117,7 +117,8 @@ export default function OrgTree({ units, positions, search, branchFilter, select
           <span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span>
           <span className="orgnode-name">{p.title}</span>
           {p.is_chief && <i className="ti ti-crown" style={{ color: "var(--warn)", fontSize: 13, flexShrink: 0 }} title="Chief position" />}
-          {!hasHolder && <span className="badge badge-warn" style={{ marginLeft: "auto", fontSize: 9.5 }}>Vacant</span>}
+          {!p.is_active && <span className="badge" style={{ marginLeft: "auto", fontSize: 9.5, background: "var(--bg-low)", color: "var(--on-variant)", flexShrink: 0 }}>Inactive</span>}
+          {p.is_active && !hasHolder && <span className="badge badge-warn" style={{ marginLeft: "auto", fontSize: 9.5 }}>Vacant</span>}
         </div>
         {hasHolder && !isCollapsed && (
           <div

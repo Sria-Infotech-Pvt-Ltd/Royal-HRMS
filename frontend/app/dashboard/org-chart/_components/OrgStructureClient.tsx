@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import { useAnyPermission } from "@/hooks/usePermission";
+import { useAnyPermission, usePermission } from "@/hooks/usePermission";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
 import OrgTree from "./OrgTree";
 import OrgDetail from "./OrgDetail";
@@ -11,6 +11,7 @@ import AddUnitModal from "./AddUnitModal";
 import AddPositionModal from "./AddPositionModal";
 import AssignHolderModal from "./AssignHolderModal";
 import EndPlacementModal from "./EndPlacementModal";
+import DeactivatePositionModal from "./DeactivatePositionModal";
 import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
 
 export interface EmployeeOption {
@@ -28,6 +29,7 @@ export type Selected = { type: "unit" | "position" | "person"; id: string } | nu
 
 export default function OrgStructureClient() {
   const canEdit = useAnyPermission("org_structure.create", "org_structure.edit", "org_structure.delete");
+  const canDelete = usePermission("org_structure.delete");
 
   const [units,     setUnits]     = useState<OrgUnit[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -45,6 +47,7 @@ export default function OrgStructureClient() {
   const [addPositionUnit,  setAddPositionUnit]  = useState<string | null>(null);
   const [assignPositionId, setAssignPositionId] = useState<string | null>(null);
   const [endPositionId,    setEndPositionId]    = useState<string | null>(null);
+  const [deactivatePositionId, setDeactivatePositionId] = useState<string | null>(null);
   const [manageJobsOpen,   setManageJobsOpen]   = useState(false);
 
   const [placementHistory,        setPlacementHistory]        = useState<Placement[]>([]);
@@ -266,6 +269,29 @@ export default function OrgStructureClient() {
               onAddPosition={unitId => setAddPositionUnit(unitId)}
               onAssign={positionId => setAssignPositionId(positionId)}
               onVacate={positionId => setEndPositionId(positionId)}
+              onDeactivate={positionId => setDeactivatePositionId(positionId)}
+              canDelete={canDelete}
+              onDelete={async positionId => {
+                beginFieldSave();
+                try {
+                  await clientApi.delete(API.orgStructure.positions.detail(positionId));
+                  setSelected(null);
+                  await load();
+                  fieldSaveSucceeded();
+                } catch (err) {
+                  fieldSaveFailed(err);
+                }
+              }}
+              onReactivate={async positionId => {
+                beginFieldSave();
+                try {
+                  await clientApi.post(API.orgStructure.positions.activate(positionId));
+                  await load();
+                  fieldSaveSucceeded();
+                } catch (err) {
+                  fieldSaveFailed(err);
+                }
+              }}
               onCancelScheduled={async placementId => {
                 await clientApi.delete(API.orgStructure.placements.detail(placementId));
                 load();
@@ -336,6 +362,13 @@ export default function OrgStructureClient() {
           position={positions.find(p => p.id === endPositionId) ?? null}
           onClose={() => setEndPositionId(null)}
           onEnded={() => { setEndPositionId(null); load(); }}
+        />
+      )}
+      {deactivatePositionId !== null && (
+        <DeactivatePositionModal
+          position={positions.find(p => p.id === deactivatePositionId) ?? null}
+          onClose={() => setDeactivatePositionId(null)}
+          onDeactivated={() => { setDeactivatePositionId(null); load(); }}
         />
       )}
       {manageJobsOpen && (

@@ -1411,6 +1411,29 @@ class PositionDeactivateView(APIView):
         return success(f'"{position.title}" deactivated.', data=PositionSerializer(position).data)
 
 
+class PositionActivateView(APIView):
+    """Reverses PositionDeactivateView — deactivating is meant to be
+    reversible (nothing about it touches placement history), so it needs
+    an undo path rather than being a one-way door."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'org_structure.edit'):
+            return error('You do not have permission to edit positions.', http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            position = Position.objects.get(pk=pk)
+        except Position.DoesNotExist:
+            return error('Position not found.', http_status=status.HTTP_404_NOT_FOUND)
+        position.is_active = True
+        position.save(update_fields=['is_active', 'updated_at'])
+        AuditLog.objects.create(
+            user=request.user, action='update', module='org_structure',
+            object_id=str(position.pk), changes={'title': position.title, 'is_active': True},
+            ip_address=get_client_ip(request),
+        )
+        return success(f'"{position.title}" reactivated.', data=PositionSerializer(position).data)
+
+
 class PositionPlacementListCreateView(APIView):
     """Handles both viewing a position's full placement history and
     assigning/reassigning its holder — POSTing a new placement is how a
