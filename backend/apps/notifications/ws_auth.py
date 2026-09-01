@@ -30,6 +30,7 @@ def _cookie_from_scope(scope: dict, name: str) -> str:
 
 @database_sync_to_async
 def _get_user_from_token(raw_token: str):
+    from django.db import close_old_connections
     from rest_framework_simplejwt.authentication import JWTAuthentication
 
     if not raw_token:
@@ -41,6 +42,17 @@ def _get_user_from_token(raw_token: str):
         return auth.get_user(validated)
     except Exception:
         return AnonymousUser()
+    finally:
+        # database_sync_to_async runs this on a thread-pool thread and does NOT
+        # close the DB connection it opens afterward (unlike a normal Django
+        # request) - that thread's connection then sits idle until the same
+        # thread happens to get reused, which can be hours for a big pool with
+        # sporadic traffic. Confirmed directly: aira_db was holding 53 idle
+        # connections (some 9+ hours old) out of Postgres's 100-connection
+        # limit, causing "Database is temporarily unavailable" across every
+        # app on the server, not just Aira. Same fix already applied in
+        # config/celery.py for the same reason.
+        close_old_connections()
 
 
 class CookieJWTAuthMiddleware(BaseMiddleware):
