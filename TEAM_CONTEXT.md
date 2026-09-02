@@ -3684,7 +3684,7 @@ The feature described as "not yet committed" in the 2026-09-01 entry above is no
 ## Session Log — 2026-09-02 (continued)
 **Author: Durga Prasad**
 
-### Features Shipped (not yet committed)
+### Features Shipped
 
 **5. Company Profile — collapsible sections, matching the design reference**
 
@@ -3702,30 +3702,49 @@ In `OrgTree.tsx`, selecting a specific branch now only shows vacant positions in
 
 User initially wanted to remove `is_department_level` entirely after learning it has zero validation (can silently change Leave Policy eligibility with no warning — see finding #3 below). Traced the real consequences first (`resolve_employee_department_name()` in `services_approval.py`, 7 real call sites including 3 Leave Policy eligibility checks) before agreeing to anything. Recommended keeping the feature (it solves a real problem — grouping a whole branch of nested sub-units under one department name instead of forcing every leaf-unit to be its own department) and fixing the actual gap instead: added `employees_depending_on_department_flag()` (reuses existing `filter_users_by_org_unit()` + `resolve_employee_department_name()`) and wired it into `OrgUnitDetailView.put()` — turning the flag off now 409s naming who's affected unless a `confirm_department_change` flag is sent; the frontend catches that specific 409 and shows the message in a native confirm before resubmitting. Verified end-to-end with a temporary real placement (Priya Menon → Head, AI & ML): blocked without confirm, allowed with it, test placement cleaned up after. Also confirmed while investigating: **zero of the 43 SRIA units are currently marked `is_department_level=True`, and all 6 existing Leave Policies have `applicable_departments=[]`** — the feature is fully dormant on real data today, so this was a zero-risk time to fix it.
 
+Items 5-8 above: **Committed** (`b5b024c`).
+
+**9. "Publicly listed company" toggle — removed from the UI**
+
+User asked to remove it after seeing it in a screenshot. Scoped via clarifying question to UI-only (the underlying `is_listed` field and the CIN-decode "Listing" chip both stay — the chip already derives listed/unlisted from the CIN's own structure, so nothing else depended on the manual toggle). Removed the `ToggleSwitch` + its now-unused import from `EntityIdentityCard.tsx` (both the India and Foreign branches). **Committed** (`f2897d1`).
+
+**10. Full backend test pass with dummy data — found and fixed a real Windows-only upload bug**
+
+User asked to exercise the whole project with dummy data and report any bugs found. Used the session's established pattern (`RefreshToken.for_user()` + `django.test.Client`, no browser automation) across previously-untested modules. Found one real bug: `core/storage.py`'s ImageKit backend broke on this Windows dev machine because Django's `Storage.generate_filename()` runs every upload path through `os.path.normpath()` before it reaches `_save()`/`_resolve_file_id()`, which turns `documents/2026/09/file.csv` into a backslash path on Windows — ImageKit's API rejects that outright. Fixed by normalizing `\` → `/` unconditionally at the top of both methods (harmless on Linux, so no environment branching needed). Verified end-to-end with a real expense-receipt upload. Flagged to the user that production (presumably Linux-hosted) was likely never affected by this — a Windows-dev-only gap. **Committed** (`b56dfa7`).
+
 ### Investigated, no code change
 
-**9. Company Profile content width — decided to keep full-width**
+**11. Company Profile content width — decided to keep full-width**
 
 User noticed the design artifact caps content at `max-width:860px` (plus a 236px rail) while the real page fills the screen. Checked before changing anything: `DashboardShell.tsx`'s `<main>` is plain `flex-1` with no cap, and *no page anywhere in the app* — not other Settings pages, not Employees, not Org Chart — caps its width either. Decision: leave Company Profile full-width; capping just this one page would make it the only inconsistent page in the app, trading one mismatch (vs. the artifact) for a worse one (vs. every other real page).
 
 ### Data cleanup
 
-**10. Production org-structure junk data — migration, not a live DB script**
+**12. Production org-structure junk data — migration, not a live DB script**
 
 User created a "Founder → Executive management → Root" test chain directly on production while trying out "Add org unit," and wanted it removed. No SSH/DB access to production exists for either of us (confirmed earlier this session — deploys are CI/CD-only), so this has to ship as a migration, same as the SRIA seed. `0117_cleanup_test_org_units.py` matches the exact name+parent chain (not a blind name match — avoids catching an unrelated unit that happens to share a generic name like "Root"), deletes leaf-first, and reuses the *exact same* safety rule as finding #6 above (no children, no placement history anywhere in the chain) rather than force-deleting blind. Tested twice against a synthetic replica of the real chain: once where it deletes all three cleanly, once where I gave "Root" a real (ended) placement and confirmed the *entire* chain — including its ancestors — correctly stays untouched rather than partially deleting. Confirmed the real chain doesn't exist in the local dev DB (production-only), so this is untestable against the real data locally — only against an equivalent synthetic case.
 
 ### Findings — flagged, not yet fixed
 
-**11. `assign_position()` doesn't enforce vacancy server-side**
+**13. `assign_position()` doesn't enforce vacancy server-side — RETRACTED**
 
-While confirming the Add Employee flow already filters to vacant-only positions in its picker (`AddEmployeeModal.tsx` / `useOrgUnitsAndPositions.ts` — it does, no work needed there), found that `services_placement.py`'s `assign_position()` will silently close out whoever currently holds a seat and reassign it to the new employee — no rejection, no warning. The org-structure spec's own rule ("frontend validates for a good experience, never for integrity") is being violated here: the frontend hiding filled seats is the *only* thing preventing an accidental reassignment today. Not fixed yet — flagged for a decision.
+Originally flagged (from reading `services_placement.py`) as silently reassigning an already-held position with no rejection. During finding #10's real API testing pass, actually tried it — created employee 2, assigned them to employee 1's already-held position — and it correctly returned 400 ("This position already has an overlapping placement for that date range") with a clean atomic rollback, no orphaned data. Told the user directly this earlier finding was wrong. Lesson: a finding from reading code, not from running it, is a hypothesis — say so, and verify before treating it as fact.
 
-**12. A second, dead-looking "Add Employee" flow**
+**14. A second, dead-looking "Add Employee" flow**
 
 `frontend/app/dashboard/employees/new/page.tsx` — a separate 7-step wizard with no Position picker at all, still using the legacy free-text department/designation dropdowns. Looks like an unused duplicate of `AddEmployeeModal.tsx`, but not confirmed dead (nothing checked yet for links pointing to it). Flagged, not touched.
 
 ### Diagnosed (false alarm, not a bug)
 
-**13. Stale-browser-state 404s from my own testing, not a real bug**
+**15. Stale-browser-state 404s from my own testing, not a real bug**
 
 User reported 404s on `positions/{id}/placements/` (GET) and `units/{id}/` (DELETE) from their own local server log while testing finding #6/#10's work. Confirmed both routes are correctly registered in `urls.py` (no routing regression) — the far more likely explanation: verifying #6 and #10 involved creating and deleting several synthetic test org units/positions directly via Django shell against the same local dev database the user's browser had open, so their already-loaded page was showing rows whose IDs no longer existed by the time they clicked them. Asked the user to hard-refresh and retry rather than guessing further; a real bug would still 404 on a *freshly loaded* row. Lesson for next time: warn before running direct-DB test scripts against a database someone else's browser tab might currently be pointed at.
+
+### Bug Fixes Shipped
+
+**16. Company Profile Directors/People section made entity-aware, plus a real backend bug it surfaced**
+
+User asked for a full re-audit of Company Profile against the design reference: "when I change the entity, only those fields should be there, not another entity's fields." Re-checked every entity-dependent field — registration number, TAN, PAN 4th-char match, GST/Other Registrations gating, and the Authorised Signatory's DIN/PAN field were all already correct (the signatory field is deliberately entity-agnostic, "not always a director," so left alone). Found one real gap: the Directors table was hardcoded to "Directors"/"DIN"/8-digit-numeric for every entity type, when per the artifact an LLP has Designated Partners/DPIN, a Partnership has Partners/PAN, a Trust/Society has Trustees/PAN, and Proprietorship/HUF have no such table at all. Added `PEOPLE_CONFIG` (`_data.ts`) and made `DirectorsSection.tsx`/`page.tsx` fully config-driven (title, ID label, ID input format/length, button/empty-state text, section visibility) — foreign entity types are a best-effort mapping since the artifact's foreign type list doesn't map 1:1 onto this app's five.
+
+This surfaced a real backend bug, not just a frontend gap: `CompanyDirector.din` was `max_length=8` and `validate_din()` unconditionally required exactly 8 digits — so a Partnership/Trust company could never actually save a partner's or trustee's PAN (10 chars, contains letters) and a foreign company's free-form ID would also be rejected; both would 500 with a DB truncation error rather than a clean validation message. Fixed by widening the column to 20 chars (migration `0118_widen_company_director_din`) and making `validate_din()` branch by the company's entity type — same reuse pattern as the existing `validate_cin`. Verified against the real API across all three formats (DIN rejects a PAN-shaped value and accepts a valid DIN for `private_limited`; PAN format rejects a DIN-shaped value and accepts a PAN for `partnership`; free format rejects 1-char garbage and accepts a real value for `corporation`) plus an unrelated-field PUT — 7 scenarios, all correct, test data cleaned up (director count unchanged before/after). `tsc`, `eslint`, and `manage.py check` all clean.
+- Files: `backend/apps/accounts/models.py`, `serializers.py`, `views.py`, `migrations/0118_widen_company_director_din.py`; `frontend/app/dashboard/settings/company/_data.ts`, `page.tsx`, `_components/DirectorsSection.tsx`.

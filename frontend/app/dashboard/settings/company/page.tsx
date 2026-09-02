@@ -18,7 +18,7 @@ import AddressCard from "./_components/AddressCard";
 import ContactBrandingCard from "./_components/ContactBrandingCard";
 import {
   EMPTY_COMPANY, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
-  profileCompletionPercent, sanitizeCompanyResponse, validateCompany,
+  PEOPLE_CONFIG, profileCompletionPercent, sanitizeCompanyResponse, validateCompany,
 } from "./_data";
 
 const ALL_SECTION_IDS = ["entity", "gst", "other", "office", "people", "signatory", "bank", "business", "regional", "contact"] as const;
@@ -154,7 +154,12 @@ export default function CompanyInfoPage() {
   const isIndia = form.jurisdiction === "india";
   const entityOptions = isIndia ? ENTITY_TYPE_OPTIONS_INDIA : ENTITY_TYPE_OPTIONS_FOREIGN;
   const completion = profileCompletionPercent(form);
-  const visibleSectionIds = isIndia ? ALL_SECTION_IDS : ALL_SECTION_IDS.filter(id => id !== "gst" && id !== "other");
+  const peopleConfig = PEOPLE_CONFIG[form.entity_type] ?? null;
+  const visibleSectionIds = ALL_SECTION_IDS.filter(id => {
+    if ((id === "gst" || id === "other") && !isIndia) return false;
+    if (id === "people" && !peopleConfig) return false;
+    return true;
+  });
   const allSectionsCollapsed = visibleSectionIds.every(id => collapsedSections.has(id));
   function toggleAllSections() {
     setCollapsedSections(allSectionsCollapsed ? new Set() : new Set(visibleSectionIds));
@@ -174,7 +179,6 @@ export default function CompanyInfoPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const sectionProps = { form, errors, canEdit, onFieldChange: handleField };
-  const dinLabel = isIndia ? "DIN" : "Director ID";
 
   return (
     <>
@@ -258,10 +262,12 @@ export default function CompanyInfoPage() {
       )}
       {isIndia && <OtherRegistrationsCard {...sectionProps} collapsed={collapsedSections.has("other")} onToggleCollapse={() => toggleSection("other")} />}
       <AddressCard {...sectionProps} collapsed={collapsedSections.has("office")} onToggleCollapse={() => toggleSection("office")} />
-      <DirectorsSection
-        canEdit={canEdit} dinLabel={dinLabel}
-        collapsed={collapsedSections.has("people")} onToggleCollapse={() => toggleSection("people")}
-      />
+      {peopleConfig && (
+        <DirectorsSection
+          canEdit={canEdit} config={peopleConfig}
+          collapsed={collapsedSections.has("people")} onToggleCollapse={() => toggleSection("people")}
+        />
+      )}
       <SignatoryCard {...sectionProps} collapsed={collapsedSections.has("signatory")} onToggleCollapse={() => toggleSection("signatory")} />
       <BankDetailsCard {...sectionProps} collapsed={collapsedSections.has("bank")} onToggleCollapse={() => toggleSection("bank")} />
       <BusinessProfileCard {...sectionProps} collapsed={collapsedSections.has("business")} onToggleCollapse={() => toggleSection("business")} />

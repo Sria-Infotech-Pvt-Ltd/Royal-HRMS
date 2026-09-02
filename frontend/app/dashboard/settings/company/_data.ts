@@ -76,6 +76,39 @@ export const REGISTRATION_NUMBER_CONFIG: Record<string, RegistrationNumberConfig
   huf:                  null,
 };
 
+// The "Directors" table's title, ID-column label, and ID format all follow
+// who this entity type's PEOPLE actually are — DIN for company Directors,
+// DPIN for an LLP's Designated Partners (both real-world 8-digit numeric
+// IDs — India's MCA unified the two numbering systems years ago, so one
+// "din" format covers both), PAN for Partnership/Trust (no personal-ID
+// system for a firm partner or trustee, so the artifact uses their PAN
+// instead — a 10-character alphanumeric code the old hardcoded
+// 8-digit-numeric-only input would have silently rejected). Proprietorship/
+// HUF have no such table at all (`null` hides the whole section, matching
+// REGISTRATION_NUMBER_CONFIG's convention above). Foreign entity types
+// don't map 1:1 onto the design reference's own foreign type list (this
+// app's foreign types are corporation/llc/foreign_partnership/branch_office/
+// other, not the reference's finer-grained set) — best-effort adapted
+// rather than a literal artifact match for those five.
+export interface PeopleConfig { sectionTitle: string; idLabel: string; idFormat: "din" | "pan" | "free"; singular: string }
+export const PEOPLE_CONFIG: Record<string, PeopleConfig | null> = {
+  private_limited:      { sectionTitle: "Directors",           idLabel: "DIN",         idFormat: "din",  singular: "director" },
+  public_limited:       { sectionTitle: "Directors",           idLabel: "DIN",         idFormat: "din",  singular: "director" },
+  opc:                   { sectionTitle: "Directors",           idLabel: "DIN",         idFormat: "din",  singular: "director" },
+  section8:              { sectionTitle: "Directors",           idLabel: "DIN",         idFormat: "din",  singular: "director" },
+  llp:                   { sectionTitle: "Designated Partners",  idLabel: "DPIN",        idFormat: "din",  singular: "designated partner" },
+  partnership:           { sectionTitle: "Partners",             idLabel: "PAN",         idFormat: "pan",  singular: "partner" },
+  trust_society:         { sectionTitle: "Trustees",             idLabel: "PAN",         idFormat: "pan",  singular: "trustee" },
+  sole_proprietorship:   null,
+  huf:                   null,
+  // Foreign — best-effort, see note above.
+  corporation:           { sectionTitle: "Directors",           idLabel: "Director ID", idFormat: "free", singular: "director" },
+  llc:                   { sectionTitle: "Members / Managers",  idLabel: "Member ID",   idFormat: "free", singular: "member/manager" },
+  foreign_partnership:   { sectionTitle: "Partners",             idLabel: "Partner ID",  idFormat: "free", singular: "partner" },
+  branch_office:         null,
+  other:                 { sectionTitle: "Directors",           idLabel: "Director ID", idFormat: "free", singular: "director" },
+};
+
 export const INDUSTRY_OPTIONS = [
   { value: "it_services",   label: "Information Technology & Services" },
   { value: "manufacturing", label: "Manufacturing" },

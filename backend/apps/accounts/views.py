@@ -2936,7 +2936,7 @@ class CompanyDirectorListCreateView(APIView):
         if not company:
             return error('Company record not found. Set up company info first.', http_status=404)
 
-        serializer = CompanyDirectorSerializer(data=request.data)
+        serializer = CompanyDirectorSerializer(data=request.data, context={'company': company})
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
         try:

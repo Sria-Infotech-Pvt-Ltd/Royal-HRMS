@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { Director } from "@/types/company";
 import ProfileCard from "./ProfileCard";
+import type { PeopleConfig } from "../_data";
 
 interface Row {
   key: string;
@@ -22,14 +23,36 @@ function toRow(d: Director): Row {
 
 let tempCounter = 0;
 
+const DESIGNATION_PLACEHOLDERS: Record<string, string> = {
+  director: "Managing Director",
+  "designated partner": "Designated Partner",
+  partner: "Managing Partner",
+  trustee: "Chairperson",
+  "member/manager": "Manager",
+};
+
 interface Props {
   canEdit: boolean;
-  dinLabel: string;
+  config: PeopleConfig;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
 
-export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggleCollapse }: Props) {
+// How the ID input filters/limits keystrokes for each entity type's ID
+// format — "din" (company DIN or LLP DPIN) is 8-digit numeric, "pan"
+// (Partnership partner / Trust trustee) is a 10-character uppercase
+// alphanumeric PAN, "free" (foreign entity types) takes whatever is typed.
+function sanitizeId(raw: string, format: PeopleConfig["idFormat"]): string {
+  if (format === "din") return raw.replace(/\D/g, "").slice(0, 8);
+  if (format === "pan") return raw.toUpperCase().slice(0, 10);
+  return raw;
+}
+
+export default function DirectorsSection({ canEdit, config, collapsed, onToggleCollapse }: Props) {
+  const { sectionTitle, idLabel, idFormat, singular } = config;
+  const idPlaceholder = idFormat === "din" ? "01234567" : idFormat === "pan" ? "AAAAA0000A" : "";
+  const idMaxLength = idFormat === "din" ? 8 : idFormat === "pan" ? 10 : undefined;
+  const designationPlaceholder = DESIGNATION_PLACEHOLDERS[singular] ?? "Managing Director";
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -95,8 +118,8 @@ export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggl
   return (
     <ProfileCard
       icon="ti-users-group"
-      title="Directors"
-      subtitle={`Each director's ${dinLabel}, name, and designation.`}
+      title={sectionTitle}
+      subtitle={`Each ${singular}'s ${idLabel}, name, and designation.`}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
     >
@@ -107,7 +130,7 @@ export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggl
           <table>
             <thead>
               <tr>
-                <th>{dinLabel} <span style={{ color: "var(--error)" }}>*</span></th>
+                <th>{idLabel} <span style={{ color: "var(--error)" }}>*</span></th>
                 <th>Name <span style={{ color: "var(--error)" }}>*</span></th>
                 <th>Designation <span style={{ color: "var(--error)" }}>*</span></th>
                 <th style={{ width: 36 }} />
@@ -122,10 +145,10 @@ export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggl
                       style={{ fontFamily: "monospace" }}
                       value={row.din}
                       disabled={!canEdit}
-                      maxLength={8}
-                      onChange={e => updateRow(row.key, { din: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+                      maxLength={idMaxLength}
+                      onChange={e => updateRow(row.key, { din: sanitizeId(e.target.value, idFormat) })}
                       onBlur={() => saveRow(row)}
-                      placeholder="01234567"
+                      placeholder={idPlaceholder}
                     />
                     {row.error && <div className="field-error-msg">{row.error}</div>}
                   </td>
@@ -145,7 +168,7 @@ export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggl
                       disabled={!canEdit}
                       onChange={e => updateRow(row.key, { designation: e.target.value })}
                       onBlur={() => saveRow(row)}
-                      placeholder="Managing Director"
+                      placeholder={designationPlaceholder}
                     />
                   </td>
                   <td style={{ textAlign: "center" }}>
@@ -168,14 +191,14 @@ export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggl
           </table>
           {rows.length === 0 && (
             <div style={{ textAlign: "center", padding: "20px 0", color: "var(--on-variant)", fontSize: 13 }}>
-              No directors added yet.
+              No {sectionTitle.toLowerCase()} added yet.
             </div>
           )}
         </div>
       )}
       {canEdit && (
         <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12, color: "var(--primary)" }} onClick={addRow}>
-          <i className="ti ti-plus" /> Add director
+          <i className="ti ti-plus" /> Add {singular}
         </button>
       )}
     </ProfileCard>

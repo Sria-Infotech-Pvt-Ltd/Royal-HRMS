@@ -1005,11 +1005,15 @@ class CompanyGSTRegistration(models.Model):
 
 
 class CompanyDirector(models.Model):
-    """One row per director — DIN, name, designation."""
+    """One row per director/partner/trustee/member — name, designation, and a
+    personal identifier. `din` holds whatever ID format that role actually
+    uses for this company's entity type (DIN for a company director, PAN for
+    a Partnership/Trust partner or trustee, a free-form ID for a foreign
+    entity) — see CompanyDirectorSerializer.validate_din()."""
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     company      = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='directors')
-    din          = models.CharField(max_length=8)
+    din          = models.CharField(max_length=20)
     name         = models.CharField(max_length=150)
     designation  = models.CharField(max_length=100)
     created_at   = models.DateTimeField(auto_now_add=True)

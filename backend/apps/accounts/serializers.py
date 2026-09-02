@@ -1051,9 +1051,28 @@ class CompanyDirectorSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'company', 'created_at', 'updated_at']
 
     def validate_din(self, value: str) -> str:
-        v = value.strip()
-        if not _DIN_RE.match(v):
-            raise serializers.ValidationError('DIN must be exactly 8 digits.')
+        v = value.strip() if value else value
+        if not v:
+            raise serializers.ValidationError('This field is required.')
+        # This column is reused for whatever ID this entity type's people
+        # actually carry — same reuse pattern as CompanySerializer.cin. The
+        # company isn't this serializer's instance (a director is), so the
+        # create path passes it via context; the update path already has it
+        # through the select_related instance.
+        company = self.context.get('company') or getattr(self.instance, 'company', None)
+        entity_type = getattr(company, 'entity_type', '') if company else ''
+        if entity_type in _CIN_ENTITY_TYPES or entity_type in _LLPIN_ENTITY_TYPES:
+            if not _DIN_RE.match(v):
+                raise serializers.ValidationError('DIN must be exactly 8 digits.')
+        elif entity_type in _GENERIC_REG_ENTITY_TYPES:
+            v = v.upper()
+            if not _PAN_RE.match(v):
+                raise serializers.ValidationError('Enter a valid PAN (e.g. AAAAA0000A).')
+        else:
+            # Foreign entity types (and any unset entity_type) have no single
+            # standard personal-ID format — just guard against garbage input.
+            if len(v) < 2:
+                raise serializers.ValidationError('Enter a valid identifier.')
         return v
 
     def validate_name(self, value: str) -> str:
