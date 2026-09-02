@@ -141,7 +141,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             </div>
             <ul style={{ margin: 0, paddingLeft: 16 }}>
               <li>Accepted formats: <strong>.csv</strong>, <strong>.xlsx</strong> (max 5 MB)</li>
-              <li>Required columns: First Name, Last Name, Work Email, Role, Department, Designation, Branch, Date of Joining</li>
+              <li>Required columns: First Name, Last Name, Work Email, Role, Org Unit, Position, Branch, Date of Joining</li>
               <li>Optional columns: Phone, Employee Type, Gender, DOB, Blood Group, Address</li>
             </ul>
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>

@@ -125,8 +125,6 @@ export default function AddEmployeeModal({
   const [orgUnitId, setOrgUnitId] = useState("");
 
   const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
-  const positionOptions = positionsForUnit(orgUnitId, /* vacantOnly */ true);
-  const selectedPosition = positionOptions.find(p => p.id === form.position);
   const derivedDepartmentName = resolveDepartmentName(orgUnitId);
 
   /* dropdown data */
@@ -136,6 +134,13 @@ export default function AddEmployeeModal({
   const [managers,  setManagers]  = useState<ApiPerson[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [peopleLoading, setPeopleLoading] = useState(false);
+
+  // form.branch holds the branch NAME (matches the free-text User.branch
+  // field), but Position.branch is the numeric Branch id — look the id up
+  // so a selected branch actually narrows the Position list, not just the
+  // form's own branch field.
+  const selectedBranchId = branches.find(b => b.branch_name === form.branch)?.id ?? null;
+  const positionOptions = positionsForUnit(orgUnitId, /* vacantOnly */ true, selectedBranchId);
 
   // A Branch Admin isn't scoped to a department (matches the backend's own
   // conditional requirement in EmployeeListCreateView.post — see
@@ -405,12 +410,15 @@ export default function AddEmployeeModal({
                         <Field label="Org Unit" required error={errs.position}>
                           <Sel v={orgUnitId} set={v => { setOrgUnitId(v); set("position", ""); }} disabled={positionsLoading}>
                             <option value="">— Select an org unit —</option>
-                            {units.filter(u => u.is_active).map(u => (
-                              <option key={u.id} value={u.id}>{u.name}</option>
-                            ))}
+                            {units.filter(u => u.is_active).map(u => {
+                              const vacantCount = positionsForUnit(u.id, /* vacantOnly */ true, selectedBranchId).length;
+                              return (
+                                <option key={u.id} value={u.id}>{u.name} ({vacantCount} open)</option>
+                              );
+                            })}
                           </Sel>
                         </Field>
-                        <Field label="Position" required error={errs.position}>
+                        <Field label={orgUnitId ? `Position (${positionOptions.length} open)` : "Position"} required error={errs.position}>
                           <Sel v={form.position} set={v => set("position", v)} err={!!errs.position} disabled={!orgUnitId || positionsLoading}>
                             <option value="">
                               {!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
@@ -420,24 +428,6 @@ export default function AddEmployeeModal({
                             ))}
                           </Sel>
                         </Field>
-                        {form.position && (
-                          <>
-                            <Field label="Department">
-                              <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                                title="Derived from the selected Position">
-                                <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                                {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
-                              </div>
-                            </Field>
-                            <Field label="Designation">
-                              <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                                title="Derived from the selected Position">
-                                <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                                {selectedPosition?.job_template_name || selectedPosition?.title}
-                              </div>
-                            </Field>
-                          </>
-                        )}
                       </>
                     )}
                     <Field label="Employee Type">

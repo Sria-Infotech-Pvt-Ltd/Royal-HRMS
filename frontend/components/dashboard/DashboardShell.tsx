@@ -25,7 +25,6 @@ const PAGE_TITLES: Record<string, string> = {
   "/dashboard/profile": "My Profile",
   "/dashboard/settings/permissions": "Roles & Permissions",
   "/dashboard/employees": "Employees",
-  "/dashboard/employees/new": "Add New Employee",
   "/dashboard/attendance": "Attendance & Time",
   "/dashboard/my-attendance": "My Attendance",
   "/dashboard/payroll": "Payroll Management",

@@ -1167,7 +1167,22 @@ class OrgUnitListCreateView(APIView):
     def get(self, request):
         if not _has_perm(request.user, 'org_chart.view'):
             return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
-        qs = OrgUnit.objects.all()
+        # Annotated so OrgUnitSerializer's position_count/child_count don't
+        # each run their own obj.positions.count()/obj.children.count() query
+        # per row — with 44 units that was 88 sequential queries for one
+        # list call (measured ~9s locally). distinct=True on both Count()s
+        # is required here, not optional — annotating two independent
+        # reverse relations (positions and children) in the same query joins
+        # both, and without distinct=True each count would be inflated by
+        # the other relation's row multiplication.
+        # Explicit order_by (Meta.ordering alone stops counting as "ordered"
+        # once an aggregate annotation forces a GROUP BY, which trips
+        # paginate()'s UnorderedObjectListWarning even though the underlying
+        # Meta.ordering = ['name'] is unchanged).
+        qs = OrgUnit.objects.annotate(
+            _position_count_annotated=Count('positions', distinct=True),
+            _child_count_annotated=Count('children', distinct=True),
+        ).order_by('name')
         # The frontend fetches the whole tree in one shot (?page_size=200) to
         # build parent/child relationships client-side — paginate()'s default
         # max_page_size=100 was silently clamping that below what a real org
@@ -6342,10 +6357,11 @@ _EMP_IMPORT_COL_MAP = {
     'phone': 'phone', 'mobile': 'phone', 'phone number': 'phone',
     'phone_number': 'phone', 'mobile number': 'phone',
     'role': 'role',
-    'department': 'department', 'dept': 'department',
-    'designation': 'designation',
-    # Optional alternative to department/designation — resolves to a real
-    # Position instead (see EmployeeBulkImportRowSerializer.validate()).
+    # Org Unit + Position resolve to a real Position, with department/
+    # designation derived from it (same as Create Employee's own Position
+    # picker) — a "Department"/"Designation" column is not recognized here;
+    # EmployeeBulkImportRowSerializer has no such fields, so those columns
+    # would be silently dropped rather than actually doing anything.
     'org unit': 'org_unit', 'org_unit': 'org_unit', 'organisation unit': 'org_unit',
     'position': 'position_title', 'position title': 'position_title', 'position_title': 'position_title',
     'branch': 'branch', 'branch name': 'branch', 'branch_name': 'branch',

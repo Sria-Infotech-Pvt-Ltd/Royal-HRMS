@@ -13,7 +13,12 @@ interface Result {
   // accidentally displace an existing employee. Left off for a
   // "Reassign Position" action, which intentionally allows it (same
   // pattern as the Org Chart's own AssignHolderModal).
-  positionsForUnit:   (orgUnitId: string, vacantOnly?: boolean) => Position[];
+  // branchId narrows further to positions tied to that one branch —
+  // a position with branch === null sits in the shared company-wide tree
+  // and matches every branch (same convention as OrgTree.tsx's own
+  // matchesBranch()), so it's never excluded just because a branch filter
+  // is set.
+  positionsForUnit:   (orgUnitId: string, vacantOnly?: boolean, branchId?: number | null) => Position[];
   // Preview-only mirror of the backend's
   // services_approval.resolve_employee_department_name() — walks up from
   // `orgUnitId` via `parent` and returns the name of the nearest unit
@@ -37,8 +42,12 @@ export function useOrgUnitsAndPositions(): Result {
   const units     = useMemo(() => (Array.isArray(unitData) ? unitData : (unitData?.results ?? [])), [unitData]);
   const positions = useMemo(() => (Array.isArray(posData)  ? posData  : (posData?.results ?? [])), [posData]);
 
-  function positionsForUnit(orgUnitId: string, vacantOnly = false): Position[] {
-    return positions.filter(p => p.org_unit === orgUnitId && p.is_active && (!vacantOnly || !p.holder));
+  function positionsForUnit(orgUnitId: string, vacantOnly = false, branchId: number | null = null): Position[] {
+    return positions.filter(p =>
+      p.org_unit === orgUnitId && p.is_active
+      && (!vacantOnly || !p.holder)
+      && (branchId == null || p.branch === null || p.branch === branchId),
+    );
   }
 
   function resolveDepartmentName(orgUnitId: string): string | null {

@@ -454,10 +454,16 @@ class OrgUnitSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'is_active', 'position_count', 'child_count', 'created_at', 'updated_at')
 
     def get_position_count(self, obj: OrgUnit) -> int:
-        return obj.positions.count()
+        # Prefer the queryset-level annotation (see OrgUnitListCreateView.get)
+        # so a list of N units doesn't run N of these as separate queries —
+        # falls back to a direct count for the single-object call sites
+        # (create/update/deactivate responses) that don't annotate.
+        annotated = getattr(obj, '_position_count_annotated', None)
+        return annotated if annotated is not None else obj.positions.count()
 
     def get_child_count(self, obj: OrgUnit) -> int:
-        return obj.children.count()
+        annotated = getattr(obj, '_child_count_annotated', None)
+        return annotated if annotated is not None else obj.children.count()
 
     def validate_name(self, value: str) -> str:
         value = value.strip()
