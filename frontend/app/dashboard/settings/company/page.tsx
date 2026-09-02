@@ -282,11 +282,22 @@ export default function CompanyInfoPage() {
       />
 
       {/* ── Bottom save bar ──────────────────────────────────────────────── */}
-      <div style={{
-        position: "sticky", bottom: 0, display: "flex", justifyContent: "space-between",
-        alignItems: "center", gap: 10, padding: "14px 0", marginTop: 8,
-        background: "var(--surface)", borderTop: "1px solid var(--outline-v)",
-      }}>
+      {/* DashboardShell's <main> carries its own bottom padding (p-4 md:p-6).
+          `position: sticky` locks to the scroll container's PADDING-BOX edge
+          regardless of the element's own margin — a negative margin changes
+          how much flow space the bar reserves, but not where "bottom: 0"
+          snaps to, so it left a persistent 16-24px gap below the bar
+          (verified via a live Playwright check: bar bottom stayed 24px short
+          of main's true bottom with -mb-6 alone). What actually cancels the
+          parent's padding is offsetting `bottom` itself by that same amount. */}
+      <div
+        className="sticky -bottom-4 md:-bottom-6"
+        style={{
+          display: "flex", justifyContent: "space-between",
+          alignItems: "center", gap: 10, paddingTop: 14, paddingBottom: 14, marginTop: 8,
+          background: "var(--surface)", borderTop: "1px solid var(--outline-v)",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)" }}>
           <div style={{ position: "relative", width: 22, height: 22 }}>
             <svg width="22" height="22" viewBox="0 0 22 22">
