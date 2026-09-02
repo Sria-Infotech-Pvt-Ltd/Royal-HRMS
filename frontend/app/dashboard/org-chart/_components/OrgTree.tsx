@@ -22,8 +22,15 @@ export default function OrgTree({ units, positions, search, branchFilter, select
   const q = search.trim().toLowerCase();
 
   // A branch-scoped position must match; a position with no branch set is
-  // company-wide and always shows, in every branch view.
-  const matchesBranch = (p: Position) => branchFilter === null || p.branch === null || p.branch === branchFilter;
+  // company-wide and always shows, in every branch view. Filtering to one
+  // specific branch is meant for "what's open here" (hiring into that
+  // branch), so once a branch is actually selected, only vacant positions
+  // show — a filled seat isn't something you'd be assigning into anyway.
+  const matchesBranch = (p: Position) => {
+    if (branchFilter === null) return true;
+    if (p.branch !== null && p.branch !== branchFilter) return false;
+    return !p.holder;
+  };
 
   const childUnits = (parentId: string | null) => units.filter(u => u.parent === parentId);
   const posInUnit = (unitId: string) => positions.filter(p => p.org_unit === unitId && matchesBranch(p));

@@ -4,12 +4,14 @@ import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import ToggleSwitch from "@/components/ToggleSwitch";
 
-export default function SignatoryCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
+export default function SignatoryCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   return (
     <ProfileCard
       icon="ti-signature"
       title="Authorised signatory"
       subtitle="Who can legally sign invoices, contracts, and filings for the company. Not always a director."
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
     >
       <div className="form-row cols-2 mb-16">
         <div className="field-group">

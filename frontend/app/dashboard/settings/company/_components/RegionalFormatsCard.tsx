@@ -4,9 +4,9 @@ import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import { CURRENCY_OPTIONS, DATE_FORMAT_OPTIONS, TIMEZONE_OPTIONS } from "../_data";
 
-export default function RegionalFormatsCard({ form, canEdit, onFieldChange }: CompanySectionProps) {
+export default function RegionalFormatsCard({ form, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   return (
-    <ProfileCard icon="ti-world" title="Regional & formats" subtitle="How amounts, dates, and times display across the app and on documents.">
+    <ProfileCard icon="ti-world" title="Regional & formats" subtitle="How amounts, dates, and times display across the app and on documents." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-3 mb-8">
         <div className="field-group">
           <label className="field-label">Default Currency <span style={{ color: "var(--error)" }}>*</span></label>

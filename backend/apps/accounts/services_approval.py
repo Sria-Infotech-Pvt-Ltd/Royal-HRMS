@@ -136,6 +136,20 @@ def filter_queryset_by_department_name(qs, department_name: str, *, department_l
     return qs.filter(**{f'{relation_prefix}_id__in': member_ids})
 
 
+def employees_depending_on_department_flag(unit: 'OrgUnit') -> list:
+    """Full names of every employee (in `unit`'s subtree) for whom
+    `resolve_employee_department_name()` currently resolves to `unit.name`
+    — i.e. `unit` is genuinely their nearest `is_department_level=True`
+    ancestor right now, not just some unrelated unit that happens to be
+    marked. Used to warn before un-marking a unit that's actually
+    load-bearing for Leave Policy eligibility today, rather than letting
+    that change go silent (see OrgUnitDetailView.put())."""
+    from apps.accounts.models import User
+
+    members = filter_users_by_org_unit(User.objects.all(), unit)
+    return [u.full_name for u in members if resolve_employee_department_name(u) == unit.name]
+
+
 def resolve_employee_org_unit_chain(employee: 'User') -> list:
     """The employee's current Position's OrgUnit id, plus every ancestor
     unit id walking up via OrgUnit.parent — self-inclusive, root-last.

@@ -5,7 +5,7 @@ import ProfileCard from "./ProfileCard";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import { STATES } from "../_data";
 
-export default function AddressCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
+export default function AddressCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   const isIndia = form.jurisdiction === "india";
   const sameAsRegistered = form.communication_address_same_as_registered;
 
@@ -14,6 +14,8 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange }: Co
       icon="ti-map-pin"
       title="Registered office"
       subtitle={isIndia ? "The statutory address on record. Must be in India." : "The registered address in the company's home country."}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
     >
       <div className="field-group mb-16">
         <label className="field-label">Address Line 1 <span style={{ color: "var(--error)" }}>*</span></label>

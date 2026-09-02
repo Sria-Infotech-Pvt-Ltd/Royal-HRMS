@@ -4,9 +4,9 @@ import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import { MSME_CLASS_OPTIONS } from "../_data";
 
-export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
+export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   return (
-    <ProfileCard icon="ti-certificate" title="Other registrations" subtitle="Add only what applies. All optional.">
+    <ProfileCard icon="ti-certificate" title="Other registrations" subtitle="Add only what applies. All optional." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-2">
         <div className="field-group">
           <label className="field-label">Udyam / MSME <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>

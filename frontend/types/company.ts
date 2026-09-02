@@ -81,6 +81,8 @@ export interface CompanySectionProps {
   errors: CompanyFieldErrors;
   canEdit: boolean;
   onFieldChange: (key: keyof CompanyData, value: string | boolean) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export interface GSTRegistration {

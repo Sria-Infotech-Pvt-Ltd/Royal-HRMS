@@ -12,12 +12,12 @@ interface Props extends CompanySectionProps {
 }
 
 export default function ContactBrandingCard({
-  form, errors, canEdit, onFieldChange, displayLogo, fileRef, onLogoChange, onLogoRemove,
+  form, errors, canEdit, onFieldChange, displayLogo, fileRef, onLogoChange, onLogoRemove, collapsed, onToggleCollapse,
 }: Props) {
   const initial = form.company_name.trim().charAt(0).toUpperCase() || "?";
 
   return (
-    <ProfileCard icon="ti-mail" title="Contact & branding" subtitle="Public-facing details shown in the app and on documents.">
+    <ProfileCard icon="ti-mail" title="Contact & branding" subtitle="Public-facing details shown in the app and on documents." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
           <label className="field-label">Primary Email <span style={{ color: "var(--error)" }}>*</span></label>

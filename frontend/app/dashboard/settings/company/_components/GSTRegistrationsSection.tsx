@@ -28,7 +28,14 @@ function toRow(r: GSTRegistration): Row {
 
 let tempCounter = 0;
 
-export default function GSTRegistrationsSection({ canEdit, companyPan }: { canEdit: boolean; companyPan: string }) {
+interface Props {
+  canEdit: boolean;
+  companyPan: string;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}
+
+export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed, onToggleCollapse }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -102,6 +109,8 @@ export default function GSTRegistrationsSection({ canEdit, companyPan }: { canEd
       icon="ti-file-invoice"
       title="GST registrations"
       subtitle="State-wise. One GSTIN per state. Each is checked against your PAN."
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
     >
       {loading && <div style={{ color: "var(--on-variant)", fontSize: 13, padding: "8px 0" }}>Loading…</div>}
       {loadError && <div style={{ color: "var(--error)", fontSize: 13, padding: "8px 0" }}>{loadError}</div>}

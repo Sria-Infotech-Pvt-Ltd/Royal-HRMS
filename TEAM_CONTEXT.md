@@ -3678,3 +3678,54 @@ User report: "most of them not came in" after the SRIA import landed on the serv
 **4. Org-chart Deactivate/Reactivate/Delete — deployed**
 
 The feature described as "not yet committed" in the 2026-09-01 entry above is now live: backend `PositionActivateView` + the frontend Deactivate/Reactivate/Delete UI. **Committed** (`540fe7d`).
+
+---
+
+## Session Log — 2026-09-02 (continued)
+**Author: Durga Prasad**
+
+### Features Shipped (not yet committed)
+
+**5. Company Profile — collapsible sections, matching the design reference**
+
+The artifact has a "Collapse all" toggle plus per-section collapse (click a card's header) — confirmed completely missing from the real page (`ProfileCard.tsx` had no collapse state at all, `page.tsx` had zero mentions of "collapse"). Added `collapsed`/`onToggleCollapse` to `CompanySectionProps` and to `ProfileCard.tsx` itself (clickable header, rotating chevron), threaded through all 10 section components (8 via the shared props, 2 — GST/Directors — via their own custom prop types since they don't use `CompanySectionProps`). `page.tsx` now owns a `collapsedSections` set and a "Collapse all/Expand all" button that only counts sections actually visible for the current jurisdiction (GST/Other Registrations excluded when Foreign). `tsc`/`eslint` clean; not visually screenshotted since it's pure client-side state with no backend involvement.
+
+**6. Org unit Delete button + a real vacant-check fix**
+
+User wanted a delete button for org units with "block if any position is assigned, allow if all vacant." The existing `OrgUnitDetailView.delete()` was actually stricter than that already — it blocked on `unit.positions.exists()`, i.e. *any* position at all, even one that's never been touched. Relaxed it to the correct, compliance-safe check: block only if `unit.positions.filter(placements__isnull=False).exists()` — a position with an ended (not just current) placement still has real history that `Placement.position`'s `PROTECT` FK would refuse to cascade through anyway, so "vacant" here specifically means "never held by anyone, ever," same rule `PositionDetailView.delete()` already uses. A never-touched unit+positions now hard-deletes and cascades cleanly. Added the matching frontend button (icon-only, `canDelete`-gated, `window.confirm`) to `OrgDetail.tsx`'s unit view. Verified via the real API: untouched unit deletes (200), one with even an ended placement is rejected (409) with a clear message.
+
+**7. Branch filter → vacant-only positions**
+
+In `OrgTree.tsx`, selecting a specific branch now only shows vacant positions in it (was previously showing filled + vacant) — the ask was "what's open in this branch," and a filled seat isn't something you'd be assigning into. "All branches" is unaffected.
+
+**8. `is_department_level` — added the missing safety check, did NOT remove the feature**
+
+User initially wanted to remove `is_department_level` entirely after learning it has zero validation (can silently change Leave Policy eligibility with no warning — see finding #3 below). Traced the real consequences first (`resolve_employee_department_name()` in `services_approval.py`, 7 real call sites including 3 Leave Policy eligibility checks) before agreeing to anything. Recommended keeping the feature (it solves a real problem — grouping a whole branch of nested sub-units under one department name instead of forcing every leaf-unit to be its own department) and fixing the actual gap instead: added `employees_depending_on_department_flag()` (reuses existing `filter_users_by_org_unit()` + `resolve_employee_department_name()`) and wired it into `OrgUnitDetailView.put()` — turning the flag off now 409s naming who's affected unless a `confirm_department_change` flag is sent; the frontend catches that specific 409 and shows the message in a native confirm before resubmitting. Verified end-to-end with a temporary real placement (Priya Menon → Head, AI & ML): blocked without confirm, allowed with it, test placement cleaned up after. Also confirmed while investigating: **zero of the 43 SRIA units are currently marked `is_department_level=True`, and all 6 existing Leave Policies have `applicable_departments=[]`** — the feature is fully dormant on real data today, so this was a zero-risk time to fix it.
+
+### Investigated, no code change
+
+**9. Company Profile content width — decided to keep full-width**
+
+User noticed the design artifact caps content at `max-width:860px` (plus a 236px rail) while the real page fills the screen. Checked before changing anything: `DashboardShell.tsx`'s `<main>` is plain `flex-1` with no cap, and *no page anywhere in the app* — not other Settings pages, not Employees, not Org Chart — caps its width either. Decision: leave Company Profile full-width; capping just this one page would make it the only inconsistent page in the app, trading one mismatch (vs. the artifact) for a worse one (vs. every other real page).
+
+### Data cleanup
+
+**10. Production org-structure junk data — migration, not a live DB script**
+
+User created a "Founder → Executive management → Root" test chain directly on production while trying out "Add org unit," and wanted it removed. No SSH/DB access to production exists for either of us (confirmed earlier this session — deploys are CI/CD-only), so this has to ship as a migration, same as the SRIA seed. `0117_cleanup_test_org_units.py` matches the exact name+parent chain (not a blind name match — avoids catching an unrelated unit that happens to share a generic name like "Root"), deletes leaf-first, and reuses the *exact same* safety rule as finding #6 above (no children, no placement history anywhere in the chain) rather than force-deleting blind. Tested twice against a synthetic replica of the real chain: once where it deletes all three cleanly, once where I gave "Root" a real (ended) placement and confirmed the *entire* chain — including its ancestors — correctly stays untouched rather than partially deleting. Confirmed the real chain doesn't exist in the local dev DB (production-only), so this is untestable against the real data locally — only against an equivalent synthetic case.
+
+### Findings — flagged, not yet fixed
+
+**11. `assign_position()` doesn't enforce vacancy server-side**
+
+While confirming the Add Employee flow already filters to vacant-only positions in its picker (`AddEmployeeModal.tsx` / `useOrgUnitsAndPositions.ts` — it does, no work needed there), found that `services_placement.py`'s `assign_position()` will silently close out whoever currently holds a seat and reassign it to the new employee — no rejection, no warning. The org-structure spec's own rule ("frontend validates for a good experience, never for integrity") is being violated here: the frontend hiding filled seats is the *only* thing preventing an accidental reassignment today. Not fixed yet — flagged for a decision.
+
+**12. A second, dead-looking "Add Employee" flow**
+
+`frontend/app/dashboard/employees/new/page.tsx` — a separate 7-step wizard with no Position picker at all, still using the legacy free-text department/designation dropdowns. Looks like an unused duplicate of `AddEmployeeModal.tsx`, but not confirmed dead (nothing checked yet for links pointing to it). Flagged, not touched.
+
+### Diagnosed (false alarm, not a bug)
+
+**13. Stale-browser-state 404s from my own testing, not a real bug**
+
+User reported 404s on `positions/{id}/placements/` (GET) and `units/{id}/` (DELETE) from their own local server log while testing finding #6/#10's work. Confirmed both routes are correctly registered in `urls.py` (no routing regression) — the far more likely explanation: verifying #6 and #10 involved creating and deleting several synthetic test org units/positions directly via Django shell against the same local dev database the user's browser had open, so their already-loaded page was showing rows whose IDs no longer existed by the time they clicked them. Asked the user to hard-refresh and retry rather than guessing further; a real bug would still 404 on a *freshly loaded* row. Lesson for next time: warn before running direct-DB test scripts against a database someone else's browser tab might currently be pointed at.

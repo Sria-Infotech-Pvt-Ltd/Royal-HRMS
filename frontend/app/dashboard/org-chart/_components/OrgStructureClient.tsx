@@ -266,6 +266,17 @@ export default function OrgStructureClient() {
               placementHistory={placementHistory} placementHistoryLoading={placementHistoryLoading}
               onSelect={setSelected}
               onAddSubUnit={unitId => setAddUnitParent(unitId)}
+              onDeleteUnit={async unitId => {
+                beginFieldSave();
+                try {
+                  await clientApi.delete(API.orgStructure.units.detail(unitId));
+                  setSelected(null);
+                  await load();
+                  fieldSaveSucceeded();
+                } catch (err) {
+                  fieldSaveFailed(err);
+                }
+              }}
               onAddPosition={unitId => setAddPositionUnit(unitId)}
               onAssign={positionId => setAssignPositionId(positionId)}
               onVacate={positionId => setEndPositionId(positionId)}
@@ -303,6 +314,27 @@ export default function OrgStructureClient() {
                   await load();
                   fieldSaveSucceeded();
                 } catch (err) {
+                  const e = err as { status?: number; message?: string };
+                  // Turning off is_department_level can silently change Leave
+                  // Policy eligibility for employees currently resolving their
+                  // department through this unit — the backend 409s with who's
+                  // affected instead of just failing; confirm here, then
+                  // resubmit with confirm_department_change so it's an
+                  // informed choice, not a silent block.
+                  if (field === "is_department_level" && e.status === 409 && e.message) {
+                    if (window.confirm(`${e.message}\n\nProceed anyway?`)) {
+                      try {
+                        await clientApi.put(API.orgStructure.units.detail(unitId), { [field]: value, confirm_department_change: true });
+                        await load();
+                        fieldSaveSucceeded();
+                      } catch (retryErr) {
+                        fieldSaveFailed(retryErr);
+                      }
+                    } else {
+                      setSaveStatus(null);
+                    }
+                    return;
+                  }
                   fieldSaveFailed(err);
                 }
               }}

@@ -16,6 +16,7 @@ interface Props {
   placementHistoryLoading: boolean;
   onSelect: (s: Selected) => void;
   onAddSubUnit: (parentUnitId: string) => void;
+  onDeleteUnit: (unitId: string) => void;
   onAddPosition: (unitId: string) => void;
   onAssign: (positionId: string) => void;
   onVacate: (positionId: string) => void;
@@ -115,7 +116,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 
 export default function OrgDetail({
   selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
-  onAddSubUnit, onAddPosition, onAssign, onVacate, onDeactivate, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
+  onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
     return (
@@ -147,11 +148,27 @@ export default function OrgDetail({
               {unit.code && <span style={{ fontFamily: "monospace", color: "var(--primary)", background: "rgba(30,78,140,0.08)", borderRadius: 5, padding: "1px 6px", fontSize: 11 }}>{unit.code}</span>}
             </div>
           </div>
-          {canEdit && (
-            <button className="btn btn-ghost btn-sm" onClick={() => onAddSubUnit(unit.id)}>
-              <i className="ti ti-plus" /> Sub-unit
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {canEdit && (
+              <button className="btn btn-ghost btn-sm" onClick={() => onAddSubUnit(unit.id)}>
+                <i className="ti ti-plus" /> Sub-unit
+              </button>
+            )}
+            {canDelete && (
+              <button
+                className="btn btn-ghost"
+                style={{ width: 32, height: 32, padding: 0, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: 6, color: "var(--error)" }}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete "${unit.name}"? This can't be undone, and only works if none of its positions have ever been held by anyone — if any have, this will be rejected; deactivate the unit instead.`)) {
+                    onDeleteUnit(unit.id);
+                  }
+                }}
+                title="Delete org unit — only possible if it has no sub-units and no position in it has ever had a holder"
+              >
+                <i className="ti ti-trash" style={{ fontSize: 13 }} />
+              </button>
+            )}
+          </div>
         </div>
 
         <SectionTitle>Head of unit</SectionTitle>

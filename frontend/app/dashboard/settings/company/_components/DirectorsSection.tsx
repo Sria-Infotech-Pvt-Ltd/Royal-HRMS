@@ -22,7 +22,14 @@ function toRow(d: Director): Row {
 
 let tempCounter = 0;
 
-export default function DirectorsSection({ canEdit, dinLabel }: { canEdit: boolean; dinLabel: string }) {
+interface Props {
+  canEdit: boolean;
+  dinLabel: string;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}
+
+export default function DirectorsSection({ canEdit, dinLabel, collapsed, onToggleCollapse }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -90,6 +97,8 @@ export default function DirectorsSection({ canEdit, dinLabel }: { canEdit: boole
       icon="ti-users-group"
       title="Directors"
       subtitle={`Each director's ${dinLabel}, name, and designation.`}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
     >
       {loading && <div style={{ color: "var(--on-variant)", fontSize: 13, padding: "8px 0" }}>Loading…</div>}
       {loadError && <div style={{ color: "var(--error)", fontSize: 13, padding: "8px 0" }}>{loadError}</div>}

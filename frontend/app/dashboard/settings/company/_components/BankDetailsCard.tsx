@@ -4,11 +4,11 @@ import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import { BANK_ACCOUNT_TYPE_OPTIONS, resolveIfsc } from "../_data";
 
-export default function BankDetailsCard({ form, canEdit, onFieldChange }: CompanySectionProps) {
+export default function BankDetailsCard({ form, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   const ifsc = resolveIfsc(form.bank_ifsc);
 
   return (
-    <ProfileCard icon="ti-building-bank" title="Bank details" subtitle="Used for payouts and on invoices. IFSC resolves bank and branch.">
+    <ProfileCard icon="ti-building-bank" title="Bank details" subtitle="Used for payouts and on invoices. IFSC resolves bank and branch." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-2">
         <div className="field-group">
           <label className="field-label">Account Holder <span style={{ color: "var(--error)" }}>*</span></label>

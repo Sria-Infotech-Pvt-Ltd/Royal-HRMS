@@ -1207,6 +1207,32 @@ class OrgUnitDetailView(APIView):
         unit = self._get(pk)
         if not unit:
             return error('Org unit not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # Turning off is_department_level can silently change Leave Policy
+        # eligibility for anyone currently resolving their department
+        # through this unit — warn (via a 409 the frontend confirms
+        # through) rather than let that go unnoticed, unless the caller
+        # has already confirmed it via confirm_department_change.
+        turning_off_department = (
+            unit.is_department_level
+            and 'is_department_level' in request.data
+            and str(request.data.get('is_department_level')).strip().lower() in ('false', '0')
+            and str(request.data.get('confirm_department_change', '')).strip().lower() not in ('true', '1')
+        )
+        if turning_off_department:
+            from apps.accounts.services_approval import employees_depending_on_department_flag
+            affected = employees_depending_on_department_flag(unit)
+            if affected:
+                shown = ', '.join(affected[:5])
+                more = f', and {len(affected) - 5} more' if len(affected) > 5 else ''
+                return error(
+                    f'"{unit.name}" is currently the resolved department for '
+                    f'{len(affected)} employee(s) ({shown}{more}) — turning this off '
+                    f'changes their Leave Policy eligibility. Confirm to proceed anyway.',
+                    http_status=status.HTTP_409_CONFLICT,
+                    data={'affected_count': len(affected), 'affected_names': affected},
+                )
+
         serializer = OrgUnitSerializer(unit, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
@@ -1232,9 +1258,17 @@ class OrgUnitDetailView(APIView):
                 f'Cannot delete "{unit.name}" — it has sub-units. Remove or move those first.',
                 http_status=status.HTTP_409_CONFLICT,
             )
-        if unit.positions.exists():
+        # A position with a CURRENT holder obviously has placement history,
+        # so checking "any placement ever" (not just "any position at all")
+        # covers both "someone is assigned right now" and "someone held
+        # this seat before and it's vacant again" — either way that's real
+        # history Placement.position's PROTECT would refuse to cascade
+        # through anyway. Only truly untouched positions (never placed,
+        # ever) make the whole unit safe to hard-delete.
+        if unit.positions.filter(placements__isnull=False).exists():
             return error(
-                f'Cannot delete "{unit.name}" — it still has positions. Deactivate the unit instead if it has real history.',
+                f'Cannot delete "{unit.name}" — one or more of its positions has been held by '
+                f'someone, now or in the past. Deactivate the unit instead to preserve that history.',
                 http_status=status.HTTP_409_CONFLICT,
             )
         name = unit.name

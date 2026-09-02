@@ -7,16 +7,25 @@ interface Props {
   title: string;
   subtitle: string;
   action?: ReactNode;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   children: ReactNode;
 }
 
-export default function ProfileCard({ icon, title, subtitle, action, children }: Props) {
+export default function ProfileCard({ icon, title, subtitle, action, collapsed, onToggleCollapse, children }: Props) {
   return (
     <div
       className="card mb-24"
       style={{ borderRadius: "var(--radius-lg)", overflow: "hidden" }}
     >
-      <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--outline-v)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+      <div
+        onClick={onToggleCollapse}
+        style={{
+          padding: "18px 24px", borderBottom: collapsed ? "none" : "1px solid var(--outline-v)",
+          display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12,
+          cursor: "pointer",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8, flexShrink: 0,
@@ -30,11 +39,22 @@ export default function ProfileCard({ icon, title, subtitle, action, children }:
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>{subtitle}</div>
           </div>
         </div>
-        {action}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {action && <span onClick={e => e.stopPropagation()}>{action}</span>}
+          <i
+            className="ti ti-chevron-down"
+            style={{
+              fontSize: 16, color: "var(--on-variant)", flexShrink: 0,
+              transition: "transform 0.15s", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+            }}
+          />
+        </div>
       </div>
-      <div style={{ padding: "20px 24px" }}>
-        {children}
-      </div>
+      {!collapsed && (
+        <div style={{ padding: "20px 24px" }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

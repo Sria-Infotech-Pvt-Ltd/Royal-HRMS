@@ -21,10 +21,13 @@ import {
   profileCompletionPercent, sanitizeCompanyResponse, validateCompany,
 } from "./_data";
 
+const ALL_SECTION_IDS = ["entity", "gst", "other", "office", "people", "signatory", "bank", "business", "regional", "contact"] as const;
+
 export default function CompanyInfoPage() {
   const router  = useRouter();
   const canEdit = usePermission("settings.edit");
 
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [form,        setForm]        = useState<CompanyData>(EMPTY_COMPANY);
   const [errors,      setErrors]      = useState<ReturnType<typeof validateCompany>>({});
   const [apiError,    setApiError]    = useState<string | null>(null);
@@ -60,6 +63,14 @@ export default function CompanyInfoPage() {
   }, []);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
+
+  function toggleSection(id: string) {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   function handleField(key: keyof CompanyData, value: string | boolean) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -143,6 +154,11 @@ export default function CompanyInfoPage() {
   const isIndia = form.jurisdiction === "india";
   const entityOptions = isIndia ? ENTITY_TYPE_OPTIONS_INDIA : ENTITY_TYPE_OPTIONS_FOREIGN;
   const completion = profileCompletionPercent(form);
+  const visibleSectionIds = isIndia ? ALL_SECTION_IDS : ALL_SECTION_IDS.filter(id => id !== "gst" && id !== "other");
+  const allSectionsCollapsed = visibleSectionIds.every(id => collapsedSections.has(id));
+  function toggleAllSections() {
+    setCollapsedSections(allSectionsCollapsed ? new Set() : new Set(visibleSectionIds));
+  }
 
   // ─── Loading ──────────────────────────────────────────────────────────────
 
@@ -169,6 +185,10 @@ export default function CompanyInfoPage() {
           <div className="page-sub">Statutory and business details. The form adapts to your entity type, so you only see what applies to you.</div>
         </div>
         <div className="page-actions">
+          <button className="btn btn-ghost" onClick={toggleAllSections}>
+            <i className={`ti ${allSectionsCollapsed ? "ti-chevron-down" : "ti-chevron-up"}`} />
+            {allSectionsCollapsed ? "Expand all" : "Collapse all"}
+          </button>
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")}>
             <i className="ti ti-arrow-left" /> Back
           </button>
@@ -229,21 +249,30 @@ export default function CompanyInfoPage() {
         </select>
       </div>
 
-      <EntityIdentityCard {...sectionProps} />
-      {isIndia && <GSTRegistrationsSection canEdit={canEdit} companyPan={form.pan} />}
-      {isIndia && <OtherRegistrationsCard {...sectionProps} />}
-      <AddressCard {...sectionProps} />
-      <DirectorsSection canEdit={canEdit} dinLabel={dinLabel} />
-      <SignatoryCard {...sectionProps} />
-      <BankDetailsCard {...sectionProps} />
-      <BusinessProfileCard {...sectionProps} />
-      <RegionalFormatsCard {...sectionProps} />
+      <EntityIdentityCard {...sectionProps} collapsed={collapsedSections.has("entity")} onToggleCollapse={() => toggleSection("entity")} />
+      {isIndia && (
+        <GSTRegistrationsSection
+          canEdit={canEdit} companyPan={form.pan}
+          collapsed={collapsedSections.has("gst")} onToggleCollapse={() => toggleSection("gst")}
+        />
+      )}
+      {isIndia && <OtherRegistrationsCard {...sectionProps} collapsed={collapsedSections.has("other")} onToggleCollapse={() => toggleSection("other")} />}
+      <AddressCard {...sectionProps} collapsed={collapsedSections.has("office")} onToggleCollapse={() => toggleSection("office")} />
+      <DirectorsSection
+        canEdit={canEdit} dinLabel={dinLabel}
+        collapsed={collapsedSections.has("people")} onToggleCollapse={() => toggleSection("people")}
+      />
+      <SignatoryCard {...sectionProps} collapsed={collapsedSections.has("signatory")} onToggleCollapse={() => toggleSection("signatory")} />
+      <BankDetailsCard {...sectionProps} collapsed={collapsedSections.has("bank")} onToggleCollapse={() => toggleSection("bank")} />
+      <BusinessProfileCard {...sectionProps} collapsed={collapsedSections.has("business")} onToggleCollapse={() => toggleSection("business")} />
+      <RegionalFormatsCard {...sectionProps} collapsed={collapsedSections.has("regional")} onToggleCollapse={() => toggleSection("regional")} />
       <ContactBrandingCard
         {...sectionProps}
         displayLogo={displayLogo}
         fileRef={fileRef}
         onLogoChange={handleLogoChange}
         onLogoRemove={handleLogoRemove}
+        collapsed={collapsedSections.has("contact")} onToggleCollapse={() => toggleSection("contact")}
       />
 
       {/* ── Bottom save bar ──────────────────────────────────────────────── */}

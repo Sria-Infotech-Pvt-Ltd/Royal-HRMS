@@ -22,7 +22,7 @@ function Chip({ label, value, error }: { label: string; value: string; error?: b
   );
 }
 
-export default function EntityIdentityCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
+export default function EntityIdentityCard({ form, errors, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   const isIndia = form.jurisdiction === "india";
   const regConfig = isIndia ? (REGISTRATION_NUMBER_CONFIG[form.entity_type] ?? null) : null;
   // The CIN structure-decode chips below only mean anything for an actual
@@ -35,7 +35,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
   const hint = entityComplianceHint(form.jurisdiction, form.entity_type, entityLabel);
 
   return (
-    <ProfileCard icon="ti-building" title="Entity & identity" subtitle="Legal identity and statutory registration numbers.">
+    <ProfileCard icon="ti-building" title="Entity & identity" subtitle="Legal identity and statutory registration numbers." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       {hint && (
         <div style={{
           display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 14px",

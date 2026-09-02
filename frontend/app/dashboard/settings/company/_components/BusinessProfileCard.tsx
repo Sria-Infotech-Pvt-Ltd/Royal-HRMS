@@ -4,9 +4,9 @@ import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import { FINANCIAL_YEAR_OPTIONS, INDUSTRY_OPTIONS } from "../_data";
 
-export default function BusinessProfileCard({ form, canEdit, onFieldChange }: CompanySectionProps) {
+export default function BusinessProfileCard({ form, canEdit, onFieldChange, collapsed, onToggleCollapse }: CompanySectionProps) {
   return (
-    <ProfileCard icon="ti-briefcase" title="Business profile" subtitle="What the company does, and how it accounts.">
+    <ProfileCard icon="ti-briefcase" title="Business profile" subtitle="What the company does, and how it accounts." collapsed={collapsed} onToggleCollapse={onToggleCollapse}>
       <div className="form-row cols-2 mb-16">
         <div className="field-group">
           <label className="field-label">Industry <span style={{ color: "var(--error)" }}>*</span></label>
