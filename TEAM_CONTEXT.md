@@ -3639,3 +3639,42 @@ Then imported the real SRIA org structure from a JSON export the user provided (
 **3. Repeated `/api/token/refresh/` 401s after a successful login**
 
 User reported ~7 real (server-received, not just client-side) failed refresh POSTs over 4+ minutes after logging in successfully, well past what the recently-shipped cross-tab refresh-race fix (`644c2c4`) should allow. Root-caused to Next.js Fast Refresh: `clientApi.ts`'s race protection (`_sessionKnownExpired`, `isRefreshing`, `refreshQueue`) is plain in-memory module state, which Fast Refresh resets on every hot-reload — so with multiple tabs open and files being saved/edited during that session, a tab can "forget" it already knows refresh failed and genuinely retry against the server. Confirmed with the user this happened with hot-reload active and multiple tabs open. The `navigator.locks` cross-tab serialization itself is unaffected (locks live in the browser, not the JS heap). Decision: **no code change** — this can't happen in a production build (Fast Refresh never runs there), so hardening it would mean adding complexity (e.g. persisting state to `sessionStorage`) to work around a dev-tooling artifact. Revisit only if it reproduces with hot-reload off.
+
+---
+
+## Session Log — 2026-09-02
+**Author: Durga Prasad**
+
+### Deploy pipeline — worth knowing before your next push
+
+Confirmed by reading `.github/workflows/deploy.yml` + `deploy/deploy.sh`: **every push to `New-AI` triggers a real production deploy** on `aira.nxsys.in` — GitHub Actions SSHes into the VPS, runs `git merge --ff-only` (refuses if the server has diverged), `manage.py migrate --noinput`, rebuilds the frontend only if frontend paths changed, `collectstatic`, then restarts all four services (`aira-web`, `aira-celery`, `aira-celery-beat`, `aira-frontend`) with a health check against `/login`. This isn't new, but it's easy to forget mid-session — every commit below went out this way, confirmed with the user before each push. Also hit a real (harmless) instance of this: a push was rejected mid-session because `cbb8c13` (a teammate's websocket connection-leak fix, unrelated file) had landed on `origin/New-AI` first — resolved with a plain `git rebase origin/New-AI` (stashing first, since work was in progress), not a force-push.
+
+### Features Shipped
+
+**1. Real SRIA org-structure data — from a one-off script to a proper migration**
+
+The org-structure data initially loaded into the dev DB via a one-off `manage.py shell -c` script (see 2026-09-01 above) was formalized into `apps/accounts/migrations/0116_seed_sria_org_structure.py` — same validated logic (chief-`reports_to` hierarchy resolution, em-dash fix), but now `get_or_create`-based and idempotent, and actually deployed to production via the pipeline above rather than living only in the dev DB. Verified idempotent locally first (re-running it against data that already existed created zero duplicates) before pushing.
+
+**2. Company Profile — format validation, entity-aware CIN/LLPIN, N+1 fix**
+
+The Company Profile settings page (`frontend/app/dashboard/settings/company/`) turned out to already exist almost in full (all 11 sections the user's design mockup called for) — this was reconciliation against a design reference, not a greenfield build. Confirmed via a background research agent before touching anything.
+
+- **Format validation added** for Udyam/MSME, IEC, EPFO, ESIC, Professional Tax, and the signatory DIN/PAN field, mirroring the existing PAN/CIN/GSTIN validator pattern in `serializers.py` exactly. IEC is now also cross-checked against the company's own PAN (it's been PAN-based since 2018), same idea as the existing GSTIN↔PAN cross-check. EPFO code and Professional Tax reg. are deliberately loosely validated (garbage-guard only) since neither has one true national format — documented as an explicit assumption, not guessed silently.
+- **Entity-type-aware CIN/LLPIN/Registration No. field** — real bug: the `cin` database column is reused for whatever an entity type's actual registration number is called, but the form always labeled and validated it as a strict CIN, so picking LLP still demanded CIN-shaped input with no way to enter a real LLPIN. First pass fixed this from general research into Indian company law (LLPIN required+loose format, Partnership/Trust optional+loose format) — then the user supplied the **actual design reference** (`india-company-profile-v2.html`, a full artifact with real `applyEntityType()`/`validateRegNo()` logic), which corrected three assumptions that turned out wrong:
+  - LLPIN has an exact format in the reference (`^[A-Z]{3}-?\d{4}$`, e.g. `AAB-1234`), not "no standard format."
+  - Partnership/Trust's registration number is **required** whenever the field is shown, not optional — the reference always adds the required asterisk when `t.reg` is set, with no partial-optional case.
+  - **TAN is optional for every entity type**, not required — the reference marks it `(for TDS)`/optional throughout and never toggles its required-state by entity type. The real app previously force-required it for every India entity; this was a genuine bug, not intentional design (see the "why is TAN required" answer earlier in this session, which was wrong).
+  Lesson: a static mockup screenshot/HTML fragment can look like a nice-to-have reference, but when the user says "match the artifact," get the *complete* file (this one only revealed its real logic once pasted in full — chat's 50k-char truncation had cut it off partway through on the first attempt) rather than inferring behavior from partial markup.
+- **Fixed a real N+1** found via a production warning (Daphne: "took too long to shut down" on the org-structure positions list): `PositionSerializer.get_reports_to()` ran a fresh, unprefetched query per position (plus another for that target's own placements) — invisible while the pagination bug above capped every page at 100 rows, but a genuine ~450-query N+1 once a full 223-position page was actually requested. Fixed by building one `{org_unit_id: chief_position}` map per list request (`PositionListCreateView.get()`) instead of a query-per-row; confirmed via `CaptureQueriesContext` — 223 positions serialize in a flat 6 queries now, not ~450.
+- Files: `backend/apps/accounts/serializers.py`, `backend/apps/accounts/views.py`, `frontend/app/dashboard/settings/company/_data.ts`, `_components/OtherRegistrationsCard.tsx`, `_components/SignatoryCard.tsx`, `_components/EntityIdentityCard.tsx`. Every validator and the N+1 fix verified against the real API (Django test client + a real JWT, not just unit-level checks) before pushing. **Committed** (`443f63d`, plus `540fe7d`/`c6e2c26`/`faed3ca` earlier in the same session).
+
+### Bug Fixes Shipped
+
+**3. Org-structure list endpoints silently truncating past 100 records**
+
+User report: "most of them not came in" after the SRIA import landed on the server. Root cause: the shared `paginate()` helper (`core/pagination.py`) defaults `max_page_size=100`; both `OrgUnitListCreateView` and `PositionListCreateView` passed `default_page_size=200` but never overrode `max_page_size`, so the frontend's `?page_size=200` request was silently clamped to 100 — invisible in dev (11 positions, well under the cap) until a real 223-position import exposed it. Fixed by raising `max_page_size` on both views and bumping the frontend's own request to match; verified end-to-end (43/43 units, 223/223 positions returned) via the real API, not just a DB count.
+- Files: `backend/apps/accounts/views.py`, `frontend/app/dashboard/org-chart/_components/OrgStructureClient.tsx`. **Committed** (`faed3ca`).
+
+**4. Org-chart Deactivate/Reactivate/Delete — deployed**
+
+The feature described as "not yet committed" in the 2026-09-01 entry above is now live: backend `PositionActivateView` + the frontend Deactivate/Reactivate/Delete UI. **Committed** (`540fe7d`).
