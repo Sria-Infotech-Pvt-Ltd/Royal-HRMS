@@ -59,6 +59,15 @@ def get_signed_url(name: str, ttl: int = SIGNED_URL_TTL_SECONDS) -> str:
 
 
 def _resolve_file_id(name: str) -> str | None:
+    # Django's Storage.generate_filename() runs `name` through
+    # os.path.normpath() before it ever reaches here — on Windows that turns
+    # the forward-slash paths every upload_to function below returns (e.g.
+    # "documents/2026/09/file.csv") into backslash paths, which ImageKit's
+    # API rejects outright ("invalid value for folder parameter"). ImageKit
+    # paths are always forward-slash, on every OS — normalize unconditionally
+    # rather than only on Windows, so this can't regress if it's ever run
+    # somewhere the separator handling differs.
+    name = name.replace('\\', '/')
     folder = os.path.dirname(name)
     file_name = os.path.basename(name)
     client = _get_client()
@@ -85,6 +94,9 @@ class ImageKitStorage(Storage):
     is_private_file = False
 
     def _save(self, name, content):
+        # See _resolve_file_id()'s comment above — same normpath-on-Windows
+        # issue applies here, at the point of upload rather than delete.
+        name = name.replace('\\', '/')
         folder = os.path.dirname(name)
         file_name = os.path.basename(name)
         content.seek(0)

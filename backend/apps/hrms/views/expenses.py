@@ -134,16 +134,25 @@ class ExpenseListCreateView(APIView):
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
 
-        with transaction.atomic():
-            branch   = _resolve_branch(request.user)
-            last_num = Expense.objects.select_for_update().aggregate(n=Max('expense_number'))['n'] or 0
-            expense  = serializer.save(
-                employee=request.user,
-                branch=branch,
-                expense_number=last_num + 1,
-            )
-            for receipt_file in receipt_files:
-                ExpenseReceipt.objects.create(expense=expense, file=receipt_file)
+        try:
+            with transaction.atomic():
+                branch   = _resolve_branch(request.user)
+                last_num = Expense.objects.select_for_update().aggregate(n=Max('expense_number'))['n'] or 0
+                expense  = serializer.save(
+                    employee=request.user,
+                    branch=branch,
+                    expense_number=last_num + 1,
+                )
+                for receipt_file in receipt_files:
+                    ExpenseReceipt.objects.create(expense=expense, file=receipt_file)
+        except Exception as exc:
+            # transaction.atomic() has already rolled back everything above by
+            # the time this runs — this only turns an unhandled 500 (e.g. a
+            # storage-backend failure saving a receipt) into the same clean,
+            # logged error response DocumentListCreateView.post() already
+            # gives for the equivalent failure.
+            logger.error('Expense submission failed for %s: %s', request.user.email, exc, exc_info=True)
+            return error('Failed to submit expense. Please try again.')
 
         logger.info('Expense submitted: %s by %s (%d receipts)', expense.title, request.user.email, len(receipt_files))
 
