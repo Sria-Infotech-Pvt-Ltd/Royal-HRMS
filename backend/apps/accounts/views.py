@@ -1305,9 +1305,22 @@ class PositionListCreateView(APIView):
         # max_page_size clamp was truncating any org chart bigger than 100
         # positions (e.g. 223 positions -> only the first 100 ever returned).
         page_obj, paginator = paginate(qs, request, default_page_size=200, max_page_size=1000)
+        # One query for every chief position in the system (there's exactly
+        # one per org unit, so this is small regardless of how many
+        # positions are on the page) instead of PositionSerializer.
+        # get_reports_to() running its own query per row — see that
+        # method's docstring for why this matters now.
+        chief_by_unit = {
+            p.org_unit_id: p
+            for p in Position.objects.filter(is_chief=True)
+                .select_related('org_unit').prefetch_related('placements__employee')
+        }
         return success('Positions retrieved.', data=paginated_data(
             paginator, page_obj,
-            PositionSerializer(page_obj.object_list, many=True, context={'as_of': as_of}).data,
+            PositionSerializer(
+                page_obj.object_list, many=True,
+                context={'as_of': as_of, 'chief_by_unit': chief_by_unit},
+            ).data,
         ))
 
     def post(self, request):

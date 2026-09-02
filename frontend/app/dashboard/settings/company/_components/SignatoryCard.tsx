@@ -36,11 +36,12 @@ export default function SignatoryCard({ form, errors, canEdit, onFieldChange }: 
         <div className="field-group">
           <label className="field-label">DIN / PAN <span style={{ color: "var(--error)" }}>*</span></label>
           <input
-            className="field-input"
+            className={`field-input${errors.signatory_din_pan ? " field-error" : ""}`}
             value={form.signatory_din_pan}
             disabled={!canEdit}
             onChange={e => onFieldChange("signatory_din_pan", e.target.value.toUpperCase())}
           />
+          {errors.signatory_din_pan && <div className="field-error-msg">{errors.signatory_din_pan}</div>}
         </div>
         <div className="field-group">
           <label className="field-label">Signatory Email <span style={{ color: "var(--error)" }}>*</span></label>

@@ -573,8 +573,22 @@ class PositionSerializer(serializers.ModelSerializer):
         """Mirrors the mockup's own reportsToName() logic: a chief reports to
         the parent unit's chief; anyone else reports to their own unit's
         chief. Purely a computed display value — never a new source of truth
-        for approval routing, which stays on User.reporting_manager."""
-        if obj.is_chief:
+        for approval routing, which stays on User.reporting_manager.
+
+        `chief_by_unit` (a {org_unit_id: Position} map, built once by
+        PositionListCreateView.get() for however many rows are on the page)
+        turns this into a dict lookup when present — without it, this ran a
+        fresh, unprefetched query per position (org_unit.positions.filter(...))
+        plus another for that target's own placements, invisible while the
+        list endpoint's own pagination bug capped every page at 100 rows, but
+        a real ~450-query N+1 once that cap was fixed and a full 223-position
+        page is actually requested. PositionDetailView (a single object) still
+        falls back to the query below, where the cost is negligible."""
+        chief_by_unit = self.context.get('chief_by_unit')
+        if chief_by_unit is not None:
+            unit_id = obj.org_unit.parent_id if obj.is_chief else obj.org_unit_id
+            target = chief_by_unit.get(unit_id) if unit_id else None
+        elif obj.is_chief:
             target = (
                 obj.org_unit.parent.positions.filter(is_chief=True).first()
                 if obj.org_unit.parent else None
@@ -641,6 +655,18 @@ _TAN_RE   = re.compile(r'^[A-Z]{4}\d{5}[A-Z]$')
 _PIN_RE   = re.compile(r'^\d{6}$')
 _PHONE_RE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
 _DIN_RE   = re.compile(r'^\d{8}$')
+_UDYAM_RE = re.compile(r'^UDYAM-[A-Z]{2}-\d{2}-\d{7}$')
+_ESIC_RE  = re.compile(r'^\d{17}$')
+# LLPIN format per the approved design reference (india-company-profile-v2
+# artifact's validateRegNo()) — 3 letters, an optional hyphen, 4 digits
+# (e.g. AAB-1234).
+_LLPIN_RE = re.compile(r'^[A-Z]{3}-?\d{4}$')
+# EPFO establishment codes and state Professional Tax registration numbers
+# have no single nationally-standardized format (EPFO varies by regional
+# office prefix; Professional Tax is levied and numbered per-state) — unlike
+# PAN/CIN/TAN/GSTIN/UDYAM/ESIC above, so this only guards against garbage
+# input (blank-only, stray symbols) rather than asserting a specific shape.
+_LOOSE_REGISTRATION_RE = re.compile(r'^[A-Z0-9/\-]{1,30}$')
 
 # 2-digit GSTIN state code, keyed by the state names used elsewhere in this
 # app — lets a GST registration row be cross-checked against its own
@@ -660,6 +686,17 @@ GST_STATE_CODES = {
 }
 
 _CIN_ENTITY_TYPES = {'private_limited', 'public_limited', 'opc', 'section8'}
+# The single `cin` column is reused for whatever this entity type's actual
+# registration number is called (see validate_cin below). Required/optional
+# and format per entity type follow the approved design reference
+# (india-company-profile-v2 artifact's TYPES_IN + applyEntityType()/
+# validateRegNo()) exactly, not independent legal research: every entity
+# type with a registration number at all (CIN types, LLP, Partnership,
+# Trust/Society) requires it — only Proprietorship/HUF have none, and the
+# frontend hides the field entirely for those two.
+_LLPIN_ENTITY_TYPES = {'llp'}
+_GENERIC_REG_ENTITY_TYPES = {'partnership', 'trust_society'}
+_NO_REG_ENTITY_TYPES = {'sole_proprietorship', 'huf'}
 
 
 def _gstin_pan_mismatch_error(gstin: str, pan: str) -> str | None:
@@ -670,6 +707,16 @@ def _gstin_pan_mismatch_error(gstin: str, pan: str) -> str | None:
     # the GSTIN is actually registered with the government.
     if gstin and pan and gstin[2:12] != pan:
         return f"This GSTIN belongs to PAN {gstin[2:12]}, not the company PAN ({pan})."
+    return None
+
+
+def _iec_pan_mismatch_error(iec: str, pan: str) -> str | None:
+    # Since 2018, DGFT issues the Import Export Code as the entity's PAN
+    # itself (no separate IEC series) — same free cross-check idea as
+    # GSTIN-vs-PAN above, catching a stale/mistyped IEC from before a PAN
+    # change without a government lookup.
+    if iec and pan and iec != pan:
+        return f"IEC is PAN-based since 2018 and should match the company PAN ({pan})."
     return None
 
 
@@ -763,8 +810,22 @@ class CompanySerializer(serializers.ModelSerializer):
         if not value:
             return value
         v = value.strip().upper()
-        if not _CIN_RE.match(v):
-            raise serializers.ValidationError('Enter a valid CIN (e.g. U74999MH2020PTC123456).')
+        entity_type = (self.initial_data.get('entity_type') if hasattr(self, 'initial_data') else None) \
+            or getattr(self.instance, 'entity_type', '')
+        if entity_type in _CIN_ENTITY_TYPES:
+            if not _CIN_RE.match(v):
+                raise serializers.ValidationError('Enter a valid CIN (e.g. U74999MH2020PTC123456).')
+        elif entity_type in _NO_REG_ENTITY_TYPES:
+            pass  # No such number for these entity types — nothing to validate.
+        elif entity_type in _LLPIN_ENTITY_TYPES:
+            if not _LLPIN_RE.match(v):
+                raise serializers.ValidationError('LLPIN is 3 letters + 4 digits (e.g. AAB-1234).')
+        else:
+            # Partnership/Trust — the artifact's own validateRegNo() applies
+            # no format check at all here beyond a minimum length, since a
+            # state filing number has no single national shape.
+            if len(v) < 3:
+                raise serializers.ValidationError('Enter the registration number from your certificate.')
         return v
 
     def validate_pan(self, value: str) -> str:
@@ -797,6 +858,54 @@ class CompanySerializer(serializers.ModelSerializer):
         v = value.strip()
         if not _PIN_RE.match(v):
             raise serializers.ValidationError('PIN code must be exactly 6 digits.')
+        return v
+
+    def validate_udyam_msme(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip().upper()
+        if not _UDYAM_RE.match(v):
+            raise serializers.ValidationError('Enter a valid Udyam number (e.g. UDYAM-TS-00-0000000).')
+        return v
+
+    def validate_iec(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip().upper()
+        if not _PAN_RE.match(v):
+            raise serializers.ValidationError('IEC is PAN-based since 2018 — enter a valid 10-character PAN-format code.')
+        return v
+
+    def validate_epfo_code(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip().upper()
+        if not _LOOSE_REGISTRATION_RE.match(v):
+            raise serializers.ValidationError('EPFO code must be 30 characters or fewer, letters/digits/slashes/hyphens only.')
+        return v
+
+    def validate_esic_code(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip()
+        if not _ESIC_RE.match(v):
+            raise serializers.ValidationError('ESIC code must be exactly 17 digits.')
+        return v
+
+    def validate_professional_tax_reg(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip().upper()
+        if not _LOOSE_REGISTRATION_RE.match(v):
+            raise serializers.ValidationError('Professional Tax registration must be 30 characters or fewer, letters/digits/slashes/hyphens only.')
+        return v
+
+    def validate_signatory_din_pan(self, value: str) -> str:
+        if not value:
+            return value
+        v = value.strip().upper()
+        if not (_DIN_RE.match(v) or _PAN_RE.match(v)):
+            raise serializers.ValidationError('Enter a valid DIN (8 digits) or PAN (10 characters) — the signatory is not always a director.')
         return v
 
     def validate_website(self, value: str) -> str:
@@ -866,10 +975,20 @@ class CompanySerializer(serializers.ModelSerializer):
             if jurisdiction == Company.JURISDICTION_INDIA:
                 if not _val('pan'):
                     errors['pan'] = 'PAN is required for an Indian entity.'
-                if not _val('tan'):
-                    errors['tan'] = 'TAN is required for an Indian entity.'
+                # TAN is intentionally NOT required here, for any entity
+                # type — matches the approved design reference, which marks
+                # it "(for TDS)"/optional throughout and never makes it
+                # required per entity type. Format is still checked below
+                # (validate_tan) whenever a value is actually entered.
                 if entity_type in _CIN_ENTITY_TYPES and not _val('cin'):
                     errors['cin'] = 'CIN is required for this entity type.'
+                elif entity_type in _LLPIN_ENTITY_TYPES and not _val('cin'):
+                    errors['cin'] = 'LLPIN is required for an LLP.'
+                elif entity_type in _GENERIC_REG_ENTITY_TYPES and not _val('cin'):
+                    errors['cin'] = 'Registration number is required for this entity type.'
+                iec_mismatch = _iec_pan_mismatch_error(_val('iec'), _val('pan'))
+                if iec_mismatch:
+                    errors['iec'] = iec_mismatch
             else:
                 if not _val('country_of_registration'):
                     errors['country_of_registration'] = 'Country of registration is required for a foreign entity.'

@@ -56,6 +56,26 @@ export const ENTITY_TYPE_OPTIONS_FOREIGN = [
 // it carries a CIN too; HUF/proprietorship/trust/society don't.
 export const CIN_ENTITY_TYPES = new Set(["private_limited", "public_limited", "opc", "section8"]);
 
+// The single `cin` column is reused for whatever this entity type's actual
+// registration number is called. Label/required/format follow the approved
+// design reference (india-company-profile-v2 artifact's TYPES_IN +
+// applyEntityType()/validateRegNo()) exactly: every entity type that has a
+// registration number at all (CIN types, LLP, Partnership, Trust/Society)
+// requires it — only Proprietorship/HUF have none, where `null` means the
+// field is hidden entirely, not just optional.
+export interface RegistrationNumberConfig { label: string; required: boolean; placeholder: string }
+export const REGISTRATION_NUMBER_CONFIG: Record<string, RegistrationNumberConfig | null> = {
+  private_limited:      { label: "CIN",              required: true, placeholder: "U74999MH2020PTC123456" },
+  public_limited:       { label: "CIN",              required: true, placeholder: "U74999MH2020PTC123456" },
+  opc:                  { label: "CIN",              required: true, placeholder: "U74999MH2020PTC123456" },
+  section8:             { label: "CIN",              required: true, placeholder: "U74999MH2020PTC123456" },
+  llp:                  { label: "LLPIN",            required: true, placeholder: "AAB-1234" },
+  partnership:          { label: "Registration No.", required: true, placeholder: "Registration number from your certificate" },
+  trust_society:        { label: "Registration No.", required: true, placeholder: "Registration number from your certificate" },
+  sole_proprietorship:  null,
+  huf:                  null,
+};
+
 export const INDUSTRY_OPTIONS = [
   { value: "it_services",   label: "Information Technology & Services" },
   { value: "manufacturing", label: "Manufacturing" },
@@ -179,8 +199,11 @@ export function entityComplianceHint(jurisdiction: string, entityType: string, e
   if (CIN_ENTITY_TYPES.has(entityType)) {
     return `A ${entityLabel.split(" — ")[0]} files a CIN and needs directors with DINs. PAN 4th char should be C.`;
   }
-  if (entityType === "llp" || entityType === "partnership") {
-    return `A ${entityLabel.split(" — ")[0]} doesn't file a CIN with the Registrar of Companies. PAN 4th char should be F.`;
+  if (entityType === "llp") {
+    return "An LLP doesn't file a CIN — it's identified by its LLPIN, filed under the LLP Act rather than the Companies Act. PAN 4th char should be F.";
+  }
+  if (entityType === "partnership") {
+    return "A Partnership Firm doesn't file a CIN — enter its registration number from the certificate instead. PAN 4th char should be F.";
   }
   if (entityType === "sole_proprietorship") {
     return "A Proprietorship uses the proprietor's own PAN (4th char P) — no separate CIN or firm PAN.";
@@ -293,6 +316,18 @@ const PIN_RE   = /^\d{6}$/;
 const PHONE_RE = /^\+?[\d\s\-()\./]{7,20}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z1-9]Z[A-Z\d]$/;
+const DIN_RE   = /^\d{8}$/;
+const UDYAM_RE = /^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/;
+const ESIC_RE  = /^\d{17}$/;
+// LLPIN format per the approved design reference (india-company-profile-v2
+// artifact's validateRegNo()) — 3 letters, an optional hyphen, 4 digits
+// (e.g. AAB-1234).
+const LLPIN_RE = /^[A-Z]{3}-?\d{4}$/;
+// EPFO establishment codes and state Professional Tax registration numbers
+// have no single nationally-standardized format (same reasoning as the
+// backend's matching constant in serializers.py) — this only guards against
+// garbage input, not a specific shape.
+const LOOSE_REGISTRATION_RE = /^[A-Z0-9/\-]{1,30}$/;
 
 export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldErrors {
   const e: CompanyFieldErrors = {};
@@ -311,16 +346,32 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
     if (!f.pan.trim())                              e.pan = "PAN is required for an Indian entity.";
     else if (!PAN_RE.test(f.pan.trim().toUpperCase())) e.pan = "Enter a valid 10-character PAN.";
 
-    if (!f.tan.trim())                              e.tan = "TAN is required for an Indian entity.";
-    else if (!TAN_RE.test(f.tan.trim().toUpperCase())) e.tan = "Enter a valid 10-character TAN.";
+    // TAN is intentionally NOT required here, for any entity type — matches
+    // the approved design reference, which marks it "(for TDS)"/optional
+    // throughout and never makes it required per entity type. Format is
+    // still checked whenever a value is actually entered.
+    if (f.tan.trim() && !TAN_RE.test(f.tan.trim().toUpperCase())) e.tan = "Enter a valid 10-character TAN.";
 
-    if (CIN_ENTITY_TYPES.has(f.entity_type) && !f.cin.trim()) {
-      e.cin = "CIN is required for this entity type.";
-    } else if (f.cin.trim() && !CIN_RE.test(f.cin.trim().toUpperCase())) {
-      e.cin = "Enter a valid CIN (e.g. U74999MH2020PTC123456).";
+    const regConfig = REGISTRATION_NUMBER_CONFIG[f.entity_type] ?? null;
+    if (regConfig) {
+      if (regConfig.required && !f.cin.trim()) {
+        e.cin = `${regConfig.label} is required for this entity type.`;
+      } else if (f.cin.trim() && CIN_ENTITY_TYPES.has(f.entity_type) && !CIN_RE.test(f.cin.trim().toUpperCase())) {
+        e.cin = "Enter a valid CIN (e.g. U74999MH2020PTC123456).";
+      } else if (f.cin.trim() && f.entity_type === "llp" && !LLPIN_RE.test(f.cin.trim().toUpperCase())) {
+        e.cin = "LLPIN is 3 letters + 4 digits (e.g. AAB-1234).";
+      } else if (f.cin.trim() && !CIN_ENTITY_TYPES.has(f.entity_type) && f.entity_type !== "llp" && f.cin.trim().length < 3) {
+        e.cin = "Enter the registration number from your certificate.";
+      }
     }
 
     if (f.pin_code.trim() && !PIN_RE.test(f.pin_code.trim())) e.pin_code = "PIN code must be exactly 6 digits.";
+
+    if (f.iec.trim() && !PAN_RE.test(f.iec.trim().toUpperCase())) {
+      e.iec = "IEC is PAN-based since 2018 — enter a valid 10-character PAN-format code.";
+    } else if (f.iec.trim() && f.pan.trim() && f.iec.trim().toUpperCase() !== f.pan.trim().toUpperCase()) {
+      e.iec = `IEC is PAN-based since 2018 and should match the company PAN (${f.pan.trim().toUpperCase()}).`;
+    }
   } else {
     if (!f.country_of_registration.trim()) e.country_of_registration = "Country of registration is required for a foreign entity.";
     if (!f.registration_number.trim())     e.registration_number     = "Registration number is required for a foreign entity.";
@@ -341,6 +392,21 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
   if (f.official_phone && !PHONE_RE.test(f.official_phone)) e.official_phone = "Enter a valid phone number.";
   if (f.primary_email && !EMAIL_RE.test(f.primary_email))   e.primary_email  = "Enter a valid email address.";
   if (f.signatory_email && !EMAIL_RE.test(f.signatory_email)) e.signatory_email = "Enter a valid email address.";
+
+  if (f.udyam_msme.trim() && !UDYAM_RE.test(f.udyam_msme.trim().toUpperCase()))
+    e.udyam_msme = "Enter a valid Udyam number (e.g. UDYAM-TS-00-0000000).";
+  if (f.epfo_code.trim() && !LOOSE_REGISTRATION_RE.test(f.epfo_code.trim().toUpperCase()))
+    e.epfo_code = "EPFO code must be 30 characters or fewer, letters/digits/slashes/hyphens only.";
+  if (f.esic_code.trim() && !ESIC_RE.test(f.esic_code.trim()))
+    e.esic_code = "ESIC code must be exactly 17 digits.";
+  if (f.professional_tax_reg.trim() && !LOOSE_REGISTRATION_RE.test(f.professional_tax_reg.trim().toUpperCase()))
+    e.professional_tax_reg = "Must be 30 characters or fewer, letters/digits/slashes/hyphens only.";
+  if (f.signatory_din_pan.trim()) {
+    const v = f.signatory_din_pan.trim().toUpperCase();
+    if (!DIN_RE.test(v) && !PAN_RE.test(v)) {
+      e.signatory_din_pan = "Enter a valid DIN (8 digits) or PAN (10 characters) — the signatory is not always a director.";
+    }
+  }
 
   return e;
 }

@@ -4,8 +4,8 @@ import type { CompanySectionProps } from "@/types/company";
 import ProfileCard from "./ProfileCard";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import {
-  CIN_ENTITY_TYPES, COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
-  entityComplianceHint, parseCin, parsePan,
+  COUNTRY_OPTIONS, ENTITY_TYPE_OPTIONS_FOREIGN, ENTITY_TYPE_OPTIONS_INDIA,
+  REGISTRATION_NUMBER_CONFIG, entityComplianceHint, parseCin, parsePan,
 } from "../_data";
 
 function Chip({ label, value, error }: { label: string; value: string; error?: boolean }) {
@@ -24,7 +24,11 @@ function Chip({ label, value, error }: { label: string; value: string; error?: b
 
 export default function EntityIdentityCard({ form, errors, canEdit, onFieldChange }: CompanySectionProps) {
   const isIndia = form.jurisdiction === "india";
-  const cin = isIndia ? parseCin(form.cin) : null;
+  const regConfig = isIndia ? (REGISTRATION_NUMBER_CONFIG[form.entity_type] ?? null) : null;
+  // The CIN structure-decode chips below only mean anything for an actual
+  // CIN — an LLPIN or a generic Partnership/Trust filing number doesn't
+  // encode a listing flag / state code / registration year the same way.
+  const cin = regConfig?.label === "CIN" ? parseCin(form.cin) : null;
   const pan = isIndia ? parsePan(form.pan, form.entity_type) : null;
   const entityLabel = (isIndia ? ENTITY_TYPE_OPTIONS_INDIA : ENTITY_TYPE_OPTIONS_FOREIGN)
     .find(o => o.value === form.entity_type)?.label ?? "";
@@ -96,20 +100,33 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
 
       {isIndia ? (
         <>
-          <div className="form-row cols-2 mb-8">
-            <div className="field-group">
-              <label className="field-label">CIN {CIN_ENTITY_TYPES.has(form.entity_type) && <span style={{ color: "var(--error)" }}>*</span>}</label>
-              <input
-                className={`field-input${errors.cin ? " field-error" : ""}`}
-                value={form.cin}
-                disabled={!canEdit}
-                onChange={e => onFieldChange("cin", e.target.value.toUpperCase())}
-                placeholder="U74999MH2020PTC123456"
-                maxLength={21}
-              />
-              {errors.cin && <div className="field-error-msg">{errors.cin}</div>}
+          {regConfig ? (
+            <div className="form-row cols-2 mb-8">
+              <div className="field-group">
+                <label className="field-label">{regConfig.label} {regConfig.required && <span style={{ color: "var(--error)" }}>*</span>}</label>
+                <input
+                  className={`field-input${errors.cin ? " field-error" : ""}`}
+                  value={form.cin}
+                  disabled={!canEdit}
+                  onChange={e => onFieldChange("cin", e.target.value.toUpperCase())}
+                  placeholder={regConfig.placeholder}
+                  maxLength={21}
+                />
+                {errors.cin && <div className="field-error-msg">{errors.cin}</div>}
+              </div>
+              <div className="field-group">
+                <label className="field-label">ROC Jurisdiction</label>
+                <input
+                  className="field-input"
+                  value={form.roc_jurisdiction}
+                  disabled={!canEdit}
+                  onChange={e => onFieldChange("roc_jurisdiction", e.target.value)}
+                  placeholder="e.g. Registrar of Companies, Hyderabad"
+                />
+              </div>
             </div>
-            <div className="field-group">
+          ) : (
+            <div className="field-group mb-8">
               <label className="field-label">ROC Jurisdiction</label>
               <input
                 className="field-input"
@@ -119,7 +136,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
                 placeholder="e.g. Registrar of Companies, Hyderabad"
               />
             </div>
-          </div>
+          )}
           {cin && (
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               <Chip label="Listing" value={cin.listing} />
@@ -142,7 +159,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
               {errors.pan && <div className="field-error-msg">{errors.pan}</div>}
             </div>
             <div className="field-group">
-              <label className="field-label">TAN <span style={{ color: "var(--error)" }}>*</span> <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(for TDS)</span></label>
+              <label className="field-label">TAN <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(for TDS)</span></label>
               <input
                 className={`field-input${errors.tan ? " field-error" : ""}`}
                 value={form.tan}
