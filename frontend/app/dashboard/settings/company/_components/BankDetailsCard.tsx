@@ -41,7 +41,7 @@ export default function BankDetailsCard({ form, canEdit, onFieldChange, collapse
         <div className="field-group">
           <label className="field-label">Account Type</label>
           <select
-            className="field-input"
+            className="field-input field-select"
             value={form.bank_account_type}
             disabled={!canEdit}
             onChange={e => onFieldChange("bank_account_type", e.target.value)}

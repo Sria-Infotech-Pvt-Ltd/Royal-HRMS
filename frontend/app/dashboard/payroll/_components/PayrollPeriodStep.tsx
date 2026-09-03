@@ -175,7 +175,7 @@ export default function PayrollPeriodStep({
           <div className="field-group" style={{ marginBottom: 20 }}>
             <label className="field-label">Branch *</label>
             <select
-              className="field-input"
+              className="field-input field-select"
               value={branchId}
               onChange={e => setBranchId(e.target.value)}
             >

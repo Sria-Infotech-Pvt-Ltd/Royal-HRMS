@@ -203,7 +203,7 @@ export default function OrgStructureClient() {
             </div>
             <div style={{ margin: "8px 8px" }}>
               <select
-                className="field-input"
+                className="field-input field-select"
                 value={branchFilter}
                 onChange={e => setBranchFilter(e.target.value)}
                 title="Positions with no branch set always show, in every view"

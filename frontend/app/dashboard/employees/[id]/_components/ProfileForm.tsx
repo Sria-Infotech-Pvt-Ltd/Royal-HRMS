@@ -377,7 +377,7 @@ function CellInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         suppressHydrationWarning
-        className={CELL}
+        className={`${CELL} field-select`}
         style={{ borderColor: "#d3dae8" }}
       >
         <option value="">—</option>

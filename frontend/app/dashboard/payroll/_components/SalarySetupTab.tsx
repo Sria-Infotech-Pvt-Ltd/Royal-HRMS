@@ -254,7 +254,7 @@ export default function SalarySetupTab() {
             <div className="field-group">
               <label className="field-label">Salary Structure Override</label>
               <select
-                className="field-input"
+                className="field-input field-select"
                 value={modal.salary_structure}
                 onChange={e => setModal(m => m ? { ...m, salary_structure: e.target.value } : m)}
               >

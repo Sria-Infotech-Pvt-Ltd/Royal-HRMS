@@ -96,7 +96,7 @@ function LeaderFields({
             style={{ marginBottom: "8px" }}
           />
           <select
-            className={`field-input${errors[`${prefix}Employee`] ? " field-error" : ""}`}
+            className={`field-input field-select${errors[`${prefix}Employee`] ? " field-error" : ""}`}
             value={form.employeeId}
             onChange={e => set("employeeId", e.target.value)}
           >
@@ -914,7 +914,7 @@ export default function BranchManagement() {
                 <div className="field-group">
                   <label className="field-label">State/Region *</label>
                   <select
-                    className={`field-input${fieldErrors.state ? " field-error" : ""}`}
+                    className={`field-input field-select${fieldErrors.state ? " field-error" : ""}`}
                     value={editForm.state}
                     onChange={e => {
                       setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; delete n.new_city_name; delete n.gst_registration; return n; });
@@ -932,7 +932,7 @@ export default function BranchManagement() {
                 <div className="field-group">
                   <label className="field-label">City *</label>
                   <select
-                    className={`field-input${fieldErrors.city ? " field-error" : ""}`}
+                    className={`field-input field-select${fieldErrors.city ? " field-error" : ""}`}
                     value={editForm.city}
                     onChange={e => {
                       setFieldErrors(prev => { const n = {...prev}; delete n.city; delete n.branch_code; delete n.new_city_name; return n; });
@@ -996,7 +996,7 @@ export default function BranchManagement() {
                   ) : (
                     <>
                       <select
-                        className={`field-input${fieldErrors.gst_registration ? " field-error" : ""}`}
+                        className={`field-input field-select${fieldErrors.gst_registration ? " field-error" : ""}`}
                         value={editForm.gst_registration}
                         onChange={e => {
                           setFieldErrors(prev => { const n = {...prev}; delete n.gst_registration; return n; });
@@ -1094,7 +1094,7 @@ export default function BranchManagement() {
                 <div className="field-group">
                   <label className="field-label">Status *</label>
                   <select
-                    className="field-input"
+                    className="field-input field-select"
                     value={editForm.status}
                     onChange={e => setEditForm({ ...editForm, status: e.target.value })}
                   >

@@ -718,7 +718,7 @@ export default function AnnouncementsPage() {
                   <label className="field-label">Branch{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
                   {isOrgWide ? (
                     <select
-                      className="field-input"
+                      className="field-input field-select"
                       value={form.target_branch}
                       onChange={e => setField("target_branch", e.target.value)}
                       disabled={form.visibility === "department"}
@@ -742,7 +742,7 @@ export default function AnnouncementsPage() {
                 <div className="field-group">
                   <label className="field-label">Visibility <span style={{ color: "var(--error)" }}>*</span></label>
                   <select
-                    className="field-input"
+                    className="field-input field-select"
                     value={form.visibility}
                     onChange={e => setField("visibility", e.target.value as FormVisibility)}
                   >
@@ -756,7 +756,7 @@ export default function AnnouncementsPage() {
                 <div className="field-group">
                   <label className="field-label">Department <span style={{ color: "var(--error)" }}>*</span></label>
                   <select
-                    className={`field-input${formErrors.target_org_unit ? " field-error" : ""}`}
+                    className={`field-input field-select${formErrors.target_org_unit ? " field-error" : ""}`}
                     value={form.target_org_unit}
                     onChange={e => setField("target_org_unit", e.target.value)}
                   >
@@ -771,7 +771,7 @@ export default function AnnouncementsPage() {
               <div className="field-group">
                 <label className="field-label">Category <span style={{ color: "var(--error)" }}>*</span></label>
                 <select
-                  className={`field-input${formErrors.category ? " field-error" : ""}`}
+                  className={`field-input field-select${formErrors.category ? " field-error" : ""}`}
                   value={form.category}
                   onChange={e => setField("category", e.target.value as Category)}
                 >

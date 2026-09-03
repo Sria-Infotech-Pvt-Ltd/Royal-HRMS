@@ -309,7 +309,7 @@ export default function WeeklyOffPatternsCard() {
                 <div key={key}>
                   <label style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginBottom: 2 }}>{label}</label>
                   <select
-                    className="field-input"
+                    className="field-input field-select"
                     value={form[key]}
                     onChange={e => setForm(f => ({ ...f, [key]: e.target.value as DayType }))}
                   >

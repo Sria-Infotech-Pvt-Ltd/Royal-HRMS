@@ -107,7 +107,7 @@ export default function CorrectionsTab() {
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <select
-          className="field-input"
+          className="field-input field-select"
           style={{ width: 160 }}
           value={status}
           onChange={e => { setStatus(e.target.value as CorrectionStatus | ""); setPage(1); }}

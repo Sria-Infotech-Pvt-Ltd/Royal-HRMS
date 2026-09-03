@@ -11,7 +11,7 @@ export default function BusinessProfileCard({ form, canEdit, onFieldChange, coll
         <div className="field-group">
           <label className="field-label">Industry <span style={{ color: "var(--error)" }}>*</span></label>
           <select
-            className="field-input"
+            className="field-input field-select"
             value={form.industry}
             disabled={!canEdit}
             onChange={e => onFieldChange("industry", e.target.value)}
@@ -33,7 +33,7 @@ export default function BusinessProfileCard({ form, canEdit, onFieldChange, coll
       <div className="field-group mb-16">
         <label className="field-label">Financial Year <span style={{ color: "var(--error)" }}>*</span></label>
         <select
-          className="field-input"
+          className="field-input field-select"
           value={form.financial_year_start_month}
           disabled={!canEdit}
           onChange={e => onFieldChange("financial_year_start_month", e.target.value)}

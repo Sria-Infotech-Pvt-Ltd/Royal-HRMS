@@ -163,7 +163,7 @@ export default function CarryForwardTab() {
                 <div className="field-group" style={{ marginBottom: 0, width: 160 }}>
                   <label className="field-label">From Year</label>
                   <select
-                    className="field-input"
+                    className="field-input field-select"
                     value={fromYear ?? ""}
                     onChange={e => setFromYear(Number(e.target.value))}
                   >
@@ -173,7 +173,7 @@ export default function CarryForwardTab() {
                 <div className="field-group" style={{ marginBottom: 0, width: 160 }}>
                   <label className="field-label">To Year</label>
                   <select
-                    className="field-input"
+                    className="field-input field-select"
                     value={toYear ?? ""}
                     onChange={e => setToYear(Number(e.target.value))}
                   >

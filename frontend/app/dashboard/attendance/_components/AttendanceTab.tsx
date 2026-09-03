@@ -157,7 +157,7 @@ export default function AttendanceTab({ onMutated }: Props) {
           lockedBranchName={effectiveBranch}
         />
         <select
-          className="field-input"
+          className="field-input field-select"
           style={{ width: 180 }}
           value={department}
           onChange={e => { setDepartment(e.target.value); setPage(1); }}

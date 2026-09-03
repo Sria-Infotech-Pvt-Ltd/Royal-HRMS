@@ -304,7 +304,7 @@ export default function StatutoryConfigTab() {
                         <select
                           value={current.lwf_frequency ?? "monthly"}
                           onChange={e => setField("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
-                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
                         >
                           <option value="monthly">Monthly</option>
                           <option value="halfyearly">Half-yearly</option>
@@ -370,7 +370,7 @@ export default function StatutoryConfigTab() {
               <select
                 value={newStateId}
                 onChange={e => setNewStateId(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
               >
                 <option value="">Select a state</option>
                 {availableStates.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
@@ -435,7 +435,7 @@ function MonthSelect({
       <select
         value={value ?? ""}
         onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
-        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
       >
         <option value="">Select month</option>
         {MONTH_NAMES.map((name, i) => (

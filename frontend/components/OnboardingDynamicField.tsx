@@ -53,7 +53,7 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
     return (
       <div className="field-group">
         {label}
-        <select className={INP} value={value} onChange={e => onChange(e.target.value)}>
+        <select className={`${INP} field-select`} value={value} onChange={e => onChange(e.target.value)}>
           <option value="">Select</option>
           {choiceOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -65,7 +65,7 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
     return (
       <div className="field-group">
         {label}
-        <select className={INP} value={value} onChange={e => onChange(e.target.value)}>
+        <select className={`${INP} field-select`} value={value} onChange={e => onChange(e.target.value)}>
           <option value="">Select</option>
           {config.options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>

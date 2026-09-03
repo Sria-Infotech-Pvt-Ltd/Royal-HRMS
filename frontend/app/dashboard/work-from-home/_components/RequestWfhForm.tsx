@@ -270,7 +270,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
             <select
               value={selectedLocationId}
               onChange={e => handleLocationSelect(e.target.value)}
-              className={INPUT}
+              className={`${INPUT} field-select`}
               suppressHydrationWarning
             >
               {locations.map(loc => (

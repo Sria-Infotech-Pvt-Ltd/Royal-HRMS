@@ -607,7 +607,7 @@ export default function AssessmentsPage() {
               <div className="field-group mb-12">
                 <label className="field-label">Notification Email Template</label>
                 <select
-                  className="field-input"
+                  className="field-input field-select"
                   value={assignTemplate}
                   onChange={e => setAssignTemplate(e.target.value)}
                 >

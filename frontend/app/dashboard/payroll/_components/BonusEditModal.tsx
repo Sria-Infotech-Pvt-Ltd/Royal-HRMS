@@ -124,7 +124,7 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
             {entries.map((entry, idx) => (
               <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 120px 1fr auto", gap: 8, alignItems: "center" }}>
                 <select
-                  className="field-input"
+                  className="field-input field-select"
                   value={entry.type}
                   onChange={e => updateEntry(idx, "type", e.target.value)}
                 >

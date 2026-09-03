@@ -50,7 +50,7 @@ export default function EntityIdentityCard({ form, errors, canEdit, onFieldChang
         <div className="field-group mb-16">
           <label className="field-label">Country of Registration <span style={{ color: "var(--error)" }}>*</span></label>
           <select
-            className={`field-input${errors.country_of_registration ? " field-error" : ""}`}
+            className={`field-input field-select${errors.country_of_registration ? " field-error" : ""}`}
             value={form.country_of_registration}
             disabled={!canEdit}
             onChange={e => onFieldChange("country_of_registration", e.target.value)}

@@ -45,7 +45,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
           <label className="field-label">State <span style={{ color: "var(--error)" }}>*</span></label>
           {isIndia ? (
             <select
-              className="field-input"
+              className="field-input field-select"
               value={form.state}
               disabled={!canEdit}
               onChange={e => onFieldChange("state", e.target.value)}
@@ -118,7 +118,7 @@ export default function AddressCard({ form, errors, canEdit, onFieldChange, coll
               <label className="field-label">State</label>
               {isIndia ? (
                 <select
-                  className="field-input"
+                  className="field-input field-select"
                   value={form.communication_state}
                   disabled={!canEdit}
                   onChange={e => onFieldChange("communication_state", e.target.value)}

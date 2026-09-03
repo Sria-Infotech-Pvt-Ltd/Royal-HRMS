@@ -87,10 +87,13 @@ export default function AuditLogsWidget() {
             value={moduleFilter}
             onChange={e => setModuleFilter(e.target.value)}
             suppressHydrationWarning
+            className="field-select"
             style={{
-              fontSize: 11, padding: "4px 8px", borderRadius: 6,
-              border: "1px solid var(--outline)", background: "var(--bg-base)",
+              fontSize: 11, padding: "4px 22px 4px 8px", borderRadius: 6,
+              border: "1px solid var(--outline)", backgroundColor: "var(--bg-base)",
               color: "var(--on-bg)", cursor: "pointer",
+              backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+              backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center", backgroundSize: "12px",
             }}
           >
             {MODULES.map(m => <option key={m} value={m}>{m}</option>)}

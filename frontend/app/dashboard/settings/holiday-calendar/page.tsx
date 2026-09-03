@@ -170,7 +170,7 @@ export default function HolidayCalendarPage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <select value={fBranch} onChange={e => { setFBranch(e.target.value); setPage(1); }}
-            className="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer">
+            className="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer field-select">
             <option>All Branches</option>
             {branches.map(b => <option key={b.id}>{b.branch_name}</option>)}
           </select>
@@ -245,14 +245,14 @@ export default function HolidayCalendarPage() {
       {/* ── Additional filters row ────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={fType} onChange={e => { setFType(e.target.value as HolidayType | "all"); setPage(1); }}
-          className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer">
+          className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer field-select">
           <option value="all">All Types</option>
           <option value="national">National</option>
           <option value="regional">Regional</option>
           <option value="company">Company</option>
         </select>
         <select value={fMonth === "all" ? "all" : fMonth} onChange={e => changeFMonth(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-          className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer">
+          className="text-xs border border-[var(--outline-v)] rounded-lg px-3 py-1.5 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-variant)] cursor-pointer field-select">
           <option value="all">All Months</option>
           {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
         </select>

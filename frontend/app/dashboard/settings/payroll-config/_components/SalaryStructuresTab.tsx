@@ -333,7 +333,7 @@ export default function SalaryStructuresTab() {
                 <select
                   value={compForm.component_type}
                   onChange={e => setCompForm(p => ({ ...p, component_type: e.target.value as ComponentFormState["component_type"] }))}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
                 >
                   <option value="earning">Earning</option>
                   <option value="allowance">Allowance</option>
@@ -344,7 +344,7 @@ export default function SalaryStructuresTab() {
                 <select
                   value={compForm.calculation_type}
                   onChange={e => setCompForm(p => ({ ...p, calculation_type: e.target.value as ComponentFormState["calculation_type"] }))}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
                 >
                   <option value="percentage_of_ctc">% of CTC</option>
                   <option value="percentage_of_basic">% of Basic</option>

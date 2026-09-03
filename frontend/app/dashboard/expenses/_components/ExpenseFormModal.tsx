@@ -170,7 +170,7 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
                 Category <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <select
-                className={`field-input${errors.category ? " field-error" : ""}`}
+                className={`field-input field-select${errors.category ? " field-error" : ""}`}
                 value={form.category}
                 onChange={e => setField("category", e.target.value as ExpenseCategory | "")}
               >

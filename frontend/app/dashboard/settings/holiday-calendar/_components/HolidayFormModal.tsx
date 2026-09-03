@@ -113,7 +113,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Type</label>
-              <select className={INPUT} value={form.holiday_type} onChange={e => setField("holiday_type", e.target.value as HolidayType)}>
+              <select className={`${INPUT} field-select`} value={form.holiday_type} onChange={e => setField("holiday_type", e.target.value as HolidayType)}>
                 <option value="national">National</option>
                 <option value="regional">Regional</option>
                 <option value="company">Company</option>
@@ -122,7 +122,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Applicable Branch</label>
-            <select className={INPUT} value={form.branch === null ? "" : String(form.branch)}
+            <select className={`${INPUT} field-select`} value={form.branch === null ? "" : String(form.branch)}
               onChange={e => setField("branch", e.target.value === "" ? null : Number(e.target.value))}>
               <option value="">All Branches</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}

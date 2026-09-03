@@ -243,7 +243,7 @@ export default function CompanyInfoPage() {
       <div className="field-group mb-24">
         <label className="field-label"><i className="ti ti-lock" style={{ marginRight: 4 }} /> Entity type — this drives the rest of the form</label>
         <select
-          className="field-input"
+          className="field-input field-select"
           value={form.entity_type}
           disabled={!canEdit}
           onChange={e => handleField("entity_type", e.target.value)}

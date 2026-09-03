@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import clientApi from "@/lib/clientApi";
@@ -15,6 +15,28 @@ interface Branch { id: string; branch_name: string; branch_code: string; }
 const ECR_READY_STATUSES = ["payslips_generated", "query_window_open", "paid", "closed"];
 
 type EcrFormat = "xlsx" | "pdf" | "txt";
+
+// Same chevron artwork as .field-select in globals.css — these two selects
+// sit inside a transparent/borderless .search-bar pill (their own icon
+// already leads the pill), so they can't just take the .field-select class
+// (its border/background would fight the pill's own styling); reproduced
+// as inline style instead, explicitly via backgroundColor rather than the
+// `background` shorthand so it doesn't reset backgroundImage back to none.
+const SEARCH_BAR_SELECT_STYLE: CSSProperties = {
+  border: "none",
+  backgroundColor: "transparent",
+  color: "var(--on-bg)",
+  fontSize: 13,
+  appearance: "none",
+  WebkitAppearance: "none",
+  MozAppearance: "none",
+  backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 0 center",
+  backgroundSize: "15px",
+  paddingRight: 22,
+  cursor: "pointer",
+};
 
 export default function PayrollReports() {
   const [selectedCycle, setSelectedCycle] = useState<string>("");
@@ -85,7 +107,7 @@ export default function PayrollReports() {
           <select
             value={selectedCycle}
             onChange={e => setSelectedCycle(e.target.value)}
-            style={{ border: "none", background: "transparent", color: "var(--on-bg)", fontSize: 13 }}
+            style={SEARCH_BAR_SELECT_STYLE}
           >
             <option value="">All Periods</option>
             {cycles.map(c => (
@@ -101,7 +123,7 @@ export default function PayrollReports() {
           <select
             value={selectedBranch}
             onChange={e => setSelectedBranch(e.target.value)}
-            style={{ border: "none", background: "transparent", color: "var(--on-bg)", fontSize: 13 }}
+            style={SEARCH_BAR_SELECT_STYLE}
           >
             <option value="">All Branches</option>
             {branches.map(b => (

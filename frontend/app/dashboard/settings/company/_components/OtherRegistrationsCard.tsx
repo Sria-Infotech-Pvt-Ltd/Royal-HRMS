@@ -22,7 +22,7 @@ export default function OtherRegistrationsCard({ form, errors, canEdit, onFieldC
         <div className="field-group">
           <label className="field-label">MSME Class <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
           <select
-            className="field-input"
+            className="field-input field-select"
             value={form.msme_class}
             disabled={!canEdit}
             onChange={e => onFieldChange("msme_class", e.target.value)}

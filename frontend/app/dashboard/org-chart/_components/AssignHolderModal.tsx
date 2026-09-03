@@ -76,7 +76,7 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
       <div className="field-group mb-16">
         <label className="field-label">Employee <span style={{ color: "var(--error)" }}>*</span></label>
         <select
-          className={`field-input${fieldError ? " field-error" : ""}`}
+          className={`field-input field-select${fieldError ? " field-error" : ""}`}
           value={employeeId}
           onChange={e => { setEmployeeId(e.target.value); setFieldError(null); }}
         >

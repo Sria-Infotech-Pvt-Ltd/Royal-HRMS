@@ -117,7 +117,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
           <div className="field-group">
             <label className="field-label">Punch Type</label>
             <select
-              className="field-input"
+              className="field-input field-select"
               value={punchType}
               onChange={e => setPunchType(e.target.value as CorrectionPunchType)}
             >
@@ -158,7 +158,7 @@ export default function RegularizationModal({ onClose, onSuccess, date }: Props)
         <div className="field-group mb-16">
           <label className="field-label">Reason</label>
           <select
-            className="field-input"
+            className="field-input field-select"
             value={reason}
             onChange={e => setReason(e.target.value as CorrectionReason)}
           >

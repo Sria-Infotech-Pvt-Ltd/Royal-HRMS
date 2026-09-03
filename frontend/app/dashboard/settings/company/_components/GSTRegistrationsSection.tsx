@@ -152,7 +152,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                     </td>
                     <td style={{ minWidth: 150 }}>
                       <select
-                        className="field-input"
+                        className="field-input field-select"
                         value={row.state}
                         disabled={!canEdit}
                         onChange={e => updateRow(row.key, { state: e.target.value })}
@@ -164,7 +164,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                     </td>
                     <td style={{ minWidth: 130 }}>
                       <select
-                        className="field-input"
+                        className="field-input field-select"
                         value={row.registration_type}
                         disabled={!canEdit}
                         onChange={e => { updateRow(row.key, { registration_type: e.target.value }); }}
