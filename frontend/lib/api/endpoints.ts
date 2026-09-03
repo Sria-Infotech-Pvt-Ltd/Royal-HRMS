@@ -29,6 +29,7 @@ export const API = {
     auditLogs: "/platform-admin/audit-logs/",
     dashboardStats: "/platform-admin/dashboard-stats/",
     smtpSettings: "/platform-admin/smtp-settings/",
+    smtpSettingsTest: "/platform-admin/smtp-settings/test/",
   },
 
   announcements: {

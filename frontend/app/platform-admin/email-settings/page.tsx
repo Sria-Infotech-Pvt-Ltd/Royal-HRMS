@@ -19,6 +19,8 @@ export default function EmailSettingsPage() {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [saved,   setSaved]   = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Seeds the form from the loaded settings exactly once — after that the
   // fields are user-owned, so a background refetch never clobbers what
@@ -56,6 +58,23 @@ export default function EmailSettingsPage() {
       setError(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSendTest() {
+    setTestResult(null);
+    setTesting(true);
+    try {
+      const { data } = await platformAdminApi.post<{ message: string }>(
+        API.platformAdmin.smtpSettingsTest,
+      );
+      setTestResult({ ok: true, message: data.message });
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Failed to send test email.";
+      setTestResult({ ok: false, message });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -97,6 +116,12 @@ export default function EmailSettingsPage() {
                 <div className="alert alert-success mb-16">
                   <i className="ti ti-check" />
                   <div>Saved.</div>
+                </div>
+              )}
+              {testResult && (
+                <div className={`alert ${testResult.ok ? "alert-success" : "alert-warn"} mb-16`}>
+                  <i className={`ti ${testResult.ok ? "ti-check" : "ti-alert-triangle"}`} />
+                  <div>{testResult.message}</div>
                 </div>
               )}
 
@@ -144,9 +169,21 @@ export default function EmailSettingsPage() {
                 Use TLS
               </label>
 
-              <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
-                {saving ? (<><i className="ti ti-loader-2 spin" /> Saving…</>) : "Save"}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
+                  {saving ? (<><i className="ti ti-loader-2 spin" /> Saving…</>) : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={handleSendTest}
+                  disabled={testing || saving}
+                  title="Sends a real test email to your platform-admin login email, using the SMTP settings currently saved above"
+                  suppressHydrationWarning
+                >
+                  {testing ? (<><i className="ti ti-loader-2 spin" /> Sending…</>) : (<><i className="ti ti-send" /> Send test email</>)}
+                </button>
+              </div>
             </>
           )}
         </div>
