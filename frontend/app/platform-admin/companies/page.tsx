@@ -31,7 +31,14 @@ export default function CompaniesPage() {
 
       <div className="card">
         <div className="card-body" style={{ padding: 0 }}>
-          {loading ? (
+          {loading && !companyList ? (
+            // Only the very first load shows this full-page spinner. A later
+            // background refetch (e.g. after revealing a password, or the
+            // 10s polling below) must NOT re-trigger this branch — doing so
+            // unmounts CompaniesTable entirely, silently destroying its
+            // local state, including the "here's the password" modal it was
+            // showing at that exact moment (confirmed: this is why the
+            // reveal-password dialog was flashing and disappearing).
             <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>
               <i className="ti ti-loader-2 spin" /> Loading companies…
             </div>
