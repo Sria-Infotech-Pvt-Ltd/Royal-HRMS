@@ -132,9 +132,14 @@ class SystemAdminKPIView(APIView):
         from apps.hrms.models import LeaveRequest, Expense, REQ_PENDING, REQ_L2_PENDING
 
         # Slow-changing aggregate — cached like HRKPIView.total_workforce below.
+        # Excludes employee_id='' the same way EmployeeListCreateView.get()
+        # does — those are portal candidates / accounts (e.g. the initial
+        # system_admin login) that were never onboarded as an employee, so
+        # counting them here disagreed with the Employees list, which always
+        # excludes them.
         total_employees = cache.get('dashboard:sysadmin:total_employees')
         if total_employees is None:
-            total_employees = User.objects.filter(is_active=True).count()
+            total_employees = User.objects.filter(is_active=True).exclude(employee_id='').count()
             cache.set('dashboard:sysadmin:total_employees', total_employees, 5 * 60)
 
         # Pending-action counts — deliberately NOT cached (matches HRKPIView's
@@ -283,7 +288,9 @@ class HRKPIView(APIView):
 
         total_workforce = cache.get(f'dashboard:hr:kpis:workforce:{cache_scope}')
         if total_workforce is None:
-            workforce_qs = User.objects.filter(is_active=True)
+            # Excludes employee_id='' — see SystemAdminKPIView.total_employees
+            # above for why (matches EmployeeListCreateView.get()'s own filter).
+            workforce_qs = User.objects.filter(is_active=True).exclude(employee_id='')
             if branch:
                 workforce_qs = workforce_qs.filter(branch=branch)
             total_workforce = workforce_qs.count()

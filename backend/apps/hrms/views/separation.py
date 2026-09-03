@@ -235,7 +235,22 @@ class SeparationRequestDetailView(APIView):
         if err:
             return err
 
-        action = request.data.get('action', 'update')
+        # Normalized (case/whitespace) rather than an exact-match default —
+        # an unrecognized value (a typo, wrong casing like "Cancel", or a
+        # client sending something else entirely) used to silently fall
+        # through to the "update" branch below and return a fake success
+        # with nothing actually changed, since a partial update with no
+        # matching fields validates trivially. Now it 400s instead, so a
+        # caller can tell the difference between "cancelled" and "nothing
+        # happened". Omitting `action` entirely still means "update" — the
+        # web app's own edit form never sends it (see SeparationFormModal.tsx).
+        raw_action = request.data.get('action')
+        action = 'update' if raw_action is None else str(raw_action).strip().lower()
+        if action not in ('cancel', 'update'):
+            return error(
+                f'Unrecognized action "{raw_action}" — expected "cancel" or "update".',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
         editable_statuses = (SEP_PENDING, SEP_STAGE2_PENDING)
 
         if action == 'cancel':

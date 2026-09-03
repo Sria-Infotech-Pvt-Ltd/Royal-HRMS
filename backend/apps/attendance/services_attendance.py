@@ -619,32 +619,47 @@ class AttendanceDashboardService:
     def get_monthly_summary(cls, employee, year: int, month: int) -> dict:
         """
         Powers the Monthly Summary grid (6-cell grid on the page).
+
+        Counts every day of the month via the same day-by-day classification
+        get_calendar() uses (see _classify_day) — not just days that happen
+        to already have an AttendanceRecord row. A day with no punch at all
+        only ever gets a stored 'absent' record if someone later runs
+        Reprocess; nothing creates one automatically, so summing over
+        `records` alone silently dropped every un-punched working day from
+        Days Absent while the calendar (which classifies every day, recorded
+        or not) correctly showed it red.
         """
         import calendar as _cal
         _, days_in_month = _cal.monthrange(year, month)
         month_start   = date(year, month, 1)
         month_end     = date(year, month, days_in_month)
+        today         = timezone.localdate()
         branch_name   = getattr(employee, 'branch', '') or ''
-        records       = cls._month_records(employee, year, month)
+        records       = {r.date: r for r in cls._month_records(employee, year, month)}
+        leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
+        off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
 
-        working_days = sum(
-            1 for r in records
-            if r.status not in (
-                AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY,
-            ) and r.date not in holiday_dates
-        )
-        days_present = sum(1 for r in records if r.status in (
-            AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE,
-        ))
-        days_absent  = sum(
-            1 for r in records
-            if r.status == AttendanceRecord.STATUS_ABSENT
-            and r.date not in holiday_dates
-        )
-        leave_days   = sum(1 for r in records if r.status == AttendanceRecord.STATUS_ON_LEAVE)
-        half_days    = sum(1 for r in records if r.status == AttendanceRecord.STATUS_HALF_DAY)
-        ot_minutes   = sum(r.overtime_minutes for r in records)
+        working_days = days_present = days_absent = leave_days = half_days = 0
+        ot_minutes = 0
+        for day_num in range(1, days_in_month + 1):
+            cur = date(year, month, day_num)
+            if cur > today:
+                continue
+            rec = records.get(cur)
+            key = cls._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+            if key not in (AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY):
+                working_days += 1
+            if key in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
+                days_present += 1
+            elif key == AttendanceRecord.STATUS_ABSENT:
+                days_absent += 1
+            elif key == AttendanceRecord.STATUS_ON_LEAVE:
+                leave_days += 1
+            elif key == AttendanceRecord.STATUS_HALF_DAY:
+                half_days += 1
+            if rec:
+                ot_minutes += rec.overtime_minutes
         ot_hours_display = _minutes_to_display(ot_minutes) if ot_minutes else '0h'
 
         return {
@@ -791,6 +806,27 @@ class AttendanceDashboardService:
         return {h['date']: h['name'] for h in holidays}
 
     @staticmethod
+    def _classify_day(
+        cur: date, rec, holiday_dates: set, off_dates: set, leave_dates: set, today: date,
+    ):
+        """Status key for one calendar date, or None for a blank future day
+        with no record. Shared by _build_day (get_calendar) and
+        get_monthly_summary so the two can never classify the same day
+        differently — a day with no AttendanceRecord row is 'absent' here
+        exactly as it is on the calendar, not silently skipped."""
+        if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
+            return AttendanceRecord.STATUS_HOLIDAY
+        if cur in off_dates or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
+            return AttendanceRecord.STATUS_WEEKLY_OFF
+        if cur in leave_dates or (rec and rec.status == AttendanceRecord.STATUS_ON_LEAVE):
+            return AttendanceRecord.STATUS_ON_LEAVE
+        if rec:
+            return rec.status
+        if cur > today:
+            return None
+        return AttendanceRecord.STATUS_ABSENT
+
+    @staticmethod
     def _build_day(
         day_num: int, year: int, month: int,
         records: dict, leave_dates: set, off_dates: set,
@@ -804,18 +840,9 @@ class AttendanceDashboardService:
         holiday_dates = holiday_dates or set()
         holiday_names = holiday_names or {}
 
-        if cur in holiday_dates or (rec and rec.status == AttendanceRecord.STATUS_HOLIDAY):
-            key = AttendanceRecord.STATUS_HOLIDAY
-        elif cur in off_dates or (rec and rec.status == AttendanceRecord.STATUS_WEEKLY_OFF):
-            key = AttendanceRecord.STATUS_WEEKLY_OFF
-        elif cur in leave_dates or (rec and rec.status == AttendanceRecord.STATUS_ON_LEAVE):
-            key = AttendanceRecord.STATUS_ON_LEAVE
-        elif rec:
-            key = rec.status
-        elif cur > today:
+        key = AttendanceDashboardService._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+        if key is None:
             return None
-        else:
-            key = AttendanceRecord.STATUS_ABSENT
 
         reg_required = key == AttendanceRecord.STATUS_INCOMPLETE
         can_reg = (
@@ -825,7 +852,14 @@ class AttendanceDashboardService:
             )
             and cur not in pending_dates
         )
-        label = 'Missing Clock Out' if reg_required else AttendanceRecord.STATUS_DISPLAY_MAP.get(key, key)
+        # Always the canonical label (matches get_history()'s status_display,
+        # and the "must match DayStatus in CalendarGrid.tsx" contract on
+        # STATUS_DISPLAY_MAP) — a day needing regularization is already
+        # conveyed by the separate `regularization_required` flag below, so
+        # overriding the label itself to "Missing Clock Out" only meant this
+        # endpoint and get_history() reported two different strings for the
+        # exact same status.
+        label = AttendanceRecord.STATUS_DISPLAY_MAP.get(key, key)
         holiday_name = None
         if key == AttendanceRecord.STATUS_HOLIDAY:
             holiday_name = holiday_names.get(cur) or (rec.note if rec and rec.note else 'Holiday')

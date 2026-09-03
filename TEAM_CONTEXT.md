@@ -3781,3 +3781,47 @@ User asked for a full picture of where Department/Designation are still used, to
 **21. Seeded a small sample of filled positions for vacancy-testing**
 
 User asked for dummy data with some positions vacant, to actually see the filled/vacant UI states. Placed 15 of the 223 SRIA positions (9 reused, previously-unassigned demo employees + 6 newly created ones) across a spread of units/branches/chief-and-IC roles, via the real `assign_position()` service path — not raw DB writes — so designation/department sync and the DB overlap constraints all ran normally. 208 positions remain vacant. Local dev database only; nothing in this item touches git.
+
+---
+
+## Session Log — 2026-09-03
+**Author: Durga Prasad**
+
+### Context
+
+A separate mobile app (not in this repo — Flutter, per the `DioException` errors QA reported) is being built against this same Django backend. QA sent an 11-item bug list from testing the mobile app. Investigated all 11 with 3 parallel research passes (each verified against the real dev DB / running API, not just read from code) before touching anything, then fixed the ones confirmed as real, scoped, low-risk backend bugs. Full 11-item breakdown, including the ones NOT touched here and why, was relayed to the user directly in chat rather than duplicated into this file — see the conversation for the complete table.
+
+### Bug Fixes Shipped
+
+**22. Attendance: Monthly Summary "Days Absent" undercounting, and a status-label mismatch between Calendar and History**
+
+Two related bugs in `apps/attendance/services_attendance.py`'s `AttendanceDashboardService`, both root-caused by live-testing the actual service functions (not just reading them) against the real dev DB:
+- `get_monthly_summary()` only ever summed over `AttendanceRecord` rows that actually exist in the DB — but nothing creates a record for a day an employee simply never punches at all (only a punch, or an HR-triggered Reprocess, ever writes one). `get_calendar()`, by contrast, classifies *every* day of the month, record or not, via `_build_day()` — so a genuine no-punch working day showed red "Absent" on the calendar while contributing 0 to the summary's Days Absent count. Fixed by extracting `_build_day()`'s day-classification logic into a shared `_classify_day()` helper and rewriting `get_monthly_summary()` to iterate every day of the month through it, the same as the calendar does, instead of only summing existing rows. Verified live: an employee with zero attendance records for August 2026 now shows `days_absent: 21` (matching the calendar's 21 red days), not 0.
+- `get_calendar()` separately overrode the "Incomplete" status label to the string "Missing Clock Out" for calendar entries specifically, while `get_history()` (and the model's own `STATUS_DISPLAY_MAP`, whose comment says it "must match DayStatus in CalendarGrid.tsx") report the same status as plain "Incomplete" — one underlying fact, two different strings depending which screen asked. The web frontend already works around this defensively (`AttendanceCalendar.tsx` treats both strings as the same icon), which is presumably why nobody caught it there — the mobile app apparently doesn't have the same workaround. Removed the override; the calendar now always reports the canonical label. The separate `regularization_required` boolean already on the same response carries the "needs a clock-out" signal, so nothing was actually communicated only by the old override string. Verified live: both endpoints now report "Incomplete" for the same record. Color intentionally left as amber (`#f59e0b`, same as Late) — this is a pre-existing, deliberate choice in `_STATUS_COLOR`, not something this fix touched; QA's mention of a missing "purple" indicator is the mobile app's own status-name-based styling, which this label fix should now let it recognize correctly.
+- Files: `backend/apps/attendance/services_attendance.py`.
+
+**23. Dashboard employee count vs. Employees list count mismatch**
+
+`SystemAdminKPIView`/`HRKPIView` counted every `is_active=True` User, while `EmployeeListCreateView` (the Employees list) additionally excludes accounts with no `employee_id` — i.e. logins that were never onboarded as a real employee, like the initial system_admin account. In a fresh/minimal tenant where that's the only extra account, this is exactly "Dashboard: 1, Employees: 0." Aligned both dashboard widgets to the same `.exclude(employee_id='')` the Employees list already uses. Verified live: both now report 16.
+- Files: `backend/apps/dashboard/views/overview.py`.
+
+**24. Separation Request cancel silently no-op'd on anything but the exact string "cancel"**
+
+The cancel/update PATCH endpoint read `action` with `request.data.get('action', 'update')` — an exact, case-sensitive match. Anything else sent as `action` (a typo, wrong casing like "Cancel", or the field simply missing a value) silently fell through to the "update" branch, which then validates trivially true against an empty/irrelevant payload and returns a normal 200 "updated" response having changed nothing — indistinguishable from a real save, and exactly matching "clicks Cancel, confirms, nothing happens." The web app's own edit flow (`SeparationFormModal.tsx`) never sends `action` at all, so the missing-field default of "update" had to be preserved exactly — only a *present-but-unrecognized* value now 400s. Verified live: `{"action": "banana"}` → 400, status unchanged; `{"action": "Cancel"}` (capital C, the likely real mobile scenario) → now correctly cancels instead of silently no-op'ing.
+- Files: `backend/apps/hrms/views/separation.py`.
+
+**25. `facial_recognition.approve` never actually reached HR Admin or Branch Admin — two stacked migration bugs**
+
+Two earlier migrations each *intended* to grant this permission to HR Admin/Branch Admin (so they could approve an employee's Face ID registration, not just System Admin) — both silently no-op'd:
+- `attendance.0023_seed_face_registration_permission` tried to grant it to a role literally named `'hr'` — the real role name is `hr_admin` — so `Role.objects.get(name='hr')` raised `DoesNotExist`, caught and swallowed by its own `try/except`.
+- `accounts.0094_add_facial_recognition_approve` correctly targeted `hr_admin`/`branch_admin`, but only declared a dependency on an earlier *accounts* migration, not on `attendance.0023` (the migration that actually creates the `Permission` row) — so on this environment, Django's migration graph happened to apply `0094` before `0023` ever ran, meaning the Permission row didn't exist yet and `0094`'s own `if not permission: return` guard silently no-op'd too.
+Confirmed directly against the DB: only `system_admin` held the permission. Per policy, neither already-shipped migration was edited in place — added a new migration (`0119_fix_facial_recognition_approve_grants.py`) that explicitly depends on `attendance.0023` (guaranteeing the Permission row exists) and grants to `hr_admin`/`branch_admin`/`system_admin` via `get_or_create` (idempotent). Verified live: `branch_admin` now passes the permission check and correctly reaches the next (separate, config-only) gate — Face ID verification itself is currently switched off org-wide (`AttendanceFaceVerificationRules` has zero rows), which is an admin setting to turn on, not a code bug, and was left alone.
+- Files: `backend/apps/accounts/migrations/0119_fix_facial_recognition_approve_grants.py`.
+
+### Findings — flagged, not fixed here (need a decision or belong to the mobile app, not this backend)
+
+**26. Attendance-mode geofencing only checks Office/WFH; Field Work/Client Location/Remote Office never validate location by design** — confirmed intentional (`_validate_no_geofence()`'s own docstring: "Always allowed"), not a bug — but also confirmed that Office-mode enforcement is currently inert too, since all 4 branches have `geofencing_enabled=False`. Needs a product decision (should the other 3 modes ever validate location, against what reference point?) before any code changes — not touched.
+
+**27. "Single Punch" / max-punch-count setting has no effect** — the admin-facing setting exists and can be configured, but `PunchService.record_punch()` never reads it, so unlimited full clock-in/out cycles are always allowed regardless of what's configured. A real gap, not fixed yet — flagged for a decision on exact enforcement behavior (reject the punch outright vs. some other UX) before implementing.
+
+**28. Not backend bugs at all** — confirmed via git history and full-repo search, not touched: Depts & Designations 404 and empty Department/Designation dropdowns in Add Employee are both the mobile app calling endpoints deliberately deleted on 2026-08-28 (`2544616`, "Stage 6 final slice: retire Department/Designation entirely") — the mobile app needs to move to the Org Unit/Position endpoints, same as the web app already has. Company Info's save endpoint works correctly when called correctly (verified live); the likely cause is the mobile app sending field names that don't exactly match the API, which DRF currently silently drops rather than rejecting — flagged as worth hardening (reject unknown fields) but not changed here since it'd affect the API's error-handling contract broadly. Reprocess Attendance's Cancel-button-doesn't-close bug isn't in this repo's web frontend at all (confirmed via exhaustive search — no such screen/endpoint reference exists there) — it's a mobile-app-only UI bug, nothing here to fix.
