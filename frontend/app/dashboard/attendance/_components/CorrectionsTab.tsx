@@ -102,7 +102,7 @@ export default function CorrectionsTab() {
           locked={!unrestricted}
           lockedBranchName={effectiveBranch}
         />
-        <select className="field-input" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
+        <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
           <option value="">All Departments</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>

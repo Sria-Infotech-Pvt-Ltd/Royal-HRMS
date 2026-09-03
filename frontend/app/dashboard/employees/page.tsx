@@ -85,9 +85,13 @@ const STATUS_FILTERS: { value: "all" | EmployeeStatus; label: string }[] = [
 const SEL_CLS =
   "px-3.5 py-2.5 pr-9 rounded-lg border border-[var(--outline-v)] bg-white text-[13px] font-medium text-[var(--on-bg)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(30,78,140,0.12)] transition-colors appearance-none bg-no-repeat cursor-pointer";
 
+// Same chevron artwork/color used everywhere else a themed <select> needs
+// one (see .field-select in globals.css) — this filter bar had its own,
+// visibly different one (a thinner, lighter, differently-shaped glyph).
 const SEL_STYLE = {
-  backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237c8aa3' stroke-width='2'><path d='M4 6l4 4 4-4'/></svg>\")",
+  backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
   backgroundPosition: "right 10px center",
+  backgroundSize: "15px",
 };
 
 export default function EmployeesPage() {

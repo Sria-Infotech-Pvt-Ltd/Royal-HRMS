@@ -157,15 +157,15 @@ export default function WeeklyOffAssignmentTab() {
             locked={!unrestricted}
             lockedBranchName={effectiveBranch}
           />
-          <select className="field-input" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
+          <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
             <option value="">All Departments</option>
             {departments.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
-          <select className="field-input" style={{ width: 180 }} value={pattern} onChange={e => { setPattern(e.target.value); setPage(1); }}>
+          <select className="field-input field-select" style={{ width: 180 }} value={pattern} onChange={e => { setPattern(e.target.value); setPage(1); }}>
             <option value="">All Patterns</option>
             {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select className="field-input" style={{ width: 150 }} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+          <select className="field-input field-select" style={{ width: 150 }} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
             {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
@@ -268,7 +268,7 @@ export default function WeeklyOffAssignmentTab() {
           </p>
           <div className="field-group">
             <label className="field-label">Weekly Off Pattern</label>
-            <select className="field-input" value={assignPattern} onChange={e => setAssignPattern(e.target.value)}>
+            <select className="field-input field-select" value={assignPattern} onChange={e => setAssignPattern(e.target.value)}>
               <option value="">Select pattern…</option>
               {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -322,7 +322,7 @@ export default function WeeklyOffAssignmentTab() {
             </div>
             <div className="field-group">
               <label className="field-label">Department</label>
-              <select className="field-input" value={bulkDept} onChange={e => setBulkDept(e.target.value)}>
+              <select className="field-input field-select" value={bulkDept} onChange={e => setBulkDept(e.target.value)}>
                 <option value="">All Departments</option>
                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
@@ -330,7 +330,7 @@ export default function WeeklyOffAssignmentTab() {
           </div>
           <div className="field-group">
             <label className="field-label">Weekly Off Pattern</label>
-            <select className="field-input" value={bulkPattern} onChange={e => setBulkPattern(e.target.value)}>
+            <select className="field-input field-select" value={bulkPattern} onChange={e => setBulkPattern(e.target.value)}>
               <option value="">Select pattern…</option>
               {patterns.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>

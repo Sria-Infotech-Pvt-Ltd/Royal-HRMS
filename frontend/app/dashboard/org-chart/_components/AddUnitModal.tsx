@@ -87,7 +87,7 @@ export default function AddUnitModal({ units, parentId, onClose, onCreated }: Pr
 
       <div className="field-group mb-16">
         <label className="field-label">Parent Unit</label>
-        <select className="field-input" value={parent} onChange={e => setParent(e.target.value)}>
+        <select className="field-input field-select" value={parent} onChange={e => setParent(e.target.value)}>
           <option value="">None — top level</option>
           {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>

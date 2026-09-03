@@ -203,7 +203,7 @@ export default function OrgDetail({
           </div>
           <div className="field-group">
             <label className="field-label">Parent unit</label>
-            <select className="field-input" defaultValue={unit.parent ?? ""} disabled={!canEdit} onChange={e => onUnitField(unit.id, "parent", e.target.value || null)}>
+            <select className="field-input field-select" defaultValue={unit.parent ?? ""} disabled={!canEdit} onChange={e => onUnitField(unit.id, "parent", e.target.value || null)}>
               <option value="">None — top level</option>
               {parentOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
@@ -339,20 +339,20 @@ export default function OrgDetail({
           </div>
           <div className="field-group">
             <label className="field-label">Org unit</label>
-            <select className="field-input" defaultValue={p.org_unit} disabled={!canEdit} onChange={e => onPositionField(p.id, "org_unit", e.target.value)}>
+            <select className="field-input field-select" defaultValue={p.org_unit} disabled={!canEdit} onChange={e => onPositionField(p.id, "org_unit", e.target.value)}>
               {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
           <div className="field-group">
             <label className="field-label">Job template</label>
-            <select className="field-input" defaultValue={p.job_template ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "job_template", e.target.value || null)}>
+            <select className="field-input field-select" defaultValue={p.job_template ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "job_template", e.target.value || null)}>
               <option value="">None</option>
               {jobs.map(j => <option key={j.id} value={j.id}>{j.name}{j.band ? ` · ${j.band}` : ""}</option>)}
             </select>
           </div>
           <div className="field-group">
             <label className="field-label">Branch <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
-            <select className="field-input" defaultValue={p.branch ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "branch", e.target.value || null)}>
+            <select className="field-input field-select" defaultValue={p.branch ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "branch", e.target.value || null)}>
               <option value="">Company-wide</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
             </select>

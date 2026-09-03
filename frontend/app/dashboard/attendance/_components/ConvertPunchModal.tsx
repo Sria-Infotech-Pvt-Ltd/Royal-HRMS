@@ -70,7 +70,7 @@ export default function ConvertPunchModal({ punch, onClose, onConverted }: Props
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Punch Type</label>
-              <select className="field-input" value={punchType} onChange={e => setPunchType(e.target.value as "IN" | "OUT")}>
+              <select className="field-input field-select" value={punchType} onChange={e => setPunchType(e.target.value as "IN" | "OUT")}>
                 <option value="IN">IN</option>
                 <option value="OUT">OUT</option>
               </select>

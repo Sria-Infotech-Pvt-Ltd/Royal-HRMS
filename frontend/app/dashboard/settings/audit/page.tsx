@@ -186,7 +186,7 @@ function AuditLogPageInner() {
           {/* Module */}
           <div className="field-group" style={{ minWidth: 150 }}>
             <label className="field-label">Module</label>
-            <select className="field-input" value={module} onChange={e => setModule(e.target.value)}>
+            <select className="field-input field-select" value={module} onChange={e => setModule(e.target.value)}>
               <option value="">All modules</option>
               {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>

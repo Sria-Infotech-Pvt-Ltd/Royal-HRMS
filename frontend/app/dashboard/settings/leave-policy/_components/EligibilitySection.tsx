@@ -110,7 +110,7 @@ export default function EligibilitySection({ rules, setField }: Props) {
           />
           <div className="field-group mb-16">
             <label className="field-label">Gender</label>
-            <select className="field-input" value={rules.applicable_gender} onChange={e => setField("applicable_gender", e.target.value)}>
+            <select className="field-input field-select" value={rules.applicable_gender} onChange={e => setField("applicable_gender", e.target.value)}>
               {GENDER_OPTIONS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
           </div>

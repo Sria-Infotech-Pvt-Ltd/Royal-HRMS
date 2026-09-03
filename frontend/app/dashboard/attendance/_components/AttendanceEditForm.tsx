@@ -149,7 +149,7 @@ function AttendanceFormFields({
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div>
         <label className="field-label">Status</label>
-        <select className="field-input" value={status} onChange={e => onStatus(e.target.value)}>
+        <select className="field-input field-select" value={status} onChange={e => onStatus(e.target.value)}>
           {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
       </div>

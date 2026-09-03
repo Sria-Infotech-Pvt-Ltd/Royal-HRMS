@@ -81,7 +81,7 @@ export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Pr
           </div>
           <div className="field-group">
             <label className="field-label">Punch Type</label>
-            <select className="field-input" value={punchType} onChange={e => setPunchType(e.target.value as PunchType)}>
+            <select className="field-input field-select" value={punchType} onChange={e => setPunchType(e.target.value as PunchType)}>
               <option value="IN">Clock In (IN)</option>
               <option value="OUT">Clock Out (OUT)</option>
               <option value="BOTH">Both IN &amp; OUT</option>
@@ -106,7 +106,7 @@ export default function CorrectionModal({ isOpen, date, onClose, onSuccess }: Pr
 
         <div className="field-group mb-16">
           <label className="field-label">Reason</label>
-          <select className="field-input" value={reason} onChange={e => setReason(e.target.value as CorrectionReason)}>
+          <select className="field-input field-select" value={reason} onChange={e => setReason(e.target.value as CorrectionReason)}>
             {REASON_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}

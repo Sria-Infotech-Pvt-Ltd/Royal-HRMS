@@ -645,7 +645,7 @@ export default function DocumentCenterPage() {
               {/* Category */}
               <div className="field-group">
                 <label className="field-label">Category <span style={{ color: "var(--error)" }}>*</span></label>
-                <select className="field-input"
+                <select className="field-input field-select"
                   value={uploadForm.category}
                   onChange={e => { setUploadForm(p => ({ ...p, category: e.target.value as DocCategory | "" })); setUploadErrors(p => ({ ...p, category: undefined })); }}
                   suppressHydrationWarning>

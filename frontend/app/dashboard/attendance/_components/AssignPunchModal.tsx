@@ -73,7 +73,7 @@ export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) 
 
           <div className="field-group">
             <label className="field-label">Assign to HR user</label>
-            <select className="field-input" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
+            <select className="field-input field-select" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
               <option value="">Select HR user…</option>
               {(hrUsers ?? []).map(u => (
                 <option key={u.id} value={u.id}>{u.full_name} ({u.employee_id})</option>

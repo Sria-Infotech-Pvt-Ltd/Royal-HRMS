@@ -150,7 +150,7 @@ export default function AttendanceSettings() {
           <div className="form-row cols-3">
             <div className="field-group">
               <label className="field-label">Min Hours — Full Day</label>
-              <select className="field-input" style={errStyle("punch_rules", "min_hours_full_day")}
+              <select className="field-input field-select" style={errStyle("punch_rules", "min_hours_full_day")}
                 value={form.punch_rules.min_hours_full_day}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, min_hours_full_day: e.target.value } }))}
               >
@@ -162,7 +162,7 @@ export default function AttendanceSettings() {
             </div>
             <div className="field-group">
               <label className="field-label">Min Hours — Half Day</label>
-              <select className="field-input" style={errStyle("punch_rules", "min_hours_half_day")}
+              <select className="field-input field-select" style={errStyle("punch_rules", "min_hours_half_day")}
                 value={form.punch_rules.min_hours_half_day}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, min_hours_half_day: e.target.value } }))}
               >
@@ -174,7 +174,7 @@ export default function AttendanceSettings() {
             </div>
             <div className="field-group">
               <label className="field-label">Early Exit Grace</label>
-              <select className="field-input" style={errStyle("punch_rules", "early_exit_grace_minutes")}
+              <select className="field-input field-select" style={errStyle("punch_rules", "early_exit_grace_minutes")}
                 value={form.punch_rules.early_exit_grace_minutes}
                 onChange={e => setForm(f => ({ ...f, punch_rules: { ...f.punch_rules, early_exit_grace_minutes: Number(e.target.value) } }))}
               >
@@ -198,7 +198,7 @@ export default function AttendanceSettings() {
           <div className="form-row cols-3">
             <div className="field-group">
               <label className="field-label">OT Threshold</label>
-              <select className="field-input" style={errStyle("overtime_rules", "ot_threshold_hours")}
+              <select className="field-input field-select" style={errStyle("overtime_rules", "ot_threshold_hours")}
                 value={form.overtime_rules.ot_threshold_hours}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_threshold_hours: e.target.value } }))}
               >
@@ -210,7 +210,7 @@ export default function AttendanceSettings() {
             </div>
             <div className="field-group">
               <label className="field-label">OT Multiplier — Regular</label>
-              <select className="field-input" style={errStyle("overtime_rules", "ot_multiplier_regular")}
+              <select className="field-input field-select" style={errStyle("overtime_rules", "ot_multiplier_regular")}
                 value={form.overtime_rules.ot_multiplier_regular}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_multiplier_regular: e.target.value } }))}
               >
@@ -222,7 +222,7 @@ export default function AttendanceSettings() {
             </div>
             <div className="field-group">
               <label className="field-label">OT Multiplier — Holiday</label>
-              <select className="field-input" style={errStyle("overtime_rules", "ot_multiplier_holiday")}
+              <select className="field-input field-select" style={errStyle("overtime_rules", "ot_multiplier_holiday")}
                 value={form.overtime_rules.ot_multiplier_holiday}
                 onChange={e => setForm(f => ({ ...f, overtime_rules: { ...f.overtime_rules, ot_multiplier_holiday: e.target.value } }))}
               >
@@ -249,7 +249,7 @@ export default function AttendanceSettings() {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Late Marks per LOP</label>
-              <select className="field-input" style={errStyle("late_mark_rules", "late_marks_per_lop")}
+              <select className="field-input field-select" style={errStyle("late_mark_rules", "late_marks_per_lop")}
                 value={form.late_mark_rules.late_marks_per_lop}
                 onChange={e => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, late_marks_per_lop: Number(e.target.value) } }))}
               >
@@ -263,7 +263,7 @@ export default function AttendanceSettings() {
             </div>
             <div className="field-group">
               <label className="field-label">LOP Deduction Unit</label>
-              <select className="field-input" style={errStyle("late_mark_rules", "lop_deduction_unit")}
+              <select className="field-input field-select" style={errStyle("late_mark_rules", "lop_deduction_unit")}
                 value={form.late_mark_rules.lop_deduction_unit}
                 onChange={e => setForm(f => ({ ...f, late_mark_rules: { ...f.late_mark_rules, lop_deduction_unit: e.target.value } }))}
               >
@@ -295,7 +295,7 @@ export default function AttendanceSettings() {
           <div className="form-row cols-2">
             <div className="field-group">
               <label className="field-label">Alert After N Absent Days</label>
-              <select className="field-input" style={errStyle("absence_alert", "alert_after_days")}
+              <select className="field-input field-select" style={errStyle("absence_alert", "alert_after_days")}
                 value={form.absence_alert.alert_after_days}
                 onChange={e => setForm(f => ({ ...f, absence_alert: { ...f.absence_alert, alert_after_days: Number(e.target.value) } }))}
               >
@@ -307,7 +307,7 @@ export default function AttendanceSettings() {
             </div>
             <div className="field-group">
               <label className="field-label">Notify</label>
-              <select className="field-input" style={errStyle("absence_alert", "notify_whom")}
+              <select className="field-input field-select" style={errStyle("absence_alert", "notify_whom")}
                 value={form.absence_alert.notify_whom}
                 onChange={e => setForm(f => ({ ...f, absence_alert: { ...f.absence_alert, notify_whom: e.target.value } }))}
               >

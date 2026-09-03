@@ -22,7 +22,7 @@ export default function BranchFilterSelect({ branches, value, onChange, locked, 
     const label = lockedBranchName || "—";
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 6 }} title="Scoped to your branch">
-        <select className="field-input" style={{ width, background: "var(--bg-low)", cursor: "not-allowed" }} value={label} disabled>
+        <select className="field-input field-select" style={{ width, background: "var(--bg-low)", cursor: "not-allowed" }} value={label} disabled>
           <option value={label}>{label}</option>
         </select>
         <i className="ti ti-lock" style={{ color: "var(--on-variant)", fontSize: 14 }} />
@@ -31,7 +31,7 @@ export default function BranchFilterSelect({ branches, value, onChange, locked, 
   }
 
   return (
-    <select className="field-input" style={{ width }} value={value} onChange={e => onChange(e.target.value)}>
+    <select className="field-input field-select" style={{ width }} value={value} onChange={e => onChange(e.target.value)}>
       <option value="">All Branches</option>
       {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
     </select>

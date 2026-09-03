@@ -54,11 +54,15 @@ const EMPTY: Form = {
 const INP = "w-full px-3.5 py-2.5 rounded-lg border text-[13px] bg-white text-[var(--on-bg)] placeholder:text-[#a5b0c2] focus:outline-none focus:ring-2 focus:ring-[rgba(30,78,140,0.12)] transition-colors";
 const OK  = "border-[var(--outline-v)] focus:border-[var(--primary)]";
 const ERR = "border-[var(--error)] focus:border-[var(--error)]";
+// Matches globals.css's .field-select exactly (same viewBox and size —
+// this was missing viewBox='0 0 24 24' and used 14px instead of 15px,
+// which doesn't visibly break the glyph but does render it fractionally
+// off from the identical icon everywhere else it's used).
 const SEL_BG = {
-  backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+  backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
   backgroundRepeat:   "no-repeat" as const,
   backgroundPosition: "right 10px center" as const,
-  backgroundSize:     "14px" as const,
+  backgroundSize:     "15px" as const,
 };
 
 /* ── Atoms ────────────────────────────────────────────────────── */

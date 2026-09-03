@@ -101,7 +101,7 @@ export default function OtEntryTab() {
           <div className="form-row cols-3">
             <div className="field-group">
               <label className="field-label">Employee</label>
-              <select className="field-input" value={form.employee_id} onChange={e => setField("employee_id", e.target.value)}>
+              <select className="field-input field-select" value={form.employee_id} onChange={e => setField("employee_id", e.target.value)}>
                 <option value="">Select employee…</option>
                 {employees.map(e => (
                   <option key={e.employee_id} value={e.employee_id}>{e.full_name} ({e.employee_id})</option>
@@ -114,7 +114,7 @@ export default function OtEntryTab() {
             </div>
             <div className="field-group">
               <label className="field-label">OT Type</label>
-              <select className="field-input" value={form.ot_type} onChange={e => setField("ot_type", e.target.value as OvertimeCreatePayload["ot_type"])}>
+              <select className="field-input field-select" value={form.ot_type} onChange={e => setField("ot_type", e.target.value as OvertimeCreatePayload["ot_type"])}>
                 <option value="regular">Regular (1.5×)</option>
                 <option value="holiday">Holiday (2.0×)</option>
                 <option value="weekly_off">Weekly Off (1.5×)</option>
@@ -132,7 +132,7 @@ export default function OtEntryTab() {
             </div>
             <div className="field-group">
               <label className="field-label">Approved By</label>
-              <select className="field-input" value={form.approved_by} onChange={e => setField("approved_by", e.target.value)}>
+              <select className="field-input field-select" value={form.approved_by} onChange={e => setField("approved_by", e.target.value)}>
                 <option value="">Select approver…</option>
                 {(approvers ?? []).map(a => (
                   <option key={a.employee_id} value={a.employee_id}>{a.full_name}</option>

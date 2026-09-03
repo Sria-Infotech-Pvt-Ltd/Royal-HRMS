@@ -163,10 +163,10 @@ export default function PayrollAdjustments() {
       {/* Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8 }}>
-          <select className="field-input" style={{ width: 130 }} value={month} onChange={e => changeMonth(e.target.value)}>
+          <select className="field-input field-select" style={{ width: 130 }} value={month} onChange={e => changeMonth(e.target.value)}>
             {MONTHS.map(m => <option key={m}>{m}</option>)}
           </select>
-          <select className="field-input" style={{ width: 90 }} value={year} onChange={e => changeYear(e.target.value)}>
+          <select className="field-input field-select" style={{ width: 90 }} value={year} onChange={e => changeYear(e.target.value)}>
             {["2024","2025","2026","2027"].map(y => <option key={y}>{y}</option>)}
           </select>
         </div>
@@ -385,7 +385,7 @@ function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalP
 
       <div className="field-group mb-16">
         <label className="field-label">Type <span style={{ color: "var(--error)" }}>*</span></label>
-        <select className="field-input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
+        <select className="field-input field-select" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
           <option value="addition">Addition</option>
           <option value="deduction">Deduction</option>
           <option value="arrear">Arrear</option>

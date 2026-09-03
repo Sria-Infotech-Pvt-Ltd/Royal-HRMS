@@ -350,7 +350,7 @@ export default function LeavePoliciesTab() {
         </div>
         <div className="field-group min-w-[260px]">
           <label className="field-label">Leave Type</label>
-          <select className="field-input" value={selectedType} onChange={e => setSelectedType(e.target.value)}>
+          <select className="field-input field-select" value={selectedType} onChange={e => setSelectedType(e.target.value)}>
             {list.map(t => (
               <option key={t.leave_type} value={t.leave_type}>{t.leave_type_display}</option>
             ))}

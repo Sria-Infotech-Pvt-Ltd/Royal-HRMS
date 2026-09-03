@@ -275,7 +275,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
             {/* Priority */}
             <div className="field-group">
               <label className="field-label">Priority</label>
-              <select className="field-input" value={form.priority}
+              <select className="field-input field-select" value={form.priority}
                 onChange={e => patch({ priority: e.target.value as typeof form.priority })}
                 style={{ cursor: "pointer" }}
                 suppressHydrationWarning>

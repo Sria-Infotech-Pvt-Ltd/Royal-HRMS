@@ -562,7 +562,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   );
                 })() : (
                   /* Edit mode — category locked, show read-only */
-                  <select className="field-input" value={form.template_type} disabled suppressHydrationWarning
+                  <select className="field-input field-select" value={form.template_type} disabled suppressHydrationWarning
                     style={{ cursor: "default", color: form.template_type ? "var(--on-bg)" : "var(--outline)" }}>
                     {categories.map(cat => <option key={cat.id} value={catValue(cat)}>{cat.name}</option>)}
                     {!categories.some(c => catValue(c) === form.template_type) && (

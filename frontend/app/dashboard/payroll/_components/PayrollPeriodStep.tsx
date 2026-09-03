@@ -190,13 +190,13 @@ export default function PayrollPeriodStep({
         <div className="form-row cols-2">
           <div className="field-group">
             <label className="field-label">Payroll Month *</label>
-            <select className="field-input" value={month} onChange={e => setMonth(e.target.value)}>
+            <select className="field-input field-select" value={month} onChange={e => setMonth(e.target.value)}>
               {MONTHS.map(m => <option key={m}>{m}</option>)}
             </select>
           </div>
           <div className="field-group">
             <label className="field-label">Payroll Year *</label>
-            <select className="field-input" value={year} onChange={e => setYear(e.target.value)}>
+            <select className="field-input field-select" value={year} onChange={e => setYear(e.target.value)}>
               {YEARS.map(y => <option key={y}>{y}</option>)}
             </select>
           </div>
