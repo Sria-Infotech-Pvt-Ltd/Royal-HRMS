@@ -129,6 +129,10 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
             <tbody>
               {rows.map(row => {
                 const status = gstinLiveStatus(row.gstin, companyPan, row.state);
+                // Client-side heads-up only — the server is the actual
+                // authority on this (a GSTIN per state is a hard rule, not
+                // just a UI nicety), enforced in CompanyGSTRegistrationSerializer.
+                const isDuplicateState = row.state !== "" && rows.some(r => r.key !== row.key && r.state === row.state);
                 return (
                   <tr key={row.key}>
                     <td style={{ minWidth: 180 }}>
@@ -161,6 +165,9 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                         <option value="">Select…</option>
                         {STATES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
+                      {isDuplicateState && (
+                        <div className="field-error-msg">A GSTIN already exists for {row.state}.</div>
+                      )}
                     </td>
                     <td style={{ minWidth: 130 }}>
                       <select
@@ -192,6 +199,7 @@ export default function GSTRegistrationsSection({ canEdit, companyPan, collapsed
                           onClick={() => removeRow(row)}
                           disabled={row.saving}
                           title="Remove"
+                          aria-label={`Remove GST registration for ${row.state || "this row"}`}
                         >
                           <i className="ti ti-trash" style={{ fontSize: 13 }} />
                         </button>

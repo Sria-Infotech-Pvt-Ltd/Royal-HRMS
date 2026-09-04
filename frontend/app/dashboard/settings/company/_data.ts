@@ -56,6 +56,45 @@ export const ENTITY_TYPE_OPTIONS_FOREIGN = [
 // it carries a CIN too; HUF/proprietorship/trust/society don't.
 export const CIN_ENTITY_TYPES = new Set(["private_limited", "public_limited", "opc", "section8"]);
 
+// CIN's embedded "ownership class" (3 letters right after the year, e.g. the
+// PTC in U74999MH2020PTC123456) reliably maps to entity type for these three
+// — MCA introduced OPC as its own class specifically so it's unambiguous,
+// and PTC/PLC are like this consistently across the ROC record. Section 8 is
+// deliberately excluded: it's a *license* layered onto an otherwise-normal
+// private/public company, so its CIN class is still PTC/PLC/OPC depending on
+// the underlying company type, not a class of its own — asserting one exact
+// value for it would be as likely to be wrong as right.
+const CIN_CLASS_BY_ENTITY: Record<string, string> = {
+  private_limited: "PTC", public_limited: "PLC", opc: "OPC",
+};
+
+// Only a Public Limited company can legally be listed (CIN prefix "L") — a
+// Private Limited/OPC/Section 8 company is structurally barred from public
+// listing, so an "L" prefix on one of these is never valid, regardless of
+// what the rest of the CIN says.
+const CIN_CANNOT_BE_LISTED_ENTITY_TYPES = new Set(["private_limited", "opc", "section8"]);
+
+// CIN's embedded state code (e.g. the MH in U74999MH2020PTC123456) is MCA's
+// own 2-LETTER ROC abbreviation — a completely different coding system from
+// GSTIN's 2-DIGIT numeric state code (GST_STATE_CODES above), not the same
+// table reused. Chhattisgarh and Uttarakhand have seen more than one
+// abbreviation in real CINs over the years (CG/CT and UT/UK respectively,
+// from ROC jurisdiction renames) — using the current, more common variant
+// for each; a false mismatch on an older CIN from one of those two states is
+// a known residual gap, not a silent wrong assumption.
+const ROC_STATE_CODES: Record<string, string> = {
+  "Andaman and Nicobar Islands": "AN", "Andhra Pradesh": "AP", "Arunachal Pradesh": "AR",
+  "Assam": "AS", "Bihar": "BR", "Chandigarh": "CH", "Chhattisgarh": "CG",
+  "Dadra and Nagar Haveli and Daman and Diu": "DN", "Delhi": "DL", "Goa": "GA",
+  "Gujarat": "GJ", "Haryana": "HR", "Himachal Pradesh": "HP", "Jammu and Kashmir": "JK",
+  "Jharkhand": "JH", "Karnataka": "KA", "Kerala": "KL", "Ladakh": "LA",
+  "Lakshadweep": "LD", "Madhya Pradesh": "MP", "Maharashtra": "MH", "Manipur": "MN",
+  "Meghalaya": "ML", "Mizoram": "MZ", "Nagaland": "NL", "Odisha": "OR",
+  "Puducherry": "PY", "Punjab": "PB", "Rajasthan": "RJ", "Sikkim": "SK",
+  "Tamil Nadu": "TN", "Telangana": "TG", "Tripura": "TR", "Uttar Pradesh": "UP",
+  "Uttarakhand": "UT", "West Bengal": "WB",
+};
+
 // The single `cin` column is reused for whatever this entity type's actual
 // registration number is called. Label/required/format follow the approved
 // design reference (india-company-profile-v2 artifact's TYPES_IN +
@@ -254,13 +293,14 @@ export function entityComplianceHint(jurisdiction: string, entityType: string, e
 // Format: L/U + 5-digit industry code + 2-letter state code + 4-digit year +
 // 3-letter ownership type + 6-digit registration number.
 
-export function parseCin(cin: string): { listing: string; stateCode: string; year: string } | null {
+export function parseCin(cin: string): { listing: string; stateCode: string; year: string; classCode: string } | null {
   const v = cin.trim().toUpperCase();
   if (!CIN_RE.test(v)) return null;
   return {
     listing: v[0] === "L" ? "Listed" : "Unlisted",
     stateCode: v.slice(6, 8),
     year: v.slice(8, 12),
+    classCode: v.slice(12, 15),
   };
 }
 
@@ -320,14 +360,48 @@ export function resolveIfsc(ifsc: string): { bank: string | null; branchCode: st
   return { bank: IFSC_BANK_NAMES[v.slice(0, 4)] ?? null, branchCode: v.slice(4) };
 }
 
-// ─── GSTIN — live, offline feedback as the row is being typed (format + PAN
-// cross-match + state-code cross-match); the server re-checks all of this on
-// save, this is only for the "✓ valid · PAN matches" inline hint. ─────────────
+// ─── GSTIN checksum — the 15th character is a check digit over the first 14,
+// a Luhn-like algorithm in base 36 (0-9 then A-Z). Publicly documented GSTN
+// spec; verified here against the two independently-known-valid GSTINs used
+// elsewhere in this file/the defect report before being relied on. ───────────
+
+const GSTIN_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function gstinCheckDigit(first14: string): string {
+  const len = GSTIN_CHARSET.length;
+  let factor = 2;
+  let sum = 0;
+  for (let i = first14.length - 1; i >= 0; i--) {
+    const code = GSTIN_CHARSET.indexOf(first14[i]);
+    let d = factor * code;
+    d = Math.floor(d / len) + (d % len);
+    sum += d;
+    factor = factor === 2 ? 1 : 2;
+  }
+  return GSTIN_CHARSET[(len - (sum % len)) % len];
+}
+
+// A GSTIN's own state code (first 2 digits) must be one of the 38 real codes
+// — distinguishing "not a real code at all" from "a real code, just not the
+// one for the selected state" is worth doing since the two mean different
+// things (garbage input vs. a state mismatch).
+const VALID_GST_STATE_CODES = new Set(Object.values(GST_STATE_CODES));
+
+// ─── GSTIN — live, offline feedback as the row is being typed (format +
+// checksum + PAN cross-match + state-code cross-match); the server re-checks
+// all of this on save, this is only for the "✓ valid · PAN matches" inline
+// hint. ─────────────────────────────────────────────────────────────────────
 
 export function gstinLiveStatus(gstin: string, companyPan: string, state: string): { ok: boolean; text: string } | null {
   const v = gstin.trim().toUpperCase();
   if (v.length < 15) return null;
   if (!GSTIN_RE.test(v)) return { ok: false, text: "Not a valid GSTIN format." };
+  if (gstinCheckDigit(v.slice(0, 14)) !== v[14]) {
+    return { ok: false, text: "Invalid GSTIN checksum — check for a typo." };
+  }
+  if (!VALID_GST_STATE_CODES.has(v.slice(0, 2))) {
+    return { ok: false, text: `${v.slice(0, 2)} isn't a valid GST state code.` };
+  }
 
   const pan = companyPan.trim().toUpperCase();
   if (pan && v.slice(2, 12) !== pan) {
@@ -361,13 +435,30 @@ const LLPIN_RE = /^[A-Z]{3}-?\d{4}$/;
 // backend's matching constant in serializers.py) — this only guards against
 // garbage input, not a specific shape.
 const LOOSE_REGISTRATION_RE = /^[A-Z0-9/\-]{1,30}$/;
+// Requires an actual http(s) scheme AND a real-looking domain after it — a
+// plain startsWith("http") check still lets a scheme-confusion payload like
+// "http://x/\njavascript:alert(1)" through; this shape-checks the whole
+// string instead of just its prefix.
+const WEBSITE_RE = /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(:\d{1,5})?(\/\S*)?$/;
+// Indian postal PINs never start with 0 (the leading digit encodes one of 9
+// postal regions, 1-9) — a bare \d{6} check happily accepts "000000".
+const PIN_LEADING_ZERO_RE = /^0/;
+// No Indian company law predates the 1850s, and a date of incorporation
+// obviously can't be in the future — generous floor/ceiling, not a strict
+// business-rule boundary, just enough to catch fat-finger dates like 1800
+// or 2030.
+const MIN_INCORPORATION_DATE = "1850-01-01";
+
+function isValidPin(v: string): boolean {
+  return PIN_RE.test(v) && !PIN_LEADING_ZERO_RE.test(v);
+}
 
 export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldErrors {
   const e: CompanyFieldErrors = {};
 
   if (isDraft) {
-    if (f.website && !f.website.startsWith("http://") && !f.website.startsWith("https://"))
-      e.website = "Must start with http:// or https://.";
+    if (f.website && !WEBSITE_RE.test(f.website.trim()))
+      e.website = "Enter a full URL starting with http:// or https://.";
     return e;
   }
 
@@ -398,7 +489,28 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
       }
     }
 
-    if (f.pin_code.trim() && !PIN_RE.test(f.pin_code.trim())) e.pin_code = "PIN code must be exactly 6 digits.";
+    // Cross-checks against CIN's own embedded data — only meaningful once the
+    // CIN has already passed the plain format check above (no point cross-
+    // checking a value that isn't even shaped like a CIN), and only for the
+    // entity types that actually carry MCA's structured CIN (not LLPIN or a
+    // generic Partnership/Trust filing number, which don't encode any of this).
+    if (!e.cin && f.cin.trim() && CIN_ENTITY_TYPES.has(f.entity_type)) {
+      const parsed = parseCin(f.cin);
+      if (parsed) {
+        const expectedClass = CIN_CLASS_BY_ENTITY[f.entity_type];
+        if (expectedClass && parsed.classCode !== expectedClass) {
+          e.cin = `This CIN's company class (${parsed.classCode}) doesn't match the selected entity type (expected ${expectedClass}).`;
+        } else if (parsed.listing === "Listed" && CIN_CANNOT_BE_LISTED_ENTITY_TYPES.has(f.entity_type)) {
+          e.cin = "This CIN's listing prefix (L) marks it as a listed company, which isn't possible for this entity type.";
+        } else if (f.state && ROC_STATE_CODES[f.state] && parsed.stateCode !== ROC_STATE_CODES[f.state]) {
+          e.cin = `This CIN's state code (${parsed.stateCode}) doesn't match the registered office state (${f.state}).`;
+        } else if (f.date_of_incorporation && parsed.year !== f.date_of_incorporation.slice(0, 4)) {
+          e.cin = `This CIN's registration year (${parsed.year}) doesn't match the Date of Incorporation (${f.date_of_incorporation.slice(0, 4)}).`;
+        }
+      }
+    }
+
+    if (f.pin_code.trim() && !isValidPin(f.pin_code.trim())) e.pin_code = "Enter a valid 6-digit Indian PIN code (can't start with 0).";
 
     if (f.iec.trim() && !PAN_RE.test(f.iec.trim().toUpperCase())) {
       e.iec = "IEC is PAN-based since 2018 — enter a valid 10-character PAN-format code.";
@@ -416,12 +528,21 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
   if (!f.communication_address_same_as_registered) {
     if (!f.communication_address.trim()) e.communication_address = "Communication address is required when it differs from the registered office.";
     if (!f.communication_city.trim())    e.communication_city    = "Communication city is required when it differs from the registered office.";
-    if (f.communication_pin_code.trim() && !PIN_RE.test(f.communication_pin_code.trim()))
-      e.communication_pin_code = "PIN code must be exactly 6 digits.";
+    if (f.communication_pin_code.trim() && !isValidPin(f.communication_pin_code.trim()))
+      e.communication_pin_code = "Enter a valid 6-digit Indian PIN code (can't start with 0).";
   }
 
-  if (f.website && !f.website.startsWith("http://") && !f.website.startsWith("https://"))
-    e.website = "Must start with http:// or https://.";
+  if (f.date_of_incorporation) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (f.date_of_incorporation > today) {
+      e.date_of_incorporation = "Date of Incorporation can't be in the future.";
+    } else if (f.date_of_incorporation < MIN_INCORPORATION_DATE) {
+      e.date_of_incorporation = "Enter a realistic Date of Incorporation.";
+    }
+  }
+
+  if (f.website && !WEBSITE_RE.test(f.website.trim()))
+    e.website = "Enter a full URL starting with http:// or https://.";
   if (f.official_phone && !PHONE_RE.test(f.official_phone)) e.official_phone = "Enter a valid phone number.";
   if (f.primary_email && !EMAIL_RE.test(f.primary_email))   e.primary_email  = "Enter a valid email address.";
   if (f.signatory_email && !EMAIL_RE.test(f.signatory_email)) e.signatory_email = "Enter a valid email address.";
@@ -467,8 +588,14 @@ export function sanitizeCompanyResponse<T extends object>(raw: T): T {
 }
 
 export function profileCompletionPercent(f: CompanyData): number {
+  // CIN (or whatever this entity type's registration number is called, per
+  // REGISTRATION_NUMBER_CONFIG) was previously left out of this calculation
+  // entirely — a record could read "100% complete" while missing a required
+  // registration number. Only counted when the field actually applies to
+  // this entity type (Proprietorship/HUF genuinely have none, so it's
+  // correctly excluded for those two, not silently 0%-weighted forever).
   const jurisdictionFields: (keyof CompanyData)[] = f.jurisdiction === "india"
-    ? ["pan", "tan"]
+    ? (REGISTRATION_NUMBER_CONFIG[f.entity_type] ? ["pan", "tan", "cin"] : ["pan", "tan"])
     : ["country_of_registration", "registration_number"];
   const fields = [...COMPLETION_FIELDS, ...jurisdictionFields];
   const filled = fields.filter(k => String(f[k] ?? "").trim().length > 0).length;

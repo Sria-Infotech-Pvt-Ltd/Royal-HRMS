@@ -8,6 +8,7 @@ from django.core import signing
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from datetime import date
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -673,6 +674,10 @@ _LLPIN_RE = re.compile(r'^[A-Z]{3}-?\d{4}$')
 # PAN/CIN/TAN/GSTIN/UDYAM/ESIC above, so this only guards against garbage
 # input (blank-only, stray symbols) rather than asserting a specific shape.
 _LOOSE_REGISTRATION_RE = re.compile(r'^[A-Z0-9/\-]{1,30}$')
+_WEBSITE_RE = re.compile(
+    r'^https?://[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?'
+    r'(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(:\d{1,5})?(/\S*)?$',
+)
 
 # 2-digit GSTIN state code, keyed by the state names used elsewhere in this
 # app — lets a GST registration row be cross-checked against its own
@@ -703,6 +708,64 @@ _CIN_ENTITY_TYPES = {'private_limited', 'public_limited', 'opc', 'section8'}
 _LLPIN_ENTITY_TYPES = {'llp'}
 _GENERIC_REG_ENTITY_TYPES = {'partnership', 'trust_society'}
 _NO_REG_ENTITY_TYPES = {'sole_proprietorship', 'huf'}
+
+# CIN's embedded "ownership class" (3 letters right after the year, e.g. the
+# PTC in U74999MH2020PTC123456) reliably maps to entity type for these three
+# — MCA introduced OPC as its own class specifically so it's unambiguous, and
+# PTC/PLC are consistent across the ROC record. Section 8 is deliberately
+# excluded: it's a *license* layered onto an otherwise-normal private/public
+# company, so its CIN class is still PTC/PLC/OPC depending on the underlying
+# company type, not a class of its own.
+_CIN_CLASS_BY_ENTITY = {'private_limited': 'PTC', 'public_limited': 'PLC', 'opc': 'OPC'}
+# Only a Public Limited company can legally be listed (CIN prefix "L") — a
+# Private Limited/OPC/Section 8 company is structurally barred from public
+# listing.
+_CIN_CANNOT_BE_LISTED_ENTITY_TYPES = {'private_limited', 'opc', 'section8'}
+# Indian postal PINs never start with 0 (the leading digit encodes one of 9
+# postal regions, 1-9) — plain \d{6} happily accepts "000000".
+_PIN_LEADING_ZERO_RE = re.compile(r'^0')
+_MIN_INCORPORATION_DATE = date(1850, 1, 1)
+
+# CIN's embedded state code (e.g. the MH in U74999MH2020PTC123456) is MCA's
+# own 2-LETTER ROC abbreviation — a completely different coding system from
+# GSTIN's 2-DIGIT numeric state code (GST_STATE_CODES above), not the same
+# table reused. Chhattisgarh and Uttarakhand have seen more than one
+# abbreviation in real CINs over the years (CG/CT and UT/UK respectively,
+# from ROC jurisdiction renames) — using the current, more common variant
+# for each; a false mismatch on an older CIN from one of those two states is
+# a known residual gap, not a silent wrong assumption.
+ROC_STATE_CODES = {
+    'Andaman and Nicobar Islands': 'AN', 'Andhra Pradesh': 'AP', 'Arunachal Pradesh': 'AR',
+    'Assam': 'AS', 'Bihar': 'BR', 'Chandigarh': 'CH', 'Chhattisgarh': 'CG',
+    'Dadra and Nagar Haveli and Daman and Diu': 'DN', 'Delhi': 'DL', 'Goa': 'GA',
+    'Gujarat': 'GJ', 'Haryana': 'HR', 'Himachal Pradesh': 'HP', 'Jammu and Kashmir': 'JK',
+    'Jharkhand': 'JH', 'Karnataka': 'KA', 'Kerala': 'KL', 'Ladakh': 'LA',
+    'Lakshadweep': 'LD', 'Madhya Pradesh': 'MP', 'Maharashtra': 'MH', 'Manipur': 'MN',
+    'Meghalaya': 'ML', 'Mizoram': 'MZ', 'Nagaland': 'NL', 'Odisha': 'OR',
+    'Puducherry': 'PY', 'Punjab': 'PB', 'Rajasthan': 'RJ', 'Sikkim': 'SK',
+    'Tamil Nadu': 'TN', 'Telangana': 'TG', 'Tripura': 'TR', 'Uttar Pradesh': 'UP',
+    'Uttarakhand': 'UT', 'West Bengal': 'WB',
+}
+
+
+# GSTIN checksum — the 15th character is a check digit over the first 14, a
+# Luhn-like algorithm in base 36 (0-9 then A-Z). Publicly documented GSTN
+# spec; verified against known-valid GSTINs (including the exact one used in
+# this defect report) before being relied on — see the identical
+# implementation and its test in frontend/_data.ts's gstinCheckDigit().
+_GSTIN_CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+
+def _gstin_check_digit(first14: str) -> str:
+    length = len(_GSTIN_CHARSET)
+    factor = 2
+    total = 0
+    for ch in reversed(first14):
+        d = factor * _GSTIN_CHARSET.index(ch)
+        d = d // length + d % length
+        total += d
+        factor = 1 if factor == 2 else 2
+    return _GSTIN_CHARSET[(length - (total % length)) % length]
 
 
 def _gstin_pan_mismatch_error(gstin: str, pan: str) -> str | None:
@@ -854,17 +917,26 @@ class CompanySerializer(serializers.ModelSerializer):
         if not value:
             return value
         v = value.strip()
-        if not _PIN_RE.match(v):
-            raise serializers.ValidationError('PIN code must be exactly 6 digits.')
+        if not _PIN_RE.match(v) or _PIN_LEADING_ZERO_RE.match(v):
+            raise serializers.ValidationError("Enter a valid 6-digit Indian PIN code (can't start with 0).")
         return v
 
     def validate_communication_pin_code(self, value: str) -> str:
         if not value:
             return value
         v = value.strip()
-        if not _PIN_RE.match(v):
-            raise serializers.ValidationError('PIN code must be exactly 6 digits.')
+        if not _PIN_RE.match(v) or _PIN_LEADING_ZERO_RE.match(v):
+            raise serializers.ValidationError("Enter a valid 6-digit Indian PIN code (can't start with 0).")
         return v
+
+    def validate_date_of_incorporation(self, value):
+        if not value:
+            return value
+        if value > timezone.localdate():
+            raise serializers.ValidationError("Date of Incorporation can't be in the future.")
+        if value < _MIN_INCORPORATION_DATE:
+            raise serializers.ValidationError('Enter a realistic Date of Incorporation.')
+        return value
 
     def validate_udyam_msme(self, value: str) -> str:
         if not value:
@@ -918,8 +990,12 @@ class CompanySerializer(serializers.ModelSerializer):
         if not value:
             return value
         v = value.strip()
-        if v and not v.startswith(('http://', 'https://')):
-            raise serializers.ValidationError('Website must start with http:// or https://.')
+        # Shape-checks the whole string, not just its prefix — a bare
+        # startswith("http") check still lets a scheme-confusion payload
+        # like "http://x/\njavascript:alert(1)" through if this value is
+        # ever rendered as a raw href.
+        if not _WEBSITE_RE.match(v):
+            raise serializers.ValidationError('Enter a full URL starting with http:// or https://.')
         return v
 
     def validate_official_phone(self, value: str) -> str:
@@ -992,6 +1068,29 @@ class CompanySerializer(serializers.ModelSerializer):
                     errors['cin'] = 'LLPIN is required for an LLP.'
                 elif entity_type in _GENERIC_REG_ENTITY_TYPES and not _val('cin'):
                     errors['cin'] = 'Registration number is required for this entity type.'
+                elif entity_type in _CIN_ENTITY_TYPES and _val('cin') and 'cin' not in errors:
+                    # Cross-checks against CIN's own embedded data — same
+                    # rules as the client-side hint in _data.ts's
+                    # validateCompany(), re-asserted here since the client is
+                    # never the authority on data integrity. Only meaningful
+                    # once the CIN has already passed validate_cin's format
+                    # check above (a malformed CIN reaching here would mean
+                    # validate_cin already raised before this method ran).
+                    cin = _val('cin').upper()
+                    expected_class = _CIN_CLASS_BY_ENTITY.get(entity_type)
+                    cin_class = cin[12:15]
+                    cin_state_code = cin[6:8]
+                    cin_year = cin[8:12]
+                    doi = _val('date_of_incorporation')
+                    state = _val('state')
+                    if expected_class and cin_class != expected_class:
+                        errors['cin'] = f"This CIN's company class ({cin_class}) doesn't match the selected entity type (expected {expected_class})."
+                    elif cin[0] == 'L' and entity_type in _CIN_CANNOT_BE_LISTED_ENTITY_TYPES:
+                        errors['cin'] = "This CIN's listing prefix (L) marks it as a listed company, which isn't possible for this entity type."
+                    elif state and ROC_STATE_CODES.get(state) and cin_state_code != ROC_STATE_CODES[state]:
+                        errors['cin'] = f"This CIN's state code ({cin_state_code}) doesn't match the registered office state ({state})."
+                    elif doi and cin_year != str(doi.year):
+                        errors['cin'] = f"This CIN's registration year ({cin_year}) doesn't match the Date of Incorporation ({doi.year})."
                 iec_mismatch = _iec_pan_mismatch_error(_val('iec'), _val('pan'))
                 if iec_mismatch:
                     errors['iec'] = iec_mismatch
@@ -1021,6 +1120,8 @@ class CompanyGSTRegistrationSerializer(serializers.ModelSerializer):
         v = value.strip().upper()
         if not _GSTIN_RE.match(v):
             raise serializers.ValidationError('Enter a valid 15-character GSTIN (e.g. 22AAAAA0000A1Z5).')
+        if _gstin_check_digit(v[:14]) != v[14]:
+            raise serializers.ValidationError('Invalid GSTIN checksum — check for a typo.')
         return v
 
     def validate_state(self, value: str) -> str:
@@ -1044,6 +1145,20 @@ class CompanyGSTRegistrationSerializer(serializers.ModelSerializer):
             expected_code = GST_STATE_CODES.get(state)
             if expected_code and gstin[:2] != expected_code and 'gstin' not in errors:
                 errors['gstin'] = f"This GSTIN's state code ({gstin[:2]}) doesn't match the selected state ({state})."
+
+        # "One GSTIN per state" is stated in the UI's own subtitle but was
+        # never actually enforced — only (company, gstin) had a uniqueness
+        # constraint, which doesn't catch a second, different-but-valid
+        # GSTIN entered for a state that already has one. Checked here
+        # rather than as a DB constraint, since a migration adding one now
+        # could fail outright if duplicate state rows already exist in
+        # production and there's no way to inspect that data directly.
+        if state and company and 'state' not in errors:
+            dupe_qs = CompanyGSTRegistration.objects.filter(company=company, state=state)
+            if self.instance:
+                dupe_qs = dupe_qs.exclude(pk=self.instance.pk)
+            if dupe_qs.exists():
+                errors['state'] = f'A GST registration already exists for {state}.'
 
         if errors:
             raise serializers.ValidationError(errors)

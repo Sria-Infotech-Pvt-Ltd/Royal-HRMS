@@ -35,6 +35,17 @@ export default function CompanyInfoPage() {
   const [saving,      setSaving]      = useState<"draft" | "validate" | null>(null);
   const [savedAt,     setSavedAt]     = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // Before the first Save & validate attempt, a blank required field stays
+  // quiet rather than flashing "is required" on every card the moment the
+  // page loads — but any field that already HAS a value gets real,
+  // immediate feedback regardless (a bad format or a cross-field conflict
+  // like a CIN's state not matching the registered office is worth
+  // surfacing right away, not just at submit time).
+  const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
+  // Remembers each jurisdiction's own last entity type selection, so
+  // toggling India -> Foreign -> India restores what was there rather than
+  // resetting to blank every time (see handleJurisdiction below).
+  const lastEntityTypeByJurisdiction = useRef<Record<string, string>>({ india: "", foreign: "" });
 
   // Logo state
   const [logoFile,    setLogoFile]    = useState<File | null>(null);
@@ -73,9 +84,38 @@ export default function CompanyInfoPage() {
   }
 
   function handleField(key: keyof CompanyData, value: string | boolean) {
-    setForm(prev => ({ ...prev, [key]: value }));
-    setErrors(prev => ({ ...prev, [key]: undefined }));
+    setForm(prev => {
+      const next = { ...prev, [key]: value };
+      const fresh = validateCompany(next, false);
+      setErrors(() => {
+        const merged: typeof fresh = { ...fresh };
+        // Suppress a bare "is required" error on a field that's still empty
+        // until the user has actually tried to save once — everything else
+        // (a value that's present but malformed, or that conflicts with
+        // another field) surfaces immediately, live, as intended.
+        if (!hasAttemptedSave) {
+          for (const k of Object.keys(merged) as (keyof CompanyData)[]) {
+            if (!String(next[k] ?? "").trim()) merged[k] = undefined;
+          }
+        }
+        return merged;
+      });
+      return next;
+    });
     setSaveSuccess(false);
+  }
+
+  // Switching Jurisdiction used to unconditionally blank out Entity type —
+  // even re-clicking the jurisdiction already selected — silently dropping
+  // Directors/statutory-ID fields out of the form (52 fields down to 42) with
+  // no warning that anything had changed. Now a no-op re-click does nothing,
+  // and each jurisdiction remembers its own last entity type so switching
+  // India -> Foreign -> India restores what was there instead of resetting it.
+  function handleJurisdiction(j: "india" | "foreign") {
+    if (j === form.jurisdiction) return;
+    lastEntityTypeByJurisdiction.current[form.jurisdiction] = form.entity_type;
+    handleField("jurisdiction", j);
+    handleField("entity_type", lastEntityTypeByJurisdiction.current[j] ?? "");
   }
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -106,6 +146,7 @@ export default function CompanyInfoPage() {
 
   async function handleSave(mode: "draft" | "validate") {
     const isDraft = mode === "draft";
+    if (!isDraft) setHasAttemptedSave(true);
     const errs = validateCompany(form, isDraft);
     if (Object.keys(errs).length) {
       setErrors(errs);
@@ -230,10 +271,7 @@ export default function CompanyInfoPage() {
               type="button"
               className={`btn btn-sm ${form.jurisdiction === j ? "btn-filled" : "btn-ghost"}`}
               disabled={!canEdit}
-              onClick={() => {
-                handleField("jurisdiction", j);
-                handleField("entity_type", "");
-              }}
+              onClick={() => handleJurisdiction(j)}
             >
               {j === "india" ? "India" : "Foreign (outside India)"}
             </button>

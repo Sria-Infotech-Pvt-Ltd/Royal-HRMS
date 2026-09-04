@@ -180,6 +180,7 @@ export default function DirectorsSection({ canEdit, config, collapsed, onToggleC
                         onClick={() => removeRow(row)}
                         disabled={row.saving}
                         title="Remove"
+                        aria-label={`Remove ${row.name || singular}`}
                       >
                         <i className="ti ti-trash" style={{ fontSize: 13 }} />
                       </button>
