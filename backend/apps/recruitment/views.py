@@ -758,9 +758,11 @@ class CandidateStatusView(APIView):
         if not _has_perm(request.user, 'recruitment.view'):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         try:
-            candidate = Candidate.objects.prefetch_related('logs').get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').prefetch_related('logs').get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         # Status change history from logs, newest first
         history = [
@@ -946,9 +948,11 @@ class CandidateHRDecisionView(APIView):
         if not _has_perm(request.user, 'recruitment.view'):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         try:
-            candidate = Candidate.objects.get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         return success('HR decision status retrieved.', data={
             'id':          candidate.pk,
             'name':        candidate.name,
@@ -1004,9 +1008,17 @@ class CandidateReviewListView(APIView):
 
         qs = (Candidate.objects
               .filter(status=Candidate.STATUS_SELECTED)
-              .select_related('interviewer', 'added_by')
+              .select_related('interviewer', 'added_by', 'branch')
               .prefetch_related('logs')
               .order_by('-updated_at'))
+
+        # Same branch scoping as CandidateListCreateView.get — without it, a
+        # branch-scoped recruitment.view holder saw every selected candidate
+        # company-wide instead of just their own branch.
+        is_admin = _has_perm(request.user, 'settings.edit')
+        user_branch = (getattr(request.user, 'branch', '') or '').strip()
+        if not is_admin and user_branch:
+            qs = qs.filter(branch__branch_name__iexact=user_branch)
 
         try:
             page_num  = max(1, int(request.query_params.get('page', 1)))
@@ -1056,8 +1068,16 @@ class CandidateEmailLogView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         qs = (CandidateEmail.objects
-              .select_related('candidate', 'sent_by')
+              .select_related('candidate', 'candidate__branch', 'sent_by')
               .order_by('-sent_at'))
+
+        # Same branch scoping as CandidateListCreateView.get — without it, a
+        # branch-scoped recruitment.view holder saw every candidate's email
+        # correspondence log company-wide instead of just their own branch.
+        is_admin = _has_perm(request.user, 'settings.edit')
+        user_branch = (getattr(request.user, 'branch', '') or '').strip()
+        if not is_admin and user_branch:
+            qs = qs.filter(candidate__branch__branch_name__iexact=user_branch)
 
         if q := request.query_params.get('search'):
             if len(q) > 100:
@@ -1308,7 +1328,9 @@ def _revoke_portal_access(request, pk):
         return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
     try:
         with transaction.atomic():
-            candidate = Candidate.objects.select_for_update().get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').select_for_update().get(pk=pk)
+            if not _can_access_candidate(request.user, candidate):
+                return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
             if not candidate.portal_credentials_sent or not candidate.portal_user_id:
                 return error(
                     'No active portal account found for this candidate.',
@@ -1354,9 +1376,11 @@ class SendPortalLoginView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            candidate = Candidate.objects.select_for_update().get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').select_for_update().get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if candidate.status not in (
             Candidate.STATUS_SELECTED,
@@ -1464,9 +1488,11 @@ class SendPortalLoginView(APIView):
         if not _has_perm(request.user, 'recruitment.view'):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         try:
-            candidate = Candidate.objects.get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         return success('Portal login status retrieved.', data=_portal_login_status(candidate))
 
     def put(self, request, pk):
@@ -1491,9 +1517,11 @@ class ResendPortalLoginView(APIView):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         try:
-            candidate = Candidate.objects.select_for_update().get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').select_for_update().get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if not candidate.portal_credentials_sent or not candidate.portal_user_id:
             return error(
@@ -1572,9 +1600,11 @@ class ResendPortalLoginView(APIView):
         if not _has_perm(request.user, 'recruitment.view'):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         try:
-            candidate = Candidate.objects.get(pk=pk)
+            candidate = Candidate.objects.select_related('branch').get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         return success('Portal login status retrieved.', data=_portal_login_status(candidate))
 
     def put(self, request, pk):
@@ -1693,8 +1723,24 @@ class ReferralRuleListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        rules = ReferralRule.objects.all()
-        return success('Rules fetched.', {'results': ReferralRuleSerializer(rules, many=True).data})
+        qs = ReferralRule.objects.all().order_by('order', 'id')
+
+        try:
+            page_num  = max(1, int(request.query_params.get('page', 1)))
+            page_size = min(50, max(1, int(request.query_params.get('page_size', 20))))
+        except (ValueError, TypeError):
+            page_num, page_size = 1, 20
+
+        paginator = Paginator(qs, page_size)
+        page_obj  = paginator.get_page(page_num)
+
+        return success('Rules fetched.', {
+            'count':       paginator.count,
+            'page':        page_obj.number,
+            'page_size':   page_size,
+            'total_pages': paginator.num_pages,
+            'results':     ReferralRuleSerializer(page_obj.object_list, many=True).data,
+        })
 
     def post(self, request):
         if not _has_perm(request.user, 'settings.view'):

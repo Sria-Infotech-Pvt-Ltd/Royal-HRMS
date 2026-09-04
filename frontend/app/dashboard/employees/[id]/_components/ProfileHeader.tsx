@@ -59,21 +59,16 @@ export default function ProfileHeader({ employee }: { employee: Employee }) {
         style={{ background: "#fff", borderColor: "var(--outline-v)" }}
       >
         <div className="flex flex-col sm:flex-row gap-5">
-          {/* avatar with camera badge */}
+          {/* avatar — no camera badge here: the profile photo endpoint is
+              deliberately self-service only (see views_profile_photo.py),
+              so there's nothing for HR to change on someone else's photo
+              from this page. */}
           <div className="relative flex-shrink-0">
             <Avatar
               text={initials(employee.firstName, employee.lastName)}
               size={80}
               color={avatarColor(employee.department)}
             />
-            <button
-              title="Change photo"
-              suppressHydrationWarning
-              className="absolute bottom-0 right-0 w-6 h-6 rounded-full text-white flex items-center justify-center border-2 border-white transition-colors"
-              style={{ background: "var(--primary)" }}
-            >
-              <i className="ti ti-camera text-[11px]" />
-            </button>
           </div>
 
           {/* identity + meta */}

@@ -136,8 +136,23 @@ class ExpenseListCreateView(APIView):
 
         try:
             with transaction.atomic():
-                branch   = _resolve_branch(request.user)
-                last_num = Expense.objects.select_for_update().aggregate(n=Max('expense_number'))['n'] or 0
+                branch = _resolve_branch(request.user)
+                # select_for_update() is silently dropped by Django when
+                # chained into .aggregate() (aggregate() runs its own,
+                # separate query with no FOR UPDATE clause at all) — so the
+                # previous MAX(expense_number) read here was never actually
+                # locked, letting two concurrent submissions read the same
+                # last number and race on the unique constraint. Locking the
+                # actual last row instead makes the lock real; nulls are
+                # excluded since Postgres sorts NULL first on DESC, which
+                # would otherwise make .first() return a null-numbered row
+                # ahead of the true max.
+                last_row = (Expense.objects
+                            .exclude(expense_number__isnull=True)
+                            .select_for_update()
+                            .order_by('-expense_number')
+                            .first())
+                last_num = last_row.expense_number if last_row else 0
                 expense  = serializer.save(
                     employee=request.user,
                     branch=branch,

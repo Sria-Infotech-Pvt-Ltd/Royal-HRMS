@@ -109,7 +109,7 @@ from apps.accounts.serializers import (
     VerifyOTPSerializer,
 )
 from apps.accounts.services_placement import assign_position, sync_from_position
-from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle
+from apps.accounts.throttles import ForgotPasswordRateThrottle, LoginRateThrottle, OTPVerifyRateThrottle, ResetPasswordRateThrottle
 from apps.accounts.tokens import FreshClaimsTokenRefreshSerializer, RoleBasedRefreshToken
 from apps.accounts.utils import send_otp_email, send_template_email, send_test_email
 
@@ -640,6 +640,7 @@ class VerifyOTPView(APIView):
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes   = [ResetPasswordRateThrottle]
 
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
@@ -3884,6 +3885,14 @@ class EmployeeDetailView(APIView):
             from apps.attendance.services_face_lifecycle import purge_face_data_for_employee
             purge_face_data_for_employee(employee)
 
+            # Same reasoning — close their open Placement so the seat they
+            # held stops being reported as filled. Position.holder resolves
+            # purely by placement date range with no is_active check, so
+            # without this the position stayed permanently "occupied" by a
+            # deactivated employee.
+            from apps.accounts.services_placement import vacate_employee
+            vacate_employee(employee)
+
         action_label = 'employee_activated' if new_status else 'employee_deactivated'
         AuditLog.objects.create(
             user       = request.user,
@@ -3930,6 +3939,9 @@ class EmployeeDetailView(APIView):
         # Same reasoning as EmployeeDetailView.patch's deactivation path above.
         from apps.attendance.services_face_lifecycle import purge_face_data_for_employee
         purge_face_data_for_employee(employee)
+
+        from apps.accounts.services_placement import vacate_employee
+        vacate_employee(employee)
 
         AuditLog.objects.create(
             user       = request.user,

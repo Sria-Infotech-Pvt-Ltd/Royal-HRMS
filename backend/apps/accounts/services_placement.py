@@ -71,6 +71,29 @@ def sync_from_position(position: 'Position', *, force: bool = False) -> None:
         holder.save(update_fields=[*update_fields, 'updated_at'])
 
 
+def vacate_employee(employee: 'User') -> None:
+    """Closes out any open Placement for `employee` (effective_to=today),
+    freeing the seat. Deactivating/deleting an employee only ever flipped
+    User.is_active — the Placement itself was left open indefinitely, so
+    Position.holder / current_placement() kept resolving to the departed
+    employee forever, permanently under-reporting that seat as filled.
+    Call this from every place an employee is deactivated or deleted."""
+    from apps.accounts.models import Placement
+
+    open_placement = Placement.objects.filter(employee=employee, effective_to__isnull=True).first()
+    if open_placement is None:
+        return
+    today = timezone.localdate()
+    if open_placement.effective_from > today:
+        # Never actually started (a future-dated assignment) — nothing to
+        # vacate "as of today"; just drop it rather than writing a
+        # effective_to before effective_from.
+        open_placement.delete()
+        return
+    open_placement.effective_to = today
+    open_placement.save(update_fields=['effective_to', 'updated_at'])
+
+
 def assign_position(
     employee: 'User', position: 'Position', *, effective_from, effective_to=None,
     note: str = '', created_by: 'User | None' = None,

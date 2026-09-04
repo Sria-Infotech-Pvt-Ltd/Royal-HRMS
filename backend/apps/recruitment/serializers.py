@@ -10,6 +10,36 @@ _NAME_RE     = re.compile(r"^[A-Za-z][A-Za-z .'-]*$")
 _POSITION_RE = re.compile(r"^[A-Za-z][A-Za-z .&/-]*$")
 
 
+def _validate_interview_slot(interview_date, interview_time, interviewer, *, exclude_pk=None):
+    """
+    Shared by CandidateCreateSerializer/CandidateUpdateSerializer.validate().
+    Two checks validate_interview_date's date-only comparison can't catch:
+    - interview_date is today but interview_time has already passed.
+    - the same interviewer already has another (non-rejected) candidate
+      booked at that exact date/time — validate_interview_date only checked
+      the date wasn't in the past, nothing ever checked for a double-booking.
+    Returns a field->message error dict (empty if no conflict).
+    """
+    errors = {}
+    if interview_date and interview_time and interview_date == timezone.localdate():
+        if interview_time <= timezone.localtime().time():
+            errors['interview_time'] = 'Interview time cannot be in the past.'
+
+    if interview_date and interview_time and interviewer:
+        conflict_qs = Candidate.objects.filter(
+            interviewer=interviewer, interview_date=interview_date, interview_time=interview_time,
+        ).exclude(status=Candidate.STATUS_REJECTED)
+        if exclude_pk:
+            conflict_qs = conflict_qs.exclude(pk=exclude_pk)
+        conflict = conflict_qs.first()
+        if conflict:
+            errors['interviewer'] = (
+                f'{interviewer.full_name or interviewer.email} is already interviewing '
+                f'{conflict.name} at this date and time.'
+            )
+    return errors
+
+
 class CandidateLogSerializer(serializers.ModelSerializer):
     class Meta:
         model  = CandidateLog
@@ -157,6 +187,14 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
         if value and len(value) > 2000:
             raise serializers.ValidationError('Notes must be 2000 characters or fewer.')
         return value
+
+    def validate(self, attrs):
+        errors = _validate_interview_slot(
+            attrs.get('interview_date'), attrs.get('interview_time'), attrs.get('interviewer'),
+        )
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
 
 
 class ReferralSubmitSerializer(CandidateCreateSerializer):
@@ -385,3 +423,13 @@ class CandidateUpdateSerializer(serializers.ModelSerializer):
         if value and len(value) > 2000:
             raise serializers.ValidationError('Notes must be 2000 characters or fewer.')
         return value
+
+    def validate(self, attrs):
+        _val = lambda field: attrs.get(field, getattr(self.instance, field, None))
+        errors = _validate_interview_slot(
+            _val('interview_date'), _val('interview_time'), _val('interviewer'),
+            exclude_pk=getattr(self.instance, 'pk', None),
+        )
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs

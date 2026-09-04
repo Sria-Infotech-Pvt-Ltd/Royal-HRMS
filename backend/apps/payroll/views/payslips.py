@@ -180,19 +180,28 @@ class UpdatePayslipReimbBonusView(APIView):
                 return error('bonus must be a valid number.')
             updated_fields.append('bonus')
 
+        other_earnings_total = sum(
+            (Decimal(str(v)) for v in payslip.other_earnings.values()),
+            Decimal(0),
+        )
+
         if 'lop_days' in request.data:
             try:
                 payslip.lop_days = Decimal(str(request.data['lop_days']))
             except (InvalidOperation, TypeError, ValueError):
                 return error('lop_days must be a valid number.')
-            per_day = payslip.gross_earnings / payslip.total_working_days if payslip.total_working_days else 0
+            # LOP is prorated against the base salary (basic+HRA+special+other)
+            # only — never payslip.gross_earnings, which this same view just
+            # folded bonus/reimbursements into below and persists. Reading
+            # gross_earnings back here on a later, separate edit (e.g. bonus
+            # saved first, LOP corrected afterward) would divide by an
+            # already-bonus-inflated figure, overcharging LOP against money
+            # that was never subject to it in the first place.
+            base_salary = payslip.basic + payslip.hra + payslip.special_allowance + other_earnings_total
+            per_day = base_salary / payslip.total_working_days if payslip.total_working_days else 0
             payslip.lop_deduction = per_day * payslip.lop_days
             updated_fields.extend(['lop_days', 'lop_deduction'])
 
-        other_earnings_total = sum(
-            (Decimal(str(v)) for v in payslip.other_earnings.values()),
-            Decimal(0),
-        )
         payslip.gross_earnings = (
             payslip.basic + payslip.hra + payslip.special_allowance
             + other_earnings_total

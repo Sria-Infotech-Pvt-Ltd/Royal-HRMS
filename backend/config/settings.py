@@ -336,6 +336,7 @@ REST_FRAMEWORK = {
         'user':                 '3000/hour',
         'login':                '20/hour',
         'forgot_password':      '5/hour',
+        'reset_password':       '10/hour',
         'otp_verify':           '10/hour',
     },
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',

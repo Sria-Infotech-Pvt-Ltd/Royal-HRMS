@@ -1012,22 +1012,6 @@ class LeaveApprovalView(APIView):
         if not _has_perm(request.user, 'leave.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
-        try:
-            leave_request = LeaveRequest.objects.select_related('employee', 'l1_approver', 'l2_approver').get(id=request_id)
-        except LeaveRequest.DoesNotExist:
-            return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
-
-        if leave_request.employee_id == request.user.id:
-            return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
-        # No blanket branch/HR-assignment gate here — _can_approve_at_stage
-        # below already authorises both stages correctly (l1: designated
-        # reporting manager; l2: designated HR, or any leave.approve holder
-        # in-branch when no HR is assigned). A gate like the one this
-        # replaced, keyed only on l2_approver_id, rejected every legitimate
-        # L1 (manager) approver outright whenever the request also had an
-        # L2 approver assigned — i.e. on almost every real request, since
-        # HR is normally always configured as the L2 fallback.
-
         action  = request.data.get('action')
         remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()
 
@@ -1035,49 +1019,98 @@ class LeaveApprovalView(APIView):
             return error('Action must be "approve" or "reject".')
 
         now = timezone.now()
+        balance_error = None
 
-        if leave_request.status == REQ_PENDING:
-            if not _can_approve_at_stage(request.user, leave_request, 'l1'):
-                return error(
-                    'You are not authorised to act on this request at the L1 stage. '
-                    'Only the designated reporting manager may approve or reject it.',
-                    http_status=status.HTTP_403_FORBIDDEN,
+        # Wrapped in a transaction with a row lock on both the request itself
+        # and the balance (see _deduct_balance_safe) — without locking the
+        # request, two concurrent clicks/approvers on the SAME request could
+        # both read status=PENDING, both pass the stage check, and both
+        # mutate+save (double-firing the audit log, or double-deducting the
+        # balance if the first commit's lock release lets the second run
+        # through _deduct_balance_safe right behind it). Locking the balance
+        # alone (as before) only stopped two DIFFERENT requests from jointly
+        # overdrawing — not the same request being processed twice.
+        # select_for_update(of=('self',)) since l1_approver/l2_approver are
+        # nullable FKs — select_related's join to them is a LEFT OUTER JOIN,
+        # and Postgres rejects FOR UPDATE across the nullable side of one
+        # unless scoped to just the base table via `of`.
+        with transaction.atomic():
+            try:
+                leave_request = (
+                    LeaveRequest.objects
+                    .select_related('employee', 'l1_approver', 'l2_approver')
+                    .select_for_update(of=('self',))
+                    .get(id=request_id)
                 )
-            leave_request.l1_approver    = request.user
-            leave_request.l1_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
-            leave_request.l1_remarks     = remarks
-            leave_request.l1_actioned_at = now
+            except LeaveRequest.DoesNotExist:
+                return error('Leave request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-            if action == 'reject':
-                leave_request.status = REQ_REJECTED
-            elif leave_request.l2_approver_id:
-                leave_request.status = REQ_L2_PENDING
+            if leave_request.employee_id == request.user.id:
+                return error('You cannot approve or reject your own leave request.', http_status=status.HTTP_403_FORBIDDEN)
+            # No blanket branch/HR-assignment gate here — _can_approve_at_stage
+            # below already authorises both stages correctly (l1: designated
+            # reporting manager; l2: designated HR, or any leave.approve holder
+            # in-branch when no HR is assigned). A gate like the one this
+            # replaced, keyed only on l2_approver_id, rejected every legitimate
+            # L1 (manager) approver outright whenever the request also had an
+            # L2 approver assigned — i.e. on almost every real request, since
+            # HR is normally always configured as the L2 fallback.
+
+            if leave_request.status == REQ_PENDING:
+                if not _can_approve_at_stage(request.user, leave_request, 'l1'):
+                    return error(
+                        'You are not authorised to act on this request at the L1 stage. '
+                        'Only the designated reporting manager may approve or reject it.',
+                        http_status=status.HTTP_403_FORBIDDEN,
+                    )
+                leave_request.l1_approver    = request.user
+                leave_request.l1_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
+                leave_request.l1_remarks     = remarks
+                leave_request.l1_actioned_at = now
+
+                if action == 'reject':
+                    leave_request.status = REQ_REJECTED
+                elif leave_request.l2_approver_id:
+                    leave_request.status = REQ_L2_PENDING
+                else:
+                    # No L2 configured — L1 approval is final.
+                    leave_request.status = REQ_APPROVED
+                    balance_error = _deduct_balance_safe(leave_request)
+                    if not balance_error:
+                        _sync_leave_attendance(leave_request)
+
+            elif leave_request.status == REQ_L2_PENDING:
+                if not _can_approve_at_stage(request.user, leave_request, 'l2'):
+                    return error(
+                        'You are not authorised to act on this request at the L2 stage. '
+                        'Only the designated HR approver may approve or reject it.',
+                        http_status=status.HTTP_403_FORBIDDEN,
+                    )
+                leave_request.l2_approver    = request.user
+                leave_request.l2_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
+                leave_request.l2_remarks     = remarks
+                leave_request.l2_actioned_at = now
+                leave_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
+                if action == 'approve':
+                    balance_error = _deduct_balance_safe(leave_request)
+                    if not balance_error:
+                        _sync_leave_attendance(leave_request)
+
             else:
-                # No L2 configured — L1 approval is final.
-                leave_request.status = REQ_APPROVED
-                _deduct_balance_safe(leave_request)
-                _sync_leave_attendance(leave_request)
+                return error(f'Cannot act on a request with status "{leave_request.status}".')
 
-        elif leave_request.status == REQ_L2_PENDING:
-            if not _can_approve_at_stage(request.user, leave_request, 'l2'):
-                return error(
-                    'You are not authorised to act on this request at the L2 stage. '
-                    'Only the designated HR approver may approve or reject it.',
-                    http_status=status.HTTP_403_FORBIDDEN,
-                )
-            leave_request.l2_approver    = request.user
-            leave_request.l2_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
-            leave_request.l2_remarks     = remarks
-            leave_request.l2_actioned_at = now
-            leave_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
-            if action == 'approve':
-                _deduct_balance_safe(leave_request)
-                _sync_leave_attendance(leave_request)
+            if balance_error:
+                # Marks the transaction for rollback without raising — undoes
+                # everything in this block, including the approver/status
+                # fields already set above, so the request stays exactly as
+                # it was and is ready to retry once the approver has seen why.
+                transaction.set_rollback(True)
+            else:
+                leave_request.save()
 
-        else:
-            return error(f'Cannot act on a request with status "{leave_request.status}".')
+        if balance_error:
+            return error(balance_error)
 
-        leave_request.save()
         logger.info('Leave request %s %sd by %s', leave_request.id, action, request.user.email)
 
         from apps.accounts.models import AuditLog
@@ -1100,18 +1133,53 @@ class LeaveApprovalView(APIView):
         return success(f'Request {action}d.', LeaveRequestSerializer(leave_request, context={'request': request}).data)
 
 
-def _deduct_balance_safe(leave_request: LeaveRequest) -> None:
+def _deduct_balance_safe(leave_request: LeaveRequest) -> str | None:
+    """Locks and re-validates the balance at the moment of final approval —
+    not just at submission, which only ever runs once and can't see a
+    second request for the same employee/leave_type/year approved in
+    between. Returns an error message if the deduction can't safely proceed
+    (None on success); the caller must roll back and must not save the
+    request as approved when this returns non-None, or two requests
+    approved close together could jointly overdraw the balance past what
+    the policy allows. Applies the same convert_to_lop/allow_negative_balance
+    semantics LeaveRequestListCreateView.post already applies at submission."""
     if leave_request.is_lwp:  # pure LWP request — no leave balance record to deduct
-        return
+        return None
     year = leave_request.start_date.year
     lop = float(getattr(leave_request, 'lop_days', 0) or 0)
     earned_days = float(leave_request.total_days) - lop
+    if earned_days <= 0:
+        return None
+
+    balance = (
+        LeaveBalance.objects
+        .select_for_update()
+        .filter(employee=leave_request.employee, leave_type=leave_request.leave_type, year=year)
+        .first()
+    )
+    if not balance:
+        return f'No leave balance found for {leave_request.leave_type} in {year}. Contact HR.'
+
+    available = float(balance.total_days) - float(balance.used_days)
+    if earned_days > available:
+        policy = LeavePolicy.objects.filter(leave_type=leave_request.leave_type).first()
+        if policy and policy.allow_negative_balance:
+            pass  # allow overdraft, same as the submission-time check
+        elif policy and policy.convert_to_lop:
+            shortfall = round(earned_days - available, 1)
+            leave_request.lop_days = round(lop + shortfall, 1)
+            earned_days = available
+        else:
+            return (
+                f'Cannot approve — only {available} day(s) of {leave_request.leave_type} balance remain. '
+                f'Another request for this employee was approved since this one was submitted, '
+                f'using up the rest.'
+            )
+
     if earned_days > 0:
-        LeaveBalance.objects.filter(
-            employee=leave_request.employee,
-            leave_type=leave_request.leave_type,
-            year=year,
-        ).update(used_days=F('used_days') + earned_days)
+        balance.used_days = F('used_days') + earned_days
+        balance.save(update_fields=['used_days', 'updated_at'])
+    return None
 
 
 def _sync_leave_attendance(leave_request: LeaveRequest) -> None:

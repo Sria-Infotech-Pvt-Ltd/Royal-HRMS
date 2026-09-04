@@ -10,7 +10,7 @@ from core.responses import error, first_error, success
 
 from ..models import (
     APPROVAL_APPROVED, APPROVAL_PENDING, APPROVAL_REJECTED,
-    SEP_APPROVED, SEP_CLEARANCE_MANAGER, SEP_REJECTED, SEP_STAGE2_PENDING,
+    SEP_APPROVED, SEP_CLEARANCE_MANAGER, SEP_PENDING, SEP_REJECTED, SEP_STAGE2_PENDING,
     SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_HR, SEP_STAGE_MANAGER,
     SeparationApprovalStage, SeparationClearance, SeparationDocument,
     SeparationHandoverTask, SeparationRequest,
@@ -74,6 +74,14 @@ class SeparationApprovalStageActionView(APIView):
             return error('Approval stage not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         sep_request = stage.request
+        if sep_request.status not in (SEP_PENDING, SEP_STAGE2_PENDING):
+            # The request itself was already rejected/approved/cancelled —
+            # possibly via a different stage or the employee cancelling —
+            # while this stage's own row was left PENDING. Without this
+            # check, acting on that stale stage silently overwrites the
+            # already-final request status (e.g. re-approving over a
+            # rejection from an earlier stage).
+            return error(f'This separation request is already {sep_request.status}.')
         if stage.status != APPROVAL_PENDING:
             return error(f'This stage has already been {stage.status}.')
         earlier_pending = SeparationApprovalStage.objects.filter(
@@ -245,6 +253,12 @@ class SeparationClearanceActionView(APIView):
         user        = request.user
         if sep_request.employee_id == user.id:
             return error('You cannot clear your own separation.', http_status=status.HTTP_403_FORBIDDEN)
+        if sep_request.status not in (SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED):
+            # Clearances (IT/Finance/HR/Manager handover) only make sense for
+            # a request that's still moving forward — not one already
+            # rejected or cancelled elsewhere while this clearance row was
+            # left PENDING.
+            return error(f'This separation request is already {sep_request.status}.')
         if clearance.status != APPROVAL_PENDING:
             return error(f'This clearance has already been {clearance.status}.')
 

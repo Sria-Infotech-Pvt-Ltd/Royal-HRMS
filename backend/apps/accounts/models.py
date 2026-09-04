@@ -887,7 +887,11 @@ class Company(models.Model):
     # ── India ──
     cin            = models.CharField(max_length=21, blank=True)
     roc_jurisdiction = models.CharField(max_length=100, blank=True)
-    pan            = models.CharField(max_length=10, blank=True)
+    # Encrypted at rest — same PII tier as EmployeeProfile.pan_number (see
+    # core/encrypted_fields.py, CLAUDE.md §3). No blind-index hash needed:
+    # Company is a singleton table (one row ever), so there's no cross-row
+    # uniqueness/lookup to preserve, unlike the employee-level PAN.
+    pan            = EncryptedCharField(max_length=255, blank=True)
     tan            = models.CharField(max_length=10, blank=True)
 
     # ── Foreign ──
@@ -906,13 +910,17 @@ class Company(models.Model):
     # ── Directors / signatory / bank ──
     signatory_full_name  = models.CharField(max_length=150, blank=True)
     signatory_designation = models.CharField(max_length=100, blank=True)
-    signatory_din_pan    = models.CharField(max_length=20, blank=True)
+    # Encrypted at rest — same reasoning as pan above.
+    signatory_din_pan    = EncryptedCharField(max_length=255, blank=True)
     signatory_email      = models.EmailField(blank=True)
     signatory_appears_on_invoices = models.BooleanField(default=True)
 
     bank_account_holder  = models.CharField(max_length=200, blank=True)
-    bank_account_number  = models.CharField(max_length=30, blank=True)
-    bank_ifsc            = models.CharField(max_length=11, blank=True)
+    # Encrypted at rest — same tier as BankDetail.account_number/ifsc_code
+    # (apps/payroll/models.py), this is just the company's own account
+    # instead of an employee's.
+    bank_account_number  = EncryptedCharField(max_length=255, blank=True)
+    bank_ifsc            = EncryptedCharField(max_length=255, blank=True)
     bank_account_type    = models.CharField(max_length=10, choices=BANK_ACCOUNT_TYPE_CHOICES, blank=True)
 
     # ── Business profile ──

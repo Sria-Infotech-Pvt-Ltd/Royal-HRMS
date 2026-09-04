@@ -159,7 +159,11 @@ export default function CompanyInfoPage() {
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([key, value]) => {
-        if (key === "id" || key === "logo_url" || key === "updated_at") return;
+        // "logo" itself is excluded too — the API returns it back as the
+        // stored file's URL string alongside logo_url, and Django's
+        // ImageField rejects a re-submitted string as "not a file". The
+        // actual upload is handled separately below via logoFile/logoRemoved.
+        if (key === "id" || key === "logo" || key === "logo_url" || key === "updated_at") return;
         if (typeof value === "boolean") { fd.append(key, value ? "true" : "false"); return; }
         fd.append(key, (value ?? "").toString().trim());
       });

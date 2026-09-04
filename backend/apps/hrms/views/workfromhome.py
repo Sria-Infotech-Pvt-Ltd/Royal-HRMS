@@ -1,5 +1,6 @@
 import logging
 
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -290,21 +291,6 @@ class WorkFromHomeApprovalView(APIView):
         if not _has_perm(request.user, 'wfh.approve'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
 
-        try:
-            wfh_request = WorkFromHomeRequest.objects.select_related('employee', 'l1_approver', 'l2_approver').get(id=request_id)
-        except WorkFromHomeRequest.DoesNotExist:
-            return error('Work from home request not found.', http_status=status.HTTP_404_NOT_FOUND)
-
-        if wfh_request.employee_id == request.user.id:
-            return error('You cannot approve or reject your own request.', http_status=status.HTTP_403_FORBIDDEN)
-        # No blanket _can_hr_access_request gate here — that helper only
-        # models L2/HR access (designated l2_approver, or branch fallback
-        # when orphaned) and incorrectly rejects the L1 manager case, since
-        # a manager is never the l2_approver. _can_approve_at_stage below
-        # already checks the correct thing for whichever stage this request
-        # is actually at (L1-designated, or L2-designated-or-branch-fallback),
-        # so it's the sole authorization check.
-
         action  = request.data.get('action')
         remarks = (request.data.get('remarks') or request.data.get('reason') or '').strip()
 
@@ -313,45 +299,81 @@ class WorkFromHomeApprovalView(APIView):
 
         now = timezone.now()
 
-        if wfh_request.status == REQ_PENDING:
-            if not _can_approve_at_stage(request.user, wfh_request, 'l1'):
-                return error(
-                    'You are not authorised to act on this request at the L1 stage. '
-                    'Only the designated reporting manager may approve or reject it.',
-                    http_status=status.HTTP_403_FORBIDDEN,
+        # Locked and wrapped in a transaction — unlike LeaveApprovalView
+        # (already fixed this session), this had neither: two near-
+        # simultaneous approval attempts on the same request could both pass
+        # the status check and both mutate/save, double-firing
+        # _sync_wfh_attendance and the audit log; and _sync_wfh_attendance's
+        # own AttendanceRecord write auto-committed immediately regardless of
+        # whether wfh_request.save() below it succeeded, risking a
+        # work_mode='wfh' record for a request that never actually reached
+        # REQ_APPROVED.
+        with transaction.atomic():
+            try:
+                # select_for_update(of=('self',)) — l1_approver/l2_approver
+                # are nullable FKs, so select_related's join to them is a
+                # LEFT OUTER JOIN; Postgres rejects FOR UPDATE across the
+                # nullable side of an outer join unless it's scoped to just
+                # the base table via `of`.
+                wfh_request = (
+                    WorkFromHomeRequest.objects
+                    .select_related('employee', 'l1_approver', 'l2_approver')
+                    .select_for_update(of=('self',))
+                    .get(id=request_id)
                 )
-            wfh_request.l1_approver    = request.user
-            wfh_request.l1_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
-            wfh_request.l1_remarks     = remarks
-            wfh_request.l1_actioned_at = now
+            except WorkFromHomeRequest.DoesNotExist:
+                return error('Work from home request not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-            if action == 'reject':
-                wfh_request.status = REQ_REJECTED
-            elif wfh_request.l2_approver_id:
-                wfh_request.status = REQ_L2_PENDING
+            if wfh_request.employee_id == request.user.id:
+                return error('You cannot approve or reject your own request.', http_status=status.HTTP_403_FORBIDDEN)
+            # No blanket _can_hr_access_request gate here — that helper only
+            # models L2/HR access (designated l2_approver, or branch fallback
+            # when orphaned) and incorrectly rejects the L1 manager case, since
+            # a manager is never the l2_approver. _can_approve_at_stage below
+            # already checks the correct thing for whichever stage this request
+            # is actually at (L1-designated, or L2-designated-or-branch-fallback),
+            # so it's the sole authorization check.
+
+            if wfh_request.status == REQ_PENDING:
+                if not _can_approve_at_stage(request.user, wfh_request, 'l1'):
+                    return error(
+                        'You are not authorised to act on this request at the L1 stage. '
+                        'Only the designated reporting manager may approve or reject it.',
+                        http_status=status.HTTP_403_FORBIDDEN,
+                    )
+                wfh_request.l1_approver    = request.user
+                wfh_request.l1_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
+                wfh_request.l1_remarks     = remarks
+                wfh_request.l1_actioned_at = now
+
+                if action == 'reject':
+                    wfh_request.status = REQ_REJECTED
+                elif wfh_request.l2_approver_id:
+                    wfh_request.status = REQ_L2_PENDING
+                else:
+                    wfh_request.status = REQ_APPROVED
+                    _sync_wfh_attendance(wfh_request)
+
+            elif wfh_request.status == REQ_L2_PENDING:
+                if not _can_approve_at_stage(request.user, wfh_request, 'l2'):
+                    return error(
+                        'You are not authorised to act on this request at the L2 stage. '
+                        'Only the designated HR approver may approve or reject it.',
+                        http_status=status.HTTP_403_FORBIDDEN,
+                    )
+                wfh_request.l2_approver    = request.user
+                wfh_request.l2_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
+                wfh_request.l2_remarks     = remarks
+                wfh_request.l2_actioned_at = now
+                wfh_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
+                if action == 'approve':
+                    _sync_wfh_attendance(wfh_request)
+
             else:
-                wfh_request.status = REQ_APPROVED
-                _sync_wfh_attendance(wfh_request)
+                return error(f'Cannot act on a request with status "{wfh_request.status}".')
 
-        elif wfh_request.status == REQ_L2_PENDING:
-            if not _can_approve_at_stage(request.user, wfh_request, 'l2'):
-                return error(
-                    'You are not authorised to act on this request at the L2 stage. '
-                    'Only the designated HR approver may approve or reject it.',
-                    http_status=status.HTTP_403_FORBIDDEN,
-                )
-            wfh_request.l2_approver    = request.user
-            wfh_request.l2_status      = APPROVAL_APPROVED if action == 'approve' else APPROVAL_REJECTED
-            wfh_request.l2_remarks     = remarks
-            wfh_request.l2_actioned_at = now
-            wfh_request.status = REQ_APPROVED if action == 'approve' else REQ_REJECTED
-            if action == 'approve':
-                _sync_wfh_attendance(wfh_request)
+            wfh_request.save()
 
-        else:
-            return error(f'Cannot act on a request with status "{wfh_request.status}".')
-
-        wfh_request.save()
         logger.info('WFH request %s %sd by %s', wfh_request.id, action, request.user.email)
 
         from apps.accounts.models import AuditLog

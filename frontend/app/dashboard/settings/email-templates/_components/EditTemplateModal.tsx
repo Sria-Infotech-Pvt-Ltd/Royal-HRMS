@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import DOMPurify from "dompurify";
 import clientApi from "@/lib/clientApi";
 import {
   validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug, catValue,
@@ -87,7 +88,12 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
   // the caret position and undo history mid-edit.
   useEffect(() => {
     if (!viewSource && editorRef.current) {
-      editorRef.current.innerHTML = form.body;
+      // A saved template's body can have been authored by a different admin
+      // (or pasted from an external source) at any point in the past —
+      // sanitize before it's parsed into the live DOM, the same as any other
+      // stored-HTML render, rather than trust it just because this editor
+      // only shows it back to admins.
+      editorRef.current.innerHTML = DOMPurify.sanitize(form.body);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewSource]);
@@ -95,7 +101,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
   // Seed on first mount only — same reasoning as above, form.body is
   // intentionally excluded so this doesn't re-run as the user types.
   useEffect(() => {
-    if (editorRef.current) editorRef.current.innerHTML = form.body;
+    if (editorRef.current) editorRef.current.innerHTML = DOMPurify.sanitize(form.body);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -349,12 +355,17 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
     await onSave(latest);
   }
 
-  // Highlight {VARIABLE} tokens with a coloured span (safe for raw text and HTML bodies)
+  // Highlight {VARIABLE} tokens with a coloured span, and sanitize — this
+  // renders straight into the DOM via dangerouslySetInnerHTML below, and a
+  // saved template's subject/body can have been authored by a different
+  // admin (or pasted from an external source) at any point in the past, so
+  // it's stored, not-necessarily-trusted HTML like any other.
   function highlightVars(html: string): string {
-    return html.replace(
+    const withHighlights = html.replace(
       /\{([A-Za-z][A-Za-z0-9_]*)\}/g,
       '<span style="background:rgba(234,167,0,0.18);color:#a06800;padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:0.88em;font-weight:600">{$1}</span>'
     );
+    return DOMPurify.sanitize(withHighlights);
   }
 
   // Extract {VARIABLE} tokens from subject + body (strips HTML tags before scanning body)

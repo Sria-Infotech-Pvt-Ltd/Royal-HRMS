@@ -500,9 +500,12 @@ class AttendanceProcessorService:
         if not punch_out_time or not cfg or not hasattr(cfg, 'working_hours'):
             return False
         wh = cfg.working_hours
+        grace_minutes = 30
+        if hasattr(cfg, 'punch_rules'):
+            grace_minutes = cfg.punch_rules.early_exit_grace_minutes
         early_threshold = (
             datetime.combine(date.today(), wh.shift_end)
-            - timedelta(minutes=30)
+            - timedelta(minutes=grace_minutes)
         ).time()
         return punch_out_time < early_threshold
 
@@ -570,40 +573,50 @@ class AttendanceDashboardService:
     def get_stats(cls, employee, year: int, month: int) -> dict:
         """
         Powers the four stat cards on the My Attendance page.
+
+        Counts every day of the month via the same day-by-day classification
+        get_calendar()/get_monthly_summary() use (see _classify_day) — not
+        just days that happen to already have an AttendanceRecord row. A day
+        with no punch at all only ever gets a stored 'absent' record if
+        someone later runs Reprocess; nothing creates one automatically, so
+        deriving working_days/lop_pending from `records` alone silently
+        dropped every un-punched working day, undercounting both and
+        inflating attendance_percentage — the same bug get_monthly_summary
+        was fixed for.
         """
         import calendar as _cal
         _, days_in_month = _cal.monthrange(year, month)
         month_start   = date(year, month, 1)
         month_end     = date(year, month, days_in_month)
+        today         = timezone.localdate()
         branch_name   = getattr(employee, 'branch', '') or ''
-        records       = cls._month_records(employee, year, month)
+        records_list  = cls._month_records(employee, year, month)
+        records       = {r.date: r for r in records_list}
+        leave_dates   = cls._leave_dates(employee, month_start, month_end)
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
+        off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
 
-        working_records = [
-            r for r in records
-            if r.status not in (
-                AttendanceRecord.STATUS_WEEKLY_OFF,
-                AttendanceRecord.STATUS_HOLIDAY,
-            ) and r.date not in holiday_dates
-        ]
-        days_present  = sum(1 for r in records if r.status in (
-            AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE,
-        ))
-        late_arrivals = sum(1 for r in records if r.is_late)
-        working_days  = len(working_records)
+        working_days = days_present = lop_pending = 0
+        for day_num in range(1, days_in_month + 1):
+            cur = date(year, month, day_num)
+            if cur > today:
+                continue
+            rec = records.get(cur)
+            key = cls._classify_day(cur, rec, holiday_dates, off_dates, leave_dates, today)
+            if key not in (AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY):
+                working_days += 1
+            if key in (AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_LATE):
+                days_present += 1
+            elif key == AttendanceRecord.STATUS_ABSENT:
+                lop_pending += 1
 
-        total_minutes = sum(r.total_working_minutes for r in records)
+        late_arrivals = sum(1 for r in records_list if r.is_late)
+        total_minutes = sum(r.total_working_minutes for r in records_list)
         avg_hours     = round(total_minutes / 60 / max(days_present, 1), 1)
 
         attendance_pct = (
             round(days_present / working_days * 100)
             if working_days else 0
-        )
-
-        lop_pending = sum(
-            1 for r in records
-            if r.status == AttendanceRecord.STATUS_ABSENT
-            and r.date not in holiday_dates
         )
 
         return {
@@ -716,6 +729,7 @@ class AttendanceDashboardService:
                 AttendanceRecord.STATUS_ABSENT,
                 AttendanceRecord.STATUS_LATE,
                 AttendanceRecord.STATUS_HALF_DAY,
+                AttendanceRecord.STATUS_INCOMPLETE,
             ) and not cls._has_pending_correction(employee, r.date)
 
             rows.append({

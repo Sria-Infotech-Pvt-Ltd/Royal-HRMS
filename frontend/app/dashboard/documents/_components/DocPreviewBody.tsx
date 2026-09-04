@@ -84,7 +84,7 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
     let cancelled = false;
     async function render() {
       try {
-        const XLSX = await import("xlsx");
+        const [XLSX, { default: DOMPurify }] = await Promise.all([import("xlsx"), import("dompurify")]);
         const res  = await fetch(fileUrl);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buf  = await res.arrayBuffer();
@@ -97,7 +97,12 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
           if (!ws || !ws["!ref"]) {
             return '<div style="padding:16px;color:#9aa0a6;font-size:12px;">This sheet is empty.</div>';
           }
-          return XLSX.utils.sheet_to_html(ws, { editable: false });
+          // sheet_to_html() escapes cell text but NOT a cell's hyperlink
+          // target (xlsx.js interpolates cell.l.Target verbatim into the
+          // href attribute) — an uploaded .xlsx with a crafted hyperlink
+          // target is stored XSS against whoever previews it next. Sanitize
+          // before render rather than trust the library's own escaping.
+          return DOMPurify.sanitize(XLSX.utils.sheet_to_html(ws, { editable: false }));
         });
         if (cancelled) return;
         setSheets(wb.SheetNames);
