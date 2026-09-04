@@ -20,12 +20,24 @@ from django.test import SimpleTestCase
 from apps.voice_commands.views_transcribe import VoiceTranscribeFallbackView, _looks_like_hallucination
 
 
-def _fake_request(audio_bytes: bytes = b'fake-audio-bytes', content_type: str = 'audio/webm'):
+
+# Real WebM/EBML magic bytes (\x1a\x45\xdf\xa3) — views_transcribe.py now
+# sniffs an upload's actual leading bytes against its declared Content-Type
+# (core/file_validation.py) rather than trusting the header alone, so a
+# fixture with no real signature at all gets correctly rejected before ever
+# reaching the mocked transcription call these tests exist to check.
+_REAL_WEBM_HEADER = b'\x1a\x45\xdf\xa3'
+
+
+def _fake_request(audio_bytes: bytes = _REAL_WEBM_HEADER + b'fake-audio-bytes', content_type: str = 'audio/webm'):
     uploaded = MagicMock()
     uploaded.content_type = content_type
     uploaded.size = len(audio_bytes)
     uploaded.name = 'clip.webm'
     uploaded.read.return_value = audio_bytes
+    # Real file objects (and Django's UploadedFile) support seek(); the
+    # content-sniffing helper reads the head then seeks back — a bare
+    # MagicMock's auto-generated seek() is harmless as a no-op stand-in here.
 
     request = MagicMock()
     request.FILES = {'audio': uploaded}

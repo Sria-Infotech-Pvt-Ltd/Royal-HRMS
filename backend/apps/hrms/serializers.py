@@ -3,6 +3,8 @@ import re
 
 from rest_framework import serializers
 
+from core.file_validation import validate_file_content as _validate_file_content
+
 from .models import (
     APPROVAL_PENDING,
     CarryForwardLog,
@@ -105,6 +107,9 @@ def validate_receipt_file(file) -> None:
     content_type = getattr(file, 'content_type', '')
     if content_type not in ALLOWED_MIME_TYPES:
         raise serializers.ValidationError('Only PDF, JPG, and PNG receipts are accepted.')
+    content_error = _validate_file_content(file, content_type)
+    if content_error:
+        raise serializers.ValidationError(content_error)
 
 
 # ─── Leave serializers ────────────────────────────────────────────────────────
@@ -552,6 +557,9 @@ class LeaveRequestCreateSerializer(serializers.ModelSerializer):
         content_type = getattr(value, 'content_type', '')
         if content_type not in ALLOWED_DOC_TYPES:
             raise serializers.ValidationError('Only PDF, JPG, and PNG documents are accepted.')
+        content_error = _validate_file_content(value, content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         return value
 
     def validate(self, data):
@@ -861,6 +869,9 @@ class SeparationRequestCreateSerializer(serializers.ModelSerializer):
         content_type = getattr(value, 'content_type', '')
         if content_type not in ALLOWED_SEPARATION_DOC_TYPES:
             raise serializers.ValidationError('Only PDF, JPG, and PNG documents are accepted.')
+        content_error = _validate_file_content(value, content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         return value
 
     def validate(self, data):
@@ -969,6 +980,9 @@ class SeparationDocumentCreateSerializer(serializers.ModelSerializer):
         content_type = getattr(value, 'content_type', '')
         if content_type not in ALLOWED_SEPARATION_DOC_TYPES:
             raise serializers.ValidationError('Only PDF, JPG, and PNG documents are accepted.')
+        content_error = _validate_file_content(value, content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         return value
 
 

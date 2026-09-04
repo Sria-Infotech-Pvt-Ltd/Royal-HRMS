@@ -71,12 +71,21 @@ interface Props { assessment: Assessment; onClose: () => void; }
 
 export default function ItemsModal({ assessment, onClose }: Props) {
   const { data: fetchedSections, loading: sectionsLoading, refetch: refetchSections } =
-    useFetch<AssessmentSection[]>(API.assessments.sections(assessment.id));
+    useFetch<{ results: AssessmentSection[] } | AssessmentSection[]>(API.assessments.sections(assessment.id));
   const { data: fetchedItems, loading: itemsLoading, refetch: refetchItems } =
-    useFetch<AssessmentItem[]>(API.assessments.items(assessment.id));
+    useFetch<{ results: AssessmentItem[] } | AssessmentItem[]>(API.assessments.items(assessment.id));
 
-  const sections: AssessmentSection[] = Array.isArray(fetchedSections) ? [...fetchedSections].sort((a, b) => a.order - b.order) : [];
-  const items: AssessmentItem[]       = Array.isArray(fetchedItems)   ? fetchedItems   : (assessment.items ?? []);
+  // Backend now returns the standard paginated envelope ({results: [...]})
+  // instead of a bare array — these lists are always small (a handful of
+  // sections/items per assessment) so a single page covers every real case,
+  // but still accept either shape defensively rather than assume the shape.
+  const sectionsRaw: AssessmentSection[] = Array.isArray(fetchedSections)
+    ? fetchedSections
+    : (fetchedSections?.results ?? []);
+  const sections: AssessmentSection[] = [...sectionsRaw].sort((a, b) => a.order - b.order);
+  const items: AssessmentItem[] = Array.isArray(fetchedItems)
+    ? fetchedItems
+    : (fetchedItems?.results ?? (assessment.items ?? []));
 
   const loading = sectionsLoading || itemsLoading;
 

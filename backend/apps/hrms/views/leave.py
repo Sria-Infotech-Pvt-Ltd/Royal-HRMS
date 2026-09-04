@@ -820,43 +820,53 @@ class LeaveRequestListCreateView(APIView):
                 return error(err_msg)
 
         _ACTIVE_STATUSES = (REQ_PENDING, REQ_L2_PENDING, REQ_APPROVED)
-        overlap = LeaveRequest.objects.filter(
-            employee=request.user,
-            status__in=_ACTIVE_STATUSES,
-            start_date__lte=end,
-            end_date__gte=start,
-        ).exists()
-        if overlap:
-            return error(
-                'You already have a leave request for the selected date(s). '
-                'Please modify or cancel the existing request before applying again.'
-            )
-
-        # Symmetric with the check apps/hrms/views/workfromhome.py's create
-        # runs against LeaveRequest — a day can't be both "on leave" and
-        # "working from home"; without this, approving both independently
-        # leaves AttendanceRecord in a contradictory state (status=on_leave,
-        # work_mode=wfh) since the two write-throughs don't know about
-        # each other.
-        from ..models import WorkFromHomeRequest
-        wfh_overlap = WorkFromHomeRequest.objects.filter(
-            employee=request.user,
-            status__in=_ACTIVE_STATUSES,
-            start_date__lte=end,
-            end_date__gte=start,
-        ).exists()
-        if wfh_overlap:
-            return error(
-                'You have a work-from-home request overlapping the selected date(s). '
-                'Cancel or wait for it to resolve before applying for leave on the same dates.'
-            )
-
         year = start.year
 
-        # Balance check + creation wrapped in a transaction with row-level lock
-        # to prevent double-booking when the same employee submits concurrent requests.
+        # Whole thing (overlap checks + balance check + creation) wrapped in
+        # one transaction, locking the employee's own User row as a
+        # stand-in mutex first — plain .exists() overlap checks with no lock
+        # left a real (if narrow) window where two near-simultaneous
+        # submissions from the same employee could each see no overlap and
+        # both get created, since a genuinely first-ever submission has no
+        # request row yet to lock. The User row always exists, so this
+        # closes that gap too, not just the balance-overdraw case the lock
+        # below already covered.
         lop_days = 0.0
         with transaction.atomic():
+            from apps.accounts.models import User
+            User.objects.select_for_update().get(pk=request.user.pk)
+
+            overlap = LeaveRequest.objects.filter(
+                employee=request.user,
+                status__in=_ACTIVE_STATUSES,
+                start_date__lte=end,
+                end_date__gte=start,
+            ).exists()
+            if overlap:
+                return error(
+                    'You already have a leave request for the selected date(s). '
+                    'Please modify or cancel the existing request before applying again.'
+                )
+
+            # Symmetric with the check apps/hrms/views/workfromhome.py's create
+            # runs against LeaveRequest — a day can't be both "on leave" and
+            # "working from home"; without this, approving both independently
+            # leaves AttendanceRecord in a contradictory state (status=on_leave,
+            # work_mode=wfh) since the two write-throughs don't know about
+            # each other.
+            from ..models import WorkFromHomeRequest
+            wfh_overlap = WorkFromHomeRequest.objects.filter(
+                employee=request.user,
+                status__in=_ACTIVE_STATUSES,
+                start_date__lte=end,
+                end_date__gte=start,
+            ).exists()
+            if wfh_overlap:
+                return error(
+                    'You have a work-from-home request overlapping the selected date(s). '
+                    'Cancel or wait for it to resolve before applying for leave on the same dates.'
+                )
+
             if leave_type != LEAVE_LWP:
                 balance = (
                     LeaveBalance.objects

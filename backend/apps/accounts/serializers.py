@@ -12,6 +12,9 @@ from datetime import date
 from django.utils import timezone
 from rest_framework import serializers
 
+from core.permissions import has_perm as _has_perm
+from core.file_validation import validate_file_content as _validate_file_content
+
 from apps.accounts.models import (
     AuditLog,
     Company,
@@ -841,6 +844,25 @@ class CompanySerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return request.build_absolute_uri(obj.logo.url) if request else obj.logo.url
 
+    # PAN/bank details/signatory ID are the same PII tier as an employee's
+    # own PAN/bank details (encrypted at rest, see EncryptedCharField on the
+    # model) — CompanyRetrieveUpdateView.get() is reachable by any
+    # authenticated user (my-payslip, approval modals, and several other
+    # pages all legitimately need the non-sensitive fields — name, logo,
+    # address, CIN — so the endpoint itself can't just be locked down to
+    # settings.edit without breaking those). Strip the sensitive fields here
+    # instead, for anyone who can't also edit company settings.
+    _SENSITIVE_FIELDS = ('pan', 'bank_account_number', 'bank_ifsc', 'signatory_din_pan')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not (user and _has_perm(user, 'settings.edit')):
+            for field in self._SENSITIVE_FIELDS:
+                data.pop(field, None)
+        return data
+
     def validate_company_name(self, value: str) -> str:
         value = value.strip()
         if not value and not self._is_draft_request():
@@ -1028,6 +1050,9 @@ class CompanySerializer(serializers.ModelSerializer):
         allowed = {'image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'}
         if hasattr(value, 'content_type') and value.content_type not in allowed:
             raise serializers.ValidationError('Only JPEG, PNG, WebP, or SVG files are allowed.')
+        content_error = _validate_file_content(value, value.content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         return value
 
     def validate(self, attrs):
@@ -1326,6 +1351,9 @@ class DocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'Unsupported file type "{value.content_type}". Allowed: {allowed}.'
             )
+        content_error = _validate_file_content(value, value.content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         if value.size > Document.MAX_FILE_SIZE:
             raise serializers.ValidationError(
                 f'File size {value.size / (1024 * 1024):.1f} MB exceeds the 25 MB limit.'
@@ -1695,6 +1723,9 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Uploaded file is empty.')
         if value.content_type not in EmployeeDocument.ALLOWED_MIME_TYPES:
             raise serializers.ValidationError('Only PDF, JPG, and PNG files are allowed.')
+        content_error = _validate_file_content(value, value.content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         if value.size > EmployeeDocument.MAX_FILE_SIZE:
             raise serializers.ValidationError(
                 f'File size {value.size / (1024 * 1024):.1f} MB exceeds the 5 MB limit.'
@@ -1734,6 +1765,9 @@ class CustomFieldFileValueSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Uploaded file is empty.')
         if value.content_type not in EmployeeDocument.ALLOWED_MIME_TYPES:
             raise serializers.ValidationError('Only PDF, JPG, and PNG files are allowed.')
+        content_error = _validate_file_content(value, value.content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
         if value.size > EmployeeDocument.MAX_FILE_SIZE:
             raise serializers.ValidationError(
                 f'File size {value.size / (1024 * 1024):.1f} MB exceeds the 5 MB limit.'

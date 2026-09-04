@@ -105,16 +105,21 @@ class SystemAdminEmployeeLifecycleView(APIView):
                 'date_of_joining': str(u.date_of_joining) if u.date_of_joining else None,
             }
 
+        # This is a bounded dashboard widget (no "load more" in the UI, not
+        # a browse-everything list) — capped rather than paginated, same
+        # reasoning as SystemAdminAuditLogsView's limit/offset just below,
+        # simplified since there's no page-through UI for either tab to use.
+        _WIDGET_CAP = 50
         new_joiners = [_emp(u) for u in User.objects.filter(
             is_active=True, date_of_joining__isnull=False, date_of_joining__gte=thirty_ago
-        ).order_by('-date_of_joining')]
+        ).order_by('-date_of_joining')[:_WIDGET_CAP]]
 
         anniversaries_qs = (
             User.objects
             .filter(is_active=True, date_of_joining__isnull=False, date_of_joining__month=today.month)
             .exclude(date_of_joining__year=today.year)
             .annotate(doj_day=ExtractDay('date_of_joining'))
-            .order_by('doj_day')
+            .order_by('doj_day')[:_WIDGET_CAP]
         )
         anniversaries = [{**_emp(u), 'years': today.year - u.date_of_joining.year} for u in anniversaries_qs]
 
@@ -205,6 +210,9 @@ class HREmployeeLifecycleView(APIView):
         today      = timezone.localdate()
         thirty_ago = today - timedelta(days=30)
 
+        # Bounded dashboard widget (no "load more" UI) — capped rather than
+        # paginated, same reasoning as SystemAdminEmployeeLifecycleView.
+        _WIDGET_CAP = 50
         new_joiners = [
             {
                 'employee_id':     u.employee_id or '',
@@ -216,7 +224,7 @@ class HREmployeeLifecycleView(APIView):
             for u in User.objects
             .only('employee_id', 'full_name', 'department', 'designation', 'date_of_joining')
             .filter(is_active=True, date_of_joining__isnull=False, date_of_joining__gte=thirty_ago)
-            .order_by('-date_of_joining')
+            .order_by('-date_of_joining')[:_WIDGET_CAP]
         ]
 
         anniversaries = [
@@ -232,7 +240,7 @@ class HREmployeeLifecycleView(APIView):
             .filter(is_active=True, date_of_joining__isnull=False, date_of_joining__month=today.month)
             .exclude(date_of_joining__year=today.year)
             .annotate(doj_day=ExtractDay('date_of_joining'))
-            .order_by('doj_day')
+            .order_by('doj_day')[:_WIDGET_CAP]
         ]
 
         data = {

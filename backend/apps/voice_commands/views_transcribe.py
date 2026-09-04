@@ -37,6 +37,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from core.file_validation import validate_file_content as _validate_file_content
 from core.responses import error, success
 
 logger = logging.getLogger(__name__)
@@ -173,6 +174,9 @@ class VoiceTranscribeFallbackView(APIView):
                 f'Unsupported audio format: {uploaded.content_type}.',
                 http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+        content_error = _validate_file_content(uploaded, uploaded.content_type)
+        if content_error:
+            return error(content_error, http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         if uploaded.size > _MAX_AUDIO_BYTES:
             return error('Audio clip is too large.', http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 

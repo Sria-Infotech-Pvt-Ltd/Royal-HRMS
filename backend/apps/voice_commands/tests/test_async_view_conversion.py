@@ -104,9 +104,14 @@ class RealAsyncDispatchTests(SimpleTestCase):
         }
         uploaded = MagicMock()
         uploaded.content_type = 'audio/webm'
-        uploaded.size = 10
+        # Real WebM/EBML magic bytes — views_transcribe.py sniffs actual
+        # file content against the declared Content-Type now (see
+        # core/file_validation.py); a fixture with no real signature gets
+        # correctly rejected before reaching this test's mocked transcribe call.
+        audio_bytes = b'\x1a\x45\xdf\xa3' + b'fake-audio'
+        uploaded.size = len(audio_bytes)
         uploaded.name = 'clip.webm'
-        uploaded.read.return_value = b'fake-audio'
+        uploaded.read.return_value = audio_bytes
         request = _api_request_factory.post('/api/voice/transcribe-fallback/', {}, format='multipart')
         request.FILES['audio'] = uploaded
         user = MagicMock()

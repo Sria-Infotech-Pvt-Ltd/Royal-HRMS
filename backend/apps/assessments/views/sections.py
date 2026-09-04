@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
+from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 
@@ -35,8 +36,12 @@ class AssessmentSectionListCreateView(APIView):
         assessment = self._get_assessment(assessment_id)
         if not assessment:
             return error('Assessment not found.', http_status=status.HTTP_404_NOT_FOUND)
-        sections = assessment.sections.prefetch_related('items').all()
-        return success('Sections retrieved.', AssessmentSectionSerializer(sections, many=True).data)
+        sections = assessment.sections.prefetch_related('items').all().order_by('order')
+        page_obj, paginator = paginate(sections, request, default_page_size=50)
+        return success(
+            'Sections retrieved.',
+            paginated_data(paginator, page_obj, AssessmentSectionSerializer(page_obj.object_list, many=True).data),
+        )
 
     def post(self, request, assessment_id):
         if not _has_perm(request.user, 'assessments.edit'):

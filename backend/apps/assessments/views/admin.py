@@ -164,7 +164,11 @@ class AssessmentItemListCreateView(APIView):
         except Assessment.DoesNotExist:
             return error('Assessment not found.', http_status=status.HTTP_404_NOT_FOUND)
         items = assessment.items.all()
-        return success('Items retrieved.', AssessmentItemSerializer(items, many=True).data)
+        page_obj, paginator = paginate(items, request, default_page_size=100)
+        return success(
+            'Items retrieved.',
+            paginated_data(paginator, page_obj, AssessmentItemSerializer(page_obj.object_list, many=True).data),
+        )
 
     def post(self, request, assessment_id):
         if not _has_perm(request.user, 'assessments.edit'):

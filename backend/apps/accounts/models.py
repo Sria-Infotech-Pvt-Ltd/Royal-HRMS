@@ -1021,7 +1021,19 @@ class CompanyDirector(models.Model):
 
     id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     company      = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='directors')
-    din          = models.CharField(max_length=20)
+    # Encrypted at rest — for a Partnership/Trust entity type this holds a
+    # partner's PAN, not just a DIN (see class docstring), the same PII tier
+    # as EmployeeProfile.pan_number. Fernet is non-deterministic, so the
+    # uniqueness constraint below can't target this column directly (see
+    # din_hash).
+    din          = EncryptedCharField(max_length=255)
+    # Deterministic blind index of din, same pattern as
+    # EmployeeProfile.pan_number_hash — kept in sync in save() below. The
+    # (company, din_hash) uniqueness constraint is what actually enforces
+    # "no duplicate DIN per company" now; din itself is encrypted so two
+    # equal plaintexts never produce equal ciphertext for a DB constraint to
+    # catch.
+    din_hash     = models.CharField(max_length=64, blank=True, db_index=True)
     name         = models.CharField(max_length=150)
     designation  = models.CharField(max_length=100)
     created_at   = models.DateTimeField(auto_now_add=True)
@@ -1030,7 +1042,14 @@ class CompanyDirector(models.Model):
     class Meta:
         db_table = 'hrms_company_director'
         ordering = ['name']
-        unique_together = [('company', 'din')]
+        unique_together = [('company', 'din_hash')]
+
+    def save(self, *args, **kwargs):
+        # Runs before get_prep_value() encrypts din, so self.din here is
+        # always the current plaintext regardless of whether this row was
+        # previously encrypted — same reasoning as EmployeeProfile.save().
+        self.din_hash = blind_index(self.din) if self.din else ''
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f'{self.name} ({self.din})'

@@ -152,61 +152,76 @@ class WorkFromHomeRequestListCreateView(APIView):
         end   = data['end_date']
 
         _ACTIVE_STATUSES = (REQ_PENDING, REQ_L2_PENDING, REQ_APPROVED)
-        overlap = WorkFromHomeRequest.objects.filter(
-            employee=request.user,
-            status__in=_ACTIVE_STATUSES,
-            start_date__lte=end,
-            end_date__gte=start,
-        ).exists()
-        if overlap:
-            return error(
-                'You already have a work-from-home request for the selected date(s). '
-                'Please cancel the existing request before applying again.'
+
+        # Locks the employee's own User row as a stand-in mutex around the
+        # overlap checks + create() — plain .exists() checks with no lock
+        # left a real (if narrow) window where two near-simultaneous
+        # submissions from the same employee could each see no overlap and
+        # both get created, since neither request-row nor leave-row exists
+        # yet to lock for a genuinely first-ever submission. Locking the
+        # User row instead works even then, because the employee's own
+        # account row always exists — a concurrent second submission blocks
+        # here until the first one commits, then correctly sees it.
+        from apps.accounts.models import User
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=request.user.pk)
+
+            overlap = WorkFromHomeRequest.objects.filter(
+                employee=request.user,
+                status__in=_ACTIVE_STATUSES,
+                start_date__lte=end,
+                end_date__gte=start,
+            ).exists()
+            if overlap:
+                return error(
+                    'You already have a work-from-home request for the selected date(s). '
+                    'Please cancel the existing request before applying again.'
+                )
+
+            # A day can't be both "on leave" and "working from home" —
+            # without this, approving both independently leaves
+            # AttendanceRecord in a contradictory state (status=on_leave,
+            # work_mode=wfh) since the two write-throughs don't know about
+            # each other.
+            from apps.hrms.models import LeaveRequest
+            leave_overlap = LeaveRequest.objects.filter(
+                employee=request.user,
+                status__in=_ACTIVE_STATUSES,
+                start_date__lte=end,
+                end_date__gte=start,
+            ).exists()
+            if leave_overlap:
+                return error(
+                    'You have a leave request overlapping the selected date(s). '
+                    'Cancel or wait for it to resolve before requesting work from home for the same dates.'
+                )
+
+            l1, l2 = _resolve_approval_chain(request.user)
+
+            # Managers skip L1 — their request routes directly to HR (L2), same
+            # as leave — and escalate to L2 when there's no reporting manager at
+            # all, so the request is never orphaned with no one to act on it.
+            if (request.user.role and request.user.role.can_manage_team) or l1 is None:
+                initial_status = REQ_L2_PENDING
+                l1_approver    = None
+                l2_approver    = l2
+            else:
+                initial_status = REQ_PENDING
+                l1_approver    = l1
+                l2_approver    = l2
+
+            wfh_request = WorkFromHomeRequest.objects.create(
+                employee=request.user,
+                start_date=start,
+                end_date=end,
+                reason=data.get('reason', ''),
+                location_label=data.get('location_label', ''),
+                latitude=data['latitude'],
+                longitude=data['longitude'],
+                l1_approver=l1_approver,
+                l2_approver=l2_approver,
+                status=initial_status,
             )
-
-        # A day can't be both "on leave" and "working from home" — without
-        # this, approving both independently leaves AttendanceRecord in a
-        # contradictory state (status=on_leave, work_mode=wfh) since the two
-        # write-throughs don't know about each other.
-        from apps.hrms.models import LeaveRequest
-        leave_overlap = LeaveRequest.objects.filter(
-            employee=request.user,
-            status__in=_ACTIVE_STATUSES,
-            start_date__lte=end,
-            end_date__gte=start,
-        ).exists()
-        if leave_overlap:
-            return error(
-                'You have a leave request overlapping the selected date(s). '
-                'Cancel or wait for it to resolve before requesting work from home for the same dates.'
-            )
-
-        l1, l2 = _resolve_approval_chain(request.user)
-
-        # Managers skip L1 — their request routes directly to HR (L2), same
-        # as leave — and escalate to L2 when there's no reporting manager at
-        # all, so the request is never orphaned with no one to act on it.
-        if (request.user.role and request.user.role.can_manage_team) or l1 is None:
-            initial_status = REQ_L2_PENDING
-            l1_approver    = None
-            l2_approver    = l2
-        else:
-            initial_status = REQ_PENDING
-            l1_approver    = l1
-            l2_approver    = l2
-
-        wfh_request = WorkFromHomeRequest.objects.create(
-            employee=request.user,
-            start_date=start,
-            end_date=end,
-            reason=data.get('reason', ''),
-            location_label=data.get('location_label', ''),
-            latitude=data['latitude'],
-            longitude=data['longitude'],
-            l1_approver=l1_approver,
-            l2_approver=l2_approver,
-            status=initial_status,
-        )
 
         logger.info('WFH request %s created by %s (%s to %s)', wfh_request.id, request.user.email, start, end)
         out = WorkFromHomeRequestSerializer(wfh_request, context={'request': request})

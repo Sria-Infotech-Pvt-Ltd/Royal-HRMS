@@ -41,6 +41,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from core.file_validation import validate_file_content as _validate_file_content
 from core.pagination import paginate, paginated_data
 from core.permissions import HasSettingsPermission, has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
@@ -2044,6 +2045,9 @@ class EmailTemplateDetailView(APIView):
                 f'File type "{file.content_type}" is not allowed. '
                 'Allowed: images (jpg/png/gif/webp), PDF, Word, Excel.',
             )
+        content_error = _validate_file_content(file, file.content_type)
+        if content_error:
+            return error(content_error)
         if file.size > self._MAX_BYTES:
             return error('File size must not exceed 10 MB.')
 
@@ -2115,6 +2119,9 @@ class EmailTemplateDetailView(APIView):
             )
             if f.content_type not in self._ALLOWED_MIME:
                 logger.warning('Attachment "%s" rejected — MIME type "%s" not allowed.', f.name, f.content_type)
+                continue
+            if _validate_file_content(f, f.content_type):
+                logger.warning('Attachment "%s" rejected — content does not match declared type "%s".', f.name, f.content_type)
                 continue
             if f.size > self._MAX_BYTES:
                 logger.warning('Attachment "%s" rejected — size %d exceeds 10 MB limit.', f.name, f.size)
@@ -2844,6 +2851,9 @@ class CompanyGSTRegistrationListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to view company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         qs = CompanyGSTRegistration.objects.select_related('company').all()
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         return success(
@@ -2934,6 +2944,9 @@ class CompanyDirectorListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to view company info.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         qs = CompanyDirector.objects.select_related('company').all()
         page_obj, paginator = paginate(qs, request, default_page_size=20)
         return success(
