@@ -26,6 +26,7 @@ from apps.attendance.models import (
     AttendancePunch,
     AttendanceRecord,
     AttendanceSettings,
+    PunchRulesPolicy,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,24 @@ class PunchService:
             raise ValueError(
                 'You are not currently clocked in. Please clock in first.'
             )
+
+        # ── Daily punch-count cap ─────────────────────────────────────────────
+        # PunchRulesPolicy.max_punch_count was fully modeled, admin-editable,
+        # and validated (punch_mode='single' forces it to 1 — see
+        # serializers.py) but never actually read here, so the setting had no
+        # effect regardless of what an admin configured. Checked before the
+        # geofence/face-verification work below, since there's no point doing
+        # either for a punch that's going to be rejected anyway.
+        policy = PunchRulesPolicy.objects.filter(is_default=True, is_active=True).first()
+        if policy:
+            today_punch_count = AttendancePunch.objects.filter(
+                employee=employee, punched_at__date=today,
+            ).count()
+            if today_punch_count >= policy.max_punch_count:
+                raise ValueError(
+                    f'You have reached the maximum number of punches for today '
+                    f'({policy.max_punch_count}).'
+                )
 
         # ── Geofence validation ───────────────────────────────────────────────
         # Runs BEFORE face verification (matches apps/voice_commands

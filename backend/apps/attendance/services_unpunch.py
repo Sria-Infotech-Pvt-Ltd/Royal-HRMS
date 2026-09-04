@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -124,15 +125,62 @@ def detect_and_mark_unpunches(
 
     record_ids    = [r.pk for r in open_records]
 
-    # ── Bulk mark incomplete ───────────────────────────────────────────────────
-    with transaction.atomic():
-        marked = AttendanceRecord.objects.filter(pk__in=record_ids).update(
-            status=AttendanceRecord.STATUS_INCOMPLETE,
-            note='Missing clock-out — shift ended without a punch-out.',
-            updated_at=timezone.now(),
-        )
+    # ── Bulk mark, per the configured missing_punch_action ────────────────────
+    # PunchRulesPolicy.missing_punch_action was fully modeled, admin-editable,
+    # and validated but never actually read — every un-punch was unconditionally
+    # marked STATUS_INCOMPLETE regardless of what was configured. All open
+    # records in one sweep get the same treatment (there's one active default
+    # policy, not a per-employee one), so this stays a single bulk UPDATE either
+    # way — the performance characteristics this function's docstring cares
+    # about for 2,000+ employees are unchanged.
+    from apps.attendance.models import PunchRulesPolicy
+    policy = PunchRulesPolicy.objects.filter(is_default=True, is_active=True).first()
+    action = policy.missing_punch_action if policy else PunchRulesPolicy.MISSING_PUNCH_REGULARIZE
 
-    logger.info('Un-punch detection: marked %d records incomplete on %s', marked, target_date)
+    update_fields = {'updated_at': timezone.now()}
+    if action == PunchRulesPolicy.MISSING_PUNCH_ABSENT:
+        # No verified clock-out to credit any hours against — treat the whole
+        # day as not worked, same as a genuine no-show, for LOP purposes.
+        update_fields['status'] = AttendanceRecord.STATUS_ABSENT
+        update_fields['total_working_minutes'] = 0
+        update_fields['note'] = 'Missing clock-out — marked absent per attendance policy.'
+    elif action == PunchRulesPolicy.MISSING_PUNCH_HALF_DAY:
+        update_fields['status'] = AttendanceRecord.STATUS_HALF_DAY
+        update_fields['note'] = 'Missing clock-out — marked half day per attendance policy.'
+    elif action == PunchRulesPolicy.MISSING_PUNCH_AUTO:
+        # Auto-forgiven: credited as a full present day using the configured
+        # minimum full-day hours (AttendancePunchRules.min_hours_full_day) —
+        # there's no real clock-out to compute actual worked minutes from.
+        # Also synthesizes last_punch_out (shift end) — without it, the
+        # record would still match this same sweep's own open-session filter
+        # (last_punch_out__isnull=True, status in [present, late]) on the
+        # next run, since STATUS_PRESENT is one of the statuses it re-selects.
+        cfg = _get_settings()
+        min_hours = (
+            cfg.punch_rules.min_hours_full_day
+            if cfg and hasattr(cfg, 'punch_rules') else Decimal('8.00')
+        )
+        shift_end = (
+            cfg.working_hours.shift_end
+            if cfg and hasattr(cfg, 'working_hours') else time(18, 0)
+        )
+        update_fields['status'] = AttendanceRecord.STATUS_PRESENT
+        update_fields['total_working_minutes'] = int(min_hours * 60)
+        update_fields['last_punch_out'] = shift_end  # TimeField, not a datetime
+        update_fields['note'] = 'Missing clock-out — auto-regularized per attendance policy.'
+    else:
+        # require_regularization (default) — unchanged from the original
+        # behavior: flag it and let the employee submit a correction request.
+        update_fields['status'] = AttendanceRecord.STATUS_INCOMPLETE
+        update_fields['note'] = 'Missing clock-out — shift ended without a punch-out.'
+
+    with transaction.atomic():
+        marked = AttendanceRecord.objects.filter(pk__in=record_ids).update(**update_fields)
+
+    logger.info(
+        'Un-punch detection: marked %d records %s (action=%s) on %s',
+        marked, update_fields['status'], action, target_date,
+    )
 
     # ── Notifications (one per employee per date per channel) ──────────────────
     notified = _notify_employees(open_records, target_date)

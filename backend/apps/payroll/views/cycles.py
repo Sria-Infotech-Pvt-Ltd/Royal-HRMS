@@ -94,13 +94,24 @@ def _lwf_due_this_cycle(statutory, cycle_month) -> bool:
 def _compute_employee_payslip(
     salary_config, components, branch_config, statutory, adjustments, structure,
     lop_days=Decimal('0'), total_working_days=26, cycle_month=None,
-    esi_covered_earlier_this_period=False,
+    esi_covered_earlier_this_period=False, proration_factor=Decimal('1'),
 ) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
     original ProcessPayrollView loop body (Phase 2: only extracted into its
     own function so process_payroll_cycle() can call it once per employee
     against pre-fetched/cached inputs instead of querying inline).
+
+    proration_factor: employed_days_in_cycle / total_days_in_cycle for a
+    mid-cycle joiner or leaver (1 for a full-cycle employee — the default,
+    and the only value this ever took before join/leave-date awareness was
+    added). Applied uniformly to every earning component's already-computed
+    amount, not threaded into the per-component calculation loop above —
+    scaling basic/hra/special_allowance/each other_earnings entry by the
+    same factor preserves their relative proportions (a CALC_PCT_BASIC
+    component computed against the full basic, then scaled by the same
+    factor as that basic, ends up correctly prorated too) while leaving the
+    calculation loop itself untouched.
     """
     monthly_ctc = salary_config.monthly_ctc
     basic = Decimal('0')
@@ -129,6 +140,13 @@ def _compute_employee_payslip(
             # but keep the running total in Decimal to avoid binary float noise.
             other_earnings[component.name] = float(amount)
             other_earnings_total += amount
+
+    if proration_factor != Decimal('1'):
+        basic = basic * proration_factor
+        hra = hra * proration_factor
+        special_allowance = special_allowance * proration_factor
+        other_earnings = {name: float(Decimal(str(v)) * proration_factor) for name, v in other_earnings.items()}
+        other_earnings_total = other_earnings_total * proration_factor
 
     gross = basic + hra + special_allowance + other_earnings_total
 
@@ -294,11 +312,26 @@ def _eligible_employees_qs(cycle: PayrollCycle):
     _run_payroll_processing() and CycleEligibleEmployeesView so the
     "who will this touch" preview the frontend shows can never drift from
     what actually gets processed."""
-    employees_qs = User.objects.filter(
-        is_active=True,
-    ).exclude(
-        role__name__in=['system_admin'],
-    ).select_related('role')
+    active_qs = User.objects.filter(is_active=True).exclude(role__name__in=['system_admin'])
+
+    # Mid-cycle leavers: an employee deactivated before this cycle is
+    # processed was previously excluded outright by is_active=True above —
+    # meaning someone who worked part of the cycle and then left (or was
+    # offboarded) got zero payslip for the days they did work, not a
+    # prorated one. Included here via a real, grounded signal — they have
+    # actual AttendanceRecord rows inside this cycle's date range, proving
+    # they were genuinely employed for at least part of it — rather than a
+    # dedicated "relieving date" field, which doesn't exist on User today.
+    leaver_ids = (
+        AttendanceRecord.objects
+        .filter(employee__is_active=False, date__range=(cycle.cycle_start, cycle.cycle_end))
+        .exclude(employee__role__name__in=['system_admin'])
+        .values_list('employee_id', flat=True)
+        .distinct()
+    )
+    leaver_qs = User.objects.filter(id__in=leaver_ids)
+
+    employees_qs = (active_qs | leaver_qs).select_related('role')
 
     if cycle.branch:
         employees_qs = employees_qs.filter(branch=cycle.branch.branch_name)
@@ -394,24 +427,77 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     )
 
     # ── Bulk fetch: daily attendance for LOP calculation ──────────────────
+    # Fetched once per employee (not re-queried) and kept as a raw
+    # (date, status) list per employee — join/leave-date proration below
+    # needs each employee's own record dates twice: once to find a mid-cycle
+    # leaver's last actual attendance date (their proxy "employed through"
+    # date, since no dedicated relieving-date field exists), and again to
+    # aggregate absent/half-day/late/working-days counts bounded to their
+    # own employed window within the cycle, not the full cycle every other
+    # employee uses.
     _NON_WORKING = {AttendanceRecord.STATUS_WEEKLY_OFF, AttendanceRecord.STATUS_HOLIDAY}
+    records_by_emp: dict = defaultdict(list)
+    for rec in AttendanceRecord.objects.filter(
+        employee_id__in=employee_ids,
+        date__range=(cycle.cycle_start, cycle.cycle_end),
+    ).only('employee_id', 'status', 'date'):
+        records_by_emp[rec.employee_id].append((rec.date, rec.status))
+
+    # ── Join/leave-date proration ──────────────────────────────────────────
+    # Previously: a mid-cycle joiner's date_of_joining was never consulted at
+    # all — they were paid the full monthly amount regardless of how many
+    # days of the cycle they'd actually been employed for. A mid-cycle
+    # leaver was excluded entirely by _eligible_employees_qs's is_active
+    # filter (now widened above) and so got zero payslip for days they did
+    # work. Both are fixed here via the same mechanism: prorate every
+    # earning component by employed_days_in_cycle / total_days_in_cycle,
+    # and bound the LOP/working-days calculation to that same window.
+    total_days_in_cycle = (cycle.cycle_end - cycle.cycle_start).days + 1
+    proration_factor_by_emp: dict = {}
+    window_by_emp: dict = {}  # employee_id -> (effective_start, effective_end)
+    for employee in employees:
+        effective_start = cycle.cycle_start
+        if employee.date_of_joining and employee.date_of_joining > cycle.cycle_start:
+            effective_start = min(employee.date_of_joining, cycle.cycle_end)
+
+        effective_end = cycle.cycle_end
+        if not employee.is_active:
+            # Proxy "last day employed" — the latest date this employee has
+            # a real attendance record for within the cycle. Falls back to
+            # effective_start (zero employed days) if they somehow have none
+            # at all, though _eligible_employees_qs only includes inactive
+            # employees who do have at least one such record.
+            emp_dates = [d for d, _ in records_by_emp.get(employee.id, [])]
+            effective_end = min(cycle.cycle_end, max(emp_dates)) if emp_dates else effective_start
+
+        window_by_emp[employee.id] = (effective_start, effective_end)
+
+        if effective_end < effective_start or total_days_in_cycle <= 0:
+            proration_factor_by_emp[employee.id] = Decimal('0')
+        else:
+            employed_days = (effective_end - effective_start).days + 1
+            proration_factor_by_emp[employee.id] = (
+                Decimal(employed_days) / Decimal(total_days_in_cycle)
+            )
+
     absent_count_by_emp:   dict = defaultdict(int)
     half_day_count_by_emp: dict = defaultdict(int)
     late_count_by_emp:     dict = defaultdict(int)
     working_days_by_emp:   dict = defaultdict(int)
 
-    for rec in AttendanceRecord.objects.filter(
-        employee_id__in=employee_ids,
-        date__range=(cycle.cycle_start, cycle.cycle_end),
-    ).only('employee_id', 'status'):
-        if rec.status not in _NON_WORKING:
-            working_days_by_emp[rec.employee_id] += 1
-        if rec.status == AttendanceRecord.STATUS_ABSENT:
-            absent_count_by_emp[rec.employee_id] += 1
-        elif rec.status == AttendanceRecord.STATUS_HALF_DAY:
-            half_day_count_by_emp[rec.employee_id] += 1
-        elif rec.status == AttendanceRecord.STATUS_LATE:
-            late_count_by_emp[rec.employee_id] += 1
+    for employee in employees:
+        eff_start, eff_end = window_by_emp[employee.id]
+        for rec_date, rec_status in records_by_emp.get(employee.id, []):
+            if not (eff_start <= rec_date <= eff_end):
+                continue
+            if rec_status not in _NON_WORKING:
+                working_days_by_emp[employee.id] += 1
+            if rec_status == AttendanceRecord.STATUS_ABSENT:
+                absent_count_by_emp[employee.id] += 1
+            elif rec_status == AttendanceRecord.STATUS_HALF_DAY:
+                half_day_count_by_emp[employee.id] += 1
+            elif rec_status == AttendanceRecord.STATUS_LATE:
+                late_count_by_emp[employee.id] += 1
 
     # ── Per-distinct-structure / per-distinct-state caches ──────────────────
     # (was: structure.components.filter(...) and StatutoryConfig.objects.filter(...)
@@ -473,6 +559,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             total_working_days=emp_working_days,
             cycle_month=cycle.cycle_start.month,
             esi_covered_earlier_this_period=employee.id in esi_covered_earlier_ids,
+            proration_factor=proration_factor_by_emp.get(employee.id, Decimal('1')),
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──
