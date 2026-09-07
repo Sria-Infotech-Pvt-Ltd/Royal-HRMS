@@ -84,15 +84,20 @@ export default function LoginPage() {
       // hire that came through the candidate pipeline — the onboarding wizard
       // (personal details, bank info, documents) doesn't apply to them, so
       // they always land on the dashboard regardless of onboarding_status.
-      // Branch Admin is the same kind of administrative account (assigned at
-      // branch-creation time, not hired through the candidate pipeline), so
-      // it gets the same exemption.
-      else if (user.onboarding_status !== "complete" && !user.is_superuser && !user.can_manage_branch) dest = "/onboarding";
+      // Branch Admin accounts, unlike superusers, ARE created through the
+      // same employee-creation flow as any new hire (see BranchManagement.tsx
+      // "Assign Branch Admin" / EmployeeListCreateView), so they still start
+      // ONBOARDING_PENDING and must complete the same 5-step wizard.
+      else if (user.onboarding_status !== "complete" && !user.is_superuser) dest = "/onboarding";
       // Managers get auto-assigned default assessments the same as any new
       // employee (no role distinction on the backend), but the pre-onboarding
       // assessment portal isn't meant for them — skip it here too, matching
-      // the same exemption in proxy.ts. Superusers and Branch Admin are
-      // exempt for the same reason as the onboarding check above.
+      // the same exemption in proxy.ts. Branch Admin is exempt from the
+      // assessment portal specifically (unlike the onboarding wizard above,
+      // which now does apply to them) — the pre-onboarding assessments are
+      // aimed at individual-contributor new hires, not admin-tier accounts.
+      // Superusers remain exempt from both for the platform/IT-account reason
+      // given above.
       else if (user.assessment_status === "pending" && !user.can_manage_team && !user.can_manage_branch && !user.is_superuser) dest = "/onboarding/assessments";
       router.push(dest);
     } catch (err) {
