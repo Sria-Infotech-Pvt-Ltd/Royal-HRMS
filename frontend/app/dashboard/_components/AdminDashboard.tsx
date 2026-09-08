@@ -59,7 +59,13 @@ export default function AdminDashboard({ session }: Props) {
       </div>
 
       {/* Row 3 — Pending Approvals + Headcount | Announcement + Lifecycle */}
-      <div className="grid-2 mb-20">
+      {/* alignItems: "start" — the left column stacks two cards and the
+          right column only one; CSS Grid's default `stretch` was forcing
+          the right column's wrapper to match the taller left column's
+          height, leaving a large blank gap below EmployeeLifecycleTabs
+          before Row 4 began. Same fix already applied the same way on
+          app/dashboard/face-id-registrations/page.tsx's own grid-2. */}
+      <div className="grid-2 mb-20" style={{ alignItems: "start" }}>
         <div>
           <PendingApprovalsWidget />
           <DeptHeadcountChart />
@@ -70,7 +76,7 @@ export default function AdminDashboard({ session }: Props) {
       </div>
 
       {/* Row 4 — Birthdays | Audit Logs */}
-      <div className="grid-2">
+      <div className="grid-2" style={{ alignItems: "start" }}>
         <div>
           <BirthdayWidget />
         </div>

@@ -275,8 +275,16 @@ export default function StatutoryConfigTab() {
                       onChange={v => setField("esi_employer_rate", v)}
                       step="0.01"
                     />
+                    <NumField
+                      label="Employee-Exempt Daily Wage (₹)"
+                      value={String(current.esi_daily_wage_exemption_threshold ?? "")}
+                      onChange={v => setField("esi_daily_wage_exemption_threshold", v)}
+                    />
                   </div>
                 )}
+                <p className="text-[11px] text-gray-500 mt-2">
+                  An employee averaging at or below the daily wage above is exempt from their own ESI share — the employer share is still due regardless.
+                </p>
               </Section>
 
               {/* LWF */}

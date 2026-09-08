@@ -764,6 +764,18 @@ class ResetPasswordView(APIView):
             user=user, action='password_reset', module='accounts',
             ip_address=get_client_ip(request),
         )
+        try:
+            from apps.notifications.signals import _notify, _send_lifecycle_email
+            _notify(
+                user, 'Password Reset',
+                'Your password was just reset. If you did not do this, contact HR immediately.',
+                'password_reset', 'security', str(user.id), category='system',
+            )
+            _send_lifecycle_email(user, 'password_reset_confirmation', {
+                'employee_name': user.full_name or user.email,
+            })
+        except Exception:
+            logger.exception('Failed to send password-reset notification for %s', user.email)
         logger.info('Password reset for %s', user.email)
         return success('Password has been reset successfully. Please log in with your new password.')
 
@@ -1933,6 +1945,10 @@ class EmailTemplateListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('You do not have permission to view email templates.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         qs = (
             EmailTemplate.objects
             .select_related('updated_by')
@@ -2364,6 +2380,10 @@ class DocumentListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         qs = (
             Document.objects
             .select_related('uploaded_by', 'branch')
@@ -2525,7 +2545,13 @@ class DocumentDetailView(APIView):
     def get(self, request, pk: int):
         token = request.query_params.get('t', '').strip()
         if token:
+            # Signed-token download — authenticated by the token itself
+            # (get_permissions() above bypasses IsAuthenticated for this
+            # exact case), not by the caller's own permission grants.
             return self._stream_file(pk, token)
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
         doc = self._get_doc(pk)
         if not doc:
             return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
@@ -2661,6 +2687,10 @@ class DocumentStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'documents.view'):
+            return error('You do not have permission to view documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
         rows = (
             Document.objects
             .filter(is_active=True)
@@ -3184,7 +3214,7 @@ class EmployeeListCreateView(APIView):
 
             body = (
                 f'<p>Hi <strong>{full_name}</strong>,</p>'
-                f'<p>Your Royal HRMS account has been created.'
+                f'<p>Your {company_name} account has been created.'
                 f' Use the credentials below to log in:</p>'
                 f'<p>'
                 f'{company_code_line}'
@@ -3199,7 +3229,7 @@ class EmployeeListCreateView(APIView):
 
             connection, from_email = _get_smtp_connection()
             msg = _build_message(
-                subject='Welcome to Royal HRMS — Your Login Credentials',
+                subject=f'Welcome to {company_name} — Your Login Credentials',
                 html_body=html_body,
                 from_email=from_email,
                 to=[email],
@@ -4840,6 +4870,24 @@ class EmployeeDocumentView(APIView):
             except Exception as exc:
                 logger.error('Employee doc download error doc=%s: %s', doc_id, exc, exc_info=True)
                 return error('File temporarily unavailable.', http_status=status.HTTP_502_BAD_GATEWAY)
+
+            # Audit who actually opened this specific sensitive document (PAN
+            # card, Aadhaar, bank proof, etc.) — separate from and in addition
+            # to the existing permission check above, which only records who
+            # is *allowed* to view it, not who actually did and when. Logged
+            # only once the fetch from Cloudinary has actually succeeded, so
+            # a 404/permission-denied/upstream-error attempt above never
+            # creates a misleading "viewed" record.
+            AuditLog.objects.create(
+                user=request.user, action='document_viewed', module='accounts',
+                object_id=str(doc.id),
+                changes={
+                    'document_type': doc.document_type,
+                    'document_owner': doc.user.email,
+                    'file_name': doc.file_name,
+                },
+                ip_address=get_client_ip(request),
+            )
 
             content_type = 'application/pdf' if fmt == 'pdf' else r.headers.get('content-type', 'application/octet-stream')
             response = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)

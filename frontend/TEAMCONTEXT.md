@@ -4643,3 +4643,533 @@ New `Client` fields are editable afterward too via the existing `CompanyDetailVi
 - **This Neon project's compute can drop connections mid-migration** on a fresh company provision — `_create_schema_with_retry()` covers the schema-creation step specifically (proven safe to retry); the later steps in `_seed_company_data()` (`Company.objects.create()`, `User.objects.create_superuser()`) are not idempotent and are not covered by the same retry — a failure there still requires `cleanup_failed_tenants` + a fresh attempt.
 - **The Add Company form's new fields are all optional and unvalidated for business meaning** (e.g. nothing stops a nonsensical contract date) — deliberately minimal since this is account-management context, not provisioning input.
 - **Still no automated tests** around any of this session's changes — everything was verified manually against the running dev server with disposable test accounts, all cleaned up afterward.
+
+---
+
+# Team Context — Face ID Message Bug, Candidate Branch-Scoping, PAN Upload, Assessments Access, Platform Admin Login Polish
+
+**Author:** G.Durga Prasad
+**Date:** 24 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+A batch of reported bugs, each traced to a root cause rather than patched at the symptom: a misleading Face ID rejection message that told employees to fix their lighting for a failure lighting had nothing to do with, a candidate-creation race condition that could silently drop the branch field, a completely inert "Upload PAN card" button, a hidden Assessments module for employees, and a document-view audit gap. Also finished the Platform Admin visual pass and re-verified the PII field encryption already in place.
+
+---
+
+## 1. Face ID Verification — Wrong Rejection Message for a Borderline Match
+
+**File:** `apps/attendance/services_face_matching.py`
+
+Reported as: employees seeing a "try again in good lighting" message together with what was really a face-mismatch rejection. Root cause: `_match_and_record()` had three structurally different rejection paths — a malformed-embedding error, a genuine mismatch, and a **low-confidence borderline match** (within `FACE_MATCH_LOW_CONFIDENCE_MARGIN` of the accept threshold) — all returning the identical `_EMBEDDING_MISMATCH_MESSAGE`. The low-confidence case is documented in this same file (from a 2026-08-13 false-accept incident) as a **hard reject with no escalation path**: retrying can never turn it into an accept for that specific employee/reference pair, and by the time the backend even runs this check, the frontend's own capture flow has already enforced lighting/quality — so "go to better lighting" was actively false guidance at that point.
+
+Added a distinct `_LOW_CONFIDENCE_MESSAGE` for that branch only, directing the employee to contact HR to review/refresh their Face ID registration instead of retrying, and set `blocked=True` on that outcome (the same flag already used for attempt-cap/replay rejections). That flag fix also stops the voice clock-in conversational flow (`apps/voice_commands/conversation_clock_in_face.py`) from offering repeated retries for a case that can never succeed. The outright-mismatch message is unchanged — retrying is genuinely useful there.
+
+## 2. Candidate Branch Assignment — Race Condition Could Drop the Branch
+
+**File:** `apps/recruitment/views.py`
+
+Reported as: `[Please select a branch]` appearing while adding a candidate, even though a branch was visibly shown as selected. The displayed branch name comes from the JWT and renders immediately; the actual `form.branch` id it's supposed to resolve to depends on a separate branch-list fetch completing and matching by name first — a race the client doesn't always win. Rather than harden the frontend timing, made the backend authoritative: new `_scoped_candidate_branch()` helper resolves the caller's own branch server-side and overrides whatever (possibly still-empty) branch id the client sent, for anyone without `settings.edit`. Used by `CandidateListCreateView.post()` (required) and both `CandidateDetailView.put()`/`.patch()` (not required, matching `_can_access_candidate`'s existing leniency for a branchless non-admin). The frontend's own client-side "branch required" check (`AddCandidateModal.tsx`, `EditCandidateModal.tsx`) now only applies to unrestricted (admin) users, who don't get the server-side override.
+
+## 3. Onboarding — "Upload PAN Card" Button Did Nothing
+
+**File:** `app/onboarding/page.tsx`
+
+The button was `disabled` whenever the entered PAN failed format validation, which silently swallowed the click before it ever reached `handlePanCardUpload` — a function that already had the correct, clear validation messages, just no path to run. Moved the check into the `onClick` handler itself (new `onPanValidationError` prop) so an invalid or empty PAN now shows the existing message instead of the button just not responding.
+
+## 4. Employee Self-Service — "My Assessments" Was Unreachable
+
+**Files:** `lib/navConfig.ts`, `proxy.ts`
+
+An employee with a pending assessment had no sidebar link to it at all — `assessments` in `navConfig.ts` was gated behind `assessments.view` (an admin/HR-only permission), and the page itself already branches into an employee self-service view based on permission (`app/dashboard/assessments/page.tsx`'s `isAdminView` check), but nothing surfaced that branch. Added a second `my-assessments` nav entry pointing at the same `/dashboard/assessments` path with `permission: null`, matching the existing `my-attendance`/`my-payslip` self-service pattern. First attempt only fixed the sidebar — clicking it still bounced to `/dashboard`, because `proxy.ts`'s separate `ROUTE_PERMISSIONS` server-side gate still required `assessments.view` for that path. Removed the entry from `ROUTE_PERMISSIONS` entirely, the same treatment `/dashboard/separation` already documents there.
+
+## 5. Document Access — No Record of Who Actually Viewed a Sensitive Document
+
+**File:** `apps/accounts/views.py`
+
+`EmployeeDocumentView.get()` already checked *permission* to view a document (PAN, Aadhaar, bank proof, etc.) but kept no record of who actually opened one or when — only who was allowed to. Added an `AuditLog.objects.create(action='document_viewed', ...)` call, logged only after the Cloudinary fetch has already succeeded so a 404/permission-denied/upstream failure never creates a misleading "viewed" record.
+
+## 6. Platform Admin Login — Final Visual Pass
+
+**Files:** `app/platform-admin/layout.tsx`, `app/platform-admin/login/page.tsx`, `app/globals.css`
+
+Went through three rounds of direct feedback on the placeholder shield-icon branding: first added the real Royal HRMS logo to the sidebar and login panel, then reworked it to a white-knockout logo directly on the gradient (no icon box) per "make it more professional," then replaced the entire left panel — gradient, headline copy, and logo — with the exact same `/login.jpg` photo the tenant/employee login page uses, with no text or logo overlay at all, for one consistent look across every login surface. Removed the now-dead `FEATURES` array and `.login-brand-panel`/`.pa-login-feature` CSS.
+
+## 7. PII Field Encryption — Re-Verified, `.env.example` Gap Closed
+
+**File:** `.env.example`
+
+Walked through `core/encrypted_fields.py`'s `EncryptedCharField`/`EncryptedJSONField` (Fernet, application-layer) and `blind_index()` (separate deterministic HMAC key, for exact-match lookups without decrypting) end to end, and confirmed live against the database that PAN/UAN/ESI/bank account/IFSC columns store `gAAAAA...`-prefixed ciphertext, not plaintext. Separately, `.env.example` shipped placeholder `FIELD_ENCRYPTION_KEY`/`FIELD_INDEX_HMAC_KEY` values with no instructions — added the exact key-generation commands and a warning that losing `FIELD_ENCRYPTION_KEY` makes every encrypted record permanently unrecoverable, with no regeneration path.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/attendance/services_face_matching.py` | New `_LOW_CONFIDENCE_MESSAGE`; low-confidence outcome now `blocked=True` |
+| `backend/apps/recruitment/views.py` | New `_scoped_candidate_branch()` helper, used by candidate create/edit |
+| `backend/apps/accounts/views.py` | `EmployeeDocumentView.get()` — `document_viewed` audit log entry |
+| `backend/.env.example` | Key-generation instructions + backup warning for the encryption keys |
+| `frontend/app/onboarding/page.tsx` | PAN upload button validates on click instead of via `disabled` |
+| `frontend/lib/navConfig.ts` | New `my-assessments` nav entry (`permission: null`) |
+| `frontend/proxy.ts` | Removed `/dashboard/assessments` from `ROUTE_PERMISSIONS` |
+| `frontend/app/dashboard/interview-list/AddCandidateModal.tsx`, `EditCandidateModal.tsx` | Client-side branch-required check now admin-only |
+| `frontend/app/platform-admin/layout.tsx`, `login/page.tsx`, `frontend/app/globals.css` | Login left panel now the same photo as the tenant login page; sidebar uses the real logo |
+
+---
+
+## Notes for Next Developer
+
+- **The Face ID low-confidence band is a hard reject by design, not a bug to "fix" by loosening the threshold** — see the 2026-08-13 incident comment in `services_face_matching.py`. If this surfaces again, the fix is in messaging/registration flow, not the distance math.
+- **Voice clock-in retry counts as a resource** — anywhere a new `FaceVerificationOutcome` terminal state is added, set `blocked=True` if a retry genuinely cannot help this cycle, or the voice flow will burn the employee's remaining attempts on something that can't succeed.
+- **Notification Settings self-service gap identified but not fixed this round** — the backend is already per-user, no-permission-required, but the frontend page and its toggles are gated behind `settings.edit` and only reachable via Settings. Flagged to the user; fix offered, not yet confirmed.
+- **Still no automated tests** around this round's changes — the existing `apps.attendance.tests_face_verification` / `apps.voice_commands.tests.test_clock_in_face_verification` suites could not be run to confirm no regression: the local test database is missing tables (`hrms_roles`) unrelated to this change, most likely the same tenant-schema/Neon flakiness documented in the 21 August entry above. Verified instead by full manual trace of `_match_and_record` → `PunchService.record_punch` → `AttendancePunchView` → `useClockWidget.ts`'s toast, and `manage.py check` passes clean.
+
+---
+
+# Team Context — Bulbul TTS/Hindi Voice Rollout Completion + FR/VC Bug-Fix Round
+
+**Branch:** ai (merged into demo 24 August 2026)
+
+---
+
+## Overview
+
+Merged from the `ai` branch — this entry documents it here since that branch's own commit never touched TEAMCONTEXT.md. Wraps up Phases 1–5 of the Bulbul TTS + Hindi language-matched voice rollout, plus a follow-up FR-1/FR-2/VC-1/VC-2/VC-3 fix round: face-match liveness/quality-gate hardening, voice clock-in/out face-verification message correctness, auto-listen scheduling, a new `QuickActionChips` component, and a stale WFH geofencing test fix. Merged alongside this same day's `Backend/24/08/2026` work — the two branches independently fixed the same Face ID mismatch-message bug from different angles (see item 1) and combined cleanly with no conflicts.
+
+---
+
+## 1. Face ID Mismatch Message — Complementary Fix to the Same-Day Low-Confidence Fix
+
+**File:** `apps/attendance/services_face_matching.py`
+
+Rewrote `_EMBEDDING_MISMATCH_MESSAGE` itself (the outright-mismatch case) to drop the same misleading "try again in good lighting" wording this session's `Backend/24/08/2026` branch also flagged — reworded to "We couldn't match your face to your registered Face ID. You can try again, or contact your HR representative if this keeps happening," framed as "we couldn't match" rather than "your face didn't match" since a marginal registration reference could equally be the cause. This branch's own comment explicitly anticipated `_LOW_CONFIDENCE_MESSAGE` ("unlike `_LOW_CONFIDENCE_MESSAGE`'s hard reject below") before that constant existed on this branch — the two fixes were clearly aimed at the exact same three-way message problem from different angles, and merge cleanly into one coherent result: a specific message for outright mismatch (retry is genuinely useful), a separate one for the low-confidence hard-reject (retry is not), unchanged from either branch's own logic.
+
+Also updated `conversation_clock_in_face.py`'s ordinary (non-blocked, under-attempt-cap) voice retry path to surface `outcome.rejection_message` instead of always showing the generic bilingual `_RETRY_MESSAGE` — matching how the `blocked` branch already worked, so a voice retry now shows the same distinct, case-specific message the web flow does (English-only, since `services_face_matching.py` has no Hindi variants — an accepted existing tradeoff, not new).
+
+## 2. Face Capture Quality Gate — Multi-Face and Eye-Occlusion Detection
+
+**File:** `frontend/lib/faceApi/qualityGate.ts`, `frameCapture.ts`, `hooks/useFaceLivenessCapture.ts`
+
+Added `classifyDetectedFaceCount()` (0/1/multiple faces in frame — more than one is now rejected with a distinct `MULTIPLE_FACES_MESSAGE`) and an eye-occlusion check (`EYE_OCCLUSION_MESSAGE`, backed by `frameCapture.ts`'s `assessEyeOcclusion`), both pulled out of `useFaceLivenessCapture.ts` as pure, independently unit-tested functions rather than inline logic. Also added `selectFailureMessage()` — when a multi-attempt capture fails for different reasons across attempts (a shadow passes, then the person turns their head), shows the most recent attempt's specific reason rather than an arbitrary or generic one.
+
+## 3. Voice Auto-Listen After Speaking — Race-Safe Scheduling
+
+**File:** `frontend/lib/voiceAutoListen.ts` (new)
+
+Extracted the "reopen the mic after a mid-conversation question finishes speaking" logic out of `useVoiceCommand.ts` into a pure, DOM-free module specifically so its race-prone half (a delayed timer that must yield to a manual mic click, and must not fire for a response a newer one has already superseded) is unit-testable with fake timers. `shouldAutoListenAfterSpeaking()` only auto-reopens for a genuine voice-answer follow-up turn — not the face-proof camera turn, which expects a captured descriptor, not speech.
+
+## 4. Quick Action Chips — Tap-to-Submit Bilingual Shortcuts
+
+**File:** `frontend/components/QuickActionChips.tsx` (new, extracted from `VoiceConversationPanel.tsx`)
+
+One tap submits the exact phrase through the same `/voice/parse/` pipeline as typing it — every phrase is copied verbatim from `backend/apps/voice_commands/registry/intents_en.yaml`, and every intent used has `required_permission: null` so the chips need no per-user filtering. Bilingual labels (English + Hindi) on every chip rather than behind a language toggle; the Hindi labels are new translations (chosen to match existing backend Hindi vocabulary where concepts overlap) since the backend's own Hindi strings only ever covered spoken/displayed response text, not UI button labels — **not yet confirmed against a native speaker**, same open item Phases 3/3.1 already flagged for their own new Hindi text.
+
+## 5. Stale WFH Geofencing Test Fixed
+
+**File:** `apps/voice_commands/tests/test_mode_geofencing.py`
+
+`test_wfh_mode_allowed_without_gps` asserted WFH mode was allowed with no approved WFH request and no GPS — no longer true; the real `_validate_wfh` contract requires both an approved `WorkFromHomeRequest` for today AND matching GPS. Replaced with `test_wfh_mode_without_approved_request_is_rejected` and `test_wfh_mode_with_approved_request_requires_gps`, mocking `WorkFromHomeRequest.approved_for` instead of the branch resolver.
+
+---
+
+## Notes for Next Developer
+
+- **The new Hindi labels on `QuickActionChips` have not been reviewed by a native speaker** — same standing gap as the Phase 3/3.1 Hindi response text elsewhere in voice_commands.
+- **`services_face_matching.py` has no Hindi message variants at all** — voice clock-in's rejection messages surface in English even mid-Hindi-conversation; an accepted, pre-existing tradeoff, not something this round introduced or fixed.
+- This entry was written after the fact, from the merged diff — the `ai` branch's own commit carried no TEAMCONTEXT.md update, so implementation details beyond what's visible in the code/tests aren't captured here.
+
+---
+
+# Team Context — Default Role Permissions Not Reliably Granted on Fresh Company Migration
+
+**Author:** G.Durga Prasad
+**Date:** 24 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+Reported as: HR Admin and Branch Admin should default to holding `facial_recognition.approve` and the `assessments.*` permissions on every newly provisioned company, without needing a manual grant afterward. Traced to the same structural bug in two unrelated places — a migration that grants a permission to a role has no explicit dependency on the earlier migration that actually creates that permission row, so on a fresh company the grant silently no-ops if Django's cross-app migration order happens to run the grant first. Verified against a real fresh company provision (`tenant_qatest`, recreated this session) via the actual `django_migrations.applied` timestamps, not just static reading of the migration files.
+
+---
+
+## 1. `facial_recognition.approve` — Role-Name Typo Plus Ordering Risk
+
+**Files:** `apps/attendance/migrations/0023_seed_face_registration_permission.py`, `apps/accounts/migrations/0094_add_facial_recognition_approve.py`, new `apps/accounts/migrations/0095_ensure_facial_recognition_approve_defaults.py`
+
+Two pre-existing migrations were each supposed to cover this and didn't, for different reasons:
+
+- `attendance.0023` creates the permission and grants it to a role named `'hr'` — that role name has **never existed** (the role has always been `hr_admin`, confirmed all the way back to `accounts.0002_seed_roles_permissions`). Dead code since it was written; only `system_admin` was ever actually granted by this migration.
+- `accounts.0094` correctly targets `hr_admin`/`branch_admin` by name, but only runs its grant loop if the permission already exists (`if not permission: return`) — and has no `dependencies` entry on `attendance.0023`, the migration that actually creates it. Confirmed via `tenant_qatest`'s real applied timestamps that `0094` ran a full minute *before* `0023` in this exact provisioning run, meaning its early-return fired and the grant loop never executed at all.
+
+New `accounts.0095` explicitly depends on both `0094` and `attendance.0023`, get_or_creates the permission as a defensive safety net, and unconditionally grants it to `system_admin`, `hr_admin`, and `branch_admin` — no longer dependent on cross-app ordering luck.
+
+## 2. `assessments.*` — Same Ordering Bug, Different Migrations
+
+**Files:** `apps/accounts/migrations/0052_seed_branch_admin_role.py`, `0093_branch_admin_assessments_no_branches_mgmt.py`, new `0096_ensure_assessments_permissions_defaults.py`
+
+Identical pattern: `assessments.0002_seed_permissions` is what actually creates `assessments.view/create/edit/delete` (and correctly self-grants them to `hr_admin`/`system_admin` in that same migration — no risk there). Both `accounts.0052` (branch_admin's original permission list) and `accounts.0093` (a dedicated later fix specifically for this gap) try to grant these to `branch_admin`, but neither declares a dependency on `assessments.0002` — confirmed via the same tenant's applied timestamps that both ran *before* `assessments.0002`, so both grant attempts should have no-opped for `branch_admin`.
+
+(On the specific `tenant_qatest` re-provision checked this session, `branch_admin` ended up holding all four permissions anyway — the exact mechanism behind that wasn't fully pinned down despite the timestamp evidence, but it doesn't change that the migration logic itself is fragile and not something to rely on for every future company.)
+
+New `accounts.0096` explicitly depends on `0095` and `assessments.0002`, and unconditionally (re-)grants `branch_admin` all four `assessments.*` permissions.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/accounts/migrations/0095_ensure_facial_recognition_approve_defaults.py` (new) | Guarantees `system_admin`/`hr_admin`/`branch_admin` hold `facial_recognition.approve` |
+| `backend/apps/accounts/migrations/0096_ensure_assessments_permissions_defaults.py` (new) | Guarantees `branch_admin` holds all four `assessments.*` permissions |
+
+---
+
+## Notes for Next Developer
+
+- **This is a pattern, not a one-off** — any migration that grants a permission by looking it up (`Permission.objects.filter(codename=...).first()` or `.get(codename=...)`) instead of creating it in the same migration must declare an explicit `dependencies` entry on whichever migration actually creates that permission row. Silently skipping via `if not permission: return`/`except DoesNotExist: continue` hides the failure instead of surfacing it — worth auditing other permission-grant migrations across the codebase for the same risk.
+- **Applied to `tenant_qatest` only** — the sole tenant schema that currently exists (see the data-loss incident earlier this session). Any company restored or provisioned after this point picks these up automatically; nothing needed for `tenant_qatest` itself since it was migrated directly.
+- Committed and merged into `demo` via `Backend/24/08/2026`.
+
+---
+
+# Team Context — Voice Endpoints Converted to Async (Selective Merge from `ai`)
+
+**Branch:** Backend/24/08/2026 (cherry-picked from `ai`'s `6e50210 "fixed bugs raised while testing."`)
+
+---
+
+## Overview
+
+`ai` branch pushed a new commit after its previous one was already merged into `demo`. That commit mixed two unrelated things: a voice-command scalability fix, and a general attendance/geofencing query-efficiency pass (duplicate WFH-approval query, holiday-check caching, a `FaceVerificationAttempt` anti-spoofing index). Only the voice-command half was requested for this merge — deliberately **not** a full merge of the commit. TEAMCONTEXT.md wasn't touched by that commit either (same gap as the previous `ai` merge), so this was written from the actual diff, same as before.
+
+---
+
+## 1. `VoiceParseView` / `VoiceSpeakView` / `VoiceTranscribeFallbackView` — Converted to Async
+
+**Files:** `apps/voice_commands/views.py`, `views_speak.py`, `views_transcribe.py`, `requirements.txt`
+
+Each view's `post()` now dispatches the unchanged, fully-synchronous business logic (renamed `_post_sync`) to a dedicated thread via `sync_to_async(thread_sensitive=True)`, using `adrf.views.APIView` (new dependency: `adrf==0.1.14`, `async-property==0.2.2`) instead of DRF's own `APIView`. Per the migrated-in code comments: under this project's current WSGI deployment this changes nothing observable — Django wraps the coroutine in `async_to_sync` and runs it on the same worker thread regardless. It only pays off once HTTP traffic is served over ASGI (today only the websocket path runs under daphne — see `config/asgi.py`), at which point a slow/rate-limited Sarvam call (`VoiceSpeakView`'s own retry/backoff can run up to ~46.5s worst case) ties up only its own thread instead of the shared event loop.
+
+## 2. New `AuditLog` Index for Voice Anomaly Checks
+
+**File:** `apps/accounts/models.py`, new `apps/accounts/migrations/0097_auditlog_user_created_idx.py`
+
+New index on `AuditLog(user, created_at)` — the existing `(module, created_at)` index can't serve `apps.voice_commands.audit._check_anomaly`'s user-first filter, which runs on every voice permission-denied/no-match event.
+
+**Renumbered from `ai`'s own `0095_auditlog_auditlog_user_created_idx.py`** — that file also depended directly on `0094_add_facial_recognition_approve`, forking the migration graph against this session's own `0095_ensure_facial_recognition_approve_defaults`/`0096_ensure_assessments_permissions_defaults` (also children of `0094`). Re-pointed at `0096` instead, keeping one linear chain rather than requiring a separate Django merge migration. Operations are otherwise unchanged from the original.
+
+## 3. Deliberately Left Out
+
+**Files (not merged):** `apps/attendance/services_attendance.py`, `services_geofencing.py`, `apps/attendance/models.py` (new `FaceVerificationAttempt` index), `apps/attendance/migrations/0041_faceverificationattempt_fva_emp_fingerprint_time_idx.py`, `apps/attendance/tests_query_efficiency.py`
+
+Part of the same upstream commit's scalability-audit work, but not voice-command-specific — a duplicate `WorkFromHomeRequest.approved_for()` query per WFH punch, a holiday check routed through cache instead of a direct query, and an anti-spoofing replay-detection index used by Face ID generally (web and voice alike). Held back at the user's explicit direction to bring in only the bot fixes from this commit; revisit separately if wanted.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/voice_commands/views.py`, `views_speak.py`, `views_transcribe.py` | `post()` now async, dispatches to `_post_sync` via `sync_to_async` |
+| `backend/requirements.txt` | Added `adrf==0.1.14`, `async-property==0.2.2` |
+| `backend/apps/accounts/models.py`, `migrations/0097_auditlog_user_created_idx.py` (new) | New `AuditLog(user, created_at)` index |
+| `backend/apps/voice_commands/tests/test_async_view_conversion.py` (new), `test_transcribe_fallback_language_hint.py`, `test_views_speak.py`, `test_voice_parse_view_geolocation.py` | Updated/new tests for the async conversion |
+
+---
+
+## Notes for Next Developer
+
+- **This async conversion has no observable effect until the deployment itself moves off WSGI for HTTP traffic** — see item 1. Don't expect a latency/throughput change from this alone.
+- **`adrf`/`async-property` must be installed in every environment that runs this code** — added to `requirements.txt` here; confirm any deploy pipeline actually reinstalls from it.
+- **The excluded attendance/geofencing/FaceVerificationAttempt changes are still sitting on `ai` (commit `6e50210`), unmerged** — pull them in separately if/when wanted; they're independent of everything in this entry.
+- Verified: `manage.py check` clean, `makemigrations --check` clean, migration applied to `tenant_qatest` and the new index confirmed present, all 38 tests across the 4 touched voice_commands test files pass.
+
+---
+
+# Team Context — `collectstatic` Crash in Production: `AttributeError: STATICFILES_STORAGE`
+
+**Author:** G.Durga Prasad
+**Date:** 26 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+Reported from a live deployment: `python manage.py collectstatic --noinput` crashed with `AttributeError: 'Settings' object has no attribute 'STATICFILES_STORAGE'`, coming from `django-cloudinary-storage`'s own `collectstatic` command override (registered ahead of `django.contrib.staticfiles` in `INSTALLED_APPS`), which reads `settings.STATICFILES_STORAGE` as a raw attribute. Traced to two incorrect assumptions baked into `config/settings.py`'s `STORAGES` block by an earlier fix in this session.
+
+## 1. `config/settings.py` — The `STORAGES`/Legacy-Names Comment Was Wrong
+
+**File:** `backend/config/settings.py`
+
+The comment introduced alongside `STORAGES` (from the Cloudinary storage regression fixed on 21 August) claimed two things about Django 5.1, neither of which holds for the actual installed version (5.1.15):
+
+1. That Django raises `ImproperlyConfigured` ("mutually exclusive") if both a legacy storage setting (`STATICFILES_STORAGE`/`DEFAULT_FILE_STORAGE`) and `STORAGES` are defined at once — grepping the installed `django/` package turns up no such check anywhere; `django.contrib.staticfiles.checks.check_storages` only requires `STORAGES['staticfiles']` to exist.
+2. That Django computes `settings.STATICFILES_STORAGE` as a value derived from `STORAGES` when the legacy name itself is left unset — also false. Django 5.1 removed `STATICFILES_STORAGE` from its own internals entirely (zero references anywhere under `django/`, confirmed by grep), so reading it as a raw attribute when it was never set raises `AttributeError`, not a computed fallback.
+
+Because of assumption 2, the earlier fix deliberately hid the legacy names behind underscore-prefixed variables (`_DEFAULT_FILE_STORAGE_BACKEND`/`_STATICFILES_STORAGE_BACKEND`) so Django would never see them as real settings — which is exactly what broke `django-cloudinary-storage`'s `collectstatic` override, since that package (predating Django 5.1's `STORAGES`-only model) still reads `settings.STATICFILES_STORAGE` directly and has never been updated to check `STORAGES` instead.
+
+**Fix:** set `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` as real, literal settings again (not underscore-prefixed), alongside `STORAGES` — confirmed via `manage.py check` (clean) and `manage.py collectstatic --noinput --dry-run` (completes with no error) that Django 5.1.15 has no actual conflict with this. `STORAGES` remains the setting Django itself uses for `FileField`/`ImageField.storage`; the legacy names exist purely so `django-cloudinary-storage`'s outdated raw-attribute read has something to find. Verified `default_storage` still resolves to `RawMediaCloudinaryStorage` (Cloudinary, not local disk) afterward — the original 21 August fix's actual goal is intact.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/config/settings.py` | `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` set as real settings again, alongside `STORAGES` |
+
+---
+
+## Notes for Next Developer
+
+- **This is the second incorrect fix to this exact `STORAGES` block** — the original (this session, 21 August) kept both settings as real values and broke on the exact `ImproperlyConfigured` this entry's investigation found doesn't actually happen; the team's follow-up "corrected" it by hiding the legacy names entirely, which then broke `collectstatic` in production the way this entry describes. Both prior fixes were based on assumptions about Django 5.1's behavior that were never verified against the actual installed source. This one was verified by grepping the installed `django/` package directly rather than trusting either prior comment.
+- **The real, longer-term fix is upgrading `django-cloudinary-storage`** to a version (if one exists) that reads `settings.STORAGES` instead of the removed `settings.STATICFILES_STORAGE` — not checked in this pass. This entry's fix is a compatibility shim, not a fix to the third-party package itself.
+- **Not yet deployed to the production server** — this was found and fixed in the repo; the server that hit this error still needs `git pull` + a restart of whatever serves the app (see the deploy process) to pick it up.
+
+---
+
+# Team Context — Full-Application Audit: Permission Gaps + Hardcoded Values
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+A requested full-application review: three parallel audits (email notification coverage, hardcoded values, permission architecture — the latter split across 4 sub-audits covering payroll, accounts+tenants, attendance+hrms, and recruitment/branch/misc) covering ~230 backend views and the whole application for hardcoded company/amount values. ~32 findings total. Per direction, fixed security/correctness first (21 fixes across 11 files) in one round, then the 3 hardcoded-value findings (16 files) in a second round after confirming risk/scope. Email notification gaps (7 found — most notably: separation lifecycle sends zero emails at any stage, payslip dispatch/payment never emails the employee, Face ID registration approve/reject is completely silent) remain unaddressed, queued for a future round.
+
+---
+
+## 1. Permission/Correctness Fixes (21 fixes, 11 files)
+
+**Real bugs (2):** `apps/hrms/views/separation.py` and `apps/announcements/views.py`'s `CanPostAnnouncement` both checked the role-null guard *before* the superuser bypass — a superuser account with no linked Role row was incorrectly denied. Fixed `separation.py` by deleting its local `_has_perm` reimplementation entirely and importing the canonical `core.permissions.has_perm` instead (propagates automatically to `separation_workflow.py`, which imports `_has_perm` from this module — 12 views fixed via one change). Fixed `announcements.py` by removing a redundant, wrongly-ordered `if not request.user.role` guard that ran before its own (already-correct) `_has_perm` call.
+
+**Real access-control bypass (1):** `apps/payroll/views/ecr.py`'s `_get_authorized_cycle()` — shared by every ESIC/ECR statutory download (Aadhaar/UAN/ESI numbers) — treated "no branch assigned" as "must be a global admin," silently letting a branch-less `payroll.view`/`payroll.edit` holder download any branch's file. Fixed by reusing `cycles.py`'s existing `_is_admin()` (superuser or `settings.edit`) instead of the branch-null heuristic — the actual pattern already used everywhere else in payroll.
+
+**Branch/manager-scope bypasses (5, across `attendance/views/hr_attendance.py` and `recruitment/views.py`):** an employee's monthly attendance calendar and weekly-off history could be pulled by ID with no manager-scope check (sibling endpoints in the same files already had one); candidate hire/reject decisions and portal-credential send/resend had no `_can_access_candidate` branch check, unlike every other candidate-mutating endpoint. All four fixed by adding the same guard already used by their siblings.
+
+**Under-permissioned reads (13 views, 6 files):** `SalaryStructureListView`/`DetailView`, `SalaryComponentListView` (structures.py); `StatutoryConfigListView`/`DetailView`/`ByStateView` (statutory.py); `BranchPayrollConfigListView`/`DetailView`/`ByBranchView` (branch_config.py); `PayrollSettingsView.get` (settings.py); `EmailTemplateListCreateView.get`, `DocumentListCreateView.get`, `DocumentDetailView.get` (metadata path only — the signed-token download path is intentionally unauthenticated by a different mechanism), `DocumentStatsView.get` (accounts/views.py) — all readable by any authenticated user while their own write methods were correctly gated. Each fixed with the matching `.view` codename (`payroll.view`, `settings.view`, `documents.view`), verified against real seeded role grants and actual frontend consumers first so no legitimate flow broke.
+
+**Permission-codename mismatches (2):** `ReferralRuleListCreateView.post`/`ReferralRuleDetailView.patch`/`.delete` (recruitment/views.py) required `settings.view` (read) for a *write* action — fixed to `settings.edit`. `BirthdaySettingsView.patch` (hrms/views/birthdays.py) required `employees.view` (read) for an org-wide settings mutation — fixed to `settings.edit`.
+
+**Bonus fix bundled in:** `ReferralRuleListCreateView.get` also had zero permission check at all (not just the wrong write codename) and returned an unpaginated full list — added the `settings.view` check and wrapped in `paginate()`/`paginated_data()` with `default_page_size=100` (the settings page renders the whole list at once, no pagination UI of its own — a deliberately generous cap, not the standard 20).
+
+**Deliberately deferred (not fixed):**
+- `ReferralBonusApproveView`/`ReferralBonusPayView` both gate on the identical `recruitment.edit` codename — no separation between approving and paying out a bonus. A process/business-control decision, not a clear bug; flagged rather than decided unilaterally.
+- Pagination on `LeaveCalendarView`/`PayslipQueryListView` — both currently return a bare array the frontend (`TeamCalendar.tsx`) already expects unwrapped; switching to the standard paginated envelope would need a matching frontend change and risks breaking a working calendar UI, for a low-severity, non-security finding.
+
+Verification note: the local test database hit the same pre-existing `relation "hrms_roles" does not exist` setup failure documented earlier this session (unrelated to these changes — fails in every test's `setUp()` before any modified code runs). Verified instead via `manage.py check`, import-checking all 11 touched modules, and direct logic-level tests confirming both bug fixes (superuser-with-no-Role now passes; a branchless non-admin is now correctly denied) — plus cross-checking every new permission codename against real seeded role grants and actual frontend route/consumer usage in `tenant_qatest` before applying, so nothing currently working gets locked out.
+
+## 2. Hardcoded-Value Fixes (3 fixes, 16 files)
+
+**`apps/accounts/views.py`** — the new-employee welcome email's subject and body hardcoded "Royal HRMS" even though the tenant's actual `company_name` was already fetched two lines above (and correctly used elsewhere in the same email, e.g. the wrapper template) — just never plugged into the subject/body text itself. Now uses `company_name` in both.
+
+**ESI daily-wage exemption threshold** — `apps/payroll/views/cycles.py`'s ESI calculation had a bare `Decimal('176')`, while every sibling ESI parameter in the same function (wage ceiling, employee/employer rates) is a real `StatutoryConfig` field. Added `StatutoryConfig.esi_daily_wage_exemption_threshold` (migration `0017`, default 176.00 — preserves every existing row's current behavior exactly), added it to `StatutoryConfigSerializer`'s explicit field list, updated the view to read from it, and added an actual input field to the Statutory Config settings screen (`StatutoryConfigTab.tsx`) plus the `StatutoryConfig` TypeScript interface — genuinely admin-editable now, not just relocated into a DB default nobody can see.
+
+**"26 working days/month"** — duplicated as a bare literal in `_compute_employee_payslip`'s own default parameter and again at its sole call site's fallback. Added `PayrollSettings.default_working_days_per_month` (same migration `0017`, default 26). Resolved once per payroll run in `_run_payroll_processing` and passed through explicitly; `_compute_employee_payslip` no longer has its own hidden default for this parameter at all (now a required argument) — one source of truth instead of two literals that could drift apart.
+
+Verified: `manage.py check` clean, `makemigrations --check` clean, migration applied to `tenant_qatest` with the new fields confirmed present and correctly defaulted, the changed function signature confirmed safe (its one caller already used keyword arguments), and a full frontend `tsc --noEmit` — zero TypeScript errors.
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/hrms/views/separation.py` | Removed buggy local `_has_perm`; imports `core.permissions.has_perm` |
+| `backend/apps/announcements/views.py` | Removed redundant/misordered role-null guard in `CanPostAnnouncement` |
+| `backend/apps/payroll/views/ecr.py` | `_get_authorized_cycle` now uses `_is_admin()` instead of a branch-null heuristic |
+| `backend/apps/attendance/views/hr_attendance.py` | Added manager-scope checks to `HREmployeeMonthView`, `WeeklyOffAssignmentHistoryView` |
+| `backend/apps/recruitment/views.py` | Added `_can_access_candidate` checks; `ReferralRuleListCreateView`/`Detail` permission + codename + pagination fixes |
+| `backend/apps/payroll/views/{structures,statutory,branch_config,settings}.py` | Added `payroll.view` checks to previously-open GET endpoints |
+| `backend/apps/accounts/views.py` | Added `settings.view`/`documents.view` checks; welcome email now uses `company_name` |
+| `backend/apps/hrms/views/birthdays.py` | `BirthdaySettingsView.patch` now requires `settings.edit`, not `employees.view` |
+| `backend/apps/payroll/models.py`, `serializers.py`, `views/cycles.py`, `migrations/0017_...py` (new) | New `StatutoryConfig.esi_daily_wage_exemption_threshold`, `PayrollSettings.default_working_days_per_month` fields |
+| `frontend/app/dashboard/settings/payroll-config/_components/StatutoryConfigTab.tsx`, `frontend/types/payroll.ts` | New editable field for the ESI exemption threshold |
+
+---
+
+## Notes for Next Developer
+
+- **Email notification gaps are still open** — separation (zero emails at any stage), payslip dispatch/payment (employee never notified), expense approve/reject (no automatic email), Face ID registration approve/reject (completely silent, no email or in-app notification), attendance regularization (no email), password reset (no confirmation email), and assessment deadline reminders (feature doesn't exist). Full findings were reported to the user; not yet actioned.
+- **The dual-control gap on referral bonus approve/pay is a real process question, not a bug** — currently one `recruitment.edit` holder can both approve and pay a bonus. Needs a business decision (a new `recruitment.pay`-style codename + role grants) before implementing, not something to decide unilaterally.
+- **`LeaveCalendarView`/`PayslipQueryListView` still return unpaginated results** — both are naturally bounded in practice (one month/year of events; open queries only) and changing their response shape requires a coordinated frontend change. Deferred rather than risking a working calendar UI for a low-severity finding.
+- **`apps/accounts/views.py` (6,600+ lines) and `apps/recruitment/views.py` (2,200+ lines) are both far past the CLAUDE.md 300-line file-per-view-domain limit** — not touched in this pass, but noted by one of the audit sub-agents as making future permission audits of these files harder than they should be.
+
+---
+
+# Team Context — Closed All 7 Email Notification Gaps From the Audit
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+The last open item from the full-application audit: 7 lifecycle events that changed real state but never emailed anyone, found by the original email-coverage sub-agent. Fixed all 7 in one pass, reusing (and generalizing) the existing leave-email infrastructure rather than inventing a second pattern.
+
+---
+
+## 0. Infrastructure: `_send_leave_email` → `_send_lifecycle_email`
+
+**File:** `apps/notifications/signals.py`
+
+The existing leave-email helper (Celery-queued via `transaction.on_commit`, delivered by `send_lifecycle_email_task`) was already fully generic under the hood — its own task docstring already said "leave submitted/approved/rejected/forwarded/cancelled, **etc.**". Only its *name* was leave-specific. Renamed it (9 call sites, all within the leave section) and reused it for every fix below instead of writing six near-identical dispatch wrappers.
+
+## 1. Separation Lifecycle (5 templates)
+
+**Files:** `apps/notifications/signals.py`, new `apps/hrms/migrations/0026_seed_separation_email_templates.py`
+
+Now emails on: request submitted (employee + first-stage approver), each stage approval (employee "moved to next stage" + next approver), final approval, and rejection — matching leave's exact coverage. Previously zero emails at any stage, despite leave (a lower-stakes event) emailing on every transition.
+
+## 2. Expense Claims (4 templates)
+
+**Files:** `apps/notifications/signals.py`, new `apps/hrms/migrations/0027_seed_expense_email_templates.py`
+
+Now emails on submit (employee + resolved approver), approve, and reject. Previously the only email was an optional one an approver could manually attach a template name to in the approve/reject request — nothing sent by default.
+
+## 3. Payslip Dispatch/Payment (2 templates)
+
+**Files:** `apps/payroll/views/payslips.py` (`DispatchPayslipsView.post`), `apps/payroll/views/cycles.py` (`MarkCyclePaidView.post`), new `apps/payroll/migrations/0018_seed_payslip_email_templates.py`
+
+Both endpoints do a bulk `queryset.update()` — which fires no Django signal — so the affected payslips are captured in a list *before* the update (the only point at which "which employees were just dispatched to" is still knowable), then each employee is individually notified + emailed after. Previously only L1/L2 manager approval-gate emails existed (`apps/payroll/notifications.py`); the employee whose payslip actually became visible, or who was actually paid, was never told at all.
+
+## 4. Face ID Registration Approve/Reject (2 templates)
+
+**Files:** `apps/attendance/views/face_registration.py` (`FaceRegistrationReviewView.patch`), new `apps/attendance/migrations/0042_seed_face_registration_email_templates.py`
+
+This was **completely silent** — no in-app Notification, no email. Not signal-driven (a direct single-approver review action, not a lifecycle status ladder), so `_notify`/`_send_lifecycle_email` are called directly from the view after the transaction commits, matching the established pattern already used the same way in `accounts/views.py` and `hrms/tasks.py`.
+
+## 5. Attendance Regularization (4 templates)
+
+**Files:** `apps/notifications/signals.py`, new `apps/attendance/migrations/0041_seed_regularization_email_templates.py`
+
+Now emails on submit (employee + assigned HR), approve, and reject — same gap shape as expense.
+
+## 6. Password Reset Confirmation (1 template)
+
+**Files:** `apps/accounts/views.py` (`ResetPasswordView._reset`), new `apps/accounts/migrations/0098_seed_password_reset_email_template.py`
+
+A genuine security-relevant event (password just changed) previously only created an in-app notification the user might never open — now also emails immediately, alongside the existing notification.
+
+## 7. Assessment Deadline Reminders — New Feature (1 template + new periodic task)
+
+**Files:** `apps/assessments/models.py` (new `CandidateAssignment.deadline_reminder_sent_at`), `apps/assessments/tasks.py` (new `send_assessment_deadline_reminders`), `config/settings.py` (new `CELERY_BEAT_SCHEDULE` entry, daily 08:00 IST), new `apps/assessments/migrations/0012_...py` + `0013_seed_deadline_reminder_email_template.py`
+
+Didn't exist as a feature at all — an assignee who never opened the portal got no nudge as their deadline approached. New daily task finds assignments whose deadline falls within the next 24 hours, aren't complete, and haven't already been reminded; sends one email each and stamps `deadline_reminder_sent_at` so it can never repeat for the same assignment. Deliberately a **single** reminder, not a recurring nag — unlike `apps.payroll.tasks.send_payroll_approval_reminders`, which is intentionally an ongoing daily nudge until the manager acts; a deadline reminder is a one-time "heads up," not an escalation.
+
+---
+
+## Supporting Changes
+
+- `apps/notifications/models.py` — new `NOTIFICATION_TYPE_CHOICES`/`MODULE_CHOICES` entries (`face_registration_status`, `payslip_dispatched`, `payslip_paid`, `facial_recognition`, `payroll`), migrated via `apps/notifications/migrations/0009_...py` (metadata-only, same as every prior choices-only migration this session).
+- `apps/notifications/signals.py`'s `_MODULE_DEFAULT_CATEGORY` — added `payroll`, `documents`, `facial_recognition` mappings so notifications created with those modules actually respect the matching `NotificationSettings` toggle instead of silently falling through as always-enabled (a live gap: the payslip/face-ID notifications added here would otherwise have bypassed the user's own notification preferences).
+
+---
+
+## Key Files Changed
+
+| File | Change |
+|------|--------|
+| `backend/apps/notifications/signals.py` | `_send_lifecycle_email` (renamed/generalized); separation, expense, regularization email wiring; `_MODULE_DEFAULT_CATEGORY` additions |
+| `backend/apps/notifications/models.py`, `migrations/0009_...py` (new) | New notification type/module choices |
+| `backend/apps/attendance/views/face_registration.py` | Face ID review now notifies + emails (previously silent) |
+| `backend/apps/payroll/views/payslips.py`, `views/cycles.py` | Payslip dispatch/paid now email the employee |
+| `backend/apps/accounts/views.py` | Password reset now emails, not just in-app notifies |
+| `backend/apps/assessments/models.py`, `tasks.py`, `backend/config/settings.py` | New deadline-reminder field, periodic task, beat schedule entry |
+| `backend/apps/{hrms,attendance,accounts,payroll,assessments}/migrations/*.py` (9 new) | Seed the 19 new email templates + the 2 supporting schema migrations |
+
+---
+
+## Notes for Next Developer
+
+- **Verified live, not just by inspection**: created a real separation request and expense in `tenant_qatest`, walked them through every status transition, and directly executed (`Task.apply()`, not just queued) the resulting email tasks to confirm they render correctly and attempt a real send — `tenant_qatest` has zero SMTP rows configured, so each failed gracefully with "no active SMTP configuration," the exact same failure mode every other email in this codebase already has. All test data cleaned up afterward.
+- **All 19 new templates are admin-editable** via Settings → Email Templates, same as every pre-existing lifecycle email — nothing here is hardcoded HTML outside that system.
+- **This closes every finding from the original email-coverage audit.** Combined with the earlier permission/hardcoded-value fixes, the full 3-part audit requested this session is now fully addressed except the two deliberately-deferred items noted in the previous entry (referral bonus dual-control, calendar/query-list pagination).
+
+---
+
+# Team Context — Admin Dashboard Column-Stretch Gap + Remaining `ai` Attendance Query-Efficiency Work
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## Overview
+
+Two unrelated fixes bundled in one push: a reported dashboard spacing bug (found and fixed by actually running the app and screenshotting it, not guessing from code), and bringing in the one item deliberately left out of the earlier selective `ai` merge — attendance/geofencing query-efficiency work.
+
+---
+
+## 1. Admin Dashboard — Large Blank Gap Between Widgets
+
+**File:** `frontend/app/dashboard/_components/AdminDashboard.tsx`
+
+Reported as "some spaces in the dashboard." Logged into a live dev server as `system_admin` and found a genuine bug: a ~350px blank gap in the right column between the "Employee Lifecycle" card and "Audit Logs" below it. Root cause: the shared `.grid-2` CSS class (`display: grid; grid-template-columns: 1fr 1fr`) has no `align-items` override, so CSS Grid's default `stretch` was forcing the right column's wrapper `<div>` — which holds only one short card — to match the left column's height (two stacked cards). The card itself doesn't fill that stretched wrapper, leaving dead space before the next row began.
+
+Found the exact same bug had already been hit and patched once before, locally, on `app/dashboard/face-id-registrations/page.tsx` (`style={{ alignItems: "start" }}` on its own `grid-2`) — confirming this is a real, recurring issue and validating the fix. Couldn't fix it at the shared `.grid-2` class level: `app/dashboard/branches/_components/BranchManagement.tsx` uses the same class for a branch-card grid that *deliberately* relies on stretch (`height: "100%"` on each card, for equal-height same-row cards) — a global change would have fixed this bug and broken that one. Applied the same scoped `alignItems: "start"` fix to `AdminDashboard.tsx`'s two mismatched-column grids instead.
+
+Checked the other 3 dashboard variants (HR, Manager, Employee) for the same imbalance — their columns are reasonably balanced by widget count, so left them alone rather than speculatively "fixing" something not confirmed broken.
+
+Verified with a real before/after screenshot (Playwright, temporarily installed and removed afterward, same as prior visual-verification rounds this session) — gap fully gone, `tsc --noEmit` clean.
+
+## 2. Remaining `ai` Branch Item — Attendance/Geofencing Query Efficiency
+
+**Files:** `apps/attendance/services_attendance.py`, `services_geofencing.py`, `models.py`, new `migrations/0043_faceverificationattempt_fva_emp_fingerprint_time_idx.py`, new `tests_query_efficiency.py`
+
+The one piece of `ai`'s `6e50210` commit deliberately excluded from the earlier selective merge (see the "Voice Endpoints Converted to Async" entry above) — not voice-specific, but requested now. Three changes, all pure performance, no behavior change:
+
+- `PunchService.record_punch()` no longer runs `WorkFromHomeRequest.approved_for()` twice for a WFH punch — the result `GeofencingService._validate_wfh()` already computed is threaded through via a new `GeofenceResult.wfh_request` field into `AttendanceProcessorService.process_day()`'s new (optional, sentinel-defaulted so every other caller/mode is unaffected) `wfh_request` parameter.
+- `AttendanceProcessorService._is_holiday()` now reads from `HolidayCacheService` instead of querying `Holiday` directly on every punch.
+- New DB index on `FaceVerificationAttempt(employee, embedding_fingerprint, created_at)` — the anti-spoofing replay check filters on both together; no existing index led with both.
+
+**Migration collision, same pattern as before:** `ai`'s own migration was also numbered `0041` in the `attendance` app, colliding with this session's own `0041_seed_regularization_email_templates.py` (also a child of `0040_attendancerecord_work_mode`). Renumbered to `0043`, re-pointed at `0042` (this session's latest).
+
+**A second wrinkle, worth flagging:** the *original* (non-renumbered) version of this migration had already been applied to `tenant_qatest` at some point earlier the same day, under its original filename — almost certainly from another active session working on this same repo/database in parallel (a peer session was visible). Found via `django.db.utils.ProgrammingError: relation "fva_emp_fingerprint_time_idx" already exists` when applying the renumbered migration normally. Resolved cleanly: deleted the orphaned `django_migrations` row for the old filename (no matching file exists in this codebase), then `--fake`-applied the renumbered `0043` migration, since its DDL effect was already physically present. Verified after: exactly one copy of the index, no orphaned migration records, `makemigrations --check` clean.
+
+Verified: `manage.py check` clean, migration applied (via the fake-apply reconciliation above) to `tenant_qatest`, and all 9 tests in the new `tests_query_efficiency.py` pass.
+
+---
+
+## Notes for Next Developer
+
+- **Another session may be concurrently working on this same repo and Neon database** — the stale migration record found in item 2 is the concrete evidence. Worth being aware of when diagnosing anything that looks like it "already happened" without a corresponding commit in this branch's own history — check `django_migrations.applied` timestamps against actual conversation/commit history before assuming a bug, the way this entry's investigation did.
+- **`ai` branch (`6e50210`) is now fully incorporated** — nothing outstanding from it as of this entry.
+
+---
+
+# Team Context — Sarvam Voice Features Down (Account Credits), QATEST Dummy Data Removed
+
+**Author:** G.Durga Prasad
+**Date:** 31 August 2026
+**Branch:** Backend/24/08/2026
+
+---
+
+## 1. Voice Commands (Chat, STT, TTS) All Failing — Sarvam Account Out of Credits
+
+**No code change** — a live-environment finding, documented so nobody re-investigates it as a bug.
+
+Dev-server logs showed `/api/voice/speak/` returning 502, with `apps.voice_commands.sarvam_client` logging `402 Client Error: Payment Required` for every Sarvam call. Traced through `sarvam_client.py`'s `text_to_speech()`: 402 isn't one of the specially-handled statuses (403/400/422/429/500/503), so it falls through to a generic `SarvamTTSServiceError`, which `views_speak.py` maps to `502 Bad Gateway` — exactly the "Sarvam returned HTTP 402" the frontend console showed.
+
+The real cause, confirmed directly from Sarvam's own response body in the logs: `{"error":{"message":"No credits available.","code":"insufficient_quota_error"}}`. Not TTS-specific — chat completions (intent classification) and speech-to-text were failing with the identical `insufficient_quota_error` in the same log window, confirming it's account-wide, not one endpoint. Re-ran a live check directly against `sarvam_client.chat_completion()`/`text_to_speech()` from a `manage.py shell` — still failing as of 17:32, so this had not been topped up yet.
+
+**No action needed in code.** This is a Sarvam account billing state — needs a credits top-up on the Sarvam dashboard. Every layer of this feature already degrades gracefully per its original fail-soft design (chat/STT return `None`/no-match, TTS silently stays unavailable) — nothing else in the app is affected while credits are down.
+
+## 2. QATEST Dummy Data Removed
+
+The light sample of `[DEMODATA]`-tagged test data added earlier this session to `tenant_qatest` (2 announcements, 4 leave requests, 4 expenses, 3 candidates, 1 separation request, 18 attendance punches / 10 records for emp1/emp2/mgr1, plus department/designation/birthday fields on 4 accounts) was deleted on request and verified clean — zero `[DEMODATA]`-tagged rows remain, and the touched fields were reverted to blank/`None`. The 7 real QATEST accounts, branches, and roles were untouched throughout.

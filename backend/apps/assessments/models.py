@@ -192,6 +192,11 @@ class CandidateAssignment(models.Model):
     started_at    = models.DateTimeField(null=True, blank=True)
     deadline      = models.DateTimeField(null=True, blank=True)
     completed_at  = models.DateTimeField(null=True, blank=True)
+    deadline_reminder_sent_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When the one-time "deadline approaching" reminder email was sent — '
+                   'unset means none has gone out yet for this assignment.',
+    )
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 

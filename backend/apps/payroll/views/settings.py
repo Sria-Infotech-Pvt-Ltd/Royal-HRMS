@@ -17,6 +17,9 @@ class PayrollSettingsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view payroll settings.', http_status=403)
+
         settings_obj, _ = PayrollSettings.objects.get_or_create(
             pk=PayrollSettings.objects.values_list('pk', flat=True).first()
             or '00000000-0000-0000-0000-000000000001',

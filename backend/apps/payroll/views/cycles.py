@@ -93,7 +93,7 @@ def _lwf_due_this_cycle(statutory, cycle_month) -> bool:
 
 def _compute_employee_payslip(
     salary_config, components, branch_config, statutory, adjustments, structure,
-    lop_days=Decimal('0'), total_working_days=26, cycle_month=None,
+    total_working_days, lop_days=Decimal('0'), cycle_month=None,
     esi_covered_earlier_this_period=False,
 ) -> dict:
     """
@@ -101,6 +101,12 @@ def _compute_employee_payslip(
     original ProcessPayrollView loop body (Phase 2: only extracted into its
     own function so process_payroll_cycle() can call it once per employee
     against pre-fetched/cached inputs instead of querying inline).
+
+    total_working_days is required, not defaulted, deliberately — its only
+    caller resolves it from PayrollSettings.default_working_days_per_month
+    (with an attendance-derived value preferred when available); this stays
+    a pure function with no config lookups of its own, so a bare "26" can't
+    silently drift back in as an unconfigurable fallback.
     """
     monthly_ctc = salary_config.monthly_ctc
     basic = Decimal('0')
@@ -173,12 +179,13 @@ def _compute_employee_payslip(
         gross <= statutory.esi_wage_ceiling or esi_covered_earlier_this_period
     ):
         esi_employer = gross * statutory.esi_employer_rate / 100
-        # An employee averaging <=₹176/day is exempt from their OWN 0.75%
-        # share — the employer's 3.25% share is still due regardless; this
-        # is a deliberate asymmetric exemption, not a skip of both sides.
+        # An employee averaging at or below esi_daily_wage_exemption_threshold
+        # is exempt from their OWN contribution share — the employer's share
+        # is still due regardless; this is a deliberate asymmetric exemption,
+        # not a skip of both sides.
         days_paid = max(Decimal('1'), Decimal(total_working_days) - lop_days)
         daily_wage = gross / days_paid
-        if daily_wage > Decimal('176'):
+        if daily_wage > statutory.esi_daily_wage_exemption_threshold:
             esi_employee = gross * statutory.esi_employee_rate / 100
 
     # PT
@@ -318,6 +325,10 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     (an out-of-branch/inactive/system_admin code simply won't match and is
     silently excluded, same as if it had never been selected)."""
     default_structure = SalaryStructure.objects.filter(is_default=True, is_active=True).first()
+    payroll_settings = PayrollSettings.objects.first()
+    default_working_days = (
+        payroll_settings.default_working_days_per_month if payroll_settings else 26
+    )
 
     employees_qs = _eligible_employees_qs(cycle)
     if selected_employee_codes is not None:
@@ -465,8 +476,9 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         # Late marks → LOP per the configured policy threshold (0 if late-mark LOP is disabled)
         late_lop     = (Decimal(late_count // late_per_lop) * late_lop_unit) if late_per_lop else Decimal('0')
         emp_lop      = absent_days + (half_days * Decimal('0.5')) + late_lop
-        # Use actual working days from attendance records; fall back to settings default if no records
-        emp_working_days = working_days_by_emp.get(employee.id) or 26
+        # Use actual working days from attendance records; fall back to
+        # PayrollSettings.default_working_days_per_month if no records
+        emp_working_days = working_days_by_emp.get(employee.id) or default_working_days
         computed[employee.id] = _compute_employee_payslip(
             salary_config, components, branch_config, statutory, adjustments, structure,
             lop_days=emp_lop,
@@ -1095,15 +1107,36 @@ class MarkCyclePaidView(APIView):
         cycle.marked_paid_by = request.user
         cycle.save(update_fields=['status', 'paid_at', 'marked_paid_by', 'updated_at'])
 
+        payable_statuses = [
+            EmployeePayslip.STATUS_DRAFT,
+            EmployeePayslip.STATUS_SENT,
+            EmployeePayslip.STATUS_ACKNOWLEDGED,
+            EmployeePayslip.STATUS_RESOLVED,
+        ]
+        # Captured before the bulk .update() below, same reasoning as
+        # DispatchPayslipsView.post() — a queryset .update() fires no
+        # signal, and these rows won't match payable_statuses anymore once
+        # it's applied.
+        paid_payslips = list(
+            cycle.payslips.filter(status__in=payable_statuses).select_related('employee')
+        )
+
         # Mark all draft/sent/acknowledged payslips as paid
-        cycle.payslips.filter(
-            status__in=[
-                EmployeePayslip.STATUS_DRAFT,
-                EmployeePayslip.STATUS_SENT,
-                EmployeePayslip.STATUS_ACKNOWLEDGED,
-                EmployeePayslip.STATUS_RESOLVED,
-            ],
-        ).update(status=EmployeePayslip.STATUS_PAID, paid_at=now)
+        cycle.payslips.filter(status__in=payable_statuses).update(
+            status=EmployeePayslip.STATUS_PAID, paid_at=now,
+        )
+
+        from apps.notifications.signals import _notify, _send_lifecycle_email
+        for payslip in paid_payslips:
+            employee = payslip.employee
+            _notify(employee, 'Salary Credited',
+                    f'Your salary for {cycle.cycle_start.strftime("%B %Y")} has been credited.',
+                    'payslip_paid', 'payroll', str(payslip.id))
+            _send_lifecycle_email(employee, 'payslip_paid', {
+                'employee_name': employee.full_name or employee.email,
+                'cycle_month':   cycle.cycle_start.strftime('%B %Y'),
+                'net_pay':       f'{payslip.net_pay:.2f}',
+            })
 
         logger.info('Cycle %s marked as paid by %s', pk, request.user.email)
         AuditLog.objects.create(

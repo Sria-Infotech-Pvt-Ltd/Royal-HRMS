@@ -205,23 +205,34 @@ SARVAM_API_KEY = env('SARVAM_API_KEY', default='')
 # built-in local-disk DefaultStorage rather than Cloudinary, since Django
 # never applied them.
 #
-# Values are held in underscore-prefixed names, not the real
-# DEFAULT_FILE_STORAGE/STATICFILES_STORAGE settings — Django raises
-# ImproperlyConfigured ("mutually exclusive") the moment both a legacy
-# storage setting AND STORAGES are defined at once. Django still resolves
-# settings.STATICFILES_STORAGE / settings.DEFAULT_FILE_STORAGE as computed
-# attributes derived FROM STORAGES when the legacy names themselves are left
-# unset, which is what django-cloudinary-storage's own collectstatic
-# override needs (it reads settings.STATICFILES_STORAGE as a raw attribute).
-_DEFAULT_FILE_STORAGE_BACKEND = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
-_STATICFILES_STORAGE_BACKEND  = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+# Kept as their own names (not underscore-prefixed) — a prior version of
+# this file believed Django 5.1 raises ImproperlyConfigured ("mutually
+# exclusive") if both a legacy storage setting and STORAGES are defined at
+# once, and hid them from Django as _DEFAULT_FILE_STORAGE_BACKEND/
+# _STATICFILES_STORAGE_BACKEND for that reason. That's not true of the
+# installed Django version (5.1.15) — grepping django/ turns up no such
+# check, and django.contrib.staticfiles.checks.check_storages only
+# requires STORAGES['staticfiles'] to exist, nothing about
+# STATICFILES_STORAGE. It's also NOT true that Django computes
+# settings.STATICFILES_STORAGE from STORAGES when the legacy name is left
+# unset — Django 5.1 removed STATICFILES_STORAGE from its own internals
+# entirely (no reference to it anywhere under django/), so reading it as a
+# raw attribute when unset raises AttributeError, not a derived value. That
+# was silently breaking collectstatic in production: django-cloudinary-
+# storage's own collectstatic override (must come before staticfiles in
+# INSTALLED_APPS below) still reads settings.STATICFILES_STORAGE directly —
+# pre-STORAGES third-party code that hasn't caught up. Setting both here
+# keeps STORAGES as the setting Django itself actually uses, while giving
+# that older package's raw attribute read something to find.
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
+STATICFILES_STORAGE  = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 STORAGES = {
     'default': {
-        'BACKEND': _DEFAULT_FILE_STORAGE_BACKEND,
+        'BACKEND': DEFAULT_FILE_STORAGE,
     },
     'staticfiles': {
-        'BACKEND': _STATICFILES_STORAGE_BACKEND,
+        'BACKEND': STATICFILES_STORAGE,
     },
 }
 
@@ -388,6 +399,13 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.payroll.tasks.send_payroll_approval_reminders',
         'schedule': crontab(hour=10, minute=0),
     },
+    # Runs daily at 08:00 IST — one-time reminder email for an assessment
+    # assignment whose deadline is within the next 24 hours and hasn't
+    # already been reminded (see REMINDER_WINDOW_HOURS in tasks.py).
+    'send-assessment-deadline-reminders': {
+        'task':     'apps.assessments.tasks.send_assessment_deadline_reminders',
+        'schedule': crontab(hour=8, minute=0),
+    },
 }
 
 # ─── DRF ─────────────────────────────────────────────────────────────────────
@@ -492,6 +510,13 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB files
 
 # ─── Security (production only) ───────────────────────────────────────────────
 if not DEBUG:
+    # Django sits behind Nginx, which terminates TLS and proxies to this app
+    # over plain HTTP — without this, request.is_secure() is always False
+    # here, and SECURE_SSL_REDIRECT below would redirect every request
+    # (even ones that already arrived over HTTPS) in an infinite loop.
+    # Nginx must set X-Forwarded-Proto to the original scheme for this to
+    # be trustworthy.
+    SECURE_PROXY_SSL_HEADER         = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT             = True
     SECURE_HSTS_SECONDS             = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS  = True

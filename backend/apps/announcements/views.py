@@ -58,8 +58,11 @@ class CanPostAnnouncement(BasePermission):
     def has_object_permission(self, request, view, obj) -> bool:
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
-        if not request.user.role:
-            return False
+        # _has_perm (core.permissions.has_perm) already checks the superuser
+        # bypass before its own role-null guard — a redundant `if not
+        # request.user.role` check here used to run first and deny a
+        # superuser with no linked Role row before _has_perm ever got a
+        # chance to bypass it.
         if _has_perm(request.user, 'settings.edit'):
             return True
         return obj.posted_by_id == request.user.id

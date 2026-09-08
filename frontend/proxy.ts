@@ -7,7 +7,11 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/announcements": "announcements.view",
   "/dashboard/interview-list": "recruitment.view",
   "/dashboard/candidate-review": "recruitment.view",
-  "/dashboard/assessments": "assessments.view",
+  // /dashboard/assessments intentionally absent — every employee can view
+  // their own assigned assessments here, not just assessments.* holders
+  // (same self-service reasoning as /dashboard/separation below). The page
+  // itself picks admin management vs. EmployeeMyAssessments based on
+  // permission (see app/dashboard/assessments/page.tsx's isAdminView check).
   "/dashboard/onboarding-approvals": "employees.approve",
   "/dashboard/email-logs": "recruitment.view",
   "/dashboard/employees": "employees.view",
@@ -192,16 +196,20 @@ export function proxy(request: NextRequest) {
     // Superusers are platform/IT-provisioned admin accounts, never hired
     // through the candidate pipeline — the onboarding wizard never applies
     // to them, regardless of their onboarding_status value (see login/page.tsx
-    // for the matching exemption at login time). Branch Admin is the same
-    // kind of administrative account (assigned at branch-creation time, not
-    // hired through the candidate pipeline), so it gets the same exemption.
-    const needsOnboarding = onboardingStatus !== "complete" && !isSuperuser && !canManageBranch;
+    // for the matching exemption at login time). Branch Admin accounts, unlike
+    // superusers, ARE created through the same employee-creation flow as any
+    // new hire (see BranchManagement.tsx / EmployeeListCreateView), so they
+    // still start ONBOARDING_PENDING and must complete the same wizard.
+    const needsOnboarding = onboardingStatus !== "complete" && !isSuperuser;
     // Default assessments get auto-assigned to every new employee record on
     // creation — including managers — with no role distinction, so a manager
     // can end up with assessment_status "pending" despite the pre-onboarding
     // assessment portal being meant for new-hire employees, not managers.
-    // Exempt can_manage_team here since the backend doesn't. Superusers and
-    // Branch Admin are exempt too, for the same reason as needsOnboarding above.
+    // Exempt can_manage_team here since the backend doesn't. Branch Admin is
+    // exempt from the assessment portal specifically (unlike the onboarding
+    // wizard above, which now does apply to them) — the pre-onboarding
+    // assessments target individual-contributor new hires, not admin-tier
+    // accounts. Superusers remain exempt from both, same reason as above.
     const needsAssessments = onboardingStatus === "complete" && assessmentStatus === "pending" && !canManageTeam && !canManageBranch && !isSuperuser;
 
     // Block /onboarding/assessments until HR has approved the onboarding form.

@@ -55,6 +55,42 @@ def _can_access_candidate(user, candidate) -> bool:
     return candidate_branch.strip().lower() == user_branch.lower()
 
 
+def _scoped_candidate_branch(request, *, required: bool = True):
+    """
+    Resolves a non-admin caller's own branch and injects it into a mutable
+    copy of request.data, overriding whatever branch id the client sent —
+    the frontend's own copy of this (matching the JWT's branch name string
+    against a separately-fetched, active-only branch list, for a field that's
+    locked/read-only in the UI anyway) is a best-effort display convenience
+    that can legitimately come up empty or stale; this is the actual source
+    of truth. Mirrors the read-side scoping in CandidateListCreateView.get
+    and _can_access_candidate.
+
+    Returns (data, None) to proceed, or (None, error_response) to bail out.
+    required=True (creating a new candidate — no existing branch to fall
+    back on) errors clearly if the caller's own account has no branch set.
+    required=False (editing a candidate the caller can already access per
+    _can_access_candidate, which treats a branchless non-admin as
+    unrestricted) instead leaves the client's data untouched in that edge
+    case, matching that same leniency rather than newly blocking the edit.
+    """
+    data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+    if _has_perm(request.user, 'settings.edit'):
+        return data, None
+
+    user_branch = (getattr(request.user, 'branch', '') or '').strip()
+    if not user_branch:
+        if required:
+            return None, error('Your account is not assigned to a branch. Contact an administrator.')
+        return data, None
+
+    from apps.branch.models import Branch
+    branch_obj = Branch.objects.filter(branch_name__iexact=user_branch).first()
+    if not branch_obj:
+        return None, error('Your assigned branch could not be found. Contact an administrator.')
+    data['branch'] = branch_obj.id
+    return data, None
+
 
 _DENIED = 'You do not have permission to perform this action.'
 
@@ -369,7 +405,13 @@ class CandidateListCreateView(APIView):
         if not _has_perm(request.user, 'recruitment.create'):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
-        serializer = CandidateCreateSerializer(data=request.data)
+        # Non-admin users are locked to their own branch — same scoping as
+        # get() above (see _scoped_candidate_branch).
+        data, branch_err = _scoped_candidate_branch(request)
+        if branch_err:
+            return branch_err
+
+        serializer = CandidateCreateSerializer(data=data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)
 
@@ -490,7 +532,11 @@ class CandidateDetailView(APIView):
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error('Cannot edit a candidate who has already been converted to an employee.')
 
-        serializer = CandidateUpdateSerializer(candidate, data=request.data)
+        data, branch_err = _scoped_candidate_branch(request, required=False)
+        if branch_err:
+            return branch_err
+
+        serializer = CandidateUpdateSerializer(candidate, data=data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
@@ -526,7 +572,11 @@ class CandidateDetailView(APIView):
         if candidate.status == Candidate.STATUS_CONVERTED:
             return error('Cannot edit a candidate who has already been converted to an employee.')
 
-        serializer = CandidateUpdateSerializer(candidate, data=request.data, partial=True)
+        data, branch_err = _scoped_candidate_branch(request, required=False)
+        if branch_err:
+            return branch_err
+
+        serializer = CandidateUpdateSerializer(candidate, data=data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors,
                          http_status=status.HTTP_422_UNPROCESSABLE_ENTITY)
@@ -786,6 +836,8 @@ class CandidateHRDecisionView(APIView):
             candidate = Candidate.objects.get(pk=pk, status=Candidate.STATUS_SELECTED)
         except Candidate.DoesNotExist:
             return error('Candidate not found or not selected.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         decision = request.data.get('decision')
         if decision not in {'approve', 'reject'}:
@@ -1306,6 +1358,8 @@ class SendPortalLoginView(APIView):
             candidate = Candidate.objects.select_for_update().get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if candidate.status not in (
             Candidate.STATUS_SELECTED,
@@ -1444,6 +1498,8 @@ class ResendPortalLoginView(APIView):
             candidate = Candidate.objects.select_for_update().get(pk=pk)
         except Candidate.DoesNotExist:
             return error('Candidate not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if not _can_access_candidate(request.user, candidate):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
         if not candidate.portal_credentials_sent or not candidate.portal_user_id:
             return error(
@@ -1645,11 +1701,22 @@ class ReferralRuleListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'settings.view'):
+            return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rules = ReferralRule.objects.all()
-        return success('Rules fetched.', {'results': ReferralRuleSerializer(rules, many=True).data})
+        # default_page_size=100: the settings page renders this whole list
+        # at once (order-ranked bonus tiers, not a growing transactional
+        # table) with no pagination UI of its own — a bounded set, so this
+        # keeps that page's existing "show everything" behavior intact
+        # while still capping the endpoint like every other list view.
+        page_obj, paginator = paginate(rules, request, default_page_size=100)
+        return success(
+            'Rules fetched.',
+            paginated_data(paginator, page_obj, ReferralRuleSerializer(page_obj.object_list, many=True).data),
+        )
 
     def post(self, request):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         serializer = ReferralRuleSerializer(data=request.data)
         if not serializer.is_valid():
@@ -1670,7 +1737,7 @@ class ReferralRuleDetailView(APIView):
             return None
 
     def patch(self, request, pk):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:
@@ -1683,7 +1750,7 @@ class ReferralRuleDetailView(APIView):
         return success('Rule updated.', ReferralRuleSerializer(rule).data)
 
     def delete(self, request, pk):
-        if not _has_perm(request.user, 'settings.view'):
+        if not _has_perm(request.user, 'settings.edit'):
             return error('Permission denied.', http_status=status.HTTP_403_FORBIDDEN)
         rule = self._get_rule(pk)
         if not rule:

@@ -60,6 +60,7 @@ export interface StatutoryConfig {
   esi_wage_ceiling: string;
   esi_employee_rate: string;
   esi_employer_rate: string;
+  esi_daily_wage_exemption_threshold: string;
   lwf_applicable: boolean;
   lwf_employee_amount: string;
   lwf_employer_amount: string;

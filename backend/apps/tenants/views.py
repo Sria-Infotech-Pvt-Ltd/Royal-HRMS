@@ -31,7 +31,9 @@ from apps.tenants.throttles import (
     PlatformAdminForgotPasswordRateThrottle, PlatformAdminLoginRateThrottle, PlatformAdminOTPVerifyRateThrottle,
 )
 from apps.tenants.tokens import PlatformAdminRefreshToken
-from apps.tenants.utils import send_platform_admin_invite_email, send_platform_admin_otp_email
+from apps.tenants.utils import (
+    _get_platform_smtp_connection, send_platform_admin_invite_email, send_platform_admin_otp_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +394,54 @@ class PlatformSMTPSettingsView(APIView):
         serializer.save()
         logger.info('Platform SMTP settings updated by %s', request.user.email)
         return success('Platform SMTP settings saved.', PlatformSMTPSettingsSerializer(smtp).data)
+
+
+class PlatformSMTPTestEmailView(APIView):
+    """
+    Sends a real test email through the currently SAVED PlatformSMTPSettings
+    row, so a platform admin can confirm the credentials actually work
+    end-to-end (host/port/auth/TLS) without waiting for the next real
+    company-provisioning email to either arrive or silently fail — that path
+    is deliberately best-effort/silent (see send_company_provisioned_email),
+    so it's a poor way to test deliverability. Defaults to the requesting
+    admin's own login email so the common case needs no input at all.
+    """
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def post(self, request):
+        to_email = (request.data.get('to') or request.user.email or '').strip()
+        if not to_email:
+            return error('No recipient email available.', http_status=status.HTTP_400_BAD_REQUEST)
+
+        connection, from_email = _get_platform_smtp_connection()
+        if not connection:
+            return error(
+                'SMTP settings are not fully configured — save host, username, password, '
+                'and from-email first.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from django.core.mail import EmailMultiAlternatives
+
+        try:
+            message = EmailMultiAlternatives(
+                subject='Royal HRMS — test email',
+                body=(
+                    'This is a test email confirming your platform SMTP settings '
+                    '(Settings → Email Settings) are working correctly.'
+                ),
+                from_email=from_email,
+                to=[to_email],
+                connection=connection,
+            )
+            message.send()
+        except Exception as exc:
+            logger.warning('Platform SMTP test email to %s failed: %s', to_email, exc)
+            return error(f'Failed to send test email: {exc}', http_status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info('Platform SMTP test email sent to %s by %s', to_email, request.user.email)
+        return success(f'Test email sent to {to_email}.')
 
 
 # ─── Platform-admin password recovery ─────────────────────────────────────────

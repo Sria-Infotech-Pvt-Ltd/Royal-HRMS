@@ -17,6 +17,7 @@ from apps.tenants.views import (
     PlatformAdminTokenRefreshView,
     PlatformAdminVerifyOtpView,
     PlatformSMTPSettingsView,
+    PlatformSMTPTestEmailView,
 )
 
 urlpatterns = [
@@ -39,5 +40,6 @@ urlpatterns = [
     path('audit-logs/',      PlatformAdminAuditLogListView.as_view(),   name='platform-admin-audit-log-list'),
     path('dashboard-stats/', PlatformAdminDashboardStatsView.as_view(), name='platform-admin-dashboard-stats'),
 
-    path('smtp-settings/', PlatformSMTPSettingsView.as_view(), name='platform-admin-smtp-settings'),
+    path('smtp-settings/',      PlatformSMTPSettingsView.as_view(),   name='platform-admin-smtp-settings'),
+    path('smtp-settings/test/', PlatformSMTPTestEmailView.as_view(), name='platform-admin-smtp-settings-test'),
 ]

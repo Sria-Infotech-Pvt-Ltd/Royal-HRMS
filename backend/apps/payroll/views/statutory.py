@@ -18,6 +18,9 @@ class StatutoryConfigListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view statutory configs.', http_status=403)
+
         configs = StatutoryConfig.objects.select_related('state').order_by('state__name')
         serializer = StatutoryConfigSerializer(configs, many=True)
         return success('Statutory configs retrieved.', serializer.data)
@@ -45,6 +48,9 @@ class StatutoryConfigDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view statutory configs.', http_status=403)
+
         config = get_object_or_404(StatutoryConfig, pk=pk)
         return success('Statutory config retrieved.', StatutoryConfigSerializer(config).data)
 
@@ -68,6 +74,9 @@ class StatutoryConfigByStateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, state_pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view statutory configs.', http_status=403)
+
         state = get_object_or_404(State, pk=state_pk)
         config = StatutoryConfig.objects.filter(state=state).first()
         if config is None:

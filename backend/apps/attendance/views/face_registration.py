@@ -240,6 +240,28 @@ class FaceRegistrationReviewView(APIView):
 
         logger.info('Face registration %s %s by %s', pk, data['status'], request.user.email)
 
+        # No signal covers this model (a direct, single-approver review
+        # action, not a lifecycle status ladder like leave/expense) — this
+        # was previously completely silent: no in-app notification, no
+        # email, leaving an employee whose Face ID was rejected with no way
+        # to find out except asking HR directly.
+        from apps.notifications.signals import _notify, _send_lifecycle_email
+        employee = face_request.employee
+        employee_name = employee.full_name or employee.email
+        if data['status'] == FaceRegistrationRequest.STATUS_APPROVED:
+            _notify(employee, 'Face ID Registration Approved',
+                    'Your Face ID registration has been approved. You can now use it to clock in.',
+                    'face_registration_status', 'facial_recognition', str(pk))
+            _send_lifecycle_email(employee, 'face_registration_approved', {'employee_name': employee_name})
+        else:
+            _notify(employee, 'Face ID Registration Rejected',
+                    'Your Face ID registration was rejected. Please try registering again.',
+                    'face_registration_status', 'facial_recognition', str(pk))
+            _send_lifecycle_email(employee, 'face_registration_rejected', {
+                'employee_name': employee_name,
+                'notes':         face_request.notes or 'No additional details provided.',
+            })
+
         return success(
             f"Face registration request {data['status']}.",
             FaceRegistrationReadSerializer(face_request).data,

@@ -423,16 +423,12 @@ export default function OnboardingPage() {
 
         {/* ── Header ── */}
         <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
-          <div style={{
-            width: 68, height: 68, borderRadius: "50%",
-            background: "linear-gradient(135deg, #1e4e8c 0%, #2563eb 100%)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 1.25rem",
-            boxShadow: "0 6px 24px rgba(30,78,140,0.28)",
-            fontSize: 30,
-          }}>
-            👑
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Royal HRMS"
+            style={{ height: 56, width: "auto", objectFit: "contain", margin: "0 auto 1.25rem", display: "block" }}
+          />
           <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: "var(--on-bg)", marginBottom: ".5rem", letterSpacing: "-.02em" }}>
             Complete Your Profile
           </h1>
@@ -535,6 +531,7 @@ export default function OnboardingPage() {
               panNumber={form.pan_number}
               onPanNumberChange={v => { set("pan_number", v); setPanErr(null); }}
               onPanCardUpload={handlePanCardUpload}
+              onPanValidationError={setPanErr}
               panErr={panErr}
               panSaving={panSaving}
             />
@@ -648,7 +645,7 @@ const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }
 
 function TabDocuments({
   docTypes, docs, uploadedTypes, uploading, fileRefs, onUpload,
-  panNumber, onPanNumberChange, onPanCardUpload, panErr, panSaving,
+  panNumber, onPanNumberChange, onPanCardUpload, onPanValidationError, panErr, panSaving,
 }: {
   docTypes: DocumentTypeConfig[];
   docs: UploadedDoc[];
@@ -659,6 +656,7 @@ function TabDocuments({
   panNumber: string;
   onPanNumberChange: (v: string) => void;
   onPanCardUpload: (file: File) => void;
+  onPanValidationError: (msg: string) => void;
   panErr: string | null;
   panSaving: boolean;
 }) {
@@ -734,9 +732,25 @@ function TabDocuments({
                     <button
                       className="btn btn-ghost"
                       style={{ fontSize: ".83rem", borderColor: uploaded ? "var(--success)" : undefined, color: uploaded ? "var(--success)" : undefined }}
-                      onClick={() => fileRefs.current[dt.type_key]?.click()}
-                      disabled={isUploading || panBlocked}
-                      title={panBlocked ? "Enter a valid PAN number first" : undefined}
+                      onClick={() => {
+                        // Validate before ever opening the file picker, not just
+                        // via a disabled attribute — a disabled button swallows
+                        // the click entirely, leaving the user with no visible
+                        // reason why "Upload" does nothing (see handlePanCardUpload,
+                        // which already has these exact messages but never used to
+                        // run because the click that would trigger it was blocked
+                        // one step earlier).
+                        if (panBlocked) {
+                          onPanValidationError(
+                            panNumber.trim()
+                              ? "Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter."
+                              : "Enter your PAN number before uploading the PAN card.",
+                          );
+                          return;
+                        }
+                        fileRefs.current[dt.type_key]?.click();
+                      }}
+                      disabled={isUploading}
                       type="button"
                     >
                       {isUploading

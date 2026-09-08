@@ -2,14 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import platformAdminApi from "@/lib/platformAdminApi";
 import { API } from "@/lib/api/endpoints";
-
-const FEATURES = [
-  { icon: "ti-building", text: "Provision a new company in minutes, fully isolated from every other one" },
-  { icon: "ti-shield-check", text: "Every company's data lives in its own schema — no admin here can see inside one" },
-  { icon: "ti-chart-bar", text: "Real usage, not just registry counts — see which companies are actually active" },
-];
 
 export default function PlatformAdminLoginPage() {
   const router = useRouter();
@@ -38,46 +33,18 @@ export default function PlatformAdminLoginPage() {
     <div className="login-page-root">
       <div className="login-layout">
 
-        {/* Left panel — gradient brand identity, matching the platform-admin dashboard's hero */}
-        <div className="login-brand-panel">
-          <i
-            className="ti ti-shield-lock"
-            style={{ position: "absolute", right: -30, bottom: -40, fontSize: 280, opacity: 0.08 }}
-            aria-hidden
+        {/* Left panel — same photo used on the tenant/employee login screen,
+            for one consistent look across every login surface. No overlaid
+            text or logo here, matching that page exactly. */}
+        <div className="login-image-panel">
+          <Image
+            src="/login.jpg"
+            alt="Royal HRMS"
+            fill
+            className="login-image"
+            sizes="60vw"
+            priority
           />
-          <div style={{ position: "relative", maxWidth: 380 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-              <div
-                style={{
-                  width: 40, height: 40, borderRadius: 10, background: "rgba(255,255,255,0.14)",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}
-              >
-                <i className="ti ti-shield-lock" style={{ fontSize: 20, color: "#fff" }} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>Royal HRMS</div>
-                <div style={{ fontSize: 11.5, opacity: 0.7 }}>Platform Admin</div>
-              </div>
-            </div>
-
-            <h1 style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.25, marginBottom: 12 }}>
-              One console for every company you run.
-            </h1>
-            <p style={{ fontSize: 14, opacity: 0.8, lineHeight: 1.6, marginBottom: 32 }}>
-              Create companies, manage platform admins, and monitor usage across every
-              tenant — from a single, isolated operator account.
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {FEATURES.map(f => (
-                <div key={f.icon} className="pa-login-feature">
-                  <i className={`ti ${f.icon}`} />
-                  <span>{f.text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Right panel — sign-in form */}

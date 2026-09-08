@@ -21,6 +21,9 @@ class SalaryStructureListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view salary structures.', http_status=403)
+
         structures = SalaryStructure.objects.filter(is_active=True).order_by('name')
         serializer = SalaryStructureListSerializer(structures, many=True)
         return success('Salary structures retrieved.', serializer.data)
@@ -48,6 +51,9 @@ class SalaryStructureDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view salary structures.', http_status=403)
+
         structure = get_object_or_404(SalaryStructure, pk=pk)
         serializer = SalaryStructureSerializer(structure)
         return success('Salary structure retrieved.', serializer.data)
@@ -85,6 +91,9 @@ class SalaryComponentListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, structure_pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view salary components.', http_status=403)
+
         structure = get_object_or_404(SalaryStructure, pk=structure_pk)
         components = structure.components.filter(is_active=True)
         serializer = SalaryComponentSerializer(components, many=True)

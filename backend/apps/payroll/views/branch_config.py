@@ -18,6 +18,9 @@ class BranchPayrollConfigListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view branch payroll configs.', http_status=403)
+
         configs = BranchPayrollConfig.objects.select_related(
             'branch', 'branch__state', 'salary_structure',
         ).order_by('branch__branch_name')
@@ -50,6 +53,9 @@ class BranchPayrollConfigDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view branch payroll configs.', http_status=403)
+
         config = get_object_or_404(
             BranchPayrollConfig.objects.select_related('branch', 'branch__state', 'salary_structure'),
             pk=pk,
@@ -92,6 +98,9 @@ class BranchPayrollConfigByBranchView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, branch_pk):
+        if not _has_perm(request.user, 'payroll.view'):
+            return error('Only HR admin can view branch payroll configs.', http_status=403)
+
         branch = get_object_or_404(Branch, pk=branch_pk)
         config = BranchPayrollConfig.objects.filter(branch=branch).select_related(
             'branch', 'branch__state', 'salary_structure',
