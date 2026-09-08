@@ -13,7 +13,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   // itself picks admin management vs. EmployeeMyAssessments based on
   // permission (see app/dashboard/assessments/page.tsx's isAdminView check).
   "/dashboard/onboarding-approvals": "employees.approve",
-  "/dashboard/email-logs": "recruitment.view",
+  "/dashboard/email-logs": "email_logs.view",
   "/dashboard/employees": "employees.view",
   "/dashboard/org-chart": "org_chart.view",
   "/dashboard/branches": "settings.view",

@@ -116,6 +116,8 @@ def _send_candidate_email(candidate, template_slug, actor, extra_context=None):
             recipient_email=candidate.email,
             template_name=template_slug,
             context=context,
+            module='recruitment',
+            triggered_by=actor,
         )
         sent_status = CandidateEmail.STATUS_SENT
         logger.info('Sent %s email to %s for candidate %s', template_slug, candidate.email, candidate.id)
@@ -144,6 +146,7 @@ def _send_referral_email(candidate, template_slug, recipient_email, context, ext
             template_name=template_slug,
             context=context,
             extra_attachments=extra_attachments,
+            module='recruitment',
         )
         sent_status = CandidateEmail.STATUS_SENT
         logger.info('Sent %s to %s for candidate %s', template_slug, recipient_email, candidate.id)
@@ -914,6 +917,8 @@ class CandidateHRDecisionView(APIView):
                                     'company_name':     company_name,
                                     'portal_url':       portal_url,
                                 },
+                                module='recruitment',
+                                triggered_by=request.user,
                             )
                         except Exception:
                             logger.exception(
@@ -1217,6 +1222,8 @@ class SendCandidateEmailView(APIView):
                 recipient_email=recipient_email,
                 template_name=template_name,
                 context=context,
+                module='recruitment',
+                triggered_by=request.user,
             )
             sent_status = CandidateEmail.STATUS_SENT
             logger.info(
@@ -1452,6 +1459,8 @@ class SendPortalLoginView(APIView):
                     'temp_password':  temp_password,
                     'portal_url':     portal_url,
                 },
+                module='recruitment',
+                triggered_by=request.user,
             )
             sent_status = CandidateEmail.STATUS_SENT
         except Exception as exc:
@@ -1564,6 +1573,8 @@ class ResendPortalLoginView(APIView):
                 recipient_email=candidate.email,
                 template_name='portal_invite',
                 context=context,
+                module='recruitment',
+                triggered_by=request.user,
             )
             sent_status = CandidateEmail.STATUS_SENT
         except Exception as exc:

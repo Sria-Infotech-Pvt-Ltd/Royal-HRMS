@@ -49,6 +49,7 @@ def _send_email(user, template_name: str, context: dict) -> None:
                 recipient_email=user.email,
                 template_name=template_name,
                 context={**context, 'company_name': _company_name()},
+                module='payroll',
             )
         except Exception:
             logger.exception('Failed to send payroll email "%s" to %s', template_name, user.email)

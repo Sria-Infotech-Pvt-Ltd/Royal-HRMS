@@ -55,6 +55,7 @@ def send_lifecycle_email_task(self, user_id, template_name: str, context: dict):
                 recipient_email=user.email,
                 template_name=template_name,
                 context={**context, 'company_name': _company_name()},
+                module='notifications',
             )
         except Exception as exc:
             logger.exception('Failed to send lifecycle email "%s" to %s: %s', template_name, user.email, exc)

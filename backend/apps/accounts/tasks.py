@@ -73,6 +73,7 @@ def send_onboarding_submitted_notification_task(self, user_id):
                     recipient_email=recipient_email,
                     template_name='onboarding_submitted',
                     context={**email_context, 'hr_name': hr_name},
+                    module='accounts',
                 )
                 sent += 1
             except Exception as exc:
@@ -142,6 +143,7 @@ def send_onboarding_approved_notification_task(self, user_id, assigned_assessmen
                     'has_assessments':  'true' if has_pending else 'false',
                     'assessment_count': str(len(assessments)),
                 },
+                module='accounts',
             )
         except Exception as exc:
             logger.error(
@@ -161,6 +163,7 @@ def send_onboarding_approved_notification_task(self, user_id, assigned_assessmen
                         'company_name':     company_name,
                         'portal_url':       assessments_portal_url or portal_url,
                     },
+                    module='accounts',
                 )
                 sent += 1
             except Exception as exc:

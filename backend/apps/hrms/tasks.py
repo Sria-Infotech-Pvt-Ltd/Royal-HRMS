@@ -182,6 +182,7 @@ def send_birthday_wishes(self):
                         'employee_name': name,
                         'company_name':  company_name,
                     },
+                    module='hrms',
                 )
                 profile.birthday_wish_sent_year = today.year
                 profile.save(update_fields=['birthday_wish_sent_year'])

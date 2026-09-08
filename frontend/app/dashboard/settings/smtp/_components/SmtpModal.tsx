@@ -3,7 +3,8 @@
 import { useState } from "react";
 import {
   EMPTY_SMTP_FORM, apiEntryToForm, validateSmtpForm,
-  type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type SmtpType,
+  PROVIDER_CONFIG, PROVIDER_LIST, inferProviderKey, applyProvider,
+  type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type ProviderKey,
 } from "../_data";
 import Modal from "@/components/Modal";
 
@@ -14,37 +15,31 @@ interface Props {
   onSave:  (form: SmtpForm) => Promise<void>;
 }
 
-const SMTP_TYPES: { value: SmtpType; label: string; sub: string; icon: string }[] = [
-  {
-    value: "local",
-    label: "Local (Gmail / Custom SMTP)",
-    sub:   "Connect via SMTP with host, port and credentials",
-    icon:  "ti-mail-cog",
-  },
-  {
-    value: "server",
-    label: "Server Mail",
-    sub:   "Use the server's built-in mail system (no credentials needed)",
-    icon:  "ti-server",
-  },
-];
-
 export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
   const isAddMode = entry === null;
 
-  const [form,   setForm]   = useState<SmtpForm>(
+  const [form, setForm] = useState<SmtpForm>(
     isAddMode ? { ...EMPTY_SMTP_FORM } : apiEntryToForm(entry)
   );
   const [errors, setErrors] = useState<SmtpFormErrors>({});
+  const [step, setStep] = useState<"provider" | "details">(isAddMode ? "provider" : "details");
+  // "gmail" is just the initial highlight in add mode — nothing is written
+  // into `form` until the user actually clicks a card.
+  const [providerKey, setProviderKey] = useState<ProviderKey>(
+    () => isAddMode ? "gmail" : inferProviderKey(entry)
+  );
 
-  const isLocal = form.smtpType === "local";
+  const provider = PROVIDER_CONFIG[providerKey];
+  const isLocal  = form.smtpType === "local";
 
   function patch(p: Partial<SmtpForm>) { setForm(prev => ({ ...prev, ...p })); }
   function clearErr(k: keyof SmtpForm) { setErrors(prev => ({ ...prev, [k]: undefined })); }
 
-  function handleTypeChange(t: SmtpType) {
-    patch({ smtpType: t });
+  function selectProvider(key: ProviderKey) {
+    setProviderKey(key);
+    setForm(f => applyProvider(f, key));
     setErrors({});
+    setStep("details");
   }
 
   async function handleSave() {
@@ -77,107 +72,86 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
       onClose={onClose}
       size="lg"
       footer={
-        <>
+        step === "provider" ? (
           <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
-          <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
-            {saving
-              ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
-              : <><i className="ti ti-device-floppy" /> {isAddMode ? "Add Configuration" : "Save Changes"}</>
-            }
-          </button>
-        </>
+        ) : (
+          <>
+            <button className="btn btn-ghost" onClick={() => setStep("provider")} disabled={saving} suppressHydrationWarning>
+              <i className="ti ti-arrow-left" /> Back
+            </button>
+            <button className="btn btn-ghost" onClick={onClose} disabled={saving} suppressHydrationWarning>Cancel</button>
+            <button className="btn btn-filled" onClick={handleSave} disabled={saving} suppressHydrationWarning>
+              {saving
+                ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} /> Saving…</>
+                : <><i className="ti ti-device-floppy" /> {isAddMode ? "Add Configuration" : "Save Changes"}</>
+              }
+            </button>
+          </>
+        )
       }
     >
 
-          {/* ── Type switcher ─────────────────────────────────────────────── */}
-          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderRadius: 8, overflow: "hidden", border: "1px solid var(--outline-v)" }}>
-            {([ ["local", "ti-mail", "Basic SMTP / Gmail"], ["server", "ti-server", "Dedicated Server"] ] as [SmtpType, string, string][]).map(([val, icon, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => patch({
-                  smtpType: val,
-                  host:     val === "local" ? (form.host || "") : (form.host || ""),
-                  port:     val === "local" ? (form.port === 25 ? 587 : form.port) : (form.port === 587 ? 25 : form.port),
-                })}
-                style={{
-                  flex: 1, padding: "10px 0", border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center",
-                  justifyContent: "center", gap: 7, transition: "background 0.15s",
-                  background: form.smtpType === val ? "var(--primary)" : "var(--bg-low)",
-                  color:      form.smtpType === val ? "#fff"           : "var(--on-variant)",
-                }}
-              >
-                <i className={`ti ${icon}`} style={{ fontSize: 15 }} />
-                {label}
-              </button>
-            ))}
+      {step === "provider" ? (
+        /* ── Step 1: pick a mail provider ─────────────────────────────── */
+        <div>
+          <p style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 0, marginBottom: 16 }}>
+            Choose a mail provider — the fields you need will be filled in for you where possible.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {PROVIDER_LIST.map(p => {
+              const selected = providerKey === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => selectProvider(p.key)}
+                  className={[
+                    "relative text-left p-3.5 rounded-xl border-2 transition-all",
+                    selected ? "shadow-md" : "border-[var(--outline-v)] hover:border-[var(--outline)] bg-[var(--bg-low)] hover:bg-[var(--surface)]",
+                  ].join(" ")}
+                  style={selected ? { borderColor: p.color, background: p.bg } : {}}
+                  suppressHydrationWarning
+                >
+                  {selected && (
+                    <span
+                      className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full flex items-center justify-center"
+                      style={{ background: p.color }}
+                    >
+                      <i className="ti ti-check text-white" style={{ fontSize: 9 }} />
+                    </span>
+                  )}
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-2.5" style={{ background: p.bg }}>
+                    <i className={`ti ${p.icon} text-sm`} style={{ color: p.color }} />
+                  </div>
+                  <div className="text-xs font-bold text-[var(--on-bg)] mb-0.5">{p.label}</div>
+                  <div style={{ fontSize: 11, color: "var(--on-variant)", lineHeight: 1.4 }}>{p.note}</div>
+                </button>
+              );
+            })}
           </div>
-
-          {/* Helper note per type */}
-          <div style={{ fontSize: 12, color: "var(--on-variant)", background: "var(--bg-low)", borderRadius: 6, padding: "8px 12px", marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 8 }}>
-            <i className={`ti ${form.smtpType === "local" ? "ti-brand-gmail" : "ti-server"}`} style={{ fontSize: 15, marginTop: 1, flexShrink: 0 }} />
-            {form.smtpType === "local" ? (
-              <span>
-                <strong>Gmail:</strong> use <code>smtp.gmail.com</code>, port <code>587</code>, TLS enabled, and a Google <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>App Password</a>.
-                For <strong>Zoho / Outlook / others</strong> use their SMTP host and credentials.
-              </span>
-            ) : (
-              <span>
-                <strong>Dedicated mail server</strong> (Postfix, Sendmail, corporate relay).
-                Typical settings: host <code>mail.yourdomain.com</code>, port <code>25</code> or <code>465</code>.
-              </span>
-            )}
+        </div>
+      ) : (
+        /* ── Step 2: provider-specific details ────────────────────────── */
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: provider.bg }}>
+                <i className={`ti ${provider.icon}`} style={{ color: provider.color, fontSize: 14 }} />
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{provider.label}</span>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setStep("provider")} suppressHydrationWarning>
+              <i className="ti ti-arrow-left" /> Change provider
+            </button>
           </div>
 
           <div className="smtp-form-grid">
-
-            {/* ── SMTP Type selector — full width ── */}
-            <div className="field-group" style={{ gridColumn: "1 / -1" }}>
-              <label className="field-label">SMTP Type <span style={{ color: "var(--error)" }}>*</span></label>
-              <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
-                {SMTP_TYPES.map(opt => {
-                  const active = form.smtpType === opt.value;
-                  return (
-                    <label
-                      key={opt.value}
-                      style={{
-                        flex: 1, display: "flex", alignItems: "flex-start", gap: 10,
-                        padding: "12px 14px", borderRadius: 8, cursor: "pointer",
-                        border: `1.5px solid ${active ? "var(--primary)" : "var(--outline-v)"}`,
-                        background: active ? "rgba(30,78,140,0.05)" : "#fff",
-                        transition: "border-color 0.15s, background 0.15s",
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="smtpType"
-                        value={opt.value}
-                        checked={active}
-                        onChange={() => handleTypeChange(opt.value)}
-                        style={{ accentColor: "var(--primary)", marginTop: 2, flexShrink: 0 }}
-                        suppressHydrationWarning
-                      />
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <i className={`ti ${opt.icon}`} style={{ fontSize: 14, color: active ? "var(--primary)" : "var(--on-variant)" }} />
-                          <span style={{ fontSize: 13, fontWeight: 600, color: active ? "var(--primary)" : "var(--on-bg)" }}>
-                            {opt.label}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 2 }}>{opt.sub}</div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Configuration Name — full width */}
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label">Configuration Name <span style={{ color: "var(--error)" }}>*</span></label>
               <input className="field-input"
-                placeholder={form.smtpType === "local" ? "e.g. Gmail SMTP, Zoho Mail" : "e.g. Corporate Mail Server"}
+                placeholder={isLocal ? "e.g. Gmail SMTP, Zoho Mail" : "e.g. Corporate Mail Server"}
                 value={form.name}
                 onChange={e => { patch({ name: e.target.value }); clearErr("name"); }}
                 suppressHydrationWarning />
@@ -192,9 +166,16 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                   <label className="field-label">SMTP Host <span style={{ color: "var(--error)" }}>*</span></label>
                   <input className="field-input" placeholder="smtp.gmail.com"
                     value={form.host}
+                    disabled={provider.locked}
                     onChange={e => { patch({ host: e.target.value }); clearErr("host"); }}
                     suppressHydrationWarning />
+                  {provider.locked && (
+                    <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Fixed for {provider.label} — not editable</span>
+                  )}
                   {errors.host && <span className="field-error">{errors.host}</span>}
+                  {provider.helpText && (
+                    <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>{provider.helpText}</span>
+                  )}
                 </div>
 
                 {/* Port + TLS */}
@@ -202,11 +183,13 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                   <label className="field-label">Port</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <input className="field-input" type="number" value={form.port}
+                      disabled={provider.locked}
                       onChange={e => patch({ port: Number(e.target.value) })}
                       style={{ flex: 1 }}
                       suppressHydrationWarning />
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: provider.locked ? "default" : "pointer", whiteSpace: "nowrap" }}>
                       <input type="checkbox" checked={form.useTls}
+                        disabled={provider.locked}
                         onChange={e => patch({ useTls: e.target.checked })}
                         style={{ accentColor: "var(--primary)" }}
                         suppressHydrationWarning />
@@ -304,6 +287,8 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
             </div>
 
           </div>
+        </div>
+      )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </Modal>

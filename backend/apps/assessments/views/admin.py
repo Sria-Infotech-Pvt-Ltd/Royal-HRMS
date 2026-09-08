@@ -29,6 +29,7 @@ def _send_assessment_email(recipient_email: str, context: dict, template_name: s
             recipient_email=recipient_email,
             template_name=template_name,
             context=context,
+            module='assessments',
         )
     except Exception:
         logger.exception('Failed to send %s email to %s', template_name, recipient_email)

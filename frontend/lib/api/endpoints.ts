@@ -63,6 +63,7 @@ export const API = {
     approvalMatrix: (id: string) => `/employees/${id}/approval-matrix/`,
     documents: (id: string) => `/employees/${id}/documents/`,
     customFileFields: (id: string) => `/employees/${id}/custom-file-fields/`,
+    resetPassword: (id: string) => `/employees/${id}/reset-password/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",
@@ -79,6 +80,9 @@ export const API = {
 
   settings: {
     audit: "/settings/audit/",
+    emailLogs: "/settings/email-logs/",
+    emailLogDetail: (id: string) => `/settings/email-logs/${id}/`,
+    emailLogResend: (id: string) => `/settings/email-logs/${id}/resend/`,
     company: "/settings/company/",
     financialYear: "/settings/company/financial-year/",
     employeeCode: "/settings/employee-code/",
@@ -133,6 +137,8 @@ export const API = {
     hrDecision: (id: number) => `/recruitment/candidates/${id}/hr-decision/`,
     sendPortalLogin: (id: number) => `/recruitment/candidates/${id}/send-portal-login/`,
     sendEmail: (id: number | string) => `/recruitment/candidates/${id}/send-email/`,
+    // Superseded by API.settings.emailLogs (system-wide) — no longer used by
+    // the Email Logs page, kept here in case anything else still reads it.
     emailLogs: "/recruitment/emails/",
   },
 
@@ -149,6 +155,16 @@ export const API = {
     approvals: "/onboarding/approvals/",
     pipeline: "/onboarding/approvals/?view=pipeline",
     approve: (userId: string) => `/onboarding/approvals/${userId}/`,
+
+    // HR/Admin completing an employee's onboarding on their behalf
+    // (onboarding.edit permission) — user_id-keyed, mirrors `approve` above.
+    employees: {
+      summary: (userId: string) => `/onboarding/employees/${userId}/`,
+      step: (userId: string, step: number) => `/onboarding/employees/${userId}/step/${step}/`,
+      submit: (userId: string) => `/onboarding/employees/${userId}/submit/`,
+      documents: (userId: string) => `/onboarding/employees/${userId}/documents/`,
+      customFileFields: (userId: string) => `/onboarding/employees/${userId}/custom-file-fields/`,
+    },
   },
 
   approvals: {

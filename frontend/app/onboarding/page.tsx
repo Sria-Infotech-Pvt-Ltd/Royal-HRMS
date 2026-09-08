@@ -5,17 +5,16 @@ import { useRouter } from "next/navigation";
 import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
-import DocPreviewModal from "@/components/DocPreviewModal";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
 import type { OnboardingFieldConfigByStep, CustomFieldFileValue } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "./_types";
 import DynamicStepFields from "./_components/DynamicStepFields";
+import TabDocuments, { type UploadedDoc } from "./_components/TabDocuments";
+import TabFaceId from "./_components/TabFaceId";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface UploadedDoc { id: string; document_type: string; document_type_display: string; file?: string; file_name: string; uploaded_at: string; }
 
 const EMPTY: ProfileForm = {
   date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
@@ -47,8 +46,6 @@ const STEPS = [
 // step so steps 0-4's indices (and all the tab === N checks throughout this
 // file) never shift.
 const FACE_STEP = { label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id" };
-
-const INP = "field-input";
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -637,225 +634,3 @@ const CARD_STYLE: React.CSSProperties = {
   boxShadow: "0 4px 24px rgba(30,78,140,0.08), 0 1px 4px rgba(0,0,0,0.04)",
   border: "1px solid rgba(30,78,140,0.08)",
 };
-
-// ── Shared: required marker ───────────────────────────────────────────────────
-const Req = () => <span style={{ color: "var(--error, #dc2626)", marginLeft: 2 }}>*</span>;
-
-// ── Tab: Documents ────────────────────────────────────────────────────────────
-
-function TabDocuments({
-  docTypes, docs, uploadedTypes, uploading, fileRefs, onUpload,
-  panNumber, onPanNumberChange, onPanCardUpload, onPanValidationError, panErr, panSaving,
-}: {
-  docTypes: DocumentTypeConfig[];
-  docs: UploadedDoc[];
-  uploadedTypes: Set<string>;
-  uploading: string | null;
-  fileRefs: React.RefObject<Record<string, HTMLInputElement | null>>;
-  onUpload: (docType: string, file: File) => void;
-  panNumber: string;
-  onPanNumberChange: (v: string) => void;
-  onPanCardUpload: (file: File) => void;
-  onPanValidationError: (msg: string) => void;
-  panErr: string | null;
-  panSaving: boolean;
-}) {
-  const [preview, setPreview] = useState<UploadedDoc | null>(null);
-
-  return (
-    <>
-      {preview && preview.file && (
-        <DocPreviewModal
-          name={preview.document_type_display}
-          fileName={preview.file_name}
-          fileUrl={preview.file}
-          onClose={() => setPreview(null)}
-        />
-      )}
-      <div>
-        <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-          Upload clear scans or photos. Accepted: PDF, JPG, PNG · Max 5 MB each.
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: ".875rem" }}>
-          {docTypes.map(dt => {
-            const uploaded     = uploadedTypes.has(dt.type_key);
-            const uploaded_doc = docs.find(d => d.document_type === dt.type_key);
-            const isPan        = dt.type_key === "pan_card";
-            const isUploading  = uploading === dt.type_key || (isPan && panSaving);
-            const panBlocked   = isPan && !PAN_RE.test(panNumber.trim());
-            return (
-              <div key={dt.type_key} style={{
-                padding: "1rem 1.25rem", borderRadius: 12,
-                border: `1.5px solid ${uploaded ? "var(--success)" : "var(--outline-v)"}`,
-                background: uploaded ? "var(--success-c)" : "#fff",
-                transition: "all 0.2s",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 9, background: uploaded ? "var(--success)" : "var(--bg-high)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <i className={uploaded ? "ti ti-file-check" : "ti ti-file-upload"} style={{ color: uploaded ? "#fff" : "var(--on-variant)", fontSize: 18 }} />
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>{dt.label}</div>
-                      {uploaded && uploaded_doc && (
-                        <div style={{ fontSize: ".78rem", color: "var(--success)", marginTop: 2 }}>
-                          <i className="ti ti-check" style={{ fontSize: 11 }} /> {uploaded_doc.file_name}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: ".5rem", alignItems: "center", flexShrink: 0 }}>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      style={{ display: "none" }}
-                      ref={el => { fileRefs.current[dt.type_key] = el; }}
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (isPan) onPanCardUpload(file);
-                          else onUpload(dt.type_key, file);
-                        }
-                        e.target.value = "";
-                      }}
-                    />
-                    {uploaded && uploaded_doc?.file && (
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: ".83rem" }}
-                        onClick={() => setPreview(uploaded_doc)}
-                        type="button"
-                      >
-                        <i className="ti ti-eye" style={{ fontSize: 13 }} /> View
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-ghost"
-                      style={{ fontSize: ".83rem", borderColor: uploaded ? "var(--success)" : undefined, color: uploaded ? "var(--success)" : undefined }}
-                      onClick={() => {
-                        // Validate before ever opening the file picker, not just
-                        // via a disabled attribute — a disabled button swallows
-                        // the click entirely, leaving the user with no visible
-                        // reason why "Upload" does nothing (see handlePanCardUpload,
-                        // which already has these exact messages but never used to
-                        // run because the click that would trigger it was blocked
-                        // one step earlier).
-                        if (panBlocked) {
-                          onPanValidationError(
-                            panNumber.trim()
-                              ? "Enter a valid PAN (e.g. ABCDE1234F) — 5 letters, 4 digits, 1 letter."
-                              : "Enter your PAN number before uploading the PAN card.",
-                          );
-                          return;
-                        }
-                        fileRefs.current[dt.type_key]?.click();
-                      }}
-                      disabled={isUploading}
-                      type="button"
-                    >
-                      {isUploading
-                        ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Uploading…</>
-                        : uploaded ? "Replace" : "Upload"
-                      }
-                    </button>
-                  </div>
-                </div>
-                {isPan && (
-                  <div style={{ marginTop: ".75rem", paddingTop: ".75rem", borderTop: "1px solid var(--outline-v)" }}>
-                    <label className="field-label">PAN Number<Req /></label>
-                    <input
-                      className={INP}
-                      style={{ maxWidth: 220 }}
-                      maxLength={10}
-                      value={panNumber}
-                      onChange={e => onPanNumberChange(e.target.value.toUpperCase())}
-                      placeholder="e.g. ABCDE1234F"
-                    />
-                    {panErr ? (
-                      <div style={{ fontSize: ".78rem", color: "var(--error, #dc2626)", marginTop: 4 }}>{panErr}</div>
-                    ) : (
-                      <div style={{ fontSize: ".72rem", color: "var(--on-variant)", marginTop: 4 }}>
-                        Checked against every other employee before the upload goes through — enter it first.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ── Tab: Face ID ──────────────────────────────────────────────────────────────
-// Only rendered when the admin's org-wide Face ID Verification toggle
-// (Attendance Settings) is mandatory — see faceMandatory above; when off, the
-// step doesn't exist and "Submit for Approval" is reachable directly after
-// Documents (see canSubmit/steps above). Capture goes through the same
-// FaceRegistrationModal/useFaceRegistrationCapture flow used on the Profile
-// page; "registered" here just means submitted — HR approval happens
-// afterwards, but submission is already unblocked at that point (canSubmit
-// above only checks that a registration exists, not its approval status).
-
-function TabFaceId({
-  registration, onRegister,
-}: {
-  registration: Partial<FaceRegistrationRequest> | null;
-  onRegister: () => void;
-}) {
-  const status = registration?.status;
-
-  return (
-    <div>
-      <p style={{ color: "var(--on-variant)", marginBottom: "1.25rem", fontSize: ".9rem", lineHeight: 1.6 }}>
-        Your organisation requires a registered face ID for web clock-in/out. Register once here —
-        we run a quick liveness check to confirm it&apos;s really you, then send it to HR for approval.
-        You won&apos;t be able to submit your onboarding profile until this step is complete.
-      </p>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
-        padding: "1rem 1.25rem", borderRadius: 12,
-        border: `1.5px solid ${status ? "var(--success)" : "var(--outline-v)"}`,
-        background: status ? "var(--success-c)" : "#fff",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: status ? "var(--success)" : "var(--bg-high)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="ti ti-face-id" style={{ color: status ? "#fff" : "var(--on-variant)", fontSize: 18 }} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: ".9rem", color: "var(--on-bg)" }}>
-              {status === "approved" && "Face ID approved"}
-              {status === "pending" && "Face ID submitted — pending HR approval"}
-              {status === "rejected" && "Face ID rejected — please register again"}
-              {!status && "Face ID not yet registered"}
-            </div>
-          </div>
-        </div>
-        {status === "pending" ? (
-          // No re-submit affordance while a request is already awaiting HR
-          // review — matches the self-service Profile page's rule for the
-          // same state. Without this, repeatedly clicking through here
-          // (most likely exactly what happens during onboarding, while
-          // waiting on HR) creates duplicate pending requests; the backend
-          // now also rejects a second one outright, but hiding the button
-          // is the actual fix for the confusing "why did clicking do
-          // nothing" experience that would otherwise cause.
-          <span style={{ fontSize: ".83rem", color: "var(--on-variant)", fontWeight: 600 }}>
-            Awaiting review
-          </span>
-        ) : (
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: ".83rem", borderColor: status ? "var(--success)" : undefined, color: status ? "var(--success)" : undefined }}
-            onClick={onRegister}
-            type="button"
-          >
-            {status === "approved" ? "Update" : status ? "Register Again" : "Register Face ID"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}

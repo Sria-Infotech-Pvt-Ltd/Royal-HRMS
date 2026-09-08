@@ -197,6 +197,7 @@ export default function EmployeeProfilePage({
 }) {
   const { id } = use(params);
   const canEdit = usePermission("employees.edit");
+  const canEditOnboarding = usePermission("onboarding.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
 
@@ -507,7 +508,7 @@ export default function EmployeeProfilePage({
 
   return (
     <div>
-      <ProfileHeader employee={employee} />
+      <ProfileHeader employee={employee} employeeUuid={employeeUuid} />
 
       {isPendingOnboarding ? (
         <div className="bg-white rounded-xl border border-[var(--outline-v)] p-14 text-center mt-4">
@@ -527,6 +528,13 @@ export default function EmployeeProfilePage({
               {onboardingStatus === "draft" ? "Form saved as draft" : "Awaiting employee submission"}
             </span>
           </div>
+          {canEditOnboarding && (
+            <div className="mt-5">
+              <Link href={`/dashboard/employees/${id}/onboarding`} className="btn btn-filled">
+                <i className="ti ti-clipboard-check" /> Complete Onboarding for this Employee
+              </Link>
+            </div>
+          )}
         </div>
       ) : (
         <>

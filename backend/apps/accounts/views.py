@@ -3416,7 +3416,7 @@ class EmployeeListCreateView(APIView):
             )
             html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
 
-            connection, from_email = _get_smtp_connection()
+            connection, from_email, _smtp = _get_smtp_connection()
             msg = _build_message(
                 subject=f'Welcome to {company_name} — Your Login Credentials',
                 html_body=html_body,
@@ -4512,79 +4512,100 @@ class OnboardingView(APIView):
         return success(f'Step {step} data cleared successfully.')
 
     def _submit(self, request):
-        if request.user.onboarding_status == User.ONBOARDING_COMPLETE:
-            return error('Onboarding is already complete.')
-        if request.user.onboarding_status == User.ONBOARDING_SUBMITTED:
-            return error('Onboarding already submitted and awaiting approval.')
+        return _submit_onboarding(request.user)
 
-        from apps.accounts.models import EmployeeProfile as EP
+
+def _submit_onboarding(target_user):
+    """
+    Validate and submit target_user's onboarding wizard. Extracted from
+    OnboardingView._submit so HREmployeeOnboardingView (HR completing
+    onboarding on someone else's behalf) gets identical required-field/
+    document/face-ID validation with no duplicated logic — see
+    OnboardingView._submit, now a one-line delegator to this function.
+    """
+    if target_user.onboarding_status == User.ONBOARDING_COMPLETE:
+        return error('Onboarding is already complete.')
+    if target_user.onboarding_status == User.ONBOARDING_SUBMITTED:
+        return error('Onboarding already submitted and awaiting approval.')
+
+    from apps.accounts.models import EmployeeProfile as EP
+    try:
+        profile = EP.objects.get(user=target_user)
+    except EP.DoesNotExist:
+        return error('Please fill in your profile details before submitting.')
+
+    missing = []
+    for step in range(4):
+        missing.extend(_missing_required(profile, step))
+
+    if missing:
+        return error(
+            f'Please complete the following required fields before submitting: '
+            f'{", ".join(missing)}.'
+        )
+
+    missing_docs = _missing_required_docs(target_user)
+    if missing_docs:
+        return error(
+            f'Please upload the following required documents before submitting: '
+            f'{", ".join(missing_docs)}.'
+        )
+
+    # Face ID registration — only required when the admin's org-wide
+    # "Face ID Verification" toggle (Attendance Settings) is mandatory.
+    # Approval isn't required at this point, only that a request was
+    # submitted — same "uploaded, not yet approved, is enough" bar as
+    # the documents check above.
+    from apps.attendance.services_face_matching import is_face_verification_mandatory
+    if is_face_verification_mandatory():
+        from apps.attendance.models import FaceRegistrationRequest
+        has_face_registration = FaceRegistrationRequest.objects.filter(employee=target_user).exists()
+        if not has_face_registration:
+            return error(
+                'Please complete Face ID registration before submitting your onboarding profile.'
+            )
+
+    User.objects.filter(pk=target_user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
+    logger.info('User %s submitted onboarding wizard', target_user.email)
+
+    # Notify HR via Celery so SMTP latency doesn't delay the response.
+    from apps.accounts.tasks import send_onboarding_submitted_notification_task
+
+    def _queue_hr_notification(user_id=target_user.pk):
         try:
-            profile = EP.objects.get(user=request.user)
-        except EP.DoesNotExist:
-            return error('Please fill in your profile details before submitting.')
-
-        missing = []
-        for step in range(4):
-            missing.extend(_missing_required(profile, step))
-
-        if missing:
-            return error(
-                f'Please complete the following required fields before submitting: '
-                f'{", ".join(missing)}.'
+            # retry=False + ignore_result=True — bounds broker/backend
+            # retries so a down Redis can't block this request; see the
+            # referral-submission dispatch in recruitment/views.py.
+            send_onboarding_submitted_notification_task.apply_async(
+                args=[user_id], retry=False, ignore_result=True,
+            )
+        except Exception as exc:
+            logger.error(
+                'Failed to queue onboarding_submitted notification for user %s: %s',
+                user_id, exc, exc_info=True,
             )
 
-        missing_docs = _missing_required_docs(request.user)
-        if missing_docs:
-            return error(
-                f'Please upload the following required documents before submitting: '
-                f'{", ".join(missing_docs)}.'
-            )
+    transaction.on_commit(_queue_hr_notification)
 
-        # Face ID registration — only required when the admin's org-wide
-        # "Face ID Verification" toggle (Attendance Settings) is mandatory.
-        # Approval isn't required at this point, only that a request was
-        # submitted — same "uploaded, not yet approved, is enough" bar as
-        # the documents check above.
-        from apps.attendance.services_face_matching import is_face_verification_mandatory
-        if is_face_verification_mandatory():
-            from apps.attendance.models import FaceRegistrationRequest
-            has_face_registration = FaceRegistrationRequest.objects.filter(employee=request.user).exists()
-            if not has_face_registration:
-                return error(
-                    'Please complete Face ID registration before submitting your onboarding profile.'
-                )
-
-        User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_SUBMITTED)
-        logger.info('User %s submitted onboarding wizard', request.user.email)
-
-        # Notify HR via Celery so SMTP latency doesn't delay the response.
-        from apps.accounts.tasks import send_onboarding_submitted_notification_task
-
-        def _queue_hr_notification(user_id=request.user.pk):
-            try:
-                # retry=False + ignore_result=True — bounds broker/backend
-                # retries so a down Redis can't block this request; see the
-                # referral-submission dispatch in recruitment/views.py.
-                send_onboarding_submitted_notification_task.apply_async(
-                    args=[user_id], retry=False, ignore_result=True,
-                )
-            except Exception as exc:
-                logger.error(
-                    'Failed to queue onboarding_submitted notification for user %s: %s',
-                    user_id, exc, exc_info=True,
-                )
-
-        transaction.on_commit(_queue_hr_notification)
-
-        return success('Onboarding submitted. Awaiting HR approval.')
+    return success('Onboarding submitted. Awaiting HR approval.')
 
 
-def _save_profile_step(request, step: int):
+def _save_profile_step(request, step: int, target_user=None):
+    """
+    target_user: whose EmployeeProfile is being saved — defaults to
+    request.user (self-service, the only caller before HREmployeeOnboardingView
+    existed). When HR/Admin is completing onboarding on someone else's behalf,
+    target_user is the employee, while request.user remains the acting HR/Admin
+    — used only where the actor themselves matters (profile._changed_by below),
+    never for whose data is being read/written.
+    """
     from apps.accounts.models import EmployeeProfile as EP
     from apps.accounts.serializers import EmployeeProfileSerializer
 
+    target_user = target_user or request.user
+
     # ── Status guard ───────────────────────────────────────────────────────────
-    if request.user.onboarding_status == User.ONBOARDING_COMPLETE:
+    if target_user.onboarding_status == User.ONBOARDING_COMPLETE:
         return error(
             'Onboarding is already complete and cannot be modified.',
             http_status=status.HTTP_403_FORBIDDEN,
@@ -4624,7 +4645,7 @@ def _save_profile_step(request, step: int):
                 pan_value = normalize_and_validate_pan(raw_pan)
             except ValueError as exc:
                 return error(str(exc), http_status=status.HTTP_400_BAD_REQUEST)
-            profile, _ = _EP.objects.get_or_create(user=request.user)
+            profile, _ = _EP.objects.get_or_create(user=target_user)
             conflict = find_conflicting_pan_profile(pan_value, exclude_profile_pk=profile.pk)
             if conflict:
                 return error(
@@ -4637,10 +4658,10 @@ def _save_profile_step(request, step: int):
             return success('PAN number saved.', data={'pan_number': pan_value})
 
         try:
-            missing_docs = _missing_required_docs(request.user)
+            missing_docs = _missing_required_docs(target_user)
         except Exception as exc:
             logger.error('_save_profile_step step=4 document query failed user=%s: %s',
-                         request.user.pk, exc, exc_info=True)
+                         target_user.pk, exc, exc_info=True)
             return error(
                 'Unable to verify documents. Please try again.',
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -4655,10 +4676,10 @@ def _save_profile_step(request, step: int):
 
     # ── Steps 0-3 — profile field save ────────────────────────────────────────
     try:
-        profile, _ = EP.objects.get_or_create(user=request.user)
+        profile, _ = EP.objects.get_or_create(user=target_user)
     except Exception as exc:
         logger.error('_save_profile_step profile fetch failed user=%s step=%d: %s',
-                     request.user.pk, step, exc, exc_info=True)
+                     target_user.pk, step, exc, exc_info=True)
         return error(
             'Unable to retrieve profile. Please try again.',
             http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -4720,24 +4741,24 @@ def _save_profile_step(request, step: int):
         serializer.save()
     except Exception as exc:
         logger.error('_save_profile_step serializer.save failed user=%s step=%d: %s',
-                     request.user.pk, step, exc, exc_info=True)
+                     target_user.pk, step, exc, exc_info=True)
         return error(
             'Failed to save profile data. Please try again.',
             http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
     # Move status to 'draft' (in-progress) on the very first step save
-    if request.user.onboarding_status == User.ONBOARDING_PENDING:
+    if target_user.onboarding_status == User.ONBOARDING_PENDING:
         try:
-            User.objects.filter(pk=request.user.pk).update(onboarding_status=User.ONBOARDING_DRAFT)
+            User.objects.filter(pk=target_user.pk).update(onboarding_status=User.ONBOARDING_DRAFT)
         except Exception as exc:
             logger.warning('_save_profile_step status→draft update failed user=%s: %s',
-                           request.user.pk, exc, exc_info=True)
+                           target_user.pk, exc, exc_info=True)
 
     # Return ONLY the fields for this step — never leak other steps' data
     all_data  = EmployeeProfileSerializer(profile).data
     step_data = _extract_step_data(profile, all_data, step)
-    logger.info('Onboarding step %d saved for user %s', step, request.user.email)
+    logger.info('Onboarding step %d saved for user %s', step, target_user.email)
     return success('Profile saved.', data=step_data)
 
 
@@ -5785,6 +5806,8 @@ class OnboardingApprovalView(APIView):
                         'remarks':       remarks or 'Please contact HR for details.',
                         'portal_url':    portal_url,
                     },
+                    module='accounts',
+                    triggered_by=request.user,
                 )
             except Exception:
                 logger.exception('Failed to send onboarding rejection email to %s', target.email)

@@ -6,6 +6,7 @@ from apps.accounts.models import (
     ApprovalWorkflowRule,
     Company,
     Document,
+    EmailLog,
     EmailTemplate,
     EmailTemplateAttachment,
     EmailTemplateCategory,
@@ -114,6 +115,22 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_filter   = ('action', 'module')
     search_fields = ('user__email', 'action')
     readonly_fields = ('created_at',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+# ─── Email Log ────────────────────────────────────────────────────────────────
+
+@admin.register(EmailLog)
+class EmailLogAdmin(admin.ModelAdmin):
+    list_display  = ('recipient_email', 'subject', 'module', 'status', 'is_resend', 'created_at')
+    list_filter   = ('status', 'module', 'is_resend', 'has_sensitive_context')
+    search_fields = ('recipient_email', 'subject', 'template_name')
+    readonly_fields = ('created_at', 'updated_at')
 
     def has_add_permission(self, request):
         return False

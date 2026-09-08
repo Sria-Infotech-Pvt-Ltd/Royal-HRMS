@@ -124,3 +124,92 @@ export function validateSmtpForm(form: SmtpForm, isAdd: boolean): SmtpFormErrors
   }
   return e;
 }
+
+// ─── Mail provider picker ───────────────────────────────────────────────────
+// A pure frontend prefill layer over the two real backend smtp_type values
+// (local/server) — the provider itself is never sent to the backend. Cost
+// blurbs are general public vendor-pricing knowledge, not verified live —
+// double-check exact numbers before relying on them.
+
+export type ProviderKey = "gmail" | "amazon_ses" | "zoho" | "brevo" | "outlook365" | "custom" | "server";
+
+export interface ProviderConfig {
+  key:        ProviderKey;
+  label:      string;
+  icon:       string;
+  color:      string;
+  bg:         string;
+  note:       string;                                    // one-line affordability blurb on the card
+  smtpType:   SmtpType;                                   // "local" for every provider except "server"
+  hostMatch?: RegExp;                                     // used only to infer provider when editing an existing entry
+  prefill?:   { host: string; port: number; useTls: boolean };
+  locked?:    boolean;                                    // true = host/port shown read-only (one fixed endpoint)
+  helpText?:  string;                                     // short caption under Host
+}
+
+export const PROVIDER_CONFIG: Record<ProviderKey, ProviderConfig> = {
+  gmail: {
+    key: "gmail", label: "Gmail", icon: "ti-brand-gmail", color: "#ea4335", bg: "rgba(234,67,53,0.1)",
+    note: "Free, but capped at ~500 emails/day — best for testing or very small teams.",
+    smtpType: "local", hostMatch: /gmail\.com/i,
+    prefill: { host: "smtp.gmail.com", port: 587, useTls: true }, locked: true,
+    helpText: "Use a Google App Password, not your normal account password.",
+  },
+  amazon_ses: {
+    key: "amazon_ses", label: "Amazon SES", icon: "ti-brand-aws", color: "#ff9900", bg: "rgba(255,153,0,0.1)",
+    note: "Usage-based (~$0.10 per 1,000 emails) — cheapest option once you're sending real volume.",
+    smtpType: "local", hostMatch: /amazonaws\.com/i,
+    prefill: { host: "email-smtp.us-east-1.amazonaws.com", port: 587, useTls: true },
+    helpText: "Host varies by AWS region — replace the region segment with the region your SES identity is verified in.",
+  },
+  zoho: {
+    key: "zoho", label: "Zoho Mail", icon: "ti-mail-check", color: "#d6193d", bg: "rgba(214,25,61,0.1)",
+    note: "Free for up to 5 users — a solid low-cost choice for small orgs.",
+    smtpType: "local", hostMatch: /zoho\./i,
+    prefill: { host: "smtp.zoho.com", port: 587, useTls: true },
+    helpText: "Use smtp.zoho.in / smtp.zoho.eu instead if your Zoho account's data center is India or Europe.",
+  },
+  brevo: {
+    key: "brevo", label: "Brevo (Sendinblue)", icon: "ti-send", color: "#0b996e", bg: "rgba(11,153,110,0.1)",
+    note: "Generous free tier — a good no-cost starting point.",
+    smtpType: "local", hostMatch: /brevo\.com|sendinblue\.com/i,
+    prefill: { host: "smtp-relay.brevo.com", port: 587, useTls: true }, locked: true,
+  },
+  outlook365: {
+    key: "outlook365", label: "Outlook / Office 365", icon: "ti-brand-office", color: "#0078d4", bg: "rgba(0,120,212,0.1)",
+    note: "Often already included free with an existing Microsoft 365 subscription.",
+    smtpType: "local", hostMatch: /office365\.com|outlook\.com/i,
+    prefill: { host: "smtp.office365.com", port: 587, useTls: true }, locked: true,
+  },
+  custom: {
+    key: "custom", label: "Custom SMTP", icon: "ti-adjustments-horizontal", color: "#64748b", bg: "rgba(100,116,139,0.1)",
+    note: "Bring your own host — for SendGrid, Mailgun, a corporate relay, or anything not listed above.",
+    smtpType: "local",
+  },
+  server: {
+    key: "server", label: "Dedicated Mail Server", icon: "ti-server", color: "#475569", bg: "rgba(71,85,105,0.1)",
+    note: "Use the server's own built-in mail system — no external credentials needed.",
+    smtpType: "server",
+  },
+};
+
+export const PROVIDER_LIST: ProviderConfig[] = [
+  PROVIDER_CONFIG.gmail, PROVIDER_CONFIG.amazon_ses, PROVIDER_CONFIG.zoho,
+  PROVIDER_CONFIG.brevo, PROVIDER_CONFIG.outlook365, PROVIDER_CONFIG.custom, PROVIDER_CONFIG.server,
+];
+
+export function inferProviderKey(entry: ApiSmtpEntry): ProviderKey {
+  if (entry.smtp_type !== "local") return "server";
+  const host = (entry.host || "").toLowerCase();
+  const match = PROVIDER_LIST.find(p => p.hostMatch?.test(host));
+  return match?.key ?? "custom";
+}
+
+export function applyProvider(form: SmtpForm, key: ProviderKey): SmtpForm {
+  const p = PROVIDER_CONFIG[key];
+  return {
+    ...form,
+    smtpType: p.smtpType,
+    ...(p.prefill ? { host: p.prefill.host, port: p.prefill.port, useTls: p.prefill.useTls } : {}),
+  };
+}

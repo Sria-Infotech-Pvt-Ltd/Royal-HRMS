@@ -271,6 +271,7 @@ def _deliver(employee, target_date: date) -> None:
                 'message':       message,
                 'company_name':  company.company_name if company else '',
             },
+            module='attendance',
         )
     except Exception as exc:
         logger.warning(

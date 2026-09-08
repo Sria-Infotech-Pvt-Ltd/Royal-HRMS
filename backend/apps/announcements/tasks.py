@@ -80,7 +80,7 @@ def send_announcement_email_task(self, announcement_id: int):
                 )
                 return {'announcement_id': announcement_id, 'status': 'no_recipients'}
 
-            smtp_connection, from_email = _get_smtp_connection()
+            smtp_connection, from_email, _smtp = _get_smtp_connection()
             subject = f'[Announcement] {announcement.title}'
             body    = _company_email_wrapper(announcement.body, *_get_company_branding())
         except RuntimeError as exc:

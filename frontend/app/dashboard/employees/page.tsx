@@ -99,6 +99,7 @@ export default function EmployeesPage() {
 
   const canCreate = usePermission("employees.create");
   const canEdit   = usePermission("employees.edit");
+  const canEditOnboarding = usePermission("onboarding.edit");
 
   const [isAdmin,    setIsAdmin]    = useState(false);
   const [isManager,  setIsManager]  = useState(false);
@@ -398,6 +399,15 @@ export default function EmployeesPage() {
                             className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--outline-v)] text-[var(--on-bg)] bg-white hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
                             <i className="ti ti-eye text-[15px]" />
                           </button>
+                          {canEditOnboarding && e.status === "onboarding" && (
+                            <button
+                              onClick={() => router.push(`/dashboard/employees/${e.id}/onboarding`)}
+                              suppressHydrationWarning
+                              title="Complete Onboarding"
+                              className="flex items-center justify-center w-8 h-8 rounded-lg border border-[var(--warn)] text-[var(--warn)] bg-white hover:bg-[var(--warn-c)] transition-colors">
+                              <i className="ti ti-clipboard-check text-[15px]" />
+                            </button>
+                          )}
                           {canEdit && (
                             <button
                               onClick={() => toggleStatus(e)}

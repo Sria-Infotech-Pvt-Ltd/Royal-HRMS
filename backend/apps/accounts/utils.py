@@ -68,8 +68,10 @@ def generate_otp(length: int = 6) -> str:
 
 # ─── SMTP connection ──────────────────────────────────────────────────────────
 
-def _get_smtp_connection() -> tuple[object, str]:
-    """Return (connection, from_email) using the active SMTPSettings row.
+def _get_smtp_connection() -> tuple[object, str, object]:
+    """Return (connection, from_email, smtp) using the active SMTPSettings row
+    — `smtp` is the row itself, returned so callers can record which config
+    was actually used (see EmailLog.smtp_settings) without a second query.
 
     Raises RuntimeError if no active config exists — callers must handle this
     and return an appropriate error to the user.
@@ -92,7 +94,7 @@ def _get_smtp_connection() -> tuple[object, str]:
         fail_silently=False,
     )
     from_email = formataddr((smtp.sender_name, smtp.from_email))
-    return connection, from_email
+    return connection, from_email, smtp
 
 
 # ─── Email helpers ────────────────────────────────────────────────────────────
@@ -125,7 +127,7 @@ def _build_message(
 
 def send_otp_email(email: str, otp: str, full_name: str) -> None:
 
-    connection, from_email = _get_smtp_connection()
+    connection, from_email, _smtp = _get_smtp_connection()
     expiry  = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
     branding = _get_company_branding()
     company_name = branding[0] or 'Aira HRMS'
@@ -248,50 +250,170 @@ def _company_email_wrapper(body: str, company_name: str, logo_url: str,
 """
 
 
+# Deny-list of context keys whose value must never be persisted to EmailLog —
+# these carry a real, working credential in the rendered email body, not just
+# a reference to one, so logging them verbatim would let anyone holding
+# email_logs.view read a live password/OTP/token indefinitely (CLAUDE.md:
+# "never log passwords, tokens"). The actual outgoing email is unaffected —
+# only what's written to EmailLog is redacted. See send_template_email below.
+_SENSITIVE_CONTEXT_KEYS = {
+    'password', 'temp_password', 'otp', 'token', 'secret',
+    'api_key', 'access_token', 'refresh_token', 'pin',
+}
+
+
+def _redact_context(context: dict) -> dict:
+    return {
+        k: ('[REDACTED]' if k.lower() in _SENSITIVE_CONTEXT_KEYS else v)
+        for k, v in context.items()
+    }
+
+
 def send_template_email(
     recipient_email: str,
     template_name: str,
     context: dict,
     extra_attachments: list[tuple[str, bytes, str]] | None = None,
+    module: str = '',
+    triggered_by=None,
 ) -> None:
     """
     extra_attachments: optional list of (filename, content_bytes, mime_type) —
     for per-send dynamic attachments (e.g. a calendar invite whose date/time
     differs on every send) that can't be a static EmailTemplateAttachment row.
-    """
 
-    from apps.accounts.models import EmailTemplate  # avoid circular import
+    module: which app/feature triggered this send (e.g. 'hrms', 'recruitment')
+    — recorded on the EmailLog row so the system-wide log can be filtered by
+    source. triggered_by: the acting User, if any (most Celery/background call
+    sites have none — pass None, which is what the field is nullable for).
+
+    Writes one EmailLog row per attempt (success or failure) before returning
+    or re-raising — the raise contract is otherwise byte-for-byte unchanged
+    from before this row was added: every exception type this function raises
+    today is still raised, via a bare `raise`, never re-wrapped. This matters
+    because some callers (e.g. recruitment's SendCandidateEmailView) inspect
+    the caught exception's type/attributes to shape their own HTTP response.
+    """
+    from apps.accounts.models import EmailLog, EmailTemplate  # avoid circular import
+
+    log_context = _redact_context(context)
+    has_sensitive = log_context != context
 
     try:
         tpl = EmailTemplate.objects.prefetch_related('attachments').get(
             name=template_name, is_active=True
         )
     except EmailTemplate.DoesNotExist:
-        raise LookupError(
-            f'Email template "{template_name}" not found or inactive.'
+        exc = LookupError(f'Email template "{template_name}" not found or inactive.')
+        EmailLog.record(
+            recipient_email=recipient_email, subject='', body_html='',
+            template_name=template_name, context=log_context, module=module,
+            status=EmailLog.STATUS_FAILED, error_message=str(exc),
+            triggered_by=triggered_by, has_sensitive_context=has_sensitive,
         )
+        raise exc
 
     subject, html_body = tpl.render(context)
     html_body = _company_email_wrapper(html_body, *_get_company_branding())
 
-    connection, from_email = _get_smtp_connection()
+    # Redacted copy of the same content, for the log row only — never sent.
+    log_subject, log_body = tpl.render(log_context)
+    log_body = _company_email_wrapper(log_body, *_get_company_branding())
 
-    msg = _build_message(
-        subject=subject,
-        html_body=html_body,
-        from_email=from_email,
-        to=[recipient_email],
-        connection=connection,
+    attachment_names = [att.filename for att in tpl.attachments.all()]
+    attachment_names += [a[0] for a in (extra_attachments or [])]
+
+    smtp = None
+    try:
+        connection, from_email, smtp = _get_smtp_connection()
+        msg = _build_message(
+            subject=subject,
+            html_body=html_body,
+            from_email=from_email,
+            to=[recipient_email],
+            connection=connection,
+        )
+
+        for att in tpl.attachments.all():
+            with att.file.open('rb') as f:
+                msg.attach(att.filename, f.read(), att.mime_type)
+
+        for filename, content, mime_type in (extra_attachments or []):
+            msg.attach(filename, content, mime_type)
+
+        msg.send(fail_silently=False)
+    except Exception as exc:
+        EmailLog.record(
+            recipient_email=recipient_email, subject=log_subject, body_html=log_body,
+            template_name=template_name, context=log_context, module=module,
+            status=EmailLog.STATUS_FAILED, error_message=str(exc),
+            triggered_by=triggered_by, smtp_settings=smtp,
+            had_attachments=bool(attachment_names),
+            attachment_filenames=', '.join(attachment_names),
+            has_sensitive_context=has_sensitive,
+        )
+        raise
+
+    EmailLog.record(
+        recipient_email=recipient_email, subject=log_subject, body_html=log_body,
+        template_name=template_name, context=log_context, module=module,
+        status=EmailLog.STATUS_SENT, error_message='',
+        triggered_by=triggered_by, smtp_settings=smtp,
+        had_attachments=bool(attachment_names),
+        attachment_filenames=', '.join(attachment_names),
+        has_sensitive_context=has_sensitive,
     )
-
-    for att in tpl.attachments.all():
-        with att.file.open('rb') as f:
-            msg.attach(att.filename, f.read(), att.mime_type)
-
-    for filename, content, mime_type in (extra_attachments or []):
-        msg.attach(filename, content, mime_type)
-
-    msg.send(fail_silently=False)
     logger.info(
         'Template email "%s" sent to %s.', template_name, recipient_email
+    )
+
+
+def resend_logged_email(email_log, triggered_by=None):
+    """
+    Replay a previously-failed EmailLog's stored subject/body verbatim.
+    Never re-touches EmailTemplate — immune to the template being edited or
+    deleted since the original send. Writes a NEW EmailLog row (does not
+    mutate `email_log`) and raises on failure, mirroring send_template_email's
+    contract. Attachments are never replayed (neither static
+    EmailTemplateAttachment rows nor dynamic extra_attachments are available
+    at this point) — callers should surface email_log.had_attachments as a
+    "not reproduced on resend" note.
+    """
+    from apps.accounts.models import EmailLog
+
+    smtp = None
+    try:
+        connection, from_email, smtp = _get_smtp_connection()
+        msg = _build_message(
+            subject=email_log.subject,
+            html_body=email_log.body_html,
+            from_email=from_email,
+            to=[email_log.recipient_email],
+            connection=connection,
+        )
+        msg.send(fail_silently=False)
+    except Exception as exc:
+        EmailLog.record(
+            recipient_email=email_log.recipient_email, subject=email_log.subject,
+            body_html=email_log.body_html, template_name=email_log.template_name,
+            context=email_log.context, module=email_log.module,
+            status=EmailLog.STATUS_FAILED, error_message=str(exc),
+            triggered_by=triggered_by, smtp_settings=smtp,
+            had_attachments=email_log.had_attachments,
+            attachment_filenames=email_log.attachment_filenames,
+            has_sensitive_context=email_log.has_sensitive_context,
+            is_resend=True, resend_of=email_log,
+        )
+        raise
+
+    return EmailLog.record(
+        recipient_email=email_log.recipient_email, subject=email_log.subject,
+        body_html=email_log.body_html, template_name=email_log.template_name,
+        context=email_log.context, module=email_log.module,
+        status=EmailLog.STATUS_SENT, error_message='',
+        triggered_by=triggered_by, smtp_settings=smtp,
+        had_attachments=email_log.had_attachments,
+        attachment_filenames=email_log.attachment_filenames,
+        has_sensitive_context=email_log.has_sensitive_context,
+        is_resend=True, resend_of=email_log,
     )

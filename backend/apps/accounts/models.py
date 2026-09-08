@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from datetime import timedelta
@@ -22,6 +23,8 @@ from core.storage import (
     email_template_attachment_upload_path,
     profile_photo_upload_path,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Role & Permission ────────────────────────────────────────────────────────
@@ -766,6 +769,76 @@ class EmailTemplate(models.Model):
             subject     = subject.replace(placeholder, safe_value)
             body        = body.replace(placeholder, safe_value)
         return subject, body
+
+
+# ─── Email Log (system-wide) ──────────────────────────────────────────────────
+
+class EmailLog(models.Model):
+    """
+    One row per email send attempt, written automatically by
+    send_template_email() / resend_logged_email() (see apps.accounts.utils) —
+    system-wide, not tied to any single app's domain object. Subject/body/
+    context are persisted from a REDACTED copy of the original context (see
+    utils._redact_context) whenever it carried a password/OTP/token, so a
+    resend can replay stored content verbatim without ever exposing a
+    credential through this log — has_sensitive_context marks those rows and
+    blocks generic resend for them (see EmailLogResendView).
+    """
+    STATUS_SENT   = 'sent'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_SENT,   'Sent'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    id                    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient_email       = models.EmailField()
+    subject               = models.CharField(max_length=500, blank=True, default='')
+    body_html             = models.TextField(blank=True, default='')
+    template_name         = models.CharField(max_length=100, blank=True, default='')
+    context               = models.JSONField(default=dict, blank=True)
+    module                = models.CharField(max_length=50, blank=True, default='')
+    status                = models.CharField(max_length=10, choices=STATUS_CHOICES)
+    error_message         = models.TextField(blank=True, default='')
+    triggered_by          = models.ForeignKey(
+                                 User, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='email_logs_triggered',
+                             )
+    smtp_settings         = models.ForeignKey(
+                                 'SMTPSettings', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='email_logs',
+                             )
+    had_attachments       = models.BooleanField(default=False)
+    attachment_filenames  = models.CharField(max_length=500, blank=True, default='')
+    has_sensitive_context = models.BooleanField(default=False)
+    is_resend             = models.BooleanField(default=False)
+    resend_of             = models.ForeignKey(
+                                 'self', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='resend_attempts',
+                             )
+    created_at            = models.DateTimeField(auto_now_add=True)
+    updated_at            = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_email_logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'created_at'], name='emaillog_status_created_idx'),
+            models.Index(fields=['module', 'created_at'], name='emaillog_module_created_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'[{self.status}] {self.subject} → {self.recipient_email}'
+
+    @classmethod
+    def record(cls, **kwargs) -> EmailLog | None:
+        """Write a log row; never raises — a logging failure must never mask
+        the real send outcome or crash the caller."""
+        try:
+            return cls.objects.create(**kwargs)
+        except Exception:
+            logger.exception('Failed to write EmailLog row for %s', kwargs.get('recipient_email'))
+            return None
 
 
 # ─── Company (singleton) ──────────────────────────────────────────────────────

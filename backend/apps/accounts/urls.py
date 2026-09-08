@@ -1,4 +1,16 @@
 from django.urls import path
+from apps.accounts.views_email_log import (
+    EmailLogDetailView,
+    EmailLogListView,
+    EmailLogResendView,
+)
+from apps.accounts.views_reset_password import EmployeePasswordResetView
+from apps.accounts.views_onboarding_hr import (
+    HREmployeeCustomFieldFileValueView,
+    HREmployeeOnboardingDocumentView,
+    HREmployeeOnboardingSubmitView,
+    HREmployeeOnboardingView,
+)
 from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
@@ -94,6 +106,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
     path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
+    path('employees/<uuid:pk>/reset-password/',                   EmployeePasswordResetView.as_view(),    name='employee-reset-password'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
     # Onboarding (self-service wizard — unified view)
@@ -107,6 +120,15 @@ urlpatterns = [
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
     path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),
     path('onboarding/document-type-config/',         DocumentTypeConfigPublicView.as_view(), name='onboarding-document-type-config'),
+
+    # Onboarding — HR/Admin completes the wizard on an employee's behalf
+    # (onboarding.edit permission). user_id-keyed, not employee_id-keyed —
+    # see views_onboarding_hr.py's module docstring for why.
+    path('onboarding/employees/<str:user_id>/',                     HREmployeeOnboardingView.as_view(),           name='onboarding-employee-summary'),
+    path('onboarding/employees/<str:user_id>/step/<int:step>/',     HREmployeeOnboardingView.as_view(),           name='onboarding-employee-step'),
+    path('onboarding/employees/<str:user_id>/submit/',              HREmployeeOnboardingSubmitView.as_view(),     name='onboarding-employee-submit'),
+    path('onboarding/employees/<str:user_id>/documents/',           HREmployeeOnboardingDocumentView.as_view(),   name='onboarding-employee-documents'),
+    path('onboarding/employees/<str:user_id>/custom-file-fields/',  HREmployeeCustomFieldFileValueView.as_view(), name='onboarding-employee-custom-file-fields'),
 
     # Onboarding field configuration (HR settings screen)
     path('settings/onboarding-fields/',              OnboardingFieldConfigView.as_view(), name='onboarding-field-settings'),
@@ -149,6 +171,11 @@ urlpatterns = [
 
     # Audit Log (read-only)
     path('settings/audit/', AuditLogListView.as_view(), name='audit-log-list'),
+
+    # Email Log (system-wide) — every send_template_email() attempt, with resend for failures
+    path('settings/email-logs/',                  EmailLogListView.as_view(),   name='email-log-list'),
+    path('settings/email-logs/<uuid:pk>/',         EmailLogDetailView.as_view(), name='email-log-detail'),
+    path('settings/email-logs/<uuid:pk>/resend/',  EmailLogResendView.as_view(), name='email-log-resend'),
 
     # SMTP Settings — unlimited named configs, one active at a time
     path('settings/smtp/',                    SMTPSettingsListCreateView.as_view(), name='smtp-list'),

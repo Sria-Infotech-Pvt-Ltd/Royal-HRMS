@@ -245,11 +245,11 @@ class ExpenseDetailView(APIView):
         # was accepted and silently discarded, so nothing was ever sent.
         template_name = request.data.get('template_name')
         if template_name:
-            self._send_decision_email(expense, template_name, request.data.get('extra_context') or {})
+            self._send_decision_email(expense, template_name, request.data.get('extra_context') or {}, request.user)
 
         return success(f'Expense {status_val}.', self._fresh(expense.pk, request))
 
-    def _send_decision_email(self, expense, template_name: str, extra_context: dict) -> None:
+    def _send_decision_email(self, expense, template_name: str, extra_context: dict, actor=None) -> None:
         # Server-computed values win over whatever the client sent — the
         # client's copy is only a preview; re-deriving it here guarantees the
         # email always matches the real record, not a stale client-side echo.
@@ -259,6 +259,8 @@ class ExpenseDetailView(APIView):
                 recipient_email=expense.employee.email,
                 template_name=template_name,
                 context=context,
+                module='hrms',
+                triggered_by=actor,
             )
         except LookupError:
             logger.warning('Expense %s: unknown/inactive template "%s" — no email sent.',
