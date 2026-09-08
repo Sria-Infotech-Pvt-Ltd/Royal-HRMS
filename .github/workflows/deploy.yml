@@ -1,0 +1,42 @@
+name: Deploy → royalhrms.nxsys.in
+
+on:
+  push:
+    branches: [demo]
+
+jobs:
+  deploy:
+    name: SSH deploy to server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_KEY }}
+          script: |
+            set -e
+            cd /var/www/royalhrms
+            git pull origin demo
+
+            # ── Backend ──────────────────────────────────────────
+            cd backend
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+            python manage.py migrate --noinput
+            python manage.py collectstatic --noinput
+            deactivate
+
+            # ── Frontend ─────────────────────────────────────────
+            cd ../frontend
+            npm install --prefer-offline
+            npm run build
+            pm2 restart royalhrms-frontend
+            pm2 save
+
+            # ── Restart Django service ────────────────────────────
+            sudo systemctl restart gunicorn-royalhrms.service
+
+            echo "✅ Deploy complete"
