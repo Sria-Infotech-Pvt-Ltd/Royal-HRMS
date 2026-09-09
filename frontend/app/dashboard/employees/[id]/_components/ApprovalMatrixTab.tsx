@@ -6,6 +6,8 @@ import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
+import EmptyState from "@/components/EmptyState";
+import LoadingState from "@/components/LoadingState";
 import type { WorkflowMatrixRow, ApprovalWorkflowType } from "@/types/approvalMatrix";
 
 interface PickerEmployee {
@@ -322,12 +324,7 @@ export function ApprovalMatrixTab({
   const branchParam = branch ? `?branch=${encodeURIComponent(branch)}` : "";
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16 gap-2 text-[13px] text-[var(--on-variant)]">
-        <i className="ti ti-loader-2 animate-spin text-[20px]" style={{ color: "var(--primary)" }} />
-        Loading approval matrix…
-      </div>
-    );
+    return <LoadingState label="Loading approval matrix…" />;
   }
 
   if (error) {
@@ -437,8 +434,8 @@ export function ApprovalMatrixTab({
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 4 : 3} style={{ padding: "40px 12px", textAlign: "center", color: "var(--on-variant)", fontSize: 13 }}>
-                    No approval matrix configured.
+                  <td colSpan={canEdit ? 4 : 3}>
+                    <EmptyState icon="ti-list-check" title="No approval matrix configured" />
                   </td>
                 </tr>
               ) : rows.map(row => (

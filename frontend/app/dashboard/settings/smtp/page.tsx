@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
+import EmptyState from "@/components/EmptyState";
+import LoadingState from "@/components/LoadingState";
 import SmtpModal from "./_components/SmtpModal";
 import {
   SMTP_BASE, smtpDetail, smtpActivate, SMTP_TEST,
@@ -201,12 +203,7 @@ export default function SmtpSettingsPage() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, gap: 10, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} />
-          Loading SMTP configurations…
-        </div>
-      )}
+      {loading && <LoadingState label="Loading SMTP configurations…" fullHeight />}
 
       {/* Error */}
       {!loading && error && (
@@ -231,11 +228,7 @@ export default function SmtpSettingsPage() {
 
       {/* Empty state */}
       {!loading && !error && entries.length === 0 && (
-        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--on-variant)" }}>
-          <i className="ti ti-mail-off" style={{ fontSize: 40, opacity: 0.25, display: "block", marginBottom: 12 }} />
-          <div style={{ fontSize: 14, fontWeight: 500 }}>No SMTP configurations yet</div>
-          <div style={{ fontSize: 13, marginTop: 4 }}>Click Add SMTP to get started</div>
-        </div>
+        <EmptyState icon="ti-mail-off" title="No SMTP configurations yet" description="Click Add SMTP to get started" />
       )}
 
       {/* Cards grid */}

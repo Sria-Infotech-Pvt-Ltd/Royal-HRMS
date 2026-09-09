@@ -5,6 +5,8 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import AttendanceDetailDrawer from "./AttendanceDetailDrawer";
 import { AttendanceCreateForm } from "./AttendanceEditForm";
+import EmptyState from "@/components/EmptyState";
+import LoadingState from "@/components/LoadingState";
 
 interface EmployeeOption {
   id: string;
@@ -214,17 +216,10 @@ export default function EmployeeMonthView({ initialEmployee, initialMonth }: Pro
 
       {/* Prompt when no employee selected */}
       {!selected && (
-        <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--on-variant)" }}>
-          <i className="ti ti-user-search" style={{ fontSize: 40, display: "block", marginBottom: 12, opacity: 0.3 }} />
-          <div style={{ fontSize: 14 }}>Search for an employee to view their monthly attendance calendar.</div>
-        </div>
+        <EmptyState icon="ti-user-search" title="Search for an employee to view their monthly attendance calendar." />
       )}
 
-      {selected && loading && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "40px 0", justifyContent: "center", fontSize: 13, color: "var(--on-variant)" }}>
-          <i className="ti ti-loader-2 animate-spin" style={{ color: "var(--primary)" }} /> Loading attendance data…
-        </div>
-      )}
+      {selected && loading && <LoadingState label="Loading attendance data…" />}
 
       {selected && error && (
         <div className="alert alert-error"><i className="ti ti-alert-circle" /> {error}</div>
