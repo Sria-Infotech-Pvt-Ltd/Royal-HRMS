@@ -14,7 +14,8 @@ from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import ApprovalWorkflowRule
-from apps.hrms.models import Expense, LeaveBalance, LeavePolicy
+from apps.hrms.models import CarryForwardLog, Expense, LeaveBalance, LeavePolicy
+from apps.hrms.tasks import expire_unused_carry_forward
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
@@ -260,3 +261,109 @@ class ExpenseSelfApprovalTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
         self.assertIn('cannot approve', resp.data['message'].lower())
+
+
+class ExpireUnusedCarryForwardTaskTests(TestCase):
+    """Regression test: LeaveBalance.carry_forward_expiry_date was set by
+    both reset_annual_leave_balances and the manual CarryForwardRunView, but
+    nothing ever read it back — carried-forward leave never actually expired.
+    Confirms the new expire_unused_carry_forward task enforces it correctly.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.employee = make_user('carryforward@test.com', role=make_role('employee'), password='TestPass123!')
+
+    def test_expired_carry_forward_is_deducted_and_cleared(self):
+        balance = LeaveBalance.objects.create(
+            employee=self.employee, leave_type='casual', year=2026,
+            total_days=Decimal('15.0'), used_days=Decimal('2.0'),
+            carried_forward=Decimal('5.0'),
+            carry_forward_expiry_date=datetime.date.today() - datetime.timedelta(days=1),
+        )
+        result = expire_unused_carry_forward()
+        self.assertEqual(result['processed'], 1)
+        self.assertEqual(result['skipped'], 0)
+
+        balance.refresh_from_db()
+        # available before expiry = 15 - 2 = 13, carried_forward = 5 -> fully reclaimable
+        self.assertEqual(balance.total_days, Decimal('10.0'))
+        self.assertEqual(balance.carried_forward, Decimal('0'))
+        self.assertIsNone(balance.carry_forward_expiry_date)
+
+        log = CarryForwardLog.objects.get(process_mode='expire')
+        self.assertEqual(log.total_processed, 1)
+        self.assertEqual(log.total_skipped, 0)
+        self.assertEqual(log.total_failed, 0)
+
+    def test_only_the_actually_available_portion_is_reclaimed(self):
+        """An employee who already used more than their non-carry-forward
+        allotment (available_days < carried_forward) must only lose what's
+        actually available — total_days must never drop below used_days."""
+        balance = LeaveBalance.objects.create(
+            employee=self.employee, leave_type='casual', year=2026,
+            total_days=Decimal('12.0'), used_days=Decimal('10.0'),
+            carried_forward=Decimal('5.0'),
+            carry_forward_expiry_date=datetime.date.today() - datetime.timedelta(days=1),
+        )
+        expire_unused_carry_forward()
+
+        balance.refresh_from_db()
+        # available = 12 - 10 = 2, carried_forward = 5 -> only 2 reclaimable
+        self.assertEqual(balance.total_days, Decimal('10.0'))
+        self.assertEqual(balance.used_days, Decimal('10.0'))
+        self.assertEqual(balance.total_days, balance.used_days, 'must never go negative')
+        self.assertEqual(balance.carried_forward, Decimal('0'))
+
+    def test_fully_used_carry_forward_is_only_cleared_not_double_deducted(self):
+        """available_days <= 0 (already fully used before expiry): nothing to
+        claw back, but the expired flag must still clear so this row is not
+        re-selected on every subsequent day's run."""
+        balance = LeaveBalance.objects.create(
+            employee=self.employee, leave_type='casual', year=2026,
+            total_days=Decimal('10.0'), used_days=Decimal('10.0'),
+            carried_forward=Decimal('5.0'),
+            carry_forward_expiry_date=datetime.date.today() - datetime.timedelta(days=1),
+        )
+        result = expire_unused_carry_forward()
+        self.assertEqual(result['skipped'], 1)
+        self.assertEqual(result['processed'], 0)
+
+        balance.refresh_from_db()
+        self.assertEqual(balance.total_days, Decimal('10.0'))
+        self.assertEqual(balance.carried_forward, Decimal('0'))
+        self.assertIsNone(balance.carry_forward_expiry_date)
+
+    def test_not_yet_expired_carry_forward_is_left_untouched(self):
+        balance = LeaveBalance.objects.create(
+            employee=self.employee, leave_type='casual', year=2026,
+            total_days=Decimal('15.0'), used_days=Decimal('2.0'),
+            carried_forward=Decimal('5.0'),
+            carry_forward_expiry_date=datetime.date.today() + datetime.timedelta(days=30),
+        )
+        result = expire_unused_carry_forward()
+        self.assertEqual(result['processed'], 0)
+        self.assertEqual(result['skipped'], 0)
+
+        balance.refresh_from_db()
+        self.assertEqual(balance.total_days, Decimal('15.0'))
+        self.assertEqual(balance.carried_forward, Decimal('5.0'))
+        self.assertIsNotNone(balance.carry_forward_expiry_date)
+
+    def test_rerunning_the_task_is_idempotent(self):
+        balance = LeaveBalance.objects.create(
+            employee=self.employee, leave_type='casual', year=2026,
+            total_days=Decimal('15.0'), used_days=Decimal('2.0'),
+            carried_forward=Decimal('5.0'),
+            carry_forward_expiry_date=datetime.date.today() - datetime.timedelta(days=1),
+        )
+        first = expire_unused_carry_forward()
+        self.assertEqual(first['processed'], 1)
+
+        second = expire_unused_carry_forward()
+        self.assertEqual(second['processed'], 0)
+        self.assertEqual(second['skipped'], 0)
+
+        balance.refresh_from_db()
+        self.assertEqual(balance.total_days, Decimal('10.0'), 'second run must not deduct again')
+        self.assertEqual(CarryForwardLog.objects.filter(process_mode='expire').count(), 2)

@@ -114,6 +114,104 @@ def reset_annual_leave_balances(self):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def expire_unused_carry_forward(self):
+    """
+    Daily task: LeaveBalance.carry_forward_expiry_date was being set correctly
+    (both here-adjacent reset_annual_leave_balances above and the manual
+    CarryForwardRunView in apps/hrms/views/leave.py both set it) and shown to
+    employees, but nothing ever read it again — carried-forward leave never
+    actually expired regardless of what the policy configured. This task is
+    that missing enforcement step.
+
+    For every LeaveBalance row whose carry_forward_expiry_date has passed and
+    which still has carried_forward > 0:
+    - Deducts only the *unused* expired portion from total_days — i.e.
+      min(carried_forward, available_days) — so a row where the employee
+      already used more than their non-carry-forward annual allotment isn't
+      double-deducted, and this can never push total_days below used_days
+      (no negative available_days as a result of this task).
+    - Zeroes out carried_forward and carry_forward_expiry_date on that row
+      once processed, so the same row isn't re-evaluated (and re-logged) on
+      every subsequent day's run — it's already been settled.
+
+    Logged via CarryForwardLog (process_mode='expire') — the same model/
+    pattern the manual carry-forward run and the annual reset above already
+    use for their own audit trail, rather than a new model for this one
+    additional way LeaveBalance.carried_forward changes. from_year/to_year
+    are both set to the current year since this isn't a year-transition
+    action the way the other two uses of this model are — there's no
+    natural "from/to" pair for an expiry sweep, and reusing the existing
+    non-choice-constrained process_mode field to distinguish it is simpler
+    than adding a new model for one extra field.
+
+    Idempotent: a row with carried_forward already at 0 (already processed,
+    or never had any) is simply skipped — safe to re-run if the task fires
+    twice, same convention as reset_annual_leave_balances above.
+    """
+    from decimal import Decimal
+
+    from apps.hrms.models import CarryForwardLog, LeaveBalance
+
+    try:
+        today = timezone.localdate()
+
+        expired_qs = LeaveBalance.objects.filter(
+            carry_forward_expiry_date__lt=today,
+            carried_forward__gt=0,
+        )
+
+        processed = 0
+        skipped   = 0
+        failed    = 0
+
+        for balance in expired_qs.iterator():
+            try:
+                available = balance.total_days - balance.used_days
+                deduct    = min(balance.carried_forward, max(available, Decimal('0')))
+
+                if deduct <= 0:
+                    # Already fully used (or over-used) before expiry — nothing
+                    # left to claw back, but the expired carry-forward still
+                    # needs clearing so this row stops being re-selected daily.
+                    LeaveBalance.objects.filter(pk=balance.pk).update(
+                        carried_forward=Decimal('0'), carry_forward_expiry_date=None,
+                    )
+                    skipped += 1
+                    continue
+
+                LeaveBalance.objects.filter(pk=balance.pk).update(
+                    total_days=balance.total_days - deduct,
+                    carried_forward=Decimal('0'),
+                    carry_forward_expiry_date=None,
+                )
+                processed += 1
+            except Exception:
+                logger.exception(
+                    'expire_unused_carry_forward failed for balance=%s employee=%s',
+                    balance.pk, balance.employee_id,
+                )
+                failed += 1
+
+        CarryForwardLog.objects.create(
+            from_year=today.year,
+            to_year=today.year,
+            process_mode='expire',
+            total_processed=processed,
+            total_skipped=skipped,
+            total_failed=failed,
+            is_completed=True,
+            notes=f'Automatic daily expiry sweep, run {today.isoformat()}.',
+        )
+
+        result = {'date': today.isoformat(), 'processed': processed, 'skipped': skipped, 'failed': failed}
+        logger.info('expire_unused_carry_forward completed: %s', result)
+        return result
+    except Exception as exc:
+        logger.error('expire_unused_carry_forward error: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_birthday_wishes(self):
     """
     Daily task: for every active employee whose birthday (month + day)

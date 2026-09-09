@@ -311,6 +311,14 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.hrms.tasks.reset_annual_leave_balances',
         'schedule': crontab(hour=0, minute=1, day_of_month=1, month_of_year=1),
     },
+    # Runs daily at 00:10 IST — deducts any carried-forward leave whose
+    # carry_forward_expiry_date has passed and is still unused. Offset 10 min
+    # past midnight so it runs after send-birthday-wishes (00:05) rather than
+    # colliding with it.
+    'expire-unused-carry-forward': {
+        'task':     'apps.hrms.tasks.expire_unused_carry_forward',
+        'schedule': crontab(hour=0, minute=10),
+    },
     # Runs daily at 10:00 IST — nudges managers who haven't approved payroll
     # attendance within 24 hours of the cycle being created.
     'send-payroll-approval-reminders': {
