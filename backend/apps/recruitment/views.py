@@ -844,6 +844,18 @@ class CandidateHRDecisionView(APIView):
         if decision not in {'approve', 'reject'}:
             return error('decision must be "approve" or "reject".')
 
+        # candidate.status never changes on this endpoint (stays
+        # STATUS_SELECTED — only hr_approved flips), so without this guard a
+        # retry after a partial failure below (e.g. the assessment-assignment
+        # step raising) re-matches the same query and repeats every
+        # candidate-facing side effect: a second "you're approved" email, a
+        # duplicate CandidateLog entry, etc. Reject doesn't need the same
+        # guard — CandidateHRDecisionView has no "undo an approval" concept,
+        # so re-rejecting an already-approved candidate is a no-op either way
+        # (just another log entry), not a repeat of a real action.
+        if decision == 'approve' and candidate.hr_approved:
+            return error('This candidate has already been approved.', http_status=status.HTTP_409_CONFLICT)
+
         remarks    = request.data.get('remarks', '')
         actor_name = request.user.full_name or request.user.email
 
@@ -859,72 +871,83 @@ class CandidateHRDecisionView(APIView):
                     if isinstance(k, str) and k.isidentifier() and len(k) <= 100:
                         extra_context[k] = str(v)[:2000]
 
-            candidate.hr_approved = True
-            candidate.save(update_fields=['hr_approved', 'updated_at'])
-            CandidateLog.objects.create(
-                candidate=candidate,
-                log_type=CandidateLog.TYPE_SUCCESS,
-                title='HR Approved — Onboarded as Employee',
-                description=f'Approved by {actor_name}. {remarks}'.strip('. '),
-            )
-            email_status = _send_candidate_email(candidate, template_name, request.user, extra_context)
-            CandidateLog.objects.create(
-                candidate=candidate,
-                log_type=(CandidateLog.TYPE_SUCCESS
-                          if email_status == CandidateEmail.STATUS_SENT
-                          else CandidateLog.TYPE_WARN),
-                title=('Onboarding email sent'
-                       if email_status == CandidateEmail.STATUS_SENT
-                       else 'Onboarding email failed — check SMTP settings'),
-                description=f'Using template: {template_name}',
-            )
-
-            # Auto-assign default assessments so candidate must complete them
-            # before accessing the employment portal
-            if candidate.portal_user_id:
-                from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
-                from apps.accounts.models import User as _User
-                default_assessments = list(
-                    Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
+            # Everything below is one all-or-nothing unit — previously
+            # `candidate.hr_approved=True` and the "HR Approved" log entry
+            # committed independently of the assessment-assignment step
+            # further down, which had no try/except at all: a DB hiccup or a
+            # bad Assessment/AssessmentItem row there would 500 the request
+            # *after* the approval had already been saved, with nothing to
+            # roll it back. `_send_candidate_email`/the assessment
+            # notification loop already swallow their own exceptions (can't
+            # raise), so including them here changes nothing about how long
+            # this transaction is realistically held open in practice.
+            with transaction.atomic():
+                candidate.hr_approved = True
+                candidate.save(update_fields=['hr_approved', 'updated_at'])
+                CandidateLog.objects.create(
+                    candidate=candidate,
+                    log_type=CandidateLog.TYPE_SUCCESS,
+                    title='HR Approved — Onboarded as Employee',
+                    description=f'Approved by {actor_name}. {remarks}'.strip('. '),
                 )
-                assigned_assessments = []
-                for assessment in default_assessments:
-                    max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
-                    _, created = CandidateAssignment.objects.get_or_create(
-                        candidate=candidate,
-                        assessment=assessment,
-                        defaults={'assigned_by': request.user, 'max_score': max_score},
+                email_status = _send_candidate_email(candidate, template_name, request.user, extra_context)
+                CandidateLog.objects.create(
+                    candidate=candidate,
+                    log_type=(CandidateLog.TYPE_SUCCESS
+                              if email_status == CandidateEmail.STATUS_SENT
+                              else CandidateLog.TYPE_WARN),
+                    title=('Onboarding email sent'
+                           if email_status == CandidateEmail.STATUS_SENT
+                           else 'Onboarding email failed — check SMTP settings'),
+                    description=f'Using template: {template_name}',
+                )
+
+                # Auto-assign default assessments so candidate must complete them
+                # before accessing the employment portal
+                if candidate.portal_user_id:
+                    from apps.assessments.models import Assessment, AssessmentItem, CandidateAssignment
+                    from apps.accounts.models import User as _User
+                    default_assessments = list(
+                        Assessment.objects.filter(is_active=True, is_default=True).prefetch_related('items')
                     )
-                    if created:
-                        assigned_assessments.append(assessment)
+                    assigned_assessments = []
+                    for assessment in default_assessments:
+                        max_score = assessment.items.filter(item_type=AssessmentItem.TYPE_QUIZ).count()
+                        _, created = CandidateAssignment.objects.get_or_create(
+                            candidate=candidate,
+                            assessment=assessment,
+                            defaults={'assigned_by': request.user, 'max_score': max_score},
+                        )
+                        if created:
+                            assigned_assessments.append(assessment)
 
-                if assigned_assessments:
-                    portal_user = candidate.portal_user
-                    portal_user.assessment_status = _User.ASSESSMENT_PENDING
-                    portal_user.save(update_fields=['assessment_status', 'updated_at'])
+                    if assigned_assessments:
+                        portal_user = candidate.portal_user
+                        portal_user.assessment_status = _User.ASSESSMENT_PENDING
+                        portal_user.save(update_fields=['assessment_status', 'updated_at'])
 
-                    company      = Company.objects.first()
-                    company_name = company.company_name if company else ''
-                    portal_url   = (company.portal_url if company else '') or ''
-                    for assessment in assigned_assessments:
-                        try:
-                            send_template_email(
-                                recipient_email=candidate.email,
-                                template_name='assessment_assigned',
-                                context={
-                                    'candidate_name':   candidate.name,
-                                    'assessment_title': assessment.title,
-                                    'company_name':     company_name,
-                                    'portal_url':       portal_url,
-                                },
-                                module='recruitment',
-                                triggered_by=request.user,
-                            )
-                        except Exception:
-                            logger.exception(
-                                'Failed to send assessment_assigned email for "%s" to %s',
-                                assessment.title, candidate.email,
-                            )
+                        company      = Company.objects.first()
+                        company_name = company.company_name if company else ''
+                        portal_url   = (company.portal_url if company else '') or ''
+                        for assessment in assigned_assessments:
+                            try:
+                                send_template_email(
+                                    recipient_email=candidate.email,
+                                    template_name='assessment_assigned',
+                                    context={
+                                        'candidate_name':   candidate.name,
+                                        'assessment_title': assessment.title,
+                                        'company_name':     company_name,
+                                        'portal_url':       portal_url,
+                                    },
+                                    module='recruitment',
+                                    triggered_by=request.user,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    'Failed to send assessment_assigned email for "%s" to %s',
+                                    assessment.title, candidate.email,
+                                )
 
             msg = f'{candidate.name} approved and onboarded!'
         else:

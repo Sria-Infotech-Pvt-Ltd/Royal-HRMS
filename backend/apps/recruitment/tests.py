@@ -121,3 +121,70 @@ class HRDecisionAssessmentAssignmentTests(TestCase):
         from apps.assessments.models import CandidateAssignment
         assignment = CandidateAssignment.objects.get(candidate=self.candidate)
         self.assertEqual(assignment.max_score, 2)
+
+    def test_reapproving_an_already_approved_candidate_is_rejected_not_repeated(self):
+        """Regression test: candidate.status never changes on this endpoint
+        (stays STATUS_SELECTED — only hr_approved flips), so retrying an
+        approve after it already succeeded used to silently re-match the
+        same query and repeat every candidate-facing side effect (a second
+        "you're approved" email, a duplicate CandidateLog entry, a second
+        attempt at assessment assignment). Confirms a retry is now a no-op
+        409 instead."""
+        first = self.client.patch(
+            reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
+            {'decision': 'approve'}, format='json',
+        )
+        self.assertEqual(first.status_code, 200, first.data)
+
+        from apps.recruitment.models import CandidateLog
+        log_count_after_first = CandidateLog.objects.filter(candidate=self.candidate).count()
+
+        second = self.client.patch(
+            reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
+            {'decision': 'approve'}, format='json',
+        )
+        self.assertEqual(second.status_code, 409, second.data)
+        self.assertEqual(
+            CandidateLog.objects.filter(candidate=self.candidate).count(),
+            log_count_after_first,
+            'a rejected retry must not create any new log entries (or, by the same logic, resend any email)',
+        )
+
+    def test_approval_is_atomic_a_failure_during_assessment_assignment_rolls_back_hr_approved(self):
+        """Regression test: previously, candidate.hr_approved=True and the
+        "HR Approved" CandidateLog entry committed independently of the
+        assessment-assignment step further down, which had no try/except at
+        all — a DB hiccup or a bad Assessment/AssessmentItem row there would
+        500 the request *after* the approval had already been saved, with
+        nothing to roll it back. Forces exactly that failure (a DB-level
+        error inside CandidateAssignment.get_or_create) and confirms the
+        whole approve action — including hr_approved and every CandidateLog
+        entry — is rolled back together, not left half-applied."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch(
+            'apps.assessments.models.CandidateAssignment.objects.get_or_create',
+            side_effect=Exception('simulated DB failure'),
+        ):
+            resp = self.client.patch(
+                reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
+                {'decision': 'approve'}, format='json',
+            )
+        self.assertEqual(resp.status_code, 500)
+
+        self.candidate.refresh_from_db()
+        self.assertFalse(self.candidate.hr_approved, 'hr_approved must roll back when a later step in the same action fails')
+
+        from apps.recruitment.models import CandidateLog
+        self.assertEqual(
+            CandidateLog.objects.filter(candidate=self.candidate).count(), 0,
+            'no CandidateLog entry (HR Approved / onboarding email) should survive the rollback either',
+        )
+
+        # And a genuine retry (the transient failure is gone) succeeds cleanly —
+        # confirms the rollback didn't leave the candidate stuck in a bad state.
+        retry = self.client.patch(
+            reverse('candidate-hr-decision', kwargs={'pk': self.candidate.pk}),
+            {'decision': 'approve'}, format='json',
+        )
+        self.assertEqual(retry.status_code, 200, retry.data)
