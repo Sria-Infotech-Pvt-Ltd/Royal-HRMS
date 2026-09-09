@@ -136,12 +136,17 @@ class BranchListCreateView(APIView):
         paginator = Paginator(qs, page_size)
         page_obj  = paginator.get_page(page_num)
 
-        # Compute real employee counts from User table (branch is stored as a name string)
+        # Keyed by branch_fk_id (the real Branch PK), not the legacy branch
+        # name string — see User.branch_fk's docstring (apps/accounts/models.py).
+        # The string comparison this replaced silently missed any employee
+        # whose branch string didn't exactly match a real Branch.branch_name
+        # (confirmed via the 0133 backfill migration: 13 users in this exact
+        # dataset have branch='Hyderabad', which matches no real branch).
         branch_counts = dict(
-            User.objects.filter(is_active=True)
-            .values('branch')
+            User.objects.filter(is_active=True, branch_fk__isnull=False)
+            .values('branch_fk_id')
             .annotate(count=Count('id'))
-            .values_list('branch', 'count')
+            .values_list('branch_fk_id', 'count')
         )
 
         return success('Branches retrieved successfully.', data={
@@ -461,24 +466,27 @@ class BranchDistributionView(APIView):
         if not _has_perm(request.user, 'branches.view'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
+        # Keyed by branch_fk_id (the real Branch PK), not the legacy branch
+        # name string — see User.branch_fk's docstring (apps/accounts/models.py)
+        # and BranchListCreateView.get's identical fix just above in this file.
         branch_counts = dict(
-            User.objects.filter(is_active=True)
-            .values('branch')
+            User.objects.filter(is_active=True, branch_fk__isnull=False)
+            .values('branch_fk_id')
             .annotate(count=Count('id'))
-            .values_list('branch', 'count')
+            .values_list('branch_fk_id', 'count')
         )
 
         branches = (
             Branch.objects
             .filter(status=Branch.STATUS_ACTIVE)
-            .values('branch_name', 'branch_code')
+            .values('id', 'branch_name', 'branch_code')
         )
         data = sorted(
             [
                 {
                     'branch': b['branch_name'],
                     'branch_code': b['branch_code'],
-                    'employees': branch_counts.get(b['branch_name'], 0),
+                    'employees': branch_counts.get(b['id'], 0),
                 }
                 for b in branches
             ],

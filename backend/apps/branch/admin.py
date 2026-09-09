@@ -33,8 +33,10 @@ class BranchAdmin(admin.ModelAdmin):
 
     @admin.display(description='Employees')
     def employees_count(self, obj):
-        from apps.accounts.models import User
-        return User.objects.filter(branch=obj.branch_name, is_active=True).count()
+        # branch_fk, not branch=obj.branch_name — see User.branch_fk's
+        # docstring (apps/accounts/models.py) and BranchSerializer's
+        # identical fix (apps/branch/serializers.py).
+        return obj.employees.filter(is_active=True).count()
 
 
 @admin.register(EmployeeBranchAccess)

@@ -45,9 +45,16 @@ class BranchSerializer(serializers.ModelSerializer):
     def get_employees_count(self, obj):
         branch_counts = self.context.get('branch_counts')
         if branch_counts is not None:
-            return branch_counts.get(obj.branch_name, 0)
-        from apps.accounts.models import User
-        return User.objects.filter(branch=obj.branch_name, is_active=True).count()
+            # Keyed by Branch PK now, not branch_name — see the view's own
+            # comment on where branch_counts is built (apps/branch/views.py).
+            return branch_counts.get(obj.pk, 0)
+        # branch_fk, not the legacy branch=obj.branch_name string comparison —
+        # see User.branch_fk's docstring (apps/accounts/models.py). This is
+        # the first call site converted; branch=obj.branch_name misses any
+        # employee whose branch string doesn't exactly match (a stale/typo'd
+        # value — confirmed via the 0133 backfill migration's own report that
+        # such rows exist in this exact dataset).
+        return obj.employees.filter(is_active=True).count()
 
     class Meta:
         model = Branch

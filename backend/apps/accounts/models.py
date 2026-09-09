@@ -173,7 +173,32 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Same idea as designation_synced_from_position, but tracked separately —
     # a manual correction to one shouldn't silently freeze sync on the other.
     department_synced_from_position = models.BooleanField(default=True)
+    # DEPRECATED — compared by exact string against Branch.branch_name at
+    # ~90 call sites across nearly every app (attendance, payroll, leave,
+    # hrms, recruitment, announcements, notifications, dashboard,
+    # voice_commands — grepped and enumerated in the PR/commit for this
+    # field). No referential integrity: renaming a branch or a typo silently
+    # orphans/misses employees with no error. `branch_fk` below is the
+    # replacement — being migrated over call-site by call-site rather than
+    # in one sweep, since a mistake in any of those ~90 places is a
+    # real-money/real-attendance bug, not a cosmetic one. Do not add new
+    # code that reads/writes this field — use `branch_fk` instead, and if
+    # you're touching an existing call site anyway, migrate it to
+    # `branch_fk` as part of that change. Drop this field only once every
+    # call site has been migrated (tracked in the same commit history as
+    # `branch_fk`'s own introduction).
     branch          = models.CharField(max_length=100, blank=True)
+    # Real FK replacement for `branch` above — nullable because (a) not
+    # every user has a branch (system_admin accounts, some managers), same
+    # as the string field's own blank=True, and (b) a legacy `branch` string
+    # that doesn't match any real Branch.branch_name (a typo or a renamed/
+    # deleted branch) has nothing valid to point at; SET_NULL rather than
+    # CASCADE/PROTECT so deleting a Branch never cascades into deleting the
+    # employees who used to belong to it.
+    branch_fk       = models.ForeignKey(
+                          'branch.Branch', on_delete=models.SET_NULL, null=True, blank=True,
+                          related_name='employees',
+                      )
     phone           = models.CharField(max_length=20, blank=True)
     date_of_joining = models.DateField(null=True, blank=True)
     reporting_manager = models.ForeignKey(
@@ -672,7 +697,15 @@ class SMTPSettings(models.Model):
     host                = models.CharField(max_length=255)
     port                = models.PositiveIntegerField(default=587)
     username            = models.CharField(max_length=255)   # may be email OR plain username
-    password            = models.CharField(max_length=255)
+    # Encrypted at rest (Fernet, core/encrypted_fields.py) — this is a real,
+    # working credential (a mailbox password or a provider API key like
+    # Resend's), not a reference to one, so it needs the same protection as
+    # PAN/bank details elsewhere in this app. max_length=512, not 255 — Fernet
+    # ciphertext (IV + HMAC + padded ciphertext, base64-encoded) runs to
+    # roughly 1.4x the plaintext length plus ~75 bytes of fixed overhead, so
+    # a 255-char plaintext (this field's own historical max, and long enough
+    # for most provider API keys) needs headroom well past 255 once encrypted.
+    password            = EncryptedCharField(max_length=512)
     use_tls             = models.BooleanField(default=True)
     sender_name         = models.CharField(max_length=255, blank=True)
     from_email          = models.EmailField(max_length=255)
@@ -1344,7 +1377,30 @@ class EmployeeProfile(models.Model):
     father_name        = models.CharField(max_length=150, blank=True)
     blood_group        = models.CharField(max_length=5, choices=BLOOD_CHOICES, blank=True)
     current_address    = models.TextField(blank=True)
+    # current_address/permanent_address hold only the house/street/area line —
+    # village, district, state and PIN code are broken out into their own
+    # columns below so each is independently reportable/filterable rather than
+    # buried inside one free-text blob (mirrors Company's address/city/state/
+    # pin_code split above).
+    current_village    = models.CharField(max_length=150, blank=True)
+    current_district   = models.CharField(max_length=100, blank=True)
+    current_state      = models.CharField(max_length=100, blank=True)
+    current_pin_code   = models.CharField(max_length=6, blank=True)
     permanent_address  = models.TextField(blank=True)
+    permanent_village  = models.CharField(max_length=150, blank=True)
+    permanent_district = models.CharField(max_length=100, blank=True)
+    permanent_state    = models.CharField(max_length=100, blank=True)
+    permanent_pin_code = models.CharField(max_length=6, blank=True)
+    # When True, permanent_* above are kept mirroring current_* on every save
+    # (see save() below) instead of being entered separately — most
+    # employees' permanent address is the same as where they currently live,
+    # so this avoids asking for the same district/state/PIN twice. Mirrors
+    # Company.communication_address_same_as_registered's role, except that
+    # field only relaxes a validation requirement — this one actively
+    # overwrites permanent_* on save so every reader of those columns
+    # (HR's employee profile, the approval drawer, self-service "My
+    # Profile") gets a correct value without needing its own fallback logic.
+    permanent_same_as_current = models.BooleanField(default=False)
 
     # Education
     highest_qualification = models.CharField(max_length=200, blank=True)
@@ -1412,12 +1468,34 @@ class EmployeeProfile(models.Model):
     def __str__(self) -> str:
         return f'Profile — {self.user.email}'
 
+    _PERMANENT_ADDRESS_FIELDS = (
+        'permanent_address', 'permanent_village', 'permanent_district',
+        'permanent_state', 'permanent_pin_code',
+    )
+
     def save(self, *args, **kwargs):
         # Keep the blind index in sync with pan_number on every save — this
         # runs before get_prep_value() encrypts it, so self.pan_number here
         # is always the current plaintext regardless of whether this row was
         # previously encrypted (see EncryptedCharField's InvalidToken fallback).
         self.pan_number_hash = blind_index(self.pan_number) if self.pan_number else ''
+
+        # Mirror current_* into permanent_* whenever the "same as current"
+        # flag is on — done here rather than in each of the several call
+        # sites that can save this model (onboarding step save, HR employee
+        # edit, self-service "My Profile") so it can never drift out of sync
+        # depending on which path was used. Runs on every save while the flag
+        # is set, not just when current_* actually changed, so a profile that
+        # somehow got out of sync self-heals on its next save.
+        if self.permanent_same_as_current:
+            self.permanent_address  = self.current_address
+            self.permanent_village  = self.current_village
+            self.permanent_district = self.current_district
+            self.permanent_state    = self.current_state
+            self.permanent_pin_code = self.current_pin_code
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = list(set(update_fields) | set(self._PERMANENT_ADDRESS_FIELDS))
 
         bank_details_changed = False
         if self.pk:
