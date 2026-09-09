@@ -52,7 +52,6 @@ class Branch(models.Model):
         null=True, blank=True,
         related_name='managed_branches',
     )
-    employees_count = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     is_headquarter = models.BooleanField(default=False)
     # Which of the company's (state-wise) GST registrations this branch's own
