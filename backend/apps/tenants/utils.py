@@ -172,8 +172,9 @@ def send_company_provisioned_email(admin_email: str, company_code: str, company_
     login_url = f'{settings.FRONTEND_URL}/login'
     html_body = f"""
         <p>Hi,</p>
-        <p>Your company <strong>{company_name}</strong> has been set up on Royal HRMS.
-        Use the credentials below to sign in for the first time:</p>
+        <p>🎉 Congratulations! Your account for <strong>{company_name}</strong> has been
+        successfully created on Royal HRMS. Please use the login details below to
+        access the platform for the first time.</p>
         <table style="border-collapse:collapse;margin:16px 0;">
           <tr>
             <td style="padding:6px 12px;font-weight:600;color:#555;">Login URL</td>
