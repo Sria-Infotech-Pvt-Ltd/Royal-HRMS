@@ -3211,6 +3211,11 @@ class EmployeeListCreateView(APIView):
             company_code_line = (
                 f'<strong>Company ID:</strong> {company_code}<br>' if company_code else ''
             )
+            # Same FRONTEND_URL + '/login' convention as the company-provisioning
+            # welcome email (see apps.tenants.utils.send_company_provisioned_email)
+            # — every tenant shares the one /login page, company ID is entered
+            # there, so no per-company portal_url lookup is needed here.
+            login_url = f'{settings.FRONTEND_URL}/login'
 
             body = (
                 f'<p>Hi <strong>{full_name}</strong>,</p>'
@@ -3220,7 +3225,8 @@ class EmployeeListCreateView(APIView):
                 f'{company_code_line}'
                 f'<strong>Employee ID:</strong> {employee_id}<br>'
                 f'<strong>Login Email:</strong> {email}<br>'
-                f'<strong>Temporary Password:</strong> {temp_password}'
+                f'<strong>Temporary Password:</strong> {temp_password}<br>'
+                f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
                 f'</p>'
                 f'<p>You will be asked to change your password on first login.</p>'
                 f'<p>— HR Team</p>'
