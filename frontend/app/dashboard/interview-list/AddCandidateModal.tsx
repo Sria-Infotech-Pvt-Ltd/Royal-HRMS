@@ -162,14 +162,14 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
 
           {/* Branch selection — required. Branch-restricted users are locked to their own branch. */}
           <div className="field-group mb-16">
-            <label className="field-label">Branch *</label>
+            <label className="field-label">Company Code *</label>
             {unrestricted ? (
               <select
                 className="field-input field-select"
                 value={form.branch}
                 onChange={e => set("branch", e.target.value)}
               >
-                <option value="">— Select branch —</option>
+                <option value="">— Select Company Code —</option>
                 {branches.map(b => (
                   <option key={b.id} value={b.id}>
                     {b.branch_name} ({b.branch_code})

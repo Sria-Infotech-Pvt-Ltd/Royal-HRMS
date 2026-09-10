@@ -258,7 +258,7 @@ export default function SalarySetupTab() {
                 value={modal.salary_structure}
                 onChange={e => setModal(m => m ? { ...m, salary_structure: e.target.value } : m)}
               >
-                <option value="">— Use branch / company default —</option>
+                <option value="">— Use Company Code / company default —</option>
                 {(structures ?? []).filter(s => s.is_active).map(s => (
                   <option key={s.id} value={s.id}>{s.name}{s.is_default ? " (Default)" : ""}</option>
                 ))}
@@ -290,8 +290,8 @@ function EmployeeTable({
         <thead>
           <tr>
             <th>Employee</th>
-            <th>Department</th>
-            <th>Branch</th>
+            <th>Org Unit</th>
+            <th>Company Code</th>
             <th style={{ textAlign: "right" }}>Annual CTC</th>
             <th style={{ textAlign: "right" }}>Monthly CTC</th>
             <th>Effective From</th>

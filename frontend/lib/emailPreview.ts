@@ -7,6 +7,7 @@ export interface CompanyInfo {
   address:      string;
   city:         string;
   state:        string;
+  pin_code:     string;
 }
 
 /**
@@ -58,10 +59,10 @@ export function buildEmailPreview(
   const name    = company?.company_name ?? '[Company]';
   const logoUrl = company?.logo_url ?? company?.logo ?? '';
   const website = company?.website ?? '';
-  const addr    = [company?.address, company?.city, company?.state]
+  const addr    = [company?.address, company?.city, company?.state, company?.pin_code]
     .filter(Boolean)
     .join(', ');
-  const footerParts = [website, addr].filter(Boolean);
+  const footerParts = [addr, website].filter(Boolean);
   const footer  = footerParts.length ? footerParts.join(' &nbsp;|&nbsp; ') : name;
 
   const logoHtml = logoUrl

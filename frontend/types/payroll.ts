@@ -84,6 +84,8 @@ export interface BranchPayrollConfig {
   updated_at: string;
 }
 
+export type CtcRevisionReason = "promotion" | "increment" | "market_correction" | "other";
+
 export interface EmployeeSalaryConfig {
   id: string;
   employee: string;
@@ -94,6 +96,16 @@ export interface EmployeeSalaryConfig {
   salary_structure: string | null;
   structure_name: string | null;
   effective_from: string;
+  reason: CtcRevisionReason | "";
+  reason_display: string;
+  reason_note: string;
+  // The specific PromotionRecord (if any) this CTC revision was for — see
+  // EmployeeSalaryConfig.linked_promotion's own docstring for why this
+  // exists (dates alone can't reliably say "this raise was for that
+  // promotion").
+  linked_promotion: string | null;
+  linked_promotion_designation: string | null;
+  linked_promotion_effective_date: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

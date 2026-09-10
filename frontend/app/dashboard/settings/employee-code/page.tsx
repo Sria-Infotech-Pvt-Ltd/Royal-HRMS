@@ -55,8 +55,8 @@ export default function EmployeeCodeSettingsPage() {
     const errs: FieldErrors = {};
     if (!form.prefix.trim()) {
       errs.prefix = "Prefix is required.";
-    } else if (!/^[A-Za-z]+$/.test(form.prefix.trim())) {
-      errs.prefix = "Prefix must contain letters only.";
+    } else if (!/^[A-Za-z0-9_-]+$/.test(form.prefix.trim())) {
+      errs.prefix = "Prefix may contain only letters, numbers, hyphens, and underscores.";
     }
     if (form.padding < 3 || form.padding > 8) {
       errs.padding = "Padding must be between 3 and 8.";
@@ -178,7 +178,7 @@ export default function EmployeeCodeSettingsPage() {
               />
               {errors.prefix && <div className="field-error-msg">{errors.prefix}</div>}
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 4 }}>
-                Letters only, max 10 characters. Saved as uppercase.
+                Letters, numbers, hyphens, and underscores, max 10 characters. Saved as uppercase.
               </div>
             </div>
 

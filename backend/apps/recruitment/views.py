@@ -80,13 +80,13 @@ def _scoped_candidate_branch(request, *, required: bool = True):
     user_branch = (getattr(request.user, 'branch', '') or '').strip()
     if not user_branch:
         if required:
-            return None, error('Your account is not assigned to a branch. Contact an administrator.')
+            return None, error('Your account is not assigned to a Company Code. Contact an administrator.')
         return data, None
 
     from apps.branch.models import Branch
     branch_obj = Branch.objects.filter(branch_name__iexact=user_branch).first()
     if not branch_obj:
-        return None, error('Your assigned branch could not be found. Contact an administrator.')
+        return None, error('Your assigned Company Code could not be found. Contact an administrator.')
     data['branch'] = branch_obj.id
     return data, None
 
@@ -951,15 +951,27 @@ class CandidateHRDecisionView(APIView):
 
             msg = f'{candidate.name} approved and onboarded!'
         else:
+            revision_remarks = remarks or 'Please recheck documents'
             CandidateLog.objects.create(
                 candidate=candidate,
                 log_type=CandidateLog.TYPE_WARN,
                 title='HR requested revision',
-                description=f'Remarks: {remarks or "Please recheck documents"}',
+                description=f'Remarks: {revision_remarks}',
             )
-            # No email is actually sent on this branch — the message must not
-            # claim otherwise (this endpoint has no candidate-facing template
-            # for a revision request, unlike the approve branch above).
+            email_status = _send_candidate_email(
+                candidate, 'candidate_revision_requested', request.user,
+                {'remarks': revision_remarks},
+            )
+            CandidateLog.objects.create(
+                candidate=candidate,
+                log_type=(CandidateLog.TYPE_SUCCESS
+                          if email_status == CandidateEmail.STATUS_SENT
+                          else CandidateLog.TYPE_WARN),
+                title=('Revision request email sent'
+                       if email_status == CandidateEmail.STATUS_SENT
+                       else 'Revision request email failed — check SMTP settings'),
+                description='Using template: candidate_revision_requested',
+            )
             msg = 'Revision requested.'
 
         AuditLog.objects.create(
@@ -2007,6 +2019,7 @@ _IMPORT_COL_MAP = {
     'position_applied': 'position_applied', 'job title': 'position_applied',
     'role': 'position_applied',
     'branch': 'branch_name',     'branch name': 'branch_name', 'branch_name': 'branch_name',
+    'company code': 'branch_name', 'company_code': 'branch_name', 'company code name': 'branch_name',
     'interview date': 'interview_date',    'interview_date': 'interview_date',
     'date': 'interview_date',
     'interview mode': 'interview_mode',    'interview_mode': 'interview_mode',
@@ -2195,8 +2208,8 @@ class CandidateBulkImportView(APIView):
                         'field':      'branch',
                         'identifier': email,
                         'message':    (
-                            f'Branch "{branch_raw}" not found. '
-                            'Use an existing branch name or branch code.'
+                            f'Company Code "{branch_raw}" not found. '
+                            'Use an existing Company Code name or code.'
                         ),
                     })
                     continue
@@ -2289,7 +2302,7 @@ class CandidateBulkImportSampleView(APIView):
 
     _HEADERS = [
         'Candidate Name', 'Email', 'Mobile Number', 'Position Applied',
-        'Branch', 'Interview Date', 'Interview Mode', 'Notes',
+        'Company Code', 'Interview Date', 'Interview Mode', 'Notes',
     ]
     _SAMPLE_ROWS = [
         [

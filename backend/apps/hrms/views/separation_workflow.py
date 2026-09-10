@@ -12,14 +12,16 @@ from ..models import (
     APPROVAL_APPROVED, APPROVAL_PENDING, APPROVAL_REJECTED,
     SEP_APPROVED, SEP_CLEARANCE_MANAGER, SEP_PENDING, SEP_REJECTED, SEP_STAGE2_PENDING,
     SEP_STAGE_BRANCH_ADMIN, SEP_STAGE_HR, SEP_STAGE_MANAGER,
+    SEP_SETTLEMENT_DRAFT, SEP_SETTLEMENT_FINALIZED,
     SeparationApprovalStage, SeparationClearance, SeparationDocument,
-    SeparationHandoverTask, SeparationRequest,
+    SeparationHandoverTask, SeparationRequest, SeparationSettlement,
 )
 from ..serializers import (
     SeparationActivitySerializer, SeparationClearanceSerializer, SeparationDocumentCreateSerializer,
     SeparationDocumentSerializer, SeparationHandoverTaskCreateSerializer,
-    SeparationHandoverTaskSerializer, SeparationRequestSerializer,
+    SeparationHandoverTaskSerializer, SeparationRequestSerializer, SeparationSettlementSerializer,
 )
+from ..services_settlement import compute_draft, recompute_net_payable
 from .separation import _has_perm, _log, _user_branch
 
 logger = logging.getLogger(__name__)
@@ -284,6 +286,85 @@ class SeparationClearanceActionView(APIView):
         return success(
             f'{clearance.get_clearance_type_display()} {action}d.',
             SeparationClearanceSerializer(clearance, context={'request': request}).data,
+        )
+
+
+# ─── Settlement (Full & Final) ───────────────────────────────────────────────────
+# Viewing follows the same visibility as the rest of the request (employee
+# sees their own, HR/managers with view rights see anyone's); editing the
+# manual line items and finalizing are both gated on payroll.edit — a
+# deliberately separate permission from separation.approve, since this is
+# money leaving the company, not a workflow sign-off (see
+# SeparationSettlementSerializer.get_can_edit()).
+
+class SeparationSettlementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _current_settlement(self, sep_request):
+        """A finalized settlement is a frozen record — returned as-is.
+        Otherwise (no row yet, or still draft) recomputes from current
+        payroll/leave data so the numbers never go stale while HR is
+        still reviewing them."""
+        existing = getattr(sep_request, 'settlement', None)
+        if existing and existing.status == SEP_SETTLEMENT_FINALIZED:
+            return existing
+        return compute_draft(sep_request)
+
+    def get(self, request, request_id: str):
+        sep_request, err = _get_visible_request(request_id, request.user)
+        if err:
+            return err
+        settlement = self._current_settlement(sep_request)
+        return success(
+            'Settlement retrieved.',
+            SeparationSettlementSerializer(settlement, context={'request': request}).data,
+        )
+
+    def patch(self, request, request_id: str):
+        sep_request, err = _get_visible_request(request_id, request.user)
+        if err:
+            return err
+        if not _has_perm(request.user, 'payroll.edit'):
+            return error('Only Payroll/Finance can edit a settlement.', http_status=status.HTTP_403_FORBIDDEN)
+
+        settlement = self._current_settlement(sep_request)
+        serializer = SeparationSettlementSerializer(settlement, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors))
+        settlement = serializer.save()
+        recompute_net_payable(settlement)
+        settlement.save()
+        _log(sep_request, request.user, f'Settlement updated by {request.user.full_name}.')
+        return success(
+            'Settlement updated.',
+            SeparationSettlementSerializer(settlement, context={'request': request}).data,
+        )
+
+
+class SeparationSettlementFinalizeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id: str):
+        sep_request, err = _get_visible_request(request_id, request.user)
+        if err:
+            return err
+        if not _has_perm(request.user, 'payroll.edit'):
+            return error('Only Payroll/Finance can finalize a settlement.', http_status=status.HTTP_403_FORBIDDEN)
+        if not hasattr(sep_request, 'settlement'):
+            return error('Compute the settlement before finalizing it.', http_status=status.HTTP_400_BAD_REQUEST)
+
+        settlement = sep_request.settlement
+        if settlement.status == SEP_SETTLEMENT_FINALIZED:
+            return error('This settlement is already finalized.')
+
+        settlement.status       = SEP_SETTLEMENT_FINALIZED
+        settlement.finalized_by = request.user
+        settlement.finalized_at = timezone.now()
+        settlement.save()
+        _log(sep_request, request.user, f'Settlement finalized by {request.user.full_name} — net payable ₹{settlement.net_payable_amount}.')
+        return success(
+            'Settlement finalized.',
+            SeparationSettlementSerializer(settlement, context={'request': request}).data,
         )
 
 

@@ -32,6 +32,23 @@ const BUILTIN_CHOICE_FIELDS: Record<string, { value: string; label: string }[]> 
   ],
 };
 
+// current_pin_code/permanent_pin_code are plain 'text' fields (server-side
+// validated in EmployeeProfileSerializer) but get the same digits-only,
+// 6-character input mask the Company address form's PIN field already uses
+// (AddressCard.tsx) — restricting keystrokes here catches typos immediately
+// instead of only at save time.
+const PIN_CODE_FIELDS = new Set(['current_pin_code', 'permanent_pin_code']);
+
+// current_address/permanent_address are 'textarea' field_type (needed so
+// DynamicStepFields.buildRuns gives each its own full-width row instead of
+// packing it into the grid alongside father_name/blood_group/etc — see
+// that file's own comment) but only ever hold one short house/street line
+// (village/district/state/PIN are their own separate fields), so a real
+// multi-row <textarea> is far taller than the content needs. Rendered as a
+// single-line input instead, purely a display choice — field_type stays
+// 'textarea' for the row-grouping logic above.
+const ADDRESS_LINE_FIELDS = new Set(['current_address', 'permanent_address']);
+
 interface Props {
   config: OnboardingFieldConfig;
   value: string;
@@ -41,6 +58,7 @@ interface Props {
 
 export default function DynamicField({ config, value, onChange, placeholder }: Props) {
   const choiceOptions = BUILTIN_CHOICE_FIELDS[config.field_key];
+  const isPinCode = PIN_CODE_FIELDS.has(config.field_key);
 
   const label = (
     <label className="field-label">
@@ -74,6 +92,14 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
   }
 
   if (config.field_type === "textarea") {
+    if (ADDRESS_LINE_FIELDS.has(config.field_key)) {
+      return (
+        <div className="field-group">
+          {label}
+          <input className={INP} type="text" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} />
+        </div>
+      );
+    }
     return (
       <div className="field-group">
         {label}
@@ -98,8 +124,10 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
         type={config.field_type === "date" ? "date" : config.field_type === "number" ? "number" : "text"}
         className={INP}
         value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
+        onChange={e => onChange(isPinCode ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value)}
+        placeholder={isPinCode ? "e.g. 500081" : placeholder}
+        inputMode={isPinCode ? "numeric" : undefined}
+        maxLength={isPinCode ? 6 : undefined}
       />
     </div>
   );

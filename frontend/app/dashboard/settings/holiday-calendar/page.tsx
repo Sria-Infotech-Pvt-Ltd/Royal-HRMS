@@ -171,7 +171,7 @@ export default function HolidayCalendarPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <select value={fBranch} onChange={e => { setFBranch(e.target.value); setPage(1); }}
             className="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer field-select">
-            <option>All Branches</option>
+            <option>All Company Codes</option>
             {branches.map(b => <option key={b.id}>{b.branch_name}</option>)}
           </select>
           <div className="relative">

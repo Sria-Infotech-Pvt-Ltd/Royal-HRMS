@@ -195,7 +195,7 @@ export default function EmployeesPage() {
     { label: "Total Employees", value: empStats.total,       icon: "ti-users",      tint: "primary" as const },
     { label: "Active",          value: empStats.active,      icon: "ti-user-check", tint: "success" as const },
     { label: "Onboarding",      value: empStats.onboarding,  icon: "ti-user-plus",  tint: "warn"    as const },
-    { label: "Departments",     value: empStats.departments, icon: "ti-building",   tint: "info"    as const },
+    { label: "Org Units",       value: empStats.departments, icon: "ti-building",   tint: "info"    as const },
   ], [empStats]);
 
   function open(id: string) {
@@ -308,7 +308,7 @@ export default function EmployeesPage() {
             className={SEL_CLS}
             style={SEL_STYLE}
           >
-            <option value="all">All Departments</option>
+            <option value="all">All Org Units</option>
             {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         )}
@@ -346,7 +346,7 @@ export default function EmployeesPage() {
             <table className="w-full border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-[var(--bg-low)] border-b border-[var(--outline-v)]">
-                  {["Employee", "Branch", "Department", "Role", "Date of Joining", "Status", "Actions"].map(h => (
+                  {["Employee", "Company Code", "Org Unit", "Role", "Date of Joining", "Status", "Actions"].map(h => (
                     <th key={h}
                       className="text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--on-variant)] px-5 py-3 whitespace-nowrap">
                       {h}

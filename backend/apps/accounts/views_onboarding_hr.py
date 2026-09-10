@@ -42,7 +42,7 @@ from core.responses import error, first_error, get_client_ip, success
 
 from apps.accounts.models import AuditLog, EmployeeProfile, User
 from apps.accounts.views import (
-    _VALID_STEPS,
+    _valid_steps,
     _employee_out_of_branch_scope,
     _extract_step_data,
     _compute_completed_steps,
@@ -106,8 +106,8 @@ class HREmployeeOnboardingView(APIView):
             data['completed_steps'] = _compute_completed_steps(profile, target)
             return success('Profile retrieved.', data=data)
 
-        if step not in _VALID_STEPS:
-            return error(f'Invalid step {step}. Valid steps are 0 to 4.', http_status=status.HTTP_400_BAD_REQUEST)
+        if step not in _valid_steps():
+            return error(f'Invalid step {step}.', http_status=status.HTTP_400_BAD_REQUEST)
 
         if step == 4:
             from apps.accounts.models import EmployeeDocument as ED
@@ -129,8 +129,8 @@ class HREmployeeOnboardingView(APIView):
         target, err = _resolve_onboarding_target(request, user_id)
         if err:
             return err
-        if step not in _VALID_STEPS:
-            return error(f'Invalid step {step}. Valid steps are 0 to 4.', http_status=status.HTTP_400_BAD_REQUEST)
+        if step not in _valid_steps():
+            return error(f'Invalid step {step}.', http_status=status.HTTP_400_BAD_REQUEST)
 
         result = _save_profile_step(request, step, target_user=target)
         if result.status_code < 300:
@@ -144,8 +144,8 @@ class HREmployeeOnboardingView(APIView):
         target, err = _resolve_onboarding_target(request, user_id)
         if err:
             return err
-        if step not in _VALID_STEPS:
-            return error(f'Invalid step {step}. Valid steps are 0 to 4.', http_status=status.HTTP_400_BAD_REQUEST)
+        if step not in _valid_steps():
+            return error(f'Invalid step {step}.', http_status=status.HTTP_400_BAD_REQUEST)
 
         ob_status = target.onboarding_status
         if ob_status == User.ONBOARDING_COMPLETE:

@@ -12,7 +12,11 @@ interface OnboardingDocument { id: number; document_type_display: string; file_n
 interface ProfileData {
   date_of_birth?: string; gender?: string; marital_status?: string;
   father_name?: string; blood_group?: string;
-  current_address?: string; permanent_address?: string;
+  current_address?: string; current_address_line2?: string;
+  current_village?: string; current_district?: string; current_state?: string; current_pin_code?: string;
+  permanent_address?: string; permanent_address_line2?: string;
+  permanent_village?: string; permanent_district?: string; permanent_state?: string; permanent_pin_code?: string;
+  permanent_same_as_current?: boolean;
   highest_qualification?: string; institution?: string;
   year_of_passing?: number; specialization?: string;
   total_experience_years?: string; previous_employer?: string;
@@ -224,9 +228,9 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           <Section title="Basic Info">
             <Row label="Email"       value={user.email} />
             <Row label="Phone"       value={user.phone} />
-            <Row label="Department"  value={user.department} />
+            <Row label="Org Unit"    value={user.department} />
             <Row label="Designation" value={user.designation} />
-            <Row label="Branch"      value={user.branch} />
+            <Row label="Company Code" value={user.branch} />
             <Row label="Role"        value={user.role_display || "Candidate"} />
           </Section>
 
@@ -238,7 +242,24 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 <Row label="Marital Status"  value={user.profile.marital_status} />
                 <Row label="Father Name"     value={user.profile.father_name} />
                 <Row label="Blood Group"     value={user.profile.blood_group} />
-                <Row label="Current Address" value={user.profile.current_address} />
+                <Row label="Address Line 1"  value={user.profile.current_address} />
+                <Row label="Address Line 2"  value={user.profile.current_address_line2} />
+                <Row label="Village / Town / Area" value={user.profile.current_village} />
+                <Row label="District"        value={user.profile.current_district} />
+                <Row label="State"           value={user.profile.current_state} />
+                <Row label="PIN Code"        value={user.profile.current_pin_code} />
+                {user.profile.permanent_same_as_current ? (
+                  <Row label="Permanent Address" value="Same as current address" />
+                ) : (
+                  <>
+                    <Row label="Address Line 1"  value={user.profile.permanent_address} />
+                    <Row label="Address Line 2"  value={user.profile.permanent_address_line2} />
+                    <Row label="Village / Town / Area" value={user.profile.permanent_village} />
+                    <Row label="District"        value={user.profile.permanent_district} />
+                    <Row label="State"           value={user.profile.permanent_state} />
+                    <Row label="PIN Code"        value={user.profile.permanent_pin_code} />
+                  </>
+                )}
               </Section>
               <Section title="Education & Experience">
                 <Row label="Qualification"    value={user.profile.highest_qualification} />
@@ -346,7 +367,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               {selPosition && (
                 <>
                   <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                    <label className="field-label">Department</label>
+                    <label className="field-label">Org Unit</label>
                     <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
                       {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
                     </div>

@@ -85,13 +85,13 @@ export default function EligibilitySection({ rules, setField }: Props) {
       <div style={{ padding: "20px 24px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
           <MultiCheckRow
-            label="Applicable Branches"
+            label="Applicable Company Codes"
             options={branches.map(b => b.branch_name)}
             selected={rules.applicable_branches}
             onChange={v => setField("applicable_branches", v)}
           />
           <MultiCheckRow
-            label="Departments"
+            label="Org Units"
             options={departments.map(d => d.name)}
             selected={rules.applicable_departments}
             onChange={v => setField("applicable_departments", v)}

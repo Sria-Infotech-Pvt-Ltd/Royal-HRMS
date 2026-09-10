@@ -54,9 +54,57 @@ export interface UpdateOnboardingFieldPayload {
   required?: boolean;
 }
 
+// ─── Education/Experience field configuration ─────────────────────────────────
+// Show/require toggles for the optional fields on each Education/Experience
+// *entry* (a genuinely repeatable list, not a single flat step) — a
+// narrower sibling of OnboardingFieldConfig above: HR can show/hide and
+// require any of these existing fields, but can't add a brand-new custom
+// one (see backend EducationExperienceFieldConfig's own docstring for why).
+export interface EducationExperienceFieldConfig {
+  id: string;
+  list_type: "education" | "experience";
+  field_key: string;
+  label: string;
+  visible: boolean;
+  required: boolean;
+  order: number;
+}
+
+export interface EducationExperienceFieldConfigResponse {
+  education: EducationExperienceFieldConfig[];
+  experience: EducationExperienceFieldConfig[];
+}
+
 export const ONBOARDING_STEP_LABELS: Record<number, string> = {
   0: "Personal Information",
   1: "Education & Experience",
   2: "Bank Details",
   3: "Emergency Contact",
 };
+
+// ─── Onboarding Sections — HR-created custom wizard tabs ──────────────────────
+// Sit alongside the 4 built-in steps above (and before the separate
+// Documents step) — a section's own `step` number (always 5+) is what an
+// OnboardingFieldConfig row's `step` points to when it belongs to one.
+
+export interface OnboardingSection {
+  id: string;
+  step: number; // 5+, server-assigned, never reused
+  label: string;
+  icon: string; // Tabler icon class, e.g. "ti-folder"
+  order: number;
+  is_active: boolean;
+  updated_at: string;
+}
+
+export interface CreateOnboardingSectionPayload {
+  label: string;
+  icon?: string;
+}
+
+export interface UpdateOnboardingSectionPayload {
+  label?: string;
+  icon?: string;
+  order?: number;
+  is_active?: boolean;
+}

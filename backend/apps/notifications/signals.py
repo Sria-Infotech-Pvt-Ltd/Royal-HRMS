@@ -500,6 +500,32 @@ def _on_expense_save(sender, instance, created, **kwargs):
 
 # ─── Separation ─────────────────────────────────────────────────────────────────
 
+def _send_separation_email(user, template_name: str, context: dict) -> None:
+    """
+    Fire-and-forget separation lifecycle email, sent alongside the in-app
+    Notification above. Queued to Celery (via transaction.on_commit) rather
+    than sent inline — a failed/slow email must never break the separation
+    save transaction. Queuing failure is logged, not raised, for the same
+    reason. Mirrors _send_leave_email above.
+    """
+    if not user or not getattr(user, 'email', ''):
+        return
+    from apps.notifications.tasks import send_lifecycle_email_task
+
+    def _dispatch(user_id=user.id, tpl=template_name, ctx=dict(context)):
+        try:
+            send_lifecycle_email_task.apply_async(
+                args=[user_id, tpl, ctx], retry=False, ignore_result=True,
+            )
+        except Exception as exc:
+            logger.error(
+                'Failed to queue separation email "%s" for user %s: %s',
+                tpl, user_id, exc, exc_info=True,
+            )
+
+    transaction.on_commit(_dispatch)
+
+
 @receiver(pre_save, sender='hrms.SeparationRequest')
 def _capture_separation_status(sender, instance, **kwargs):
     instance._old_status = None
@@ -544,33 +570,85 @@ def _notify_separation_created(sep_request_id) -> None:
     _notify(employee, 'Separation Request Submitted',
             'Your separation request has been submitted successfully.',
             'separation_submitted', 'separation', ref_id, employee)
+    _send_separation_email(employee, 'separation_request_submitted', {
+        'employee_name':      employee.full_name or employee.email,
+        'separation_type':    sep_request.get_separation_type_display(),
+        'reason':             sep_request.get_reason_display(),
+        'last_working_day':   sep_request.proposed_last_working_day.strftime('%d %b %Y'),
+        'notice_period_days': str(sep_request.notice_period_days),
+    })
     first_stage = sep_request.approval_stages.order_by('sequence').first()
     if first_stage and first_stage.approver:
         _notify(first_stage.approver, 'Separation Request Pending Your Approval',
                 f'{employee.full_name}’s separation request needs your approval.',
                 'separation_submitted', 'separation', ref_id, employee, category='approval')
+        _send_separation_email(first_stage.approver, 'separation_request_pending_approval', {
+            'approver_name':     first_stage.approver.full_name or first_stage.approver.email,
+            'employee_name':     employee.full_name or employee.email,
+            'separation_type':   sep_request.get_separation_type_display(),
+            'reason':            sep_request.get_reason_display(),
+            'last_working_day':  sep_request.proposed_last_working_day.strftime('%d %b %Y'),
+            'stage_name':        first_stage.get_stage_display(),
+        })
 
 
 def _dispatch_separation_status(instance, employee, ref_id, new_status) -> None:
-    from apps.hrms.models import APPROVAL_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_STAGE2_PENDING
+    from apps.hrms.models import (
+        APPROVAL_APPROVED, APPROVAL_PENDING, APPROVAL_REJECTED,
+        SEP_APPROVED, SEP_REJECTED, SEP_STAGE2_PENDING,
+    )
+
+    # The stage that was just actioned (approved/rejected) — carries the
+    # approver and remarks needed for the email, neither of which live on
+    # the SeparationRequest itself.
+    last_stage = instance.approval_stages.filter(
+        status__in=[APPROVAL_APPROVED, APPROVAL_REJECTED],
+    ).order_by('-actioned_at').first()
+    approver_name = last_stage.approver.full_name if last_stage and last_stage.approver else 'Approver'
+    stage_name    = last_stage.get_stage_display() if last_stage else ''
 
     if new_status == SEP_STAGE2_PENDING:
         _notify(employee, 'Separation Request — Stage Approved',
                 'Your separation request has moved to the next approval stage.',
                 'separation_status', 'separation', ref_id)
         next_stage = instance.approval_stages.filter(status=APPROVAL_PENDING).order_by('sequence').first()
+        _send_separation_email(employee, 'separation_stage_approved', {
+            'employee_name':   employee.full_name or employee.email,
+            'approver_name':   approver_name,
+            'stage_name':      stage_name,
+            'next_stage_name': next_stage.get_stage_display() if next_stage else '',
+        })
         if next_stage and next_stage.approver:
             _notify(next_stage.approver, 'Separation Request Pending Your Approval',
                     f'{employee.full_name}’s separation request needs your approval.',
                     'separation_status', 'separation', ref_id, employee, category='approval')
+            _send_separation_email(next_stage.approver, 'separation_request_pending_approval', {
+                'approver_name':    next_stage.approver.full_name or next_stage.approver.email,
+                'employee_name':    employee.full_name or employee.email,
+                'separation_type':  instance.get_separation_type_display(),
+                'reason':           instance.get_reason_display(),
+                'last_working_day': instance.proposed_last_working_day.strftime('%d %b %Y'),
+                'stage_name':       next_stage.get_stage_display(),
+            })
     elif new_status == SEP_APPROVED:
         _notify(employee, 'Separation Request Approved',
                 'Your separation request has been fully approved.',
                 'separation_status', 'separation', ref_id)
+        _send_separation_email(employee, 'separation_approved', {
+            'employee_name':    employee.full_name or employee.email,
+            'separation_type':  instance.get_separation_type_display(),
+            'last_working_day': instance.proposed_last_working_day.strftime('%d %b %Y'),
+        })
     elif new_status == SEP_REJECTED:
         _notify(employee, 'Separation Request Rejected',
                 'Your separation request has been rejected.',
                 'separation_status', 'separation', ref_id)
+        _send_separation_email(employee, 'separation_rejected', {
+            'employee_name': employee.full_name or employee.email,
+            'approver_name': approver_name,
+            'stage_name':    stage_name,
+            'remarks':       (last_stage.remarks if last_stage else '') or '—',
+        })
 
 
 # ─── Document Center ────────────────────────────────────────────────────────────

@@ -715,7 +715,7 @@ export default function AnnouncementsPage() {
               {/* Branch + Visibility */}
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Branch{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
+                  <label className="field-label">Company Code{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
                   {isOrgWide ? (
                     <select
                       className="field-input field-select"
@@ -723,7 +723,7 @@ export default function AnnouncementsPage() {
                       onChange={e => setField("target_branch", e.target.value)}
                       disabled={form.visibility === "department"}
                     >
-                      <option value="">All Branches</option>
+                      <option value="">All Company Codes</option>
                       {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}
                     </select>
                   ) : (
@@ -754,7 +754,7 @@ export default function AnnouncementsPage() {
               {/* Conditional: Department (targets an Org Unit) */}
               {form.visibility === "department" && (
                 <div className="field-group">
-                  <label className="field-label">Department <span style={{ color: "var(--error)" }}>*</span></label>
+                  <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
                   <select
                     className={`field-input field-select${formErrors.target_org_unit ? " field-error" : ""}`}
                     value={form.target_org_unit}

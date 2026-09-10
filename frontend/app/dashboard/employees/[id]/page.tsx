@@ -40,7 +40,11 @@ import PromotionTab from "./_components/PromotionTab";
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
   father_name?: string; blood_group?: string;
-  current_address?: string; permanent_address?: string;
+  current_address?: string; current_address_line2?: string;
+  current_village?: string; current_district?: string; current_state?: string; current_pin_code?: string;
+  permanent_address?: string; permanent_address_line2?: string;
+  permanent_village?: string; permanent_district?: string; permanent_state?: string; permanent_pin_code?: string;
+  permanent_same_as_current?: boolean;
   highest_qualification?: string; institution?: string;
   year_of_passing?: string | number; specialization?: string;
   total_experience_years?: string; previous_employer?: string;
@@ -58,10 +62,11 @@ interface ApiEmployee {
   first_name: string; last_name: string; full_name: string;
   email: string; phone: string;
   department: string; designation: string; branch: string;
+  position_id: string | null; org_unit_id: string | null;
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   onboarding_status: string;
-  reporting_manager:  { id: string; uuid: string | null; name: string } | null;
+  reporting_manager:  { id: string; uuid: string | null; name: string; from_org_chart: boolean } | null;
   reporting_approver: { id: string; uuid: string | null; name: string } | null;
   hr:                 { id: string; uuid: string | null; name: string } | null;
   profile?: ApiProfile;
@@ -132,6 +137,9 @@ function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeConfig[] 
       // perfectly valid manager is already assigned. Same reasoning for hr
       // and reporting_approver below.
       reportingManagerId:  u.reporting_manager?.uuid ?? "",
+      // "true"/"false" string, not boolean — DetailValues is a plain string
+      // bag (see _data.ts), same convention every other field here follows.
+      reportingManagerFromOrgChart: u.reporting_manager?.from_org_chart ? "true" : "false",
       reportingApprover:   u.reporting_approver?.name ?? "",
       reportingApproverId: u.reporting_approver?.uuid ?? "",
       hr:                  u.hr?.name ?? "",
@@ -154,7 +162,18 @@ function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeConfig[] 
       fatherName:       p.father_name || "",
       bloodGroup:       p.blood_group || "",
       currentAddress:   p.current_address || "",
+      currentAddressLine2: p.current_address_line2 || "",
+      currentVillage:   p.current_village || "",
+      currentDistrict:  p.current_district || "",
+      currentState:     p.current_state || "",
+      currentPinCode:   p.current_pin_code || "",
       permanentAddress: p.permanent_address || "",
+      permanentAddressLine2: p.permanent_address_line2 || "",
+      permanentVillage:  p.permanent_village || "",
+      permanentDistrict: p.permanent_district || "",
+      permanentState:    p.permanent_state || "",
+      permanentPinCode:  p.permanent_pin_code || "",
+      permanentSameAsCurrent: p.permanent_same_as_current ? "true" : "false",
       // Education & experience (from onboarding profile)
       highestQualification: p.highest_qualification || "",
       specialization:       p.specialization || "",
@@ -203,6 +222,8 @@ export default function EmployeeProfilePage({
 
   const [employee,          setEmployee]          = useState<Employee | null>(null);
   const [employeeUuid,      setEmployeeUuid]      = useState<string>("");
+  const [currentPositionId, setCurrentPositionId] = useState<string>("");
+  const [currentOrgUnitId,  setCurrentOrgUnitId]  = useState<string>("");
   const [onboardingStatus,  setOnboardingStatus]  = useState<string>("");
   const [loading,           setLoading]           = useState(true);
   const [notFound,          setNotFound]          = useState(false);
@@ -268,6 +289,8 @@ export default function EmployeeProfilePage({
         const emp = apiToEmployee(raw, []);
         setEmployee(emp);
         setEmployeeUuid(raw.uuid);
+        setCurrentPositionId(raw.position_id ?? "");
+        setCurrentOrgUnitId(raw.org_unit_id ?? "");
         setOnboardingStatus(raw.onboarding_status ?? "");
         setRawApiDocuments(raw.documents ?? []);
         setCustomFileFields(
@@ -386,7 +409,18 @@ export default function EmployeeProfilePage({
         father_name:            values.fatherName           || "",
         blood_group:            values.bloodGroup           || "",
         current_address:        values.currentAddress       || "",
+        current_address_line2:  values.currentAddressLine2  || "",
+        current_village:        values.currentVillage       || "",
+        current_district:       values.currentDistrict      || "",
+        current_state:          values.currentState         || "",
+        current_pin_code:       values.currentPinCode       || "",
         permanent_address:      values.permanentAddress     || "",
+        permanent_address_line2: values.permanentAddressLine2 || "",
+        permanent_village:      values.permanentVillage     || "",
+        permanent_district:     values.permanentDistrict    || "",
+        permanent_state:        values.permanentState       || "",
+        permanent_pin_code:     values.permanentPinCode     || "",
+        permanent_same_as_current: values.permanentSameAsCurrent === "true",
         // Education & experience
         highest_qualification:  values.highestQualification || "",
         institution:            values.institution          || "",
@@ -432,10 +466,12 @@ export default function EmployeeProfilePage({
       setSaving(false);
     }
   }
-  function onPositionReassigned(designation: string, department: string, role: string) {
+  function onPositionReassigned(designation: string, department: string, role: string, positionId: string, orgUnitId: string) {
     setValues(v => ({ ...v, designation, ssRole: role, ...(department ? { department } : {}) }));
     setBaseValues(v => ({ ...v, designation, ssRole: role, ...(department ? { department } : {}) }));
     setEmployee(prev => (prev ? { ...prev, designation, ...(department ? { department } : {}) } : prev));
+    setCurrentPositionId(positionId);
+    setCurrentOrgUnitId(orgUnitId);
   }
   async function onUploadDocument(documentType: string, file: File) {
     setDocUploadError("");
@@ -594,6 +630,31 @@ export default function EmployeeProfilePage({
                 ],
               }}
               fieldSlot={(key, disabled) => {
+                if (key === "permanentSameAsCurrent") {
+                  // No informational value in read mode — the permanent
+                  // fields below already display whatever was actually
+                  // saved (the backend keeps them mirroring current_* when
+                  // this is on), so showing the toggle itself there too
+                  // would be redundant.
+                  if (disabled) return "hidden";
+                  return (
+                    <label className="module-check">
+                      <input
+                        type="checkbox"
+                        checked={values.permanentSameAsCurrent === "true"}
+                        onChange={e => onFieldChange("permanentSameAsCurrent", e.target.checked ? "true" : "false")}
+                      />
+                      <span>Permanent address is the same as current address</span>
+                    </label>
+                  );
+                }
+                if (
+                  !disabled
+                  && values.permanentSameAsCurrent === "true"
+                  && ["permanentAddress", "permanentAddressLine2", "permanentVillage", "permanentDistrict", "permanentState", "permanentPinCode"].includes(key)
+                ) {
+                  return "hidden";
+                }
                 if (key === "reportingManager") {
                   // Read mode: let ProfileForm show the value as a standard readonly field (always visible)
                   if (disabled) return null;
@@ -631,7 +692,7 @@ export default function EmployeeProfilePage({
                   if (disabled) return null;
                   return (
                     <EmployeePickerInline
-                      label="Branch HR"
+                      label="Company Code HR"
                       value={values.hr ?? ""}
                       selectedId={values.hrId ?? ""}
                       disabled={false}
@@ -672,7 +733,7 @@ export default function EmployeeProfilePage({
           </div>
         </div>
       ) : tab === "salary" ? (
-        <SalaryTab employeeId={employeeUuid} />
+        <SalaryTab employeeId={employeeUuid} employeeCode={id} />
       ) : tab === "payroll" ? (
         <PayrollTab employeeId={employeeUuid} />
       ) : tab === "leave" ? (
@@ -685,6 +746,7 @@ export default function EmployeeProfilePage({
           branch={values.branch ?? ""}
           defaultManagerId={values.reportingManagerId ?? ""}
           defaultManagerName={values.reportingManager ?? ""}
+          defaultManagerFromOrgChart={values.reportingManagerFromOrgChart === "true"}
           defaultHrId={values.hrId ?? ""}
           defaultHrName={values.hr ?? ""}
           onManagerChanged={(id, name) => setValues(v => ({ ...v, reportingManager: name, reportingManagerId: id }))}
@@ -696,6 +758,8 @@ export default function EmployeeProfilePage({
           employeeName={employee.firstName + (employee.lastName ? " " + employee.lastName : "")}
           currentDesignation={values.designation ?? ""}
           currentRole={values.ssRole ?? "employee"}
+          currentPositionId={currentPositionId}
+          currentOrgUnitId={currentOrgUnitId}
           roleOptions={roleOptions}
           onPositionReassigned={onPositionReassigned}
         />

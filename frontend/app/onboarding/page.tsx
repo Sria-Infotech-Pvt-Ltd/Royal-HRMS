@@ -7,18 +7,26 @@ import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import type { FaceRegistrationRequest } from "@/types/faceRegistration";
-import type { OnboardingFieldConfigByStep, CustomFieldFileValue } from "@/types/onboardingFieldConfig";
+import type { OnboardingFieldConfigByStep, CustomFieldFileValue, OnboardingSection, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import type { ProfileForm } from "./_types";
 import DynamicStepFields from "./_components/DynamicStepFields";
 import TabDocuments, { type UploadedDoc } from "./_components/TabDocuments";
 import TabFaceId from "./_components/TabFaceId";
+import StepIndicator from "./_components/StepIndicator";
+import BasicDetailsCard, { type BasicDetails } from "./_components/BasicDetailsCard";
+import EducationChecklist, { type EducationEntry } from "./_components/EducationChecklist";
+import ExperienceList, { type ExperienceEntry } from "./_components/ExperienceList";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 const EMPTY: ProfileForm = {
   date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
-  current_address: "", permanent_address: "",
+  current_address: "", current_address_line2: "",
+  current_village: "", current_district: "", current_state: "", current_pin_code: "",
+  permanent_address: "", permanent_address_line2: "",
+  permanent_village: "", permanent_district: "", permanent_state: "", permanent_pin_code: "",
+  permanent_same_as_current: "false",
   highest_qualification: "", institution: "", year_of_passing: "", specialization: "",
   total_experience_years: "", previous_employer: "", previous_designation: "", leaving_reason: "",
   account_number: "", ifsc_code: "", bank_name: "", bank_branch_name: "",
@@ -29,13 +37,31 @@ const EMPTY: ProfileForm = {
 
 const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 
-const STEPS = [
-  { label: "Personal",               shortLabel: "Personal",   icon: "ti-user"          },
-  { label: "Education & Experience", shortLabel: "Education",  icon: "ti-school"        },
-  { label: "Bank Details",           shortLabel: "Bank",       icon: "ti-building-bank" },
-  { label: "Emergency Contact",      shortLabel: "Emergency",  icon: "ti-urgent"        },
-  { label: "Documents",              shortLabel: "Documents",  icon: "ti-files"         },
+// Each entry carries its own real backend `step` number and a `kind` saying
+// which component renders it — `tab` (component state) is only ever an
+// index into the merged `steps` array below, never assumed to equal the
+// backend step number itself. That split is what lets HR-created custom
+// sections (step 5+, see OnboardingSection) slot in between Emergency
+// Contact and Documents without shifting Documents'/Face ID's own identity.
+type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "face" | "education" | "experience" };
+
+// Education and Experience are their own bespoke steps now (a fixed
+// checklist and a real add/remove list respectively — neither fits the
+// generic OnboardingFieldConfig "one config = one flat value" model any
+// more than Documents/Face ID do). `step: -2`/`-3` are sentinels, same
+// convention as Face ID's `step: -1` below — neither ever round-trips
+// through /onboarding/step/<n>/, so no real step number is needed, and
+// this sidesteps any future collision with HR-created custom sections
+// (server-assigned, always >= 5, growing forever).
+const BUILTIN_STEPS: WizardStep[] = [
+  { step: 0,  label: "Personal",          shortLabel: "Personal",   icon: "ti-user",          kind: "fields" },
+  { step: -2, label: "Education",         shortLabel: "Education",  icon: "ti-school",        kind: "education" },
+  { step: -3, label: "Experience",        shortLabel: "Experience", icon: "ti-briefcase",     kind: "experience" },
+  { step: 2,  label: "Bank Details",      shortLabel: "Bank",       icon: "ti-building-bank", kind: "fields" },
+  { step: 3,  label: "Emergency Contact", shortLabel: "Emergency",  icon: "ti-urgent",         kind: "fields" },
 ];
+
+const DOCUMENTS_STEP: WizardStep = { step: 4, label: "Documents", shortLabel: "Documents", icon: "ti-files", kind: "documents" };
 
 // Appended only when the admin's org-wide Face ID Verification toggle
 // (Attendance Settings) is mandatory — see the faceMandatory fetch below. When
@@ -43,9 +69,9 @@ const STEPS = [
 // "Submit for Approval" appears directly after Documents. When on, it's
 // required — the submit button below stays disabled until a face
 // registration has actually been submitted (see canSubmit). Always the LAST
-// step so steps 0-4's indices (and all the tab === N checks throughout this
-// file) never shift.
-const FACE_STEP = { label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id" };
+// step. `step: -1` is a sentinel — Face ID never round-trips through
+// /onboarding/step/<n>/, so no real step number is needed for it.
+const FACE_STEP: WizardStep = { step: -1, label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id", kind: "face" };
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -65,6 +91,15 @@ export default function OnboardingPage() {
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
   const [checkingApproval,   setCheckingApproval]   = useState(false);
   const [highestSaved, setHighestSaved] = useState(-1);
+  // Raw step numbers the backend already considers complete (GET
+  // /onboarding/'s own `completed_steps`) — restores unlocked progress when
+  // reopening onboarding partway through, instead of resetting to only
+  // Step 1 unlocked on every fresh page load regardless of what's actually
+  // saved server-side. Experience (-3) is deliberately never in this list
+  // (it has no required fields, see _missing_education_experience) but
+  // never blocks advancing either — treated as always-passed below, same
+  // as saveSection()'s own "experience" branch always returning true.
+  const [completedStepNumbers, setCompletedStepNumbers] = useState<number[]>([]);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Per-company configurable fields (steps 0-3) — see Settings > Onboarding
@@ -72,6 +107,13 @@ export default function OnboardingPage() {
   // a step until its config arrives, same "nothing to show yet" behavior as
   // every other useFetch-backed list in this app.
   const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
+  // Show/require toggles for Education/Experience list-entry fields — see
+  // Settings > Onboarding Fields > Education & Experience. Empty arrays
+  // until fetched, same "everything defaults to shown/optional" fallback
+  // EducationChecklist/ExperienceList themselves use.
+  const [eduExpFieldConfig, setEduExpFieldConfig] = useState<EducationExperienceFieldConfigResponse>({ education: [], experience: [] });
+  // HR-created custom sections beyond the 4 built-ins — see OnboardingSection.
+  const [customSections, setCustomSections] = useState<OnboardingSection[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [customFileValues, setCustomFileValues] = useState<CustomFieldFileValue[]>([]);
   // Per-company configurable document types (Settings > Onboarding Fields >
@@ -85,7 +127,238 @@ export default function OnboardingPage() {
   const [faceRegistration, setFaceRegistration] = useState<Partial<FaceRegistrationRequest> | null>(null);
   const [showFaceCapture, setShowFaceCapture] = useState(false);
 
-  const steps = useMemo(() => (faceMandatory ? [...STEPS, FACE_STEP] : STEPS), [faceMandatory]);
+  // "Basic details" — read-only here (self-service). An employee must never
+  // be able to change their own Role/Company Code, so this whole section is
+  // view-only, not just those two fields — see BasicDetailsCard's own header
+  // comment for the full reasoning.
+  const [basicDetails, setBasicDetails] = useState<BasicDetails | null>(null);
+  useEffect(() => {
+    clientApi.get<{ data: Record<string, unknown> }>(API.employees.me).then(r => {
+      const d = r.data?.data;
+      if (!d) return;
+      setBasicDetails({
+        full_name:       String(d.full_name ?? ""),
+        email:           String(d.email ?? ""),
+        phone:           String(d.phone ?? ""),
+        employee_type:   String(d.employee_type ?? ""),
+        date_of_joining: String(d.date_of_joining ?? ""),
+        // /employees/me/ (MyProfileSerializer) names this role_name, not
+        // role — different from /employees/<id>/'s _employee_dict() shape,
+        // normalized here so BasicDetailsCard itself stays endpoint-agnostic.
+        role:            String(d.role_name ?? ""),
+        role_display:    String(d.role_display ?? ""),
+        branch:          String(d.branch ?? ""),
+        department:      String(d.department ?? ""),
+        designation:     String(d.designation ?? ""),
+      });
+    }).catch(() => {});
+  }, []);
+
+  // Education + Experience — both real add/remove lists, see BUILTIN_STEPS'
+  // comment above for why these are their own bespoke steps. Add/edit/remove
+  // is purely local state; nothing reaches the server until the step's own
+  // Save & Continue reconciles the whole list at once (see saveSection()'s
+  // "education"/"experience" branches below) — deletedEducationIdsRef/
+  // deletedExperienceIdsRef track which real (non-temp) ids were removed
+  // locally so that reconciliation knows what to DELETE server-side.
+  const [educationEntries, setEducationEntries] = useState<EducationEntry[]>([]);
+  const [educationErr, setEducationErr] = useState<string | null>(null);
+  const tempEducationIdRef = useRef(0);
+  const deletedEducationIdsRef = useRef<Set<string>>(new Set());
+  const [experienceEntries, setExperienceEntries] = useState<ExperienceEntry[]>([]);
+  const [totalExperienceYears, setTotalExperienceYears] = useState<string | null>(null);
+  const [experienceErr, setExperienceErr] = useState<string | null>(null);
+  const tempExperienceIdRef = useRef(0);
+  const deletedExperienceIdsRef = useRef<Set<string>>(new Set());
+
+  // Total Experience (Years) is derived server-side from the experience
+  // entries themselves (see backend's _compute_total_experience_years) —
+  // refetched after every successful saveExperienceEntries() so the
+  // read-only display in ExperienceList stays current.
+  const refetchTotalExperience = useCallback(() => {
+    clientApi.get<{ data: { total_experience_years: number | null } }>(API.onboarding.experienceSummary).then(r => {
+      const v = r.data?.data?.total_experience_years;
+      setTotalExperienceYears(v != null ? String(v) : null);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    clientApi.get<{ data: EducationEntry[] }>(API.onboarding.education).then(r => {
+      setEducationEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get<{ data: ExperienceEntry[] }>(API.onboarding.experience).then(r => {
+      setExperienceEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    refetchTotalExperience();
+  }, [refetchTotalExperience]);
+
+  function handleAddEducation() {
+    tempEducationIdRef.current += 1;
+    setEducationEntries(prev => [...prev, {
+      id: `temp-${tempEducationIdRef.current}`,
+      level: "", custom_level_label: "", institution: "", specialization: "",
+      percentage: "", start_date: "", end_date: "",
+    }]);
+  }
+
+  function handleEducationFieldChange(id: string, field: keyof EducationEntry, value: string) {
+    setEducationEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+
+  function handleRemoveEducation(id: string) {
+    if (!id.startsWith("temp-")) deletedEducationIdsRef.current.add(id);
+    setEducationEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  // Reconciles the whole Education list against the server in one go —
+  // called from saveSection()'s "education" branch, not from any per-entry
+  // button. Deletes first (removed entries), then creates/updates whatever
+  // remains, so a removed-then-re-added entry never collides with itself.
+  async function saveEducationEntries(): Promise<boolean> {
+    if (!educationEntries.some(e => e.institution.trim())) {
+      setEducationErr("Please add at least one education entry (with an institution) before continuing.");
+      return false;
+    }
+    for (const entry of educationEntries) {
+      if (!entry.level) {
+        setEducationErr("Select an education type for every entry.");
+        return false;
+      }
+      if (entry.level === "other" && !entry.custom_level_label.trim()) {
+        setEducationErr("Name the custom education type for every entry marked \"Other\".");
+        return false;
+      }
+    }
+    setEducationErr(null);
+    try {
+      for (const id of deletedEducationIdsRef.current) {
+        await clientApi.delete(API.onboarding.educationDetail(id));
+      }
+      deletedEducationIdsRef.current.clear();
+
+      const saved: EducationEntry[] = [];
+      for (const entry of educationEntries) {
+        const payload = {
+          level: entry.level,
+          custom_level_label: entry.custom_level_label,
+          institution: entry.institution,
+          specialization: entry.specialization,
+          percentage: entry.percentage,
+          start_date: entry.start_date || null,
+          end_date: entry.end_date || null,
+        };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: EducationEntry }>(API.onboarding.education, payload)
+          : await clientApi.patch<{ data: EducationEntry }>(API.onboarding.educationDetail(entry.id), payload);
+        saved.push(res.data?.data ?? entry);
+      }
+      setEducationEntries(saved);
+      return true;
+    } catch (err: unknown) {
+      setEducationErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      return false;
+    }
+  }
+
+  function handleAddExperience() {
+    tempExperienceIdRef.current += 1;
+    setExperienceEntries(prev => [...prev, {
+      id: `temp-${tempExperienceIdRef.current}`,
+      employer_name: "", designation: "", employment_type: "",
+      start_date: "", end_date: "", is_current: false,
+      responsibilities: "", reason_for_leaving: "",
+    }]);
+  }
+
+  function handleExperienceFieldChange(id: string, field: keyof ExperienceEntry, value: string | boolean) {
+    setExperienceEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+
+  function handleRemoveExperience(id: string) {
+    if (!id.startsWith("temp-")) deletedExperienceIdsRef.current.add(id);
+    setExperienceEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  // Reconciles the whole Experience list against the server in one go —
+  // called from saveSection()'s "experience" branch. Experience has no
+  // required-count rule (a fresher can leave it empty), so the only
+  // per-entry check is "if you started one, name the employer".
+  async function saveExperienceEntries(): Promise<boolean> {
+    for (const entry of experienceEntries) {
+      if (!entry.employer_name.trim()) {
+        setExperienceErr("Employer name is required for every entry — remove any blank ones, or fill them in.");
+        return false;
+      }
+    }
+    setExperienceErr(null);
+    try {
+      for (const id of deletedExperienceIdsRef.current) {
+        await clientApi.delete(API.onboarding.experienceDetail(id));
+      }
+      deletedExperienceIdsRef.current.clear();
+
+      const saved: ExperienceEntry[] = [];
+      for (const entry of experienceEntries) {
+        const payload = {
+          employer_name: entry.employer_name.trim(),
+          designation: entry.designation,
+          employment_type: entry.employment_type,
+          start_date: entry.start_date || null,
+          end_date: entry.is_current ? null : (entry.end_date || null),
+          is_current: entry.is_current,
+          responsibilities: entry.responsibilities,
+          reason_for_leaving: entry.reason_for_leaving,
+        };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: ExperienceEntry }>(API.onboarding.experience, payload)
+          : await clientApi.patch<{ data: ExperienceEntry }>(API.onboarding.experienceDetail(entry.id), payload);
+        saved.push(res.data?.data ?? entry);
+      }
+      setExperienceEntries(saved);
+      refetchTotalExperience();
+      return true;
+    } catch (err: unknown) {
+      setExperienceErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      return false;
+    }
+  }
+
+  const steps = useMemo<WizardStep[]>(() => {
+    // OnboardingSection also carries label/icon-override rows for the 4
+    // built-ins (steps 0-3, renameable from Settings) — this wizard keeps
+    // its own hardcoded built-in labels regardless, so only step 5+ rows
+    // (real custom sections) render as extra tabs here.
+    const customSteps: WizardStep[] = customSections
+      .filter(s => s.is_active && s.step > 4)
+      .slice()
+      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
+      .map(s => ({ step: s.step, label: s.label, shortLabel: s.label, icon: s.icon, kind: "fields" }));
+    return [
+      ...BUILTIN_STEPS,
+      ...customSteps,
+      DOCUMENTS_STEP,
+      ...(faceMandatory ? [FACE_STEP] : []),
+    ];
+  }, [customSections, faceMandatory]);
+
+  // Restores unlocked progress from the backend's own completed_steps once
+  // both it and the real step list have arrived — a contiguous PREFIX of
+  // "done" steps starting from Step 1, not just "which steps are done"
+  // (stopping at the first not-done step matches the same one-at-a-time
+  // gate StepIndicator itself enforces from here on). Only ever raises
+  // highestSaved (Math.max), never lowers it, so this can't undo progress
+  // made after this effect first runs.
+  useEffect(() => {
+    let highest = -1;
+    for (let i = 0; i < steps.length; i++) {
+      const passes = steps[i].kind === "experience" || completedStepNumbers.includes(steps[i].step);
+      if (!passes) break;
+      highest = i;
+    }
+    if (highest >= 0) setHighestSaved(prev => Math.max(prev, highest));
+  }, [steps, completedStepNumbers]);
 
   // Mirrors the backend's own gate (OnboardingView._submit,
   // apps/accounts/views.py): submission requires a face registration to
@@ -128,19 +401,33 @@ export default function OnboardingPage() {
     clientApi.get(API.onboarding.profile).then(r => {
       const d = r.data?.data ?? {};
       setForm(prev => ({ ...prev, ...Object.fromEntries(
-        Object.keys(EMPTY).map(k => [k, d[k] ?? ""])
+        Object.keys(EMPTY).map(k => [
+          k,
+          // permanent_same_as_current comes back as a real JSON boolean,
+          // but every other ProfileForm value (this field included) is a
+          // string — `?? ""` alone would let `false` through unconverted
+          // since `??` only catches null/undefined, not false.
+          k === "permanent_same_as_current" ? String(Boolean(d[k])) : (d[k] ?? ""),
+        ])
       ) }));
       setCustomValues(
         Object.fromEntries(
           Object.entries(d.custom_field_values ?? {}).map(([k, v]) => [k, v == null ? "" : String(v)]),
         ),
       );
+      setCompletedStepNumbers(d.completed_steps ?? []);
     }).catch(() => {});
     clientApi.get(API.onboarding.documents).then(r => {
       setDocs(r.data?.data ?? []);
     }).catch(() => {});
     clientApi.get(API.onboarding.fieldConfig).then(r => {
       setFieldConfig(r.data?.data ?? {});
+    }).catch(() => {});
+    clientApi.get<{ data: EducationExperienceFieldConfigResponse }>(API.onboarding.educationExperienceFieldConfig).then(r => {
+      setEduExpFieldConfig(r.data?.data ?? { education: [], experience: [] });
+    }).catch(() => {});
+    clientApi.get(API.onboarding.sections).then(r => {
+      setCustomSections(r.data?.data ?? []);
     }).catch(() => {});
     clientApi.get(API.onboarding.customFileFields).then(r => {
       setCustomFileValues(r.data?.data ?? []);
@@ -201,13 +488,25 @@ export default function OnboardingPage() {
   async function saveSection(): Promise<boolean> {
     setSaveMsg(null); setSaveErr(null);
 
+    const currentStepEarly = steps[tab];
+
+    // Education and Experience each reconcile their whole list in one go
+    // here — add/edit/remove is purely local state until this point (see
+    // saveEducationEntries()/saveExperienceEntries()'s own docstrings).
+    // Errors render inline via each component's own `error` prop, not the
+    // page-level saveErr banner above — showing both would just duplicate
+    // the same message twice on screen.
+    if (currentStepEarly.kind === "education") return saveEducationEntries();
+    if (currentStepEarly.kind === "experience") return saveExperienceEntries();
+
     // Required-ness is settings-driven now (see Settings > Onboarding
-    // Fields) — fieldConfig[tab] covers each company's own visible+required
+    // Fields) — fieldConfig[step] covers each company's own visible+required
     // choices for both built-in and custom fields. A hidden field can never
     // block saving even if still marked required in the config (matches the
     // backend's _step_required_configs, which checks visible AND required
     // together for the same reason).
-    const stepConfigs = fieldConfig[String(tab)] ?? [];
+    const currentStep = steps[tab];
+    const stepConfigs = fieldConfig[String(currentStep.step)] ?? [];
     const missing = stepConfigs
       .filter(c => c.visible && c.required)
       .filter(c => {
@@ -227,11 +526,11 @@ export default function OnboardingPage() {
       return false;
     }
 
-    // Tab 4 (documents) and tab 5 (face ID, when present) have no profile
-    // data to save — documents are uploaded via handleUpload, face ID is
-    // submitted via the FaceRegistrationModal. Skip the API call and let
-    // handleSubmit fire the single submit request.
-    if (tab >= 4) return true;
+    // Documents and Face ID (when present) have no profile data to save —
+    // documents are uploaded via handleUpload, face ID is submitted via the
+    // FaceRegistrationModal. Skip the API call and let handleSubmit fire the
+    // single submit request.
+    if (currentStep.kind !== "fields") return true;
 
     // Custom field values for this step ride along in the same PATCH body —
     // the backend filters incoming keys to this step's configured fields
@@ -243,7 +542,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       const res = await clientApi.patch<{ success: boolean; message: string }>(
-        API.onboarding.profileStep(tab), { ...form, ...customForStep },
+        API.onboarding.profileStep(currentStep.step), { ...form, ...customForStep },
       );
       if (res.data?.success === false) {
         setSaveErr(res.data.message ?? "Please fill in all required fields.");
@@ -435,52 +734,7 @@ export default function OnboardingPage() {
         </div>
 
         {/* ── Step Indicator ── */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", marginBottom: "2.5rem", overflowX: "auto", padding: "0 .5rem" }}>
-          {steps.map((step, i) => {
-            const isDone   = i <= highestSaved;
-            const isActive = i === tab;
-            return (
-              <div key={step.label} style={{ display: "flex", alignItems: "flex-start", flexShrink: 0 }}>
-                <button
-                  type="button"
-                  onClick={() => { if (i <= highestSaved + 1) setTab(i); }}
-                  disabled={i > highestSaved + 1}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, background: "none", border: "none", cursor: i <= highestSaved + 1 ? "pointer" : "default", padding: "0 4px", minWidth: 88, opacity: i > highestSaved + 1 ? 0.45 : 1 }}
-                >
-                  <div style={{
-                    width: 58, height: 58, borderRadius: "50%",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    background: isDone ? "var(--success)" : isActive ? "var(--primary)" : "#fff",
-                    border: isDone ? "2.5px solid var(--success)" : isActive ? "2.5px solid var(--primary)" : "2px solid var(--outline-v)",
-                    boxShadow: isActive ? "0 0 0 5px rgba(30,78,140,0.12), 0 4px 12px rgba(30,78,140,0.18)" : isDone ? "0 2px 8px rgba(27,138,107,0.18)" : "none",
-                    transition: "all 0.25s ease",
-                  }}>
-                    {isDone
-                      ? <i className="ti ti-check" style={{ fontSize: 24, color: "#fff" }} />
-                      : <i className={`ti ${step.icon}`} style={{ fontSize: 22, color: isActive ? "#fff" : "var(--outline)" }} />
-                    }
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: isDone ? "var(--success)" : isActive ? "var(--primary)" : "var(--outline)", marginBottom: 3 }}>
-                      {isDone ? "Done" : `Step ${i + 1}`}
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: isActive ? 700 : 500, color: isActive ? "var(--on-bg)" : isDone ? "var(--success)" : "var(--on-variant)", maxWidth: 80, lineHeight: 1.3 }}>
-                      {step.shortLabel}
-                    </div>
-                  </div>
-                </button>
-
-                {i < steps.length - 1 && (
-                  <div style={{ display: "flex", alignItems: "center", paddingTop: 29, margin: "0 -4px" }}>
-                    <div style={{ width: 28, height: 2, background: i <= highestSaved ? "var(--success)" : "var(--outline-v)", borderRadius: 2, transition: "background 0.3s" }} />
-                    <i className="ti ti-chevron-right" style={{ fontSize: 14, color: i <= highestSaved ? "var(--success)" : "var(--outline-v)", margin: "0 -2px", transition: "color 0.3s" }} />
-                    <div style={{ width: 28, height: 2, background: i <= highestSaved ? "var(--success)" : "var(--outline-v)", borderRadius: 2, transition: "background 0.3s" }} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <StepIndicator steps={steps} currentStep={tab} highestSaved={highestSaved} onStepClick={setTab} />
 
         {/* ── Form card ── */}
         <div style={CARD_STYLE}>
@@ -503,9 +757,20 @@ export default function OnboardingPage() {
           {saveErr && <div className="alert alert-error"  style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
           {saveMsg && <div className="alert alert-success" style={{ marginBottom: "1.25rem" }}>{saveMsg}</div>}
 
-          {tab <= 3 && (
+          {tab === 0 && basicDetails && (
+            // employeeId is unused in read-only mode (save() is only ever
+            // reachable from the editable branch) — passed empty here.
+            <BasicDetailsCard
+              employeeId=""
+              details={basicDetails}
+              editable={false}
+              onSaved={setBasicDetails}
+            />
+          )}
+
+          {steps[tab].kind === "fields" && (
             <DynamicStepFields
-              configs={(fieldConfig[String(tab)] ?? []).filter(c => c.visible)}
+              configs={(fieldConfig[String(steps[tab].step)] ?? []).filter(c => c.visible)}
               form={form}
               customValues={customValues}
               onBuiltinChange={set}
@@ -517,7 +782,7 @@ export default function OnboardingPage() {
               onCustomFileDelete={handleCustomFileDelete}
             />
           )}
-          {tab === 4 && (
+          {steps[tab].kind === "documents" && (
             <TabDocuments
               docTypes={docTypes}
               docs={docs}
@@ -533,10 +798,31 @@ export default function OnboardingPage() {
               panSaving={panSaving}
             />
           )}
-          {tab === 5 && faceMandatory && (
+          {steps[tab].kind === "face" && (
             <TabFaceId
               registration={faceRegistration}
               onRegister={() => setShowFaceCapture(true)}
+            />
+          )}
+          {steps[tab].kind === "education" && (
+            <EducationChecklist
+              entries={educationEntries}
+              fieldConfig={eduExpFieldConfig.education}
+              onAdd={handleAddEducation}
+              onFieldChange={handleEducationFieldChange}
+              onRemove={handleRemoveEducation}
+              error={educationErr}
+            />
+          )}
+          {steps[tab].kind === "experience" && (
+            <ExperienceList
+              totalExperienceYears={totalExperienceYears}
+              entries={experienceEntries}
+              fieldConfig={eduExpFieldConfig.experience}
+              onAdd={handleAddExperience}
+              onFieldChange={handleExperienceFieldChange}
+              onRemove={handleRemoveExperience}
+              error={experienceErr}
             />
           )}
 

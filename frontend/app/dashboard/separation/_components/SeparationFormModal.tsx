@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
-import type { SeparationLookupOption, SeparationRequest } from "@/types/separation";
+import type { SeparationLookupOption, SeparationRequest, SeparationTypeOption } from "@/types/separation";
 import { daysBetween, todayIso } from "../_workflow";
 import EmployeePickerField, { type PickedEmployee } from "./EmployeePickerField";
 
@@ -19,6 +19,7 @@ interface Props {
 interface FormState {
   separationType:         string;
   reason:                 string;
+  reasonNote:             string;
   requestDate:            string;
   proposedLastWorkingDay: string;
   noticePeriodDays:       string;
@@ -33,19 +34,19 @@ const MAX_DOC_BYTES = 5 * 1024 * 1024;
 function initialForm(existing?: SeparationRequest): FormState {
   if (!existing) {
     return {
-      separationType: "", reason: "", requestDate: todayIso(),
+      separationType: "", reason: "", reasonNote: "", requestDate: todayIso(),
       proposedLastWorkingDay: "", noticePeriodDays: "30", comments: "",
     };
   }
   return {
-    separationType: existing.separation_type, reason: existing.reason,
+    separationType: existing.separation_type, reason: existing.reason, reasonNote: existing.reason_note,
     requestDate: existing.request_date, proposedLastWorkingDay: existing.proposed_last_working_day,
     noticePeriodDays: String(existing.notice_period_days), comments: existing.comments,
   };
 }
 
 export default function SeparationFormModal({ mode, existing, canPickEmployee, onClose, onSaved }: Props) {
-  const { data: types }   = useFetch<SeparationLookupOption[]>(API.separation.types);
+  const { data: types }   = useFetch<SeparationTypeOption[]>(API.separation.types);
   const { data: reasons } = useFetch<SeparationLookupOption[]>(API.separation.reasons);
 
   const [employee, setEmployee] = useState<PickedEmployee | null>(null);
@@ -54,9 +55,34 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Which fields actually apply to the currently-selected type — nothing
+  // is shown/required until a type is picked, matching how neither field
+  // makes sense to ask about in the abstract (see backend
+  // SEPARATION_REASON_APPLICABLE_TYPES's own comment).
+  const selectedType = (types ?? []).find(t => t.value === form.separationType);
+  const reasonApplicable = selectedType?.reason_applicable ?? false;
+  const noticeApplicable = selectedType?.notice_period_applicable ?? false;
+
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
     setErrors(prev => ({ ...prev, [key]: undefined }));
+  }
+
+  function handleTypeChange(value: string) {
+    const next = (types ?? []).find(t => t.value === value);
+    setForm(prev => ({
+      ...prev,
+      separationType: value,
+      reason: next?.reason_applicable ? prev.reason : "",
+      reasonNote: next?.reason_applicable ? prev.reasonNote : "",
+      noticePeriodDays: next?.notice_period_applicable ? (prev.noticePeriodDays || "30") : "0",
+    }));
+    setErrors(prev => ({ ...prev, separationType: undefined, reason: undefined, reasonNote: undefined, noticePeriodDays: undefined }));
+  }
+
+  function handleReasonChange(value: string) {
+    setForm(prev => ({ ...prev, reason: value, reasonNote: value === "other" ? prev.reasonNote : "" }));
+    setErrors(prev => ({ ...prev, reason: undefined, reasonNote: undefined }));
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -78,13 +104,17 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
   function validate(): boolean {
     const errs: FormErrors = {};
     if (!form.separationType)         errs.separationType = "Please select a separation type.";
-    if (!form.reason)                 errs.reason         = "Please select a reason.";
+    if (reasonApplicable && !form.reason) errs.reason      = "Please select a reason.";
+    if (reasonApplicable && form.reason === "other" && !form.reasonNote.trim())
+      errs.reasonNote = "Specify the reason, or pick a different option from the list.";
     if (!form.requestDate)            errs.requestDate    = "Request date is required.";
     if (!form.proposedLastWorkingDay) errs.proposedLastWorkingDay = "Proposed last working day is required.";
     else if (form.requestDate && form.proposedLastWorkingDay < form.requestDate)
       errs.proposedLastWorkingDay = "Cannot be earlier than the request date.";
-    const notice = Number(form.noticePeriodDays);
-    if (!form.noticePeriodDays || Number.isNaN(notice) || notice < 0) errs.noticePeriodDays = "Enter a valid number of days.";
+    if (noticeApplicable) {
+      const notice = Number(form.noticePeriodDays);
+      if (!form.noticePeriodDays || Number.isNaN(notice) || notice < 0) errs.noticePeriodDays = "Enter a valid number of days.";
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -95,10 +125,11 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
     try {
       const fields: Record<string, string> = {
         separation_type: form.separationType,
-        reason: form.reason,
+        reason: reasonApplicable ? form.reason : "",
+        reason_note: reasonApplicable && form.reason === "other" ? form.reasonNote.trim() : "",
         request_date: form.requestDate,
         proposed_last_working_day: form.proposedLastWorkingDay,
-        notice_period_days: form.noticePeriodDays,
+        notice_period_days: noticeApplicable ? form.noticePeriodDays : "0",
         comments: form.comments.trim(),
       };
       if (mode === "create" && employee) fields.employee_id = employee.code;
@@ -177,7 +208,7 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
             </div>
           )}
 
-          <div className="form-row cols-2">
+          <div className={`form-row ${reasonApplicable ? "cols-2" : ""}`}>
             <div className="field-group">
               <label className="field-label">
                 Separation Type <span style={{ color: "var(--error)" }}>*</span>
@@ -185,30 +216,49 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
               <select
                 className={`field-input field-select${errors.separationType ? " field-error" : ""}`}
                 value={form.separationType}
-                onChange={e => setField("separationType", e.target.value)}
+                onChange={e => handleTypeChange(e.target.value)}
               >
                 <option value="">Select type…</option>
                 {(types ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               {errors.separationType && <p className="field-error-msg">{errors.separationType}</p>}
             </div>
-            <div className="field-group">
-              <label className="field-label">
-                Reason <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <select
-                className={`field-input field-select${errors.reason ? " field-error" : ""}`}
-                value={form.reason}
-                onChange={e => setField("reason", e.target.value)}
-              >
-                <option value="">Select reason…</option>
-                {(reasons ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              {errors.reason && <p className="field-error-msg">{errors.reason}</p>}
-            </div>
+            {reasonApplicable && (
+              <div className="field-group">
+                <label className="field-label">
+                  Reason <span style={{ color: "var(--error)" }}>*</span>
+                </label>
+                <select
+                  className={`field-input field-select${errors.reason ? " field-error" : ""}`}
+                  value={form.reason}
+                  onChange={e => handleReasonChange(e.target.value)}
+                >
+                  <option value="">Select reason…</option>
+                  {(reasons ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {errors.reason && <p className="field-error-msg">{errors.reason}</p>}
+              </div>
+            )}
           </div>
 
-          <div className="form-row cols-3">
+          {reasonApplicable && form.reason === "other" && (
+            <div className="form-row">
+              <div className="field-group">
+                <label className="field-label">
+                  Specify Reason <span style={{ color: "var(--error)" }}>*</span>
+                </label>
+                <input
+                  className={`field-input${errors.reasonNote ? " field-error" : ""}`}
+                  placeholder="e.g. Family relocation to another country"
+                  value={form.reasonNote}
+                  onChange={e => setField("reasonNote", e.target.value)}
+                />
+                {errors.reasonNote && <p className="field-error-msg">{errors.reasonNote}</p>}
+              </div>
+            </div>
+          )}
+
+          <div className={`form-row ${noticeApplicable ? "cols-3" : "cols-2"}`}>
             <div className="field-group">
               <label className="field-label">
                 Request Date <span style={{ color: "var(--error)" }}>*</span>
@@ -231,16 +281,18 @@ export default function SeparationFormModal({ mode, existing, canPickEmployee, o
                 ? <p className="field-error-msg">{errors.proposedLastWorkingDay}</p>
                 : noticeDays !== null && <p style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 3 }}>{noticeDays} day{noticeDays !== 1 ? "s" : ""} from request date</p>}
             </div>
-            <div className="field-group">
-              <label className="field-label">
-                Notice Period (days) <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <input
-                type="number" min="0" className={`field-input${errors.noticePeriodDays ? " field-error" : ""}`}
-                value={form.noticePeriodDays} onChange={e => setField("noticePeriodDays", e.target.value)}
-              />
-              {errors.noticePeriodDays && <p className="field-error-msg">{errors.noticePeriodDays}</p>}
-            </div>
+            {noticeApplicable && (
+              <div className="field-group">
+                <label className="field-label">
+                  Notice Period (days) <span style={{ color: "var(--error)" }}>*</span>
+                </label>
+                <input
+                  type="number" min="0" className={`field-input${errors.noticePeriodDays ? " field-error" : ""}`}
+                  value={form.noticePeriodDays} onChange={e => setField("noticePeriodDays", e.target.value)}
+                />
+                {errors.noticePeriodDays && <p className="field-error-msg">{errors.noticePeriodDays}</p>}
+              </div>
+            )}
           </div>
 
           <div className="field-group mb-16">

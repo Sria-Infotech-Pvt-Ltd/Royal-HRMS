@@ -12,12 +12,19 @@ interface Props {
   employeeName: string;
   currentDesignation: string;
   currentRole: string;
+  // The Position/Org Unit this employee already holds (from their current
+  // Placement) — prefills the Reassign Position modal below instead of
+  // always starting blank, since this action is only ever taken on an
+  // employee who already has both. Empty string when neither is known
+  // (e.g. a Company Code Admin, who has no Position at all).
+  currentPositionId: string;
+  currentOrgUnitId: string;
   roleOptions: FieldOption[];
   // Position reassignment can change designation, department, and
   // (optionally, in the same action) role — a single callback covers all
   // three, unlike the old separate Promote Employee / Reassign Position
   // split this replaces.
-  onPositionReassigned: (designation: string, department: string, role: string) => void;
+  onPositionReassigned: (designation: string, department: string, role: string, positionId: string, orgUnitId: string) => void;
 }
 
 interface PromotionRecord {
@@ -27,6 +34,9 @@ interface PromotionRecord {
   roleChanged: boolean;
   effectiveDate: string;
   updatedBy: string;
+  // The CTC (if any) tagged on the Salary tab as being "for" this specific
+  // promotion — see EmployeeSalaryConfig.linked_promotion.
+  linkedCtc: string | null;
 }
 
 // Shape returned by GET /employees/{id}/promotions/ (backend PromotionRecord model, snake_case).
@@ -37,6 +47,7 @@ interface ApiPromotionRecord {
   role_changed: boolean;
   effective_date: string;
   promoted_by: string;
+  linked_ctc: string | null;
 }
 
 const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
@@ -46,7 +57,11 @@ const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
   roleChanged: r.role_changed,
   effectiveDate: r.effective_date,
   updatedBy: r.promoted_by || "—",
+  linkedCtc: r.linked_ctc,
 });
+
+const INR = (n: string | number) =>
+  `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -55,7 +70,8 @@ const labelFor = (options: FieldOption[], value: string) =>
   options.find(o => o.value === value)?.label ?? value;
 
 export default function PromotionTab({
-  employeeId, employeeName, currentDesignation, currentRole, roleOptions, onPositionReassigned,
+  employeeId, employeeName, currentDesignation, currentRole,
+  currentPositionId, currentOrgUnitId, roleOptions, onPositionReassigned,
 }: Props) {
   const canEdit = usePermission("employees.edit");
 
@@ -99,8 +115,13 @@ export default function PromotionTab({
   }, [fetchHistory]);
 
   function openReassignModal() {
-    setReassignOrgUnit("");
-    setReassignPosition("");
+    // Prefilled to what the employee already holds — HR is reassigning an
+    // existing employee here (not hiring fresh), so starting blank meant
+    // reconstructing their current Org Unit/Position from scratch every
+    // time even when only the Role, or just the Position within the same
+    // Org Unit, is actually changing.
+    setReassignOrgUnit(currentOrgUnitId);
+    setReassignPosition(currentPositionId);
     setReassignDate(new Date().toISOString().split("T")[0]);
     setReassignRole(currentRole);
     setRoleConfirmed(false);
@@ -128,12 +149,17 @@ export default function PromotionTab({
         position: reassignPosition, effective_date: reassignDate,
         ...(isElevated ? { role: reassignRole } : {}),
       });
-      const updated = res.data?.data as { designation?: string; department?: string; role?: string } | undefined;
+      const updated = res.data?.data as {
+        designation?: string; department?: string; role?: string;
+        position_id?: string | null; org_unit_id?: string | null;
+      } | undefined;
       await fetchHistory();
       onPositionReassigned(
         updated?.designation ?? currentDesignation,
         updated?.department ?? "",
         updated?.role ?? currentRole,
+        updated?.position_id ?? reassignPosition,
+        updated?.org_unit_id ?? reassignOrgUnit,
       );
       setShowReassignModal(false);
       setSuccessMsg(
@@ -209,6 +235,11 @@ export default function PromotionTab({
                         <i className="ti ti-arrow-right text-muted" />
                         <span className="font-medium">{h.toDesignation}</span>
                         {h.roleChanged && <span className="badge badge-warn">Role change</span>}
+                        {h.linkedCtc && (
+                          <span className="badge badge-success" title="CTC revised for this promotion — see the Salary tab">
+                            <i className="ti ti-currency-rupee" /> {INR(h.linkedCtc)}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="tabular-nums">{fmtDate(h.effectiveDate)}</td>
@@ -292,7 +323,7 @@ export default function PromotionTab({
                 </select>
               </div>
 
-              {reassignSelectedPosition?.holder_name && (
+              {reassignSelectedPosition?.holder_name && reassignSelectedPosition.holder_employee_id !== employeeId && (
                 <div className="alert alert-warn">
                   <i className="ti ti-info-circle" />
                   {reassignSelectedPosition.holder_name}&apos;s placement on this position will be closed the day

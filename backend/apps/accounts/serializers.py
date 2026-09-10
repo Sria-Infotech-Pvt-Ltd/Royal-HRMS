@@ -23,6 +23,7 @@ from apps.accounts.models import (
     CustomFieldFileValue,
     Document,
     DocumentTypeConfig,
+    EducationExperienceFieldConfig,
     EmailTemplate,
     EmailTemplateAttachment,
     EmailTemplateCategory,
@@ -31,6 +32,7 @@ from apps.accounts.models import (
     EmployeeProfile,
     JobTemplate,
     OnboardingFieldConfig,
+    OnboardingSection,
     OrgUnit,
     Permission,
     Placement,
@@ -498,6 +500,7 @@ class PositionSerializer(serializers.ModelSerializer):
     org_unit_name       = serializers.CharField(source='org_unit.name', read_only=True)
     job_template_name   = serializers.CharField(source='job_template.name', read_only=True, default=None)
     branch_name         = serializers.CharField(source='branch.branch_name', read_only=True, default=None)
+    default_role_name   = serializers.CharField(source='default_role.display_name', read_only=True, default=None)
     holder              = serializers.SerializerMethodField()
     holder_name         = serializers.SerializerMethodField()
     holder_employee_id  = serializers.SerializerMethodField()
@@ -511,13 +514,30 @@ class PositionSerializer(serializers.ModelSerializer):
             'id', 'org_unit', 'org_unit_name', 'job_template', 'job_template_name',
             'title', 'grade', 'is_chief', 'is_active',
             'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
-            'branch', 'branch_name', 'reports_to', 'created_at', 'updated_at',
+            'branch', 'branch_name', 'default_role', 'default_role_name',
+            'reports_to', 'created_at', 'updated_at',
         )
         read_only_fields = (
             'id', 'org_unit_name', 'job_template_name', 'is_active',
             'holder', 'holder_name', 'holder_employee_id', 'holder_since', 'scheduled',
-            'branch_name', 'reports_to', 'created_at', 'updated_at',
+            'branch_name', 'default_role_name', 'reports_to', 'created_at', 'updated_at',
         )
+
+    def validate_default_role(self, value):
+        # Same rule as assigning a Role to an employee directly (Create/Edit
+        # Employee, views.py) — a seat can't default to a Role that carries
+        # settings.edit, one level up from the employee-level guard. A
+        # can_manage_branch role is excluded too: Branch Admin is assigned
+        # via Designation, never via a Position, so it could never actually
+        # be reached through a seat's default anyway.
+        if value and (
+            value.role_permissions.filter(permission__codename='settings.edit').exists()
+            or value.can_manage_branch
+        ):
+            raise serializers.ValidationError(
+                f'"{value.display_name}" cannot be set as a seat\'s default role.'
+            )
+        return value
 
     def validate_title(self, value: str) -> str:
         value = value.strip()
@@ -1012,12 +1032,18 @@ class CompanySerializer(serializers.ModelSerializer):
         if not value:
             return value
         v = value.strip()
+        # A bare domain or "www.example.com" has no scheme at all — rather
+        # than reject it, assume https:// like a browser address bar does.
+        # _WEBSITE_RE below still shape-checks the whole string afterward
+        # (not just the prefix), so this doesn't loosen what's accepted.
+        if not re.match(r'^https?://', v, re.IGNORECASE):
+            v = f'https://{v}'
         # Shape-checks the whole string, not just its prefix — a bare
         # startswith("http") check still lets a scheme-confusion payload
         # like "http://x/\njavascript:alert(1)" through if this value is
         # ever rendered as a raw href.
         if not _WEBSITE_RE.match(v):
-            raise serializers.ValidationError('Enter a full URL starting with http:// or https://.')
+            raise serializers.ValidationError('Enter a valid website, e.g. www.example.com.')
         return v
 
     def validate_official_phone(self, value: str) -> str:
@@ -1390,8 +1416,15 @@ class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
 
     def validate_prefix(self, value):
         value = value.strip().upper()
-        if not value.isalpha():
-            raise serializers.ValidationError('Prefix must contain letters only.')
+        # Letters/digits/hyphen/underscore — covers real-world employee ID
+        # prefixes like "HR-", "IT_2024", "EMP01", not just plain letters.
+        # Still excludes whitespace/other symbols since this value is
+        # concatenated straight into employee_id (portal usernames, emails,
+        # DB lookups) with no further sanitization downstream.
+        if not re.fullmatch(r'[A-Z0-9_-]+', value):
+            raise serializers.ValidationError(
+                'Prefix may contain only letters, numbers, hyphens, and underscores.'
+            )
         return value
 
     def validate_padding(self, value):
@@ -1409,6 +1442,10 @@ class EmployeeCodeSettingsSerializer(serializers.ModelSerializer):
 
 _IFSC_RE  = re.compile(r'^[A-Z]{4}0[A-Z0-9]{6}$')
 _PHONE_RE_PROFILE = re.compile(r'^\+?[\d\s\-()\./]{7,20}$')
+# Indian PIN codes are always 6 digits and never start with 0 (the leading
+# digit encodes one of 9 postal regions, 1-9) — same rule the Company address
+# form's isValidPin() enforces (frontend/app/dashboard/settings/company/_data.ts).
+_PIN_CODE_RE = re.compile(r'^[1-9]\d{5}$')
 
 
 class EmployeeProfileSerializer(serializers.ModelSerializer):
@@ -1416,7 +1453,11 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         model  = EmployeeProfile
         fields = [
             'date_of_birth', 'gender', 'marital_status', 'father_name',
-            'blood_group', 'current_address', 'permanent_address',
+            'blood_group', 'current_address', 'current_address_line2',
+            'current_village', 'current_district', 'current_state', 'current_pin_code',
+            'permanent_address', 'permanent_address_line2',
+            'permanent_village', 'permanent_district', 'permanent_state', 'permanent_pin_code',
+            'permanent_same_as_current',
             'highest_qualification', 'institution', 'year_of_passing', 'specialization',
             'total_experience_years', 'previous_employer', 'previous_designation', 'leaving_reason',
             'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
@@ -1548,6 +1589,20 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         if len(value) > 1000:
             raise serializers.ValidationError('Permanent address must be 1000 characters or fewer.')
         return value
+
+    def _validate_pin_code_value(self, value: str, field_label: str) -> str:
+        if not value:
+            return value
+        value = value.strip()
+        if not _PIN_CODE_RE.match(value):
+            raise serializers.ValidationError(f'Enter a valid 6-digit {field_label} (cannot start with 0).')
+        return value
+
+    def validate_current_pin_code(self, value: str) -> str:
+        return self._validate_pin_code_value(value, 'PIN code')
+
+    def validate_permanent_pin_code(self, value: str) -> str:
+        return self._validate_pin_code_value(value, 'PIN code')
 
     # ── Step 1 — Education & Experience ──────────────────────────────────────
 
@@ -1789,6 +1844,16 @@ class OnboardingFieldConfigSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class EducationExperienceFieldConfigSerializer(serializers.ModelSerializer):
+    """visible/required are the only writable fields — see
+    EducationExperienceFieldConfig's own docstring for why this is a fixed
+    set of rows (no add/remove, unlike OnboardingFieldConfig)."""
+    class Meta:
+        model  = EducationExperienceFieldConfig
+        fields = ['id', 'list_type', 'field_key', 'label', 'visible', 'required', 'order']
+        read_only_fields = ['id', 'list_type', 'field_key', 'label', 'order']
+
+
 class OnboardingFieldConfigCreateSerializer(serializers.Serializer):
     """Creates a new HR-defined custom field. field_key is derived from label
     in the view (mirrors LeavePolicyCreateSerializer's leave_type_label ->
@@ -1799,13 +1864,22 @@ class OnboardingFieldConfigCreateSerializer(serializers.Serializer):
     # File fields only, mirrors `options` being dropdown-only — ignored for
     # every other field_type.
     allow_multiple = serializers.BooleanField(default=False)
-    step       = serializers.ChoiceField(choices=OnboardingFieldConfig.STEP_CHOICES)
+    # Not a fixed ChoiceField(STEP_CHOICES) — HR-created OnboardingSection
+    # rows add valid step numbers beyond the 4 built-ins, so membership is
+    # checked dynamically in validate_step() below instead.
+    step       = serializers.IntegerField()
     required   = serializers.BooleanField(default=False)
 
     def validate_label(self, value: str) -> str:
         value = value.strip()
         if not value:
             raise serializers.ValidationError('Label cannot be blank.')
+        return value
+
+    def validate_step(self, value: int) -> int:
+        from apps.accounts.views import _valid_steps
+        if value not in _valid_steps():
+            raise serializers.ValidationError('Not a valid step.')
         return value
 
     def validate(self, attrs):
@@ -1821,6 +1895,43 @@ class OnboardingFieldConfigUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = OnboardingFieldConfig
         fields = ['label', 'options', 'order', 'visible', 'required']
+
+
+# ─── Onboarding Sections (HR-created custom wizard tabs) ───────────────────────
+
+class OnboardingSectionSerializer(serializers.ModelSerializer):
+    """Read-only — used for the settings list and the wizard-facing config."""
+    class Meta:
+        model  = OnboardingSection
+        fields = ['id', 'step', 'label', 'icon', 'order', 'is_active', 'updated_at']
+        read_only_fields = fields
+
+
+class OnboardingSectionCreateSerializer(serializers.Serializer):
+    """Creates a new HR-defined section. `step`/`order` are server-assigned
+    (see OnboardingSectionListCreateView) — never client-submitted, so a
+    custom section's step can never collide with the 5 reserved built-in
+    step numbers (0-4)."""
+    label = serializers.CharField(max_length=100, trim_whitespace=True)
+    icon  = serializers.CharField(max_length=50, default='ti-folder', trim_whitespace=True)
+
+    def validate_label(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Label cannot be blank.')
+        return value
+
+    def validate_icon(self, value: str) -> str:
+        value = value.strip()
+        return value or 'ti-folder'
+
+
+class OnboardingSectionUpdateSerializer(serializers.ModelSerializer):
+    """Partial update only — `step` is immutable after creation, same
+    reasoning as OnboardingFieldConfig's field_key/field_type."""
+    class Meta:
+        model  = OnboardingSection
+        fields = ['label', 'icon', 'order', 'is_active']
 
 
 # ─── Document Type Configuration (onboarding Step 5) ───────────────────────────
@@ -1950,7 +2061,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
         model  = User
         fields = [
             'id', 'full_name', 'email', 'phone', 'employee_id',
-            'department', 'designation', 'branch',
+            'department', 'designation', 'branch', 'employee_type',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
             'onboarding_status', 'assessment_status',
             'reporting_manager', 'reporting_approver', 'hr',
@@ -2009,7 +2120,18 @@ class MyProfileSerializer(serializers.ModelSerializer):
 class MyProfileUpdateSerializer(serializers.Serializer):
     phone                  = serializers.CharField(max_length=20,  required=False, allow_blank=True)
     current_address        = serializers.CharField(max_length=500,  required=False, allow_blank=True)
+    current_address_line2  = serializers.CharField(max_length=200,  required=False, allow_blank=True)
+    current_village        = serializers.CharField(max_length=150,  required=False, allow_blank=True)
+    current_district       = serializers.CharField(max_length=100,  required=False, allow_blank=True)
+    current_state          = serializers.CharField(max_length=100,  required=False, allow_blank=True)
+    current_pin_code       = serializers.CharField(max_length=6,    required=False, allow_blank=True)
     permanent_address      = serializers.CharField(max_length=500,  required=False, allow_blank=True)
+    permanent_address_line2 = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    permanent_village      = serializers.CharField(max_length=150,  required=False, allow_blank=True)
+    permanent_district     = serializers.CharField(max_length=100,  required=False, allow_blank=True)
+    permanent_state        = serializers.CharField(max_length=100,  required=False, allow_blank=True)
+    permanent_pin_code     = serializers.CharField(max_length=6,    required=False, allow_blank=True)
+    permanent_same_as_current = serializers.BooleanField(required=False)
     emergency_name         = serializers.CharField(max_length=150,  required=False, allow_blank=True)
     emergency_relationship = serializers.CharField(max_length=50,   required=False, allow_blank=True)
     emergency_phone        = serializers.CharField(max_length=20,   required=False, allow_blank=True)
@@ -2038,6 +2160,20 @@ class MyProfileUpdateSerializer(serializers.Serializer):
 
     def validate_emergency_phone(self, value: str) -> str:
         return self._validate_phone_value(value, 'emergency contact phone number')
+
+    def _validate_pin_code_value(self, value: str) -> str:
+        if not value:
+            return value
+        value = value.strip()
+        if not _PIN_CODE_RE.match(value):
+            raise serializers.ValidationError('Enter a valid 6-digit PIN code (cannot start with 0).')
+        return value
+
+    def validate_current_pin_code(self, value: str) -> str:
+        return self._validate_pin_code_value(value)
+
+    def validate_permanent_pin_code(self, value: str) -> str:
+        return self._validate_pin_code_value(value)
 
 
 # ─── Approval Matrix ──────────────────────────────────────────────────────────
@@ -2190,7 +2326,7 @@ class EmployeeBulkImportRowSerializer(serializers.Serializer):
     def validate_branch(self, value: str) -> str:
         value = value.strip()
         if not value:
-            raise serializers.ValidationError('Branch is required.')
+            raise serializers.ValidationError('Company Code is required.')
         return value
 
     def validate_gender(self, value: str) -> str:

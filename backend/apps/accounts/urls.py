@@ -11,6 +11,18 @@ from apps.accounts.views_onboarding_hr import (
     HREmployeeOnboardingSubmitView,
     HREmployeeOnboardingView,
 )
+from apps.accounts.views_education_experience import (
+    EducationDetailView,
+    EducationListView,
+    ExperienceDetailView,
+    ExperienceListView,
+    HREmployeeEducationDetailView,
+    HREmployeeEducationListView,
+    HREmployeeExperienceDetailView,
+    HREmployeeExperienceListView,
+    HREmployeeTotalExperienceView,
+    TotalExperienceView,
+)
 from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
@@ -29,8 +41,12 @@ from apps.accounts.views import (
     HRListView,
     ManagerListView,
     MyProfileView,
+    EducationExperienceFieldConfigView,
     OnboardingFieldConfigPublicView,
     OnboardingFieldConfigView,
+    OnboardingSectionDetailView,
+    OnboardingSectionListCreateView,
+    OnboardingSectionPublicView,
     OnboardingView,
     OnboardingApprovalView,
     CompanyDirectorDetailView,
@@ -80,6 +96,7 @@ from apps.accounts.views import (
     ResolveTemplateVariablesView,
 )
 from apps.accounts.views_profile_photo import ProfilePhotoView
+from apps.accounts.views_pincode import PincodeLookupView
 
 urlpatterns = [
     # Auth
@@ -119,7 +136,29 @@ urlpatterns = [
     path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
     path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),
+    path(
+        'onboarding/education-experience-field-config/',
+        EducationExperienceFieldConfigView.as_view(), name='education-experience-field-config',
+    ),
+    path(
+        'onboarding/education-experience-field-config/<str:config_id>/',
+        EducationExperienceFieldConfigView.as_view(), name='education-experience-field-config-detail',
+    ),
+    path('onboarding/sections/',                     OnboardingSectionPublicView.as_view(),     name='onboarding-sections-public'),
     path('onboarding/document-type-config/',         DocumentTypeConfigPublicView.as_view(), name='onboarding-document-type-config'),
+
+    # Education and Work Experience — both genuinely unbounded add/remove
+    # lists, bespoke steps not part of the generic OnboardingFieldConfig/
+    # step-N system (see views_education_experience.py).
+    path('onboarding/education/',                    EducationListView.as_view(),      name='onboarding-education'),
+    path('onboarding/education/<str:pk>/',           EducationDetailView.as_view(),    name='onboarding-education-detail'),
+    path('onboarding/experience/',                   ExperienceListView.as_view(),     name='onboarding-experience'),
+    path('onboarding/experience/summary/',           TotalExperienceView.as_view(),    name='onboarding-experience-summary'),
+    path('onboarding/experience/<str:pk>/',          ExperienceDetailView.as_view(),   name='onboarding-experience-detail'),
+
+    # PIN code -> District/State lookup, used by the address fields in step
+    # 0 of both wizards (see views_pincode.py).
+    path('onboarding/pincode-lookup/<str:pincode>/', PincodeLookupView.as_view(),      name='onboarding-pincode-lookup'),
 
     # Onboarding — HR/Admin completes the wizard on an employee's behalf
     # (onboarding.edit permission). user_id-keyed, not employee_id-keyed —
@@ -129,10 +168,17 @@ urlpatterns = [
     path('onboarding/employees/<str:user_id>/submit/',              HREmployeeOnboardingSubmitView.as_view(),     name='onboarding-employee-submit'),
     path('onboarding/employees/<str:user_id>/documents/',           HREmployeeOnboardingDocumentView.as_view(),   name='onboarding-employee-documents'),
     path('onboarding/employees/<str:user_id>/custom-file-fields/',  HREmployeeCustomFieldFileValueView.as_view(), name='onboarding-employee-custom-file-fields'),
+    path('onboarding/employees/<str:user_id>/education/',            HREmployeeEducationListView.as_view(),        name='onboarding-employee-education'),
+    path('onboarding/employees/<str:user_id>/education/<str:pk>/',   HREmployeeEducationDetailView.as_view(),      name='onboarding-employee-education-detail'),
+    path('onboarding/employees/<str:user_id>/experience/',           HREmployeeExperienceListView.as_view(),       name='onboarding-employee-experience'),
+    path('onboarding/employees/<str:user_id>/experience/summary/',   HREmployeeTotalExperienceView.as_view(),      name='onboarding-employee-experience-summary'),
+    path('onboarding/employees/<str:user_id>/experience/<str:pk>/',  HREmployeeExperienceDetailView.as_view(),     name='onboarding-employee-experience-detail'),
 
     # Onboarding field configuration (HR settings screen)
     path('settings/onboarding-fields/',              OnboardingFieldConfigView.as_view(), name='onboarding-field-settings'),
     path('settings/onboarding-fields/<str:field_key>/', OnboardingFieldConfigView.as_view(), name='onboarding-field-settings-detail'),
+    path('settings/onboarding-sections/',             OnboardingSectionListCreateView.as_view(), name='onboarding-section-settings'),
+    path('settings/onboarding-sections/<uuid:pk>/',   OnboardingSectionDetailView.as_view(),     name='onboarding-section-settings-detail'),
     path('settings/document-types/',                 DocumentTypeConfigView.as_view(), name='document-type-settings'),
     path('settings/document-types/<str:type_key>/',  DocumentTypeConfigView.as_view(), name='document-type-settings-detail'),
 

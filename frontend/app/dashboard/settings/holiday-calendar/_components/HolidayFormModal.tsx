@@ -121,10 +121,10 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Applicable Branch</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Applicable Company Code</label>
             <select className={`${INPUT} field-select`} value={form.branch === null ? "" : String(form.branch)}
               onChange={e => setField("branch", e.target.value === "" ? null : Number(e.target.value))}>
-              <option value="">All Branches</option>
+              <option value="">All Company Codes</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
             </select>
           </div>

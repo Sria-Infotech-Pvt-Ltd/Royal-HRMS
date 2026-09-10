@@ -36,6 +36,8 @@ from .views import (
     SeparationReasonListView,
     SeparationRequestDetailView,
     SeparationRequestListCreateView,
+    SeparationSettlementFinalizeView,
+    SeparationSettlementView,
     SeparationTypeListView,
     WorkFromHomeApprovalView,
     WorkFromHomeRequestDetailView,
@@ -115,6 +117,10 @@ urlpatterns = [
     # Separation — clearances
     path('separation/requests/<str:request_id>/clearances/',                            SeparationClearanceListView.as_view(),   name='separation-clearance-list'),
     path('separation/requests/<str:request_id>/clearances/<str:clearance_id>/action/',  SeparationClearanceActionView.as_view(), name='separation-clearance-action'),
+
+    # Separation — settlement (Full & Final)
+    path('separation/requests/<str:request_id>/settlement/',          SeparationSettlementView.as_view(),         name='separation-settlement'),
+    path('separation/requests/<str:request_id>/settlement/finalize/', SeparationSettlementFinalizeView.as_view(), name='separation-settlement-finalize'),
 
     # Separation — documents
     path('separation/requests/<str:request_id>/documents/',                   SeparationDocumentListCreateView.as_view(), name='separation-document-list'),

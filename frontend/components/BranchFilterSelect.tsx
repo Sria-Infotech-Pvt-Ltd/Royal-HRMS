@@ -21,7 +21,7 @@ export default function BranchFilterSelect({ branches, value, onChange, locked, 
   if (locked) {
     const label = lockedBranchName || "—";
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }} title="Scoped to your branch">
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }} title="Scoped to your Company Code">
         <select className="field-input field-select" style={{ width, background: "var(--bg-low)", cursor: "not-allowed" }} value={label} disabled>
           <option value={label}>{label}</option>
         </select>
@@ -32,7 +32,7 @@ export default function BranchFilterSelect({ branches, value, onChange, locked, 
 
   return (
     <select className="field-input field-select" style={{ width }} value={value} onChange={e => onChange(e.target.value)}>
-      <option value="">All Branches</option>
+      <option value="">All Company Codes</option>
       {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
     </select>
   );

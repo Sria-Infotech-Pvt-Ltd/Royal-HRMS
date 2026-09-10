@@ -108,7 +108,7 @@ function ReferralTable({
           <table>
             <thead>
               <tr>
-                <th>Candidate</th><th>Position</th><th>Branch</th>
+                <th>Candidate</th><th>Position</th><th>Company Code</th>
                 <th>Referred By</th><th>Status</th><th>Referred On</th>
               </tr>
             </thead>
@@ -426,7 +426,7 @@ export default function ReferralsPage() {
                       required suppressHydrationWarning />
                   </div>
                   <div className="field-group">
-                    <label className="field-label">Branch{isAdmin && <span style={{ color: "var(--error)" }}> *</span>}</label>
+                    <label className="field-label">Company Code{isAdmin && <span style={{ color: "var(--error)" }}> *</span>}</label>
                     {isAdmin ? (
                       <select
                         className="field-input field-select"
@@ -435,7 +435,7 @@ export default function ReferralsPage() {
                         required
                         suppressHydrationWarning
                       >
-                        <option value="">Select branch…</option>
+                        <option value="">Select Company Code…</option>
                         {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name}</option>)}
                       </select>
                     ) : (

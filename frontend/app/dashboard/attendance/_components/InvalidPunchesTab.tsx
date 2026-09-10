@@ -62,7 +62,7 @@ export default function InvalidPunchesTab({ onMutated }: Props) {
                 <th>Card / Bio ID</th>
                 <th>Issue</th>
                 <th>Suggested Match</th>
-                <th>Branch</th>
+                <th>Company Code</th>
                 <th>Action</th>
               </tr>
             </thead>

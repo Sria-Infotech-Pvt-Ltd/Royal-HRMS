@@ -59,7 +59,7 @@ def _branch_scoped_or_403(request, cycle):
         return None
     branch_obj = _resolve_user_branch(request.user)
     if branch_obj is None or cycle.branch_id != branch_obj.pk:
-        return error('You can only act on payroll for your own branch.', http_status=403)
+        return error('You can only act on payroll for your own Company Code.', http_status=403)
     return None
 
 

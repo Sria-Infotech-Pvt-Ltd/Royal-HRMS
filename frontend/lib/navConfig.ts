@@ -30,7 +30,7 @@ const ALL_NAV: NavEntry[] = [
   { section: "Workforce" },
   { id: "employees", icon: "ti-id-badge", label: "Employees", path: "/dashboard/employees", permission: "employees.view" },
   { id: "org-chart", icon: "ti-sitemap", label: "Organization Management", path: "/dashboard/org-chart", permission: "org_chart.view" },
-  { id: "branches", icon: "ti-building-skyscraper", label: "Branches", path: "/dashboard/branches", permission: "branches.view" },
+  { id: "branches", icon: "ti-building-skyscraper", label: "Company Codes", path: "/dashboard/branches", permission: "branches.view" },
 
   { section: "Time & Pay" },
   { id: "attendance", icon: "ti-clock", label: "Attendance", path: "/dashboard/attendance", permission: "attendance.create" },

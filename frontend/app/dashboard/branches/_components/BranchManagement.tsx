@@ -448,7 +448,7 @@ export default function BranchManagement() {
     // to carry both can_manage_branch and settings.edit is company-wide, not
     // branch-scoped, and this picker must never hand out that much access.
     const role = roles.find(r => r.can_manage_branch && !r.permissions.includes("settings.edit"));
-    if (!role) throw new Error("No Branch Admin role is set up for this company yet.");
+    if (!role) throw new Error("No Company Code Admin role is set up for this company yet.");
 
     if (f.mode === "existing") {
       await clientApi.put(API.employees.detail(f.employeeId), {
@@ -514,13 +514,13 @@ export default function BranchManagement() {
           setInviteAlert({
             type: "success",
             text: branchAdminForm.mode === "new"
-              ? `${branchName} was created and its Branch Admin was invited by email.`
-              : `${branchName} was created and its Branch Admin was assigned.`,
+              ? `${branchName} was created and its Company Code Admin was invited by email.`
+              : `${branchName} was created and its Company Code Admin was assigned.`,
           });
         } catch (e) {
           setInviteAlert({
             type: "warn",
-            text: `${branchName} was created, but assigning its Branch Admin failed: ${(e as { message?: string })?.message ?? "unknown error"} — use the Employees page instead.`,
+            text: `${branchName} was created, but assigning its Company Code Admin failed: ${(e as { message?: string })?.message ?? "unknown error"} — use the Employees page instead.`,
           });
         }
         setBranchAdminForm(EMPTY_LEADER);
@@ -621,15 +621,15 @@ export default function BranchManagement() {
   const gstChoiceRequired = gstOptionsForState.length > 1;
 
   if (isLoading && branches.length === 0) {
-    return <div className="p-8 text-center text-[var(--on-variant)]">Loading branches...</div>;
+    return <div className="p-8 text-center text-[var(--on-variant)]">Loading Company Codes...</div>;
   }
 
   return (
     <>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Branches</h1>
-          <p className="page-sub">{isHrAdmin ? "Your branch details" : "Manage all company branch locations"}</p>
+          <h1 className="page-title">Company Codes</h1>
+          <p className="page-sub">{isHrAdmin ? "Your Company Code details" : "Manage all Company Code locations"}</p>
         </div>
         {canEdit && (
           <div className="page-actions">
@@ -662,7 +662,7 @@ export default function BranchManagement() {
                 );
               });
             }}>
-              <i className="ti ti-plus" /> Add Branch
+              <i className="ti ti-plus" /> Add Company Code
             </button>
           </div>
         )}
@@ -692,7 +692,7 @@ export default function BranchManagement() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon si-primary"><i className="ti ti-building" /></div>
-          <div className="stat-label">Total Branches</div>
+          <div className="stat-label">Total Company Codes</div>
           <div className="stat-value">{stats.total_branches}</div>
         </div>
         <div className="stat-card">
@@ -707,7 +707,7 @@ export default function BranchManagement() {
         </div>
         <div className="stat-card">
           <div className="stat-icon si-warn"><i className="ti ti-building-skyscraper" /></div>
-          <div className="stat-label">Active Branches</div>
+          <div className="stat-label">Active Company Codes</div>
           <div className="stat-value">{stats.total_active_branches}</div>
         </div>
       </div>
@@ -742,12 +742,6 @@ export default function BranchManagement() {
                   <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--on-variant)", alignItems: "center" }}>
                     <i className="ti ti-flag" style={{ fontSize: "14px", color: "var(--outline)" }} />
                     <span>{branch.city_name}, {branch.state_name}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--on-variant)", alignItems: "center" }}>
-                    <i className="ti ti-receipt-tax" style={{ fontSize: "14px", color: "var(--outline)" }} />
-                    <span style={{ fontFamily: branch.gst_registration_gstin ? "monospace" : undefined }}>
-                      {branch.gst_registration_gstin || "No GST registration linked"}
-                    </span>
                   </div>
                 </div>
 
@@ -825,8 +819,8 @@ export default function BranchManagement() {
       ) : (
         <div className="empty-state mb-24 card">
           <i className="ti ti-building-skyscraper" />
-          <h3>No Branches Found</h3>
-          <p>You haven&apos;t added any branches yet.</p>
+          <h3>No Company Codes Found</h3>
+          <p>You haven&apos;t added any Company Codes yet.</p>
         </div>
       )}
 
@@ -834,7 +828,7 @@ export default function BranchManagement() {
         <div className="card">
           <div className="card-header">
             <div className="card-title">
-              <i className="ti ti-chart-bar" /> Employee Distribution by Branch
+              <i className="ti ti-chart-bar" /> Employee Distribution by Company Code
             </div>
           </div>
           <div className="card-body">
@@ -881,7 +875,7 @@ export default function BranchManagement() {
           title={
             <>
               <i className="ti ti-building-skyscraper" style={{ marginRight: "8px" }} />
-              {modalMode === "add" ? "Add New Branch" : `Edit Branch: ${editForm.branch_name}`}
+              {modalMode === "add" ? "Add New Company Code" : `Edit Company Code: ${editForm.branch_name}`}
             </>
           }
           onClose={() => setModalMode(null)}
@@ -1003,7 +997,7 @@ export default function BranchManagement() {
                           setEditForm({ ...editForm, gst_registration: e.target.value });
                         }}
                       >
-                        <option value="">Select which GST registration this branch uses…</option>
+                        <option value="">Select which GST registration this Company Code uses…</option>
                         {gstOptionsForState.map(r => (
                           <option key={r.id} value={r.id}>
                             {r.gstin}{r.place_of_business ? ` — ${r.place_of_business}` : ""}
@@ -1022,7 +1016,7 @@ export default function BranchManagement() {
 
               <div className="form-row cols-2">
                 <div className="field-group">
-                  <label className="field-label">Branch Code <span style={{ fontSize: "11px", color: "var(--outline)", fontWeight: 400 }}>(auto-generated)</span></label>
+                  <label className="field-label">Company Code <span style={{ fontSize: "11px", color: "var(--outline)", fontWeight: 400 }}>(auto-generated)</span></label>
                   <div style={{ position: "relative" }}>
                     <input
                       type="text"
@@ -1047,7 +1041,7 @@ export default function BranchManagement() {
                   )}
                 </div>
                 <div className="field-group">
-                  <label className="field-label">Branch Name *</label>
+                  <label className="field-label">Company Code Name *</label>
                   <input
                     type="text"
                     className={`field-input${fieldErrors.branch_name ? " field-error" : ""}`}
@@ -1072,7 +1066,7 @@ export default function BranchManagement() {
                       setFieldErrors(prev => { const n = {...prev}; delete n.address; return n; });
                       setEditForm({ ...editForm, address: e.target.value });
                     }}
-                    placeholder="Full branch address"
+                    placeholder="Full Company Code address"
                   />
                   {fieldErrors.address && <p className="field-error-msg">{fieldErrors.address}</p>}
                 </div>
@@ -1081,10 +1075,10 @@ export default function BranchManagement() {
               {modalMode === "add" && (
                 <div style={{ marginTop: "4px", marginBottom: "20px", paddingTop: "18px", paddingBottom: "4px", borderTop: "1px solid var(--outline-v)" }}>
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "14px" }}>
-                    Assign Branch Admin <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span>
+                    Assign Company Code Admin <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span>
                   </div>
                   <LeaderFields
-                    label="Branch Admin" form={branchAdminForm} setForm={setBranchAdminForm}
+                    label="Company Code Admin" form={branchAdminForm} setForm={setBranchAdminForm}
                     employees={leaderEmployees} errors={leaderErrors} prefix="branchAdmin"
                   />
                 </div>
@@ -1213,8 +1207,8 @@ export default function BranchManagement() {
         >
           <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6, marginBottom: (transferConfirm.reportsCount > 0 || transferConfirm.hrForCount > 0) ? "14px" : 0 }}>
             <strong>{transferConfirm.employee.full_name}</strong> currently belongs to{" "}
-            <strong>{transferConfirm.employee.branch || "no branch"}</strong>. This will move them to the new branch
-            and change their role to Branch Admin.
+            <strong>{transferConfirm.employee.branch || "no Company Code"}</strong>. This will move them to the new Company Code
+            and change their role to Company Code Admin.
           </p>
           {(transferConfirm.reportsCount > 0 || transferConfirm.hrForCount > 0) && (
             <div className="alert alert-warn">
@@ -1261,7 +1255,7 @@ export default function BranchManagement() {
           title={
             <>
               <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
-              Delete Branch?
+              Delete Company Code?
             </>
           }
           onClose={() => setDeleteConfirm(null)}

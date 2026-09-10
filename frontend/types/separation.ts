@@ -17,6 +17,15 @@ export interface SeparationLookupOption {
   label: string;
 }
 
+// Only present on /separation/types/ entries (not /separation/reasons/) —
+// tells the request form which fields actually apply once this type is
+// picked, e.g. Retirement has no "reason" and Absconding has no notice
+// period. See backend SEPARATION_REASON_APPLICABLE_TYPES's own comment.
+export interface SeparationTypeOption extends SeparationLookupOption {
+  reason_applicable: boolean;
+  notice_period_applicable: boolean;
+}
+
 export interface ApprovalStage {
   id:             string;
   stage:          string;
@@ -37,6 +46,7 @@ export interface SeparationRequest {
   separation_type_display:    string;
   reason:                     string;
   reason_display:             string;
+  reason_note:                string;
   request_date:               string; // ISO date
   proposed_last_working_day:  string; // ISO date
   notice_period_days:         number;
@@ -89,6 +99,38 @@ export interface KtHandoverTask {
   completed_at:     string | null; // ISO datetime
   created_by_name:  string;
   created_at:       string; // ISO datetime
+}
+
+// Full & Final settlement for one separation request. pro_rata_salary
+// through notice_period_recovery_amount are system-computed (see backend
+// services_settlement.compute_draft() for the exact formula and its
+// documented simplifications) — everything from gratuity_amount onward is
+// always HR/Finance-entered by hand, matching real-world practice.
+export interface SettlementItem {
+  id:                            string;
+  pro_rata_salary:               string;
+  leave_encashment_days:         string;
+  leave_encashment_amount:       string;
+  notice_period_required_days:   number;
+  notice_period_served_days:     number;
+  notice_period_shortfall_days:  number;
+  notice_period_recovery_amount: string;
+  gratuity_amount:               string;
+  statutory_bonus_amount:        string;
+  reimbursements_amount:         string;
+  advances_recovery_amount:      string;
+  tds_amount:                    string;
+  other_adjustment_amount:       string;
+  other_adjustment_note:         string;
+  net_payable_amount:            string;
+  status:                        "draft" | "finalized";
+  status_display:                string;
+  finalized_by_name:             string;
+  finalized_at:                  string | null;
+  can_edit:                      boolean;
+  can_finalize:                  boolean;
+  created_at:                    string;
+  updated_at:                    string;
 }
 
 export interface ClearanceItem {

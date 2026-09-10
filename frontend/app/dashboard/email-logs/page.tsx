@@ -174,8 +174,14 @@ export default function EmailLogsPage() {
       </div>
 
       {/* ── Filters ─────────────────────────────────────────────────────── */}
-      <form onSubmit={handleSearchSubmit} className="filter-bar">
-        <div className="search-bar">
+      {/* Explicit minWidth:0/flexWrap/maxWidth here rather than relying only
+          on globals.css's .filter-bar shrink rules — those only kick in
+          under the 768px mobile breakpoint, leaving a gap at ordinary laptop
+          widths where this row (one more field than the pattern it's based
+          on) could force the whole page to scroll horizontally instead of
+          wrapping onto a second line. */}
+      <form onSubmit={handleSearchSubmit} className="filter-bar" style={{ maxWidth: "100%", flexWrap: "wrap", rowGap: 10 }}>
+        <div className="search-bar" style={{ flex: "1 1 180px", minWidth: 0 }}>
           <i className="ti ti-search" />
           <input
             value={search}
@@ -185,31 +191,31 @@ export default function EmailLogsPage() {
           />
         </div>
 
-        <select className="field-input field-select" style={{ width: 130 }} value={status} onChange={e => setStatus(e.target.value)} suppressHydrationWarning>
+        <select className="field-input field-select" style={{ width: 120, flexShrink: 0 }} value={status} onChange={e => setStatus(e.target.value)} suppressHydrationWarning>
           <option value="">All statuses</option>
           <option value="sent">Sent</option>
           <option value="failed">Failed</option>
         </select>
 
-        <select className="field-input field-select" style={{ width: 170 }} value={module} onChange={e => setModule(e.target.value)} suppressHydrationWarning>
+        <select className="field-input field-select" style={{ width: 150, flexShrink: 0 }} value={module} onChange={e => setModule(e.target.value)} suppressHydrationWarning>
           <option value="">All modules</option>
           {MODULES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
 
         <input
-          className="field-input" type="date" style={{ width: 150 }}
+          className="field-input" type="date" style={{ width: 140, flexShrink: 0 }}
           value={dateFrom} onChange={e => setDateFrom(e.target.value)}
           title="From" suppressHydrationWarning
         />
-        <span style={{ fontSize: 12, color: "var(--on-variant)" }}>to</span>
+        <span style={{ fontSize: 12, color: "var(--on-variant)", flexShrink: 0 }}>to</span>
         <input
-          className="field-input" type="date" style={{ width: 150 }}
+          className="field-input" type="date" style={{ width: 140, flexShrink: 0 }}
           value={dateTo} onChange={e => setDateTo(e.target.value)}
           title="To" suppressHydrationWarning
         />
 
         {hasActiveFilters && (
-          <button type="button" className="btn btn-ghost" onClick={clearFilters}>
+          <button type="button" className="btn btn-ghost" onClick={clearFilters} style={{ flexShrink: 0 }}>
             <i className="ti ti-x" /> Clear
           </button>
         )}

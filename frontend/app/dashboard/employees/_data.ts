@@ -6,6 +6,7 @@
 
 import type { OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
+import { STATES } from "@/app/dashboard/settings/company/_data";
 
 export type EmployeeStatus = "active" | "onboarding" | "inactive";
 export type Gender = "male" | "female" | "transgender";
@@ -49,7 +50,7 @@ export interface Employee {
 
 export type FieldType =
   | "text" | "email" | "tel" | "number"
-  | "select" | "date" | "radio" | "textarea" | "readonly" | "file";
+  | "select" | "date" | "radio" | "textarea" | "readonly" | "file" | "checkbox";
 
 export interface FieldOption { value: string; label: string; }
 
@@ -146,14 +147,14 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "mobileNumber",  label: "Phone",          type: "readonly" },
       // department/designation are Position-derived only — see the
       // "Reassign Position" action (PromotionTab.tsx), not editable here.
-      { key: "department",  label: "Department",  type: "readonly" },
+      { key: "department",  label: "Org Unit",    type: "readonly" },
       { key: "designation", label: "Designation", type: "readonly" },
       // ── editable employment fields (options injected at runtime from API) ──
       { key: "ssRole",      label: "Role",        type: "select", required: true, options: [] },
-      { key: "branch",            label: "Branch",           type: "select",   options: [] },
+      { key: "branch",            label: "Company Code",     type: "select",   options: [] },
       { key: "reportingManager",  label: "Reporting Manager",  type: "readonly" },
       { key: "reportingApprover", label: "Reporting Approver", type: "readonly" },
-      { key: "hr",                label: "Branch HR",          type: "readonly" },
+      { key: "hr",                label: "Company Code HR",    type: "readonly" },
       // ── personal details ─────────────────────────────────────────
       { key: "dateOfBirth",    label: "Date of Birth",   type: "date",     required: true },
       {
@@ -163,8 +164,28 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
       { key: "maritalStatus",  label: "Marital Status",  type: "select",   options: opt("Single", "Married", "Divorced", "Widowed") },
       { key: "fatherName",     label: "Father's Name",   type: "text",     placeholder: "Father's full name" },
       { key: "bloodGroup",     label: "Blood Group",     type: "select",   options: opt("A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-") },
-      { key: "currentAddress",   label: "Current Address",   type: "textarea", full: true, placeholder: "House / Flat no., Street, City, State, PIN" },
-      { key: "permanentAddress", label: "Permanent Address", type: "textarea", full: true, placeholder: "Leave blank if same as current" },
+      // current_address and its sub-fields aren't part of this page's
+      // editable set (see EmployeeDetailView.put()'s _PROFILE_FIELD_KEYS on
+      // the backend) — self-service (My Profile) or the onboarding wizard is
+      // where an employee's current address gets updated, so these render
+      // read-only here rather than looking editable but silently no-op-ing.
+      { key: "currentAddress",   label: "Address Line 1",   type: "readonly", full: true },
+      { key: "currentAddressLine2", label: "Address Line 2", type: "readonly", full: true },
+      { key: "currentVillage",   label: "Village / Town / Area", type: "readonly" },
+      { key: "currentDistrict",  label: "District",              type: "readonly" },
+      { key: "currentState",     label: "State",                 type: "readonly" },
+      { key: "currentPinCode",   label: "PIN Code",              type: "readonly" },
+      // permanentSameAsCurrent has no real "type" of its own — the detail
+      // page's fieldSlot intercepts it and renders a checkbox, and uses its
+      // value to hide the four permanent_* fields below in edit mode (same
+      // mechanism the manager-picker fields already use).
+      { key: "permanentSameAsCurrent", label: "Same as current address", type: "checkbox", full: true },
+      { key: "permanentAddress", label: "Address Line 1", type: "text", full: true, placeholder: "House / Flat no., Street" },
+      { key: "permanentAddressLine2", label: "Address Line 2", type: "text", full: true, placeholder: "Apartment, floor, landmark" },
+      { key: "permanentVillage", label: "Village / Town / Area", type: "text" },
+      { key: "permanentDistrict", label: "District",             type: "text" },
+      { key: "permanentState",   label: "State",   type: "select", options: opt(...STATES) },
+      { key: "permanentPinCode", label: "PIN Code", type: "text", placeholder: "6-digit PIN" },
     ],
   },
   {
@@ -246,7 +267,16 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
 const CAMEL_TO_SNAKE: Record<string, string> = {
   dateOfBirth: "date_of_birth", gender: "gender", maritalStatus: "marital_status",
   fatherName: "father_name", bloodGroup: "blood_group",
-  currentAddress: "current_address", permanentAddress: "permanent_address",
+  currentAddress: "current_address", currentAddressLine2: "current_address_line2",
+  currentVillage: "current_village", currentDistrict: "current_district",
+  currentState: "current_state", currentPinCode: "current_pin_code",
+  permanentAddress: "permanent_address", permanentAddressLine2: "permanent_address_line2",
+  permanentVillage: "permanent_village", permanentDistrict: "permanent_district",
+  permanentState: "permanent_state", permanentPinCode: "permanent_pin_code",
+  // Not a real OnboardingFieldConfig row of its own — mapped to
+  // permanent_address's own visibility so the toggle disappears along with
+  // the rest of the permanent-address block when HR hides it.
+  permanentSameAsCurrent: "permanent_address",
   highestQualification: "highest_qualification", institution: "institution",
   yearOfPassing: "year_of_passing", specialization: "specialization",
   totalExperienceYears: "total_experience_years", previousEmployer: "previous_employer",

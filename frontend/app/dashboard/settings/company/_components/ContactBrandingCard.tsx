@@ -52,8 +52,8 @@ export default function ContactBrandingCard({
           value={form.website}
           disabled={!canEdit}
           onChange={e => onFieldChange("website", e.target.value)}
-          placeholder="https://company.com"
-          type="url"
+          placeholder="www.company.com"
+          type="text"
         />
         {errors.website && <div className="field-error-msg">{errors.website}</div>}
       </div>

@@ -300,7 +300,7 @@ export default function InterviewListPage() {
                   onChange={e => handleBranchFilter(e.target.value ? Number(e.target.value) : "")}
                   suppressHydrationWarning
                 >
-                  <option value="">All Branches</option>
+                  <option value="">All Company Codes</option>
                   {branches.map(b => (
                     <option key={b.id} value={b.id}>
                       {b.branch_name} ({b.branch_code})
@@ -322,7 +322,7 @@ export default function InterviewListPage() {
                 style={{ minWidth: 180, paddingLeft: 32, background: "var(--bg-low)", cursor: "not-allowed" }}
                 value={effectiveBranch}
                 disabled
-                title="Scoped to your branch"
+                title="Scoped to your Company Code"
                 suppressHydrationWarning
               >
                 <option value={effectiveBranch}>{effectiveBranch || "—"}</option>
@@ -409,13 +409,13 @@ export default function InterviewListPage() {
             <div className="empty-state">
               <i className="ti ti-users" />
               <h3>{activeBranch ? `No candidates in ${activeBranch.branch_name}` : "No candidates found"}</h3>
-              <p>{activeBranch ? "Add a candidate to this branch to get started." : "Add a candidate or adjust your filters."}</p>
+              <p>{activeBranch ? "Add a candidate to this Company Code to get started." : "Add a candidate or adjust your filters."}</p>
             </div>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>Candidate</th><th>Position</th><th>Branch</th>
+                  <th>Candidate</th><th>Position</th><th>Company Code</th>
                   <th>Interview Date</th><th>Mode</th><th>Status</th><th>Actions</th>
                 </tr>
               </thead>

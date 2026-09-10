@@ -13,7 +13,8 @@ from core.responses import error, first_error, success
 from ..models import (
     SEP_APPROVED, SEP_PENDING, SEP_STAGE2_PENDING,
     SEP_STAGE_HR, SEP_CLEARANCE_TYPE_CHOICES,
-    SEPARATION_REASON_CHOICES, SEPARATION_TYPE_CHOICES,
+    SEPARATION_NOTICE_PERIOD_APPLICABLE_TYPES, SEPARATION_REASON_APPLICABLE_TYPES,
+    SEPARATION_REASON_CHOICES, SEPARATION_SELF_SERVICE_TYPES, SEPARATION_TYPE_CHOICES,
     SeparationActivity, SeparationApprovalStage, SeparationClearance, SeparationRequest,
 )
 from ..serializers import SeparationRequestCreateSerializer, SeparationRequestSerializer
@@ -27,7 +28,28 @@ class SeparationTypeListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        types = [{'value': key, 'label': label} for key, label in SEPARATION_TYPE_CHOICES]
+        # Same gate the frontend's "Employee" picker itself uses
+        # (frontend/app/dashboard/separation/_access.ts's canPickEmployee) —
+        # anyone without it can only file for themselves, so they only ever
+        # see the voluntary types (Resignation/Retirement/Other). HR-only
+        # types (Termination, Layoff, End of Contract, Absconding, Death)
+        # only make sense filed by HR, on someone's behalf.
+        can_pick_employee = _has_perm(request.user, 'employees.view') or _has_perm(request.user, 'settings.edit')
+        choices = SEPARATION_TYPE_CHOICES if can_pick_employee else [
+            (key, label) for key, label in SEPARATION_TYPE_CHOICES if key in SEPARATION_SELF_SERVICE_TYPES
+        ]
+        # reason_applicable/notice_period_applicable tell the form which
+        # fields to actually show once this type is picked — see
+        # SEPARATION_REASON_APPLICABLE_TYPES's own comment for why these
+        # aren't just "always shown, sometimes optional".
+        types = [
+            {
+                'value': key, 'label': label,
+                'reason_applicable': key in SEPARATION_REASON_APPLICABLE_TYPES,
+                'notice_period_applicable': key in SEPARATION_NOTICE_PERIOD_APPLICABLE_TYPES,
+            }
+            for key, label in choices
+        ]
         return success('Separation types retrieved.', types)
 
 
@@ -169,6 +191,16 @@ class SeparationRequestListCreateView(APIView):
         serializer = SeparationRequestCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))
+
+        # Mirrors SeparationTypeListView's own filtering — the frontend
+        # already hides HR-only types (Termination/Layoff/End of Contract/
+        # Absconding/Death) from anyone filing for themselves, but that's
+        # just what the dropdown shows; a raw request could still send one
+        # directly, so it's enforced here too.
+        can_pick_employee = _has_perm(request.user, 'employees.view') or _has_perm(request.user, 'settings.edit')
+        if target_employee.id == request.user.id and not can_pick_employee:
+            if serializer.validated_data['separation_type'] not in SEPARATION_SELF_SERVICE_TYPES:
+                return error('That separation type is not available when filing for yourself.')
 
         if SeparationRequest.objects.filter(employee=target_employee, status__in=_ACTIVE_STATUSES).exists():
             return error('This employee already has an active separation request.')

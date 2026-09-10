@@ -24,7 +24,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { href: "/dashboard/settings/permissions", icon: "ti-shield-check",        bg: "rgba(27,138,107,0.12)", color: "var(--success)", label: "Roles & Perms" },
   { href: "/dashboard/attendance",           icon: "ti-clock",               bg: "rgba(14,124,134,0.12)", color: "var(--info)",    label: "Attendance"    },
   { href: "/dashboard/payroll",              icon: "ti-report-money",        bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "Payroll"       },
-  { href: "/dashboard/branches",             icon: "ti-building-skyscraper", bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Branches"      },
+  { href: "/dashboard/branches",             icon: "ti-building-skyscraper", bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Company Codes" },
   { href: "/dashboard/settings",             icon: "ti-settings",            bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "Settings"      },
 ];
 

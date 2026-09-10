@@ -281,7 +281,28 @@ class BranchPayrollConfig(models.Model):
 
 
 class EmployeeSalaryConfig(models.Model):
-    """Per-employee CTC and optional structure override. Multiple records = history."""
+    """Per-employee CTC and optional structure override. Multiple records = history.
+
+    `reason`/`linked_promotion` exist because a CTC revision and a
+    promotion (accounts.PromotionRecord) are otherwise two completely
+    separate, unlinked records with no way to later tell "was this raise
+    because of that promotion" apart from eyeballing whether their dates
+    happen to match — which is also just wrong plenty of the time (annual
+    increments, market corrections, and promotions-with-no-raise all
+    exist). `linked_promotion` is optional and SET_NULL on delete — a
+    salary history row must never disappear just because the promotion
+    record it references does."""
+
+    REASON_PROMOTION          = 'promotion'
+    REASON_INCREMENT          = 'increment'
+    REASON_MARKET_CORRECTION  = 'market_correction'
+    REASON_OTHER              = 'other'
+    REASON_CHOICES = [
+        (REASON_PROMOTION,         'Promotion'),
+        (REASON_INCREMENT,         'Annual Increment'),
+        (REASON_MARKET_CORRECTION, 'Market Correction'),
+        (REASON_OTHER,             'Other'),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee = models.ForeignKey(
@@ -301,6 +322,19 @@ class EmployeeSalaryConfig(models.Model):
         help_text='Leave blank to use branch/company default',
     )
     effective_from = models.DateField()
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES, blank=True)
+    # Free text for REASON_OTHER (e.g. "Retention counter-offer") — the 4
+    # REASON_CHOICES cover the common cases, but "Other" alone with nothing
+    # else recorded would be no more useful than leaving reason blank.
+    reason_note = models.CharField(max_length=200, blank=True)
+    linked_promotion = models.ForeignKey(
+        'accounts.PromotionRecord',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='salary_revisions',
+        help_text='The specific promotion (if any) this CTC revision was for',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

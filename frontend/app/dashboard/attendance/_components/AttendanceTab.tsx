@@ -202,7 +202,7 @@ export default function AttendanceTab({ onMutated }: Props) {
               <tr>
                 <th>Employee</th>
                 <th>Department</th>
-                <th>Branch</th>
+                <th>Company Code</th>
                 <th>Clock In</th>
                 <th>Clock Out</th>
                 <th>Total Hrs</th>

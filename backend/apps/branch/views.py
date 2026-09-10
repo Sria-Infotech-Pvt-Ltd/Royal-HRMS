@@ -79,7 +79,7 @@ class BranchPreviewCodeView(APIView):
             with transaction.atomic():
                 code = generate_branch_code(city.name)
             return success(
-                'Branch code preview generated.',
+                'Company Code preview generated.',
                 data={'branch_code': code, 'city': city.name, 'state': city.state.name},
             )
 
@@ -89,7 +89,7 @@ class BranchPreviewCodeView(APIView):
             with transaction.atomic():
                 code = generate_branch_code(city_name)
             return success(
-                'Branch code preview generated.',
+                'Company Code preview generated.',
                 data={'branch_code': code, 'city': city_name, 'state': None},
             )
 
@@ -149,7 +149,7 @@ class BranchListCreateView(APIView):
             .values_list('branch_fk_id', 'count')
         )
 
-        return success('Branches retrieved successfully.', data={
+        return success('Company Codes retrieved successfully.', data={
             'count':       paginator.count,
             'page':        page_obj.number,
             'page_size':   page_size,
@@ -181,7 +181,7 @@ class BranchListCreateView(APIView):
         )
         logger.info('Branch "%s" created by %s', branch.branch_code, request.user.email)
         return success(
-            'Branch created successfully.',
+            'Company Code created successfully.',
             data=BranchSerializer(branch).data,
             http_status=status.HTTP_201_CREATED,
         )
@@ -218,17 +218,17 @@ class BranchDetailView(APIView):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         if _branch_out_of_scope(request.user, branch):
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
-        return success('Branch retrieved successfully.', data=BranchSerializer(branch).data)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return success('Company Code retrieved successfully.', data=BranchSerializer(branch).data)
 
     def put(self, request, pk):
         if not _has_perm(request.user, 'branches.edit'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         if _branch_out_of_scope(request.user, branch):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         old_hr_id = branch.hr_id
@@ -250,14 +250,14 @@ class BranchDetailView(APIView):
             ip_address=get_client_ip(request),
         )
         logger.info('Branch "%s" updated by %s', updated.branch_code, request.user.email)
-        return success('Branch updated successfully.', data=BranchSerializer(updated).data)
+        return success('Company Code updated successfully.', data=BranchSerializer(updated).data)
 
     def patch(self, request, pk):
         if not _has_perm(request.user, 'branches.edit'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         if _branch_out_of_scope(request.user, branch):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         old_hr_id = branch.hr_id
@@ -279,7 +279,7 @@ class BranchDetailView(APIView):
             ip_address=get_client_ip(request),
         )
         logger.info('Branch "%s" patched by %s', updated.branch_code, request.user.email)
-        return success('Branch updated successfully.', data=BranchSerializer(updated).data)
+        return success('Company Code updated successfully.', data=BranchSerializer(updated).data)
 
     def post(self, request, pk):
         return self.put(request, pk)
@@ -289,7 +289,7 @@ class BranchDetailView(APIView):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         code = branch.branch_code
 
         # User.branch is a free-text field, not a FK to Branch, so deleting a
@@ -320,7 +320,7 @@ class BranchDetailView(APIView):
             ip_address=get_client_ip(request),
         )
         logger.info('Branch "%s" deleted by %s', code, request.user.email)
-        return success(f'Branch "{code}" deleted successfully.')
+        return success(f'Company Code "{code}" deleted successfully.')
 
 
 # ─── Branch Geofencing ───────────────────────────────────────────────────────
@@ -344,7 +344,7 @@ class BranchGeofencingView(APIView):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Geofencing config retrieved successfully.', data={
             'id':                   branch.pk,
             'branch_name':          branch.branch_name,
@@ -361,7 +361,7 @@ class BranchGeofencingView(APIView):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
         branch = self._get_branch(pk)
         if not branch:
-            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+            return error('Company Code not found.', http_status=status.HTTP_404_NOT_FOUND)
         if _branch_out_of_scope(request.user, branch):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
 
@@ -444,7 +444,7 @@ class BranchStatsView(APIView):
         total_active = Branch.objects.filter(status=Branch.STATUS_ACTIVE).count()
         total_employees = User.objects.filter(is_active=True).count()
         total_cities = Branch.objects.values('city').distinct().count()
-        return success('Branch statistics retrieved successfully.', data={
+        return success('Company Code statistics retrieved successfully.', data={
             'total_employees': total_employees,
             'total_branches': total_branches,
             'total_active_branches': total_active,
@@ -493,4 +493,4 @@ class BranchDistributionView(APIView):
             key=lambda x: x['employees'],
             reverse=True,
         )
-        return success('Employee distribution by branch retrieved successfully.', data=data)
+        return success('Employee distribution by Company Code retrieved successfully.', data=data)

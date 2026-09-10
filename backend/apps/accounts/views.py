@@ -70,6 +70,7 @@ from apps.accounts.models import (
     EmployeeCodeSettings,
     JobTemplate,
     OnboardingFieldConfig,
+    OnboardingSection,
     OrgUnit,
     OTPVerification,
     PasswordResetToken,
@@ -166,6 +167,7 @@ def _auto_assign_managers(employee: 'User') -> list:
         return changed
 
     assigned = None
+    from_org_chart = False
 
     # 1. Org Unit chief in same branch (most specific — preferred).
     if emp_dept:
@@ -177,6 +179,7 @@ def _auto_assign_managers(employee: 'User') -> list:
             and (chief.branch or '').strip().lower() == emp_branch.lower()
         ):
             assigned = chief
+            from_org_chart = True
 
     # 2. Fallback: first active manager in the branch (deterministic by id).
     #    Handles branches with multiple managers when no dept-level manager is set.
@@ -188,10 +191,13 @@ def _auto_assign_managers(employee: 'User') -> list:
             .order_by('id')
             .first()
         )
+        from_org_chart = False
 
     if assigned is not None:
         employee.reporting_manager = assigned
+        employee.reporting_manager_from_org_chart = from_org_chart
         changed.append('reporting_manager')
+        changed.append('reporting_manager_from_org_chart')
 
     return changed
 
@@ -261,7 +267,18 @@ def _employee_dict(user: User) -> dict:
         'father_name':       p.father_name       if p else '',
         'blood_group':       p.blood_group       if p else '',
         'current_address':   p.current_address   if p else '',
+        'current_address_line2': p.current_address_line2 if p else '',
+        'current_village':   p.current_village   if p else '',
+        'current_district':  p.current_district  if p else '',
+        'current_state':     p.current_state     if p else '',
+        'current_pin_code':  p.current_pin_code  if p else '',
         'permanent_address': p.permanent_address if p else '',
+        'permanent_address_line2': p.permanent_address_line2 if p else '',
+        'permanent_village':  p.permanent_village  if p else '',
+        'permanent_district': p.permanent_district if p else '',
+        'permanent_state':    p.permanent_state    if p else '',
+        'permanent_pin_code': p.permanent_pin_code if p else '',
+        'permanent_same_as_current': p.permanent_same_as_current if p else False,
         # Education
         'highest_qualification': p.highest_qualification if p else '',
         'institution':           p.institution           if p else '',
@@ -303,6 +320,13 @@ def _employee_dict(user: User) -> dict:
     _hr = getattr(user, 'hr', None)
     approver = getattr(user, 'reporting_approver', None)
 
+    # Current Position/Org Unit — used by Employee Detail's "Reassign
+    # Position" modal (PromotionTab.tsx) to prefill Org Unit/Position to
+    # what this employee already holds, instead of always starting blank.
+    # None for a Company Code Admin (no Position at all) or anyone with no
+    # open Placement.
+    current_placement = user.placements.filter(effective_to__isnull=True).select_related('position').first()
+
     result = {
         'id':             user.employee_id,
         'uuid':           str(user.id),
@@ -314,7 +338,10 @@ def _employee_dict(user: User) -> dict:
         'phone':          user.phone,
         'department':     user.department,
         'designation':    user.designation,
+        'position_id':    str(current_placement.position_id) if current_placement else None,
+        'org_unit_id':    str(current_placement.position.org_unit_id) if current_placement else None,
         'branch':         user.branch,
+        'employee_type':  user.employee_type,
         'role':           user.role.name         if user.role else '',
         'role_display':   user.role.display_name if user.role else '',
         'date_of_joining': str(user.date_of_joining) if user.date_of_joining else '',
@@ -343,6 +370,9 @@ def _employee_dict(user: User) -> dict:
             'id':   mgr.employee_id if mgr else None,
             'uuid': str(mgr.id)     if mgr else None,
             'name': mgr.full_name   if mgr else None,
+            # True only when resolved from an actual placed chief in this
+            # employee's Org Unit chain — see User.reporting_manager_from_org_chart.
+            'from_org_chart': bool(mgr) and user.reporting_manager_from_org_chart,
         }
 
     return result
@@ -1961,7 +1991,14 @@ class EmailTemplateListCreateView(APIView):
         if tpl_type := request.query_params.get('type', '').strip():
             qs = qs.filter(template_type=tpl_type)
 
-        page_obj, paginator = paginate(qs, request, default_page_size=20)
+        # The Settings > Email Templates page has no "next page" control — it
+        # fetches once and groups everything client-side by template_type. A
+        # 20-row default silently truncated the flat (pre-grouping) queryset
+        # once the template count passed 20, dropping entire categories
+        # (recruitment, reminder, wish) off the response with no error.
+        # Matches EmailTemplateCategoryListCreateView's default_page_size=50
+        # for the same reason.
+        page_obj, paginator = paginate(qs, request, default_page_size=100)
 
         category_map = dict(
             EmailTemplateCategory.objects.values_list('name', 'display_name')
@@ -3140,6 +3177,7 @@ class EmployeeListCreateView(APIView):
         branch          = (request.data.get('branch')          or '').strip()
         date_of_joining = (request.data.get('date_of_joining') or '').strip()
         phone           = (request.data.get('phone')           or '').strip()
+        employee_type   = (request.data.get('employee_type')   or '').strip() or 'Permanent'
         hr_id                 = (request.data.get('hr_id')                 or '').strip()
         reporting_manager_id  = (request.data.get('reporting_manager_id')  or '').strip()
         # Every role is hired onto a Position, department/designation are
@@ -3169,7 +3207,7 @@ class EmployeeListCreateView(APIView):
             if not designation: errs['designation'] = 'Designation is required.'
         elif not position_id:
             errs['position'] = 'Position is required.'
-        if not branch:          errs['branch']          = 'Branch is required.'
+        if not branch:          errs['branch']          = 'Company Code is required.'
         if not date_of_joining: errs['date_of_joining'] = 'Date of joining is required.'
 
         # Length guards
@@ -3296,6 +3334,7 @@ class EmployeeListCreateView(APIView):
                 designation     = designation,
                 branch          = branch,
                 phone           = phone,
+                employee_type   = employee_type,
                 date_of_joining  = date_of_joining or None,
                 must_change_password = True,
                 onboarding_status    = User.ONBOARDING_PENDING,
@@ -3321,7 +3360,9 @@ class EmployeeListCreateView(APIView):
                 manual_fields.append('hr')
             if selected_manager is not None:
                 user.reporting_manager = selected_manager
+                user.reporting_manager_from_org_chart = False
                 manual_fields.append('reporting_manager')
+                manual_fields.append('reporting_manager_from_org_chart')
 
             # _auto_assign_managers() only fills in fields left unset above, so an
             # explicit hr_id/reporting_manager_id from the form always wins.
@@ -3543,6 +3584,13 @@ def _employee_out_of_branch_scope(requesting_user, employee) -> bool:
 # see the comment at the call site).
 _PROFILE_FIELD_KEYS = frozenset({
     'gender', 'marital_status', 'father_name', 'blood_group', 'permanent_address',
+    # current_* address sub-fields are excluded for the same reason
+    # current_address itself already is (see the comment above _PROFILE_FIELD_KEYS'
+    # call site) — permanent_* sub-fields follow permanent_address into this
+    # page's editable set.
+    'permanent_address_line2',
+    'permanent_village', 'permanent_district', 'permanent_state', 'permanent_pin_code',
+    'permanent_same_as_current',
     'highest_qualification', 'institution', 'year_of_passing', 'specialization',
     'total_experience_years', 'previous_employer', 'previous_designation', 'leaving_reason',
     'account_holder_name', 'account_type', 'account_number', 'ifsc_code',
@@ -3638,6 +3686,18 @@ class EmployeeDetailView(APIView):
                 changes['phone'] = {'from': employee.phone, 'to': phone}
             employee.phone = phone
             update_fields.append('phone')
+
+        if 'employee_type' in data:
+            employee_type = (data.get('employee_type') or '').strip()
+            if locked and employee_type != employee.employee_type:
+                return error(
+                    'Employee type is locked once onboarding is complete and can no longer be changed here.',
+                    http_status=status.HTTP_409_CONFLICT,
+                )
+            if employee.employee_type != employee_type:
+                changes['employee_type'] = {'from': employee.employee_type, 'to': employee_type}
+            employee.employee_type = employee_type
+            update_fields.append('employee_type')
 
         full_name = (data.get('full_name') or '').strip()
         if full_name:
@@ -3752,8 +3812,11 @@ class EmployeeDetailView(APIView):
                 employee.reporting_manager = rm_user
             else:
                 employee.reporting_manager = None
+            employee.reporting_manager_from_org_chart = False
             if 'reporting_manager' not in update_fields:
                 update_fields.append('reporting_manager')
+            if 'reporting_manager_from_org_chart' not in update_fields:
+                update_fields.append('reporting_manager_from_org_chart')
 
         # Manual reporting approver assignment — the designated approver for a
         # Manager/HR employee's own requests (e.g. separation) in place of a
@@ -3986,7 +4049,12 @@ class EmployeePromotionHistoryView(APIView):
         if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
-        records = PromotionRecord.objects.filter(employee=employee).select_related('promoted_by')
+        records = (
+            PromotionRecord.objects
+            .filter(employee=employee)
+            .select_related('promoted_by')
+            .prefetch_related('salary_revisions')
+        )
         data = [
             {
                 'id':                   str(r.id),
@@ -3999,6 +4067,12 @@ class EmployeePromotionHistoryView(APIView):
                 'remarks':              r.remarks,
                 'promoted_by':          r.promoted_by.full_name if r.promoted_by_id else '—',
                 'created_at':           r.created_at.isoformat(),
+                # The CTC revision (if any) tagged as being for this specific
+                # promotion — see EmployeeSalaryConfig.linked_promotion.
+                'linked_ctc': (
+                    str(next(iter(r.salary_revisions.all())).annual_ctc)
+                    if r.salary_revisions.all() else None
+                ),
             }
             for r in records
         ]
@@ -4108,17 +4182,35 @@ class EmployeeCodeSettingsView(APIView):
 # ─── Onboarding — Employee fills their own profile ────────────────────────────
 
 
-# Step numbers are structural to the wizard (5 steps, 0-4) — unlike which
-# FIELDS live in each step, this isn't something HR customizes, so it stays a
-# plain constant rather than being derived from OnboardingFieldConfig (which
-# only covers steps 0-3; step 4/Documents is a separate file-upload flow).
-_VALID_STEPS = frozenset({0, 1, 2, 3, 4})
+# The 5 built-in step numbers (0-3 field steps + 4/Documents) are structural
+# to the wizard — unlike which FIELDS live in each step, this isn't something
+# HR customizes, so it stays a plain constant. HR *can* add custom sections
+# on top (see OnboardingSection) — _valid_steps()/_step_labels() below widen
+# these built-ins with whatever active custom sections currently exist.
+_BUILTIN_STEPS = frozenset({0, 1, 2, 3, 4})
+
+
+def _valid_steps() -> frozenset:
+    from core.cache_service import OnboardingSectionCacheService
+    return _BUILTIN_STEPS | OnboardingSectionCacheService.get_active_steps()
+
+
+def _custom_field_steps() -> list:
+    """Active custom section step numbers, sorted — the field-bearing steps
+    beyond the 4 built-ins (0-3), i.e. excluding Documents (4) which is never
+    customizable this way. OnboardingSection also holds label/icon-override
+    rows for the 4 built-ins themselves (steps 0-3, seeded so their Settings
+    tab can be renamed) — those are filtered out here so callers combining
+    this with the literal [0, 1, 2, 3] prefix never double-count them."""
+    from core.cache_service import OnboardingSectionCacheService
+    return sorted(s for s in OnboardingSectionCacheService.get_active_steps() if s not in _BUILTIN_STEPS)
+
 
 # Step 4 — Documents. pan_number is the one exception to "documents are
 # handled separately via EmployeeDocument records": real-world onboarding
 # captures the PAN *number* at the moment the PAN card proof is uploaded, not
 # later — so the frontend saves it here, right before the upload request for
-# that specific document. Not customizable, same reasoning as _VALID_STEPS.
+# that specific document. Not customizable, same reasoning as _BUILTIN_STEPS.
 _STEP_4_FIELDS = frozenset({'pan_number'})
 
 # Profile fields that are nullable in the DB (null=True).
@@ -4131,7 +4223,11 @@ _NULLABLE_PROFILE_FIELDS = frozenset({
     'total_experience_years',
 })
 
-_STEP_LABELS = dict(OnboardingFieldConfig.STEP_CHOICES)
+def _step_labels() -> dict:
+    from core.cache_service import OnboardingSectionCacheService
+    labels = dict(OnboardingFieldConfig.STEP_CHOICES)
+    labels.update({s.step: s.label for s in OnboardingSectionCacheService.get_all() if s.is_active})
+    return labels
 
 
 def _step_configs(step: int) -> list:
@@ -4143,7 +4239,14 @@ def _step_configs(step: int) -> list:
 def _step_all_field_keys(step: int) -> frozenset:
     if step == 4:
         return _STEP_4_FIELDS
-    return frozenset(c.field_key for c in _step_configs(step))
+    keys = frozenset(c.field_key for c in _step_configs(step))
+    if step == 0:
+        # permanent_same_as_current has no OnboardingFieldConfig row of its
+        # own (it's a structural toggle, not a collectible field HR would
+        # reorder/hide/require) — added explicitly so the request-filtering
+        # loop below doesn't silently drop it.
+        keys = keys | {'permanent_same_as_current'}
+    return keys
 
 
 def _step_required_configs(step: int) -> list:
@@ -4208,7 +4311,7 @@ def _file_type_custom_field_keys() -> frozenset:
 def _missing_required(profile, step: int) -> list:
     """Human-readable '<label> (<step name>)' strings for required-but-empty
     fields in this step — same format the old hardcoded _submit() checks used."""
-    step_label = _STEP_LABELS.get(step, '')
+    step_label = _step_labels().get(step, '')
     missing = []
     for c in _step_required_configs(step):
         if not _field_filled(_field_value(profile, c)):
@@ -4267,15 +4370,40 @@ def _missing_required_docs(user) -> list:
     ]
 
 
+def _missing_education_experience(user) -> list:
+    """
+    Human-readable labels for the one required Education check — the
+    bespoke-step equivalent of _missing_required_docs() above, now that
+    Education/Experience are their own components (views_education_experience.py),
+    not generic OnboardingFieldConfig step 1. At least one EducationRecord
+    with institution filled must exist — matches step 1's original
+    required=True fields' intent (some education must be on file), just
+    checked against "any one entry in the list" instead of one hardcoded
+    scalar. Experience stays fully optional, matching step 1's original
+    config too (none of those 4 fields were required).
+    """
+    from apps.accounts.models import EducationRecord
+    has_valid_education = EducationRecord.objects.filter(employee=user).exclude(institution='').exists()
+    return [] if has_valid_education else ['At least one education entry (institution name)']
+
+
 def _compute_completed_steps(profile, user) -> list:
     """
-    Derive which wizard steps (0-4) already satisfy their required fields,
+    Derive which wizard steps already satisfy their required fields,
     without persisting a separate progress field — completion is always
-    recomputed from the profile/document data that is already saved.
+    recomputed from the profile/document/education data that is already
+    saved. `1` (the old generic Education & Experience step) is
+    deliberately absent from field_steps — Education is now its own
+    bespoke step (see _missing_education_experience above), reported here
+    under its own sentinel `-2`, mirroring how Documents reports as `4`
+    and Face ID would as `-1` if it round-tripped through this at all.
     """
-    completed = [step for step in range(4) if _step_is_complete(profile, step)]
+    field_steps = [0, 2, 3] + _custom_field_steps()
+    completed = [step for step in field_steps if _step_is_complete(profile, step)]
     if not _missing_required_docs(user):
         completed.append(4)
+    if not _missing_education_experience(user):
+        completed.append(-2)
     return completed
 
 
@@ -4365,9 +4493,9 @@ class OnboardingView(APIView):
             data['completed_steps'] = _compute_completed_steps(profile, request.user)
             return success('Profile retrieved.', data=data)
 
-        if step not in _VALID_STEPS:
+        if step not in _valid_steps():
             return error(
-                f'Invalid step {step}. Valid steps are 0 to 4.',
+                f'Invalid step {step}.',
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -4408,9 +4536,9 @@ class OnboardingView(APIView):
 
     def post(self, request, step: int = None):
         if step is not None:
-            if step not in _VALID_STEPS:
+            if step not in _valid_steps():
                 return error(
-                    f'Invalid step {step}. Valid steps are 0 to 4.',
+                    f'Invalid step {step}.',
                     http_status=status.HTTP_400_BAD_REQUEST,
                 )
             return _save_profile_step(request, step)
@@ -4432,9 +4560,9 @@ class OnboardingView(APIView):
                 'Specify a step: PATCH /onboarding/step/<n>/',
                 http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        if step not in _VALID_STEPS:
+        if step not in _valid_steps():
             return error(
-                f'Invalid step {step}. Valid steps are 0 to 4.',
+                f'Invalid step {step}.',
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
         return _save_profile_step(request, step)
@@ -4447,9 +4575,9 @@ class OnboardingView(APIView):
                 'Specify a step to clear, e.g. DELETE /onboarding/step/0/.',
                 http_status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
-        if step not in _VALID_STEPS:
+        if step not in _valid_steps():
             return error(
-                f'Invalid step {step}. Valid steps are 0 to 4.',
+                f'Invalid step {step}.',
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -4535,13 +4663,20 @@ def _submit_onboarding(target_user):
         return error('Please fill in your profile details before submitting.')
 
     missing = []
-    for step in range(4):
+    for step in [0, 2, 3] + _custom_field_steps():
         missing.extend(_missing_required(profile, step))
 
     if missing:
         return error(
             f'Please complete the following required fields before submitting: '
             f'{", ".join(missing)}.'
+        )
+
+    missing_education = _missing_education_experience(target_user)
+    if missing_education:
+        return error(
+            f'Please complete the following before submitting: '
+            f'{", ".join(missing_education)}.'
         )
 
     missing_docs = _missing_required_docs(target_user)
@@ -4612,9 +4747,9 @@ def _save_profile_step(request, step: int, target_user=None):
         )
 
     # ── Step range validation ──────────────────────────────────────────────────
-    if step not in _VALID_STEPS:
+    if step not in _valid_steps():
         return error(
-            f'Invalid step {step}. Valid steps are 0 to 4.',
+            f'Invalid step {step}.',
             http_status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -4692,6 +4827,14 @@ def _save_profile_step(request, step: int, target_user=None):
 
     filled_data: dict = {}
     custom_updates: dict = {}
+    # Required built-in keys the request explicitly submitted as blank —
+    # kept apart from "key absent from this request entirely" so the
+    # required-field gate below can tell "the employee just cleared this
+    # field and saved" (must fail, regardless of whatever value is still
+    # sitting in the DB from an earlier save) from "this request didn't
+    # touch this field at all" (should fall back to that earlier value —
+    # a field filled in a previous save still counts as satisfied).
+    cleared_required_keys: set = set()
     for k, v in request.data.items():
         if k not in step_fields:
             continue
@@ -4704,14 +4847,14 @@ def _save_profile_step(request, step: int, target_user=None):
         if k in custom_keys:
             # No serializer-level type coercion for custom fields (they're
             # HR-defined at runtime, not real columns) — stored as submitted,
-            # empty value included. Required-ness is checked separately by
-            # _missing_required at step-complete/submit time, same as
-            # built-in fields' "let required-field validation catch it" below.
+            # empty value included; the required-field gate below catches a
+            # blank one the same way it does built-in fields.
             custom_updates[k] = v
             continue
         if v in ('', None):
             if k in required_keys:
-                continue  # let required-field validation catch the missing value
+                cleared_required_keys.add(k)
+                continue  # don't persist blank over a real prior value — the gate below still catches it as missing
             filled_data[k] = None if k in _NULLABLE_PROFILE_FIELDS else ''
         else:
             filled_data[k] = v
@@ -4720,6 +4863,42 @@ def _save_profile_step(request, step: int, target_user=None):
         merged = dict(profile.custom_field_values or {})
         merged.update(custom_updates)
         filled_data['custom_field_values'] = merged
+
+    # Required-field gate — a step save must never report success while any
+    # visible+required field for this step would still end up blank
+    # afterward. Checked against the EFFECTIVE post-save value (this
+    # request's own data if it provided one, else whatever's already on the
+    # profile), not just what's live in this one request, since a field
+    # filled in an earlier save still counts as satisfied. Previously this
+    # only got enforced client-side (see the wizard's own saveSection()) and
+    # again at final submission (_missing_required, called from
+    # _submit_onboarding) — meaning a request that skipped or raced past the
+    # frontend's own check (or called this endpoint directly) could "save"
+    # step 0 empty and still land on step 1's Save & Continue reporting
+    # success, silently unlocking the next step with nothing actually filled
+    # in. Enforcing it here too closes that gap the same way every other
+    # required-field check in this codebase already works in two places,
+    # not one.
+    def _effective_value(config):
+        if config.is_custom:
+            return custom_updates.get(config.field_key, _field_value(profile, config))
+        if config.field_key in cleared_required_keys:
+            return ''
+        if config.field_key in filled_data:
+            return filled_data[config.field_key]
+        return getattr(profile, config.field_key, None)
+
+    step_label = _step_labels().get(step, '')
+    missing = [
+        f'{c.label} ({step_label})' if step_label else c.label
+        for c in _step_required_configs(step)
+        if not _field_filled(_effective_value(c))
+    ]
+    if missing:
+        return error(
+            f'Please fill in: {", ".join(missing)}.',
+            http_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
 
     # Step-scoped "nothing to save" — only triggers when the request had no step
     # fields at all or all were required fields with empty values.
@@ -4865,6 +5044,99 @@ class OnboardingFieldConfigView(APIView):
         return success('Custom field deleted.')
 
 
+class OnboardingSectionListCreateView(APIView):
+    """
+    HR-only settings screen for HR-created custom onboarding sections/tabs —
+    the sibling of OnboardingFieldConfigView, but for whole sections rather
+    than individual fields within one. GET lists every custom section; POST
+    creates one, server-assigning its `step` (never client-submitted) so it
+    can never collide with the 5 reserved built-in step numbers (0-4).
+    """
+    permission_classes = [HasSettingsPermission]
+
+    def get(self, request):
+        from apps.accounts.serializers import OnboardingSectionSerializer
+        from core.cache_service import OnboardingSectionCacheService
+        sections = sorted(OnboardingSectionCacheService.get_all(), key=lambda s: (s.order, s.label))
+        return success(
+            'Onboarding sections retrieved.',
+            OnboardingSectionSerializer(sections, many=True).data,
+        )
+
+    def post(self, request):
+        from django.db.models import Max
+
+        from apps.accounts.serializers import (
+            OnboardingSectionCreateSerializer,
+            OnboardingSectionSerializer,
+        )
+        from core.cache_service import OnboardingSectionCacheService
+
+        serializer = OnboardingSectionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        data = serializer.validated_data
+
+        max_step = OnboardingSection.objects.aggregate(m=Max('step'))['m']
+        next_step = max(max_step or 4, 4) + 1
+        max_order = OnboardingSection.objects.aggregate(m=Max('order'))['m']
+
+        section = OnboardingSection.objects.create(
+            step=next_step,
+            label=data['label'],
+            icon=data['icon'],
+            order=(max_order or 0) + 1,
+        )
+        OnboardingSectionCacheService.invalidate()
+        logger.info('Created onboarding section "%s" (step %s) by %s', section.label, section.step, request.user.email)
+        return success(
+            'Section created.', OnboardingSectionSerializer(section).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+class OnboardingSectionDetailView(APIView):
+    permission_classes = [HasSettingsPermission]
+
+    def _get_section(self, pk) -> 'OnboardingSection | None':
+        return OnboardingSection.objects.filter(pk=pk).first()
+
+    def patch(self, request, pk):
+        from apps.accounts.serializers import (
+            OnboardingSectionSerializer,
+            OnboardingSectionUpdateSerializer,
+        )
+        from core.cache_service import OnboardingSectionCacheService
+
+        section = self._get_section(pk)
+        if not section:
+            return error('Section not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        serializer = OnboardingSectionUpdateSerializer(section, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        serializer.save()
+        OnboardingSectionCacheService.invalidate()
+        logger.info('Updated onboarding section "%s" by %s', section.label, request.user.email)
+        return success('Section updated.', OnboardingSectionSerializer(section).data)
+
+    def delete(self, request, pk):
+        from core.cache_service import OnboardingSectionCacheService
+
+        section = self._get_section(pk)
+        if not section:
+            return error('Section not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if OnboardingFieldConfig.objects.filter(step=section.step).exists():
+            return error(
+                f'"{section.label}" still has fields under it — delete or move them first.',
+                http_status=status.HTTP_409_CONFLICT,
+            )
+        section.delete()
+        OnboardingSectionCacheService.invalidate()
+        logger.info('Deleted onboarding section "%s" by %s', section.label, request.user.email)
+        return success('Section deleted.')
+
+
 class OnboardingFieldConfigPublicView(APIView):
     """
     Every field (visible AND hidden) grouped by step — used by the wizard,
@@ -4895,6 +5167,71 @@ class OnboardingFieldConfigPublicView(APIView):
             for step, fields in by_step.items()
         }
         return success('Onboarding field configuration retrieved.', data=data)
+
+
+class EducationExperienceFieldConfigView(APIView):
+    """
+    Show/require toggles for Education/Experience list-entry fields — see
+    EducationExperienceFieldConfig's own docstring for what this does and
+    doesn't cover (no add/remove, unlike OnboardingFieldConfigView).
+
+    GET is open to any authenticated user (both onboarding wizards need it
+    to decide what to show/require, same reasoning as
+    OnboardingFieldConfigPublicView above); PATCH is HR-only.
+    """
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [HasSettingsPermission()]
+        return [IsAuthenticated()]
+
+    def get(self, request):
+        from apps.accounts.models import EducationExperienceFieldConfig as CFG
+        from apps.accounts.serializers import EducationExperienceFieldConfigSerializer as Ser
+        configs = list(CFG.objects.all().order_by('list_type', 'order'))
+        data = {
+            'education':  Ser([c for c in configs if c.list_type == CFG.LIST_EDUCATION], many=True).data,
+            'experience': Ser([c for c in configs if c.list_type == CFG.LIST_EXPERIENCE], many=True).data,
+        }
+        return success('Education/Experience field configuration retrieved.', data=data)
+
+    def patch(self, request, config_id: str):
+        from apps.accounts.models import EducationExperienceFieldConfig as CFG
+        from apps.accounts.serializers import EducationExperienceFieldConfigSerializer as Ser
+        try:
+            config = CFG.objects.get(pk=config_id)
+        except (CFG.DoesNotExist, ValueError, ValidationError):
+            return error('Field not found.', http_status=status.HTTP_404_NOT_FOUND)
+        serializer = Ser(config, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        serializer.save()
+        logger.info(
+            'Updated education/experience field "%s.%s" (visible=%s, required=%s) by %s',
+            config.list_type, config.field_key, config.visible, config.required, request.user.email,
+        )
+        return success('Field updated.', Ser(config).data)
+
+
+class OnboardingSectionPublicView(APIView):
+    """
+    Active custom onboarding sections — used by both onboarding wizards (the
+    self-service one and the HR-on-behalf mirror) to render extra tabs
+    beyond the 4 built-ins. Every onboarding employee needs this regardless
+    of role, same reasoning as OnboardingFieldConfigPublicView above; only
+    active sections are returned since (unlike a field) a section has no
+    "hidden but shown while loading" ambiguity to guard against.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.serializers import OnboardingSectionSerializer
+        from core.cache_service import OnboardingSectionCacheService
+
+        sections = sorted(
+            (s for s in OnboardingSectionCacheService.get_all() if s.is_active),
+            key=lambda s: (s.order, s.label),
+        )
+        return success('Onboarding sections retrieved.', OnboardingSectionSerializer(sections, many=True).data)
 
 
 # ─── Document Type Configuration (onboarding Step 5) ──────────────────────────
@@ -5624,6 +5961,7 @@ class OnboardingApprovalView(APIView):
                 try:
                     manager_user = User.objects.get(pk=req_manager_id, is_active=True)
                     target.reporting_manager = manager_user
+                    target.reporting_manager_from_org_chart = False
                 except User.DoesNotExist:
                     return error('Reporting manager not found or is inactive.')
 
@@ -5634,7 +5972,7 @@ class OnboardingApprovalView(APIView):
                 'onboarding_status', 'must_change_password',
                 'role', 'employee_id', 'date_of_joining',
                 'designation', 'department', 'branch',
-                'reporting_manager', 'hr',
+                'reporting_manager', 'reporting_manager_from_org_chart', 'hr',
                 *auto_fields,
             ])))
 
@@ -5978,7 +6316,9 @@ class MyProfileView(APIView):
             request.user.save(update_fields=['phone', 'updated_at'])
 
         profile_fields = [
-            'current_address', 'permanent_address',
+            'current_address', 'current_address_line2', 'current_village', 'current_district', 'current_state', 'current_pin_code',
+            'permanent_address', 'permanent_address_line2', 'permanent_village', 'permanent_district', 'permanent_state', 'permanent_pin_code',
+            'permanent_same_as_current',
             'emergency_name', 'emergency_relationship',
             'emergency_phone', 'emergency_email',
         ]
@@ -6120,7 +6460,8 @@ class EmployeeReportingManagerView(APIView):
 
             employee.reporting_manager = manager
 
-        employee.save(update_fields=['reporting_manager', 'updated_at'])
+        employee.reporting_manager_from_org_chart = False
+        employee.save(update_fields=['reporting_manager', 'reporting_manager_from_org_chart', 'updated_at'])
         logger.info(
             'Reporting manager for %s set to %s by %s',
             employee.employee_id,
@@ -6412,7 +6753,11 @@ _EMP_IMPORT_COL_MAP = {
     # would be silently dropped rather than actually doing anything.
     'org unit': 'org_unit', 'org_unit': 'org_unit', 'organisation unit': 'org_unit',
     'position': 'position_title', 'position title': 'position_title', 'position_title': 'position_title',
+    # 'branch'/'branch name' kept for any pre-existing template already in
+    # use — 'company code' is the current column name (see the sample
+    # template's own _HEADERS below), both accepted indefinitely.
     'branch': 'branch', 'branch name': 'branch', 'branch_name': 'branch',
+    'company code': 'branch', 'company_code': 'branch', 'company code name': 'branch',
     'employee type': 'employee_type', 'employee_type': 'employee_type',
     'emp type': 'employee_type', 'type': 'employee_type',
     'date of joining': 'date_of_joining', 'date_of_joining': 'date_of_joining',
@@ -6600,7 +6945,7 @@ class EmployeeBulkImportView(APIView):
                     'row':        idx,
                     'field':      'branch',
                     'identifier': email,
-                    'message':    f'Branch "{branch_raw}" not found.',
+                    'message':    f'Company Code "{branch_raw}" not found.',
                 })
                 continue
 
@@ -6669,6 +7014,7 @@ class EmployeeBulkImportView(APIView):
                     employee_id          = employee_id,
                     branch               = branch_name,
                     phone                = vd.get('phone') or '',
+                    employee_type        = vd.get('employee_type') or 'Permanent',
                     date_of_joining      = vd.get('date_of_joining'),
                     must_change_password = True,
                     onboarding_status    = User.ONBOARDING_PENDING,
@@ -6816,7 +7162,7 @@ class EmployeeBulkImportSampleView(APIView):
 
     _HEADERS = [
         'First Name', 'Last Name', 'Work Email', 'Mobile Number',
-        'Role', 'Org Unit', 'Position', 'Branch', 'Employee Type',
+        'Role', 'Org Unit', 'Position', 'Company Code', 'Employee Type',
         'Date of Joining', 'Gender', 'Date of Birth', 'Blood Group', 'Address',
     ]
     _SAMPLE_ROWS = [

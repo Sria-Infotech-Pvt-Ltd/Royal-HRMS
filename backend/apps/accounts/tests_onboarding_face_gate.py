@@ -13,7 +13,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.factories import make_role, make_user
-from apps.accounts.models import EmployeeDocument, EmployeeProfile
+from apps.accounts.models import EDUCATION_LEVEL_BACHELORS, EducationRecord, EmployeeDocument, EmployeeProfile
 from apps.attendance.models import (
     AttendanceFaceVerificationRules,
     AttendanceSettings,
@@ -35,12 +35,20 @@ def _set_face_verification_mandatory(is_mandatory: bool) -> None:
 
 
 def _complete_profile(user) -> EmployeeProfile:
-    """Fills every field _submit() requires, except documents/face ID."""
+    """Fills every field _submit() requires, except documents/face ID.
+    Education is now its own bespoke list (EducationRecord), not a step-1
+    generic field — _missing_education_experience() requires at least one
+    row with institution filled."""
+    EducationRecord.objects.create(
+        employee=user, level=EDUCATION_LEVEL_BACHELORS,
+        institution='Test University', end_date='2017-06-01',
+    )
     return EmployeeProfile.objects.create(
         user=user,
         date_of_birth='1995-01-01', gender=EmployeeProfile.GENDER_MALE,
         marital_status=EmployeeProfile.MARITAL_SINGLE, father_name='Test Father',
         current_address='123 Test Street',
+        current_district='Test District', current_state='Test State', current_pin_code='500001',
         highest_qualification='B.Tech', institution='Test University', year_of_passing=2017,
         account_holder_name='Test User', account_type=EmployeeProfile.ACCOUNT_SAVINGS,
         account_number='1234567890', ifsc_code='SBIN0001234',

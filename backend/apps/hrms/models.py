@@ -313,15 +313,35 @@ class CarryForwardLog(models.Model):
 
 # ─── Separation Request ───────────────────────────────────────────────────────
 
-SEPARATION_RESIGNATION  = 'resignation'
-SEPARATION_RETIREMENT   = 'retirement'
-SEPARATION_OTHER        = 'other'
+SEPARATION_RESIGNATION     = 'resignation'
+SEPARATION_RETIREMENT      = 'retirement'
+SEPARATION_TERMINATION     = 'termination'
+SEPARATION_LAYOFF          = 'layoff'
+SEPARATION_END_OF_CONTRACT = 'end_of_contract'
+SEPARATION_ABSCONDING      = 'absconding'
+SEPARATION_DEATH           = 'death'
+SEPARATION_OTHER           = 'other'
 
 SEPARATION_TYPE_CHOICES = [
-    (SEPARATION_RESIGNATION,  'Resignation'),
-    (SEPARATION_RETIREMENT,   'Retirement'),
-    (SEPARATION_OTHER,        'Other'),
+    (SEPARATION_RESIGNATION,     'Resignation'),
+    (SEPARATION_RETIREMENT,      'Retirement'),
+    (SEPARATION_TERMINATION,     'Termination'),
+    (SEPARATION_LAYOFF,          'Layoff / Redundancy'),
+    (SEPARATION_END_OF_CONTRACT, 'End of Contract'),
+    (SEPARATION_ABSCONDING,      'Absconding'),
+    (SEPARATION_DEATH,           'Death'),
+    (SEPARATION_OTHER,           'Other'),
 ]
+
+# Types an employee may file against themselves (Request Separation with no
+# "Employee" picker — see SeparationTypeListView). Termination/Layoff/
+# End of Contract/Absconding/Death are all HR-initiated by nature — an
+# employee choosing one of these "for themselves" wouldn't make sense (and
+# for Absconding/Death, the employee obviously isn't the one filing at
+# all) — so only these three are offered when filing for yourself. HR/Admin
+# (the same permission the "Employee" picker itself is gated on) still see
+# every type, for either themselves or someone else.
+SEPARATION_SELF_SERVICE_TYPES = {SEPARATION_RESIGNATION, SEPARATION_RETIREMENT, SEPARATION_OTHER}
 
 SEPARATION_REASON_CHOICES = [
     ('better_career_opportunity', 'Better Career Opportunity'),
@@ -332,6 +352,21 @@ SEPARATION_REASON_CHOICES = [
     ('health_family',             'Health / Family'),
     ('other',                     'Other'),
 ]
+
+# Which fields actually apply to each separation type — Reason and Notice
+# Period were being asked for unconditionally regardless of type, which
+# made no sense for e.g. Retirement (there's no "reason" beyond retiring
+# itself) or Absconding/Death (nobody filing on the employee's behalf would
+# even know a reason, and no notice was ever given). SeparationTypeListView
+# exposes both flags per type so the form can show/require only what's
+# actually relevant once a type is picked, instead of one fixed field set
+# for every type.
+SEPARATION_REASON_APPLICABLE_TYPES = {
+    SEPARATION_RESIGNATION, SEPARATION_TERMINATION, SEPARATION_LAYOFF, SEPARATION_OTHER,
+}
+SEPARATION_NOTICE_PERIOD_APPLICABLE_TYPES = {
+    SEPARATION_RESIGNATION, SEPARATION_RETIREMENT, SEPARATION_LAYOFF, SEPARATION_OTHER,
+}
 
 SEP_PENDING        = 'pending'         # awaiting the chain's 1st stage (see _resolve_separation_chain)
 SEP_STAGE2_PENDING = 'stage2_pending'  # 1st stage approved, awaiting the 2nd (never reached for a 1-stage chain)
@@ -353,7 +388,14 @@ class SeparationRequest(models.Model):
     request_number            = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
     employee                  = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='separation_requests')
     separation_type           = models.CharField(max_length=20, choices=SEPARATION_TYPE_CHOICES)
-    reason                    = models.CharField(max_length=30, choices=SEPARATION_REASON_CHOICES)
+    # blank=True — required only for the separation types where a reason is
+    # actually applicable (see SEPARATION_REASON_APPLICABLE_TYPES); enforced
+    # in SeparationRequestCreateSerializer.validate(), not here, since that
+    # requiredness depends on separation_type.
+    reason                    = models.CharField(max_length=30, choices=SEPARATION_REASON_CHOICES, blank=True)
+    # Free text for reason='other' — "Other" alone explains nothing; required
+    # whenever reason is 'other' (see SeparationRequestCreateSerializer.validate()).
+    reason_note               = models.CharField(max_length=200, blank=True)
     request_date              = models.DateField()
     proposed_last_working_day = models.DateField()
     notice_period_days        = models.PositiveIntegerField(default=30)
@@ -532,6 +574,80 @@ class SeparationDocument(models.Model):
 
     def __str__(self) -> str:
         return f'{self.get_document_type_display()} ({self.request_id})'
+
+
+# ─── Separation — Settlement (Full & Final) ────────────────────────────────────
+
+SEP_SETTLEMENT_DRAFT     = 'draft'
+SEP_SETTLEMENT_FINALIZED = 'finalized'
+
+SEP_SETTLEMENT_STATUS_CHOICES = [
+    (SEP_SETTLEMENT_DRAFT,     'Draft'),
+    (SEP_SETTLEMENT_FINALIZED, 'Finalized'),
+]
+
+
+class SeparationSettlement(models.Model):
+    """Full & Final settlement for one separation.
+
+    Pro-rated final salary, leave encashment, and notice-period shortfall
+    recovery are computed from existing payroll/leave data (see
+    services_settlement.compute_draft()) — real starting estimates, not
+    final figures, exactly matching how this actually works at real
+    companies: Payroll computes a draft, then reviews/adjusts it before
+    anyone gets paid (see that module's own docstring for the calculation
+    and its documented simplifications).
+
+    Gratuity, statutory bonus, reimbursements, advance recovery, TDS, and
+    any other one-off adjustment are always HR/Finance-entered by hand —
+    each involves real legal/policy judgment (gratuity eligibility under
+    the Payment of Gratuity Act, the applicable bonus scheme, tax slab) that
+    this system has no reliable way to get right automatically, and getting
+    it wrong here is a compliance problem, not just a display bug.
+
+    One-to-one with SeparationRequest — a separation has at most one
+    settlement, recomputed (while still draft) every time compute_draft()
+    runs; manual fields are preserved across recomputes."""
+
+    id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request = models.OneToOneField(SeparationRequest, on_delete=models.CASCADE, related_name='settlement')
+
+    # ── Computed — system-derived, still HR-editable before finalizing ─────
+    pro_rata_salary               = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    leave_encashment_days         = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    leave_encashment_amount       = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    notice_period_required_days   = models.PositiveIntegerField(default=0)
+    notice_period_served_days     = models.PositiveIntegerField(default=0)
+    notice_period_shortfall_days  = models.PositiveIntegerField(default=0)
+    notice_period_recovery_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # ── Manual entry — HR/Finance judgment calls, never auto-computed ───────
+    gratuity_amount          = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    statutory_bonus_amount   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    reimbursements_amount    = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    advances_recovery_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tds_amount               = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Can be positive or negative — anything the above line items don't cover.
+    other_adjustment_amount  = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    other_adjustment_note    = models.CharField(max_length=200, blank=True)
+
+    net_payable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    status       = models.CharField(max_length=20, choices=SEP_SETTLEMENT_STATUS_CHOICES, default=SEP_SETTLEMENT_DRAFT)
+    finalized_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='separation_settlements_finalized',
+    )
+    finalized_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_separation_settlements'
+
+    def __str__(self) -> str:
+        return f'Settlement for {self.request_id} — ₹{self.net_payable_amount} ({self.status})'
 
 
 # ─── Separation — Activity Log ─────────────────────────────────────────────────

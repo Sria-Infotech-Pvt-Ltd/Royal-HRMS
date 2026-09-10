@@ -83,7 +83,7 @@ export default function UnpunchesTab() {
               <tr>
                 <th>Employee ID</th>
                 <th>Name</th>
-                <th>Branch</th>
+                <th>Company Code</th>
                 <th>Date</th>
                 <th>Clock In</th>
                 <th>Expected Out</th>

@@ -16,6 +16,7 @@ import SeparationCard from "./_components/SeparationCard";
 import OnboardingDynamicField from "@/components/OnboardingDynamicField";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
 import type { CustomFieldFileValue, OnboardingFieldConfig, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
+import { STATES } from "@/app/dashboard/settings/company/_data";
 
 interface ProfileSub {
   date_of_birth:          string | null;
@@ -24,7 +25,18 @@ interface ProfileSub {
   father_name:            string | null;
   blood_group:            string | null;
   current_address:        string | null;
+  current_address_line2:  string | null;
+  current_village:        string | null;
+  current_district:       string | null;
+  current_state:          string | null;
+  current_pin_code:       string | null;
   permanent_address:      string | null;
+  permanent_address_line2: string | null;
+  permanent_village:      string | null;
+  permanent_district:     string | null;
+  permanent_state:        string | null;
+  permanent_pin_code:     string | null;
+  permanent_same_as_current: boolean;
   highest_qualification:  string | null;
   institution:            string | null;
   year_of_passing:        number | null;
@@ -109,7 +121,20 @@ function fmtBytes(bytes: number): string {
 interface EditableFields {
   phone:                  string;
   current_address:        string;
+  current_address_line2:  string;
+  current_village:        string;
+  current_district:       string;
+  current_state:          string;
+  current_pin_code:       string;
   permanent_address:      string;
+  permanent_address_line2: string;
+  permanent_village:      string;
+  permanent_district:     string;
+  permanent_state:        string;
+  permanent_pin_code:     string;
+  // Holds "true"/"false" — every EditableFields value is a string so it can
+  // go through the same field() setter as everything else.
+  permanent_same_as_current: string;
   emergency_name:         string;
   emergency_relationship: string;
   emergency_phone:        string;
@@ -117,7 +142,10 @@ interface EditableFields {
 }
 
 const EMPTY: EditableFields = {
-  phone: "", current_address: "", permanent_address: "",
+  phone: "",
+  current_address: "", current_address_line2: "", current_village: "", current_district: "", current_state: "", current_pin_code: "",
+  permanent_address: "", permanent_address_line2: "", permanent_village: "", permanent_district: "", permanent_state: "", permanent_pin_code: "",
+  permanent_same_as_current: "false",
   emergency_name: "", emergency_relationship: "", emergency_phone: "", emergency_email: "",
 };
 
@@ -297,7 +325,18 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
     setForm({
       phone:                  profile.phone ?? "",
       current_address:        profile.profile?.current_address ?? "",
+      current_address_line2:  profile.profile?.current_address_line2 ?? "",
+      current_village:        profile.profile?.current_village ?? "",
+      current_district:       profile.profile?.current_district ?? "",
+      current_state:          profile.profile?.current_state ?? "",
+      current_pin_code:       profile.profile?.current_pin_code ?? "",
       permanent_address:      profile.profile?.permanent_address ?? "",
+      permanent_address_line2: profile.profile?.permanent_address_line2 ?? "",
+      permanent_village:      profile.profile?.permanent_village ?? "",
+      permanent_district:     profile.profile?.permanent_district ?? "",
+      permanent_state:        profile.profile?.permanent_state ?? "",
+      permanent_pin_code:     profile.profile?.permanent_pin_code ?? "",
+      permanent_same_as_current: String(Boolean(profile.profile?.permanent_same_as_current)),
       emergency_name:         profile.profile?.emergency_name ?? "",
       emergency_relationship: profile.profile?.emergency_relationship ?? "",
       emergency_phone:        profile.profile?.emergency_phone ?? "",
@@ -541,21 +580,130 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           <div className="card mb-16">
             <SectionHeader icon="ti-map-pin" title="Address" />
             <div className="card-body">
-              {isBuiltinVisible(fieldConfig, 0, "current_address") && (
-                <div className="field-group">
-                  <label className="field-label">Current Address</label>
-                  <textarea className="field-input" rows={2} value={form.current_address}
-                    onChange={e => field("current_address", e.target.value)}
-                    placeholder="Current residential address" style={{ resize: "vertical" }} suppressHydrationWarning />
+              {(isBuiltinVisible(fieldConfig, 0, "current_address") || isBuiltinVisible(fieldConfig, 0, "current_address_line2")) && (
+                <div className="form-row cols-2">
+                  {isBuiltinVisible(fieldConfig, 0, "current_address") && (
+                    <div className="field-group">
+                      <label className="field-label">Address Line 1</label>
+                      <input className="field-input" type="text" value={form.current_address}
+                        onChange={e => field("current_address", e.target.value)}
+                        placeholder="House / Flat no., Street" suppressHydrationWarning />
+                    </div>
+                  )}
+                  {isBuiltinVisible(fieldConfig, 0, "current_address_line2") && (
+                    <div className="field-group">
+                      <label className="field-label">Address Line 2</label>
+                      <input className="field-input" type="text" value={form.current_address_line2}
+                        onChange={e => field("current_address_line2", e.target.value)}
+                        placeholder="Apartment, floor, landmark" suppressHydrationWarning />
+                    </div>
+                  )}
                 </div>
               )}
+              <div className="form-row cols-2">
+                {isBuiltinVisible(fieldConfig, 0, "current_village") && (
+                  <div className="field-group">
+                    <label className="field-label">Village / Town / Area</label>
+                    <input className="field-input" value={form.current_village}
+                      onChange={e => field("current_village", e.target.value)} suppressHydrationWarning />
+                  </div>
+                )}
+                {isBuiltinVisible(fieldConfig, 0, "current_district") && (
+                  <div className="field-group">
+                    <label className="field-label">District</label>
+                    <input className="field-input" value={form.current_district}
+                      onChange={e => field("current_district", e.target.value)} suppressHydrationWarning />
+                  </div>
+                )}
+              </div>
+              <div className="form-row cols-2">
+                {isBuiltinVisible(fieldConfig, 0, "current_state") && (
+                  <div className="field-group">
+                    <label className="field-label">State</label>
+                    <select className="field-input field-select" value={form.current_state}
+                      onChange={e => field("current_state", e.target.value)} suppressHydrationWarning>
+                      <option value="">Select…</option>
+                      {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                )}
+                {isBuiltinVisible(fieldConfig, 0, "current_pin_code") && (
+                  <div className="field-group">
+                    <label className="field-label">PIN Code</label>
+                    <input className="field-input" value={form.current_pin_code}
+                      onChange={e => field("current_pin_code", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="500081" maxLength={6} inputMode="numeric" suppressHydrationWarning />
+                  </div>
+                )}
+              </div>
+
               {isBuiltinVisible(fieldConfig, 0, "permanent_address") && (
-                <div className="field-group">
-                  <label className="field-label">Permanent Address</label>
-                  <textarea className="field-input" rows={2} value={form.permanent_address}
-                    onChange={e => field("permanent_address", e.target.value)}
-                    placeholder="Permanent / home town address" style={{ resize: "vertical" }} suppressHydrationWarning />
-                </div>
+                <label className="module-check" style={{ margin: "4px 0 12px" }}>
+                  <input type="checkbox" checked={form.permanent_same_as_current === "true"}
+                    onChange={e => field("permanent_same_as_current", e.target.checked ? "true" : "false")}
+                    suppressHydrationWarning />
+                  <span>Permanent address is the same as current address</span>
+                </label>
+              )}
+              {form.permanent_same_as_current !== "true" && (
+                <>
+                  {(isBuiltinVisible(fieldConfig, 0, "permanent_address") || isBuiltinVisible(fieldConfig, 0, "permanent_address_line2")) && (
+                    <div className="form-row cols-2">
+                      {isBuiltinVisible(fieldConfig, 0, "permanent_address") && (
+                        <div className="field-group">
+                          <label className="field-label">Address Line 1</label>
+                          <input className="field-input" type="text" value={form.permanent_address}
+                            onChange={e => field("permanent_address", e.target.value)}
+                            placeholder="House / Flat no., Street" suppressHydrationWarning />
+                        </div>
+                      )}
+                      {isBuiltinVisible(fieldConfig, 0, "permanent_address_line2") && (
+                        <div className="field-group">
+                          <label className="field-label">Address Line 2</label>
+                          <input className="field-input" type="text" value={form.permanent_address_line2}
+                            onChange={e => field("permanent_address_line2", e.target.value)}
+                            placeholder="Apartment, floor, landmark" suppressHydrationWarning />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="form-row cols-2">
+                    {isBuiltinVisible(fieldConfig, 0, "permanent_village") && (
+                      <div className="field-group">
+                        <label className="field-label">Village / Town / Area</label>
+                        <input className="field-input" value={form.permanent_village}
+                          onChange={e => field("permanent_village", e.target.value)} suppressHydrationWarning />
+                      </div>
+                    )}
+                    {isBuiltinVisible(fieldConfig, 0, "permanent_district") && (
+                      <div className="field-group">
+                        <label className="field-label">District</label>
+                        <input className="field-input" value={form.permanent_district}
+                          onChange={e => field("permanent_district", e.target.value)} suppressHydrationWarning />
+                      </div>
+                    )}
+                  </div>
+                  <div className="form-row cols-2">
+                    {isBuiltinVisible(fieldConfig, 0, "permanent_state") && (
+                      <div className="field-group">
+                        <label className="field-label">State</label>
+                        <select className="field-input field-select" value={form.permanent_state}
+                          onChange={e => field("permanent_state", e.target.value)} suppressHydrationWarning>
+                          <option value="">Select…</option>
+                          {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {isBuiltinVisible(fieldConfig, 0, "permanent_pin_code") && (
+                      <div className="field-group">
+                        <label className="field-label">PIN Code</label>
+                        <input className="field-input" value={form.permanent_pin_code}
+                          onChange={e => field("permanent_pin_code", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="500081" maxLength={6} inputMode="numeric" suppressHydrationWarning />
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -651,11 +799,11 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
                 <ReadField label="Role"         value={profile?.role_display} />
               </div>
               <div className="form-row cols-2">
-                <ReadField label="Department"   value={profile?.department} />
+                <ReadField label="Org Unit"     value={profile?.department} />
                 <ReadField label="Designation"  value={profile?.designation} />
               </div>
               <div className="form-row cols-2">
-                <ReadField label="Branch"         value={profile?.branch} />
+                <ReadField label="Company Code"   value={profile?.branch} />
                 <ReadField label="Date of Joining" value={joinedDate} />
               </div>
               <div className="form-row cols-2">

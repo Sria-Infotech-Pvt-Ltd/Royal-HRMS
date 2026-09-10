@@ -5383,3 +5383,79 @@ New `ManageJobTemplatesModal.tsx`, opened via a "Manage job templates" button ne
 - **`requirements.txt` pins `Django==5.1.15`/`psycopg2-binary==2.9.12`, and that's genuinely what this project's own venv (`backend/H/`) has installed — confirmed directly, not assumed, while researching §16's `ExclusionConstraint` syntax.** A *separate*, global `python` on this machine's PATH (unrelated to this project) happens to have Django 6.0.4 — if a future session's tool output ever reports "Django 6.0.4," that's almost certainly that stray global interpreter being invoked by accident, not this project's real version. Always use `./H/Scripts/python.exe` directly from `backend/` (see the existing venv-path note above) to avoid this exact confusion.
 - **§16's `Placement` model is Postgres-specific by design** (`django.contrib.postgres.constraints.ExclusionConstraint`, `btree_gist`) — this app already only targets Postgres (Neon-hosted) so that's not a new constraint being introduced, but worth knowing if anyone ever proposes a sqlite/mysql test-DB shortcut for this app: the `Placement` migrations would not apply against either.
 - **Update — resolved, not just flagged**: §16's spec Phase 3 (Department/Designation retirement) and §14's roadmap turned out to want the same thing; §17 picked §14's `OrgUnit.department` link-table approach as the actual bridge mechanism (built and live-verified) rather than treating them as two competing plans. §17's Stage 2–6 numbering supersedes §14's old Stage 2–5 numbering — follow §17's list for what's left, not §14's.
+
+---
+
+# Team Context — Onboarding UX Fixes, Promotion/Separation Improvements, Education & Experience Overhaul
+
+**Author:** G.Durga Prasad
+**Date:** 10 September 2026
+**Branch:** New-AI
+
+---
+
+## 1. Address Line 1/2 + Pincode Lookup Fixes
+
+Address Line 1 shrunk from a textarea to a single-line input; added a genuinely new `current_address_line2`/`permanent_address_line2` field pair on `EmployeeProfile`, paired into a half-width row via a new `addressPair` layout kind in `DynamicStepFields.tsx`. Fixed two real bugs found while testing: a stale-district race condition on rapid PIN re-entry (`latestPincodeRef` guard in the new `usePincodeLookup.ts` hook), and stale post-2016 district data from the free India Post HTTP API — switched entirely to the `indiapins` Python package (local/offline, pinned in `requirements.txt`) for pincode to district/state lookups (`views_pincode.py`).
+
+## 2. Promotion ("Reassign Position") — Prefill + CTC Linkage
+
+`_employee_dict()` (`views.py`) now returns `position_id`/`org_unit_id` so `PromotionTab.tsx`'s Reassign Position modal prefills the employee's current Org Unit/Position instead of always starting blank; suppressed a misleading "X's placement will be closed" warning when X is the employee themself. Separately, added a real CTC to Promotion link: `EmployeeSalaryConfig.reason`/`reason_note`/`linked_promotion` (FK to `PromotionRecord`, `apps/payroll/models.py`), validated so a CTC record can't reference another employee's promotion; `SalaryTab.tsx` gained a Reason dropdown plus conditional promotion-link picker, `PromotionTab.tsx` shows a money badge on any promotion row with a linked CTC change.
+
+## 3. Onboarding assign_position() Idempotency Bug
+
+`assign_position()` (`apps/accounts/services_placement.py`) failed with "This position already has an overlapping placement for that date range" whenever approving onboarding for an employee whose position was already assigned at Add-Employee time (the normal case) — fixed by detecting the idempotent same-employee/same-position/same-still-open-start-date case and skipping the redundant close-and-recreate.
+
+## 4. Separation Types + Custom Reason + Full & Final Settlement
+
+Added standard separation types (Termination, Layoff/Redundancy, End of Contract, Absconding, Death) alongside the original 3 — self-service filers only see the voluntary 3 (Resignation/Retirement/Other), HR/Admin see all 8, enforced both client- and server-side (`SeparationRequestListCreateView.post()`). Added `SeparationRequest.reason_note`, required when reason is "Other". Built a full `SeparationSettlement` model/service/views (`apps/hrms/models.py`, `services_settlement.py`) — auto-computed pro-rata salary, Earned-Leave encashment, notice-period shortfall recovery, plus manual-entry gratuity/bonus/reimbursements/advances/TDS/other-adjustment, net payable amount, draft/finalized status gated by `payroll.edit` (distinct from `separation.approve`) — with a new `SettlementSection.tsx` on the Separation Detail page.
+
+## 5. Education & Experience — HR/Admin Field Customization
+
+Added `EducationExperienceFieldConfig` (fixed toggle set of show/require per field, Level/Institution/Employer/Designation always shown and not configurable — deliberately narrower than the generic `OnboardingFieldConfig`, no add/delete of new fields) with a Settings UI tab, enforced in `views_education_experience.py`'s add/update endpoints (including a correct is_current bypass for the end_date required check) and reflected in the wizard's `EducationChecklist.tsx`/`ExperienceList.tsx`. Removed the now-dead old "Education & Experience" (`OnboardingFieldConfig`-driven) Settings tab entirely (DB rows kept, just unlisted) since it no longer drove anything real.
+
+## 6. Education/Experience — One Save & Continue Per Step
+
+Replaced per-entry Save buttons in `EducationChecklist.tsx`/`ExperienceList.tsx` with a single step-level Save & Continue — entries are edited purely in local state; `saveEducationEntries()`/`saveExperienceEntries()` (both wizard pages) reconcile the whole list against the server in one go (POST new temp- rows, PATCH existing, DELETE locally-removed ones tracked via `deletedEducationIdsRef`/`deletedExperienceIdsRef`) only when Save & Continue is clicked.
+
+## 7. Total Experience (Years) — Now Auto-Calculated, Not Manually Entered
+
+Removed manual entry of Total Experience entirely. `services_education_experience._compute_total_experience_years()` derives it from `WorkExperienceRecord` date ranges — merges overlapping/adjacent intervals (so concurrent roles never double-count), treats "currently working here" as running through today, ignores entries with no usable dates or an end before its start. Recomputed on every Education/Experience add/update/delete via `sync_legacy_education_experience_fields()`. `TotalExperienceView`/`HREmployeeTotalExperienceView` (`views_education_experience.py`) are now GET-only — their `.patch()` methods and the standalone `set_total_experience_years()` function were removed. `ExperienceList.tsx` shows it as a read-only computed field; both wizard pages refetch it (`refetchTotalExperience()`) right after a successful experience-list save. Verified live via `manage.py shell` across 6 scenarios (no records, single range, sequential ranges, overlapping ranges, an open-ended "currently working" range through today, and an invalid end-before-start range) — all computed correctly.
+
+## 8. Onboarding Step-Locking (HR Wizard)
+
+`StepIndicator.tsx`'s `freeNavigation` prop (previously let HR jump between steps freely) was removed entirely — both the self-service and HR-assisted wizards now enforce identical sequential step-locking. Backend gained a matching required-field gate in `_save_profile_step()` (`views.py`) — previously the endpoint silently returned success on an empty/incomplete step-save, since only the frontend validated it. That gate itself had a bug (falling back to a stale already-saved DB value when a required field was explicitly cleared in the current request) — fixed via a `cleared_required_keys` set that distinguishes "never sent" from "sent empty." Added highestSaved-restoration so reopening onboarding partway through doesn't reset progress-unlock back to Step 1.
+
+---
+
+## Files Touched
+
+| File(s) | What changed |
+|---|---|
+| `backend/apps/accounts/models.py`, migrations 0129/0131/0140-0147 | `current_address_line2`/`permanent_address_line2`; `EducationRecord`/`WorkExperienceRecord`; `EducationExperienceFieldConfig` |
+| `backend/apps/accounts/services_education_experience.py` (new) | `sync_legacy_education_experience_fields()`, `_compute_total_experience_years()` |
+| `backend/apps/accounts/views_education_experience.py` (new) | Education/Experience CRUD + summary endpoints, self + HR-on-behalf pairs |
+| `backend/apps/accounts/views_pincode.py` (new) | `indiapins`-backed pincode to district/state lookup, replacing the free India Post API |
+| `backend/apps/accounts/services_placement.py` | `assign_position()` idempotency fix |
+| `backend/apps/accounts/views.py` | `_employee_dict()` position_id/org_unit_id; `_save_profile_step()` required-field gate plus `cleared_required_keys` fix |
+| `backend/apps/hrms/models.py`, migrations 0026-0030 | New separation types; `reason_note`; `SeparationSettlement` |
+| `backend/apps/hrms/services_settlement.py` (new) | `compute_draft()`/`recompute_net_payable()` |
+| `backend/apps/hrms/views/separation.py`, `separation_workflow.py` | `SeparationSettlementView`/`SeparationSettlementFinalizeView`; self-service type filtering |
+| `backend/apps/payroll/models.py`, migrations 0017-0018 | `EmployeeSalaryConfig.reason`/`reason_note`/`linked_promotion` |
+| `backend/apps/payroll/serializers.py` | Cross-employee `linked_promotion` validation |
+| `backend/requirements.txt` | `indiapins==1.1.0` pinned |
+| `frontend/app/onboarding/_components/EducationChecklist.tsx`, `ExperienceList.tsx`, `StepIndicator.tsx`, `BasicDetailsCard.tsx` (new/rewritten), `DynamicStepFields.tsx` | `addressPair` layout; one-Save-per-step lists; sequential-only step lock; read-only computed Total Experience |
+| `frontend/hooks/usePincodeLookup.ts` (new) | Race-condition-safe pincode lookup hook |
+| `frontend/app/onboarding/page.tsx`, `app/dashboard/employees/[id]/onboarding/page.tsx` | Bulk Education/Experience reconciliation; `refetchTotalExperience()` |
+| `frontend/app/dashboard/employees/[id]/_components/PromotionTab.tsx`, `SalaryTab.tsx` | Prefilled Reassign Position; CTC reason plus promotion-link picker; linked-CTC badge |
+| `frontend/app/dashboard/separation/[id]/_components/SettlementSection.tsx` (new) | Full & Final Settlement UI |
+| `frontend/app/dashboard/settings/onboarding-fields/page.tsx`, `_components/EducationExperienceFieldConfigTable.tsx` (new) | Education/Experience field-toggle Settings tab; old dead tab removed |
+
+---
+
+## Notes for Next Developer
+
+- **Total Experience is now derived, never entered** — if a future ask is "let HR override the computed number," that needs a distinct override field (`total_experience_years_override` or similar), not resurrecting the old PATCH; the current design assumes the computed value is always correct.
+- **`EducationExperienceFieldConfig` is deliberately not a full custom-field builder** — no add/delete of new fields, only show/require toggles on a fixed set. If HR/Admin later asks for genuinely custom Education/Experience fields, that's a bigger separate feature, flagged but not built.
+- **Settlement's gratuity/bonus/reimbursements/advances/TDS/other-adjustment are manual-entry-only, not computed** — only pro-rata salary, EL encashment, and notice-period shortfall are auto-computed. This matches actual India F&F practice (researched, not assumed) where those other components depend on policy/negotiation specifics this codebase doesn't model.
+- **`apps.accounts.tests.PasswordResetFlowTests.test_forgot_password_does_not_reveal_account_existence` still fails, pre-existing and unrelated** — same one noted in the prior session's entry; not touched again this round.

@@ -167,11 +167,11 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
           </div>
 
           <div className="field-group mb-16">
-            <label className="field-label">Branch <span style={{ color: "var(--error)" }}>*</span></label>
+            <label className="field-label">Company Code <span style={{ color: "var(--error)" }}>*</span></label>
             {unrestricted ? (
               <select className="field-input field-select" value={branch}
                 onChange={e => setBranch(e.target.value)} suppressHydrationWarning>
-                <option value="">Select branch</option>
+                <option value="">Select Company Code</option>
                 {branches.map(b => (
                   <option key={b.id} value={b.id}>{b.branch_name} ({b.branch_code})</option>
                 ))}

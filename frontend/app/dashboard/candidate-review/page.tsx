@@ -122,7 +122,7 @@ export default function CandidateReviewPage() {
                 <tr>
                   <th>Name</th>
                   <th className="col-hide-sm">Role / Designation</th>
-                  {isSystemAdmin && <th className="col-hide-md">Branch</th>}
+                  {isSystemAdmin && <th className="col-hide-md">Company Code</th>}
                   <th className="col-hide-md">Joined</th>
                   <th>Status</th>
                   <th>Actions</th>

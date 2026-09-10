@@ -125,7 +125,7 @@ export default function PayrollReports() {
             onChange={e => setSelectedBranch(e.target.value)}
             style={SEARCH_BAR_SELECT_STYLE}
           >
-            <option value="">All Branches</option>
+            <option value="">All Company Codes</option>
             {branches.map(b => (
               <option key={b.id} value={b.id}>{b.branch_name}</option>
             ))}

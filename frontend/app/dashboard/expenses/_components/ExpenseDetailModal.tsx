@@ -76,7 +76,7 @@ export default function ExpenseDetailModal({ initialData, onClose }: Props) {
               <p className="text-sm text-[var(--on-bg)]">{expense.employee_name || "—"}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Branch</p>
+              <p className="text-xs font-semibold text-[var(--on-variant)] uppercase tracking-wide mb-1">Company Code</p>
               <p className="text-sm text-[var(--on-bg)]">{expense.branch_name || "—"}</p>
             </div>
           </div>

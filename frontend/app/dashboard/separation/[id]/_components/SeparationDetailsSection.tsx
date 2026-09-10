@@ -23,7 +23,7 @@ export default function SeparationDetailsSection({ r }: { r: SeparationRequest }
         </div>
         <div className="form-row cols-2">
           <ReadField label="Separation Type" value={r.separation_type_display} />
-          <ReadField label="Reason" value={r.reason_display} />
+          <ReadField label="Reason" value={r.reason === "other" && r.reason_note ? r.reason_note : r.reason_display} />
         </div>
         <div className="form-row cols-2">
           <ReadField label="Request Date" value={fmtDate(r.request_date)} />

@@ -490,6 +490,43 @@ class OnboardingFieldConfigCacheService:
             logger.warning('Cache delete failed for onboarding_field_config:all')
 
 
+class OnboardingSectionCacheService:
+    """
+    All OnboardingSection rows (HR-created custom onboarding sections/tabs,
+    in addition to the 4 built-in steps) — sibling of
+    OnboardingFieldConfigCacheService, read on every onboarding wizard load
+    and settings-page load.
+    """
+    _ALL_KEY = 'onboarding_section:all'
+
+    @classmethod
+    def get_all(cls) -> list:
+        try:
+            cached = cache.get(cls._ALL_KEY)
+            if cached is not None:
+                return cached
+        except Exception:
+            logger.warning('Cache read failed for onboarding_section:all')
+        from apps.accounts.models import OnboardingSection
+        data = list(OnboardingSection.objects.all())
+        try:
+            cache.set(cls._ALL_KEY, data, CacheTTL.ONBOARDING_FIELDS)
+        except Exception:
+            logger.warning('Cache write failed for onboarding_section:all')
+        return data
+
+    @classmethod
+    def get_active_steps(cls) -> frozenset:
+        return frozenset(s.step for s in cls.get_all() if s.is_active)
+
+    @classmethod
+    def invalidate(cls) -> None:
+        try:
+            cache.delete(cls._ALL_KEY)
+        except Exception:
+            logger.warning('Cache delete failed for onboarding_section:all')
+
+
 class DocumentTypeConfigCacheService:
     """
     All DocumentTypeConfig rows — sibling of OnboardingFieldConfigCacheService

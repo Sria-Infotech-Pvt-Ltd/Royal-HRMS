@@ -16,6 +16,8 @@ from .separation_workflow import (
     SeparationDocumentListCreateView,
     SeparationHandoverTaskDetailView,
     SeparationHandoverTaskListCreateView,
+    SeparationSettlementFinalizeView,
+    SeparationSettlementView,
 )
 from .leave import (
     CarryForwardHistoryView,

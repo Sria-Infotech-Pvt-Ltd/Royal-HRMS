@@ -166,6 +166,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     employee_id     = models.CharField(max_length=20, blank=True, db_index=True)
     department      = models.CharField(max_length=100, blank=True)
     designation     = models.CharField(max_length=100, blank=True)
+    # Free text, no choices enum — same convention as department/designation
+    # above. Was already collected by the Add Employee form and validated by
+    # EmployeeBulkImportRowSerializer, but had nowhere to be saved until now.
+    employee_type   = models.CharField(max_length=50, blank=True, default='Permanent')
     # True until a human manually edits `designation` (EmployeeDetailView.put()) —
     # lets Position-driven syncs (accounts/services_placement._sync_from_position)
     # keep writing to it until someone deliberately overrides it by hand.
@@ -208,6 +212,17 @@ class User(AbstractBaseUser, PermissionsMixin):
                             blank=True,
                             related_name='direct_reports',
                         )
+    # True only when `reporting_manager` was resolved from an actual placed
+    # chief somewhere in this employee's Org Unit chain (_auto_assign_managers
+    # -> resolve_employee_org_unit_chief). False for the same function's own
+    # "any active manager in the branch" fallback (used when no unit in the
+    # chain has a chief placed yet) and for any manually-set reporting_manager
+    # (HR picking one explicitly at create/edit time) — both are legitimate,
+    # but neither reflects a real org-chart placement, so this flag is purely
+    # informational: it lets HR find and close org-chart gaps (place a chief
+    # somewhere) rather than that going unnoticed forever behind a working
+    # fallback. Never read by permission/approval logic itself.
+    reporting_manager_from_org_chart = models.BooleanField(default=False)
     hr = models.ForeignKey(
              'self',
              on_delete=models.SET_NULL,
@@ -399,6 +414,18 @@ class Position(models.Model):
     title         = models.CharField(max_length=150)
     grade         = models.CharField(max_length=20, blank=True)
     is_chief      = models.BooleanField(default=False)
+    # Optional — which Role a person placed into this seat should get.
+    # Only ever *suggested* to HR at Create Employee time (prefills the Role
+    # picker, still overridable) — deliberately NOT re-applied on every later
+    # position reassignment the way designation/department are, because
+    # Role (unlike those two) already has a live, independently-used manual
+    # override path (EmployeeDetailView.put's `role` field) that a background
+    # sync would silently clobber. See services_placement.py for the
+    # designation/department sync this intentionally does not mirror.
+    default_role  = models.ForeignKey(
+                        'Role', on_delete=models.SET_NULL, null=True, blank=True,
+                        related_name='default_for_positions',
+                    )
     # Optional — most positions live in the one shared, company-wide tree;
     # set this only when a seat is genuinely tied to one physical branch
     # (e.g. "Recruiter — Kondapur"). Lets the same tree be filtered to a
@@ -1376,17 +1403,20 @@ class EmployeeProfile(models.Model):
     marital_status     = models.CharField(max_length=20, choices=MARITAL_CHOICES, blank=True)
     father_name        = models.CharField(max_length=150, blank=True)
     blood_group        = models.CharField(max_length=5, choices=BLOOD_CHOICES, blank=True)
-    current_address    = models.TextField(blank=True)
+    current_address       = models.TextField(blank=True)
     # current_address/permanent_address hold only the house/street/area line —
     # village, district, state and PIN code are broken out into their own
     # columns below so each is independently reportable/filterable rather than
     # buried inside one free-text blob (mirrors Company's address/city/state/
-    # pin_code split above).
+    # pin_code split above). *_address_line2 is a purely optional second line
+    # (apartment/floor/landmark) — never required, unlike line 1.
+    current_address_line2 = models.CharField(max_length=200, blank=True)
     current_village    = models.CharField(max_length=150, blank=True)
     current_district   = models.CharField(max_length=100, blank=True)
     current_state      = models.CharField(max_length=100, blank=True)
     current_pin_code   = models.CharField(max_length=6, blank=True)
     permanent_address  = models.TextField(blank=True)
+    permanent_address_line2 = models.CharField(max_length=200, blank=True)
     permanent_village  = models.CharField(max_length=150, blank=True)
     permanent_district = models.CharField(max_length=100, blank=True)
     permanent_state    = models.CharField(max_length=100, blank=True)
@@ -1469,8 +1499,8 @@ class EmployeeProfile(models.Model):
         return f'Profile — {self.user.email}'
 
     _PERMANENT_ADDRESS_FIELDS = (
-        'permanent_address', 'permanent_village', 'permanent_district',
-        'permanent_state', 'permanent_pin_code',
+        'permanent_address', 'permanent_address_line2', 'permanent_village',
+        'permanent_district', 'permanent_state', 'permanent_pin_code',
     )
 
     def save(self, *args, **kwargs):
@@ -1489,6 +1519,7 @@ class EmployeeProfile(models.Model):
         # somehow got out of sync self-heals on its next save.
         if self.permanent_same_as_current:
             self.permanent_address  = self.current_address
+            self.permanent_address_line2 = self.current_address_line2
             self.permanent_village  = self.current_village
             self.permanent_district = self.current_district
             self.permanent_state    = self.current_state
@@ -1549,6 +1580,177 @@ class EmployeeProfile(models.Model):
             _push_live(notification)
         except Exception:
             pass
+
+
+EDUCATION_LEVEL_SSC          = 'ssc'
+EDUCATION_LEVEL_INTERMEDIATE = 'intermediate'
+EDUCATION_LEVEL_DIPLOMA      = 'diploma'
+EDUCATION_LEVEL_BACHELORS    = 'bachelors'
+EDUCATION_LEVEL_MASTERS      = 'masters'
+EDUCATION_LEVEL_DOCTORATE    = 'doctorate'
+
+EDUCATION_LEVEL_OTHER = 'other'
+
+EDUCATION_LEVEL_CHOICES = [
+    (EDUCATION_LEVEL_SSC,          'SSC / 10th'),
+    (EDUCATION_LEVEL_INTERMEDIATE, 'Intermediate / 12th'),
+    (EDUCATION_LEVEL_DIPLOMA,      'Diploma'),
+    (EDUCATION_LEVEL_BACHELORS,    "Bachelor's"),
+    (EDUCATION_LEVEL_MASTERS,      "Master's"),
+    (EDUCATION_LEVEL_DOCTORATE,    'Doctorate'),
+    (EDUCATION_LEVEL_OTHER,        'Other'),
+]
+
+# Highest-first — used by services_education_experience.py to pick which
+# single entry to mirror onto EmployeeProfile's legacy flat fields (the
+# "highest qualification actually on file", not just whichever was edited
+# most recently). "Other" ranks lowest — a real recognized level always
+# wins for the legacy summary field unless "Other" is literally the only
+# thing on file.
+EDUCATION_LEVEL_RANK = [
+    EDUCATION_LEVEL_DOCTORATE, EDUCATION_LEVEL_MASTERS, EDUCATION_LEVEL_BACHELORS,
+    EDUCATION_LEVEL_DIPLOMA, EDUCATION_LEVEL_INTERMEDIATE, EDUCATION_LEVEL_SSC,
+    EDUCATION_LEVEL_OTHER,
+]
+
+
+class EducationExperienceFieldConfig(models.Model):
+    """Show/require toggles for the optional fields on each Education/
+    Experience list entry (EducationRecord/WorkExperienceRecord below).
+
+    Deliberately NOT the same mechanism as OnboardingFieldConfig — that
+    system is "one config row = one flat scalar value" per employee, which
+    is exactly what stopped fitting once Education/Experience became
+    genuine repeatable lists (see EducationRecord's own docstring). This is
+    a much narrower, fixed set of rows: HR can show/hide and require any of
+    the *existing* optional fields on an entry, but can't add a brand-new
+    custom field the way OnboardingFieldConfig allows — every entry still
+    needs somewhere to store an arbitrary new value, and building that for
+    a repeatable list (vs. one flat profile) is a bigger, separate feature.
+
+    Level/Institution (education) and Employer Name/Designation
+    (experience) are the structural minimum identifying an entry and are
+    intentionally absent here — always shown, always required, not
+    configurable. Everything else on an entry has a row here, seeded once
+    by migration, visible=True/required=False by default; HR can only
+    toggle visible/required on existing rows, never create or delete one."""
+
+    LIST_EDUCATION  = 'education'
+    LIST_EXPERIENCE = 'experience'
+    LIST_TYPE_CHOICES = [
+        (LIST_EDUCATION,  'Education'),
+        (LIST_EXPERIENCE, 'Experience'),
+    ]
+
+    id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    list_type = models.CharField(max_length=20, choices=LIST_TYPE_CHOICES)
+    field_key = models.CharField(max_length=50)
+    label     = models.CharField(max_length=100)
+    visible   = models.BooleanField(default=True)
+    required  = models.BooleanField(default=False)
+    order     = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_education_experience_field_configs'
+        unique_together = ('list_type', 'field_key')
+        ordering = ['list_type', 'order']
+
+    def __str__(self) -> str:
+        return f'{self.list_type}.{self.field_key}'
+
+
+class EducationRecord(models.Model):
+    """One row per qualification an employee has completed — a genuine,
+    unbounded, add/remove-any-number-of-entries list (matching
+    WorkExperienceRecord below, and real HRMS practice — Keka's own
+    Education card uses this same degree/institution/percentage/date-range
+    shape, confirmed from their help docs). `level` is a fixed set of common
+    qualifications (SSC through Doctorate) plus `EDUCATION_LEVEL_OTHER`,
+    which pairs with `custom_level_label` for anything not covered (a
+    professional certification, etc.) — `display_label()` returns whichever
+    of the two is the right one to show. No unique-per-level constraint:
+    two Bachelor's degrees, or two "Other" certifications, are both valid.
+    See EDUCATION_LEVEL_RANK for how these feed EmployeeProfile's legacy
+    flat education fields (highest_qualification etc.) — those stay as an
+    auto-synced summary for the other UI surfaces that haven't been rebuilt
+    to read this table directly yet (Employee Detail's own Edit Employee
+    tab, My Profile, the candidate-review Onboarding Drawer)."""
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee            = models.ForeignKey('User', on_delete=models.CASCADE, related_name='education_records')
+    level               = models.CharField(max_length=20, choices=EDUCATION_LEVEL_CHOICES)
+    custom_level_label  = models.CharField(max_length=100, blank=True)
+    institution         = models.CharField(max_length=200, blank=True)
+    specialization      = models.CharField(max_length=200, blank=True)
+    # Free text, not a numeric field — real-world grading varies ("85%",
+    # "8.5 CGPA", "First Class") and this codebase has no reason to
+    # normalize across those schemes.
+    percentage          = models.CharField(max_length=20, blank=True)
+    start_date          = models.DateField(null=True, blank=True)
+    end_date            = models.DateField(null=True, blank=True)
+    order               = models.PositiveSmallIntegerField(default=0)
+    created_at          = models.DateTimeField(auto_now_add=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_education_records'
+        ordering = ['order', '-end_date']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.display_label()}'
+
+    def display_label(self) -> str:
+        if self.level == EDUCATION_LEVEL_OTHER and self.custom_level_label:
+            return self.custom_level_label
+        return self.get_level_display()
+
+    def has_any_data(self) -> bool:
+        return bool(self.institution or self.specialization or self.percentage or self.start_date or self.end_date)
+
+
+class WorkExperienceRecord(models.Model):
+    """One row per previous employer — a genuine, unbounded, add/remove-any-
+    number-of-entries list (unlike EducationRecord's fixed checklist above).
+    `end_date=None` means "currently working there" (only meaningful for a
+    record an employee is adding about a concurrent/most-recent job before
+    joining here — this table is their history prior to this company, not
+    their employment here). `order` is manually re-sequenced by the
+    frontend on add/remove so the list displays in the sequence the
+    employee entered it, independent of `start_date` (which may be blank).
+    See EmployeeProfile's legacy previous_employer/previous_designation/
+    leaving_reason fields for the auto-synced single-entry summary other
+    surfaces still read — never computed/summed here (see
+    EmployeeProfile.total_experience_years, still a separate manual field,
+    not derived from these rows — accurately summing possibly-overlapping
+    or open-ended employment ranges is out of scope)."""
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    EMPLOYMENT_TYPE_CHOICES = [
+        ('full_time',  'Full-time'),
+        ('part_time',  'Part-time'),
+        ('internship', 'Internship'),
+        ('contract',   'Contract'),
+        ('freelance',  'Freelance'),
+    ]
+
+    employee            = models.ForeignKey('User', on_delete=models.CASCADE, related_name='experience_records')
+    employer_name       = models.CharField(max_length=200)
+    designation         = models.CharField(max_length=200, blank=True)
+    employment_type     = models.CharField(max_length=20, choices=EMPLOYMENT_TYPE_CHOICES, blank=True)
+    start_date          = models.DateField(null=True, blank=True)
+    end_date            = models.DateField(null=True, blank=True)
+    responsibilities    = models.TextField(blank=True)
+    reason_for_leaving  = models.TextField(blank=True)
+    order               = models.PositiveSmallIntegerField(default=0)
+    created_at          = models.DateTimeField(auto_now_add=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_work_experience_records'
+        ordering = ['order', '-start_date']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.employer_name}'
 
 
 PAN_RE = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]$')
@@ -1656,6 +1858,38 @@ class OnboardingFieldConfig(models.Model):
 
     def __str__(self) -> str:
         return f'{self.label} ({self.field_key})'
+
+
+class OnboardingSection(models.Model):
+    """
+    An HR-created custom section/tab in the onboarding wizard, in addition to
+    the 4 built-in steps (Personal/Education/Bank/Emergency, steps 0-3 on
+    OnboardingFieldConfig) and the separate Documents step (4). Only ever
+    holds custom sections — the built-ins aren't modeled here at all, so
+    adding this table can't affect them.
+
+    `step` is server-assigned (see OnboardingSectionListCreateView), always
+    5 or higher, monotonically increasing and never reused, so it can never
+    collide with the 5 reserved built-in step numbers (0-4). OnboardingFieldConfig
+    rows for a custom section just use this `step` value like any other.
+    """
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    step       = models.PositiveSmallIntegerField(unique=True)
+    label      = models.CharField(max_length=100)
+    icon       = models.CharField(max_length=50, default='ti-folder')
+    order      = models.PositiveSmallIntegerField(default=0)
+    # Deactivate rather than delete once a section still has fields under it
+    # — see the view's delete-blocked-if-referenced check.
+    is_active  = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_onboarding_sections'
+        ordering = ['order', 'label']
+
+    def __str__(self) -> str:
+        return self.label
 
 
 class DocumentTypeConfig(models.Model):

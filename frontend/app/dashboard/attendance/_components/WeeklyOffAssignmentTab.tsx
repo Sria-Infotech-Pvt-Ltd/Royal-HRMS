@@ -186,7 +186,7 @@ export default function WeeklyOffAssignmentTab() {
                 <th>Employee ID</th>
                 <th>Employee Name</th>
                 <th>Department</th>
-                <th>Branch</th>
+                <th>Company Code</th>
                 <th>Weekly Off Pattern</th>
                 <th>Effective From</th>
                 <th>Effective To</th>
@@ -311,7 +311,7 @@ export default function WeeklyOffAssignmentTab() {
           </p>
           <div className="form-row cols-2">
             <div className="field-group">
-              <label className="field-label">Branch</label>
+              <label className="field-label">Company Code</label>
               <BranchFilterSelect
                 branches={branches}
                 value={unrestricted ? bulkBranch : effectiveBranch}

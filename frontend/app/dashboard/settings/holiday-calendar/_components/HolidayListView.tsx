@@ -50,7 +50,7 @@ export default function HolidayListView({
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Holiday Name","Date","Day","Holiday Type","Mandatory / Optional","Applicable Branches","Status","Actions"].map(col => (
+                  {["Holiday Name","Date","Day","Holiday Type","Mandatory / Optional","Applicable Company Codes","Status","Actions"].map(col => (
                     <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
                       {col}
                     </th>

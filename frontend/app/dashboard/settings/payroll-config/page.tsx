@@ -16,7 +16,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: "run",       icon: "ti-settings",     label: "Payroll Run Settings"  },
   { id: "structures",icon: "ti-stack",         label: "Salary Structures"     },
   { id: "statutory", icon: "ti-building-bank", label: "Statutory Config"      },
-  { id: "branch",    icon: "ti-building",      label: "Branch Config"         },
+  { id: "branch",    icon: "ti-building",      label: "Company Code Config"   },
 ];
 
 export default function PayrollConfigPage() {

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
-import type { BranchOption, Selected } from "./OrgStructureClient";
+import type { BranchOption, RoleOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   positions: Position[];
   jobs: JobTemplate[];
   branches: BranchOption[];
+  roles: RoleOption[];
   canEdit: boolean;
   placementHistory: Placement[];
   placementHistoryLoading: boolean;
@@ -115,7 +116,7 @@ function PositionRow({ p, onSelect, onAssign }: { p: Position; onSelect: () => v
 }
 
 export default function OrgDetail({
-  selected, units, positions, jobs, branches, canEdit, placementHistory, placementHistoryLoading, onSelect,
+  selected, units, positions, jobs, branches, roles, canEdit, placementHistory, placementHistoryLoading, onSelect,
   onAddSubUnit, onDeleteUnit, onAddPosition, onAssign, onVacate, onDeactivate, onReactivate, canDelete, onDelete, onCancelScheduled, onUnitField, onPositionField, onToggleChief,
 }: Props) {
   if (!selected) {
@@ -351,10 +352,17 @@ export default function OrgDetail({
             </select>
           </div>
           <div className="field-group">
-            <label className="field-label">Branch <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
+            <label className="field-label">Company Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
             <select className="field-input field-select" defaultValue={p.branch ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "branch", e.target.value || null)}>
               <option value="">Company-wide</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Default role <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(suggested to HR when hiring into this seat)</span></label>
+            <select className="field-input field-select" defaultValue={p.default_role ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "default_role", e.target.value || null)}>
+              <option value="">None</option>
+              {roles.map(r => <option key={r.id} value={r.id}>{r.display_name}</option>)}
             </select>
           </div>
         </div>

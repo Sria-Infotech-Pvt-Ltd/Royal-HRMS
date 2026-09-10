@@ -101,8 +101,8 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
             <thead>
               <tr>
                 <th>Employee</th>
-                <th>Department</th>
-                <th>Branch</th>
+                <th>Org Unit</th>
+                <th>Company Code</th>
                 <th style={{ textAlign: "right", color: "var(--success)" }}>Net Salary</th>
                 <th>Status</th>
               </tr>

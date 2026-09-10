@@ -190,6 +190,17 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
     employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
     structure_name = serializers.CharField(source='salary_structure.name', read_only=True)
     monthly_ctc = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    reason_display = serializers.CharField(source='get_reason_display', read_only=True)
+    # Snapshot strings, not a nested serializer — a promotion record's own
+    # designation/role fields are themselves already immutable snapshots
+    # (see PromotionRecord's docstring), so echoing them back here needs no
+    # extra query beyond the FK's own values.
+    linked_promotion_designation = serializers.CharField(
+        source='linked_promotion.new_designation', read_only=True, default=None,
+    )
+    linked_promotion_effective_date = serializers.DateField(
+        source='linked_promotion.effective_date', read_only=True, default=None,
+    )
 
     class Meta:
         model = EmployeeSalaryConfig
@@ -203,14 +214,35 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
             'salary_structure',
             'structure_name',
             'effective_from',
+            'reason',
+            'reason_display',
+            'reason_note',
+            'linked_promotion',
+            'linked_promotion_designation',
+            'linked_promotion_effective_date',
             'is_active',
             'created_at',
             'updated_at',
         ]
         read_only_fields = [
             'id', 'employee_name', 'employee_id_code',
-            'structure_name', 'monthly_ctc', 'created_at', 'updated_at',
+            'structure_name', 'monthly_ctc', 'reason_display',
+            'linked_promotion_designation', 'linked_promotion_effective_date',
+            'created_at', 'updated_at',
         ]
+
+    def validate(self, attrs):
+        # linked_promotion must belong to the same employee this config is
+        # being assigned to — otherwise a crafted request could tag one
+        # employee's CTC revision as "for" a completely different
+        # employee's promotion.
+        linked_promotion = attrs.get('linked_promotion')
+        employee = attrs.get('employee') or getattr(self.instance, 'employee', None)
+        if linked_promotion is not None and employee is not None and linked_promotion.employee_id != employee.id:
+            raise serializers.ValidationError({
+                'linked_promotion': "That promotion record doesn't belong to this employee.",
+            })
+        return attrs
 
 
 class PayrollCycleSerializer(serializers.ModelSerializer):

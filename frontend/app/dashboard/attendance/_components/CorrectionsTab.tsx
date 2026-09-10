@@ -126,7 +126,7 @@ export default function CorrectionsTab() {
                 <th>Employee ID</th>
                 <th>Name</th>
                 <th>Department</th>
-                <th>Branch</th>
+                <th>Company Code</th>
                 <th>Date</th>
                 <th>Punch Type</th>
                 <th>Requested In</th>

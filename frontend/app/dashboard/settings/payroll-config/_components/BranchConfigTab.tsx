@@ -84,7 +84,7 @@ export default function BranchConfigTab() {
       <div className="w-60 shrink-0">
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
-            <span className="font-semibold text-[13px] text-gray-900">All Branches</span>
+            <span className="font-semibold text-[13px] text-gray-900">All Company Codes</span>
             <div className="text-[11px] text-gray-400 mt-0.5">Select to view or override PF</div>
           </div>
           {loading ? (
@@ -111,7 +111,7 @@ export default function BranchConfigTab() {
                 );
               })}
               {branches.length === 0 && (
-                <div className="px-4 py-6 text-center text-gray-400 text-xs">No branches found</div>
+                <div className="px-4 py-6 text-center text-gray-400 text-xs">No Company Codes found</div>
               )}
             </div>
           )}
@@ -129,8 +129,8 @@ export default function BranchConfigTab() {
         {!selectedBranch ? (
           <div className="bg-white rounded-xl border border-gray-200 px-6 py-12 text-center text-gray-400">
             <i className="ti ti-building text-3xl mb-2 block" />
-            <div className="text-sm">Select a branch to view its PF configuration</div>
-            <div className="text-[11px] mt-1">All branches use standard defaults unless overridden</div>
+            <div className="text-sm">Select a Company Code to view its PF configuration</div>
+            <div className="text-[11px] mt-1">All Company Codes use standard defaults unless overridden</div>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

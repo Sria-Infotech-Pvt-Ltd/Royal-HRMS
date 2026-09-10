@@ -154,7 +154,7 @@ export default function PayrollPeriodStep({
         {/* Branch — locked for HR, selectable for admin */}
         {lockedBranch ? (
           <div className="field-group" style={{ marginBottom: 20 }}>
-            <label className="field-label">Branch</label>
+            <label className="field-label">Company Code</label>
             <div style={{
               display: "flex", alignItems: "center", gap: 10,
               padding: "10px 14px",
@@ -167,19 +167,19 @@ export default function PayrollPeriodStep({
               <i className="ti ti-building" style={{ color: "var(--primary)", fontSize: 16 }} />
               {lockedBranch.name}
               <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--on-variant)", fontWeight: 400 }}>
-                Your assigned branch
+                Your assigned Company Code
               </span>
             </div>
           </div>
         ) : isAdmin ? (
           <div className="field-group" style={{ marginBottom: 20 }}>
-            <label className="field-label">Branch *</label>
+            <label className="field-label">Company Code *</label>
             <select
               className="field-input field-select"
               value={branchId}
               onChange={e => setBranchId(e.target.value)}
             >
-              <option value="">Select a branch…</option>
+              <option value="">Select a Company Code…</option>
               {branches.map(b => (
                 <option key={b.id} value={b.id}>{b.branch_name}</option>
               ))}

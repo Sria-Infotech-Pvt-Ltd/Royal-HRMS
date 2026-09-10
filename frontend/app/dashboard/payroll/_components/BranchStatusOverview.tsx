@@ -65,11 +65,11 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
     return (
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-building-bank" /> Branch Payroll Status</div>
+          <div className="card-title"><i className="ti ti-building-bank" /> Company Code Payroll Status</div>
         </div>
         <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)" }}>
           <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 24 }} />
-          <div style={{ marginTop: 8, fontSize: 13 }}>Loading branch status…</div>
+          <div style={{ marginTop: 8, fontSize: 13 }}>Loading Company Code status…</div>
         </div>
       </div>
     );
@@ -79,11 +79,11 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
     return (
       <div className="card" style={{ marginBottom: 24 }}>
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-building-bank" /> Branch Payroll Status</div>
+          <div className="card-title"><i className="ti ti-building-bank" /> Company Code Payroll Status</div>
         </div>
         <div className="alert alert-error" style={{ margin: 20 }}>
           <i className="ti ti-alert-circle" />
-          <span>Failed to load branch status. <button className="btn btn-ghost btn-sm" onClick={refetch}>Retry</button></span>
+          <span>Failed to load Company Code status. <button className="btn btn-ghost btn-sm" onClick={refetch}>Retry</button></span>
         </div>
       </div>
     );
@@ -98,11 +98,11 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
     <div className="card" style={{ marginBottom: 24 }}>
       <div className="card-header">
         <div className="card-title">
-          <i className="ti ti-building-bank" /> Branch Payroll Status
+          <i className="ti ti-building-bank" /> Company Code Payroll Status
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-            {branches.length} branch{branches.length !== 1 ? "es" : ""}
+            {branches.length} Company Code{branches.length !== 1 ? "s" : ""}
           </span>
           <button className="btn btn-ghost btn-sm" onClick={refetch}>
             <i className="ti ti-refresh" /> Refresh
@@ -138,14 +138,14 @@ export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Pr
 
       {branches.length === 0 ? (
         <div style={{ padding: 32, textAlign: "center", color: "var(--on-variant)", fontSize: 14 }}>
-          No active branches found. Add branches in Settings → Branch Management.
+          No active Company Codes found. Add Company Codes in Settings → Company Code Management.
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "var(--bg-low)" }}>
-                {["Branch", "Code", "Current Cycle", "Period", "Status", "Action"].map(h => (
+                {["Company Code", "Code", "Current Cycle", "Period", "Status", "Action"].map(h => (
                   <th key={h} style={{
                     padding: "10px 16px", textAlign: "left",
                     fontSize: 11, fontWeight: 700, color: "var(--on-variant)",

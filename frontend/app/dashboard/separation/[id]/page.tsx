@@ -16,6 +16,7 @@ import SeparationDetailsSection from "./_components/SeparationDetailsSection";
 import ApprovalSection from "./_components/ApprovalSection";
 import KtHandoverSection from "./_components/KtHandoverSection";
 import ClearanceSection from "./_components/ClearanceSection";
+import SettlementSection from "./_components/SettlementSection";
 import DocumentsSection from "./_components/DocumentsSection";
 import ActivitySection from "./_components/ActivitySection";
 
@@ -133,6 +134,7 @@ export default function SeparationDetailPage({ params }: { params: Promise<{ id:
       <ApprovalSection r={r} onDecide={(stageId, action) => setDecision({ stageId, action })} />
       <KtHandoverSection r={r} access={access} />
       <ClearanceSection r={r} />
+      <SettlementSection r={r} />
       <DocumentsSection r={r} access={access} />
       <ActivitySection r={r} />
 

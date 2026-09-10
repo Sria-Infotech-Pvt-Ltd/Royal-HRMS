@@ -284,6 +284,13 @@ interface Props {
   branch:              string;
   defaultManagerId?:   string;
   defaultManagerName?: string;
+  // True only when this reporting manager was resolved from an actual
+  // placed chief in the employee's Org Unit chain (backend
+  // User.reporting_manager_from_org_chart) — false covers both the
+  // branch-wide fallback and a manually-picked manager. Purely
+  // informational, surfaced here so gaps in the org chart (missing chiefs)
+  // are visible instead of silently masked by a working fallback.
+  defaultManagerFromOrgChart?: boolean;
   defaultHrId?:        string;
   defaultHrName?:      string;
   onManagerChanged?:   (id: string, name: string) => void;
@@ -295,6 +302,7 @@ export function ApprovalMatrixTab({
   branch,
   defaultManagerId   = "",
   defaultManagerName = "",
+  defaultManagerFromOrgChart = false,
   defaultHrId        = "",
   defaultHrName      = "",
   onManagerChanged,
@@ -308,6 +316,7 @@ export function ApprovalMatrixTab({
   // Local relationship state — keeps UI in sync without a full page refresh
   const [managerId,   setManagerId]   = useState(defaultManagerId);
   const [managerName, setManagerName] = useState(defaultManagerName);
+  const [managerFromOrgChart, setManagerFromOrgChart] = useState(defaultManagerFromOrgChart);
   const [hrId,        setHrId]        = useState(defaultHrId);
   const [hrName,      setHrName]      = useState(defaultHrName);
 
@@ -364,7 +373,18 @@ export function ApprovalMatrixTab({
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ flex: 1 }}>
                 {managerName ? (
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{managerName}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)", display: "flex", alignItems: "center", gap: 6 }}>
+                    {managerName}
+                    {!managerFromOrgChart && (
+                      <span
+                        className="badge badge-warn"
+                        style={{ fontSize: 9.5, fontWeight: 650, padding: "2px 7px" }}
+                        title="Not resolved from a placed chief in this employee's Org Unit chain — either the org chart has no chief set for that chain yet, or this was picked manually."
+                      >
+                        Not from org chart
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <div style={{ fontSize: 13, color: "var(--outline)", fontStyle: "italic" }}>Not assigned</div>
                 )}
@@ -502,6 +522,10 @@ export function ApprovalMatrixTab({
           onSaved={(id, name) => {
             setManagerId(id);
             setManagerName(name);
+            // A manual pick here is never org-chart-derived — matches the
+            // backend, which resets reporting_manager_from_org_chart to
+            // False on this same endpoint (EmployeeReportingManagerView.patch).
+            setManagerFromOrgChart(false);
             setEditingManager(false);
             onManagerChanged?.(id, name);
           }}
@@ -511,7 +535,7 @@ export function ApprovalMatrixTab({
 
       {editingHr && (
         <RelationshipEditorModal
-          title="Edit Branch HR"
+          title="Edit Company Code HR"
           listEndpoint={`${API.employees.hrList}${branchParam}`}
           currentId={hrId}
           saveEndpoint={API.employees.hr(employeeCode)}

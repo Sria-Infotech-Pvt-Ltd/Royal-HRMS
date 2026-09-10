@@ -204,7 +204,9 @@ def _get_company_branding() -> tuple[str, str, str, str]:
     company_name = company.company_name
     logo_url     = company.logo.url if company.logo else ''
     website      = company.website
-    address      = ', '.join(p for p in [company.address, company.city, company.state] if p)
+    address      = ', '.join(
+        p for p in [company.address, company.city, company.state, company.pin_code] if p
+    )
     return company_name, logo_url, website, address
 
 
@@ -217,7 +219,7 @@ def _company_email_wrapper(body: str, company_name: str, logo_url: str,
         if logo_url
         else f'<span style="font-size:18px;font-weight:700;color:#1a1a2e;">{company_name}</span>'
     )
-    footer_parts = [p for p in [website, address] if p]
+    footer_parts = [p for p in [address, website] if p]
     footer_text  = ' &nbsp;|&nbsp; '.join(footer_parts) if footer_parts else company_name
 
     return f"""

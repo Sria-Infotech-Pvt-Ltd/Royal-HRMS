@@ -253,9 +253,9 @@ def _build_ecr_pdf(cycle: PayrollCycle, rows: list) -> bytes:
     styles = getSampleStyleSheet()
     period_label = cycle.cycle_start.strftime('%B %Y') if cycle.cycle_start else ''
     try:
-        branch_label = cycle.branch.branch_name if cycle.branch_id else 'All Branches'
+        branch_label = cycle.branch.branch_name if cycle.branch_id else 'All Company Codes'
     except Exception:
-        branch_label = 'All Branches'
+        branch_label = 'All Company Codes'
 
     headers = [
         'Sr No', 'Employee Name', 'UAN', 'Employee Name\nas per Aadhar',
@@ -306,7 +306,7 @@ def _build_ecr_pdf(cycle: PayrollCycle, rows: list) -> bytes:
     )
     doc.build([
         Paragraph(f'ECR (Electronic Challan-cum-Return) — {period_label}', styles['Heading2']),
-        Paragraph(f'Branch: {branch_label}', styles['Normal']),
+        Paragraph(f'Company Code: {branch_label}', styles['Normal']),
         Spacer(1, 10),
         table,
     ])

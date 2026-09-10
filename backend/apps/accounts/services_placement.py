@@ -115,26 +115,45 @@ def assign_position(
         day_before = effective_from - timedelta(days=1)
 
         prior_on_seat = position.placements.filter(effective_to__isnull=True).first()
-        if prior_on_seat is not None and prior_on_seat.effective_from < effective_from:
-            prior_on_seat.effective_to = day_before
-            prior_on_seat.save(update_fields=['effective_to', 'updated_at'])
 
-        prior_for_employee = (
-            Placement.objects.filter(employee=employee, effective_to__isnull=True)
-            .exclude(pk=getattr(prior_on_seat, 'pk', None))
-            .first()
-        )
-        if prior_for_employee is not None and prior_for_employee.effective_from < effective_from:
-            prior_for_employee.effective_to = day_before
-            prior_for_employee.save(update_fields=['effective_to', 'updated_at'])
+        # Already exactly this placement — same employee, same open-ended
+        # start date already on this seat. Re-running the close-then-create
+        # logic below would try to open a second placement on the same seat
+        # starting the same day, which Placement.full_clean() correctly
+        # rejects as an overlap (closing "the day before" an identical start
+        # date produces an inverted effective_to < effective_from window).
+        # A real caller hits this whenever a position is confirmed twice for
+        # the same hire — e.g. Add Employee assigns the position at creation
+        # time, then Onboarding Approval re-submits that same position for
+        # the same employee/date to (re-)derive designation/department.
+        if (
+            prior_on_seat is not None
+            and prior_on_seat.employee_id == employee.id
+            and prior_on_seat.effective_from == effective_from
+            and effective_to is None
+        ):
+            placement = prior_on_seat
+        else:
+            if prior_on_seat is not None and prior_on_seat.effective_from < effective_from:
+                prior_on_seat.effective_to = day_before
+                prior_on_seat.save(update_fields=['effective_to', 'updated_at'])
 
-        placement = Placement(
-            position=position, employee=employee,
-            effective_from=effective_from, effective_to=effective_to,
-            note=note, created_by=created_by,
-        )
-        placement.full_clean()  # friendly-path 400 for an overlap the pre-close above didn't resolve
-        placement.save()
+            prior_for_employee = (
+                Placement.objects.filter(employee=employee, effective_to__isnull=True)
+                .exclude(pk=getattr(prior_on_seat, 'pk', None))
+                .first()
+            )
+            if prior_for_employee is not None and prior_for_employee.effective_from < effective_from:
+                prior_for_employee.effective_to = day_before
+                prior_for_employee.save(update_fields=['effective_to', 'updated_at'])
+
+            placement = Placement(
+                position=position, employee=employee,
+                effective_from=effective_from, effective_to=effective_to,
+                note=note, created_by=created_by,
+            )
+            placement.full_clean()  # friendly-path 400 for an overlap the pre-close above didn't resolve
+            placement.save()
 
     sync_from_position(position, force=True)
     return placement

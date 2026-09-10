@@ -6,9 +6,29 @@ import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
-import type { EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
+import type { CtcRevisionReason, EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
 
-interface Props { employeeId: string; }
+interface Props {
+  employeeId: string;
+  // Human employee_id code (e.g. "EMP00038") — separate from `employeeId`
+  // (that one's a UUID here) because the promotions endpoint only resolves
+  // by that code, not by UUID. Used solely to populate the "Link to
+  // promotion" dropdown below.
+  employeeCode: string;
+}
+
+interface PromotionOption {
+  id: string;
+  new_designation: string;
+  effective_date: string;
+}
+
+const REASON_OPTIONS: { value: CtcRevisionReason; label: string }[] = [
+  { value: "promotion",         label: "Promotion" },
+  { value: "increment",         label: "Annual Increment" },
+  { value: "market_correction", label: "Market Correction" },
+  { value: "other",             label: "Other" },
+];
 
 const INR = (n: string | number) =>
   `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -16,20 +36,30 @@ const INR = (n: string | number) =>
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-export default function SalaryTab({ employeeId }: Props) {
+export default function SalaryTab({ employeeId, employeeCode }: Props) {
   const canEdit = usePermission("payroll.edit");
 
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [form, setForm] = useState({ annual_ctc: "", effective_from: "", salary_structure: "" });
+  const [form, setForm] = useState({
+    annual_ctc: "", effective_from: "", salary_structure: "",
+    reason: "" as CtcRevisionReason | "", linked_promotion: "", reason_note: "",
+  });
 
   const { data: history, loading, refetch } = useFetch<EmployeeSalaryConfig[]>(
     employeeId ? API.payroll.employeeSalaryHistory(employeeId) : null
   );
   const { data: structures } = useFetch<SalaryStructureListItem[]>(
     showModal ? API.payroll.structures : null
+  );
+  // Only fetched once the modal is open and "Promotion" is picked as the
+  // reason — no need to load this employee's promotion history otherwise.
+  const { data: promotions } = useFetch<PromotionOption[]>(
+    showModal && form.reason === "promotion" && employeeCode
+      ? API.employees.promotions(employeeCode)
+      : null
   );
 
   const current = history?.find(h => h.is_active) ?? null;
@@ -40,6 +70,7 @@ export default function SalaryTab({ employeeId }: Props) {
       annual_ctc: current ? String(Math.round(Number(current.annual_ctc))) : "",
       effective_from: new Date().toISOString().split("T")[0],
       salary_structure: current?.salary_structure ?? "",
+      reason: "", linked_promotion: "", reason_note: "",
     });
     setSaveErr(null);
     setShowModal(true);
@@ -50,6 +81,10 @@ export default function SalaryTab({ employeeId }: Props) {
       setSaveErr("Annual CTC and Effective From are required.");
       return;
     }
+    if (form.reason === "other" && !form.reason_note.trim()) {
+      setSaveErr("Specify the reason, or pick a different option from the list.");
+      return;
+    }
     setSaving(true);
     setSaveErr(null);
     try {
@@ -58,6 +93,9 @@ export default function SalaryTab({ employeeId }: Props) {
         annual_ctc: form.annual_ctc,
         effective_from: form.effective_from,
         salary_structure: form.salary_structure || null,
+        reason: form.reason || null,
+        reason_note: form.reason === "other" ? form.reason_note.trim() : "",
+        linked_promotion: form.reason === "promotion" ? (form.linked_promotion || null) : null,
       });
       setShowModal(false);
       setSuccessMsg(hasConfig ? "CTC revised successfully." : "CTC assigned successfully.");
@@ -99,12 +137,24 @@ export default function SalaryTab({ employeeId }: Props) {
               <div className="empty-state-desc">Click &quot;Assign CTC&quot; to set this employee&apos;s compensation.</div>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 20 }}>
-              <Stat label="Annual CTC" value={INR(current.annual_ctc)} large />
-              <Stat label="Monthly CTC" value={INR(current.monthly_ctc)} large />
-              <Stat label="Effective From" value={fmtDate(current.effective_from)} />
-              <Stat label="Salary Structure" value={current.structure_name ?? "Company Default"} />
-            </div>
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 20 }}>
+                <Stat label="Annual CTC" value={INR(current.annual_ctc)} large />
+                <Stat label="Monthly CTC" value={INR(current.monthly_ctc)} large />
+                <Stat label="Effective From" value={fmtDate(current.effective_from)} />
+                <Stat label="Salary Structure" value={current.structure_name ?? "Company Default"} />
+              </div>
+              {current.reason && (
+                <div style={{ marginTop: 16, fontSize: 13, color: "var(--text-secondary)" }}>
+                  <i className="ti ti-tag" style={{ marginRight: 4 }} />
+                  Reason: <strong>{current.reason === "other" && current.reason_note ? current.reason_note : current.reason_display}</strong>
+                  {current.linked_promotion_designation && (
+                    <> — linked to promotion to <strong>{current.linked_promotion_designation}</strong>
+                    {current.linked_promotion_effective_date && ` (${fmtDate(current.linked_promotion_effective_date)})`}</>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -123,6 +173,7 @@ export default function SalaryTab({ employeeId }: Props) {
                   <th>Annual CTC</th>
                   <th>Monthly CTC</th>
                   <th>Structure</th>
+                  <th>Reason</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -133,6 +184,15 @@ export default function SalaryTab({ employeeId }: Props) {
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>{INR(h.annual_ctc)}</td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>{INR(h.monthly_ctc)}</td>
                     <td>{h.structure_name ?? <span style={{ color: "var(--text-muted)" }}>Default</span>}</td>
+                    <td>
+                      {h.reason
+                        ? <span title={h.linked_promotion_designation ? `Linked to promotion to ${h.linked_promotion_designation}` : undefined}>
+                            {h.reason === "other" && h.reason_note ? h.reason_note : h.reason_display}
+                            {h.linked_promotion_designation ? " 🔗" : ""}
+                          </span>
+                        : <span style={{ color: "var(--text-muted)" }}>—</span>
+                      }
+                    </td>
                     <td>
                       {h.is_active
                         ? <span className="status-badge status-active">Active</span>
@@ -160,7 +220,7 @@ export default function SalaryTab({ employeeId }: Props) {
               <button
                 className="btn btn-filled"
                 onClick={save}
-                disabled={saving || !form.annual_ctc || !form.effective_from}
+                disabled={saving || !form.annual_ctc || !form.effective_from || (form.reason === "other" && !form.reason_note.trim())}
               >
                 {saving
                   ? <><i className="ti ti-loader-2 spin" /> Saving…</>
@@ -226,6 +286,61 @@ export default function SalaryTab({ employeeId }: Props) {
               ))}
             </select>
           </div>
+
+          <div className="field-group" style={{ marginTop: "1rem" }}>
+            <label className="field-label">
+              Reason <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
+            </label>
+            <select
+              className="field-input field-select"
+              value={form.reason}
+              onChange={e => setForm(f => ({
+                ...f, reason: e.target.value as CtcRevisionReason | "", linked_promotion: "", reason_note: "",
+              }))}
+            >
+              <option value="">— Not specified —</option>
+              {REASON_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+
+          {form.reason === "other" && (
+            <div className="field-group" style={{ marginTop: "1rem" }}>
+              <label className="field-label">
+                Specify reason <span style={{ color: "var(--error)" }}>*</span>
+              </label>
+              <input
+                className="field-input"
+                placeholder="e.g. Retention counter-offer"
+                value={form.reason_note}
+                onChange={e => setForm(f => ({ ...f, reason_note: e.target.value }))}
+              />
+            </div>
+          )}
+
+          {form.reason === "promotion" && (
+            <div className="field-group" style={{ marginTop: "1rem" }}>
+              <label className="field-label">
+                Link to promotion <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
+              </label>
+              <select
+                className="field-input field-select"
+                value={form.linked_promotion}
+                onChange={e => setForm(f => ({ ...f, linked_promotion: e.target.value }))}
+              >
+                <option value="">— None of these / not sure —</option>
+                {(promotions ?? []).map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.new_designation} ({fmtDate(p.effective_date)})
+                  </option>
+                ))}
+              </select>
+              {promotions && promotions.length === 0 && (
+                <div style={{ fontSize: ".78rem", color: "var(--text-secondary)", marginTop: ".25rem" }}>
+                  No promotion history found for this employee yet.
+                </div>
+              )}
+            </div>
+          )}
         </Modal>
       )}
     </div>

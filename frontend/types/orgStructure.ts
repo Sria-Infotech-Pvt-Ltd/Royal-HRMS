@@ -69,6 +69,12 @@ export interface Position {
   // without duplicating OrgUnit/Position data per branch.
   branch:              number | null;
   branch_name:         string | null;
+  // Optional — which Role a person placed into this seat should get,
+  // suggested (not enforced) to HR at Create Employee time. Never changes
+  // an existing holder's Role automatically — see backend Position model
+  // docstring for why.
+  default_role:        number | null;
+  default_role_name:   string | null;
   reports_to:          PositionReportsTo | null;
   created_at:           string;
   updated_at:           string;
@@ -113,6 +119,7 @@ export interface PositionPayload {
   grade:        string;
   is_chief:     boolean;
   branch?:      number | null;
+  default_role?: number | null;
 }
 
 export interface JobTemplatePayload {

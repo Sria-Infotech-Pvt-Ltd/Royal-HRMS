@@ -440,6 +440,13 @@ const LOOSE_REGISTRATION_RE = /^[A-Z0-9/\-]{1,30}$/;
 // "http://x/\njavascript:alert(1)" through; this shape-checks the whole
 // string instead of just its prefix.
 const WEBSITE_RE = /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(:\d{1,5})?(\/\S*)?$/;
+// A bare domain or "www.example.com" has no scheme — assume https://, same
+// normalization the backend's validate_website applies, so this check
+// doesn't reject input the server will happily accept.
+function isValidWebsite(value: string): boolean {
+  const v = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  return WEBSITE_RE.test(v);
+}
 // Indian postal PINs never start with 0 (the leading digit encodes one of 9
 // postal regions, 1-9) — a bare \d{6} check happily accepts "000000".
 const PIN_LEADING_ZERO_RE = /^0/;
@@ -457,8 +464,8 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
   const e: CompanyFieldErrors = {};
 
   if (isDraft) {
-    if (f.website && !WEBSITE_RE.test(f.website.trim()))
-      e.website = "Enter a full URL starting with http:// or https://.";
+    if (f.website && !isValidWebsite(f.website.trim()))
+      e.website = "Enter a valid website, e.g. www.example.com.";
     return e;
   }
 
@@ -541,8 +548,8 @@ export function validateCompany(f: CompanyData, isDraft = false): CompanyFieldEr
     }
   }
 
-  if (f.website && !WEBSITE_RE.test(f.website.trim()))
-    e.website = "Enter a full URL starting with http:// or https://.";
+  if (f.website && !isValidWebsite(f.website.trim()))
+    e.website = "Enter a valid website, e.g. www.example.com.";
   if (f.official_phone && !PHONE_RE.test(f.official_phone)) e.official_phone = "Enter a valid phone number.";
   if (f.primary_email && !EMAIL_RE.test(f.primary_email))   e.primary_email  = "Enter a valid email address.";
   if (f.signatory_email && !EMAIL_RE.test(f.signatory_email)) e.signatory_email = "Enter a valid email address.";

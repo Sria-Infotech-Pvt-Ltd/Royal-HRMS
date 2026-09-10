@@ -4,6 +4,7 @@ import re
 from rest_framework import serializers
 
 from core.file_validation import validate_file_content as _validate_file_content
+from core.permissions import has_perm as _has_perm
 
 from .models import (
     APPROVAL_PENDING,
@@ -15,11 +16,13 @@ from .models import (
     WorkFromHomeRequest,
     WFHSavedLocation,
     SeparationRequest,
+    SEPARATION_NOTICE_PERIOD_APPLICABLE_TYPES, SEPARATION_REASON_APPLICABLE_TYPES,
     SEP_PENDING, SEP_STAGE2_PENDING, SEP_APPROVED, SEP_REJECTED, SEP_CANCELLED,
     SEP_STAGE_HR, SEP_STAGE_MANAGER, SEP_STAGE_BRANCH_ADMIN,
     SEP_CLEARANCE_MANAGER,
+    SEP_SETTLEMENT_DRAFT, SEP_SETTLEMENT_FINALIZED,
     SeparationApprovalStage, SeparationHandoverTask, SeparationClearance,
-    SeparationDocument, SeparationActivity,
+    SeparationDocument, SeparationActivity, SeparationSettlement,
 )
 
 logger = logging.getLogger(__name__)
@@ -773,7 +776,7 @@ class SeparationRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SeparationRequest
         fields = [
-            'id', 'request_ref', 'separation_type', 'separation_type_display', 'reason', 'reason_display',
+            'id', 'request_ref', 'separation_type', 'separation_type_display', 'reason', 'reason_display', 'reason_note',
             'request_date', 'proposed_last_working_day', 'notice_period_days', 'comments',
             'status', 'status_display',
             'employee_name', 'employee_code', 'employee_department', 'employee_designation', 'reporting_manager',
@@ -852,7 +855,7 @@ class SeparationRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SeparationRequest
         fields = [
-            'separation_type', 'reason', 'request_date', 'proposed_last_working_day',
+            'separation_type', 'reason', 'reason_note', 'request_date', 'proposed_last_working_day',
             'notice_period_days', 'comments', 'document',
         ]
 
@@ -881,6 +884,33 @@ class SeparationRequestCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'proposed_last_working_day': 'Proposed last working day must be on or after the request date.'}
             )
+
+        # Reason/Notice Period only apply to some separation types (see
+        # SEPARATION_REASON_APPLICABLE_TYPES's own comment) — required when
+        # applicable, silently cleared/zeroed otherwise so a value left over
+        # from switching types in the form (or sent by a raw request) never
+        # gets saved against a type it doesn't apply to.
+        separation_type = data.get('separation_type', self.instance.separation_type if self.instance else None)
+        if separation_type in SEPARATION_REASON_APPLICABLE_TYPES:
+            reason = data.get('reason', self.instance.reason if self.instance else '')
+            if not reason:
+                raise serializers.ValidationError({'reason': 'Reason is required for this separation type.'})
+            # 'other' alone explains nothing — require the free-text note too.
+            if reason == 'other':
+                reason_note = data.get('reason_note', self.instance.reason_note if self.instance else '')
+                if not reason_note.strip():
+                    raise serializers.ValidationError({'reason_note': 'Specify the reason, or pick a different option from the list.'})
+            elif 'reason_note' in data or self.instance is None:
+                data['reason_note'] = ''
+        else:
+            if 'reason' in data or self.instance is None:
+                data['reason'] = ''
+            if 'reason_note' in data or self.instance is None:
+                data['reason_note'] = ''
+
+        if separation_type not in SEPARATION_NOTICE_PERIOD_APPLICABLE_TYPES:
+            data['notice_period_days'] = 0
+
         return data
 
 
@@ -947,6 +977,54 @@ class SeparationClearanceSerializer(serializers.ModelSerializer):
             chief = resolve_employee_org_unit_chief(obj.request.employee)
             return bool(chief and chief.id == user.id)
         return False
+
+
+# ─── Separation — Settlement (Full & Final) serializer ─────────────────────────
+
+class SeparationSettlementSerializer(serializers.ModelSerializer):
+    status_display    = serializers.CharField(source='get_status_display', read_only=True)
+    finalized_by_name = serializers.SerializerMethodField()
+    can_edit           = serializers.SerializerMethodField()
+    can_finalize       = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = SeparationSettlement
+        fields = [
+            'id',
+            'pro_rata_salary',
+            'leave_encashment_days', 'leave_encashment_amount',
+            'notice_period_required_days', 'notice_period_served_days',
+            'notice_period_shortfall_days', 'notice_period_recovery_amount',
+            'gratuity_amount', 'statutory_bonus_amount', 'reimbursements_amount',
+            'advances_recovery_amount', 'tds_amount',
+            'other_adjustment_amount', 'other_adjustment_note',
+            'net_payable_amount',
+            'status', 'status_display', 'finalized_by_name', 'finalized_at',
+            'can_edit', 'can_finalize',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'pro_rata_salary', 'leave_encashment_days', 'leave_encashment_amount',
+            'notice_period_required_days', 'notice_period_served_days',
+            'notice_period_shortfall_days', 'notice_period_recovery_amount',
+            'net_payable_amount', 'status', 'status_display', 'finalized_by_name',
+            'finalized_at', 'can_edit', 'can_finalize', 'created_at', 'updated_at',
+        ]
+
+    def get_finalized_by_name(self, obj):
+        return obj.finalized_by.full_name if obj.finalized_by_id else ''
+
+    def get_can_edit(self, obj):
+        user = _authed_user(self.context)
+        return bool(user and obj.status == SEP_SETTLEMENT_DRAFT and _has_perm(user, 'payroll.edit'))
+
+    def get_can_finalize(self, obj):
+        return self.get_can_edit(obj)
+
+    def validate(self, data):
+        if self.instance and self.instance.status == SEP_SETTLEMENT_FINALIZED:
+            raise serializers.ValidationError('This settlement is already finalized and can no longer be edited.')
+        return data
 
 
 # ─── Separation — Document serializer ──────────────────────────────────────────

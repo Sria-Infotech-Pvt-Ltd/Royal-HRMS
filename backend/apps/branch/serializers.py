@@ -74,7 +74,7 @@ class BranchSerializer(serializers.ModelSerializer):
         if value is not None:
             value = value.strip()
         if not value:
-            raise serializers.ValidationError('Branch address is required.')
+            raise serializers.ValidationError('Company Code address is required.')
         if len(value) > 500:
             raise serializers.ValidationError('Address must be 500 characters or fewer.')
         return value
@@ -90,12 +90,12 @@ class BranchSerializer(serializers.ModelSerializer):
     def validate_branch_name(self, value: str) -> str:
         value = value.strip()
         if not value:
-            raise serializers.ValidationError('Branch name must not be blank.')
+            raise serializers.ValidationError('Company Code name must not be blank.')
         if len(value) > 200:
-            raise serializers.ValidationError('Branch name must be under 200 characters.')
+            raise serializers.ValidationError('Company Code name must be under 200 characters.')
         if not _BRANCH_NAME_RE.match(value):
             raise serializers.ValidationError(
-                'Branch name may only contain letters, numbers, spaces, & - and . characters.'
+                'Company Code name may only contain letters, numbers, spaces, & - and . characters.'
             )
         return value
 

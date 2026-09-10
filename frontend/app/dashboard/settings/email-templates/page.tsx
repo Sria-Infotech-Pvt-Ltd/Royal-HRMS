@@ -21,11 +21,12 @@ interface BrandingForm {
   address:        string;
   city:           string;
   state:          string;
+  pin_code:       string;
   official_phone: string;
 }
 
 const EMPTY_BRANDING: BrandingForm = {
-  company_name: "", website: "", address: "", city: "", state: "", official_phone: "",
+  company_name: "", website: "", address: "", city: "", state: "", pin_code: "", official_phone: "",
 };
 
 interface BirthdaySettingsForm {
@@ -123,6 +124,7 @@ export default function EmailTemplatesPage() {
           address:        data.address        ?? "",
           city:           data.city           ?? "",
           state:          data.state          ?? "",
+          pin_code:       data.pin_code       ?? "",
           official_phone: data.official_phone ?? "",
         });
       }
@@ -169,6 +171,7 @@ export default function EmailTemplatesPage() {
       fd.append("address",        brandingForm.address);
       fd.append("city",           brandingForm.city);
       fd.append("state",          brandingForm.state);
+      fd.append("pin_code",       brandingForm.pin_code);
       fd.append("official_phone", brandingForm.official_phone);
       if (logoFile) fd.append("logo", logoFile, logoFile.name);
 
@@ -182,6 +185,7 @@ export default function EmailTemplatesPage() {
           address:        updated.address        ?? "",
           city:           updated.city           ?? "",
           state:          updated.state          ?? "",
+          pin_code:       updated.pin_code       ?? "",
           official_phone: updated.official_phone ?? "",
         });
       }
@@ -215,14 +219,15 @@ export default function EmailTemplatesPage() {
         address:        company.address        ?? "",
         city:           company.city           ?? "",
         state:          company.state          ?? "",
+        pin_code:       company.pin_code       ?? "",
         official_phone: company.official_phone ?? "",
       });
     }
   }
 
   // Derived footer text (mirrors emailPreview.ts)
-  const footerAddr   = [company?.address, company?.city, company?.state].filter(Boolean).join(", ");
-  const footerParts  = [company?.website, footerAddr].filter(Boolean);
+  const footerAddr   = [company?.address, company?.city, company?.state, company?.pin_code].filter(Boolean).join(", ");
+  const footerParts  = [footerAddr, company?.website].filter(Boolean);
   const footerText   = footerParts.join("  |  ") || company?.company_name || "—";
   const currentLogo  = logoPreview ?? company?.logo_url ?? company?.logo ?? "";
 
@@ -410,11 +415,12 @@ export default function EmailTemplatesPage() {
             <div className="et-branding-grid">
               {([
                 ["company_name",   "Company Name",   "text"],
-                ["website",        "Website URL",    "url"],
+                ["website",        "Website URL",    "text"],
                 ["official_phone", "Phone",          "tel"],
                 ["address",        "Address",        "text"],
                 ["city",           "City",           "text"],
                 ["state",          "State",          "text"],
+                ["pin_code",       "PIN Code",       "text"],
               ] as [keyof BrandingForm, string, string][]).map(([field, label, type]) => (
                 <div key={field}>
                   <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 5 }}>{label}</label>

@@ -131,7 +131,7 @@ export function validateSmtpForm(form: SmtpForm, isAdd: boolean): SmtpFormErrors
 // blurbs are general public vendor-pricing knowledge, not verified live —
 // double-check exact numbers before relying on them.
 
-export type ProviderKey = "gmail" | "amazon_ses" | "zoho" | "brevo" | "outlook365" | "custom" | "server";
+export type ProviderKey = "gmail" | "amazon_ses" | "zoho" | "brevo" | "resend" | "outlook365" | "custom" | "server";
 
 export interface ProviderConfig {
   key:        ProviderKey;
@@ -175,6 +175,13 @@ export const PROVIDER_CONFIG: Record<ProviderKey, ProviderConfig> = {
     smtpType: "local", hostMatch: /brevo\.com|sendinblue\.com/i,
     prefill: { host: "smtp-relay.brevo.com", port: 587, useTls: true }, locked: true,
   },
+  resend: {
+    key: "resend", label: "Resend", icon: "ti-rocket", color: "#7c3aed", bg: "rgba(124,58,237,0.1)",
+    note: "Developer-friendly, generous free tier (a few thousand emails/month) — strong deliverability, quick setup.",
+    smtpType: "local", hostMatch: /resend\.com/i,
+    prefill: { host: "smtp.resend.com", port: 587, useTls: true }, locked: true,
+    helpText: "Username is literally \"resend\" — the password field is your Resend API key, not an account password.",
+  },
   outlook365: {
     key: "outlook365", label: "Outlook / Office 365", icon: "ti-brand-office", color: "#0078d4", bg: "rgba(0,120,212,0.1)",
     note: "Often already included free with an existing Microsoft 365 subscription.",
@@ -194,8 +201,8 @@ export const PROVIDER_CONFIG: Record<ProviderKey, ProviderConfig> = {
 };
 
 export const PROVIDER_LIST: ProviderConfig[] = [
-  PROVIDER_CONFIG.gmail, PROVIDER_CONFIG.amazon_ses, PROVIDER_CONFIG.zoho,
-  PROVIDER_CONFIG.brevo, PROVIDER_CONFIG.outlook365, PROVIDER_CONFIG.custom, PROVIDER_CONFIG.server,
+  PROVIDER_CONFIG.gmail, PROVIDER_CONFIG.amazon_ses, PROVIDER_CONFIG.zoho, PROVIDER_CONFIG.brevo,
+  PROVIDER_CONFIG.resend, PROVIDER_CONFIG.outlook365, PROVIDER_CONFIG.custom, PROVIDER_CONFIG.server,
 ];
 
 export function inferProviderKey(entry: ApiSmtpEntry): ProviderKey {

@@ -673,7 +673,7 @@ class PayrollCycleListView(APIView):
             if branch_id:
                 branch_obj = Branch.objects.filter(pk=branch_id, status=Branch.STATUS_ACTIVE).first()
                 if not branch_obj:
-                    return error('Selected branch not found or inactive.')
+                    return error('Selected Company Code not found or inactive.')
             else:
                 branch_obj = None  # admin global cycle (legacy path, no branch restriction)
         else:
@@ -824,7 +824,7 @@ class BranchPayrollStatusView(APIView):
                 'paid_at':     latest.paid_at.isoformat() if latest and latest.paid_at else None,
             })
 
-        return success('Branch payroll status retrieved.', result)
+        return success('Company Code payroll status retrieved.', result)
 
 
 class AttendanceApprovalView(APIView):
@@ -1049,7 +1049,7 @@ class ProcessPayrollView(APIView):
         if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
-                return error('You can only process payroll for your own branch.', http_status=403)
+                return error('You can only process payroll for your own Company Code.', http_status=403)
 
         is_reprocess = cycle.status == PayrollCycle.STATUS_PAYSLIPS_GENERATED
         if cycle.status not in (
@@ -1132,7 +1132,7 @@ class CycleEligibleEmployeesView(APIView):
         if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
-                return error('You can only view payroll for your own branch.', http_status=403)
+                return error('You can only view payroll for your own Company Code.', http_status=403)
 
         employees = list(
             _eligible_employees_qs(cycle)
@@ -1156,7 +1156,7 @@ class MarkCyclePaidView(APIView):
         if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
-                return error('You can only update payroll for your own branch.', http_status=403)
+                return error('You can only update payroll for your own Company Code.', http_status=403)
 
         if cycle.status not in [
             PayrollCycle.STATUS_QUERY_WINDOW_OPEN,
@@ -1221,7 +1221,7 @@ class CancelPayrollCycleView(APIView):
         if not _is_admin(request.user):
             branch_obj = _resolve_user_branch(request.user)
             if branch_obj is None or cycle.branch_id != branch_obj.pk:
-                return error('You can only cancel payroll for your own branch.', http_status=403)
+                return error('You can only cancel payroll for your own Company Code.', http_status=403)
 
         if cycle.status == PayrollCycle.STATUS_CANCELLED:
             return error('This cycle is already cancelled.')

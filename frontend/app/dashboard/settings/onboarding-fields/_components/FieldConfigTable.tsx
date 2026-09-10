@@ -9,6 +9,7 @@ interface Props {
   fields: OnboardingFieldConfig[]; // already filtered to one step, sorted by order
   canEdit: boolean;
   onChanged: () => void;
+  onEdit: (field: OnboardingFieldConfig) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -21,7 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   file: "File / Image",
 };
 
-export default function FieldConfigTable({ fields, canEdit, onChanged }: Props) {
+export default function FieldConfigTable({ fields, canEdit, onChanged, onEdit }: Props) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
@@ -147,20 +148,34 @@ export default function FieldConfigTable({ fields, canEdit, onChanged }: Props) 
                   />
                 </td>
                 <td style={{ textAlign: "center" }}>
-                  <button
-                    className="btn btn-ghost"
-                    style={{
-                      width: 28, height: 28, padding: 0, justifyContent: "center",
-                      border: "1px solid var(--outline-v)", borderRadius: 6,
-                      color: f.is_custom ? "var(--error)" : "var(--outline)",
-                      cursor: f.is_custom ? "pointer" : "not-allowed",
-                    }}
-                    onClick={() => remove(f)}
-                    disabled={!canEdit || !f.is_custom || busyKey === f.field_key}
-                    title={f.is_custom ? "Delete custom field" : "Built-in fields can't be deleted — hide them instead"}
-                  >
-                    <i className="ti ti-trash" style={{ fontSize: 13 }} />
-                  </button>
+                  <div style={{ display: "inline-flex", gap: 6 }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{
+                        width: 28, height: 28, padding: 0, justifyContent: "center",
+                        border: "1px solid var(--outline-v)", borderRadius: 6,
+                      }}
+                      onClick={() => onEdit(f)}
+                      disabled={!canEdit || busyKey === f.field_key}
+                      title="Edit label / options"
+                    >
+                      <i className="ti ti-pencil" style={{ fontSize: 13 }} />
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{
+                        width: 28, height: 28, padding: 0, justifyContent: "center",
+                        border: "1px solid var(--outline-v)", borderRadius: 6,
+                        color: f.is_custom ? "var(--error)" : "var(--outline)",
+                        cursor: f.is_custom ? "pointer" : "not-allowed",
+                      }}
+                      onClick={() => remove(f)}
+                      disabled={!canEdit || !f.is_custom || busyKey === f.field_key}
+                      title={f.is_custom ? "Delete custom field" : "Built-in fields can't be deleted — hide them instead"}
+                    >
+                      <i className="ti ti-trash" style={{ fontSize: 13 }} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -25,7 +25,7 @@ interface Form {
 }
 type Errs = Partial<Record<keyof Form, string>>;
 
-const EMP_TYPES = ["Permanent", "Contract", "Intern", "Probation"];
+const EMP_TYPES = ["Permanent", "Contract", "Freelancer", "Consultant", "Part-Time", "Temporary", "Intern"];
 
 const NAME_RE  = /^[A-Za-z0-9]+(?:[ '-][A-Za-z0-9]+)*$/;
 const PHONE_RE = /^(?:\+?91)?\d{10}$/;
@@ -153,6 +153,14 @@ export default function AddEmployeeModal({
   const selectedRole = roles.find(r => String(r.id) === form.role);
   const isBranchAdmin = !!selectedRole?.can_manage_branch;
 
+  // Once a seat with a Default Role is picked, Role is no longer a manual
+  // decision — hide the picker and just show what the seat carries. Falls
+  // back to the manual picker whenever the seat has no Default Role
+  // configured yet (most seats, until Org Chart is fully tagged), so hiring
+  // is never blocked on that rollout.
+  const selectedPosition = positionOptions.find(p => p.id === form.position);
+  const roleFromPosition = selectedPosition?.default_role_name ?? null;
+
   /* fetch roles, departments, branches on mount */
   useEffect(() => {
     // allSettled — one endpoint failing must not wipe out the others' dropdowns.
@@ -228,8 +236,19 @@ export default function AddEmployeeModal({
         // has no department-filtered designation dropdown to pick from.
         if (nextRole?.can_manage_branch) {
           next.department = "";
-          if (!next.designation.trim()) next.designation = "Branch Manager";
+          if (!next.designation.trim()) next.designation = "Company Code Manager";
         }
+      }
+      // Role always follows the seat: set from its Default Role, or cleared
+      // back to blank (forcing a fresh manual pick via the fallback picker)
+      // if the newly chosen seat has none — never leaves a stale role
+      // carried over from whichever seat was selected before this one. This
+      // never touches an existing employee's Role after creation (Position
+      // never re-syncs Role post-hire — see Position.default_role's
+      // docstring) — it only governs what's pre-filled on this form.
+      if (k === "position") {
+        const nextPosition = positionOptions.find(p => p.id === v);
+        next.role = nextPosition?.default_role != null ? String(nextPosition.default_role) : "";
       }
       return next;
     });
@@ -372,25 +391,33 @@ export default function AddEmployeeModal({
                   {/* ── Employment ── */}
                   <SectionHead icon="ti-id" title="Employment Details" />
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Role" required error={errs.role}>
-                      <Sel v={form.role} set={v => set("role", v)} err={!!errs.role}>
-                        <option value="">— Select Role —</option>
-                        {roles.map(r => (
-                          <option key={r.id} value={r.id}>{r.display_name}</option>
-                        ))}
-                      </Sel>
+                    <Field label="Role" required={!roleFromPosition} error={errs.role}>
+                      {roleFromPosition ? (
+                        <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
+                          title="Set by the seat's Default Role in Organization Management">
+                          <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
+                          {roleFromPosition}
+                        </div>
+                      ) : (
+                        <Sel v={form.role} set={v => set("role", v)} err={!!errs.role}>
+                          <option value="">— Select Role —</option>
+                          {roles.map(r => (
+                            <option key={r.id} value={r.id}>{r.display_name}</option>
+                          ))}
+                        </Sel>
+                      )}
                     </Field>
-                    <Field label="Branch" required error={errs.branch}>
+                    <Field label="Company Code" required error={errs.branch}>
                       {unrestricted ? (
                         <Sel v={form.branch} set={v => set("branch", v)} err={!!errs.branch}>
-                          <option value="">— Select Branch —</option>
+                          <option value="">— Select Company Code —</option>
                           {branches.map(b => (
                             <option key={b.id} value={b.branch_name}>{b.branch_name}</option>
                           ))}
                         </Sel>
                       ) : (
                         <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                          title="Scoped to your branch">
+                          title="Scoped to your Company Code">
                           <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
                           {effectiveBranch}
                         </div>
@@ -398,15 +425,8 @@ export default function AddEmployeeModal({
                     </Field>
                     {isBranchAdmin ? (
                       <>
-                        <Field label="Department">
-                          <div className={`${INP} ${OK} flex items-center gap-2 bg-[var(--bg-low)] cursor-not-allowed`}
-                            title="A Branch Admin manages the whole branch, not a single department">
-                            <i className="ti ti-lock text-[12px]" style={{ color: "var(--on-variant)" }} />
-                            Not applicable — Branch Admin
-                          </div>
-                        </Field>
                         <Field label="Designation" required error={errs.designation}>
-                          <Inp v={form.designation} set={v => set("designation", sanitizeName(v))} ph="e.g. Branch Manager" err={!!errs.designation} />
+                          <Inp v={form.designation} set={v => set("designation", sanitizeName(v))} ph="e.g. Company Code Manager" err={!!errs.designation} />
                         </Field>
                       </>
                     ) : (
@@ -428,7 +448,7 @@ export default function AddEmployeeModal({
                               {!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
                             </option>
                             {positionOptions.map(p => (
-                              <option key={p.id} value={p.id}>{p.title}</option>
+                              <option key={p.id} value={p.id}>{p.title}{p.default_role_name ? ` — ${p.default_role_name}` : ""}</option>
                             ))}
                           </Sel>
                         </Field>
@@ -445,7 +465,7 @@ export default function AddEmployeeModal({
                     <Field label="Assign HR">
                       <Sel v={form.hr} set={v => set("hr", v)} disabled={!form.branch || peopleLoading}>
                         <option value="">
-                          {!form.branch ? "Select branch first" : peopleLoading ? "Loading…" : hrs.length === 0 ? "No HR found for this branch" : "— Auto-assign —"}
+                          {!form.branch ? "Select Company Code first" : peopleLoading ? "Loading…" : hrs.length === 0 ? "No HR found for this Company Code" : "— Auto-assign —"}
                         </option>
                         {hrs.map(h => (
                           <option key={h.id} value={h.id}>{h.full_name}{h.employee_id ? ` (${h.employee_id})` : ""}</option>
@@ -455,7 +475,7 @@ export default function AddEmployeeModal({
                     <Field label="Reporting Manager">
                       <Sel v={form.reporting_manager} set={v => set("reporting_manager", v)} disabled={!form.branch || peopleLoading}>
                         <option value="">
-                          {!form.branch ? "Select branch first" : peopleLoading ? "Loading…" : managers.length === 0 ? "No managers found for this branch" : "— Auto-assign —"}
+                          {!form.branch ? "Select Company Code first" : peopleLoading ? "Loading…" : managers.length === 0 ? "No managers found for this Company Code" : "— Auto-assign —"}
                         </option>
                         {managers.map(m => (
                           <option key={m.id} value={m.id}>{m.full_name}{m.employee_id ? ` (${m.employee_id})` : ""}</option>
