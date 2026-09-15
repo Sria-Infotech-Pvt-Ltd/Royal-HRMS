@@ -143,8 +143,8 @@ class AuditLogAdmin(admin.ModelAdmin):
 
 @admin.register(SMTPSettings)
 class SMTPSettingsAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'smtp_type', 'host', 'port', 'from_email', 'is_active', 'priority', 'updated_at')
-    list_filter   = ('is_active', 'smtp_type', 'priority')
+    list_display  = ('name', 'smtp_type', 'provider', 'host', 'port', 'from_email', 'is_active', 'priority', 'updated_at')
+    list_filter   = ('is_active', 'smtp_type', 'provider', 'priority')
     search_fields = ('name', 'host', 'from_email')
     readonly_fields = ('updated_at', 'updated_by')
 

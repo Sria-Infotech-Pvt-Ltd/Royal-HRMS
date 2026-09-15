@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
+
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -14,6 +16,51 @@ def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
     resp = client.post(reverse('login'), {'email': email, 'password': password}, format='json')
     assert resp.status_code == 200, resp.data
     return resp
+
+
+class HtmlToTextCredentialEmailTests(SimpleTestCase):
+    """
+    Regression test for the "Invalid credentials" support issue: an
+    employee copies Company Code / Login Email / Temporary Password from
+    the credential email and pastes them into login, and sometimes gets
+    "Invalid credentials" despite pasting correctly.
+
+    Root cause: _html_to_text() (the plain-text MIME alternative every
+    credential email attaches alongside its HTML part) stripped tags with
+    no replacement whitespace. The employee-creation and admin-reset email
+    bodies build the password/URL lines as directly-adjacent literals with
+    no space between '<br>' and the next '<strong>' — e.g.
+    '...{temp_password}<br><strong>Login URL:...' — so the plain-text part
+    rendered as '...{temp_password}Login URL: https://...', gluing the
+    literal word "Login" onto the end of the real password. Any mail
+    client/gateway that shows or lets the recipient copy from the
+    plain-text part (rather than the HTML part) then yields a password
+    that can never pass check_password(), regardless of a byte-perfect
+    copy-paste on the employee's end. No database is needed to test this
+    — it is a pure string transformation.
+    """
+
+    def test_br_and_closing_tags_become_newlines_not_nothing(self):
+        from apps.accounts.utils import _html_to_text
+        self.assertEqual(_html_to_text('A<br>B'), 'A\nB')
+        self.assertEqual(_html_to_text('<p>A</p><p>B</p>'), 'A\nB')
+
+    def test_password_is_not_glued_to_adjacent_label_in_plaintext_part(self):
+        from apps.accounts.utils import _html_to_text
+        temp_password = 'aB3xK9mQ7Zwp'
+        login_url = 'https://royalhrms.com/login'
+        # Exact shape of the real credential-email bodies (employee-creation
+        # welcome email and admin-reset email in views.py).
+        body = (
+            f'<strong>Temporary Password:</strong> {temp_password}<br>'
+            f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
+        )
+        text = _html_to_text(body)
+        self.assertIn(temp_password, text)
+        self.assertNotIn(temp_password + 'Login', text)
+        # The password must appear as its own separated token, not fused
+        # to any neighbouring word on either side.
+        self.assertRegex(text, rf'(?<![A-Za-z0-9]){re.escape(temp_password)}(?![A-Za-z0-9])')
 
 
 class LoginFlowTests(TestCase):
@@ -305,3 +352,4 @@ class OnboardingApprovalReferralBonusTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertFalse(self.ReferralBonus.objects.filter(candidate=self.candidate).exists())
+
