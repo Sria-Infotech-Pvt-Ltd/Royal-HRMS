@@ -267,6 +267,17 @@ def _company_email_wrapper(body: str, company_name: str, logo_url: str,
       {footer_text}
     </div>
 
+    <!-- Royal HRMS platform link — the product's own site, distinct from
+         the tenant company's own website/address line above. Fixed, not
+         tenant-configurable, same category of constant as BRAND_NAME/
+         BRAND_LOGO on the frontend login page. -->
+    <div style="background:#f8f8fb;text-align:center;
+                padding:10px 24px 16px;font-size:11px;color:#aaaaaa;
+                border-top:1px solid #eeeeee;">
+      Visit Royal HRMS<br/>
+      <a href="https://royalhrms.com" style="color:#4f46e5;text-decoration:none;">royalhrms.com</a>
+    </div>
+
   </div>
 </div>
 """

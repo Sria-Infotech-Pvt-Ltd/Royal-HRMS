@@ -2977,10 +2977,19 @@ class EmployeeListCreateView(APIView):
             except (ValueError, ValidationError):
                 role_for_dept_check = None
         department_required = not (role_for_dept_check and role_for_dept_check.can_manage_branch)
+        # Same reasoning and same condition as department_required above —
+        # the Branch Admin quick-assign form (BranchManagement.tsx
+        # applyLeaderRole) collects a single "Full name" field, which may
+        # legitimately be one word (no last name to split out). Scoped by
+        # role capability, not by which frontend screen submitted the
+        # request, so the regular Add Employee form's own separate,
+        # always-required Last Name field is completely unaffected for
+        # every other role.
+        last_name_required = not (role_for_dept_check and role_for_dept_check.can_manage_branch)
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
-        if not last_name:       errs['last_name']       = 'Last name is required.'
+        if not last_name and last_name_required: errs['last_name'] = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
         if not role_id:         errs['role']            = 'Role is required.'
         if department_required and not department: errs['department'] = 'Department is required.'
@@ -3100,7 +3109,11 @@ class EmployeeListCreateView(APIView):
             last_name=last_name,
             date_of_joining=date_of_joining or None,
         )
-        full_name = f'{first_name} {last_name}'
+        # .strip() avoids a trailing space when last_name is legitimately
+        # blank (single-word Branch Admin names, see last_name_required
+        # above) — first_name/last_name are already individually stripped
+        # above, so this has no effect on the normal two-part-name case.
+        full_name = f'{first_name} {last_name}'.strip()
 
         with transaction.atomic():
             user = User.objects.create_user(

@@ -447,8 +447,15 @@ export default function BranchManagement() {
 
     const name = f.name.trim();
     const splitAt = name.indexOf(" ");
+    // A single-word name (no space) is legitimate here — this form has one
+    // "Full name" field, unlike Add Employee's separate, always-required
+    // First/Last Name fields — so it must NOT fall back to duplicating the
+    // first name into last_name. The backend now accepts a blank last_name
+    // for branch-admin-capable roles specifically (see last_name_required
+    // in EmployeeListCreateView.post) and builds full_name without a
+    // trailing space in that case.
     const first_name = splitAt === -1 ? name : name.slice(0, splitAt);
-    const last_name  = splitAt === -1 ? name : name.slice(splitAt + 1).trim() || name;
+    const last_name  = splitAt === -1 ? "" : name.slice(splitAt + 1).trim();
     await clientApi.post(API.employees.list, {
       first_name, last_name,
       email: f.email.trim(),
