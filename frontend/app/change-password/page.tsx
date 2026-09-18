@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { clearAuth } from "@/lib/auth";
+import { clearAuth, getStoredUser } from "@/lib/auth";
 import ChangePasswordForm from "@/app/dashboard/profile/ChangePasswordForm";
 
 export default function ChangePasswordPage() {
@@ -12,8 +12,20 @@ export default function ChangePasswordPage() {
     // time (or reset by an admin) — the backend already logged this session
     // out as part of the change, so clear the local signal cookies too and
     // send the user to sign in fresh with their new password.
+    //
+    // Company Code and Email are read here (before clearAuth wipes the user
+    // cookie) purely as a convenience so the employee doesn't have to retype
+    // two non-secret identifiers they just used seconds ago — carried only
+    // as plain query params on the /login redirect, never the password
+    // itself, and never written to any storage. login/page.tsx reads them
+    // once on mount and immediately strips them from the URL.
+    const user = getStoredUser();
     clearAuth();
-    router.push("/login");
+    const params = new URLSearchParams();
+    if (user?.companyCode) params.set("company_code", user.companyCode);
+    if (user?.email)       params.set("email", user.email);
+    const qs = params.toString();
+    router.push(qs ? `/login?${qs}` : "/login");
   }
 
   return (
