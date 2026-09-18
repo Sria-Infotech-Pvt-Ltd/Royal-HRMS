@@ -222,7 +222,16 @@ export default function OnboardingPage() {
           return !customFileValues.some(v => v.field_key === c.field_key);
         }
         const value = c.is_custom ? customValues[c.field_key] : form[c.field_key as keyof ProfileForm];
-        return !value?.trim();
+        // Number-typed profile fields (e.g. year_of_passing, a Django
+        // PositiveSmallIntegerField) come back from GET /onboarding/ as a
+        // raw JSON number, not a string — value?.trim() then throws
+        // "trim is not a function" the moment this step is opened with that
+        // field already saved and left untouched, silently aborting Save &
+        // Continue with no visible error (the crash happens before the
+        // try/catch around the actual save call below). String(...) makes
+        // this check work the same for a freshly-typed string and a
+        // pre-loaded number alike.
+        return !String(value ?? "").trim();
       })
       .map(c => c.label);
     if (missing.length > 0) {
