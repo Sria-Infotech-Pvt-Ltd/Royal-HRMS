@@ -8,10 +8,19 @@ from rest_framework.test import APIClient
 from apps.accounts.factories import make_role, make_user
 from apps.accounts.models import AuditLog, OTPVerification, User
 from apps.accounts.serializers import ForgotPasswordSerializer
+from config.test_runner import TEST_COMPANY_CODE
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
-    resp = client.post(reverse('login'), {'email': email, 'password': password}, format='json')
+    # company_code is a required LoginSerializer field — it's what tells
+    # LoginView which tenant schema to authenticate against. TEST_COMPANY_CODE
+    # is the one test tenant config/test_runner.TenantAwareTestRunner
+    # provisions for the whole run (see that module's own docstring).
+    resp = client.post(
+        reverse('login'),
+        {'company_code': TEST_COMPANY_CODE, 'email': email, 'password': password},
+        format='json',
+    )
     assert resp.status_code == 200, resp.data
     return resp
 
@@ -26,7 +35,7 @@ class LoginFlowTests(TestCase):
     def test_valid_login_succeeds_and_sets_cookies(self):
         resp = self.client.post(
             reverse('login'),
-            {'email': 'employee@test.com', 'password': 'CorrectPass123!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'employee@test.com', 'password': 'CorrectPass123!'},
             format='json',
         )
         self.assertEqual(resp.status_code, 200)
@@ -41,7 +50,7 @@ class LoginFlowTests(TestCase):
     def test_wrong_password_does_not_authenticate(self):
         resp = self.client.post(
             reverse('login'),
-            {'email': 'employee@test.com', 'password': 'WrongPassword!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'employee@test.com', 'password': 'WrongPassword!'},
             format='json',
         )
         self.assertEqual(resp.status_code, 401)
@@ -52,7 +61,7 @@ class LoginFlowTests(TestCase):
         for _ in range(5):
             self.client.post(
                 reverse('login'),
-                {'email': 'employee@test.com', 'password': 'WrongPassword!'},
+                {'company_code': TEST_COMPANY_CODE, 'email': 'employee@test.com', 'password': 'WrongPassword!'},
                 format='json',
             )
         self.user.refresh_from_db()
@@ -62,7 +71,7 @@ class LoginFlowTests(TestCase):
         # Even the correct password must be rejected while locked.
         resp = self.client.post(
             reverse('login'),
-            {'email': 'employee@test.com', 'password': 'CorrectPass123!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'employee@test.com', 'password': 'CorrectPass123!'},
             format='json',
         )
         self.assertEqual(resp.status_code, 403)
@@ -72,7 +81,7 @@ class LoginFlowTests(TestCase):
         self.user.save(update_fields=['is_active'])
         resp = self.client.post(
             reverse('login'),
-            {'email': 'employee@test.com', 'password': 'CorrectPass123!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'employee@test.com', 'password': 'CorrectPass123!'},
             format='json',
         )
         self.assertEqual(resp.status_code, 403)
@@ -82,7 +91,7 @@ class LoginFlowTests(TestCase):
         self.user.save(update_fields=['failed_login_attempts'])
         resp = self.client.post(
             reverse('login'),
-            {'email': 'employee@test.com', 'password': 'CorrectPass123!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'employee@test.com', 'password': 'CorrectPass123!'},
             format='json',
         )
         self.assertEqual(resp.status_code, 200)
@@ -98,7 +107,7 @@ class TokenRefreshTests(TestCase):
         self.user = make_user('refresh@test.com', role=self.role, password='CorrectPass123!')
         login_resp = self.client.post(
             reverse('login'),
-            {'email': 'refresh@test.com', 'password': 'CorrectPass123!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'refresh@test.com', 'password': 'CorrectPass123!'},
             format='json',
         )
         self.refresh_cookie = login_resp.cookies['royal_refresh_token'].value
@@ -151,7 +160,9 @@ class PasswordResetFlowTests(TestCase):
         # doesn't create — so only the unknown-user (no-op) path is checked
         # against the API here; the serializer-level test above covers both.
         resp = self.client.post(
-            reverse('forgot-password'), {'email': 'nobody-registered@test.com'}, format='json',
+            reverse('forgot-password'),
+            {'company_code': TEST_COMPANY_CODE, 'email': 'nobody-registered@test.com'},
+            format='json',
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(
@@ -164,7 +175,7 @@ class PasswordResetFlowTests(TestCase):
 
         verify_resp = self.client.post(
             reverse('verify-otp'),
-            {'email': 'reset@test.com', 'otp': plain_otp},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'reset@test.com', 'otp': plain_otp},
             format='json',
         )
         self.assertEqual(verify_resp.status_code, 200)
@@ -173,6 +184,7 @@ class PasswordResetFlowTests(TestCase):
         reset_resp = self.client.post(
             reverse('reset-password'),
             {
+                'company_code': TEST_COMPANY_CODE,
                 'reset_token': reset_token,
                 'new_password': 'BrandNewPass123!',
                 'confirm_password': 'BrandNewPass123!',
@@ -189,6 +201,7 @@ class PasswordResetFlowTests(TestCase):
         replay_resp = self.client.post(
             reverse('reset-password'),
             {
+                'company_code': TEST_COMPANY_CODE,
                 'reset_token': reset_token,
                 'new_password': 'AnotherPass123!',
                 'confirm_password': 'AnotherPass123!',
@@ -202,12 +215,12 @@ class PasswordResetFlowTests(TestCase):
         for _ in range(5):
             self.client.post(
                 reverse('verify-otp'),
-                {'email': 'reset@test.com', 'otp': '000000'},
+                {'company_code': TEST_COMPANY_CODE, 'email': 'reset@test.com', 'otp': '000000'},
                 format='json',
             )
         resp = self.client.post(
             reverse('verify-otp'),
-            {'email': 'reset@test.com', 'otp': plain_otp},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'reset@test.com', 'otp': plain_otp},
             format='json',
         )
         self.assertEqual(resp.status_code, 400)
@@ -222,7 +235,7 @@ class ChangePasswordTests(TestCase):
         self.user = make_user('change@test.com', role=self.role, password='OldPass123!')
         login_resp = self.client.post(
             reverse('login'),
-            {'email': 'change@test.com', 'password': 'OldPass123!'},
+            {'company_code': TEST_COMPANY_CODE, 'email': 'change@test.com', 'password': 'OldPass123!'},
             format='json',
         )
         self.access_cookie = login_resp.cookies['royal_access_token'].value

@@ -159,6 +159,16 @@ if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
     # There is no SQLite equivalent: multi-tenancy requires Postgres.
     DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 
+# ─── Testing ─────────────────────────────────────────────────────────────────
+# Plain DiscoverRunner only migrates SHARED_APPS into the public schema —
+# every TENANT_APP table (accounts, hrms, payroll, voice_commands,
+# attendance, ...) never gets created anywhere at all under a bare
+# `manage.py test`, so any test touching those models fails with "relation
+# ... does not exist". See config/test_runner.py's own docstring for the
+# full story, including why a once-only tenant activation at the start of
+# the run isn't enough on its own.
+TEST_RUNNER = 'config.test_runner.TenantAwareTestRunner'
+
 AUTH_USER_MODEL = 'accounts.User'
 
 AUTH_PASSWORD_VALIDATORS = [

@@ -200,6 +200,8 @@ intents:
       - "please withdraw my leave application"
       - "can you cancel my leave request"
       - "i'd like to cancel my leave"
+      - "i want to cancel my leave"
+      - "i want to cancel my leave request"
 
   check_attendance_stats:
     # No domain codename required — matches the own-stats default branch
@@ -357,8 +359,10 @@ intents:
       - "approve leave"
       - "approve pending leave"
       - "go ahead and approve the leave"
+      - "go ahead and approve the pending leave request"
       - "yes approve the leave"
       - "approve that leave request"
+      - "approve the pending leave request"
       - "give the green light on this leave request"
       - "sign off on this leave request"
       - "approve her leave"
@@ -526,6 +530,67 @@ intents:
       - "check his payslip"
       - "look up someone's pay"
       - "show me someone's payslip"
+
+  check_pending_payroll_cycles:
+    # Requires payroll.view as this app's own coarse-grained voice gate —
+    # dispatches through the existing AttendancePendingCyclesView
+    # (payroll/views/attendance_approval.py), whose own internal check
+    # (_can_view_approvals: can_manage_team OR payroll.edit) is the real,
+    # finer-grained gate; a caller who clears payroll.view here but not that
+    # inner check still gets that view's own 403, same as
+    # check_employee_payslip's two-layer shape above.
+    required_permission: payroll.view
+    conversational: false
+    phrases:
+      - "check pending payroll cycles"
+      - "show pending payroll cycles"
+      - "what payroll cycles are pending"
+      - "which payroll cycles need my approval"
+      - "show cycles awaiting approval"
+      - "check payroll cycles awaiting approval"
+      - "any payroll cycles pending"
+      - "show me pending payroll approvals"
+      - "what's pending in payroll"
+
+  check_payroll_cost_summary:
+    # Requires payroll.view — the same codename BranchPayrollStatusView
+    # itself checks (payroll/views/cycles.py) for a read-only, company/
+    # branch-wide payroll view. Company/branch-wide aggregate figures, not a
+    # single employee's own payslip — see executor_payroll_analytics.py for
+    # why this is read aloud in full, unlike check_my_payslip/
+    # check_employee_payslip's redacted speech_message.
+    required_permission: payroll.view
+    conversational: false
+    phrases:
+      - "what's our payroll cost"
+      - "what is our payroll cost"
+      - "check payroll cost summary"
+      - "show payroll cost summary"
+      - "what's the total payroll cost"
+      - "how much did we spend on payroll"
+      - "how much did we spend on payroll this month"
+      - "what's our payroll cost last month"
+      - "show me the payroll cost summary"
+      - "what's the total salary payout"
+      - "how much is our total payroll"
+      - "give me the payroll cost summary"
+
+  check_branch_payroll_breakdown:
+    # Requires payroll.view — see check_payroll_cost_summary above. Groups
+    # by branch (BranchPayrollBreakdownView); a branch-scoped caller's own
+    # single-row result is not an error (see that view's own docstring).
+    required_permission: payroll.view
+    conversational: false
+    phrases:
+      - "show branch payroll breakdown"
+      - "check branch payroll breakdown"
+      - "what's the payroll breakdown by branch"
+      - "show payroll cost by branch"
+      - "which branch spent the most on payroll"
+      - "compare payroll cost across branches"
+      - "show me the branch payroll breakdown"
+      - "give me a branch-wise payroll breakdown"
+      - "top branches by payroll cost"
 
   request_attendance_correction:
     # No domain codename required — matches AttendanceCorrectionView.post()

@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.payroll.views.analytics import PayrollCostSummaryView, BranchPayrollBreakdownView
 from apps.payroll.views.settings import PayrollSettingsView
 from apps.payroll.views.structures import (
     SalaryStructureListView,
@@ -97,6 +98,10 @@ urlpatterns = [
 
     # ── Branch payroll status overview (admin) ───────────────────────────────
     path('branch-status/', BranchPayrollStatusView.as_view(), name='payroll-branch-status'),
+
+    # ── Payroll analytics ────────────────────────────────────────────────────
+    path('analytics/cost-summary/', PayrollCostSummaryView.as_view(), name='payroll-cost-summary'),
+    path('analytics/branch-breakdown/', BranchPayrollBreakdownView.as_view(), name='payroll-branch-breakdown'),
 
     # ── Payroll cycles ───────────────────────────────────────────────────────
     path('cycles/', PayrollCycleListView.as_view(), name='payroll-cycle-list'),

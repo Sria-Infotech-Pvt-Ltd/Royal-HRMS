@@ -404,9 +404,15 @@ def _dispatch_matched_intent(
     if intent in (INTENT_CLOCK_IN, INTENT_CLOCK_OUT):
         return start_voice_clock_punch(request, intent, attendance_mode, confidence, latitude, longitude)
 
+    # raw_text forwarded as slots['raw_text'] — only check_payroll_cost_summary/
+    # check_branch_payroll_breakdown read it today (to extract an optional
+    # spoken period via payroll_period_extractor.py; see executor.py's own
+    # execute_intent docstring). Every other intent on this generic path
+    # ignores an unrecognized slots key, same as it already ignores slots
+    # being absent entirely.
     outcome = execute_intent(
         intent, request, attendance_mode=attendance_mode, lang=lang,
-        latitude=latitude, longitude=longitude,
+        slots={'raw_text': intent_text}, latitude=latitude, longitude=longitude,
     )
     logger.info(
         'Voice command: user=%s intent=%s confidence=%s success=%s',

@@ -31,6 +31,11 @@ from apps.voice_commands.executor_payroll import (
     execute_identify_employee_payslip,
     execute_raise_payslip_query,
 )
+from apps.voice_commands.executor_payroll_analytics import (
+    execute_check_branch_payroll_breakdown,
+    execute_check_payroll_cost_summary,
+    execute_check_pending_payroll_cycles,
+)
 from apps.voice_commands.audit import log_permission_denied
 from apps.voice_commands.executor_result import ExecutionResult
 from apps.voice_commands.language import text
@@ -54,6 +59,9 @@ INTENT_CHECK_MY_PAYSLIP = 'check_my_payslip'
 INTENT_ACKNOWLEDGE_PAYSLIP = 'acknowledge_payslip'
 INTENT_RAISE_PAYSLIP_QUERY = 'raise_payslip_query'
 INTENT_CHECK_EMPLOYEE_PAYSLIP = 'check_employee_payslip'
+INTENT_CHECK_PENDING_PAYROLL_CYCLES = 'check_pending_payroll_cycles'
+INTENT_CHECK_PAYROLL_COST_SUMMARY = 'check_payroll_cost_summary'
+INTENT_CHECK_BRANCH_PAYROLL_BREAKDOWN = 'check_branch_payroll_breakdown'
 INTENT_GREETING = 'greeting'
 
 _LEAVE_APPROVAL_INTENT_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
@@ -105,6 +113,9 @@ _INTENT_MODULES = {
     INTENT_ACKNOWLEDGE_PAYSLIP: MODULE_PAYROLL,
     INTENT_RAISE_PAYSLIP_QUERY: MODULE_PAYROLL,
     INTENT_CHECK_EMPLOYEE_PAYSLIP: MODULE_PAYROLL,
+    INTENT_CHECK_PENDING_PAYROLL_CYCLES: MODULE_PAYROLL,
+    INTENT_CHECK_PAYROLL_COST_SUMMARY: MODULE_PAYROLL,
+    INTENT_CHECK_BRANCH_PAYROLL_BREAKDOWN: MODULE_PAYROLL,
 }
 
 
@@ -131,6 +142,8 @@ def execute_intent(
         approve_leave, reject_leave
       - executor_payroll.py     — check_my_payslip, acknowledge_payslip,
         raise_payslip_query, check_employee_payslip
+      - executor_payroll_analytics.py — check_pending_payroll_cycles,
+        check_payroll_cost_summary, check_branch_payroll_breakdown
       - executor_greeting.py    — greeting
     This function's only job is the permission gate (below) and routing to
     the right one — no domain-specific imports live here.
@@ -171,7 +184,13 @@ def execute_intent(
     as approve_leave/reject_leave above) — unlike those two, there's no
     'confirm' stage: a single employee match is already the terminal
     response (see executor_payroll.execute_identify_employee_payslip).
-    Every other intent ignores slots entirely.
+    check_payroll_cost_summary/check_branch_payroll_breakdown use
+    slots['raw_text'] — the caller's raw utterance, forwarded by
+    conversation.py's generic dispatch branch — to extract an optional
+    spoken period ("last month", "for March") via
+    payroll_period_extractor.py; absent slots (or an absent 'raw_text' key)
+    falls back to the underlying view's own default period. Every other
+    intent ignores slots entirely.
 
     Every intent is gated on its registry-declared required_permission before
     dispatch. Most intents set required_permission: null (they're
@@ -262,6 +281,12 @@ def execute_intent(
         return execute_raise_payslip_query(request, (slots or {}).get('description', ''))
     if intent == INTENT_CHECK_EMPLOYEE_PAYSLIP:
         return execute_identify_employee_payslip(request, (slots or {}).get('name_query'))
+    if intent == INTENT_CHECK_PENDING_PAYROLL_CYCLES:
+        return execute_check_pending_payroll_cycles(request)
+    if intent == INTENT_CHECK_PAYROLL_COST_SUMMARY:
+        return execute_check_payroll_cost_summary(request, (slots or {}).get('raw_text', ''))
+    if intent == INTENT_CHECK_BRANCH_PAYROLL_BREAKDOWN:
+        return execute_check_branch_payroll_breakdown(request, (slots or {}).get('raw_text', ''))
     if intent == INTENT_GREETING:
         return execute_greeting(request)
     return ExecutionResult(success=False, message=text(_UNRECOGNIZED_INTENT_MESSAGE))

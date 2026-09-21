@@ -16,10 +16,15 @@ from rest_framework.test import APIClient
 from apps.accounts.factories import make_role, make_user
 from apps.attendance.models import FaceRegistrationRequest, FaceVerificationAttempt
 from apps.attendance.services_face_lifecycle import purge_face_data_for_employee
+from config.test_runner import TEST_COMPANY_CODE
 
 
 def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
-    resp = client.post(reverse('login'), {'email': email, 'password': password}, format='json')
+    resp = client.post(
+        reverse('login'),
+        {'company_code': TEST_COMPANY_CODE, 'email': email, 'password': password},
+        format='json',
+    )
     assert resp.status_code == 200, resp.data
     return resp
 
