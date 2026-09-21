@@ -1,6 +1,7 @@
 import { LeaveRequest } from "../leave/_data";
 import type { Expense } from "../expenses/_components/ExpenseClaims";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import { formatDate } from "@/lib/formatDate";
 
 // ─── Correction request shape (own corrections, /attendance/corrections/my/) ──
 // The single source of truth for "my attendance correction" rows — used by
@@ -71,9 +72,9 @@ export const REQUEST_TABS: { key: "all" | MyRequestKind; label: string; icon: st
 
 export const TYPE_META: Record<MyRequestKind, { label: string; icon: string; color: string; bg: string }> = {
   leave:                 { label: "Leave",                 icon: "ti-beach",     color: "var(--success)", bg: "rgba(22,163,74,0.10)"  },
-  wfh:                   { label: "Work From Home",        icon: "ti-home-2",    color: "var(--primary)", bg: "rgba(30,78,140,0.10)"  },
+  wfh:                   { label: "Work From Home",        icon: "ti-home-2",    color: "var(--primary)", bg: "rgba(124,58,237,0.10)"  },
   expense:               { label: "Expense",               icon: "ti-receipt",   color: "var(--warn)",    bg: "rgba(217,119,6,0.10)"  },
-  attendance_correction: { label: "Attendance Correction", icon: "ti-clock-edit", color: "var(--info)",    bg: "rgba(14,124,134,0.10)" },
+  attendance_correction: { label: "Attendance Correction", icon: "ti-clock-edit", color: "var(--info)",    bg: "rgba(37,99,235,0.10)" },
 };
 
 export const STATUS_BADGE_CLASS: Record<DisplayStatus, string> = {
@@ -113,7 +114,7 @@ export function fmtSubmitted(raw: string): string {
   const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
   const d = new Date(iso);
   if (isNaN(d.getTime())) return raw;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 export function toSortableTime(raw: string): number {
@@ -142,7 +143,7 @@ export function toDisplayStatus(status: string): DisplayStatus {
 
 function fmtDateOnly(iso: string): string {
   if (!iso) return "—";
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 function fmtShort(iso: string): string {

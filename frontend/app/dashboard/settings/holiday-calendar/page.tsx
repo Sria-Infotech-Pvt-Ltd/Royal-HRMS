@@ -193,7 +193,7 @@ export default function HolidayCalendarPage() {
           { icon: "ti-flag",           si: "si-info",    label: "National",         value: stats.national },
           { icon: "ti-map-pin",        si: "si-success", label: "Regional",         value: stats.regional },
           { icon: "ti-building",       si: "si-warn",     label: "Company",          value: stats.company  },
-          { icon: "ti-calendar-check", si: "bg-[rgba(173,149,207,0.15)] text-[var(--purple)]", label: "Optional", value: stats.optional },
+          { icon: "ti-calendar-check", si: "bg-[rgba(167,139,250,0.15)] text-[var(--purple)]", label: "Optional", value: stats.optional },
         ].map(s => (
           <div key={s.label} className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm px-4 py-4 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${s.si} flex items-center justify-center flex-shrink-0`}>

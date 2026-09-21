@@ -531,6 +531,203 @@ class HRAttendanceSummaryView(APIView):
         return success('Attendance summary retrieved.', data=data)
 
 
+class HRDashboardOverviewView(APIView):
+    """Backs the redesigned HR/admin dashboard's KPI row + 'Dashboard
+    overview' status panel — one call, every number computed from real
+    data (no fabricated demo figures):
+    - total_headcount / new_this_month: active employees, and how many of
+      them joined this calendar month.
+    - present_today / attendance_pct: today's AttendanceRecord rows (same
+      counting convention as HRAttendanceSummaryView above).
+    - payroll_ready / payroll_total / payroll_blocked: an active employee
+      counts as payroll-ready only with both an active EmployeeSalaryConfig
+      and a complete bank profile (account_number + ifsc_code) — the two
+      concrete things that actually block a payslip from being produced.
+    - onboarding_in_progress / joining_this_week: onboarding_status not yet
+      'complete', and active employees whose date_of_joining falls in the
+      next 7 days.
+    - attendance_exceptions_today: late arrivals + still-incomplete punches
+      today (the same two "needs a human to look at this" statuses
+      HRAttendanceSummaryView already surfaces separately).
+    - open_requests: pending leave + expense + attendance-correction
+      approvals — the same figure HRKPIView.pending_actions already
+      computes for the console banner, recomputed here to avoid a second
+      round trip.
+    - compliance_pct: % of active employees who have uploaded every
+      currently-required document type (DocumentTypeConfig.required=True) —
+      a real completeness measure, not a placeholder number.
+    - weekly_attendance: present-count per day for the last 7 calendar days
+      (real AttendanceRecord counts) — backs the small trend chart on the
+      Quick Actions panel; never randomly generated.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import DocumentTypeConfig, EmployeeDocument, User
+        from apps.attendance.models import AttendanceRecord
+        from apps.hrms.models import Expense, LeaveRequest, REQ_L2_PENDING, REQ_PENDING
+        from apps.payroll.models import EmployeeSalaryConfig
+
+        today = timezone.localdate()
+        branch = _hr_dashboard_branch(request.user)
+
+        employees = User.objects.filter(is_active=True).exclude(employee_id='')
+        if branch:
+            employees = employees.filter(branch=branch)
+        total_headcount = employees.count()
+        new_this_month = employees.filter(
+            date_of_joining__year=today.year, date_of_joining__month=today.month,
+        ).count()
+
+        attendance_qs = AttendanceRecord.objects.filter(date=today)
+        if branch:
+            attendance_qs = attendance_qs.filter(employee__branch=branch)
+        att_counts = dict(attendance_qs.values('status').annotate(n=Count('id')).values_list('status', 'n'))
+        present_today = att_counts.get(AttendanceRecord.STATUS_PRESENT, 0) + att_counts.get(AttendanceRecord.STATUS_INCOMPLETE, 0)
+        attendance_pct = round((present_today / total_headcount) * 100) if total_headcount else 0
+        attendance_exceptions_today = att_counts.get(AttendanceRecord.STATUS_LATE, 0) + att_counts.get(AttendanceRecord.STATUS_INCOMPLETE, 0)
+
+        payroll_ready_ids = set(
+            EmployeeSalaryConfig.objects.filter(employee__in=employees, is_active=True)
+            .values_list('employee_id', flat=True)
+        )
+        bank_complete_ids = set(
+            employees.filter(profile__account_number__isnull=False)
+            .exclude(profile__account_number='').exclude(profile__ifsc_code='')
+            .values_list('id', flat=True)
+        )
+        payroll_ready = len(payroll_ready_ids & bank_complete_ids)
+        payroll_blocked = total_headcount - payroll_ready
+
+        onboarding_in_progress = employees.exclude(onboarding_status=User.ONBOARDING_COMPLETE).count()
+        joining_this_week = employees.filter(
+            date_of_joining__gte=today, date_of_joining__lte=today + timezone.timedelta(days=7),
+        ).count()
+
+        leave_qs   = LeaveRequest.objects.filter(status__in=[REQ_PENDING, REQ_L2_PENDING])
+        expense_qs = Expense.objects.filter(status='pending')
+        onboarding_submitted_qs = employees.filter(onboarding_status=User.ONBOARDING_SUBMITTED)
+        if branch:
+            leave_qs   = leave_qs.filter(employee__branch=branch)
+            expense_qs = expense_qs.filter(employee__branch=branch)
+        open_requests = leave_qs.count() + expense_qs.count() + onboarding_submitted_qs.count()
+
+        required_doc_types = list(
+            DocumentTypeConfig.objects.filter(required=True, visible=True).values_list('type_key', flat=True)
+        )
+        if required_doc_types and total_headcount:
+            uploaded_by_employee: dict = {}
+            doc_rows = (
+                EmployeeDocument.objects
+                .filter(user__in=employees, document_type__in=required_doc_types)
+                .values_list('user_id', 'document_type')
+            )
+            for emp_id, doc_type in doc_rows:
+                uploaded_by_employee.setdefault(emp_id, set()).add(doc_type)
+            required_set = set(required_doc_types)
+            compliant = sum(1 for types in uploaded_by_employee.values() if required_set.issubset(types))
+            compliance_pct = round((compliant / total_headcount) * 100)
+        else:
+            compliance_pct = 100
+
+        weekly_attendance = []
+        for offset in range(6, -1, -1):
+            day = today - timezone.timedelta(days=offset)
+            day_qs = AttendanceRecord.objects.filter(date=day, status__in=[
+                AttendanceRecord.STATUS_PRESENT, AttendanceRecord.STATUS_INCOMPLETE,
+            ])
+            if branch:
+                day_qs = day_qs.filter(employee__branch=branch)
+            weekly_attendance.append({'label': day.strftime('%a')[0], 'count': day_qs.count()})
+
+        return success('HR dashboard overview retrieved.', data={
+            'total_headcount':   total_headcount,
+            'new_this_month':    new_this_month,
+            'present_today':     present_today,
+            'attendance_pct':    attendance_pct,
+            'payroll_ready':     payroll_ready,
+            'payroll_total':     total_headcount,
+            'payroll_blocked':   payroll_blocked,
+            'onboarding_in_progress':      onboarding_in_progress,
+            'joining_this_week':          joining_this_week,
+            'attendance_exceptions_today': attendance_exceptions_today,
+            'open_requests':     open_requests,
+            'compliance_pct':    compliance_pct,
+            'weekly_attendance': weekly_attendance,
+        })
+
+
+class HRLifecycleActionRegisterView(APIView):
+    """Real, row-level 'pending lifecycle actions' register for the
+    dashboard — pulls from the two genuinely approval-gated employee
+    lifecycle workflows that already exist (Separation requests and
+    onboarding submissions awaiting HR approval). Deliberately does NOT
+    invent pending rows for Promotion or Confirmation — neither of those
+    is an approval-gated workflow in this app (both apply immediately when
+    an authorized user acts, per PromotionRecord's own immutable-log
+    design and EmployeeConfirmView), so there is no real "pending" state
+    for them to show here.
+
+    Each row links back to the real page that actually handles it
+    (Separation detail / Onboarding approval) rather than offering an
+    inline decision here — the full approval UI (comments, stage history,
+    clearances) already lives there and isn't worth duplicating."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_hr_or_admin(request.user):
+            return error(_DENIED, http_status=403)
+
+        from apps.accounts.models import User
+        from apps.hrms.models import SEP_PENDING, SEP_STAGE2_PENDING, SeparationRequest
+
+        branch = _hr_dashboard_branch(request.user)
+
+        sep_qs = (
+            SeparationRequest.objects
+            .filter(status__in=[SEP_PENDING, SEP_STAGE2_PENDING])
+            .select_related('employee')
+            .order_by('-created_at')[:10]
+        )
+        if branch:
+            sep_qs = sep_qs.filter(employee__branch=branch)
+
+        onboarding_qs = (
+            User.objects.filter(onboarding_status=User.ONBOARDING_SUBMITTED, is_active=True)
+            .order_by('-updated_at')[:10]
+        )
+        if branch:
+            onboarding_qs = onboarding_qs.filter(branch=branch)
+
+        rows = []
+        for sep in sep_qs:
+            rows.append({
+                'case_ref':     f'SEP-{sep.request_number:05d}' if sep.request_number else f'SEP-{str(sep.id)[:8]}',
+                'employee_name': sep.employee.full_name,
+                'action':       f'Separation ({sep.get_separation_type_display()})',
+                'effective':    str(sep.proposed_last_working_day),
+                'owner':        'HR Operations',
+                'state':        'In Progress' if sep.status == SEP_STAGE2_PENDING else 'Pending',
+                'link':         f'/dashboard/separation',
+            })
+        for user in onboarding_qs:
+            rows.append({
+                'case_ref':      f'ONB-{user.employee_id}',
+                'employee_name': user.full_name,
+                'action':        'Onboarding completion',
+                'effective':     str(user.date_of_joining) if user.date_of_joining else '',
+                'owner':         'Reporting Manager' if user.reporting_manager_id else 'HR Operations',
+                'state':         'Pending',
+                'link':          f'/dashboard/employees/{user.employee_id}/onboarding',
+            })
+
+        rows.sort(key=lambda r: r['effective'] or '9999-99-99')
+        return success('Lifecycle action register retrieved.', data=rows[:10])
+
+
 # ─── Shared Announcement (all authenticated users) ───────────────────────────
 
 class SharedAnnouncementView(APIView):

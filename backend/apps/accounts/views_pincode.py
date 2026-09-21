@@ -59,8 +59,19 @@ def _smart_title(text: str) -> str:
     )
 
 
+_OFFICE_SUFFIX_RE = re.compile(r'\s+[SHB]\.?O\.?$', re.IGNORECASE)
+
+
+def _locality_from_office_name(name: str) -> str:
+    """indiapins' `Name` is the post office name (e.g. "Cyberabad S.O",
+    "Kondapur B.O") — a real, genuine locality/area name for the PIN code,
+    just with the postal Sub/Head/Branch Office suffix stripped so it reads
+    as a place name rather than a post-office record."""
+    return _smart_title(_OFFICE_SUFFIX_RE.sub('', name or '').strip())
+
+
 class PincodeLookupView(APIView):
-    """GET /onboarding/pincode-lookup/<pincode>/ — {district, state} for a valid Indian PIN code."""
+    """GET /onboarding/pincode-lookup/<pincode>/ — {locality, district, state} for a valid Indian PIN code."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pincode):
@@ -78,4 +89,5 @@ class PincodeLookupView(APIView):
         district = _smart_title(match.get('District', ''))
         raw_state = (match.get('State') or '').strip()
         state = STATE_LOOKUP.get(raw_state.upper(), _smart_title(raw_state))
-        return success('OK', {'district': district, 'state': state})
+        locality = _locality_from_office_name(match.get('Name', ''))
+        return success('OK', {'locality': locality, 'district': district, 'state': state})

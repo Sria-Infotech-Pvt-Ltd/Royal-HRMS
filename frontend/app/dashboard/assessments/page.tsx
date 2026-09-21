@@ -8,6 +8,7 @@ import { usePermission, useAnyPermission } from "@/hooks/usePermission";
 import ItemsModal from "./_components/ItemsModal";
 import EmployeeMyAssessments from "./_components/EmployeeMyAssessments";
 import Modal from "@/components/Modal";
+import { formatDate } from "@/lib/formatDate";
 
 interface AssessmentSettings {
   default_pass_percentage: number;
@@ -108,7 +109,7 @@ function apiErr(e: unknown) {
 
 function fmt(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 function StatusBadge({ status }: { status: AssessmentCandidate["status"] }) {
@@ -666,7 +667,7 @@ export default function AssessmentsPage() {
                         display: "flex", alignItems: "center", gap: 10,
                         padding: "9px 12px", cursor: "pointer",
                         borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
-                        background: checked ? "var(--primary-c, rgba(30,78,140,0.07))" : "transparent",
+                        background: checked ? "var(--primary-c, rgba(124,58,237,0.07))" : "transparent",
                       }}
                     >
                       <input

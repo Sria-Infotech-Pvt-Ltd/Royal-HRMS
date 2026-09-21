@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { PaginatedResponse } from "@/app/dashboard/leave/_data";
 import { WFH_STATUS_LABELS, type WorkFromHomeRequest } from "@/types/workFromHome";
+import { formatDate } from "@/lib/formatDate";
 
 const STATUS_BADGE: Record<WorkFromHomeRequest["status"], string> = {
   pending:    "badge-warn",
@@ -18,7 +19,7 @@ const STATUS_BADGE: Record<WorkFromHomeRequest["status"], string> = {
 
 function fmtDate(iso: string): string {
   if (!iso) return "";
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(iso + "T12:00:00");
 }
 
 export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }) {
@@ -59,7 +60,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
 
   if (error) {
     return (
-      <div className="bg-white rounded-xl border border-[var(--outline-v)] p-10 text-center">
+      <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-10 text-center">
         <p className="text-sm text-[var(--on-variant)] mb-4">{error}</p>
         <button onClick={refetch} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--primary)" }}>
           Try again
@@ -70,7 +71,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
 
   if (requests.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-[var(--outline-v)] p-12 text-center">
+      <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-12 text-center">
         <i className="ti ti-home-2 text-4xl text-[var(--outline)] block mb-3" />
         <p className="text-sm text-[var(--on-variant)]">You haven&apos;t submitted any work-from-home requests yet.</p>
       </div>
@@ -80,7 +81,7 @@ export default function MyWfhRequestsList({ refreshKey }: { refreshKey: number }
   return (
     <div className="flex flex-col gap-3">
       {requests.map(req => (
-        <div key={req.id} className="bg-white rounded-xl border border-[var(--outline-v)] p-4 flex items-center justify-between gap-4 flex-wrap">
+        <div key={req.id} className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-4 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-[220px]">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-semibold text-[var(--on-bg)]">

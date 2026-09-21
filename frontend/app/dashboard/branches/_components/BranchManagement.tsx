@@ -25,6 +25,7 @@ interface Branch {
   branch_code:    string;
   branch_name:    string;
   is_headquarter: boolean;
+  is_metro:       boolean;
   address:        string;
   state:          number;
   state_name:     string;
@@ -259,6 +260,7 @@ export default function BranchManagement() {
     gst_registration: "",
     status:         "Active",
     is_headquarter: false,
+    is_metro:       false,
     geofencing_enabled:    false,
     latitude:              "",
     longitude:             "",
@@ -482,6 +484,7 @@ export default function BranchManagement() {
       gst_registration: editForm.gst_registration || null,
       status:         editForm.status,
       is_headquarter: editForm.is_headquarter,
+      is_metro:       editForm.is_metro,
       geofencing_enabled:    editForm.geofencing_enabled,
       latitude:              editForm.geofencing_enabled ? Number(editForm.latitude)  : null,
       longitude:             editForm.geofencing_enabled ? Number(editForm.longitude) : null,
@@ -642,7 +645,7 @@ export default function BranchManagement() {
               setTransferConfirm(null);
               setNewCityName("");
               setEditForm({
-                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", gst_registration: "", status: "active", is_headquarter: false,
+                id: 0, branch_code: "", branch_name: "", address: "", state: "", city: "", gst_registration: "", status: "active", is_headquarter: false, is_metro: false,
                 geofencing_enabled: false, latitude: "", longitude: "", allowed_radius_meters: "150",
               });
               Promise.allSettled([
@@ -727,11 +730,18 @@ export default function BranchManagement() {
                       <div style={{ fontSize: "12px", color: "var(--on-variant)", marginTop: "2px" }}>{branch.branch_code}</div>
                     </div>
                   </div>
-                  {branch.is_headquarter && (
-                    <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
-                      <i className="ti ti-star-filled" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> HEADQUARTER
-                    </span>
-                  )}
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {branch.is_headquarter && (
+                      <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
+                        <i className="ti ti-star-filled" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> HEADQUARTER
+                      </span>
+                    )}
+                    {branch.is_metro && (
+                      <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
+                        <i className="ti ti-map-pin" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> METRO
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px", flex: 1 }}>
@@ -792,6 +802,7 @@ export default function BranchManagement() {
                           gst_registration: branch.gst_registration ?? "",
                           status:         branch.status.toLowerCase(),
                           is_headquarter: branch.is_headquarter,
+                          is_metro:       branch.is_metro ?? false,
                           geofencing_enabled:    branch.geofencing_enabled ?? false,
                           latitude:              branch.latitude?.toString() ?? "",
                           longitude:             branch.longitude?.toString() ?? "",
@@ -1096,7 +1107,7 @@ export default function BranchManagement() {
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
-                <div className="field-group" style={{ display: "flex", alignItems: "flex-end", paddingBottom: "2px" }}>
+                <div className="field-group" style={{ display: "flex", alignItems: "flex-end", gap: 16, paddingBottom: "2px" }}>
                   <label className="module-check">
                     <input
                       type="checkbox"
@@ -1104,6 +1115,14 @@ export default function BranchManagement() {
                       onChange={e => setEditForm({ ...editForm, is_headquarter: e.target.checked })}
                     />
                     <span>Mark as Headquarter</span>
+                  </label>
+                  <label className="module-check" title="Metro classification for HRA — 50% of Basic instead of 40% for salary structures using the Metro HRA calculation.">
+                    <input
+                      type="checkbox"
+                      checked={editForm.is_metro}
+                      onChange={e => setEditForm({ ...editForm, is_metro: e.target.checked })}
+                    />
+                    <span>Metro City (HRA)</span>
                   </label>
                 </div>
               </div>

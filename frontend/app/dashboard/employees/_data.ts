@@ -9,6 +9,14 @@ import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import { STATES } from "@/app/dashboard/settings/company/_data";
 
 export type EmployeeStatus = "active" | "onboarding" | "inactive";
+
+// Widens the status FILTER dropdown's value beyond the per-row
+// EmployeeStatus above (which stays active/onboarding/inactive, unchanged)
+// — "probation" and "notice_period" are real, separately-filterable
+// backend buckets (EmployeeListCreateView.get()'s status_param) that don't
+// have their own per-row status value since the table shows them via
+// employmentStatus / the Notice Period pill instead.
+export type EmployeeStatusFilter = EmployeeStatus | "probation" | "notice_period";
 export type Gender = "male" | "female" | "transgender";
 
 /** A single field's value bag — every detail value lives here keyed by FieldDef.key */
@@ -36,6 +44,17 @@ export interface Employee {
   location: string;
   gender: Gender;
   status: EmployeeStatus;
+  /** "probation" | "confirmed" — flipped exactly once by the Confirmation action. */
+  employmentStatus: string;
+  confirmationDate: string | null;
+  /** Reporting manager's name, or null for a top-level role (shown as "CEO Office"). */
+  reportingManagerName?: string | null;
+  /** Set only while a separation is in progress — drives the "Notice Period" pill/column. */
+  lastWorkingDay?: string | null;
+  /** Current OrgUnit name (e.g. "AI & ML") — the real hierarchy node, distinct from the legacy `department` string. */
+  orgUnitName?: string | null;
+  /** Immediate parent OrgUnit name (e.g. "Software Services"), shown as gray subtext under orgUnitName. */
+  orgUnitParentName?: string | null;
   /** all the long-tail profile fields, keyed by FieldDef.key */
   details: DetailValues;
   /** repeatable sections, keyed by TableSection.id */
@@ -381,13 +400,12 @@ export const PROFILE_TABS = [
   { id: "approval", label: "Approval Matrix", icon: "ti-sitemap" },
   { id: "promotion", label: "Promotion", icon: "ti-award" },
   { id: "wishes", label: "Send Wishes", icon: "ti-confetti" },
+  { id: "audit", label: "Audit Trail", icon: "ti-history" },
 ] as const;
 
 // ────────────────────────────────────────────────────────────
 //  Helpers
 // ────────────────────────────────────────────────────────────
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function initials(first: string, last: string): string {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
@@ -395,21 +413,6 @@ export function initials(first: string, last: string): string {
 
 export function fullName(e: Pick<Employee, "firstName" | "middleName" | "lastName">): string {
   return [e.firstName, e.middleName, e.lastName].filter(Boolean).join(" ");
-}
-
-/** "2022-01-15" → "Jan 15, 2022" */
-export function formatDate(iso: string): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return `${MONTHS[m - 1]} ${d}, ${y}`;
-}
-
-/** "2022-01-15" → "15-01-2022" (for date inputs displayed dd-mm-yyyy) */
-export function toDisplayDmy(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return [d, m, y].join("-");
 }
 
 /** Years/months between an ISO date and now → "4 years 5 months" */
@@ -444,12 +447,12 @@ export interface Tint { bg: string; text: string }
 
 /** Soft tints (light bg + coloured icon) — used for badges, stat & icon chips. */
 export const TINTS: Record<TintKey, Tint> = {
-  primary: { bg: "bg-[rgba(30,78,140,0.10)]", text: "text-[var(--primary)]" },
+  primary: { bg: "bg-[rgba(124,58,237,0.10)]", text: "text-[var(--primary)]" },
   success: { bg: "bg-[var(--success-c)]", text: "text-[var(--success)]" },
   info: { bg: "bg-[var(--info-c)]", text: "text-[var(--info)]" },
   warn: { bg: "bg-[var(--warn-c)]", text: "text-[var(--warn)]" },
   secondary: { bg: "bg-[var(--sec-c)]", text: "text-[var(--secondary)]" },
-  purple: { bg: "bg-[rgba(173,149,207,0.20)]", text: "text-[var(--purple)]" },
+  purple: { bg: "bg-[rgba(167,139,250,0.20)]", text: "text-[var(--purple)]" },
   error: { bg: "bg-[var(--error-c)]", text: "text-[var(--error)]" },
 };
 
@@ -466,23 +469,103 @@ export const DEPARTMENT_TINT: Record<string, TintKey> = {
 
 /** Solid avatar background per department (readable with white text). */
 const DEPARTMENT_AVATAR: Record<string, string> = {
-  Engineering: "#1e4e8c",
-  HR: "#1b8a6b",
-  IT: "#0e7c86",
+  Engineering: "#7c3aed",
+  HR: "#17905a",
+  IT: "#2563eb",
   Finance: "#b08423",
-  Sales: "#b5651d",
+  Sales: "#a2620c",
   Operations: "#7c5fb0",
-  Marketing: "#c0392b",
+  Marketing: "#c23a2f",
 };
 
 export function deptTint(dept: string): Tint {
   return TINTS[DEPARTMENT_TINT[dept] ?? "primary"];
 }
 export function avatarColor(dept: string): string {
-  return DEPARTMENT_AVATAR[dept] ?? "#1e4e8c";
+  return DEPARTMENT_AVATAR[dept] ?? "#7c3aed";
+}
+
+/** Per-person HSL-tinted avatar (light bg + dark text of the same hue) —
+ * the reference Employee Directory table's own confirmed formula:
+ * hsl(hue 58% 92%) bg / hsl(hue 52% 34%) text, hue derived per person so
+ * each row gets a distinct, stable tint (not tied to department). */
+export function personAvatarTint(seed: string): { bg: string; text: string } {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  return { bg: `hsl(${hue} 58% 92%)`, text: `hsl(${hue} 52% 34%)` };
 }
 
 /** Each profile section gets a distinct palette colour for its icon chip. */
 export const SECTION_TINT: Record<string, TintKey> = {
   personal: "success", education: "secondary", bank: "info", emergency: "error", documents: "warn",
 };
+
+// ────────────────────────────────────────────────────────────
+//  Directory list API mapping — EmployeeListCreateView.get()'s
+//  per-row shape, converted into this module's Employee type.
+// ────────────────────────────────────────────────────────────
+export interface ApiEmployee {
+  id: string; employee_id: string;
+  first_name: string; last_name: string; full_name: string;
+  email: string; phone: string;
+  department: string; designation: string; branch: string;
+  role: string; role_display: string;
+  date_of_joining: string; is_active: boolean; status: string;
+  employment_status?: string;
+  confirmation_date?: string | null;
+  reporting_manager?: { id: string | null; uuid: string | null; name: string | null } | null;
+  last_working_day?: string | null;
+  org_unit_name?: string | null;
+  org_unit_parent_name?: string | null;
+}
+
+export function apiToEmployee(u: ApiEmployee): Employee {
+  return {
+    id:            u.employee_id || u.id,
+    uuid:          u.id,
+    code:          u.employee_id || u.id,
+    firstName:     u.first_name,
+    middleName:    "",
+    lastName:      u.last_name,
+    email:         u.email,
+    phone:         u.phone,
+    department:    u.department,
+    designation:   u.designation,
+    dateOfJoining: u.date_of_joining,
+    dateOfBirth:   "",
+    location:      u.branch,
+    gender:        "male",
+    status:        (u.status as EmployeeStatus) || (u.is_active ? "active" : "inactive"),
+    employmentStatus: u.employment_status || "probation",
+    confirmationDate: u.confirmation_date ?? null,
+    reportingManagerName: u.reporting_manager?.name ?? null,
+    lastWorkingDay: u.last_working_day ?? null,
+    orgUnitName: u.org_unit_name ?? null,
+    orgUnitParentName: u.org_unit_parent_name ?? null,
+    details: {
+      code:          u.employee_id,
+      firstName:     u.first_name,
+      middleName:    "",
+      lastName:      u.last_name,
+      gender:        "",
+      dateOfBirth:   "",
+      dateOfJoining: u.date_of_joining,
+      department:    u.department,
+      designation:   u.designation,
+      branch:        u.branch,
+      category:      "General",
+      esiLocation:   "Corporate",
+      metroTds:      "Metro",
+      esiDispensary: "N/A",
+      nationality:   "Indian",
+      country:       "India",
+      loginEmail:    u.email,
+      personalEmail: u.email,
+      ssRole:        u.role_display || "Employee",
+      portalAccess:  "enabled",
+      mobileNumber:  u.phone,
+    },
+    tables: {},
+  };
+}

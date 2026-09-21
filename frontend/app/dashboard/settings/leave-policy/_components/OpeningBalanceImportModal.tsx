@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { downloadBlobFile } from "@/lib/downloadFile";
+import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import type {
   ImportPreviewRow,
@@ -41,7 +42,7 @@ function downloadErrorReportCsv(csv: string) {
 
 function fmtDate(d: string | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 export default function OpeningBalanceImportModal({ onClose, onSuccess }: Props) {

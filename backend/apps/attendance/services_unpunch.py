@@ -23,6 +23,8 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from core.date_utils import format_date_display
+
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
@@ -266,7 +268,7 @@ def _deliver(employee, target_date: date) -> None:
             template_name='attendance_missing_clockout',
             context={
                 'employee_name': getattr(employee, 'full_name', None) or employee.email,
-                'date_display':  target_date.strftime('%A, %d %B %Y'),
+                'date_display':  f"{target_date.strftime('%A')}, {format_date_display(target_date)}",
                 'subject':       subject,
                 'message':       message,
                 'company_name':  company.company_name if company else '',

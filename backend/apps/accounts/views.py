@@ -34,7 +34,7 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, StreamingHttpResponse
 from django.db.models.deletion import ProtectedError
-from django.db.models import Count, F, Max, Q
+from django.db.models import Count, Exists, F, Max, OuterRef, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -68,6 +68,7 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSettings,
+    HireAction,
     JobTemplate,
     OnboardingFieldConfig,
     OnboardingSection,
@@ -266,6 +267,7 @@ def _employee_dict(user: User) -> dict:
         'marital_status':    p.marital_status    if p else '',
         'father_name':       p.father_name       if p else '',
         'blood_group':       p.blood_group       if p else '',
+        'nationality':       p.nationality       if p else '',
         'current_address':   p.current_address   if p else '',
         'current_address_line2': p.current_address_line2 if p else '',
         'current_village':   p.current_village   if p else '',
@@ -298,6 +300,35 @@ def _employee_dict(user: User) -> dict:
         'ifsc_code':           p.ifsc_code           if p else '',
         'bank_name':           p.bank_name           if p else '',
         'bank_branch_name':    p.bank_branch_name    if p else '',
+        # PAN is otherwise write-only (never surfaced on any read view) —
+        # this masked preview is always safe to include regardless of
+        # viewer permission; the real value only ever comes back from
+        # EmployeeRevealSensitiveView, gated by employees.view_sensitive.
+        'pan_masked': (
+            f'{p.pan_number[:5]}••••{p.pan_number[-1]}'
+            if (p and p.pan_number and len(p.pan_number) >= 6) else ''
+        ),
+        # Aadhaar/PF number/passport are the same PII tier as PAN — masked
+        # previews only here; real values come back exclusively from
+        # EmployeeRevealSensitiveView, gated by employees.view_sensitive.
+        'aadhaar_masked': (
+            f'XXXX XXXX {p.aadhaar_number[-4:]}'
+            if (p and p.aadhaar_number and len(p.aadhaar_number) >= 4) else ''
+        ),
+        'pf_masked': (
+            f'••••{p.pf_number[-4:]}'
+            if (p and p.pf_number and len(p.pf_number) >= 4) else ''
+        ),
+        # Statutory declarations — not PII-tier, safe to show plainly.
+        'pf_covered':  p.pf_covered  if p else True,
+        'esi_covered': p.esi_covered if p else False,
+        'is_disabled':                   p.is_disabled                   if p else False,
+        'disability_type':               p.disability_type               if p else '',
+        'disability_percentage':         p.disability_percentage         if p else None,
+        'disability_certificate_number': p.disability_certificate_number if p else '',
+        'is_international_worker':      p.is_international_worker      if p else False,
+        'international_worker_country': p.international_worker_country if p else '',
+        'passport_expiry': str(p.passport_expiry) if (p and p.passport_expiry) else '',
         # Emergency Contact
         'emergency_name':         p.emergency_name         if p else '',
         'emergency_relationship': p.emergency_relationship if p else '',
@@ -325,7 +356,33 @@ def _employee_dict(user: User) -> dict:
     # what this employee already holds, instead of always starting blank.
     # None for a Company Code Admin (no Position at all) or anyone with no
     # open Placement.
-    current_placement = user.placements.filter(effective_to__isnull=True).select_related('position').first()
+    current_placement = user.placements.filter(effective_to__isnull=True).select_related(
+        'position', 'position__org_unit', 'position__org_unit__parent',
+    ).first()
+    current_org_unit = current_placement.position.org_unit if current_placement else None
+
+    # The Employee Directory table shows the org unit's own name bold with
+    # its immediate parent unit as a gray subtext (e.g. "AI & ML" / "Software
+    # Services") — the real OrgUnit hierarchy, not a second copy of the same
+    # department string.
+    org_unit_name = current_org_unit.name if current_org_unit else None
+    org_unit_parent_name = current_org_unit.parent.name if (current_org_unit and current_org_unit.parent) else None
+
+    # The Employee Directory table shows "Last day dd/mm/yyyy" in place of a
+    # reporting manager for anyone on notice period. Deliberately matches
+    # EmployeeStatsView's own "notice_period" count below (SEP_APPROVED
+    # only) — a merely-requested-but-not-yet-approved separation isn't a
+    # confirmed exit yet, and showing a "Notice Period" row here for one
+    # while the KPI card doesn't count it would be a real inconsistency.
+    from apps.hrms.models import SEP_APPROVED
+
+    today = timezone.localdate()
+    active_separation = (
+        user.separation_requests
+        .filter(status=SEP_APPROVED, proposed_last_working_day__gte=today)
+        .order_by('proposed_last_working_day')
+        .first()
+    )
 
     result = {
         'id':             user.employee_id,
@@ -341,6 +398,7 @@ def _employee_dict(user: User) -> dict:
         'position_id':    str(current_placement.position_id) if current_placement else None,
         'org_unit_id':    str(current_placement.position.org_unit_id) if current_placement else None,
         'branch':         user.branch,
+        'work_location':  user.work_location,
         'employee_type':  user.employee_type,
         'role':           user.role.name         if user.role else '',
         'role_display':   user.role.display_name if user.role else '',
@@ -362,6 +420,11 @@ def _employee_dict(user: User) -> dict:
         'documents':          documents,
         'custom_file_fields': custom_file_fields,
         'onboarding_status':  user.onboarding_status,
+        'employment_status':  user.employment_status,
+        'confirmation_date':  user.confirmation_date.isoformat() if user.confirmation_date else None,
+        'last_working_day':   active_separation.proposed_last_working_day.isoformat() if active_separation else None,
+        'org_unit_name':        org_unit_name,
+        'org_unit_parent_name': org_unit_parent_name,
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
@@ -1349,6 +1412,112 @@ class OrgUnitDeactivateView(APIView):
             ip_address=get_client_ip(request),
         )
         return success(f'"{unit.name}" deactivated.', data=OrgUnitSerializer(unit).data)
+
+
+class OrgOverviewView(APIView):
+    """Read-only summary for the Organization landing page — KPI counts, a
+    per-unit overview table, and location list. Every number here is a real
+    query against OrgUnit/Position/Placement/Branch/CompanyGSTRegistration,
+    never hardcoded — this view exists purely to pre-aggregate what the
+    org-chart tree page (org-structure/units/, /positions/) already exposes
+    row-by-row, into the small set of figures a landing dashboard needs."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _has_perm(request.user, 'org_chart.view'):
+            return error('You do not have permission to view the org structure.', http_status=status.HTTP_403_FORBIDDEN)
+
+        from apps.branch.models import Branch
+
+        today = timezone.localdate()
+        current_placement_qs = Placement.objects.filter(
+            position=OuterRef('pk'), effective_from__lte=today,
+        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+
+        positions = Position.objects.filter(is_active=True).annotate(
+            _has_holder=Exists(current_placement_qs),
+        )
+        vacant_positions = positions.filter(_has_holder=False)
+
+        active_units = OrgUnit.objects.filter(is_active=True)
+        active_branches = Branch.objects.filter(status=Branch.STATUS_ACTIVE)
+
+        legal_entities_count = CompanyGSTRegistration.objects.count()
+        org_units_count = active_units.count()
+        departments_count = active_units.filter(is_department_level=True).count()
+        locations_count = active_branches.count()
+        open_positions_count = vacant_positions.count()
+        manager_vacancy_count = vacant_positions.filter(is_chief=True).count()
+
+        # One row per active unit, top-level units first then their direct
+        # children (grouped right under their parent) — matches how the
+        # tree itself reads, one level deep, without needing a full
+        # recursive walk for what's meant to be a quick-glance summary.
+        units = list(
+            active_units.select_related('parent')
+            .annotate(_child_count=Count('children', filter=Q(children__is_active=True), distinct=True))
+            .order_by('name')
+        )
+        by_parent: dict[str | None, list] = {}
+        for u in units:
+            by_parent.setdefault(str(u.parent_id) if u.parent_id else None, []).append(u)
+
+        rows = []
+        for unit in by_parent.get(None, []):
+            rows.append(unit)
+            rows.extend(by_parent.get(str(unit.pk), []))
+
+        unit_ids = [u.pk for u in rows]
+        unit_positions = list(
+            positions.filter(org_unit_id__in=unit_ids).values('org_unit_id', 'is_chief', '_has_holder')
+        )
+        per_unit: dict[str, dict] = {}
+        for p in unit_positions:
+            bucket = per_unit.setdefault(str(p['org_unit_id']), {'headcount': 0, 'vacant': 0, 'vacant_chief': 0})
+            if p['_has_holder']:
+                bucket['headcount'] += 1
+            else:
+                bucket['vacant'] += 1
+                if p['is_chief']:
+                    bucket['vacant_chief'] += 1
+
+        overview = []
+        for unit in rows:
+            stats = per_unit.get(str(unit.pk), {'headcount': 0, 'vacant': 0, 'vacant_chief': 0})
+            if stats['vacant_chief']:
+                status_kind, status_label = 'manager_vacancy', f"{stats['vacant_chief']} manager vacancy"
+            elif stats['vacant']:
+                status_kind, status_label = 'open_positions', f"{stats['vacant']} open positions"
+            else:
+                status_kind, status_label = 'headcount', f"{stats['headcount']} employees"
+
+            if unit.parent_id:
+                context_label = unit.parent.name
+            elif unit._child_count:
+                context_label = f"{unit._child_count} departments"
+            else:
+                context_label = unit.cost_center or '—'
+
+            overview.append({
+                'id': str(unit.pk),
+                'name': unit.name,
+                'context_label': context_label,
+                'status_kind': status_kind,
+                'status_label': status_label,
+            })
+
+        return success('Organization overview retrieved.', data={
+            'legal_entities': {'count': legal_entities_count},
+            'org_units': {'count': org_units_count},
+            'departments': {'count': departments_count, 'locations_count': locations_count},
+            'open_positions': {'count': open_positions_count, 'manager_vacancy_count': manager_vacancy_count},
+            'locations': list(active_branches.order_by('branch_name').values_list('branch_name', flat=True)),
+            'overview_rows': overview,
+            'headcount_by_unit': [
+                {'name': u.name, 'headcount': per_unit.get(str(u.pk), {}).get('headcount', 0)}
+                for u in by_parent.get(None, [])
+            ],
+        })
 
 
 def _parse_as_of(request):
@@ -3128,18 +3297,46 @@ class EmployeeListCreateView(APIView):
                 Q(employee_id__icontains=search)
             )
         if dept:
-            qs = qs.filter(department=dept)
+            # Matches by the real OrgUnit an employee currently holds via
+            # Placement (what the dropdown is actually built from — see
+            # EmployeeStatsView.department_names), OR the legacy `department`
+            # string for anyone with no Position/Placement at all.
+            qs = qs.filter(
+                Q(department=dept) |
+                Q(placements__effective_to__isnull=True, placements__position__org_unit__name=dept)
+            ).distinct()
         if branch_param:
             qs = qs.filter(branch=branch_param)
         if status_param:
+            # Mirrors the same "Notice Period" definition used everywhere
+            # else (EmployeeStatsView, _employee_dict) — an approved,
+            # not-yet-completed separation. Filtering active/probation
+            # excludes anyone on notice period, matching the table row's own
+            # display precedence (a notice-period row shows that pill
+            # instead of Active/Probation, so the filters stay mutually
+            # exclusive with what's actually shown).
+            from apps.hrms.models import SEP_APPROVED
+            today = timezone.localdate()
+            notice_period_q = Q(
+                separation_requests__status=SEP_APPROVED,
+                separation_requests__proposed_last_working_day__gte=today,
+            )
             if status_param == 'inactive':
                 qs = qs.filter(is_active=False)
             elif status_param == 'active':
-                qs = qs.filter(is_active=True, must_change_password=False)
+                qs = qs.filter(
+                    is_active=True, must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
+                ).exclude(notice_period_q)
             elif status_param == 'onboarding':
                 qs = qs.filter(is_active=True, must_change_password=True)
+            elif status_param == 'probation':
+                qs = qs.filter(
+                    is_active=True, must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_PROBATION,
+                ).exclude(notice_period_q)
+            elif status_param == 'notice_period':
+                qs = qs.filter(is_active=True).filter(notice_period_q).distinct()
             else:
-                return error('status must be one of: active, onboarding, inactive.')
+                return error('status must be one of: active, onboarding, probation, notice_period, inactive.')
 
         # Used to check "does anyone currently report to this person, or have
         # them as HR" before a caller re-roles/re-branches them elsewhere —
@@ -3519,22 +3716,69 @@ class EmployeeStatsView(APIView):
         branch_names = list(
             base_qs.exclude(branch='').values_list('branch', flat=True).distinct().order_by('branch')
         )
-        department_names = list(
-            base_qs.exclude(department='').values_list('department', flat=True).distinct().order_by('department')
+        # The legacy `department` string is blank for anyone hired onto a
+        # real Position (assign_position() only back-fills it when the
+        # Position's OrgUnit chain has an is_department_level ancestor,
+        # which this tenant's org structure doesn't use) — so the dropdown
+        # must be built from the real OrgUnit each employee currently holds
+        # via Placement, not that mostly-empty field. Legacy `department`
+        # values are still unioned in, for any employee placed the old way
+        # (no Position/Placement at all) who'd otherwise disappear from the
+        # filter entirely.
+        org_unit_names = set(
+            Placement.objects.filter(employee__in=base_qs, effective_to__isnull=True)
+            .exclude(position__org_unit__isnull=True)
+            .values_list('position__org_unit__name', flat=True)
         )
+        legacy_department_names = set(base_qs.exclude(department='').values_list('department', flat=True))
+        department_names = sorted(org_unit_names | legacy_department_names)
 
         qs = base_qs
         branch_filter = request.query_params.get('branch', '').strip()
         if branch_filter and branch_filter != 'all':
             qs = qs.filter(branch=branch_filter)
 
+        from datetime import date
+        from apps.hrms.models import SeparationRequest, SEP_APPROVED
+
+        today = date.today()
+        active_qs = qs.filter(is_active=True)
+        # "Onboarding / Probation" — either still going through the wizard
+        # (must_change_password, same signal EmployeeListCreateView.get()'s
+        # own status filter uses) or already onboarded but not yet
+        # confirmed (employment_status='probation', see the Confirmation
+        # action — apps/accounts/views.py:EmployeeConfirmView).
+        onboarding_or_probation_qs = active_qs.filter(
+            Q(must_change_password=True) | Q(employment_status=User.EMPLOYMENT_STATUS_PROBATION)
+        )
+        notice_period_count = active_qs.filter(
+            separation_requests__status=SEP_APPROVED,
+            separation_requests__proposed_last_working_day__gte=today,
+        ).distinct().count()
+        new_this_month = active_qs.filter(
+            date_of_joining__year=today.year, date_of_joining__month=today.month,
+        ).count()
+
+        # Same real-OrgUnit source as department_names above, scoped to the
+        # branch-filtered qs instead of base_qs for the "TOTAL HEADCOUNT —
+        # across N org units" caption.
+        departments_count = len(set(
+            Placement.objects.filter(employee__in=qs, effective_to__isnull=True)
+            .exclude(position__org_unit__isnull=True)
+            .values_list('position__org_unit_id', flat=True)
+        ) | set(qs.exclude(department='').values_list('department', flat=True)))
+
         return success('Employee statistics retrieved.', data={
             'total':             qs.count(),
             'active':            qs.filter(is_active=True, must_change_password=False).count(),
             'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
-            'departments':       qs.exclude(department='').values('department').distinct().count(),
+            'departments':       departments_count,
             'branch_names':      branch_names,
             'department_names':  department_names,
+            'new_this_month':          new_this_month,
+            'onboarding_or_probation': onboarding_or_probation_qs.count(),
+            'needs_reporting_manager': onboarding_or_probation_qs.filter(reporting_manager__isnull=True).count(),
+            'notice_period':           notice_period_count,
         })
 
 
@@ -3607,6 +3851,22 @@ _PROFILE_FIELD_KEYS = frozenset({
 })
 
 
+def _mask_bank_fields(data: dict) -> dict:
+    """Masks profile.account_number/profile.ifsc_code in place (e.g.
+    '••••7734') — used when one user views another's record without
+    employees.view_sensitive. Never applied to a user's own profile view or
+    to the response of an edit they just performed themselves (see
+    EmployeeDetailView.get()'s call site) — those legitimately need the real
+    values. Bank fields live under the nested 'profile' dict, not top-level
+    (see _employee_dict()'s profile_data/result split)."""
+    profile = data.get('profile') or {}
+    acct = profile.get('account_number') or ''
+    ifsc = profile.get('ifsc_code') or ''
+    profile['account_number'] = f'••••{acct[-4:]}' if len(acct) >= 4 else ('••••' if acct else '')
+    profile['ifsc_code'] = '•' * len(ifsc) if ifsc else ''
+    return data
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3619,7 +3879,13 @@ class EmployeeDetailView(APIView):
         auto_changed = _auto_assign_managers(employee)
         if auto_changed:
             employee.save(update_fields=auto_changed + ['updated_at'])
-        return success('Employee retrieved.', data=_employee_dict(employee))
+        data = _employee_dict(employee)
+        # Bank details are only masked when viewing SOMEONE ELSE's record
+        # without employees.view_sensitive — self-view always sees the real
+        # values, matching every other self-service surface in this app.
+        if employee.id != request.user.id and not _has_perm(request.user, 'employees.view_sensitive'):
+            data = _mask_bank_fields(data)
+        return success('Employee retrieved.', data=data)
 
     def put(self, request, employee_id: str):
         if not _has_perm(request.user, 'employees.edit'):
@@ -4035,6 +4301,58 @@ class EmployeeDetailView(APIView):
         return self.put(request, employee_id)
 
 
+class EmployeeConfirmView(APIView):
+    """POST /employees/<employee_id>/confirm/ — the Confirmation action
+    (probation -> confirmed). A one-time flip, not a dated/effective-ranged
+    record like Promotion/Salary — so it's logged via the existing generic
+    AuditLog rather than a new dedicated history model (mirrors
+    EmployeeRevealSensitiveView's own use of AuditLog for a similarly
+    one-shot event)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, employee_id: str):
+        if not _has_perm(request.user, 'employees.confirm'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if employee.employment_status == User.EMPLOYMENT_STATUS_CONFIRMED:
+            return error('This employee is already confirmed.')
+
+        effective_date_raw = (request.data.get('effective_date') or '').strip()
+        if effective_date_raw:
+            try:
+                effective_date = datetime.strptime(effective_date_raw, '%Y-%m-%d').date()
+            except ValueError:
+                return error('effective_date must be in YYYY-MM-DD format.')
+        else:
+            effective_date = timezone.now().date()
+        remarks = (request.data.get('remarks') or '').strip()
+
+        employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
+        employee.confirmation_date = effective_date
+        employee.save(update_fields=['employment_status', 'confirmation_date', 'updated_at'])
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'employee_confirmed',
+            module     = 'employees',
+            object_id  = str(employee.id),
+            changes    = {
+                'employee_id':       employee.employee_id,
+                'full_name':         employee.full_name,
+                'confirmation_date': effective_date.isoformat(),
+                'remarks':           remarks,
+            },
+            branch     = employee.branch,
+            ip_address = get_client_ip(request),
+        )
+
+        return success('Employee confirmed successfully.', data=_employee_dict(employee))
+
+
 class EmployeePromotionHistoryView(APIView):
     """GET /employees/<employee_id>/promotions/ — persisted promotion history
     for one employee (Employee > Promotion tab's history table). Read-only;
@@ -4079,6 +4397,132 @@ class EmployeePromotionHistoryView(APIView):
         return success('Promotion history retrieved.', data=data)
 
 
+class EmployeeActionHistoryView(APIView):
+    """GET /employees/<employee_id>/action-history/ — a real, unified
+    lifecycle timeline for the Employee Drawer's "Action History" section:
+    the original Hire (from the two-stage Hire flow's HireAction record
+    when one exists — bulk-imported/directly-created employees have none,
+    so that row falls back to their own date_of_joining/designation
+    instead of inventing a reason) followed by every real PromotionRecord,
+    in chronological order. Only the last row is marked "Current"."""
+
+    permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _current_status_display(employee) -> str:
+        """Same Active/Onboarding/Notice Period/Exited definition the
+        Employee Directory table and EmployeeStatsView already use —
+        deliberately not User.onboarding_status (the hiring *wizard's* own
+        draft/submitted/complete progress, a different concept entirely)."""
+        from apps.hrms.models import SEP_APPROVED
+
+        if not employee.is_active:
+            return 'Exited'
+        if employee.must_change_password:
+            return 'Onboarding'
+        today = timezone.localdate()
+        on_notice = employee.separation_requests.filter(
+            status=SEP_APPROVED, proposed_last_working_day__gte=today,
+        ).exists()
+        return 'Notice Period' if on_notice else 'Active'
+
+    def get(self, request, employee_id: str):
+        is_self = request.user.employee_id == employee_id
+        if not is_self and not _has_perm(request.user, 'employees.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or (not is_self and _employee_out_of_branch_scope(request.user, employee)):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        rows = []
+        hire_action = (
+            HireAction.objects.filter(created_employee=employee)
+            .select_related('position', 'position__org_unit')
+            .first()
+        )
+        if hire_action:
+            rows.append({
+                'action_type':     'Hire',
+                'reason_display':  hire_action.get_reason_display(),
+                'position_title':  hire_action.position.title,
+                'org_unit_name':   hire_action.position.org_unit.name,
+                'status_display':  self._current_status_display(employee),
+                'effective_from':  str(hire_action.effective_from),
+            })
+        elif employee.date_of_joining:
+            current_placement = employee.placements.filter(effective_to__isnull=True).select_related(
+                'position', 'position__org_unit',
+            ).first()
+            rows.append({
+                'action_type':     'Hire',
+                'reason_display':  '',
+                'position_title':  current_placement.position.title if current_placement else employee.designation,
+                'org_unit_name':   current_placement.position.org_unit.name if current_placement else employee.department,
+                'status_display':  self._current_status_display(employee),
+                'effective_from':  str(employee.date_of_joining),
+            })
+
+        for promo in PromotionRecord.objects.filter(employee=employee).order_by('effective_date'):
+            rows.append({
+                'action_type':     'Promotion',
+                'reason_display':  f'{promo.previous_designation} → {promo.new_designation}',
+                'position_title':  promo.new_designation,
+                'org_unit_name':   '',
+                'status_display':  '',
+                'effective_from':  str(promo.effective_date),
+            })
+
+        for i, row in enumerate(rows):
+            row['is_current'] = (i == len(rows) - 1)
+            row['effective_to'] = '9999-12-31' if row['is_current'] else rows[i + 1]['effective_from']
+
+        return success('Action history retrieved.', data=rows)
+
+
+class EmployeeRevealSensitiveView(APIView):
+    """POST /employees/<employee_id>/reveal-sensitive/ — returns unmasked
+    PAN/Aadhaar/bank details for one employee. The employee list/detail
+    surfaces show these fields masked by default; this is the only path
+    that returns the real values, gated by employees.view_sensitive
+    (distinct from employees.view, which only lets you see the record at
+    all) and logged to AuditLog every time, matching how every other
+    reveal-worthy action in this app is audited (see branch/views.py)."""
+
+    permission_classes = [IsAuthenticated]
+
+    _FIELD_MAP = {
+        'pan_number':          'pan_number',
+        'name_as_per_aadhar':  'name_as_per_aadhar',
+        'aadhaar_number':      'aadhaar_number',
+        'account_number':      'account_number',
+        'ifsc_code':           'ifsc_code',
+        'pf_number':           'pf_number',
+        'passport_number':     'passport_number',
+    }
+
+    def post(self, request, employee_id: str):
+        if not _has_perm(request.user, 'employees.view_sensitive'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        requested = [f for f in (request.data.get('fields') or []) if f in self._FIELD_MAP]
+        if not requested:
+            return error('No valid fields requested.')
+
+        profile = getattr(employee, 'profile', None)
+        data = {f: (getattr(profile, self._FIELD_MAP[f], '') or '') if profile else '' for f in requested}
+
+        AuditLog.objects.create(
+            user=request.user, action='sensitive_reveal', module='employees',
+            object_id=str(employee.id),
+            changes={'fields': requested},
+            ip_address=get_client_ip(request),
+        )
+        return success('Sensitive fields revealed.', data=data)
+
+
 class AuditLogListView(APIView):
     # audit.view, not settings.edit — this was requiring CanManageRoles
     # (settings.edit), but audit logs are read-only for every viewer (no
@@ -4108,9 +4552,17 @@ class AuditLogListView(APIView):
         search    = request.query_params.get('search', '').strip()
         date_from = request.query_params.get('date_from', '').strip()
         date_to   = request.query_params.get('date_to', '').strip()
+        object_id = request.query_params.get('object_id', '').strip()
 
         if module:
             qs = qs.filter(module=module)
+        if object_id:
+            # Per-record trail (e.g. Employee Detail's Audit Trail tab, keyed
+            # by the employee's UUID — see AuditLog.objects.create(...,
+            # object_id=str(employee.id), ...) at every employees-module call
+            # site). Always paired with module in practice by the caller, but
+            # not required here — object_id alone is still a meaningful filter.
+            qs = qs.filter(object_id=object_id)
         if action:
             qs = qs.filter(action__icontains=action)
         if search:
@@ -4221,6 +4673,8 @@ _NULLABLE_PROFILE_FIELDS = frozenset({
     'date_of_birth',
     'year_of_passing',
     'total_experience_years',
+    'disability_percentage',
+    'passport_expiry',
 })
 
 def _step_labels() -> dict:

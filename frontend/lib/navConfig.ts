@@ -9,6 +9,8 @@ export interface NavItem {
   path: string;
   permission: string | string[] | null; // null = always visible; string[] = any one grants access
   comingSoon?: boolean;       // true = non-clickable, shows "Soon" badge
+  /** Shorter label for the flat top-nav strip, where the sidebar's fuller label doesn't fit — falls back to `label` when unset. */
+  topNavLabel?: string;
 }
 export type NavEntry = NavSection | NavItem;
 
@@ -29,13 +31,14 @@ const ALL_NAV: NavEntry[] = [
 
   { section: "Workforce" },
   { id: "employees", icon: "ti-id-badge", label: "Employees", path: "/dashboard/employees", permission: "employees.view" },
-  { id: "org-chart", icon: "ti-sitemap", label: "Organization Management", path: "/dashboard/org-chart", permission: "org_chart.view" },
+  { id: "org-chart", icon: "ti-sitemap", label: "Organization Management", path: "/dashboard/org-chart", permission: "org_chart.view", topNavLabel: "Organization" },
+  { id: "performance", icon: "ti-target-arrow", label: "Performance", path: "/dashboard/performance", permission: "performance.manage_cycles" },
   { id: "branches", icon: "ti-building-skyscraper", label: "Company Codes", path: "/dashboard/branches", permission: "branches.view" },
 
   { section: "Time & Pay" },
   { id: "attendance", icon: "ti-clock", label: "Attendance", path: "/dashboard/attendance", permission: "attendance.create" },
   { id: "payroll", icon: "ti-report-money", label: "Payroll", path: "/dashboard/payroll", permission: "payroll.view" },
-  { id: "leave", icon: "ti-beach", label: "Leave Management", path: "/dashboard/leave", permission: "leave.view" },
+  { id: "leave", icon: "ti-beach", label: "Leave Management", path: "/dashboard/leave", permission: "leave.view", topNavLabel: "Leave" },
   { id: "work-from-home", icon: "ti-home-2", label: "Work From Home", path: "/dashboard/work-from-home", permission: "wfh.view" },
   { id: "expenses", icon: "ti-wallet", label: "Expenses", path: "/dashboard/expenses", permission: "expenses.view" },
 
@@ -47,6 +50,11 @@ const ALL_NAV: NavEntry[] = [
   { id: "documents", icon: "ti-folder", label: "Document Center", path: "/dashboard/documents", permission: "documents.view" },
 
   { section: "My" },
+  // Consolidates Profile/My Attendance/Leave/My Payslips/Document Center/
+  // Separation/My Requests into one tabbed shell — those entries below stay
+  // as-is (bookmarks/deep links keep working), this is an additional entry
+  // point, not a replacement.
+  { id: "ess", icon: "ti-apps", label: "My Workspace", path: "/dashboard/ess", permission: null },
   { id: "my-attendance", icon: "ti-clock-check", label: "My Attendance", path: "/dashboard/my-attendance", permission: null },
   { id: "my-requests", icon: "ti-list-check", label: "My Requests", path: "/dashboard/my-requests", permission: null },
   // permission: null, matching my-attendance above — the backend's MyPayslipsView
@@ -65,6 +73,7 @@ const ALL_NAV: NavEntry[] = [
   { id: "profile", icon: "ti-user-circle", label: "My Profile", path: "/dashboard/profile", permission: null },
 
   { section: "System" },
+  { id: "reports", icon: "ti-chart-bar", label: "Reports", path: "/dashboard/reports", permission: null },
   { id: "audit", icon: "ti-shield-check", label: "Audit Log", path: "/dashboard/settings/audit", permission: "audit.view" },
   { id: "email-logs", icon: "ti-mail", label: "Email Logs", path: "/dashboard/email-logs", permission: "email_logs.view" },
   { id: "settings", icon: "ti-settings", label: "Settings", path: "/dashboard/settings", permission: "settings.view" },

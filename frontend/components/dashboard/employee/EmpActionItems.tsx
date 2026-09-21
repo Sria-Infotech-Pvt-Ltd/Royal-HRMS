@@ -67,7 +67,7 @@ export default function EmpActionItems() {
       ) : (
         <div style={{ padding: "4px 0 8px" }}>
           {items.map((item, index) => {
-            const meta  = ACTION_ICON[item.action_type] ?? { icon: "ti-info-circle", color: "var(--primary)", bg: "rgba(30,78,140,0.10)" };
+            const meta  = ACTION_ICON[item.action_type] ?? { icon: "ti-info-circle", color: "var(--primary)", bg: "rgba(124,58,237,0.10)" };
             const done  = isDone(item);
             return (
               <Link

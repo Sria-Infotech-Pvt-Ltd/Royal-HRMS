@@ -13,8 +13,8 @@ export default function ComingSoon({ icon, title, description, features }: Props
         {/* Icon bubble */}
         <div style={{
           width: 80, height: 80, borderRadius: "50%",
-          background: "linear-gradient(135deg, rgba(30,78,140,0.10) 0%, rgba(30,78,140,0.06) 100%)",
-          border: "1.5px solid rgba(30,78,140,0.15)",
+          background: "linear-gradient(135deg, rgba(124,58,237,0.10) 0%, rgba(124,58,237,0.06) 100%)",
+          border: "1.5px solid rgba(124,58,237,0.15)",
           display: "flex", alignItems: "center", justifyContent: "center",
           margin: "0 auto 24px",
         }}>
@@ -25,9 +25,9 @@ export default function ComingSoon({ icon, title, description, features }: Props
         <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}>
           <span style={{
             fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-            background: "rgba(30,78,140,0.08)", color: "var(--primary)",
+            background: "rgba(124,58,237,0.08)", color: "var(--primary)",
             padding: "4px 12px", borderRadius: 20,
-            border: "1px solid rgba(30,78,140,0.18)",
+            border: "1px solid rgba(124,58,237,0.18)",
           }}>
             COMING SOON
           </span>

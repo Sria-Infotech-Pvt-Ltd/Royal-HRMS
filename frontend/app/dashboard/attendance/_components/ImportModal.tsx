@@ -173,7 +173,7 @@ export default function ImportModal({ onClose, onImported }: Props) {
               {/* Stat tiles */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
                 {[
-                  { label: "Total",      value: result.total_records, color: "var(--primary)",    bg: "rgba(30,78,140,0.06)"  },
+                  { label: "Total",      value: result.total_records, color: "var(--primary)",    bg: "rgba(124,58,237,0.06)"  },
                   { label: "Successful", value: result.successful,    color: "var(--success)",    bg: "rgba(34,197,94,0.08)"  },
                   { label: "Failed",     value: result.failed,        color: result.failed  > 0 ? "var(--error)"  : "var(--on-variant)", bg: result.failed  > 0 ? "rgba(239,68,68,0.08)"  : "var(--bg-low)" },
                   { label: "Skipped",    value: result.skipped,       color: result.skipped > 0 ? "var(--warn)"   : "var(--on-variant)", bg: result.skipped > 0 ? "rgba(234,179,8,0.08)"  : "var(--bg-low)" },

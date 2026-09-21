@@ -21,7 +21,7 @@ export default function TeamBirthdayCard() {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 20px" }}>
         <div style={{
           width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-          background: "rgba(14,124,134,0.12)", color: "var(--info)",
+          background: "rgba(37,99,235,0.12)", color: "var(--info)",
           display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
         }}>
           <i className="ti ti-cake" />

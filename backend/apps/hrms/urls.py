@@ -14,6 +14,8 @@ from .views import (
     ExpenseStatusListView,
     HolidayDetailView,
     HolidayListCreateView,
+    HRHelpRequestDetailView,
+    HRHelpRequestListCreateView,
     LeaveApprovalView,
     LeaveBalanceAdjustView,
     LeaveBalanceView,
@@ -128,4 +130,8 @@ urlpatterns = [
 
     # Separation — activity log
     path('separation/requests/<str:request_id>/activities/', SeparationActivityListView.as_view(), name='separation-activity-list'),
+
+    # HR Help
+    path('hr-help/requests/',            HRHelpRequestListCreateView.as_view(), name='hr-help-request-list'),
+    path('hr-help/requests/<uuid:pk>/',  HRHelpRequestDetailView.as_view(),     name='hr-help-request-detail'),
 ]

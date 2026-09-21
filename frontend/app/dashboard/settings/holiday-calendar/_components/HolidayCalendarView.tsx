@@ -41,47 +41,47 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
   const calMap = Object.fromEntries(holidays.map(h => [h.date, h]));
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="bg-[var(--surface)] rounded-2xl border border-[var(--outline-v)] shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
         <button onClick={() => onMonthChange(Math.max(0, calMonth - 1))} disabled={calMonth === 0}
-          className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 disabled:opacity-30 hover:border-blue-400 hover:text-blue-600 transition-colors">
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
           <i className="ti ti-chevron-left text-sm" />
         </button>
         <div className="text-center">
-          <div className="text-base font-bold text-gray-800">{MONTH_NAMES[calMonth]} {year}</div>
-          <div className="text-xs text-gray-400 mt-0.5">{holidays.length} holiday{holidays.length !== 1 ? "s" : ""} this month</div>
+          <div className="text-base font-bold text-[var(--on-bg)]">{MONTH_NAMES[calMonth]} {year}</div>
+          <div className="text-xs text-[var(--outline)] mt-0.5">{holidays.length} holiday{holidays.length !== 1 ? "s" : ""} this month</div>
         </div>
         <button onClick={() => onMonthChange(Math.min(11, calMonth + 1))} disabled={calMonth === 11}
-          className="w-8 h-8 flex items-center justify-center rounded-xl border border-gray-200 text-gray-500 disabled:opacity-30 hover:border-blue-400 hover:text-blue-600 transition-colors">
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-[var(--outline-v)] text-[var(--on-variant)] disabled:opacity-30 hover:border-[var(--info)] hover:text-[var(--info)] transition-colors">
           <i className="ti ti-chevron-right text-sm" />
         </button>
       </div>
 
-      <div className="grid grid-cols-7 border-b border-gray-100">
+      <div className="grid grid-cols-7 border-b border-[var(--outline-v)]">
         {DAY_SHORT.map(d => (
-          <div key={d} className={`py-2 text-center text-xs font-bold uppercase tracking-wider ${d === "Sun" ? "text-red-400" : "text-gray-400"}`}>{d}</div>
+          <div key={d} className={`py-2 text-center text-xs font-bold uppercase tracking-wider ${d === "Sun" ? "text-[var(--error)]" : "text-[var(--outline)]"}`}>{d}</div>
         ))}
       </div>
 
       <div>
         {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 border-b border-gray-50 last:border-b-0">
+          <div key={wi} className="grid grid-cols-7 border-b border-[var(--outline-v)] last:border-b-0">
             {week.map((day, di) => {
               const iso = day ? isoDate(year, calMonth, day) : "";
               const holiday = iso ? calMap[iso] : null;
               const isSun = di === 0;
               return (
-                <div key={di} className={`min-h-[80px] p-2 border-r border-gray-50 last:border-r-0 ${!day ? "bg-gray-50/50" : ""}`}>
+                <div key={di} className={`min-h-[80px] p-2 border-r border-[var(--outline-v)] last:border-r-0 ${!day ? "bg-[var(--bg-mid)]" : ""}`}>
                   {day && (
                     <>
-                      <span className={`text-xs font-semibold ${isSun ? "text-red-400" : "text-gray-600"} ${holiday ? "w-6 h-6 flex items-center justify-center rounded-full bg-blue-700 text-white text-xs" : ""}`}>
+                      <span className={`text-xs font-semibold ${isSun ? "text-[var(--error)]" : "text-[var(--on-variant)]"} ${holiday ? "w-6 h-6 flex items-center justify-center rounded-full bg-[var(--info)] text-white text-xs" : ""}`}>
                         {day}
                       </span>
                       {holiday && (
                         <div className={`mt-1 px-1.5 py-1 rounded text-xs font-medium leading-tight ${TYPE_STYLES[holiday.holiday_type].cal} cursor-pointer`}
                           onClick={() => onView(holiday)}>
                           <div className="truncate">{holiday.name}</div>
-                          {holiday.is_optional && <div className="text-purple-500 text-[10px]">Optional</div>}
+                          {holiday.is_optional && <div className="text-[var(--primary)] text-[10px]">Optional</div>}
                         </div>
                       )}
                     </>
@@ -94,16 +94,16 @@ export default function HolidayCalendarView({ year, calMonth, holidays, onMonthC
       </div>
 
       {holidays.length > 0 && (
-        <div className="border-t border-gray-100 px-5 py-4">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Holidays in {MONTH_NAMES[calMonth]}</div>
+        <div className="border-t border-[var(--outline-v)] px-5 py-4">
+          <div className="text-xs font-bold text-[var(--outline)] uppercase tracking-wider mb-3">Holidays in {MONTH_NAMES[calMonth]}</div>
           <div className="flex flex-col gap-2">
             {[...holidays].sort((a, b) => a.date.localeCompare(b.date)).map(h => (
               <div key={h.id} className="flex items-center gap-3 text-sm">
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${TYPE_STYLES[h.holiday_type].dot}`} />
-                <span className="font-semibold text-gray-700 w-[160px] truncate">{h.name}</span>
-                <span className="text-gray-400">{fmtDate(h.date)}</span>
+                <span className="font-semibold text-[var(--on-bg)] w-[160px] truncate">{h.name}</span>
+                <span className="text-[var(--outline)]">{fmtDate(h.date)}</span>
                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_STYLES[h.holiday_type].badge}`}>{h.holiday_type_display}</span>
-                {h.is_optional && <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">Optional</span>}
+                {h.is_optional && <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--primary-c)] text-[var(--primary)]">Optional</span>}
               </div>
             ))}
           </div>

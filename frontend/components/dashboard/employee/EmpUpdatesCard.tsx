@@ -3,9 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSharedAnnouncement, useBirthdaysToday } from "@/hooks/useEmployeeDashboard";
+import { formatDate } from "@/lib/formatDate";
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 function namesList(names: string[]): string {
@@ -41,7 +42,7 @@ export default function EmpUpdatesCard() {
             borderBottom: showBirthdays ? "1px solid var(--outline-v)" : undefined,
           }}
         >
-          <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(30,78,140,0.12)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(124,58,237,0.12)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
             <i className={announcement.is_pinned ? "ti ti-pin" : "ti ti-speakerphone"} />
           </div>
 
@@ -56,7 +57,7 @@ export default function EmpUpdatesCard() {
                 </span>
               )}
               {announcement.category && announcement.category !== "general" && (
-                <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 10, background: "rgba(30,78,140,0.12)", color: "var(--primary)" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 10, background: "rgba(124,58,237,0.12)", color: "var(--primary)" }}>
                   {announcement.category.charAt(0).toUpperCase() + announcement.category.slice(1)}
                 </span>
               )}
@@ -84,7 +85,7 @@ export default function EmpUpdatesCard() {
 
       {showBirthdays && (
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 20px" }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(14,124,134,0.12)", color: "var(--info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: "rgba(37,99,235,0.12)", color: "var(--info)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
             <i className="ti ti-cake" />
           </div>
 

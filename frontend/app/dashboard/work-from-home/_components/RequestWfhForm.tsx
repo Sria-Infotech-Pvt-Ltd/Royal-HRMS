@@ -6,6 +6,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { WorkFromHomeRequest, WFHSavedLocation } from "@/types/workFromHome";
+import { formatDate } from "@/lib/formatDate";
 
 interface Coords { latitude: number; longitude: number; accuracy: number | null }
 
@@ -13,7 +14,7 @@ const NEW_LOCATION = "__new__";
 
 function fmtDate(iso: string): string {
   if (!iso) return "";
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(iso + "T12:00:00");
 }
 
 const INPUT     = "w-full border border-[var(--outline-v)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--on-bg)] bg-[var(--surface)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-c)] placeholder:text-[var(--on-variant)]";

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
 
 interface Props {
@@ -17,12 +18,12 @@ interface PagedResponse<T> { results: T[]; count: number; }
 type SlipStatus = EmployeePayslip["status"];
 
 const STATUS_STYLE: Record<SlipStatus, { bg: string; text: string; label: string }> = {
-  draft:        { bg: "bg-gray-50",    text: "text-gray-600",    label: "Draft"        },
-  sent:         { bg: "bg-blue-50",    text: "text-blue-700",    label: "Dispatched"   },
-  acknowledged: { bg: "bg-indigo-50",  text: "text-indigo-700",  label: "Acknowledged" },
-  queried:      { bg: "bg-amber-50",   text: "text-amber-700",   label: "Queried"      },
+  draft:        { bg: "bg-[var(--bg-mid)]",    text: "text-[var(--on-variant)]",    label: "Draft"        },
+  sent:         { bg: "bg-[var(--info-c)]",    text: "text-[var(--info)]",    label: "Dispatched"   },
+  acknowledged: { bg: "bg-[var(--primary-c)]",  text: "text-[var(--primary)]",  label: "Acknowledged" },
+  queried:      { bg: "bg-[var(--warn-c)]",   text: "text-[var(--warn)]",   label: "Queried"      },
   resolved:     { bg: "bg-emerald-50", text: "text-emerald-700", label: "Resolved"     },
-  paid:         { bg: "bg-green-50",   text: "text-green-700",   label: "Paid"         },
+  paid:         { bg: "bg-[var(--success-c)]",   text: "text-[var(--success)]",   label: "Paid"         },
 };
 
 const fmt = (n: number | string) =>
@@ -99,7 +100,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
         {cycleDispatched && (
           <div className="alert alert-success" style={{ margin: "0", borderRadius: 0 }}>
             <i className="ti ti-circle-check" />
-            <span>All payslips dispatched. Employees have {cycle?.query_window_closes_at ? `until ${new Date(cycle.query_window_closes_at).toLocaleDateString("en-IN")}` : "the configured window"} to raise queries.</span>
+            <span>All payslips dispatched. Employees have {cycle?.query_window_closes_at ? `until ${formatDate(cycle.query_window_closes_at)}` : "the configured window"} to raise queries.</span>
           </div>
         )}
 

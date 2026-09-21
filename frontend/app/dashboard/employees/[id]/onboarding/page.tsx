@@ -14,6 +14,8 @@ import StepIndicator from "@/app/onboarding/_components/StepIndicator";
 import BasicDetailsCard, { type BasicDetails } from "@/app/onboarding/_components/BasicDetailsCard";
 import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
+import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_components/FamilyNominationStep";
+import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
 
 // HR/Admin-side onboarding wizard — fills in an employee's onboarding profile
 // on their behalf (walk-in hires, or anyone who can't complete it themselves).
@@ -46,17 +48,20 @@ const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 // index into the merged `steps` array below. Mirrors the identical split in
 // the self-service wizard (app/onboarding/page.tsx) — see its own comment
 // for the full reasoning.
-type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "education" | "experience" };
+type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "education" | "experience" | "family-nomination" | "assets" };
 
-// Sentinel step numbers -2/-3 for Education/Experience — same convention
-// as the self-service wizard's own BUILTIN_STEPS (see its comment for the
-// full reasoning): neither round-trips through /onboarding/step/<n>/.
+// Sentinel step numbers -2/-3/-4/-5 for Education/Experience/Family &
+// Nomination/Assets — same convention as the self-service wizard's own
+// BUILTIN_STEPS (see its comment for the full reasoning): none round-trip
+// through /onboarding/step/<n>/.
 const BUILTIN_STEPS: WizardStep[] = [
   { step: 0,  label: "Personal",          shortLabel: "Personal",   icon: "ti-user",          kind: "fields" },
   { step: -2, label: "Education",         shortLabel: "Education",  icon: "ti-school",        kind: "education" },
   { step: -3, label: "Experience",        shortLabel: "Experience", icon: "ti-briefcase",     kind: "experience" },
   { step: 2,  label: "Bank Details",      shortLabel: "Bank",       icon: "ti-building-bank", kind: "fields" },
   { step: 3,  label: "Emergency Contact", shortLabel: "Emergency",  icon: "ti-urgent",        kind: "fields" },
+  { step: -4, label: "Family & Nomination", shortLabel: "Family",   icon: "ti-users",         kind: "family-nomination" },
+  { step: -5, label: "Assets",            shortLabel: "Assets",     icon: "ti-device-laptop", kind: "assets" },
 ];
 const DOCUMENTS_STEP: WizardStep = { step: 4, label: "Documents", shortLabel: "Documents", icon: "ti-files", kind: "documents" };
 
@@ -113,7 +118,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   useEffect(() => {
     let highest = -1;
     for (let i = 0; i < steps.length; i++) {
-      const passes = steps[i].kind === "experience" || completedStepNumbers.includes(steps[i].step);
+      const passes = steps[i].kind === "experience" || steps[i].kind === "family-nomination" || steps[i].kind === "assets" || completedStepNumbers.includes(steps[i].step);
       if (!passes) break;
       highest = i;
     }
@@ -174,6 +179,24 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   const tempExperienceIdRef = useRef(0);
   const deletedExperienceIdsRef = useRef<Set<string>>(new Set());
 
+  // Family/Nominee/Asset — same bulk-reconciliation convention as
+  // Education/Experience above. Family is always saved before Nominees in
+  // saveFamilyNominationEntries() so a nominee referencing a not-yet-created
+  // (`temp-`) family member gets translated to the real id via idMap before
+  // it's sent — see that function's own comment.
+  const [familyEntries, setFamilyEntries] = useState<FamilyEntry[]>([]);
+  const [nomineeEntries, setNomineeEntries] = useState<NomineeEntry[]>([]);
+  const [familyNominationErr, setFamilyNominationErr] = useState<string | null>(null);
+  const tempFamilyIdRef = useRef(0);
+  const tempNomineeIdRef = useRef(0);
+  const deletedFamilyIdsRef = useRef<Set<string>>(new Set());
+  const deletedNomineeIdsRef = useRef<Set<string>>(new Set());
+
+  const [assetEntries, setAssetEntries] = useState<AssetEntry[]>([]);
+  const [assetErr, setAssetErr] = useState<string | null>(null);
+  const tempAssetIdRef = useRef(0);
+  const deletedAssetIdsRef = useRef<Set<string>>(new Set());
+
   // Total Experience (Years) is derived server-side from the experience
   // entries themselves (see backend's _compute_total_experience_years) —
   // refetched after every successful saveExperienceEntries() so the
@@ -216,6 +239,15 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     }).catch(() => {});
     clientApi.get<{ data: ExperienceEntry[] }>(API.onboarding.employees.experience(employeeUuid)).then(r => {
       setExperienceEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get<{ data: FamilyEntry[] }>(API.onboarding.employees.family(employeeUuid)).then(r => {
+      setFamilyEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get<{ data: NomineeEntry[] }>(API.onboarding.employees.nominees(employeeUuid)).then(r => {
+      setNomineeEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get<{ data: AssetEntry[] }>(API.onboarding.employees.assets(employeeUuid)).then(r => {
+      setAssetEntries(r.data?.data ?? []);
     }).catch(() => {});
     refetchTotalExperience();
   }, [employeeUuid, refetchTotalExperience]);
@@ -355,6 +387,160 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     }
   }, [experienceEntries, employeeUuid, refetchTotalExperience]);
 
+  function handleAddFamily() {
+    tempFamilyIdRef.current += 1;
+    setFamilyEntries(prev => [...prev, {
+      id: `temp-${tempFamilyIdRef.current}`,
+      name: "", relationship: "", date_of_birth: "", gender: "", blood_group: "", is_dependent: false,
+    }]);
+  }
+
+  function handleFamilyFieldChange(id: string, field: keyof FamilyEntry, value: string | boolean) {
+    setFamilyEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+
+  function handleRemoveFamily(id: string) {
+    if (!id.startsWith("temp-")) deletedFamilyIdsRef.current.add(id);
+    setFamilyEntries(prev => prev.filter(e => e.id !== id));
+    // A nominee pointing at the removed family member no longer has anyone
+    // to reference — drop it locally too, same as the self-service wizard.
+    setNomineeEntries(prev => prev.filter(n => n.family_member !== id));
+  }
+
+  function handleAddNominee() {
+    tempNomineeIdRef.current += 1;
+    setNomineeEntries(prev => [...prev, {
+      id: `temp-${tempNomineeIdRef.current}`,
+      family_member: "", scheme: "epf_eps", share_percentage: "",
+    }]);
+  }
+
+  function handleNomineeFieldChange(id: string, field: keyof NomineeEntry, value: string) {
+    setNomineeEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+
+  function handleRemoveNominee(id: string) {
+    if (!id.startsWith("temp-")) deletedNomineeIdsRef.current.add(id);
+    setNomineeEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  // Reconciles Family, then Nominees, in one go — family MUST be saved
+  // first since a nominee references a family member by id, and a
+  // not-yet-created family entry only has a temp- id until this save
+  // returns. idMap translates temp- family ids to the real ids the family
+  // save just returned before nominee payloads are sent.
+  const saveFamilyNominationEntries = useCallback(async (): Promise<boolean> => {
+    if (!familyEntries.every(e => e.name.trim())) {
+      setFamilyNominationErr("Name is required for every family member entry.");
+      return false;
+    }
+    if (!nomineeEntries.every(e => e.family_member)) {
+      setFamilyNominationErr("Select a family member for every nominee entry.");
+      return false;
+    }
+    setFamilyNominationErr(null);
+    try {
+      for (const id of deletedFamilyIdsRef.current) {
+        await clientApi.delete(API.onboarding.employees.familyDetail(employeeUuid, id));
+      }
+      deletedFamilyIdsRef.current.clear();
+
+      const idMap = new Map<string, string>();
+      const savedFamily: FamilyEntry[] = [];
+      for (const entry of familyEntries) {
+        const payload = {
+          name: entry.name.trim(),
+          relationship: entry.relationship,
+          date_of_birth: entry.date_of_birth || null,
+          gender: entry.gender,
+          blood_group: entry.blood_group,
+          is_dependent: entry.is_dependent,
+        };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: FamilyEntry }>(API.onboarding.employees.family(employeeUuid), payload)
+          : await clientApi.patch<{ data: FamilyEntry }>(API.onboarding.employees.familyDetail(employeeUuid, entry.id), payload);
+        const saved = res.data?.data ?? entry;
+        if (isNew) idMap.set(entry.id, saved.id);
+        savedFamily.push(saved);
+      }
+      setFamilyEntries(savedFamily);
+
+      for (const id of deletedNomineeIdsRef.current) {
+        await clientApi.delete(API.onboarding.employees.nomineeDetail(employeeUuid, id));
+      }
+      deletedNomineeIdsRef.current.clear();
+
+      const savedNominees: NomineeEntry[] = [];
+      for (const entry of nomineeEntries) {
+        const realFamilyId = idMap.get(entry.family_member) ?? entry.family_member;
+        const payload = {
+          family_member: realFamilyId,
+          scheme: entry.scheme,
+          share_percentage: entry.share_percentage || "0",
+        };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: NomineeEntry }>(API.onboarding.employees.nominees(employeeUuid), payload)
+          : await clientApi.patch<{ data: NomineeEntry }>(API.onboarding.employees.nomineeDetail(employeeUuid, entry.id), payload);
+        savedNominees.push(res.data?.data ?? { ...entry, family_member: realFamilyId });
+      }
+      setNomineeEntries(savedNominees);
+      return true;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setFamilyNominationErr(msg ?? "Failed to save. Please try again.");
+      return false;
+    }
+  }, [familyEntries, nomineeEntries, employeeUuid]);
+
+  function handleAddAsset() {
+    tempAssetIdRef.current += 1;
+    setAssetEntries(prev => [...prev, {
+      id: `temp-${tempAssetIdRef.current}`,
+      asset_type: "", tag_number: "", condition: "new",
+    }]);
+  }
+
+  function handleAssetFieldChange(id: string, field: keyof AssetEntry, value: string) {
+    setAssetEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+
+  function handleRemoveAsset(id: string) {
+    if (!id.startsWith("temp-")) deletedAssetIdsRef.current.add(id);
+    setAssetEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  const saveAssetEntries = useCallback(async (): Promise<boolean> => {
+    if (!assetEntries.every(e => e.asset_type)) {
+      setAssetErr("Select an asset type for every entry.");
+      return false;
+    }
+    setAssetErr(null);
+    try {
+      for (const id of deletedAssetIdsRef.current) {
+        await clientApi.delete(API.onboarding.employees.assetDetail(employeeUuid, id));
+      }
+      deletedAssetIdsRef.current.clear();
+
+      const saved: AssetEntry[] = [];
+      for (const entry of assetEntries) {
+        const payload = { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: AssetEntry }>(API.onboarding.employees.assets(employeeUuid), payload)
+          : await clientApi.patch<{ data: AssetEntry }>(API.onboarding.employees.assetDetail(employeeUuid, entry.id), payload);
+        saved.push(res.data?.data ?? entry);
+      }
+      setAssetEntries(saved);
+      return true;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setAssetErr(msg ?? "Failed to save. Please try again.");
+      return false;
+    }
+  }, [assetEntries, employeeUuid]);
+
   function set(field: keyof ProfileForm, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
   }
@@ -374,6 +560,8 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     // the same message twice on screen.
     if (currentStep.kind === "education") return saveEducationEntries();
     if (currentStep.kind === "experience") return saveExperienceEntries();
+    if (currentStep.kind === "family-nomination") return saveFamilyNominationEntries();
+    if (currentStep.kind === "assets") return saveAssetEntries();
     if (currentStep.kind !== "fields") return true;
 
     const stepConfigs = fieldConfig[String(currentStep.step)] ?? [];
@@ -400,7 +588,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
     } finally {
       setSaving(false);
     }
-  }, [tab, steps, fieldConfig, customValues, form, employeeUuid, saveEducationEntries, saveExperienceEntries]);
+  }, [tab, steps, fieldConfig, customValues, form, employeeUuid, saveEducationEntries, saveExperienceEntries, saveFamilyNominationEntries, saveAssetEntries]);
 
   async function handlePanCardUpload(file: File) {
     const value = form.pan_number.trim().toUpperCase();
@@ -628,6 +816,28 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
             onFieldChange={handleExperienceFieldChange}
             onRemove={handleRemoveExperience}
             error={experienceErr}
+          />
+        )}
+        {steps[tab].kind === "family-nomination" && (
+          <FamilyNominationStep
+            familyEntries={familyEntries}
+            nomineeEntries={nomineeEntries}
+            onAddFamily={handleAddFamily}
+            onFamilyFieldChange={handleFamilyFieldChange}
+            onRemoveFamily={handleRemoveFamily}
+            onAddNominee={handleAddNominee}
+            onNomineeFieldChange={handleNomineeFieldChange}
+            onRemoveNominee={handleRemoveNominee}
+            error={familyNominationErr}
+          />
+        )}
+        {steps[tab].kind === "assets" && (
+          <AssetsList
+            entries={assetEntries}
+            onAdd={handleAddAsset}
+            onFieldChange={handleAssetFieldChange}
+            onRemove={handleRemoveAsset}
+            error={assetErr}
           />
         )}
 

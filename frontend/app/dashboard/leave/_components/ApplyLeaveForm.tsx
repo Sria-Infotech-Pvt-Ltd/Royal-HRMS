@@ -307,7 +307,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               {!preview && workDays > 0 && (
                 <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
                   overLimit ? "bg-red-50 border-red-200" : "border-[var(--primary-c)]"].join(" ")}
-                  style={overLimit ? {} : { background: "rgba(30,78,140,0.05)" }}>
+                  style={overLimit ? {} : { background: "rgba(124,58,237,0.05)" }}>
                   <div className="flex items-center gap-2">
                     <i className={`ti ${overLimit ? "ti-alert-triangle text-red-500" : "ti-calendar-check"} text-sm`}
                       style={!overLimit ? { color: "var(--primary)" } : {}} />
@@ -440,7 +440,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                 </div>
               ) : (
                 <label className={["flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl py-7 px-4 cursor-pointer transition-all",
-                  errors.doc ? "border-red-300 bg-red-50" : "border-[var(--outline-v)] bg-[var(--bg-low)] hover:border-[var(--primary)] hover:bg-[rgba(30,78,140,0.06)]"].join(" ")}>
+                  errors.doc ? "border-red-300 bg-red-50" : "border-[var(--outline-v)] bg-[var(--bg-low)] hover:border-[var(--primary)] hover:bg-[rgba(124,58,237,0.06)]"].join(" ")}>
                   <i className="ti ti-cloud-upload text-[var(--on-variant)] text-2xl" />
                   <div className="text-center">
                     <p className="text-sm font-medium text-[var(--on-bg)]">Click to upload or drag & drop</p>

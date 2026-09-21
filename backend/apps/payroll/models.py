@@ -57,6 +57,17 @@ class PayrollSettings(models.Model):
         max_digits=5, decimal_places=2, default=0.50,
         help_text='EPF administrative / inspection charges %',
     )
+    # Gratuity provisioning is not otherwise computed anywhere in payroll
+    # today (the only existing gratuity figure, SeparationSettlement.gratuity_amount,
+    # is a manual one-off entered at separation, not an accrual rate) — this
+    # backs the Hire wizard's CTC-preview "Gratuity Provision" row via the new
+    # estimate_salary_breakdown() service, following the same configurable-
+    # rate convention as eps_rate/edli_rate above rather than hardcoding the
+    # standard 4.81%-of-Basic+DA formula inline.
+    gratuity_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=4.81,
+        help_text='Employer gratuity provision % of Basic+DA (standard formula: 15/26/12)',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -190,10 +201,18 @@ class SalaryComponent(models.Model):
     CALC_PCT_CTC = 'percentage_of_ctc'
     CALC_PCT_BASIC = 'percentage_of_basic'
     CALC_FIXED = 'fixed'
+    # Opt-in HRA rule that ignores `value` and instead computes 50% of Basic
+    # for employees in a metro branch (Branch.is_metro), 40% otherwise — the
+    # standard Income Tax HRA exemption split. A structure that already has
+    # its own fixed HRA % (CALC_PCT_BASIC) keeps working unchanged; this is
+    # only used when the structure's HRA component is deliberately switched
+    # to this calculation type.
+    CALC_METRO_HRA = 'metro_hra_of_basic'
     CALCULATION_TYPE_CHOICES = [
         (CALC_PCT_CTC, '% of CTC'),
         (CALC_PCT_BASIC, '% of Basic'),
         (CALC_FIXED, 'Fixed Amount'),
+        (CALC_METRO_HRA, 'Metro HRA (50%/40% of Basic)'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -805,4 +824,68 @@ class SalaryTransferItem(models.Model):
 
     def __str__(self):
         return f'{self.employee.full_name} — ₹{self.amount}'
+
+
+# ─── Employee Tax Declaration ───────────────────────────────────────────────────
+
+class EmployeeTaxDeclaration(models.Model):
+    """An employee's once-per-financial-year tax regime choice plus declared
+    investment amounts (Section 80C/80D/etc, stored as a flexible
+    section->amount JSON blob rather than one column per section — the same
+    convention LeavePolicy's own applicable_* JSON fields already use in this
+    codebase, and section lists change more often than a migration should be
+    needed for).
+
+    Deliberately does NOT compute actual income tax (old vs new regime
+    slabs, HRA exemption interplay, 80C/80D limits) — that's a payroll-engine
+    feature on its own, out of scope here; this only records what the
+    employee declared and whether HR has reviewed it. Approval doesn't feed
+    into any real payslip computation (no such computation exists yet) — it
+    is a review/acknowledgement step, mirroring the effective-dated
+    "submit -> HR reviews" shape already used by Promotion/Salary/
+    Confirmation, without inventing a new workflow pattern."""
+
+    REGIME_OLD = 'old'
+    REGIME_NEW = 'new'
+    REGIME_CHOICES = [
+        (REGIME_OLD, 'Old Regime'),
+        (REGIME_NEW, 'New Regime (115BAC)'),
+    ]
+
+    STATUS_DRAFT     = 'draft'
+    STATUS_SUBMITTED = 'submitted'
+    STATUS_APPROVED  = 'approved'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT,     'Draft'),
+        (STATUS_SUBMITTED, 'Submitted'),
+        (STATUS_APPROVED,  'Approved'),
+    ]
+
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee            = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tax_declarations',
+    )
+    # The calendar year the financial year starts in (e.g. 2026 for FY 2026-27)
+    # — same integer-year convention LeaveBalance already uses for its own
+    # per-year rows, rather than a free-text "2026-27" string.
+    financial_year_start = models.PositiveIntegerField()
+    tax_regime          = models.CharField(max_length=10, choices=REGIME_CHOICES, default=REGIME_NEW)
+    declared_investments = models.JSONField(default=dict, blank=True)
+    status              = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    submitted_at        = models.DateTimeField(null=True, blank=True)
+    approved_at         = models.DateTimeField(null=True, blank=True)
+    approved_by         = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tax_declarations_approved',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table        = 'payroll_employee_tax_declarations'
+        unique_together = [('employee', 'financial_year_start')]
+        ordering        = ['-financial_year_start']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — FY {self.financial_year_start}-{str(self.financial_year_start + 1)[2:]} ({self.tax_regime})'
 

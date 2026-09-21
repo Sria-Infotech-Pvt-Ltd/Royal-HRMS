@@ -1464,6 +1464,9 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'account_holder_name', 'account_type',
             'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
             'uan_number', 'esi_number', 'name_as_per_aadhar', 'pan_number',
+            'aadhaar_number', 'pf_covered', 'pf_number', 'esi_covered',
+            'is_disabled', 'disability_type', 'disability_percentage', 'disability_certificate_number',
+            'is_international_worker', 'international_worker_country', 'passport_number', 'passport_expiry',
             'custom_field_values',
             'updated_at',
         ]
@@ -2063,7 +2066,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'id', 'full_name', 'email', 'phone', 'employee_id',
             'department', 'designation', 'branch', 'employee_type',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
-            'onboarding_status', 'assessment_status',
+            'work_location', 'onboarding_status', 'assessment_status',
             'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',
         ]

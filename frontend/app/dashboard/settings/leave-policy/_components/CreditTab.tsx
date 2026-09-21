@@ -35,7 +35,7 @@ export default function CreditTab() {
   }
 
   return (
-    <div className="card mb-20" style={{ border: "1.5px solid rgba(30,78,140,0.25)", background: "rgba(30,78,140,0.03)" }}>
+    <div className="card mb-20" style={{ border: "1.5px solid rgba(124,58,237,0.25)", background: "rgba(124,58,237,0.03)" }}>
       <div className="card-header" style={{ borderBottom: "1px solid var(--outline-v)" }}>
         <div className="card-title"><i className="ti ti-coin" /> Credit Leave Balances</div>
       </div>
@@ -60,7 +60,7 @@ export default function CreditTab() {
           </button>
         </div>
         {creditResult && (
-          <div style={{ marginTop: 14, padding: "12px 16px", background: "rgba(27,138,107,0.08)", border: "1px solid rgba(27,138,107,0.25)", borderRadius: 8, color: "var(--success)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ marginTop: 14, padding: "12px 16px", background: "rgba(23,144,90,0.08)", border: "1px solid rgba(23,144,90,0.25)", borderRadius: 8, color: "var(--success)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <i className="ti ti-circle-check" style={{ fontSize: 16 }} />
             <span>
               {creditResult.credited === 0

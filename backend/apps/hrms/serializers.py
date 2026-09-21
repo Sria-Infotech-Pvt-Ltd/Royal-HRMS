@@ -23,6 +23,7 @@ from .models import (
     SEP_SETTLEMENT_DRAFT, SEP_SETTLEMENT_FINALIZED,
     SeparationApprovalStage, SeparationHandoverTask, SeparationClearance,
     SeparationDocument, SeparationActivity, SeparationSettlement,
+    HRHelpRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ class LeavePolicySerializer(serializers.ModelSerializer):
     class Meta:
         model  = LeavePolicy
         fields = (
-            ['id', 'leave_type', 'leave_type_display', 'annual_days', 'can_carry_forward',
+            ['id', 'leave_type', 'leave_type_display', 'annual_days', 'accrual_frequency', 'can_carry_forward',
              'max_carry_forward_days', 'carry_forward_type', 'carry_forward_mode',
              'carry_forward_expiry_days', 'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
@@ -167,6 +168,7 @@ class LeavePolicyCreateSerializer(serializers.Serializer):
     carry_forward_type        = serializers.ChoiceField(choices=['limited', 'unlimited'], default='limited', required=False)
     carry_forward_mode        = serializers.ChoiceField(choices=['automatic', 'manual'], default='automatic', required=False)
     carry_forward_expiry_days = serializers.IntegerField(default=0, min_value=0, required=False)
+    accrual_frequency         = serializers.ChoiceField(choices=['annual', 'monthly'], default='annual', required=False)
     policy_note               = serializers.CharField(required=False, default='', allow_blank=True)
     is_active              = serializers.BooleanField(default=True)
     # Application Rules
@@ -249,7 +251,7 @@ class LeavePolicyUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = LeavePolicy
         fields = (
-            ['annual_days', 'can_carry_forward', 'max_carry_forward_days',
+            ['annual_days', 'accrual_frequency', 'can_carry_forward', 'max_carry_forward_days',
              'carry_forward_type', 'carry_forward_mode', 'carry_forward_expiry_days',
              'policy_note', 'is_active']
             + _POLICY_RULE_FIELDS
@@ -1079,3 +1081,55 @@ class SeparationActivitySerializer(serializers.ModelSerializer):
 
     def get_actor_role(self, obj):
         return obj.actor.role.name if obj.actor_id and obj.actor.role_id else 'system'
+
+
+# ─── HR Help ────────────────────────────────────────────────────────────────────
+
+class HRHelpRequestSerializer(serializers.ModelSerializer):
+    request_ref        = serializers.SerializerMethodField()
+    submitted_by_name   = serializers.SerializerMethodField()
+    topic_display       = serializers.CharField(source='get_topic_display', read_only=True)
+    priority_display    = serializers.CharField(source='get_priority_display', read_only=True)
+    status_display      = serializers.CharField(source='get_status_display', read_only=True)
+    assigned_to_name     = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = HRHelpRequest
+        fields = [
+            'id', 'request_ref', 'topic', 'topic_display', 'priority', 'priority_display',
+            'message', 'status', 'status_display', 'response',
+            'submitted_by_name', 'assigned_to_name', 'created_at', 'updated_at', 'resolved_at',
+        ]
+
+    def get_request_ref(self, obj: HRHelpRequest) -> str:
+        if obj.request_number is None:
+            return ''
+        return f'HR-{obj.request_number:05d}'
+
+    def get_submitted_by_name(self, obj: HRHelpRequest) -> str:
+        return obj.submitted_by.full_name if obj.submitted_by_id else ''
+
+    def get_assigned_to_name(self, obj: HRHelpRequest) -> str:
+        return obj.assigned_to.full_name if obj.assigned_to_id else ''
+
+
+class HRHelpRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = HRHelpRequest
+        fields = ['topic', 'priority', 'message']
+
+    def validate_message(self, value):
+        value = value.strip()
+        if len(value) < 10:
+            raise serializers.ValidationError('Please describe your question or request in at least 10 characters.')
+        return value
+
+
+class HRHelpRequestRespondSerializer(serializers.ModelSerializer):
+    """HR-side update — status + an optional response note. Never touches
+    topic/priority/message, which belong to the submitter's original
+    request."""
+    class Meta:
+        model  = HRHelpRequest
+        fields = ['status', 'response', 'assigned_to']
+        extra_kwargs = {'response': {'required': False}, 'assigned_to': {'required': False}}

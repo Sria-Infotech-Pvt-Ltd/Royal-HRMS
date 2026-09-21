@@ -7,6 +7,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import type { CtcRevisionReason, EmployeeSalaryConfig, SalaryStructureListItem } from "@/types/payroll";
+import { formatDate } from "@/lib/formatDate";
 
 interface Props {
   employeeId: string;
@@ -33,8 +34,7 @@ const REASON_OPTIONS: { value: CtcRevisionReason; label: string }[] = [
 const INR = (n: string | number) =>
   `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const fmtDate = (d: string) => formatDate(d);
 
 export default function SalaryTab({ employeeId, employeeCode }: Props) {
   const canEdit = usePermission("payroll.edit");

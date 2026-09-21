@@ -1,5 +1,6 @@
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -170,14 +171,11 @@ export const MODE_LABELS: Record<InterviewMode, string> = {
 
 export function fmtDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 export function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  return formatDateTime(iso);
 }
 
 export function initials(name: string): string {

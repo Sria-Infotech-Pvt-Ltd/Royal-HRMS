@@ -12,6 +12,7 @@ interface LeavePolicy {
   leave_type: string;
   leave_type_display: string;
   annual_days: number;
+  accrual_frequency: "annual" | "monthly";
   can_carry_forward: boolean;
   max_carry_forward_days: number;
   policy_note: string;
@@ -21,6 +22,7 @@ interface LeavePolicy {
 
 interface EditForm {
   annual_days: number;
+  accrual_frequency: "annual" | "monthly";
   can_carry_forward: boolean;
   max_carry_forward_days: number;
   policy_note: string;
@@ -30,6 +32,7 @@ interface EditForm {
 interface CreateForm {
   leave_type_label: string;
   annual_days: number;
+  accrual_frequency: "annual" | "monthly";
   can_carry_forward: boolean;
   max_carry_forward_days: number;
   policy_note: string;
@@ -37,12 +40,12 @@ interface CreateForm {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  casual:    "#1e4e8c",
-  earned:    "#1b8a6b",
-  sick:      "#b5651d",
+  casual:    "#7c3aed",
+  earned:    "#17905a",
+  sick:      "#a2620c",
   lwp:       "#6b7280",
-  maternity: "#ad95cf",
-  paternity: "#0e7c86",
+  maternity: "#a78bfa",
+  paternity: "#2563eb",
 };
 
 // Built-in leave types can be deactivated but never deleted — mirrors the
@@ -58,14 +61,14 @@ export default function PolicyTab() {
 
   // ── Edit state ────────────────────────────────────────────────────────────
   const [editing,   setEditing]   = useState<LeavePolicy | null>(null);
-  const [form,      setForm]      = useState<EditForm>({ annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+  const [form,      setForm]      = useState<EditForm>({ annual_days: 0, accrual_frequency: "annual", can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
   const [errors,    setErrors]    = useState<Record<string, string>>({});
   const [isSaving,  setIsSaving]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // ── Create state ──────────────────────────────────────────────────────────
   const [isCreating,    setIsCreating]    = useState(false);
-  const [createForm,    setCreateForm]    = useState<CreateForm>({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+  const [createForm,    setCreateForm]    = useState<CreateForm>({ leave_type_label: "", annual_days: 0, accrual_frequency: "annual", can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
   const [createErrors,  setCreateErrors]  = useState<Record<string, string>>({});
   const [isSubmitting,  setIsSubmitting]  = useState(false);
   const [createError,   setCreateError]   = useState<string | null>(null);
@@ -77,7 +80,7 @@ export default function PolicyTab() {
   // ── Edit handlers ─────────────────────────────────────────────────────────
   function openEdit(p: LeavePolicy) {
     setEditing(p);
-    setForm({ annual_days: Number(p.annual_days), can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note ?? "", is_active: p.is_active });
+    setForm({ annual_days: Number(p.annual_days), accrual_frequency: p.accrual_frequency ?? "annual", can_carry_forward: p.can_carry_forward, max_carry_forward_days: p.max_carry_forward_days, policy_note: p.policy_note ?? "", is_active: p.is_active });
     setErrors({});
     setSaveError(null);
   }
@@ -147,7 +150,7 @@ export default function PolicyTab() {
 
   // ── Create handlers ───────────────────────────────────────────────────────
   function openCreate() {
-    setCreateForm({ leave_type_label: "", annual_days: 0, can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
+    setCreateForm({ leave_type_label: "", annual_days: 0, accrual_frequency: "annual", can_carry_forward: false, max_carry_forward_days: 0, policy_note: "", is_active: true });
     setCreateErrors({});
     setCreateError(null);
     setIsCreating(true);
@@ -197,9 +200,9 @@ export default function PolicyTab() {
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 1, background: "var(--outline-v)", borderRadius: "var(--radius-lg)", overflow: "hidden", marginBottom: 24 }}>
         {[
-          { icon: "ti-beach",        color: "var(--primary)", bg: "rgba(30,78,140,0.08)",  label: "Total Types",   value: list.length },
-          { icon: "ti-circle-check", color: "var(--success)", bg: "rgba(27,138,107,0.08)", label: "Active",        value: list.filter(t => t.is_active).length },
-          { icon: "ti-repeat",       color: "var(--warn)",    bg: "rgba(181,101,29,0.08)", label: "Carry Forward", value: list.filter(t => t.can_carry_forward).length },
+          { icon: "ti-beach",        color: "var(--primary)", bg: "rgba(124,58,237,0.08)",  label: "Total Types",   value: list.length },
+          { icon: "ti-circle-check", color: "var(--success)", bg: "rgba(23,144,90,0.08)", label: "Active",        value: list.filter(t => t.is_active).length },
+          { icon: "ti-repeat",       color: "var(--warn)",    bg: "rgba(162,98,12,0.08)", label: "Carry Forward", value: list.filter(t => t.can_carry_forward).length },
         ].map((s, i) => (
           <div key={i} style={{ background: "var(--surface)", padding: "18px 22px", display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ width: 42, height: 42, borderRadius: 11, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", color: s.color, flexShrink: 0 }}>
@@ -235,6 +238,7 @@ export default function PolicyTab() {
                 <tr>
                   <th>Type</th>
                   <th style={{ textAlign: "center" }}>Annual Days</th>
+                  <th style={{ textAlign: "center" }}>Accrual</th>
                   <th style={{ textAlign: "center" }}>Carry Fwd</th>
                   <th style={{ textAlign: "center" }}>Max Carry Fwd</th>
                   <th style={{ textAlign: "center" }}>Status</th>
@@ -252,6 +256,9 @@ export default function PolicyTab() {
                       </div>
                     </td>
                     <td style={{ textAlign: "center", fontWeight: 700, fontSize: 15, color: "var(--primary)" }}>{Number(p.annual_days)}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <span className="badge badge-neutral">{p.accrual_frequency === "monthly" ? "Monthly" : "Annual"}</span>
+                    </td>
                     <td style={{ textAlign: "center" }}>
                       {p.can_carry_forward ? <span className="badge badge-info">Yes</span> : <span className="badge badge-neutral">No</span>}
                     </td>
@@ -334,6 +341,13 @@ export default function PolicyTab() {
               {errors.annual_days && <p className="field-error-msg">{errors.annual_days}</p>}
             </div>
             <div className="field-group mb-16">
+              <label className="field-label">Accrual</label>
+              <select className="field-input field-select" value={form.accrual_frequency} onChange={e => editField("accrual_frequency", e.target.value)}>
+                <option value="annual">Annual (lump sum on Jan 1)</option>
+                <option value="monthly">Monthly (1/12th each month)</option>
+              </select>
+            </div>
+            <div className="field-group mb-16">
               <label className="field-label">Max Carry Fwd (days)</label>
               <input className={`field-input${errors.max_carry_forward_days ? " field-error" : ""}`} type="number" min={0} value={form.max_carry_forward_days} onChange={e => editField("max_carry_forward_days", Number(e.target.value))} disabled={!form.can_carry_forward} />
               {errors.max_carry_forward_days && <p className="field-error-msg">{errors.max_carry_forward_days}</p>}
@@ -397,6 +411,13 @@ export default function PolicyTab() {
               <label className="field-label">Annual Days *</label>
               <input className={`field-input${createErrors.annual_days ? " field-error" : ""}`} type="number" min={0} step={0.5} value={createForm.annual_days} onChange={e => createField("annual_days", Number(e.target.value))} />
               {createErrors.annual_days && <p className="field-error-msg">{createErrors.annual_days}</p>}
+            </div>
+            <div className="field-group mb-16">
+              <label className="field-label">Accrual</label>
+              <select className="field-input field-select" value={createForm.accrual_frequency} onChange={e => createField("accrual_frequency", e.target.value)}>
+                <option value="annual">Annual (lump sum on Jan 1)</option>
+                <option value="monthly">Monthly (1/12th each month)</option>
+              </select>
             </div>
             <div className="field-group mb-16">
               <label className="field-label">Max Carry Fwd (days)</label>

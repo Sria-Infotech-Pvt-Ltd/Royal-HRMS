@@ -11,6 +11,7 @@ from .models import (
     EmployeePayslip,
     PayslipQuery,
     PayrollAdjustment,
+    EmployeeTaxDeclaration,
 )
 
 
@@ -444,3 +445,48 @@ class PayslipQuerySerializer(serializers.ModelSerializer):
             'id', 'raised_by', 'raised_by_name', 'status',
             'resolved_by', 'resolved_by_name', 'created_at', 'updated_at',
         ]
+
+
+class EmployeeTaxDeclarationSerializer(serializers.ModelSerializer):
+    employee_name    = serializers.CharField(source='employee.full_name', read_only=True)
+    tax_regime_display = serializers.CharField(source='get_tax_regime_display', read_only=True)
+    status_display    = serializers.CharField(source='get_status_display', read_only=True)
+    financial_year    = serializers.SerializerMethodField()
+    approved_by_name  = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = EmployeeTaxDeclaration
+        fields = [
+            'id', 'employee_name', 'financial_year_start', 'financial_year',
+            'tax_regime', 'tax_regime_display', 'declared_investments',
+            'status', 'status_display', 'submitted_at', 'approved_at', 'approved_by_name',
+            'created_at', 'updated_at',
+        ]
+
+    def get_financial_year(self, obj: EmployeeTaxDeclaration) -> str:
+        return f'{obj.financial_year_start}-{str(obj.financial_year_start + 1)[2:]}'
+
+    def get_approved_by_name(self, obj: EmployeeTaxDeclaration) -> str:
+        return obj.approved_by.full_name if obj.approved_by_id else ''
+
+
+class EmployeeTaxDeclarationSaveSerializer(serializers.ModelSerializer):
+    """Self-service create/update — only the fields the employee themselves
+    controls. Submitting (status='submitted') is a separate explicit action
+    (see EmployeeTaxDeclarationSubmitView) rather than a field on this
+    serializer, so a plain PATCH can never accidentally lock in a
+    declaration."""
+    class Meta:
+        model  = EmployeeTaxDeclaration
+        fields = ['tax_regime', 'declared_investments']
+
+    def validate_declared_investments(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('declared_investments must be an object of section -> amount.')
+        for section, amount in value.items():
+            try:
+                if float(amount) < 0:
+                    raise serializers.ValidationError(f'"{section}" amount cannot be negative.')
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(f'"{section}" amount must be a number.')
+        return value

@@ -3,6 +3,7 @@
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import type { EmployeePayslip } from "@/types/payroll";
+import { formatDate } from "@/lib/formatDate";
 
 interface PagedResponse<T> { results: T[]; count: number }
 
@@ -14,8 +15,7 @@ const INR = (n: string | number) =>
 const fmtMonth = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const fmtDate = (d: string) => formatDate(d);
 
 const STATUS_BADGE: Record<EmployeePayslip["status"], string> = {
   draft:        "badge badge-neutral",

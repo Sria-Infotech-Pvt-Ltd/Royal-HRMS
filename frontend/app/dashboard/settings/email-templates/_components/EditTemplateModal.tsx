@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import clientApi from "@/lib/clientApi";
+import { formatDateTime } from "@/lib/formatDate";
 import {
   validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug, catValue,
   ATTACHMENT_ACCEPT_ATTR, fileKind, FILE_KIND_META, formatBytes,
@@ -523,7 +524,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
 
                       {/* Dropdown */}
                       {catOpen && (
-                        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "#fff", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", boxShadow: "0 4px 18px rgba(0,0,0,0.1)", zIndex: 300, overflow: "hidden" }}>
+                        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", boxShadow: "0 4px 18px rgba(0,0,0,0.1)", zIndex: 300, overflow: "hidden" }}>
                           <div style={{ maxHeight: 186, overflowY: "auto" }}>
                             {filtered.length === 0 && !catSearch.trim() && (
                               <div style={{ padding: "10px 14px", fontSize: 12, color: "var(--on-variant)" }}>No categories yet</div>
@@ -540,9 +541,9 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                                     setCatOpen(false);
                                     setErrors(p => ({ ...p, template_type: undefined }));
                                   }}
-                                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: isSelected ? "rgba(30,78,140,0.07)" : "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--on-bg)", textAlign: "left" }}
+                                  style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", background: isSelected ? "rgba(124,58,237,0.07)" : "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--on-bg)", textAlign: "left" }}
                                   onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "var(--bg-low)"; }}
-                                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? "rgba(30,78,140,0.07)" : "none"; }}>
+                                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? "rgba(124,58,237,0.07)" : "none"; }}>
                                   <i className="ti ti-check" style={{ fontSize: 12, color: "var(--primary)", visibility: isSelected ? "visible" : "hidden", flexShrink: 0 }} />
                                   {cat.name}
                                 </button>
@@ -558,7 +559,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                                 onClick={handleCreateCategory}
                                 disabled={catCreating}
                                 style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", padding: "8px 12px", background: "none", border: "none", cursor: catCreating ? "default" : "pointer", fontSize: 13, color: "var(--primary)", textAlign: "left", opacity: catCreating ? 0.65 : 1 }}
-                                onMouseEnter={e => { if (!catCreating) e.currentTarget.style.background = "rgba(30,78,140,0.06)"; }}
+                                onMouseEnter={e => { if (!catCreating) e.currentTarget.style.background = "rgba(124,58,237,0.06)"; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
                                 {catCreating
                                   ? <><i className="ti ti-loader-2" style={{ fontSize: 13, animation: "spin 1s linear infinite" }} /> Creating…</>
@@ -680,7 +681,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                 {!viewSource && (
                   <div ref={editorRef} contentEditable suppressContentEditableWarning
                     onInput={syncBody} onBlur={syncBody} onClick={handleEditorClick}
-                    style={{ flex: 1, minHeight: 200, padding: "12px 14px", border: "1.5px solid var(--outline-v)", borderRadius: selImg ? "0 0 var(--radius) var(--radius)" : "0 0 var(--radius) var(--radius)", outline: "none", overflowY: "auto", fontSize: 13, lineHeight: 1.7, color: "var(--on-bg)", background: "#fff", fontFamily: "inherit" }}
+                    style={{ flex: 1, minHeight: 200, padding: "12px 14px", border: "1.5px solid var(--outline-v)", borderRadius: selImg ? "0 0 var(--radius) var(--radius)" : "0 0 var(--radius) var(--radius)", outline: "none", overflowY: "auto", fontSize: 13, lineHeight: 1.7, color: "var(--on-bg)", background: "var(--surface)", fontFamily: "inherit" }}
                   />
                 )}
 
@@ -709,16 +710,16 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
             <div style={{ padding: "0 14px 16px", flex: 1, overflowY: "auto" }}>
               {/* Subject preview */}
               <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Subject</div>
-              <div style={{ fontSize: 12, color: "var(--on-bg)", marginBottom: 14, padding: "8px 10px", background: "#fff", borderRadius: 6, border: "1px solid var(--outline-v)", lineHeight: 1.5, wordBreak: "break-word" }}
+              <div style={{ fontSize: 12, color: "var(--on-bg)", marginBottom: 14, padding: "8px 10px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--outline-v)", lineHeight: 1.5, wordBreak: "break-word" }}
                 dangerouslySetInnerHTML={{ __html: highlightVars(form.subject) || '<span style="color:var(--outline);font-style:italic">No subject yet…</span>' }} />
 
               {/* Body preview */}
               <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Body</div>
               {form.body ? (
-                <div style={{ fontSize: 12, lineHeight: 1.75, padding: "12px 12px", background: "#fff", borderRadius: 6, border: "1px solid var(--outline-v)", wordBreak: "break-word", overflowX: "auto" }}
+                <div style={{ fontSize: 12, lineHeight: 1.75, padding: "12px 12px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--outline-v)", wordBreak: "break-word", overflowX: "auto" }}
                   dangerouslySetInnerHTML={{ __html: highlightVars(form.body) }} />
               ) : (
-                <div style={{ fontSize: 12, color: "var(--outline)", fontStyle: "italic", padding: "12px 12px", background: "#fff", borderRadius: 6, border: "1px solid var(--outline-v)" }}>
+                <div style={{ fontSize: 12, color: "var(--outline)", fontStyle: "italic", padding: "12px 12px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--outline-v)" }}>
                   Body will appear here…
                 </div>
               )}
@@ -740,9 +741,9 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                     <button key={v} type="button" suppressHydrationWarning
                       onClick={() => insertTag(tag)}
                       title={`Insert ${tag}`}
-                      style={{ textAlign: "left", padding: "5px 9px", background: "rgba(30,78,140,0.06)", border: "1px solid rgba(30,78,140,0.12)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--primary)", cursor: "pointer" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(30,78,140,0.14)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "rgba(30,78,140,0.06)")}>
+                      style={{ textAlign: "left", padding: "5px 9px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.12)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--primary)", cursor: "pointer" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.14)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "rgba(124,58,237,0.06)")}>
                       {tag}
                     </button>
                   );
@@ -785,7 +786,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
               <div style={{ borderTop: "1px solid var(--outline-v)", padding: "12px 14px", fontSize: 11, color: "var(--outline)" }}>
                 <div style={{ marginBottom: 2 }}>Last updated</div>
                 <div style={{ color: "var(--on-variant)", fontWeight: 500 }}>
-                  {new Date(template.updated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                  {formatDateTime(template.updated_at)}
                 </div>
                 {template.is_builtin && (
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
@@ -806,7 +807,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
           style={{
             flexShrink: 0,
             borderTop: `1.5px ${dragOver ? "dashed" : "solid"} ${dragOver ? "var(--primary)" : "var(--outline-v)"}`,
-            background: dragOver ? "rgba(30,78,140,0.03)" : "var(--bg-low)",
+            background: dragOver ? "rgba(124,58,237,0.03)" : "var(--bg-low)",
             padding: "10px 20px",
             display: "flex",
             alignItems: "center",
@@ -854,7 +855,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   <div key={`saved-${att.id}`} title={`${att.filename} · ${formatBytes(att.size)}`} style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px 4px 7px",
-                    background: "rgba(30,78,140,0.05)", border: "1px solid rgba(30,78,140,0.18)",
+                    background: "rgba(124,58,237,0.05)", border: "1px solid rgba(124,58,237,0.18)",
                     borderRadius: 20, flexShrink: 0, maxWidth: 200,
                   }}>
                     {isImg ? (
@@ -889,7 +890,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   <div key={`new-${file.name}-${i}`} title={`${file.name} · ${formatBytes(file.size)} — will be uploaded`} style={{
                     display: "flex", alignItems: "center", gap: 6,
                     padding: "4px 8px 4px 6px",
-                    background: "#fff", border: "1px dashed var(--outline-v)",
+                    background: "var(--surface)", border: "1px dashed var(--outline-v)",
                     borderRadius: 20, flexShrink: 0, maxWidth: 200,
                   }}>
                     {isImg ? (
@@ -940,7 +941,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
         <style>{`
           [contenteditable]:focus { border-color: var(--primary) !important; }
           [contenteditable] img { max-width: 100%; height: auto; cursor: pointer; border-radius: 4px; transition: outline 0.1s; }
-          [contenteditable] img:hover { outline: 2px solid rgba(30,78,140,0.4); }
+          [contenteditable] img:hover { outline: 2px solid rgba(124,58,237,0.4); }
           [contenteditable] img:focus { outline: 2px solid var(--primary); }
           @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -980,7 +981,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
       <div style={{ position: "fixed", inset: 0, zIndex: 10001, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center" }}
         onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
         onClick={e => { if (mouseDownOnOverlay.current && e.target === e.currentTarget) setCropState(null); }}>
-        <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", maxWidth: "96vw" }}>
+        <div style={{ background: "var(--surface)", borderRadius: 12, overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", maxWidth: "96vw" }}>
 
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: "1px solid var(--outline-v)" }}>

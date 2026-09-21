@@ -134,7 +134,7 @@ function XlsxPreview({ fileUrl }: { fileUrl: string }) {
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
       {/* Sheet tabs */}
       {sheets.length > 1 && (
-        <div style={{ display: "flex", gap: 2, padding: "8px 16px 0", background: "#fff", borderBottom: "1px solid var(--outline-v)", flexShrink: 0, overflowX: "auto" }}>
+        <div style={{ display: "flex", gap: 2, padding: "8px 16px 0", background: "var(--surface)", borderBottom: "1px solid var(--outline-v)", flexShrink: 0, overflowX: "auto" }}>
           {sheets.map((name, i) => (
             <button key={name} type="button" suppressHydrationWarning
               onClick={() => { setActive(i); setHtml(allHtml[i]); }}
@@ -204,7 +204,7 @@ export default function DocPreviewBody({ doc, blobUrl, textContent, loading, err
 
   // TXT / CSV — pre block
   if (textContent !== null) return (
-    <div style={{ flex: 1, overflow: "auto", padding: 24, background: "#fff" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: 24, background: "var(--surface)" }}>
       <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.7, color: "var(--on-bg)", fontFamily: "ui-monospace, monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
         {textContent}
       </pre>

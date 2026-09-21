@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { ManagerApproval } from "@/types/payroll";
 import EmployeeAttendanceRow, { type EmployeeRow } from "./EmployeeAttendanceRow";
+import { formatDate } from "@/lib/formatDate";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,8 +46,7 @@ interface CycleSummary {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const fmtDate = (d: string) => formatDate(d);
 
 const fmtMonth = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -150,7 +150,7 @@ export default function AttendanceApprovalTab() {
               style={{
                 padding: "10px 18px", borderRadius: 10, border: "1.5px solid",
                 borderColor: selectedId === c.id ? "var(--primary)" : "var(--outline-v)",
-                background: selectedId === c.id ? "rgba(30,78,140,0.07)" : "var(--bg)",
+                background: selectedId === c.id ? "rgba(124,58,237,0.07)" : "var(--bg)",
                 color: selectedId === c.id ? "var(--primary)" : "var(--on-bg)",
                 cursor: "pointer", fontSize: 13, fontWeight: selectedId === c.id ? 700 : 500,
                 transition: "all 0.12s",

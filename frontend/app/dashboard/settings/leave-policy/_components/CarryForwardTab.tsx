@@ -209,7 +209,7 @@ export default function CarryForwardTab() {
       )}
 
       {duplicateWarning && (
-        <div className="mb-20" style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 18px", background: "rgba(181,101,29,0.08)", border: "1px solid rgba(181,101,29,0.3)", borderRadius: "var(--radius)", color: "var(--warn)" }}>
+        <div className="mb-20" style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 18px", background: "rgba(162,98,12,0.08)", border: "1px solid rgba(162,98,12,0.3)", borderRadius: "var(--radius)", color: "var(--warn)" }}>
           <i className="ti ti-alert-triangle" style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }} />
           <div style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>{duplicateWarning}</div>
           <button className="btn btn-ghost btn-sm" onClick={() => setDuplicateWarning(null)} style={{ flexShrink: 0 }}>

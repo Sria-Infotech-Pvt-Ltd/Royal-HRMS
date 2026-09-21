@@ -283,12 +283,12 @@ export default function DocumentCenterPage() {
       {/* Stats row */}
       <div className="dc-stats-row" style={{ display: "grid", gap: 12, marginBottom: 24 }}>
         {([
-          { label: "Total Documents", value: statsLoading ? "—" : total,         icon: "ti-copy",             color: "var(--primary)", bg: "rgba(30,78,140,0.08)"  },
+          { label: "Total Documents", value: statsLoading ? "—" : total,         icon: "ti-copy",             color: "var(--primary)", bg: "rgba(124,58,237,0.08)"  },
           { label: "Policies",        value: statsLoading ? "—" : policyCount,   icon: "ti-shield-check",     color: "#c28b00",        bg: "rgba(194,139,0,0.10)"  },
-          { label: "Forms",           value: statsLoading ? "—" : formCount,     icon: "ti-file-description", color: "var(--info)",    bg: "rgba(14,124,134,0.10)" },
-          { label: "Templates",       value: statsLoading ? "—" : templateCount, icon: "ti-table",            color: "var(--success)", bg: "rgba(27,138,107,0.10)" },
+          { label: "Forms",           value: statsLoading ? "—" : formCount,     icon: "ti-file-description", color: "var(--info)",    bg: "rgba(37,99,235,0.10)" },
+          { label: "Templates",       value: statsLoading ? "—" : templateCount, icon: "ti-table",            color: "var(--success)", bg: "rgba(23,144,90,0.10)" },
         ] as const).map(stat => (
-          <div key={stat.label} style={{ background: "#fff", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div key={stat.label} style={{ background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 6 }}>{stat.label}</div>
               <div style={{ fontSize: 26, fontWeight: 700, color: "var(--on-bg)", lineHeight: 1 }}>{stat.value}</div>
@@ -583,7 +583,7 @@ export default function DocumentCenterPage() {
                 style={{
                   border: `2px dashed ${dragOver ? "var(--primary)" : uploadErrors.file ? "var(--error)" : "var(--outline-v)"}`,
                   borderRadius: "var(--radius)",
-                  background: dragOver ? "rgba(30,78,140,0.04)" : "var(--bg-low)",
+                  background: dragOver ? "rgba(124,58,237,0.04)" : "var(--bg-low)",
                   padding: "28px 16px",
                   textAlign: "center",
                   cursor: "pointer",

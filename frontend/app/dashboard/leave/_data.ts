@@ -1,3 +1,5 @@
+import { formatDate } from "@/lib/formatDate";
+
 // ─── Leave type UI metadata ───────────────────────────────────────────────────
 
 export type LeaveTypeKey = "casual" | "earned" | "sick" | "lwp" | "maternity" | "paternity";
@@ -16,12 +18,12 @@ export interface LeaveTypeConfig {
 }
 
 export const LEAVE_TYPE_CONFIG: Record<LeaveTypeKey, LeaveTypeConfig> = {
-  casual:    { key: "casual",    label: "Casual Leave",      shortLabel: "CL",  icon: "ti-beach",          color: "#1e4e8c", bg: "rgba(30,78,140,0.1)",    isLwp: false, requiresDoc: false },
-  earned:    { key: "earned",    label: "Earned Leave",      shortLabel: "EL",  icon: "ti-calendar-check", color: "#1b8a6b", bg: "rgba(27,138,107,0.1)",   isLwp: false, requiresDoc: false },
-  sick:      { key: "sick",      label: "Sick Leave",        shortLabel: "SL",  icon: "ti-stethoscope",    color: "#0e7c86", bg: "rgba(14,124,134,0.1)",   isLwp: false, requiresDoc: true  },
-  lwp:       { key: "lwp",       label: "Leave Without Pay", shortLabel: "LWP", icon: "ti-coin-off",       color: "#b5651d", bg: "rgba(181,101,29,0.1)",   isLwp: true,  requiresDoc: false },
-  maternity: { key: "maternity", label: "Maternity Leave",   shortLabel: "ML",  icon: "ti-heart",          color: "#ad95cf", bg: "rgba(173,149,207,0.12)", isLwp: false, requiresDoc: true  },
-  paternity: { key: "paternity", label: "Paternity Leave",   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "#5b86c9", bg: "rgba(91,134,201,0.1)",  isLwp: false, requiresDoc: true  },
+  casual:    { key: "casual",    label: "Casual Leave",      shortLabel: "CL",  icon: "ti-beach",          color: "#7c3aed", bg: "rgba(124,58,237,0.1)",    isLwp: false, requiresDoc: false },
+  earned:    { key: "earned",    label: "Earned Leave",      shortLabel: "EL",  icon: "ti-calendar-check", color: "#17905a", bg: "rgba(23,144,90,0.1)",   isLwp: false, requiresDoc: false },
+  sick:      { key: "sick",      label: "Sick Leave",        shortLabel: "SL",  icon: "ti-stethoscope",    color: "#2563eb", bg: "rgba(37,99,235,0.1)",   isLwp: false, requiresDoc: true  },
+  lwp:       { key: "lwp",       label: "Leave Without Pay", shortLabel: "LWP", icon: "ti-coin-off",       color: "#a2620c", bg: "rgba(162,98,12,0.1)",   isLwp: true,  requiresDoc: false },
+  maternity: { key: "maternity", label: "Maternity Leave",   shortLabel: "ML",  icon: "ti-heart",          color: "#a78bfa", bg: "rgba(167,139,250,0.12)", isLwp: false, requiresDoc: true  },
+  paternity: { key: "paternity", label: "Paternity Leave",   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "#a78bfa", bg: "rgba(167,139,250,0.1)",  isLwp: false, requiresDoc: true  },
 };
 
 export const LEAVE_TYPES_LIST = Object.values(LEAVE_TYPE_CONFIG);
@@ -173,7 +175,7 @@ export const STATUS_LABEL: Record<ReqStatus, string> = {
 
 export function fmtDate(iso: string): string {
   if (!iso) return "—";
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 export function fmtShortDate(iso: string): string {

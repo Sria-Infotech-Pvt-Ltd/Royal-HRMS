@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 import type { PayrollCycle, PayrollSettings, EmployeeSalaryConfig } from "@/types/payroll";
 import CancelCycleModal from "./CancelCycleModal";
 
@@ -430,7 +431,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
                     </td>
                     <td style={{ fontSize: 13 }}>{c.cancelled_by_name ?? "—"}</td>
                     <td style={{ fontSize: 13, color: "var(--on-variant)" }}>
-                      {c.cancelled_at ? new Date(c.cancelled_at).toLocaleDateString("en-IN") : "—"}
+                      {c.cancelled_at ? formatDate(c.cancelled_at) : "—"}
                     </td>
                     <td style={{ fontSize: 13, color: "var(--on-variant)", maxWidth: 300 }}>{c.cancellation_reason}</td>
                   </tr>

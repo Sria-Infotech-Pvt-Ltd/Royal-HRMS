@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CustomFieldFileValue } from "@/types/onboardingFieldConfig";
 import DocPreviewModal from "@/components/DocPreviewModal";
+import { formatDate } from "@/lib/formatDate";
 
 const FILE_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
 
@@ -52,16 +53,16 @@ export default function CustomFieldFileUpload({
     return (
       <div
         key={item?.id ?? "empty"}
-        className="flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-white"
+        className="flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-[var(--surface)]"
         style={{ borderColor: "var(--outline-v)" }}
       >
         <div
           className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: uploaded ? "rgba(27,138,107,0.10)" : "var(--bg-mid)" }}
+          style={{ background: uploaded ? "rgba(23,144,90,0.10)" : "var(--bg-mid)" }}
         >
           <i
             className={`ti ${uploading ? "ti-loader-2 animate-spin" : uploaded ? "ti-file-check" : "ti-file-off"} text-[18px]`}
-            style={{ color: uploaded ? "#1b8a6b" : "var(--on-variant)" }}
+            style={{ color: uploaded ? "#17905a" : "var(--on-variant)" }}
           />
         </div>
         <div className="flex-1 min-w-0">
@@ -72,7 +73,7 @@ export default function CustomFieldFileUpload({
             {uploading
               ? "Uploading…"
               : uploaded
-                ? `${new Date(item!.uploaded_at).toLocaleDateString()}${item!.file_size ? ` · ${fmtBytes(item!.file_size)}` : ""}`
+                ? `${formatDate(item!.uploaded_at)}${item!.file_size ? ` · ${fmtBytes(item!.file_size)}` : ""}`
                 : "Not uploaded"}
           </p>
         </div>

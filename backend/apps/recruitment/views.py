@@ -14,6 +14,7 @@ from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from core.date_utils import format_date_display
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
@@ -1225,7 +1226,7 @@ class SendCandidateEmailView(APIView):
                 'company_name':           company_name,
                 'branch_name':            candidate.branch.branch_name if candidate.branch else '',
                 'interview_date':         (
-                    candidate.interview_date.strftime('%d %b %Y')
+                    format_date_display(candidate.interview_date)
                     if candidate.interview_date else ''
                 ),
                 'interview_mode_display': candidate.get_interview_mode_display(),

@@ -22,7 +22,7 @@ export default function ToggleSwitch({ checked, onChange, label, disabled = fals
         <span
           style={{
             position: "absolute", top: "2px", left: checked ? "18px" : "2px",
-            width: "18px", height: "18px", borderRadius: "50%", background: "#fff",
+            width: "18px", height: "18px", borderRadius: "50%", background: "var(--surface)",
             boxShadow: "0 1px 3px rgba(0,0,0,0.3)", transition: "left 0.15s",
           }}
         />

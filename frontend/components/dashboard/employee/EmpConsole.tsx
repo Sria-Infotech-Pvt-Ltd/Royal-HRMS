@@ -88,7 +88,7 @@ export default function EmpConsole({ firstName }: Props) {
   return (
     <div
       className="mb-20"
-      style={{ background: "linear-gradient(135deg, #1a3a6e 0%, #0e2447 100%)", borderRadius: 10, overflow: "hidden", position: "relative" }}
+      style={{ background: "linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%)", borderRadius: 10, overflow: "hidden", position: "relative" }}
     >
       <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.06)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", top: -20, right: -20, width: 110, height: 110, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.04)", pointerEvents: "none" }} />

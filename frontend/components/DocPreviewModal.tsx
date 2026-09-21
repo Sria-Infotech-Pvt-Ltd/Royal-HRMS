@@ -91,7 +91,7 @@ export default function DocPreviewModal({
     >
       <div
         className="relative flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "#fff", width: "min(860px, 92vw)", maxHeight: "88vh" }}
+        style={{ background: "var(--surface)", width: "min(860px, 92vw)", maxHeight: "88vh" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

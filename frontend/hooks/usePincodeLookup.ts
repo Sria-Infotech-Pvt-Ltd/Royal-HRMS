@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
 export interface PincodeLocation {
+  locality: string;
   district: string;
   state: string;
 }

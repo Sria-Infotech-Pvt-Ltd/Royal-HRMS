@@ -9,6 +9,7 @@ import { useFetch } from "@/hooks/useFetch";
 import type { CustomFieldFileValue, OnboardingFieldConfigByStep } from "@/types/onboardingFieldConfig";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
+import { formatDate } from "@/lib/formatDate";
 import {
   PROFILE_SECTIONS,
   PROFILE_TABS,
@@ -36,6 +37,7 @@ import { AttendanceTab } from "./_components/AttendanceTab";
 import SalaryTab from "./_components/SalaryTab";
 import PayrollTab from "./_components/PayrollTab";
 import PromotionTab from "./_components/PromotionTab";
+import AuditTrailTab from "./_components/AuditTrailTab";
 
 interface ApiProfile {
   date_of_birth?: string; gender?: string; marital_status?: string;
@@ -66,6 +68,8 @@ interface ApiEmployee {
   role: string; role_display: string;
   date_of_joining: string; is_active: boolean; status: string;
   onboarding_status: string;
+  employment_status: string;
+  confirmation_date: string | null;
   reporting_manager:  { id: string; uuid: string | null; name: string; from_org_chart: boolean } | null;
   reporting_approver: { id: string; uuid: string | null; name: string } | null;
   hr:                 { id: string; uuid: string | null; name: string } | null;
@@ -92,7 +96,7 @@ function buildDocEntries(apiDocs: ApiDocument[], documentTypeConfig: DocumentTyp
     return {
       ...expected,
       status: "pending" as const,
-      uploadedOn: dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      uploadedOn: formatDate(dt),
       fileUrl: uploaded.file,
       fileName: uploaded.file_name,
       fileSize: uploaded.file_size,
@@ -117,6 +121,8 @@ function apiToEmployee(u: ApiEmployee, documentTypeConfig: DocumentTypeConfig[] 
     location:      u.branch || "",
     gender:        (p.gender as Gender) || "male",
     status:        (u.status as EmployeeStatus) || (u.is_active ? "active" : "inactive"),
+    employmentStatus: u.employment_status || "probation",
+    confirmationDate: u.confirmation_date,
     details: {
       // Basic
       code:          u.employee_id,
@@ -358,7 +364,7 @@ export default function EmployeeProfilePage({
 
   if (notFound || !employee) {
     return (
-      <div className="bg-white rounded-xl border border-[var(--outline-v)] p-12 text-center max-w-lg mx-auto mt-10">
+      <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-12 text-center max-w-lg mx-auto mt-10">
         <i className="ti ti-user-question text-5xl text-[var(--outline)] block mb-4" />
         <h2 className="text-[17px] font-semibold text-[var(--on-bg)] mb-1.5">Employee not found</h2>
         <p className="text-[13px] text-[var(--on-variant)] mb-5">
@@ -366,7 +372,7 @@ export default function EmployeeProfilePage({
         </p>
         <Link
           href="/dashboard/employees"
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold bg-[var(--primary)] text-white hover:bg-[#163d72] transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold bg-[var(--primary)] text-white hover:bg-[#6d28d9] transition-colors"
         >
           <i className="ti ti-arrow-left text-[15px]" />
           Back to Employees
@@ -544,10 +550,17 @@ export default function EmployeeProfilePage({
 
   return (
     <div>
-      <ProfileHeader employee={employee} employeeUuid={employeeUuid} />
+      <ProfileHeader
+        employee={employee}
+        employeeUuid={employeeUuid}
+        onSelectTab={setTab}
+        onConfirmed={(employmentStatus, confirmationDate) => {
+          setEmployee(prev => (prev ? { ...prev, employmentStatus, confirmationDate } : prev));
+        }}
+      />
 
       {isPendingOnboarding ? (
-        <div className="bg-white rounded-xl border border-[var(--outline-v)] p-14 text-center mt-4">
+        <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-14 text-center mt-4">
           <div className="w-14 h-14 rounded-2xl bg-[var(--bg-mid)] flex items-center justify-center mx-auto mb-4">
             <i className="ti ti-clipboard-text text-[26px] text-[var(--primary)]" />
           </div>
@@ -771,6 +784,8 @@ export default function EmployeeProfilePage({
           dateOfBirth={employee.dateOfBirth}
           dateOfJoining={employee.dateOfJoining}
         />
+      ) : tab === "audit" ? (
+        <AuditTrailTab employeeUuid={employeeUuid} />
       ) : (
         <TabPlaceholder icon={activeTab.icon} label={activeTab.label} />
       ))}
@@ -780,7 +795,7 @@ export default function EmployeeProfilePage({
 
 function TabPlaceholder({ icon, label }: { icon: string; label: string }) {
   return (
-    <div className="bg-white rounded-xl border border-[var(--outline-v)] p-14 text-center">
+    <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] p-14 text-center">
       <div className="w-14 h-14 rounded-2xl bg-[var(--bg-mid)] flex items-center justify-center mx-auto mb-4">
         <i className={`ti ${icon} text-[26px] text-[var(--primary)]`} />
       </div>

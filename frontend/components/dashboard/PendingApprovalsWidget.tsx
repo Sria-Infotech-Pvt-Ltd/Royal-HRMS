@@ -14,10 +14,10 @@ interface ApprovalRow {
 }
 
 const ROWS: ApprovalRow[] = [
-  { key: "leave_requests",      icon: "ti-beach",      bg: "rgba(27,138,107,0.12)", color: "var(--success)", label: "Leave Requests",      href: "/dashboard/approvals"   },
-  { key: "expense_claims",      icon: "ti-wallet",     bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "Expense Claims",      href: "/dashboard/expenses"    },
-  { key: "onboarding_reviews",  icon: "ti-user-check", bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Onboarding Reviews",  href: "/dashboard/employees"   },
-  { key: "separation_requests", icon: "ti-logout",     bg: "rgba(192,57,43,0.12)",  color: "var(--error)",   label: "Separation Requests", href: "/dashboard/separation"  },
+  { key: "leave_requests",      icon: "ti-beach",      bg: "rgba(23,144,90,0.12)", color: "var(--success)", label: "Leave Requests",      href: "/dashboard/approvals"   },
+  { key: "expense_claims",      icon: "ti-wallet",     bg: "rgba(162,98,12,0.12)", color: "var(--warn)",    label: "Expense Claims",      href: "/dashboard/expenses"    },
+  { key: "onboarding_reviews",  icon: "ti-user-check", bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "Onboarding Reviews",  href: "/dashboard/employees"   },
+  { key: "separation_requests", icon: "ti-logout",     bg: "rgba(194,58,47,0.12)",  color: "var(--error)",   label: "Separation Requests", href: "/dashboard/separation"  },
 ];
 
 export default function PendingApprovalsWidget() {

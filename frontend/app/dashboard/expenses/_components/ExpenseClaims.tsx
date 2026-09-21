@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate as sharedFormatDate } from "@/lib/formatDate";
 import type { PaginatedResponse } from "@/types/attendance";
 import ExpenseFormModal from "./ExpenseFormModal";
 import ExpenseDetailModal from "./ExpenseDetailModal";
@@ -68,9 +69,7 @@ function formatAmount(amount: number | string): string {
 }
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  return sharedFormatDate(iso);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

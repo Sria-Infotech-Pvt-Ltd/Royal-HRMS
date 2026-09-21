@@ -15,20 +15,24 @@ logger = logging.getLogger(__name__)
 
 # ─── Leave constants ──────────────────────────────────────────────────────────
 
-LEAVE_CASUAL    = 'casual'
-LEAVE_EARNED    = 'earned'
-LEAVE_SICK      = 'sick'
-LEAVE_LWP       = 'lwp'
-LEAVE_MATERNITY = 'maternity'
-LEAVE_PATERNITY = 'paternity'
+LEAVE_CASUAL      = 'casual'
+LEAVE_EARNED      = 'earned'
+LEAVE_SICK        = 'sick'
+LEAVE_LWP         = 'lwp'
+LEAVE_MATERNITY   = 'maternity'
+LEAVE_PATERNITY   = 'paternity'
+LEAVE_BEREAVEMENT = 'bereavement'
+LEAVE_COMP_OFF    = 'comp_off'
 
 LEAVE_TYPE_CHOICES = [
-    (LEAVE_CASUAL,    'Casual Leave'),
-    (LEAVE_EARNED,    'Earned Leave'),
-    (LEAVE_SICK,      'Sick Leave'),
-    (LEAVE_LWP,       'Leave Without Pay'),
-    (LEAVE_MATERNITY, 'Maternity Leave'),
-    (LEAVE_PATERNITY, 'Paternity Leave'),
+    (LEAVE_CASUAL,      'Casual Leave'),
+    (LEAVE_EARNED,      'Earned Leave'),
+    (LEAVE_SICK,        'Sick Leave'),
+    (LEAVE_LWP,         'Leave Without Pay'),
+    (LEAVE_MATERNITY,   'Maternity Leave'),
+    (LEAVE_PATERNITY,   'Paternity Leave'),
+    (LEAVE_BEREAVEMENT, 'Bereavement Leave'),
+    (LEAVE_COMP_OFF,    'Compensatory Off'),
 ]
 
 DURATION_FULL      = 'full_day'
@@ -190,12 +194,27 @@ CARRY_FORWARD_MODE_CHOICES = [
 
 GENDER_CHOICES = [('all', 'All'), ('male', 'Male'), ('female', 'Female')]
 
+ACCRUAL_ANNUAL  = 'annual'
+ACCRUAL_MONTHLY = 'monthly'
+ACCRUAL_FREQUENCY_CHOICES = [
+    (ACCRUAL_ANNUAL,  'Annual (lump sum on Jan 1)'),
+    (ACCRUAL_MONTHLY, 'Monthly (1/12th credited each month)'),
+]
+
 
 class LeavePolicy(models.Model):
     # ── Type & Credit ──
     leave_type             = models.CharField(max_length=50, unique=True)
     leave_type_label       = models.CharField(max_length=100, blank=True, default='')
     annual_days            = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    # 'annual' (default) preserves every existing policy's current behavior —
+    # the whole annual_days amount is credited once, on Jan 1, by
+    # reset_annual_leave_balances. 'monthly' opts a policy into
+    # accrue_monthly_leave_balances instead, which tops up 1/12th of
+    # annual_days each month rather than the annual task's lump sum — see
+    # that task's own docstring (apps/hrms/tasks.py) for how the two stay
+    # mutually exclusive per policy.
+    accrual_frequency      = models.CharField(max_length=10, choices=ACCRUAL_FREQUENCY_CHOICES, default=ACCRUAL_ANNUAL)
     can_carry_forward         = models.BooleanField(default=False)
     max_carry_forward_days    = models.PositiveIntegerField(default=0)
     carry_forward_type        = models.CharField(max_length=20, choices=CARRY_FORWARD_TYPE_CHOICES, default=CARRY_FORWARD_LIMITED)
@@ -267,6 +286,11 @@ class LeaveBalance(models.Model):
     used_days                 = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     carried_forward           = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     carry_forward_expiry_date = models.DateField(null=True, blank=True)
+    # Set by accrue_monthly_leave_balances each time it credits this row —
+    # guards against crediting the same employee/policy/month twice if that
+    # task fires more than once in a month (retry, manual re-trigger).
+    # Irrelevant to annual-frequency policies, which never touch this field.
+    last_monthly_accrual      = models.DateField(null=True, blank=True)
     created_at                = models.DateTimeField(auto_now_add=True)
     updated_at                = models.DateTimeField(auto_now=True)
 
@@ -835,3 +859,69 @@ class WFHSavedLocation(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.label}'
+
+
+# ─── HR Help (support requests) ────────────────────────────────────────────────
+
+HR_HELP_TOPIC_CHOICES = [
+    ('payroll_query',    'Payroll query'),
+    ('leave_query',      'Leave query'),
+    ('attendance_query', 'Attendance query'),
+    ('document_request', 'Document request'),
+    ('policy_question',  'Policy question'),
+    # Submitted only from ESS -> Policies & Assets -> "Request an asset" — an
+    # employee asking for a NEW asset to be issued, distinct from the read-only
+    # CompanyAsset records (accounts.models.CompanyAsset) of what has already
+    # been issued. Reuses this generic support-request model rather than a new
+    # dedicated one, same as every other HR help topic.
+    ('asset_request',    'Asset request'),
+    ('other',            'Other'),
+]
+
+HR_HELP_PRIORITY_CHOICES = [
+    ('low',    'Low'),
+    ('normal', 'Normal'),
+    ('high',   'High'),
+]
+
+HR_HELP_OPEN        = 'open'
+HR_HELP_IN_PROGRESS = 'in_progress'
+HR_HELP_RESOLVED    = 'resolved'
+HR_HELP_STATUS_CHOICES = [
+    (HR_HELP_OPEN,        'Open'),
+    (HR_HELP_IN_PROGRESS, 'In Progress'),
+    (HR_HELP_RESOLVED,    'Resolved'),
+]
+
+
+class HRHelpRequest(models.Model):
+    """A confidential employee -> HR support request (e.g. "Payroll query").
+    Deliberately simple — no receipts/attachments, no approval workflow, no
+    branch/manager scoping like Expense/Leave — just topic + priority +
+    message in, status + an optional response note out. Visible to the
+    submitter and to hr_help.respond holders only (never to a reporting
+    manager, unlike Expense/Leave — this is meant to stay a private line to
+    HR, matching the mockup's own "Confidentiality: Restricted to assigned
+    HR team" framing)."""
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request_number = models.PositiveIntegerField(unique=True, null=True, blank=True, db_index=True)
+    submitted_by   = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='hr_help_requests')
+    topic          = models.CharField(max_length=30, choices=HR_HELP_TOPIC_CHOICES)
+    priority       = models.CharField(max_length=10, choices=HR_HELP_PRIORITY_CHOICES, default='normal')
+    message        = models.TextField()
+    status         = models.CharField(max_length=20, choices=HR_HELP_STATUS_CHOICES, default=HR_HELP_OPEN, db_index=True)
+    assigned_to    = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_hr_help_requests',
+    )
+    response       = models.TextField(blank=True, default='')
+    resolved_at    = models.DateTimeField(null=True, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_hr_help_requests'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'HR Help #{self.request_number or self.id} — {self.get_topic_display()}'

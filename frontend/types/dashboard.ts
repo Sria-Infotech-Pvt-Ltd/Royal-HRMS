@@ -178,3 +178,41 @@ export interface HRBirthdayEmployee {
   date_of_birth: string;
   days_until:    number;
 }
+
+// ── Workforce Dashboard overview (Screen 1) ────────────────────────────────────
+// Backed by HRDashboardOverviewView / HRLifecycleActionRegisterView
+// (backend/apps/dashboard/views/overview.py) — every field a real computed
+// number, never a fabricated demo value.
+
+export interface WeeklyAttendanceDay {
+  label: string;
+  count: number;
+}
+
+export interface DashboardOverview {
+  total_headcount: number;
+  new_this_month: number;
+  present_today: number;
+  attendance_pct: number;
+  payroll_ready: number;
+  payroll_total: number;
+  payroll_blocked: number;
+  onboarding_in_progress: number;
+  joining_this_week: number;
+  attendance_exceptions_today: number;
+  open_requests: number;
+  compliance_pct: number;
+  weekly_attendance: WeeklyAttendanceDay[];
+}
+
+export type LifecycleActionState = "Pending" | "In Progress";
+
+export interface LifecycleActionRow {
+  case_ref: string;
+  employee_name: string;
+  action: string;
+  effective: string;
+  owner: string;
+  state: LifecycleActionState;
+  link: string;
+}

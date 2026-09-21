@@ -99,7 +99,7 @@ export default function EmployeePickerField({ value, onChange, disabled }: Props
       {open && query && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 60,
-          background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 8,
+          background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 8,
           boxShadow: "var(--shadow-md)", maxHeight: 220, overflowY: "auto",
         }}>
           {loading ? (

@@ -7,7 +7,7 @@ import AssessmentLockedNotice from "./AssessmentLockedNotice";
 const REQUEST_META: Record<RecentRequest["request_type"], { icon: string; color: string; bg: string; label: string }> = {
   leave:                { icon: "ti-beach",  color: "var(--success)", bg: "rgba(22,163,74,0.10)",  label: "Leave"       },
   expense:              { icon: "ti-receipt",color: "var(--warn)",    bg: "rgba(217,119,6,0.10)",  label: "Expense"     },
-  attendance_correction:{ icon: "ti-clock",  color: "var(--info)",   bg: "rgba(14,124,134,0.10)", label: "Attendance"  },
+  attendance_correction:{ icon: "ti-clock",  color: "var(--info)",   bg: "rgba(37,99,235,0.10)", label: "Attendance"  },
 };
 
 const STATUS_BADGE: Record<string, string> = {

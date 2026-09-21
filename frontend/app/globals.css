@@ -6,40 +6,41 @@
    ROYAL HRMS — FINANCE DESIGN SYSTEM
    ============================================================ */
 :root {
-  --bg: #f7f9fc;
-  --bg-low: #eff2f8;
-  --bg-mid: #e7ecf4;
-  --bg-high: #dee5f0;
-  --bg-highest: #d4dceb;
+  --bg: #f6f7fb;
+  --bg-low: #fafbfe;
+  --bg-mid: #f4f5fa;
+  --bg-high: #e8eaf1;
+  --bg-highest: #d9dbe8;
   --surface: #ffffff;
-  --on-bg: #1a2433;
-  --on-variant: #4f5d75;
-  --outline: #7c8aa3;
-  --outline-v: #d3dae8;
-  --primary: #1e4e8c;
-  --primary-c: #5b86c9;
+  --on-bg: #14151f;
+  --on-variant: #5c6377;
+  --outline: #7d8698;
+  --outline-v: #e8eaf1;
+  --primary: #7c3aed;
+  --primary-c: #a78bfa;
   --on-primary: #ffffff;
-  --secondary: #c99a2e;
-  --sec-c: #ecd9a0;
-  --chart-1: #5b86c9;
+  --secondary: #6d28d9;
+  --sec-c: #f3eefe;
+  --brand-ink: #6425d5;
+  --chart-1: #7c3aed;
   --chart-2: #dfc06a;
   --chart-3: #7fc99c;
   --chart-4: #4fb0b8;
-  --purple: #ad95cf;
-  --error: #c0392b;
-  --error-c: #ffdad6;
-  --success: #1b8a6b;
-  --success-c: #d8f3dc;
-  --info: #0e7c86;
-  --info-c: #e6f1fb;
-  --warn: #b5651d;
-  --warn-c: #fef3c7;
+  --purple: #a78bfa;
+  --error: #c23a2f;
+  --error-c: #fcebe9;
+  --success: #17905a;
+  --success-c: #e6f6ee;
+  --info: #2563eb;
+  --info-c: #e9f0fe;
+  --warn: #a2620c;
+  --warn-c: #fdf3dd;
   --sidebar-w: 220px;
   --header-h: 56px;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow: 0 1px 4px rgba(30, 78, 140, 0.08), 0 0 0 1px rgba(30, 78, 140, 0.06);
-  --shadow-md: 0 4px 16px rgba(30, 78, 140, 0.12);
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow: 0 1px 4px rgba(124, 58, 237, 0.08), 0 0 0 1px rgba(124, 58, 237, 0.06);
+  --shadow-md: 0 4px 16px rgba(124, 58, 237, 0.12);
 }
 
 *,
@@ -55,12 +56,19 @@ html {
 }
 
 body {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   color: var(--on-bg);
   background: var(--bg);
   line-height: 1.5;
-  min-height: 100vh;
+  height: 100vh;
+  /* The whole app (dashboard shell, login page) is architected as one
+     fixed-height frame with its own inner overflow-y-auto scroll regions
+     (see DashboardShell.tsx's <main>, .login-page-root) — body itself must
+     never scroll. Without this, any 1-2px rounding mismatch between this
+     and an inner "h-screen" box creates a second, barely-movable outer
+     page scrollbar that looks broken/truncated next to the real one. */
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -86,8 +94,8 @@ a {
 
 /* ---- SCROLLBAR ---- */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -95,8 +103,13 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--outline-v);
+  background: var(--outline);
   border-radius: 99px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
 }
 
 /* ============================================================
@@ -134,7 +147,7 @@ a {
 
 /* Cards */
 .card {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--outline-v);
   overflow: hidden;
@@ -175,24 +188,26 @@ a {
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--outline-v);
   padding: 20px;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 10.5px;
   color: var(--on-variant);
   margin-bottom: 4px;
-  font-weight: 500;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .stat-value {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 28px;
+  font-weight: 800;
   color: var(--on-bg);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
   line-height: 1;
 }
 
@@ -203,19 +218,19 @@ a {
 }
 
 .stat-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 17px;
   float: right;
   margin-top: -4px;
 }
 
 .si-primary {
-  background: rgba(30, 78, 140, 0.1);
+  background: var(--sec-c);
   color: var(--primary);
 }
 
@@ -250,15 +265,15 @@ table {
 }
 
 th {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--on-variant);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--outline);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.07em;
   padding: 10px 14px;
   text-align: left;
   background: var(--bg-low);
-  border-bottom: 1px solid var(--outline-v);
+  border-bottom: 1px solid var(--bg-mid);
 }
 
 td {
@@ -282,10 +297,11 @@ tr:hover td {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 2px 9px;
   border-radius: 99px;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .badge-success {
@@ -309,7 +325,7 @@ tr:hover td {
 }
 
 .badge-primary {
-  background: rgba(30, 78, 140, 0.12);
+  background: var(--sec-c);
   color: var(--primary);
 }
 
@@ -352,10 +368,11 @@ tr:hover td {
 .btn-filled {
   background: var(--primary);
   color: #fff;
+  font-weight: 700;
 }
 
 .btn-filled:hover {
-  background: #163e73;
+  background: #6d28d9;
 }
 
 .btn-outline {
@@ -365,7 +382,7 @@ tr:hover td {
 }
 
 .btn-outline:hover {
-  background: rgba(30, 78, 140, 0.06);
+  background: var(--sec-c);
 }
 
 .btn-ghost {
@@ -385,7 +402,7 @@ tr:hover td {
 }
 
 .btn-danger:hover {
-  background: #9b1515;
+  background: #9e2f26;
 }
 
 .btn-success {
@@ -394,7 +411,7 @@ tr:hover td {
 }
 
 .btn-success:hover {
-  background: #1e4d38;
+  background: #12703f;
 }
 
 .btn i {
@@ -447,7 +464,7 @@ tr:hover td {
 
 .field-input:focus {
   border-color: var(--primary);
-  background: #fff;
+  background: var(--surface);
 }
 
 textarea.field-input {
@@ -560,10 +577,10 @@ textarea.field-input {
 }
 
 .page-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
   color: var(--on-bg);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .page-sub {
@@ -589,8 +606,8 @@ textarea.field-input {
 
 .tab {
   padding: 10px 18px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--on-variant);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -603,8 +620,53 @@ textarea.field-input {
 }
 
 .tab.active {
+  color: var(--on-bg);
+  font-weight: 700;
+  border-bottom-color: var(--on-bg);
+}
+
+/* ESS pill tab bar — a rounded segmented control, distinct from the
+   underline .tabs/.tab used elsewhere in the app. */
+.ess-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1px;
+  background: var(--surface);
+  border: 1px solid var(--outline-v);
+  border-radius: 12px;
+  padding: 5px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ess-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ess-tab {
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-variant);
+  cursor: pointer;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ess-tab:hover {
+  color: var(--on-bg);
+  background: var(--bg-mid);
+}
+
+.ess-tab.active {
   color: var(--primary);
-  border-bottom-color: var(--primary);
+  font-weight: 700;
+  background: rgba(124, 58, 237, 0.1);
 }
 
 /* Alert */
@@ -665,7 +727,7 @@ textarea.field-input {
 }
 
 .modal {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius-lg);
   width: 560px;
   max-width: 95vw;
@@ -686,7 +748,7 @@ textarea.field-input {
   justify-content: space-between;
   position: sticky;
   top: 0;
-  background: #fff;
+  background: var(--surface);
   z-index: 1;
 }
 
@@ -882,7 +944,7 @@ textarea.field-input {
   border: 1px solid var(--outline-v);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #fff;
+  background: var(--surface);
 }
 
 .accordion-header {
@@ -891,7 +953,7 @@ textarea.field-input {
   gap: 12px;
   padding: 14px 16px;
   cursor: pointer;
-  background: #fff;
+  background: var(--surface);
   transition: background 0.15s;
   user-select: none;
 }
@@ -934,7 +996,7 @@ textarea.field-input {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   border-left: 3px solid var(--primary);
@@ -1059,13 +1121,13 @@ textarea.field-input {
 
 .upload-zone:hover {
   border-color: var(--primary);
-  background: rgba(30, 78, 140, 0.04);
+  background: rgba(124, 58, 237, 0.04);
 }
 
 /* A file has been picked — same visual treatment as :hover, but persistent */
 .upload-zone--active {
   border-color: var(--primary);
-  background: rgba(30, 78, 140, 0.04);
+  background: rgba(124, 58, 237, 0.04);
 }
 
 .upload-zone--active i {
@@ -1090,7 +1152,7 @@ textarea.field-input {
 
 /* Dashboard greeting banner */
 .dash-greeting {
-  background: linear-gradient(135deg, var(--primary) 0%, #163e73 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%);
   color: #fff;
   border-radius: var(--radius-lg);
   padding: 24px 28px;
@@ -1173,7 +1235,7 @@ textarea.field-input {
 }
 
 .qa-tile {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--outline-v);
   border-radius: var(--radius);
   padding: 16px 14px;
@@ -1189,7 +1251,7 @@ textarea.field-input {
 .qa-tile:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(30, 78, 140, 0.1);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
 }
 
 .qa-icon {
@@ -1220,7 +1282,7 @@ textarea.field-input {
 }
 
 .anc-card:hover {
-  box-shadow: 0 4px 12px rgba(30, 78, 140, 0.08);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
 }
 
 .anc-card.pinned {
@@ -1265,7 +1327,7 @@ textarea.field-input {
 .doc-tile:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(30, 78, 140, 0.08);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
 }
 
 .doc-icon {
@@ -1279,22 +1341,22 @@ textarea.field-input {
 }
 
 .doc-icon.pdf {
-  background: rgba(192, 57, 43, 0.12);
+  background: rgba(194, 58, 47, 0.12);
   color: var(--error);
 }
 
 .doc-icon.doc {
-  background: rgba(14, 124, 134, 0.12);
+  background: rgba(37, 99, 235, 0.12);
   color: var(--info);
 }
 
 .doc-icon.xls {
-  background: rgba(27, 138, 107, 0.12);
+  background: rgba(23, 144, 90, 0.12);
   color: var(--success);
 }
 
 .doc-icon.policy {
-  background: rgba(30, 78, 140, 0.12);
+  background: rgba(124, 58, 237, 0.12);
   color: var(--primary);
 }
 
@@ -1364,7 +1426,7 @@ textarea.field-input {
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1386,7 +1448,7 @@ textarea.field-input {
 
 /* Birthday / celebration card */
 .bday-card {
-  background: linear-gradient(135deg, rgba(30, 78, 140, 0.08) 0%, rgba(91, 134, 201, 0.08) 100%);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(167, 139, 250, 0.08) 100%);
   border: 1px solid var(--outline-v);
   border-radius: var(--radius);
   padding: 14px 16px;
@@ -1612,7 +1674,7 @@ textarea.field-input {
 }
 
 .settings-card-tile {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--outline-v);
   border-radius: var(--radius-lg);
   padding: 18px 20px;
@@ -1626,7 +1688,7 @@ textarea.field-input {
 .settings-card-tile:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(30, 78, 140, 0.08);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08);
 }
 
 .settings-card-icon {
@@ -1641,22 +1703,22 @@ textarea.field-input {
 }
 
 .sc-company {
-  background: rgba(30, 78, 140, 0.12);
+  background: rgba(124, 58, 237, 0.12);
   color: var(--primary);
 }
 
 .sc-modules {
-  background: rgba(27, 138, 107, 0.12);
+  background: rgba(23, 144, 90, 0.12);
   color: var(--success);
 }
 
 .sc-comm {
-  background: rgba(14, 124, 134, 0.12);
+  background: rgba(37, 99, 235, 0.12);
   color: var(--info);
 }
 
 .sc-system {
-  background: rgba(181, 101, 29, 0.12);
+  background: rgba(162, 98, 12, 0.12);
   color: var(--warn);
 }
 
@@ -1744,7 +1806,7 @@ textarea.field-input {
 .login-submit-btn {
   width: 100%;
   padding: 14px 20px;
-  background: #1e4e8c;
+  background: #7c3aed;
   color: #fff;
   border: none;
   border-radius: var(--radius-lg);
@@ -1761,7 +1823,7 @@ textarea.field-input {
 }
 
 .login-submit-btn:hover {
-  background: #163d6e;
+  background: #6d28d9;
 }
 
 .login-submit-btn:disabled {
@@ -1809,7 +1871,7 @@ textarea.field-input {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: rgba(30, 78, 140, 0.08);
+  background: rgba(124, 58, 237, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2038,7 +2100,7 @@ textarea.field-input {
 /* ============================================================
    DARK MODE
    ============================================================ */
-body.dark-mode {
+html[data-theme="dark"] {
   --bg: #10151f;
   --bg-low: #161c28;
   --bg-mid: #1c2330;
@@ -2049,10 +2111,11 @@ body.dark-mode {
   --on-variant: #b7c0d4;
   --outline: #7c8aa3;
   --outline-v: #2c3445;
-  --primary: #7fa3de;
-  --primary-c: #5b86c9;
-  --on-primary: #1c1a17;
-  --secondary: #ecd9a0;
+  --primary: #a78bfa;
+  --primary-c: #c4b5fd;
+  --on-primary: #0c0d14;
+  --secondary: #c4b5fd;
+  --brand-ink: #c4b5fd;
   --error: #f4a5a5;
   --error-c: #5e1a1a;
   --success: #9fe1cb;
@@ -2167,7 +2230,7 @@ body.dark-mode {
 }
 
 .ann-card:hover {
-  box-shadow: 0 4px 12px rgba(30, 78, 140, 0.08);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
 }
 
 .ann-card.pinned {
@@ -2648,7 +2711,7 @@ body.dark-mode {
 
 /* Scope banner — signals that every section below it applies only to the
    currently selected record (e.g. one leave type), not to all records. */
-.scope-banner { margin-bottom: 20px; padding: 18px 24px; background: rgba(30, 78, 140, 0.05); border: 1px solid var(--primary); border-radius: var(--radius-lg); }
+.scope-banner { margin-bottom: 20px; padding: 18px 24px; background: rgba(124, 58, 237, 0.05); border: 1px solid var(--primary); border-radius: var(--radius-lg); }
 
 /* ============================================================
    TEAM APPROVALS — enterprise redesign (Keka / Darwinbox style)
@@ -2659,8 +2722,8 @@ body.dark-mode {
   --ta-bg: #F8FAFC;
   --ta-surface: #ffffff;
   --ta-primary: var(--primary);
-  --ta-primary-hover: #163e73;
-  --ta-primary-soft: rgba(30, 78, 140, 0.10);
+  --ta-primary-hover: #6d28d9;
+  --ta-primary-soft: rgba(124, 58, 237, 0.10);
   --ta-success: #22C55E;
   --ta-success-soft: rgba(34, 197, 94, 0.12);
   --ta-warning: #F59E0B;

@@ -200,7 +200,7 @@ export default function OtEntryTab() {
                 <tr key={r.id}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(30,78,140,0.1)", color: "var(--primary)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(124,58,237,0.1)", color: "var(--primary)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {r.initials}
                       </div>
                       <div>

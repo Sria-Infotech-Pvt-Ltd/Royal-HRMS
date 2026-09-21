@@ -15,8 +15,8 @@ import DocPreviewModal from "@/components/DocPreviewModal";
 /* ── shared cell input style ────────────────────────────────── */
 const CELL =
   "w-full px-2.5 py-1.5 rounded-md border text-[12.5px] outline-none transition-all" +
-  " bg-white placeholder:text-[#7c8aa3]" +
-  " focus:border-[var(--primary)] focus:ring-1 focus:ring-[rgba(30,78,140,0.15)]";
+  " bg-[var(--surface)] placeholder:text-[#7c8aa3]" +
+  " focus:border-[var(--primary)] focus:ring-1 focus:ring-[rgba(124,58,237,0.15)]";
 
 export default function ProfileForm({
   section,
@@ -58,7 +58,7 @@ export default function ProfileForm({
   return (
     <div
       className="rounded-xl border overflow-hidden flex flex-col"
-      style={{ background: "#fff", borderColor: "var(--outline-v)" }}
+      style={{ background: "var(--surface)", borderColor: "var(--outline-v)" }}
     >
       {/* ── Blue header ─────────────────────────────────────── */}
       <div
@@ -138,7 +138,7 @@ export default function ProfileForm({
             disabled={!dirty}
             suppressHydrationWarning
             className="px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+            style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "var(--surface)" }}
           >
             Cancel
           </button>
@@ -202,7 +202,7 @@ function TableEditor({
           onClick={addRow}
           suppressHydrationWarning
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-[13px] font-medium transition-colors"
-          style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "#fff" }}
+          style={{ borderColor: "var(--outline-v)", color: "var(--primary)", background: "var(--surface)" }}
         >
           <i className="ti ti-plus text-[13px]" />
           {section.addLabel}
@@ -276,7 +276,7 @@ function TableEditor({
                           style={{
                             borderColor: "var(--outline-v)",
                             color: isEditing ? "var(--primary)" : "var(--on-variant)",
-                            background: isEditing ? "rgba(30,78,140,0.06)" : "#fff",
+                            background: isEditing ? "rgba(124,58,237,0.06)" : "#fff",
                           }}
                         >
                           <i className={`ti ${isEditing ? "ti-check" : "ti-pencil"} text-[13px]`} />
@@ -318,8 +318,8 @@ function CellDisplay({ col, value }: { col: TableColumn; value: string }) {
       <span
         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium"
         style={{
-          background: yes ? "rgba(27,138,107,0.12)" : "rgba(192,57,43,0.10)",
-          color: yes ? "#1b8a6b" : "#c0392b",
+          background: yes ? "rgba(23,144,90,0.12)" : "rgba(194,58,47,0.10)",
+          color: yes ? "#17905a" : "#c23a2f",
         }}
       >
         {yes ? "Yes" : "No"}
@@ -460,16 +460,16 @@ function DocsCards({
             return (
               <div
                 key={doc.name}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-white"
+                className="flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-[var(--surface)]"
                 style={{ borderColor: "var(--outline-v)" }}
               >
                 <div
                   className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: uploaded ? "rgba(27,138,107,0.10)" : "var(--bg-mid)" }}
+                  style={{ background: uploaded ? "rgba(23,144,90,0.10)" : "var(--bg-mid)" }}
                 >
                   <i
                     className={`ti ${uploading ? "ti-loader-2 animate-spin" : uploaded ? "ti-file-check" : "ti-file-off"} text-[18px]`}
-                    style={{ color: uploaded ? "#1b8a6b" : "var(--on-variant)" }}
+                    style={{ color: uploaded ? "#17905a" : "var(--on-variant)" }}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -536,7 +536,7 @@ function DocsTable({ documents }: { documents: DocEntry[] }) {
       {/* Info banner */}
       <div
         className="flex items-center gap-2.5 px-4 py-3 rounded-lg mb-5"
-        style={{ background: "rgba(30,78,140,0.06)", border: "1px solid rgba(30,78,140,0.15)" }}
+        style={{ background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)" }}
       >
         <i className="ti ti-info-circle text-[16px]" style={{ color: "var(--primary)" }} />
         <p className="text-[13px]" style={{ color: "var(--primary)" }}>
@@ -586,7 +586,7 @@ function DocsTable({ documents }: { documents: DocEntry[] }) {
                   {doc.status === "verified" && (
                     <span
                       className="inline-flex items-center px-3 py-0.5 rounded-full text-[12px] font-medium"
-                      style={{ background: "rgba(27,138,107,0.12)", color: "#1b8a6b" }}
+                      style={{ background: "rgba(23,144,90,0.12)", color: "#17905a" }}
                     >
                       Verified
                     </span>
@@ -621,7 +621,7 @@ function DocsTable({ documents }: { documents: DocEntry[] }) {
                     disabled={!doc.fileUrl}
                     onClick={() => doc.fileUrl && setPreview(doc)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-colors hover:bg-[var(--bg-mid)] disabled:opacity-30 disabled:cursor-not-allowed"
-                    style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "#fff" }}
+                    style={{ borderColor: "var(--outline-v)", color: "var(--on-bg)", background: "var(--surface)" }}
                   >
                     <i className="ti ti-eye text-[13px]" />
                     View

@@ -37,8 +37,8 @@ function toForm(h: Holiday): HolidayFormPayload {
   };
 }
 
-const INPUT     = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
-const INPUT_ERR = "w-full border border-red-400 rounded-lg px-3 py-2 text-sm bg-red-50 outline-none";
+const INPUT     = "w-full border border-[var(--outline-v)] rounded-lg px-3 py-2 text-sm text-[var(--on-bg)] bg-[var(--surface)] outline-none transition focus:border-[var(--info)] focus:ring-2 focus:ring-[var(--info)]";
+const INPUT_ERR = "w-full border border-[var(--error)] rounded-lg px-3 py-2 text-sm bg-[var(--error-c)] outline-none";
 
 export default function HolidayFormModal({ mode, editing, branches, onClose, onSaved }: Props) {
   const { showToast } = useToast();
@@ -83,36 +83,36 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <span className="text-sm font-bold text-gray-800">
+      <div className="bg-[var(--surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
+          <span className="text-sm font-bold text-[var(--on-bg)]">
             {mode === "add" ? "Add Holiday" : `Edit: ${editing?.name}`}
           </span>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bg-mid)] text-[var(--outline)] transition-colors">
             <i className="ti ti-x text-sm" />
           </button>
         </div>
         <div className="px-6 py-5 flex flex-col gap-4">
           {saveErr && (
-            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+            <div className="text-xs text-[var(--error)] bg-[var(--error-c)] border border-[var(--error)] rounded-lg px-3 py-2 flex items-center gap-1.5">
               <i className="ti ti-alert-circle" /> {saveErr}
             </div>
           )}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Holiday Name *</label>
+            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Holiday Name *</label>
             <input className={errors.name ? INPUT_ERR : INPUT} value={form.name}
               onChange={e => setField("name", sanitizeHolidayName(e.target.value))} placeholder="e.g. Independence Day" autoFocus maxLength={80} />
-            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+            {errors.name && <p className="text-xs text-[var(--error)] mt-1">{errors.name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Date *</label>
+              <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Date *</label>
               <input className={errors.date ? INPUT_ERR : INPUT} type="date" value={form.date}
                 onChange={e => setField("date", e.target.value)} />
-              {errors.date && <p className="text-xs text-red-500 mt-1">{errors.date}</p>}
+              {errors.date && <p className="text-xs text-[var(--error)] mt-1">{errors.date}</p>}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Type</label>
+              <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Type</label>
               <select className={`${INPUT} field-select`} value={form.holiday_type} onChange={e => setField("holiday_type", e.target.value as HolidayType)}>
                 <option value="national">National</option>
                 <option value="regional">Regional</option>
@@ -121,7 +121,7 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Applicable Company Code</label>
+            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Applicable Company Code</label>
             <select className={`${INPUT} field-select`} value={form.branch === null ? "" : String(form.branch)}
               onChange={e => setField("branch", e.target.value === "" ? null : Number(e.target.value))}>
               <option value="">All Company Codes</option>
@@ -129,30 +129,30 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description</label>
+            <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Description</label>
             <textarea className={INPUT} rows={2} value={form.description}
               onChange={e => setField("description", e.target.value)} placeholder="Optional notes" />
           </div>
           <div className="flex items-center gap-6">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.is_optional} onChange={e => setField("is_optional", e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600" />
-              <span className="text-sm text-gray-700">Optional holiday</span>
+                className="w-4 h-4 rounded border-[var(--outline-v)] text-[var(--info)]" />
+              <span className="text-sm text-[var(--on-bg)]">Optional holiday</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input type="checkbox" checked={form.is_active} onChange={e => setField("is_active", e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600" />
-              <span className="text-sm text-gray-700">Active</span>
+                className="w-4 h-4 rounded border-[var(--outline-v)] text-[var(--info)]" />
+              <span className="text-sm text-[var(--on-bg)]">Active</span>
             </label>
           </div>
         </div>
         <div className="flex justify-end gap-2 px-6 pb-5">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-mid)] transition-colors">
             Cancel
           </button>
           <button onClick={save} disabled={saving}
             className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-colors flex items-center gap-2"
-            style={{ background: saving ? "#7fa3c8" : "#1e4e8c" }}>
+            style={{ background: "var(--primary)", opacity: saving ? 0.7 : 1 }}>
             {saving ? <><i className="ti ti-loader-2 animate-spin" /> Saving…</> : mode === "add" ? "Add Holiday" : "Save Changes"}
           </button>
         </div>

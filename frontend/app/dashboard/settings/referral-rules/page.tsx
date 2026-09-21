@@ -64,7 +64,7 @@ function RuleForm({
         <div className="field-group">
           <label className="field-label">Icon</label>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(30,78,140,0.09)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(124,58,237,0.09)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className={`ti ${form.icon}`} style={{ fontSize: 16, color: "var(--primary)" }} />
             </div>
             <select className="field-input field-select" style={{ flex: 1 }}
@@ -247,7 +247,7 @@ export default function ReferralRulesSettingsPage() {
                 ) : (
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
                     {/* Icon */}
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: rule.is_active ? "rgba(30,78,140,0.09)" : "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: rule.is_active ? "rgba(124,58,237,0.09)" : "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <i className={`ti ${rule.icon}`} style={{ fontSize: 18, color: rule.is_active ? "var(--primary)" : "var(--on-variant)" }} />
                     </div>
 

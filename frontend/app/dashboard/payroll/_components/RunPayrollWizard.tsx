@@ -119,7 +119,7 @@ export default function RunPayrollWizard({
                     fontSize: 13, fontWeight: 600, flexShrink: 0,
                     background: idx < step ? "var(--success)" : idx === step ? "var(--primary)" : "var(--bg-high)",
                     color: idx <= step ? "#fff" : "var(--on-variant)",
-                    boxShadow: idx === step ? "0 0 0 3px rgba(30,78,140,0.2)" : "none",
+                    boxShadow: idx === step ? "0 0 0 3px rgba(124,58,237,0.2)" : "none",
                     transition: "all 0.2s",
                   }}>
                     {idx < step

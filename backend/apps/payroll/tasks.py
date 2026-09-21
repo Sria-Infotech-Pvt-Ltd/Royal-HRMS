@@ -9,6 +9,8 @@ import logging
 
 from celery import shared_task
 
+from core.date_utils import format_date_display
+
 logger = logging.getLogger(__name__)
 
 REMINDER_HOURS = 24
@@ -61,9 +63,9 @@ def send_payroll_approval_reminders(self):
                 _send_email(manager, 'payroll_l1_approval_required', {
                     'manager_name': manager.full_name or manager.email,
                     'month':        month_label,
-                    'cycle_start':  cycle.cycle_start.strftime('%d %b %Y'),
-                    'cycle_end':    cycle.cycle_end.strftime('%d %b %Y'),
-                    'pay_date':     cycle.pay_date.strftime('%d %b %Y'),
+                    'cycle_start':  format_date_display(cycle.cycle_start),
+                    'cycle_end':    format_date_display(cycle.cycle_end),
+                    'pay_date':     format_date_display(cycle.pay_date),
                 })
                 reminded_count += 1
 

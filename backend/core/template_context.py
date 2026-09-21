@@ -12,6 +12,8 @@ place.
 """
 from datetime import date
 
+from core.date_utils import format_date_display
+
 
 def company_name() -> str:
     from apps.accounts.models import Company
@@ -83,7 +85,7 @@ def candidate_context(candidate, actor=None) -> dict:
     # Display-friendly variants for candidate-facing interview emails — kept
     # separate from the ISO `interview_date` above so existing templates
     # relying on that exact format are unaffected.
-    interview_date_display = candidate.interview_date.strftime('%d %b %Y') if candidate.interview_date else ''
+    interview_date_display = format_date_display(candidate.interview_date) if candidate.interview_date else ''
     interview_time_display = candidate.interview_time.strftime('%I:%M %p').lstrip('0') if candidate.interview_time else ''
     interviewer = candidate.interviewer
     interviewer_name = interviewer.full_name if interviewer else ''

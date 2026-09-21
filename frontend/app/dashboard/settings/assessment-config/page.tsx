@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDateTime } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 
 interface AssessmentConfig {
@@ -42,7 +43,7 @@ function apiErrMsg(e: unknown) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(iso);
 }
 
 export default function AssessmentConfigPage() {
@@ -142,7 +143,7 @@ export default function AssessmentConfigPage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div style={{
                             width: 32, height: 32, borderRadius: 8,
-                            background: "var(--primary-c, rgba(30,78,140,0.10))",
+                            background: "var(--primary-c, rgba(124,58,237,0.10))",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             flexShrink: 0,
                           }}>

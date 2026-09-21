@@ -225,8 +225,8 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                 return (
                   <div key={section.id} className="settings-card" style={{ padding: 0, overflow: "hidden" }}>
                     {/* Section header */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(30,78,140,0.05)", borderBottom: "1px solid var(--border)" }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(30,78,140,0.12)", color: "var(--primary)", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontWeight: 700 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(124,58,237,0.05)", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(124,58,237,0.12)", color: "var(--primary)", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontWeight: 700 }}>
                         {si + 1}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -244,7 +244,7 @@ export default function ItemsModal({ assessment, onClose }: Props) {
                     {/* Items */}
                     {sItems.map((item, ii) => (
                       <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px 8px 44px", borderBottom: "1px solid var(--border)" }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 6, background: item.item_type === "video" ? "rgba(30,78,140,0.10)" : "rgba(116,55,200,0.10)", color: item.item_type === "video" ? "var(--primary)" : "#7437c8", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 6, background: item.item_type === "video" ? "rgba(124,58,237,0.10)" : "rgba(116,55,200,0.10)", color: item.item_type === "video" ? "var(--primary)" : "#7437c8", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <i className={`ti ${item.item_type === "video" ? "ti-player-play" : "ti-help-circle"}`} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>

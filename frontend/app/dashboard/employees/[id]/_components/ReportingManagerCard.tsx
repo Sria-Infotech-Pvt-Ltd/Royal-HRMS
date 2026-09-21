@@ -59,11 +59,11 @@ export function EmployeePickerInline({
           className={BASE_CLS + " text-left appearance-none flex items-center justify-between pr-9"}
           style={{
             borderColor: open ? "var(--primary)" : BORDER,
-            background: "#eff2f8",
-            color: value ? "#1e4e8c" : "var(--on-variant)",
+            background: "#f3eefe",
+            color: value ? "#7c3aed" : "var(--on-variant)",
             fontWeight: value ? 600 : 400,
             cursor: disabled ? "default" : "pointer",
-            boxShadow: open ? "0 0 0 2px rgba(30,78,140,0.10)" : undefined,
+            boxShadow: open ? "0 0 0 2px rgba(124,58,237,0.10)" : undefined,
             // show chevron only in edit mode
             backgroundImage: disabled ? undefined : `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
             backgroundRepeat: "no-repeat",
@@ -78,7 +78,7 @@ export function EmployeePickerInline({
         {open && (
           <div style={{
             position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 60,
-            background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 8,
+            background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 8,
             boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden", maxHeight: 240, overflowY: "auto",
           }}>
             {loading ? (
@@ -99,7 +99,7 @@ export function EmployeePickerInline({
                     style={{
                       display: "flex", alignItems: "center", gap: 10,
                       width: "100%", padding: "9px 14px",
-                      background: isActive ? "rgba(30,78,140,0.06)" : "none",
+                      background: isActive ? "rgba(124,58,237,0.06)" : "none",
                       border: "none", borderBottom: "1px solid var(--outline-v)",
                       cursor: "pointer", textAlign: "left",
                     }}

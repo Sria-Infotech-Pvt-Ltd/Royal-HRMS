@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
 import { PROFILE_SECTIONS, applyDocumentTypeConfig, type DocEntry } from "@/app/dashboard/employees/_data";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
+import { formatDate } from "@/lib/formatDate";
 import { useFaceRegistrationCard } from "@/hooks/useFaceRegistrationCard";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ChangePasswordForm from "./ChangePasswordForm";
@@ -157,7 +158,7 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 function val(v: string | number | null | undefined): string {
@@ -453,7 +454,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
             {profile?.employee_id && (
-              <span style={{ fontSize: 11, background: "rgba(30,78,140,0.1)", color: "var(--primary)", padding: "2px 10px", borderRadius: 20, fontWeight: 600 }}>
+              <span style={{ fontSize: 11, background: "rgba(124,58,237,0.1)", color: "var(--primary)", padding: "2px 10px", borderRadius: 20, fontWeight: 600 }}>
                 {profile.employee_id}
               </span>
             )}
@@ -501,7 +502,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
             its HR counterpart. ── */}
         <nav
           className="rounded-xl border p-1 sticky top-4 self-start flex-shrink-0 w-[220px]"
-          style={{ background: "#fff", borderColor: "var(--outline-v)" }}
+          style={{ background: "var(--surface)", borderColor: "var(--outline-v)" }}
         >
           <ul className="flex flex-col gap-0.5">
             {visibleTabs.map(tab => {

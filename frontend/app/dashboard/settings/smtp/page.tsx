@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
+import { formatDateTime } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
@@ -218,7 +219,7 @@ export default function SmtpSettingsPage() {
 
       {/* Active banner */}
       {!loading && !error && activeEntry && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 20, background: "rgba(27,138,107,0.07)", border: "1px solid rgba(27,138,107,0.2)", borderRadius: "var(--radius)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 20, background: "rgba(23,144,90,0.07)", border: "1px solid rgba(23,144,90,0.2)", borderRadius: "var(--radius)" }}>
           <i className="ti ti-circle-check-filled" style={{ fontSize: 16, color: "var(--success)" }} />
           <span style={{ fontSize: 13 }}>
             Currently using <strong>{activeEntry.name}</strong> ({activeEntry.from_email}) for sending emails.
@@ -241,13 +242,13 @@ export default function SmtpSettingsPage() {
             }}>
               {/* Card header */}
               <div style={{ padding: "14px 20px", background: "var(--bg-low)", borderBottom: "1px solid var(--outline-v)", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(30,78,140,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(124,58,237,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <i className="ti ti-mail-cog" style={{ fontSize: 17, color: "var(--primary)" }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</div>
                   <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 1 }}>
-                    Updated {new Date(entry.updated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    Updated {formatDateTime(entry.updated_at)}
                   </div>
                 </div>
                 {entry.is_active

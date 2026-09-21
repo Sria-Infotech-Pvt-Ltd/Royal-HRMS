@@ -8,12 +8,12 @@ import LeaveAnalytics from "./_components/LeaveAnalytics";
 
 type TabId = "dashboard" | "apply" | "calendar" | "analytics";
 
-interface Props { initialTab?: TabId }
+interface Props { initialTab?: TabId; onBack?: () => void }
 
 // Approving leave/expense/attendance-correction requests — for both managers
 // and HR — lives entirely in the Approvals module (/dashboard/approvals) now.
 // This page is scoped to applying for and tracking one's own leave only.
-export default function LeavePageClient({ initialTab = "dashboard" }: Props) {
+export default function LeavePageClient({ initialTab = "dashboard", onBack }: Props) {
   const tabs: { id: TabId; label: string }[] = [
     { id: "dashboard", label: "Dashboard"    },
     { id: "apply",     label: "Apply Leave"  },
@@ -27,6 +27,14 @@ export default function LeavePageClient({ initialTab = "dashboard" }: Props) {
     <div>
       <div className="page-header">
         <div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
+            >
+              <i className="ti ti-arrow-left" /> Back to overview
+            </button>
+          )}
           <div className="page-title">Leave Management</div>
           <div className="page-sub">Apply for leave and track your own requests</div>
         </div>

@@ -60,21 +60,23 @@ export function NotificationBell() {
   return (
     <div ref={containerRef} className="relative">
       <button
-        className="relative w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-transparent text-[var(--outline)] border-none cursor-pointer hover:bg-[var(--bg-mid)]"
+        className="iconbtn relative"
         title="Notifications"
         onClick={() => setOpen(v => !v)}
         suppressHydrationWarning
       >
-        <i className="ti ti-bell text-[18px]" />
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
+          <path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />
+        </svg>
         {unreadCount > 0 && (
-          <span className="absolute top-[2px] right-[2px] min-w-[16px] h-[16px] px-[3px] rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-[var(--error)] border-[1.5px] border-white">
+          <span className="absolute top-[2px] right-[2px] min-w-[16px] h-[16px] px-[3px] rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-[var(--error)] border-[1.5px] border-[var(--surface)]">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[42px] w-[340px] bg-white rounded-xl border border-[var(--outline-v)] shadow-lg z-50 overflow-hidden">
+        <div className="absolute right-0 top-[42px] w-[340px] bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] shadow-lg z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
             <span className="text-sm font-semibold text-[var(--on-bg)]">Notifications</span>
             {unreadCount > 0 && (

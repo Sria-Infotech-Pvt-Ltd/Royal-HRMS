@@ -101,7 +101,7 @@ function CompletionModal({ result, title, attemptNumber, isLastPending, retaking
   const passed = result.passed;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.75)", backdropFilter: "blur(4px)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 380, boxShadow: "0 25px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+      <div style={{ background: "var(--surface)", borderRadius: 20, width: "100%", maxWidth: 380, boxShadow: "0 25px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
         <div style={{ height: 4, background: passed ? "linear-gradient(90deg,#16a34a,#22c55e)" : "linear-gradient(90deg,#dc2626,#ef4444)" }} />
         <div style={{ padding: "32px 32px 28px", textAlign: "center" }}>
           <div style={{ position: "relative", width: 136, height: 136, margin: "0 auto 20px" }}>
@@ -121,11 +121,11 @@ function CompletionModal({ result, title, attemptNumber, isLastPending, retaking
           <p style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 4px" }}>{pct}% Score</p>
           <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px" }}>{title} · Attempt #{attemptNumber}</p>
           {passed && isLastPending ? (
-            <button suppressHydrationWarning onClick={onDashboard} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button suppressHydrationWarning onClick={onDashboard} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#7c3aed", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               Go to Dashboard <i className="ti ti-arrow-right" />
             </button>
           ) : passed ? (
-            <button suppressHydrationWarning onClick={onContinue} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button suppressHydrationWarning onClick={onContinue} style={{ width: "100%", padding: "12px 0", borderRadius: 10, background: "#7c3aed", color: "#fff", fontWeight: 600, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               Continue to Next Assessment <i className="ti ti-arrow-right" />
             </button>
           ) : (
@@ -338,12 +338,12 @@ export default function AssessmentsPage() {
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#f0f4f8" }}>
 
       {/* Top accent */}
-      <div style={{ height: 3, background: "linear-gradient(90deg,#1e4e8c,#3b82f6)", flexShrink: 0 }} />
+      <div style={{ height: 3, background: "linear-gradient(90deg,#7c3aed,#3b82f6)", flexShrink: 0 }} />
 
       {/* Header */}
-      <header style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+      <header style={{ background: "var(--surface)", borderBottom: "1px solid #e2e8f0", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#1e4e8c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="ti ti-clipboard-check" style={{ color: "#fff", fontSize: 17 }} />
           </div>
           <div>
@@ -354,7 +354,7 @@ export default function AssessmentsPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {allComplete && (
             <button suppressHydrationWarning onClick={() => router.push("/dashboard")}
-              style={{ padding: "8px 18px", borderRadius: 9, background: "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+              style={{ padding: "8px 18px", borderRadius: 9, background: "#7c3aed", color: "#fff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
               Go to Dashboard <i className="ti ti-arrow-right" />
             </button>
           )}
@@ -370,7 +370,7 @@ export default function AssessmentsPage() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* ── SIDEBAR ── */}
-        <aside style={{ width: 280, background: "#fff", borderRight: "1px solid #e2e8f0", display: "flex", flexDirection: "column", flexShrink: 0, overflowY: "auto" }}>
+        <aside style={{ width: 280, background: "var(--surface)", borderRight: "1px solid #e2e8f0", display: "flex", flexDirection: "column", flexShrink: 0, overflowY: "auto" }}>
 
           {/* Sidebar header */}
           <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid #f1f5f9", background: "#fafafa" }}>
@@ -449,11 +449,11 @@ export default function AssessmentsPage() {
                   </div>
                   {/* Mini progress bar */}
                   <div style={{ height: 3, background: "#f1f5f9", borderRadius: 99, overflow: "hidden", marginBottom: 4 }}>
-                    <div style={{ height: "100%", width: `${sortedItems.length > 0 ? (doneCount / sortedItems.length) * 100 : 0}%`, background: isDone && isPassed === false ? "#ef4444" : "#1e4e8c", borderRadius: 99, transition: "width 0.4s" }} />
+                    <div style={{ height: "100%", width: `${sortedItems.length > 0 ? (doneCount / sortedItems.length) * 100 : 0}%`, background: isDone && isPassed === false ? "#ef4444" : "#7c3aed", borderRadius: 99, transition: "width 0.4s" }} />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 11, color: "#94a3b8" }}>{doneCount}/{sortedItems.length} items</span>
-                    {assignment.max_score > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#1e4e8c" }}>{currentScore}/{assignment.max_score} pts</span>}
+                    {assignment.max_score > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed" }}>{currentScore}/{assignment.max_score} pts</span>}
                   </div>
                 </div>
 
@@ -524,15 +524,15 @@ export default function AssessmentsPage() {
                                 padding: `8px 18px 8px ${indent}px`,
                                 cursor: locked ? "not-allowed" : "pointer",
                                 opacity: locked ? 0.45 : 1,
-                                background: isActive ? "rgba(30,78,140,0.07)" : "transparent",
-                                borderLeft: `3px solid ${isActive ? "#1e4e8c" : "transparent"}`,
+                                background: isActive ? "rgba(124,58,237,0.07)" : "transparent",
+                                borderLeft: `3px solid ${isActive ? "#7c3aed" : "transparent"}`,
                                 transition: "all 0.15s",
                               }}>
-                              <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, background: done ? "#dcfce7" : locked ? "#f1f5f9" : isActive ? "#1e4e8c" : "#eff6ff", color: done ? "#16a34a" : locked ? "#94a3b8" : isActive ? "#fff" : "#1e4e8c", border: `1.5px solid ${done ? "#86efac" : locked ? "#e2e8f0" : isActive ? "#1e4e8c" : "#bfdbfe"}` }}>
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, background: done ? "#dcfce7" : locked ? "#f1f5f9" : isActive ? "#7c3aed" : "#eff6ff", color: done ? "#16a34a" : locked ? "#94a3b8" : isActive ? "#fff" : "#7c3aed", border: `1.5px solid ${done ? "#86efac" : locked ? "#e2e8f0" : isActive ? "#7c3aed" : "#bfdbfe"}` }}>
                                 {done ? <i className="ti ti-check" style={{ fontSize: 11 }} /> : locked ? <i className="ti ti-lock" style={{ fontSize: 9 }} /> : (globalIdx + 1)}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, color: locked ? "#94a3b8" : isActive ? "#1e4e8c" : "#334155", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
+                                <p style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, color: locked ? "#94a3b8" : isActive ? "#7c3aed" : "#334155", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
                                 <p style={{ fontSize: 10, color: "#94a3b8", margin: 0, display: "flex", alignItems: "center", gap: 3 }}>
                                   <i className={`ti ${isVideo ? "ti-player-play" : "ti-help-circle"}`} style={{ fontSize: 9 }} />
                                   {isVideo ? "Video" : "Quiz"}
@@ -560,7 +560,7 @@ export default function AssessmentsPage() {
                           <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{completeError[assignment.id]}</p>
                         )}
                         <button suppressHydrationWarning onClick={() => handleComplete(assignment.id)} disabled={completing === assignment.id}
-                          style={{ width: "100%", padding: "9px 0", borderRadius: 9, background: completing === assignment.id ? "#94a3b8" : "#1e4e8c", color: "#fff", fontWeight: 600, fontSize: 12, border: "none", cursor: completing === assignment.id ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                          style={{ width: "100%", padding: "9px 0", borderRadius: 9, background: completing === assignment.id ? "#94a3b8" : "#7c3aed", color: "#fff", fontWeight: 600, fontSize: 12, border: "none", cursor: completing === assignment.id ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
                           {completing === assignment.id ? <><i className="ti ti-loader-2 spin" />Submitting…</> : <><i className="ti ti-send" />Submit Assessment</>}
                         </button>
                       </>
@@ -602,7 +602,7 @@ export default function AssessmentsPage() {
 
           {/* Top bar with context */}
           {selectedPanel && selectedAssignment && (
-            <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "10px 28px", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+            <div style={{ background: "var(--surface)", borderBottom: "1px solid #e2e8f0", padding: "10px 28px", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 11, color: "#94a3b8", margin: 0, fontWeight: 500 }}>{selectedAssignment.assessment_title}</p>
                 <p style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -615,7 +615,7 @@ export default function AssessmentsPage() {
                 {selectedPanel.maxScore > 0 && (
                   <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "3px 12px", textAlign: "center" }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: "#1d4ed8" }}>Score: </span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: "#1e4e8c" }}>{panelRunScore}</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: "#7c3aed" }}>{panelRunScore}</span>
                     <span style={{ fontSize: 11, color: "#64748b" }}>/{selectedPanel.maxScore}</span>
                   </div>
                 )}
@@ -648,7 +648,7 @@ export default function AssessmentsPage() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
                 <div style={{ textAlign: "center", maxWidth: 360 }}>
                   <div style={{ width: 72, height: 72, borderRadius: 20, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-                    <i className="ti ti-arrow-left" style={{ fontSize: 32, color: "#1e4e8c" }} />
+                    <i className="ti ti-arrow-left" style={{ fontSize: 32, color: "#7c3aed" }} />
                   </div>
                   <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>
                     {assignments.length === 0 ? "No Assessments Yet" : "Select an Item to Begin"}
@@ -733,13 +733,13 @@ export default function AssessmentsPage() {
                       <div style={{ display: "flex", gap: 12 }}>
                         {!alreadyDone && !panelResult && (
                           <button suppressHydrationWarning onClick={handlePanelSubmit} disabled={panelSaving}
-                            style={{ padding: "12px 28px", borderRadius: 10, background: panelSaving ? "#94a3b8" : "#1e4e8c", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: panelSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(30,78,140,0.3)" }}>
+                            style={{ padding: "12px 28px", borderRadius: 10, background: panelSaving ? "#94a3b8" : "#7c3aed", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: panelSaving ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(124,58,237,0.3)" }}>
                             {panelSaving ? <><i className="ti ti-loader-2 spin" />Saving…</> : <><i className="ti ti-circle-check" />Mark as Watched</>}
                           </button>
                         )}
                         {(panelResult || alreadyDone) && selectedPanel.itemIndex < selectedPanel.totalItems && (
                           <button suppressHydrationWarning onClick={goToNextItem}
-                            style={{ padding: "12px 28px", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                            style={{ padding: "12px 28px", borderRadius: 10, background: "#7c3aed", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
                             Next Item <i className="ti ti-arrow-right" />
                           </button>
                         )}
@@ -757,7 +757,7 @@ export default function AssessmentsPage() {
                   {!isVideo && (
                     <div>
                       {/* Question card */}
-                      <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "24px 28px", marginBottom: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                      <div style={{ background: "var(--surface)", border: "1px solid #e2e8f0", borderRadius: 14, padding: "24px 28px", marginBottom: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                           <span style={{ fontSize: 10, fontWeight: 700, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.08em", background: "#f5f3ff", padding: "3px 10px", borderRadius: 20 }}>Question</span>
                           {item.pass_score > 0 && <span style={{ fontSize: 11, color: "#64748b" }}><i className="ti ti-target mr-1" />{item.pass_score} point{item.pass_score !== 1 ? "s" : ""}</span>}
@@ -770,8 +770,8 @@ export default function AssessmentsPage() {
                         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
                           {OPTIONS.filter(o => item[o.field]).map(o => (
                             <div key={o.key} onClick={() => setPanelSelected(o.key)}
-                              style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", borderRadius: 12, border: `2px solid ${panelSelected === o.key ? "#1e4e8c" : "#e2e8f0"}`, background: panelSelected === o.key ? "rgba(30,78,140,0.04)" : "#fff", cursor: "pointer", transition: "all 0.15s", boxShadow: panelSelected === o.key ? "0 0 0 3px rgba(30,78,140,0.12)" : "none" }}>
-                              <div style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, background: panelSelected === o.key ? "#1e4e8c" : "#f1f5f9", color: panelSelected === o.key ? "#fff" : "#64748b", transition: "all 0.15s" }}>
+                              style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", borderRadius: 12, border: `2px solid ${panelSelected === o.key ? "#7c3aed" : "#e2e8f0"}`, background: panelSelected === o.key ? "rgba(124,58,237,0.04)" : "#fff", cursor: "pointer", transition: "all 0.15s", boxShadow: panelSelected === o.key ? "0 0 0 3px rgba(124,58,237,0.12)" : "none" }}>
+                              <div style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, background: panelSelected === o.key ? "#7c3aed" : "#f1f5f9", color: panelSelected === o.key ? "#fff" : "#64748b", transition: "all 0.15s" }}>
                                 {o.key.toUpperCase()}
                               </div>
                               <span style={{ fontSize: 15, color: "#1e293b", lineHeight: 1.5 }}>{item[o.field] as string}</span>
@@ -807,9 +807,9 @@ export default function AssessmentsPage() {
                           <p style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: "0 0 4px" }}>{panelResult.is_correct ? "Correct!" : "Incorrect"}</p>
                           {panelResult.score_awarded > 0 && <p style={{ fontSize: 14, color: "#16a34a", fontWeight: 600, margin: "0 0 12px" }}>+{panelResult.score_awarded} point{panelResult.score_awarded !== 1 ? "s" : ""} awarded</p>}
                           {selectedPanel.maxScore > 0 && (
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 18px", fontSize: 13 }}>
-                              <i className="ti ti-chart-bar" style={{ color: "#1e4e8c" }} />
-                              Running total: <strong style={{ color: "#1e4e8c" }}>{panelResult.assignment_score} / {selectedPanel.maxScore}</strong>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 18px", fontSize: 13 }}>
+                              <i className="ti ti-chart-bar" style={{ color: "#7c3aed" }} />
+                              Running total: <strong style={{ color: "#7c3aed" }}>{panelResult.assignment_score} / {selectedPanel.maxScore}</strong>
                             </div>
                           )}
                         </div>
@@ -825,13 +825,13 @@ export default function AssessmentsPage() {
                       <div style={{ display: "flex", gap: 12 }}>
                         {!alreadyDone && !panelResult && (
                           <button suppressHydrationWarning onClick={handlePanelSubmit} disabled={panelSaving || !panelSelected}
-                            style={{ padding: "12px 28px", borderRadius: 10, background: panelSaving || !panelSelected ? "#94a3b8" : "#1e4e8c", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: panelSaving || !panelSelected ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: panelSelected ? "0 2px 8px rgba(30,78,140,0.3)" : "none" }}>
+                            style={{ padding: "12px 28px", borderRadius: 10, background: panelSaving || !panelSelected ? "#94a3b8" : "#7c3aed", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: panelSaving || !panelSelected ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: panelSelected ? "0 2px 8px rgba(124,58,237,0.3)" : "none" }}>
                             {panelSaving ? <><i className="ti ti-loader-2 spin" />Saving…</> : <><i className="ti ti-send" />Submit Answer</>}
                           </button>
                         )}
                         {(panelResult || alreadyDone) && selectedPanel.itemIndex < selectedPanel.totalItems && (
                           <button suppressHydrationWarning onClick={goToNextItem}
-                            style={{ padding: "12px 28px", borderRadius: 10, background: "#1e4e8c", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                            style={{ padding: "12px 28px", borderRadius: 10, background: "#7c3aed", color: "#fff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
                             Next Item <i className="ti ti-arrow-right" />
                           </button>
                         )}

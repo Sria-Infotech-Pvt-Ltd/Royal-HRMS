@@ -20,6 +20,8 @@ from zoneinfo import ZoneInfo
 from django.db import transaction
 from django.utils import timezone
 
+from core.date_utils import format_date_display
+
 _IST = ZoneInfo('Asia/Kolkata')
 
 from apps.attendance.models import (
@@ -258,7 +260,7 @@ class PunchService:
             'punches':         punch_list,
             'total_seconds':   total_seconds,
             'session_seconds': session_seconds,
-            'date_display':    today.strftime('%A, %d %B %Y'),
+            'date_display':    f"{today.strftime('%A')}, {format_date_display(today)}",
         }
 
     # ── Private helpers ───────────────────────────────────────────────────────

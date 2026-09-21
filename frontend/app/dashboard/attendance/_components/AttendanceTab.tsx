@@ -181,13 +181,13 @@ export default function AttendanceTab({ onMutated }: Props) {
       {/* Summary chips */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         {CHIP_CONFIG.map(item => (
-          <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 6, fontSize: 12 }}>
+          <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 6, fontSize: 12 }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: item.color, flexShrink: 0, display: "inline-block" }} />
             <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{chips?.[item.key] ?? 0}</span>
             <span style={{ color: "var(--on-variant)", fontSize: 11 }}>{item.label}</span>
           </div>
         ))}
-        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 6, fontSize: 11, marginLeft: "auto", color: "var(--on-variant)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 6, fontSize: 11, marginLeft: "auto", color: "var(--on-variant)" }}>
           Total: {records?.count ?? 0} employees
         </div>
       </div>
@@ -222,7 +222,7 @@ export default function AttendanceTab({ onMutated }: Props) {
                 <tr key={`${r.record_id ?? r.employee_id ?? "row"}-${idx}`}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(30,78,140,0.1)", color: "var(--primary)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(124,58,237,0.1)", color: "var(--primary)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {r.initials}
                       </div>
                       <div>

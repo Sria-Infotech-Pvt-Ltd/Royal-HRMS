@@ -2,13 +2,12 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate as formatDisplayDate } from "@/lib/formatDate";
 import type { AnnouncementData } from "@/types/dashboard";
 
 function formatDate(raw: string | undefined): string {
   if (!raw) return "";
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return formatDisplayDate(raw);
 }
 
 function resolveAuthor(data: AnnouncementData): string {
@@ -56,7 +55,7 @@ export default function AnnouncementCard() {
             <span style={{
               display: "inline-block", fontSize: 10, fontWeight: 700,
               padding: "2px 8px", borderRadius: 4, marginBottom: 8,
-              background: "rgba(30,78,140,0.10)", color: "var(--primary)",
+              background: "rgba(124,58,237,0.10)", color: "var(--primary)",
               letterSpacing: "0.05em", textTransform: "uppercase",
             }}>
               {announcement.category}

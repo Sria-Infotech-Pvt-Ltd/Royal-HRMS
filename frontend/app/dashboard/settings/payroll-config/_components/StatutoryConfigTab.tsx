@@ -105,29 +105,29 @@ export default function StatutoryConfigTab() {
     <div className="flex gap-4">
       {/* State list */}
       <div className="w-56 shrink-0">
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span className="font-semibold text-[13px] text-gray-900">States</span>
+        <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
+            <span className="font-semibold text-[13px] text-[var(--on-bg)]">States</span>
             {availableStates.length > 0 && (
-              <button onClick={() => setShowNew(true)} className="p-1 rounded-lg text-blue-800 hover:bg-blue-50"><i className="ti ti-plus text-sm" /></button>
+              <button onClick={() => setShowNew(true)} className="p-1 rounded-lg text-[var(--info)] hover:bg-[var(--info-c)]"><i className="ti ti-plus text-sm" /></button>
             )}
           </div>
           {loading ? (
-            <div className="px-4 py-6 text-center text-gray-400 text-xs"><i className="ti ti-loader-2 animate-spin" /></div>
+            <div className="px-4 py-6 text-center text-[var(--outline)] text-xs"><i className="ti ti-loader-2 animate-spin" /></div>
           ) : (
-            <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+            <div className="divide-y divide-[var(--outline-v)] max-h-96 overflow-y-auto">
               {(configs ?? []).map(c => (
                 <button
                   key={c.id}
                   onClick={() => selectConfig(c.id)}
-                  className={`w-full text-left px-4 py-3 transition-colors ${selectedId === c.id ? "bg-blue-50" : "hover:bg-gray-50"}`}
+                  className={`w-full text-left px-4 py-3 transition-colors ${selectedId === c.id ? "bg-[var(--info-c)]" : "hover:bg-[var(--bg-mid)]"}`}
                 >
-                  <div className="font-medium text-[13px] text-gray-900">{c.state_name}</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">{c.state_code}</div>
+                  <div className="font-medium text-[13px] text-[var(--on-bg)]">{c.state_name}</div>
+                  <div className="text-[10px] text-[var(--outline)] mt-0.5">{c.state_code}</div>
                 </button>
               ))}
               {(configs ?? []).length === 0 && (
-                <div className="px-4 py-6 text-center text-gray-400 text-xs">No states configured</div>
+                <div className="px-4 py-6 text-center text-[var(--outline)] text-xs">No states configured</div>
               )}
             </div>
           )}
@@ -137,32 +137,32 @@ export default function StatutoryConfigTab() {
       {/* Config panel */}
       <div className="flex-1">
         {msg && (
-          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.startsWith("Failed") || msg.startsWith("A config") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.startsWith("Failed") || msg.startsWith("A config") ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
             {msg}
           </div>
         )}
 
         {!selected ? (
-          <div className="bg-white rounded-xl border border-gray-200 px-6 py-12 text-center text-gray-400">
+          <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] px-6 py-12 text-center text-[var(--outline)]">
             <i className="ti ti-building-bank text-3xl mb-2 block" />
             Select a state to configure statutory deductions (PT, ESI, LWF)
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <span className="font-semibold text-gray-900">{selected.state_name} — Statutory Config</span>
+          <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--outline-v)]">
+              <span className="font-semibold text-[var(--on-bg)]">{selected.state_name} — Statutory Config</span>
               {hasChanges && (
                 <button
                   onClick={saveConfig}
                   disabled={saving}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--info)] text-white rounded-lg hover:bg-[var(--info)] disabled:opacity-50"
                 >
                   {saving ? "Saving…" : <><i className="ti ti-device-floppy text-sm" /> Save</>}
                 </button>
               )}
             </div>
 
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-[var(--outline-v)]">
               {/* Professional Tax */}
               <Section title="Professional Tax (PT)">
                 <ToggleRow
@@ -173,18 +173,18 @@ export default function StatutoryConfigTab() {
 
                 {current.pt_applicable && (
                   <div className="mt-4">
-                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">PT Slabs</div>
-                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="text-[11px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-2">PT Slabs</div>
+                    <div className="border border-[var(--outline-v)] rounded-lg overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-gray-50 border-b border-gray-200">
-                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Min (₹)</th>
-                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Max (₹)</th>
-                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">PT Amount (₹/mo)</th>
+                          <tr className="bg-[var(--bg-mid)] border-b border-[var(--outline-v)]">
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">Min (₹)</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">Max (₹)</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">PT Amount (₹/mo)</th>
                             <th className="px-3 py-2 w-10" />
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-[var(--outline-v)]">
                           {currentSlabs.map((slab, i) => (
                             <tr key={i}>
                               <td className="px-3 py-2">
@@ -193,7 +193,7 @@ export default function StatutoryConfigTab() {
                                   min={0}
                                   value={slab.min}
                                   onChange={e => updateSlab(i, "min", e.target.value)}
-                                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                  className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
                                 />
                               </td>
                               <td className="px-3 py-2">
@@ -203,7 +203,7 @@ export default function StatutoryConfigTab() {
                                   value={slab.max ?? ""}
                                   placeholder="No limit"
                                   onChange={e => updateSlab(i, "max", e.target.value)}
-                                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                  className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
                                 />
                               </td>
                               <td className="px-3 py-2">
@@ -212,13 +212,13 @@ export default function StatutoryConfigTab() {
                                   min={0}
                                   value={slab.amount}
                                   onChange={e => updateSlab(i, "amount", e.target.value)}
-                                  className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                  className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
                                 />
                               </td>
                               <td className="px-3 py-2 text-right">
                                 <button
                                   onClick={() => removeSlab(i)}
-                                  className="text-red-400 hover:text-red-600 transition-colors p-1 rounded"
+                                  className="text-[var(--error)] hover:text-[var(--error)] transition-colors p-1 rounded"
                                   title="Remove slab"
                                 >
                                   <i className="ti ti-trash text-sm" />
@@ -228,7 +228,7 @@ export default function StatutoryConfigTab() {
                           ))}
                           {currentSlabs.length === 0 && (
                             <tr>
-                              <td colSpan={4} className="px-3 py-4 text-center text-gray-400 text-xs">
+                              <td colSpan={4} className="px-3 py-4 text-center text-[var(--outline)] text-xs">
                                 No PT slabs defined — add one below
                               </td>
                             </tr>
@@ -238,11 +238,11 @@ export default function StatutoryConfigTab() {
                     </div>
                     <button
                       onClick={addSlab}
-                      className="mt-2 flex items-center gap-1.5 text-[12px] text-blue-700 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                      className="mt-2 flex items-center gap-1.5 text-[12px] text-[var(--info)] border border-[var(--info)] hover:bg-[var(--info-c)] px-3 py-1.5 rounded-lg transition-colors"
                     >
                       <i className="ti ti-plus text-xs" /> Add Slab
                     </button>
-                    <div className="mt-2 text-[11px] text-gray-400">
+                    <div className="mt-2 text-[11px] text-[var(--outline)]">
                       Leave Max blank on the last slab to apply it to all higher incomes.
                     </div>
                   </div>
@@ -300,11 +300,11 @@ export default function StatutoryConfigTab() {
                         onChange={v => setField("lwf_employer_amount", v)}
                       />
                       <div>
-                        <label className="block text-[12px] font-semibold text-gray-700 mb-1">Frequency</label>
+                        <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">Frequency</label>
                         <select
                           value={current.lwf_frequency ?? "monthly"}
                           onChange={e => setField("lwf_frequency", e.target.value as StatutoryConfig["lwf_frequency"])}
-                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
+                          className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
                         >
                           <option value="monthly">Monthly</option>
                           <option value="halfyearly">Half-yearly</option>
@@ -312,7 +312,7 @@ export default function StatutoryConfigTab() {
                         </select>
                       </div>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-2">
+                    <p className="text-[11px] text-[var(--on-variant)] mt-2">
                       The amount above is charged in full only in the due month(s) below — it is never divided across the year.
                     </p>
                     {current.lwf_frequency === "annual" && (
@@ -360,27 +360,27 @@ export default function StatutoryConfigTab() {
           onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
           onClick={e => mouseDownOnOverlay.current && e.target === e.currentTarget && setShowNew(false)}
         >
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="font-semibold text-gray-900">Add State Config</div>
-              <button onClick={() => setShowNew(false)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100"><i className="ti ti-x" /></button>
+          <div className="bg-[var(--surface)] rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
+              <div className="font-semibold text-[var(--on-bg)]">Add State Config</div>
+              <button onClick={() => setShowNew(false)} className="p-1.5 rounded-lg text-[var(--outline)] hover:bg-[var(--bg-mid)]"><i className="ti ti-x" /></button>
             </div>
             <div className="px-6 py-5">
-              <label className="block text-[12px] font-semibold text-gray-700 mb-1.5">State</label>
+              <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1.5">State</label>
               <select
                 value={newStateId}
                 onChange={e => setNewStateId(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
+                className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
               >
                 <option value="">Select a state</option>
                 {availableStates.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
               </select>
               <div className="flex items-center justify-end gap-2 mt-4">
-                <button onClick={() => setShowNew(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100">Cancel</button>
+                <button onClick={() => setShowNew(false)} className="px-4 py-2 text-sm text-[var(--on-variant)] border border-[var(--outline-v)] rounded-lg hover:bg-[var(--bg-mid)]">Cancel</button>
                 <button
                   onClick={createConfig}
                   disabled={saving || !newStateId}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-800 text-white rounded-lg hover:bg-blue-900 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--info)] text-white rounded-lg hover:bg-[var(--info)] disabled:opacity-50"
                 >
                   {saving ? "Creating…" : "Create Config"}
                 </button>
@@ -396,7 +396,7 @@ export default function StatutoryConfigTab() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="px-5 py-4">
-      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">{title}</div>
+      <div className="text-[11px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-3">{title}</div>
       {children}
     </div>
   );
@@ -405,12 +405,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-[13px] font-medium text-gray-800">{label}</span>
+      <span className="text-[13px] font-medium text-[var(--on-bg)]">{label}</span>
       <button
         onClick={() => onChange(!value)}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? "bg-blue-800" : "bg-gray-200"}`}
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? "bg-[var(--info)]" : "bg-[var(--bg-mid)]"}`}
       >
-        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
+        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-[var(--surface)] shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
       </button>
     </div>
   );
@@ -431,11 +431,11 @@ function MonthSelect({
 }) {
   return (
     <div>
-      <label className="block text-[12px] font-semibold text-gray-700 mb-1">{label}</label>
+      <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{label}</label>
       <select
         value={value ?? ""}
         onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
-        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 field-select"
+        className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
       >
         <option value="">Select month</option>
         {MONTH_NAMES.map((name, i) => (
@@ -449,14 +449,14 @@ function MonthSelect({
 function NumField({ label, value, onChange, step }: { label: string; value: string; onChange: (v: string) => void; step?: string }) {
   return (
     <div>
-      <label className="block text-[12px] font-semibold text-gray-700 mb-1">{label}</label>
+      <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{label}</label>
       <input
         type="number"
         step={step ?? "1"}
         min={0}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
       />
     </div>
   );

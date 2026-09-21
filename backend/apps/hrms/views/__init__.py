@@ -45,3 +45,7 @@ from .wfh_saved_locations import (
     WFHSavedLocationListCreateView,
     WFHSavedLocationDetailView,
 )
+from .hr_help import (
+    HRHelpRequestListCreateView,
+    HRHelpRequestDetailView,
+)

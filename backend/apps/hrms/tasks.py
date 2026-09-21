@@ -29,7 +29,7 @@ def reset_annual_leave_balances(self):
     """
     from decimal import Decimal
     from apps.accounts.models import User
-    from apps.hrms.models import CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
+    from apps.hrms.models import ACCRUAL_MONTHLY, CARRY_FORWARD_MANUAL, CARRY_FORWARD_UNLIMITED, LeaveBalance, LeavePolicy
 
     try:
         today    = timezone.localdate()
@@ -39,8 +39,15 @@ def reset_annual_leave_balances(self):
         active_employees = list(
             User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
         )
-        # Automatic task only runs policies set to automatic carry-forward mode
-        policies = list(LeavePolicy.objects.filter(is_active=True).exclude(carry_forward_mode=CARRY_FORWARD_MANUAL))
+        # Automatic task only runs policies set to automatic carry-forward mode.
+        # Monthly-frequency policies are excluded too — they get their annual_days
+        # credited in twelve monthly installments by accrue_monthly_leave_balances
+        # below instead of one Jan-1 lump sum; crediting both would double-credit.
+        policies = list(
+            LeavePolicy.objects.filter(is_active=True)
+            .exclude(carry_forward_mode=CARRY_FORWARD_MANUAL)
+            .exclude(accrual_frequency=ACCRUAL_MONTHLY)
+        )
 
         created_total = 0
         skipped_total = 0
@@ -110,6 +117,106 @@ def reset_annual_leave_balances(self):
         return result
     except Exception as exc:
         logger.error('reset_annual_leave_balances error: %s', exc, exc_info=True)
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=300)
+def accrue_monthly_leave_balances(self):
+    """
+    Monthly task: runs on the 1st of every month at 00:01 IST.
+
+    Additive to reset_annual_leave_balances above, not a replacement — that
+    task already excludes accrual_frequency='monthly' policies from its own
+    Jan-1 lump credit (see its own comment), so a policy is only ever
+    credited by one of these two tasks, never both. This one credits
+    1/12th of annual_days each month instead, for the same active/eligible
+    employee set and the same eligibility rules (service period, branch,
+    dept, designation) as the annual task.
+
+    Uses the same active/eligible employee set and eligibility rules
+    (service period, branch, dept, designation) as the annual task above.
+    Does not carry forward unused balance across years — a monthly-accrual
+    policy (e.g. Earned Leave credited monthly, or Compensatory Off) is
+    expected to configure carry-forward, if any, the same way the annual
+    task would, but this task's own job is only the recurring monthly
+    top-up; year-end carry-forward for monthly policies is out of scope
+    here (documented as a plan follow-up, not silently half-implemented).
+
+    Idempotent per (employee, policy, month): LeaveBalance.last_monthly_accrual
+    guards against crediting the same employee/policy twice in the same
+    calendar month if this task is retried or fires twice.
+    """
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from django.db.models import F
+
+    from apps.accounts.models import User
+    from apps.hrms.models import ACCRUAL_MONTHLY, LeaveBalance, LeavePolicy
+
+    try:
+        today = timezone.localdate()
+        year  = today.year
+
+        active_employees = list(
+            User.objects.filter(is_active=True, role__isnull=False, employee_id__isnull=False)
+        )
+        policies = list(LeavePolicy.objects.filter(is_active=True, accrual_frequency=ACCRUAL_MONTHLY))
+
+        credited_total = 0
+        skipped_total  = 0
+
+        from apps.accounts.services_approval import resolve_employee_department_name
+
+        for employee in active_employees:
+            doj           = getattr(employee, 'date_of_joining', None)
+            months_served = 0
+            if doj:
+                months_served = (today.year - doj.year) * 12 + (today.month - doj.month)
+            emp_dept_name = resolve_employee_department_name(employee)
+
+            for policy in policies:
+                if policy.minimum_service_period > 0 and months_served < policy.minimum_service_period:
+                    continue
+
+                if policy.applicable_branches and (
+                    not employee.branch or employee.branch not in policy.applicable_branches
+                ):
+                    continue
+
+                if policy.applicable_departments and (
+                    not emp_dept_name or emp_dept_name not in policy.applicable_departments
+                ):
+                    continue
+
+                if policy.applicable_designations and (
+                    not employee.designation or employee.designation not in policy.applicable_designations
+                ):
+                    continue
+
+                balance, _ = LeaveBalance.objects.get_or_create(
+                    employee=employee, leave_type=policy.leave_type, year=year,
+                    defaults={'total_days': Decimal('0')},
+                )
+                if (
+                    balance.last_monthly_accrual
+                    and balance.last_monthly_accrual.year == today.year
+                    and balance.last_monthly_accrual.month == today.month
+                ):
+                    skipped_total += 1
+                    continue
+
+                monthly_credit = (policy.annual_days / Decimal('12')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+                LeaveBalance.objects.filter(pk=balance.pk).update(
+                    total_days=F('total_days') + monthly_credit,
+                    last_monthly_accrual=today,
+                )
+                credited_total += 1
+
+        result = {'month': today.strftime('%Y-%m'), 'credited': credited_total, 'skipped': skipped_total}
+        logger.info('accrue_monthly_leave_balances completed: %s', result)
+        return result
+    except Exception as exc:
+        logger.error('accrue_monthly_leave_balances error: %s', exc, exc_info=True)
         raise self.retry(exc=exc)
 
 

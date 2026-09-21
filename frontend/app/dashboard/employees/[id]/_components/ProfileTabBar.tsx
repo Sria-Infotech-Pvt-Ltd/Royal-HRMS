@@ -12,7 +12,7 @@ export default function ProfileTabBar({
   return (
     <div
       className="rounded-xl border mb-4 overflow-x-auto"
-      style={{ background: "#fff", borderColor: "var(--outline-v)" }}
+      style={{ background: "var(--surface)", borderColor: "var(--outline-v)" }}
     >
       <div className="flex items-center px-2 py-1.5 gap-0.5 min-w-max">
         {PROFILE_TABS.map((t) => {

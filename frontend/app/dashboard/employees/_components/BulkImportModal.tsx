@@ -135,7 +135,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
       }
     >
           {/* Instructions */}
-          <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(30,78,140,0.06)", border: "1px solid rgba(30,78,140,0.15)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
+          <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 4, fontSize: 12 }}>
               <i className="ti ti-info-circle" style={{ marginRight: 5 }} />File Requirements
             </div>
@@ -163,7 +163,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             style={{
               border: `2px dashed ${file ? "var(--primary)" : "var(--outline-v)"}`,
               borderRadius: 10, padding: "28px 20px", textAlign: "center",
-              cursor: "pointer", background: file ? "rgba(30,78,140,0.04)" : "var(--bg-low)",
+              cursor: "pointer", background: file ? "rgba(124,58,237,0.04)" : "var(--bg-low)",
               transition: "border-color 0.15s, background 0.15s", marginBottom: 16,
             }}
           >

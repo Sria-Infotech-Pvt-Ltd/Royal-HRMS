@@ -10,6 +10,8 @@ from apps.dashboard.views.overview import (
     HRActionQueueView,
     HRRecruitmentFunnelView,
     HRAttendanceSummaryView,
+    HRDashboardOverviewView,
+    HRLifecycleActionRegisterView,
     SharedAnnouncementView,
     EmployeeKPIView,
     EmployeeLeaveBalanceView,

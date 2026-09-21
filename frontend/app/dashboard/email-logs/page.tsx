@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { formatDateTime } from "@/lib/formatDate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,10 +71,7 @@ function iso30DaysAgo(): string {
 }
 
 function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "2-digit", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  return formatDateTime(iso);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────

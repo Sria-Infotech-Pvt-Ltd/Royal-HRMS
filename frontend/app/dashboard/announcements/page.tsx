@@ -10,6 +10,7 @@ import type { OrgUnit } from "@/types/orgStructure";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 import Modal from "@/components/Modal";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,13 +116,11 @@ function timeAgo(iso: string): string {
   if (hrs < 24)  return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7)  return `${days}d ago`;
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 function fullDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
+  return formatDateTime(iso);
 }
 
 const CAT_BADGE: Record<Category, string> = {
@@ -139,10 +138,10 @@ const CAT_LABEL: Record<Category, string> = {
 };
 
 const AVATAR_COLORS = [
-  { bg: "rgba(30,78,140,0.15)",  color: "#1e4e8c" },
-  { bg: "rgba(14,124,134,0.15)", color: "#0e7c86" },
-  { bg: "rgba(27,138,107,0.15)", color: "#1b8a6b" },
-  { bg: "rgba(181,101,29,0.15)", color: "#b5651d" },
+  { bg: "rgba(124,58,237,0.15)",  color: "#7c3aed" },
+  { bg: "rgba(37,99,235,0.15)", color: "#2563eb" },
+  { bg: "rgba(23,144,90,0.15)", color: "#17905a" },
+  { bg: "rgba(162,98,12,0.15)", color: "#a2620c" },
 ];
 function avatarColor(name: string) {
   return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];

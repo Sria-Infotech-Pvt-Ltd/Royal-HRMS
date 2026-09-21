@@ -168,7 +168,7 @@ export default function CalculationStep({ cycleId, onNext, onBack }: Props) {
                             <span style={{ color: "var(--error)" }}>{p.lop_days} days</span>
                           </div>
                         )}
-                        <div style={{ background: "rgba(27,138,107,0.07)", borderRadius: "var(--radius)", padding: "10px 12px", marginTop: 10 }}>
+                        <div style={{ background: "rgba(23,144,90,0.07)", borderRadius: "var(--radius)", padding: "10px 12px", marginTop: 10 }}>
                           <div style={{ fontSize: 11, color: "var(--on-variant)", marginBottom: 4 }}>Net Pay</div>
                           <div style={{ fontSize: 22, fontWeight: 800, color: "var(--success)" }}>{fmt(p.net_pay)}</div>
                         </div>

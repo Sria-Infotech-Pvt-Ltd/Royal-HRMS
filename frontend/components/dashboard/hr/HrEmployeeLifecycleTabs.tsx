@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate as sharedFormatDate } from "@/lib/formatDate";
 import type { HREmployeeLifecycle, HRLifecycleEmployee } from "@/types/dashboard";
 
 type Tab = "new_joiners" | "notice_period" | "work_anniversaries";
@@ -16,7 +17,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 
 function formatDate(dateStr: string | undefined): string {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return sharedFormatDate(dateStr);
 }
 
 function initials(name: string): string {

@@ -70,7 +70,7 @@ export default function ClockWidget() {
 
         {/* Header — live wall clock */}
         <div style={{
-          background: "linear-gradient(135deg, var(--primary) 0%, #1a3a6e 100%)",
+          background: "linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%)",
           padding: "22px 20px 18px",
           textAlign: "center",
           color: "#fff",

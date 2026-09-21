@@ -320,7 +320,7 @@ function Toggle({
         onClick={() => onChange(!value)}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? "bg-[var(--primary)]" : "bg-[var(--bg-high)]"}`}
       >
-        <span className={`inline-block h-4 w-4 rounded-full shadow transition-transform ${value ? "translate-x-6" : "translate-x-1"}`} style={{ background: "#fff" }} />
+        <span className={`inline-block h-4 w-4 rounded-full shadow transition-transform ${value ? "translate-x-6" : "translate-x-1"}`} style={{ background: "var(--surface)" }} />
       </button>
     </div>
   );

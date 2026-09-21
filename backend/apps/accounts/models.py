@@ -146,6 +146,73 @@ class User(AbstractBaseUser, PermissionsMixin):
         (ASSESSMENT_COMPLETE, 'Complete'),
     ]
 
+    EMPLOYMENT_STATUS_PROBATION = 'probation'
+    EMPLOYMENT_STATUS_CONFIRMED = 'confirmed'
+    EMPLOYMENT_STATUS_CHOICES   = [
+        (EMPLOYMENT_STATUS_PROBATION, 'Probation'),
+        (EMPLOYMENT_STATUS_CONFIRMED, 'Confirmed'),
+    ]
+
+    # Matches the hire wizard's Employment-type list exactly (previously only
+    # enforced as a hardcoded array on the frontend, AddEmployeeModal.tsx's
+    # EMP_TYPES — added here as real choices= so the Hire flow's
+    # EmployeeCodeSeries (one numbering series per type) has a closed set of
+    # valid keys to seed, not free text).
+    EMPLOYMENT_TYPE_PERMANENT  = 'Permanent'
+    EMPLOYMENT_TYPE_CONTRACT   = 'Contract'
+    EMPLOYMENT_TYPE_FREELANCER = 'Freelancer'
+    EMPLOYMENT_TYPE_CONSULTANT = 'Consultant'
+    EMPLOYMENT_TYPE_PART_TIME  = 'Part-Time'
+    EMPLOYMENT_TYPE_TEMPORARY  = 'Temporary'
+    EMPLOYMENT_TYPE_INTERN     = 'Intern'
+    EMPLOYMENT_TYPE_CHOICES    = [
+        (EMPLOYMENT_TYPE_PERMANENT,  'Permanent'),
+        (EMPLOYMENT_TYPE_CONTRACT,   'Contract'),
+        (EMPLOYMENT_TYPE_FREELANCER, 'Freelancer'),
+        (EMPLOYMENT_TYPE_CONSULTANT, 'Consultant'),
+        (EMPLOYMENT_TYPE_PART_TIME,  'Part-Time'),
+        (EMPLOYMENT_TYPE_TEMPORARY,  'Temporary'),
+        (EMPLOYMENT_TYPE_INTERN,     'Intern'),
+    ]
+
+    WORK_MODE_OFFICE = 'office'
+    WORK_MODE_REMOTE = 'remote'
+    WORK_MODE_HYBRID = 'hybrid'
+    WORK_MODE_CHOICES = [
+        (WORK_MODE_OFFICE, 'Office'),
+        (WORK_MODE_REMOTE, 'Remote'),
+        (WORK_MODE_HYBRID, 'Hybrid'),
+    ]
+
+    PAY_GROUP_MONTHLY  = 'monthly'
+    PAY_GROUP_WEEKLY   = 'weekly'
+    PAY_GROUP_BIWEEKLY = 'biweekly'
+    PAY_GROUP_DAILY    = 'daily'
+    PAY_GROUP_CHOICES = [
+        (PAY_GROUP_MONTHLY,  'Monthly – India'),
+        (PAY_GROUP_WEEKLY,   'Weekly'),
+        (PAY_GROUP_BIWEEKLY, 'Bi-Weekly'),
+        (PAY_GROUP_DAILY,    'Daily Wage'),
+    ]
+
+    ATTENDANCE_SCHEME_STANDARD    = 'standard'
+    ATTENDANCE_SCHEME_FLEXIBLE    = 'flexible'
+    ATTENDANCE_SCHEME_SHIFT_BASED = 'shift_based'
+    ATTENDANCE_SCHEME_CHOICES = [
+        (ATTENDANCE_SCHEME_STANDARD,    'Standard'),
+        (ATTENDANCE_SCHEME_FLEXIBLE,    'Flexible'),
+        (ATTENDANCE_SCHEME_SHIFT_BASED, 'Shift-based'),
+    ]
+
+    PAYMENT_METHOD_BANK_TRANSFER = 'bank_transfer'
+    PAYMENT_METHOD_CHEQUE        = 'cheque'
+    PAYMENT_METHOD_CASH          = 'cash'
+    PAYMENT_METHOD_CHOICES = [
+        (PAYMENT_METHOD_BANK_TRANSFER, 'Bank Transfer – NEFT'),
+        (PAYMENT_METHOD_CHEQUE,        'Cheque'),
+        (PAYMENT_METHOD_CASH,          'Cash'),
+    ]
+
     # Profile photo — a plain displayable image (shown in the sidebar, header,
     # and Profile page), unrelated to apps.attendance's face-ID verification
     # feature which stores a numeric face descriptor, never an image.
@@ -169,7 +236,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Free text, no choices enum — same convention as department/designation
     # above. Was already collected by the Add Employee form and validated by
     # EmployeeBulkImportRowSerializer, but had nowhere to be saved until now.
-    employee_type   = models.CharField(max_length=50, blank=True, default='Permanent')
+    employee_type   = models.CharField(max_length=50, blank=True, default='Permanent', choices=EMPLOYMENT_TYPE_CHOICES)
     # True until a human manually edits `designation` (EmployeeDetailView.put()) —
     # lets Position-driven syncs (accounts/services_placement._sync_from_position)
     # keep writing to it until someone deliberately overrides it by hand.
@@ -242,6 +309,47 @@ class User(AbstractBaseUser, PermissionsMixin):
                               blank=True,
                               related_name='approver_for',
                           )
+    # Secondary/matrix reporting line, set from the Hire wizard's Employment
+    # step — distinct from reporting_approver above (that's an approval-flow
+    # fallback, not a real dotted-line relationship). Purely informational —
+    # never read by permission/approval logic, same as
+    # reporting_manager_from_org_chart above.
+    dotted_line_manager = models.ForeignKey(
+                              'self',
+                              on_delete=models.SET_NULL,
+                              null=True,
+                              blank=True,
+                              related_name='dotted_line_reports',
+                          )
+    # Set once, at hire time, on the Hire wizard's Employment step — there is
+    # no automatic "N months after joining -> confirmed" job; EmployeeConfirmView
+    # (the Confirmation action) still requires a human to trigger it, this is
+    # just the target period HR agreed to at hire time for reference.
+    probation_period_months = models.PositiveSmallIntegerField(null=True, blank=True)
+    notice_period_days      = models.PositiveSmallIntegerField(null=True, blank=True)
+    work_location            = models.CharField(max_length=150, blank=True)
+    work_mode                = models.CharField(max_length=20, blank=True, choices=WORK_MODE_CHOICES)
+    # Which pay-frequency group this employee is paid under — distinct from
+    # PayrollCycle (which schedules a single run) and SalaryStructure (which
+    # defines earning components); this is what groups employees together
+    # for that run. Set at hire time on the Employment step.
+    pay_group         = models.CharField(max_length=20, blank=True, choices=PAY_GROUP_CHOICES, default=PAY_GROUP_MONTHLY)
+    # Distinct from Shift (attendance.WorkingHoursPolicy, a specific clock-in/
+    # clock-out window) — this is the broader attendance-tracking mode the
+    # employee is on. Set at hire time; not yet read by any attendance
+    # computation (same "real field, not yet a consumer" category as
+    # work_location/work_mode above).
+    attendance_scheme = models.CharField(max_length=20, blank=True, choices=ATTENDANCE_SCHEME_CHOICES, default=ATTENDANCE_SCHEME_STANDARD)
+    payment_method    = models.CharField(max_length=20, blank=True, choices=PAYMENT_METHOD_CHOICES, default=PAYMENT_METHOD_BANK_TRANSFER)
+    # The leave plan HR assigned at hire time — informational alongside the
+    # app's existing eligibility-driven LeavePolicy resolution (branch/
+    # department/employment_type/gender/tenure JSON matching, see
+    # LeavePolicy.applicable_*), which is what actually drives LeaveBalance
+    # allocation; this field doesn't override that, it records what HR
+    # intended at hire for reference on the employee's own record.
+    leave_plan = models.ForeignKey(
+        'hrms.LeavePolicy', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_employees',
+    )
     is_active       = models.BooleanField(default=True)
     is_staff      = models.BooleanField(default=False)
     must_change_password    = models.BooleanField(default=True)
@@ -255,6 +363,17 @@ class User(AbstractBaseUser, PermissionsMixin):
                                   choices=ASSESSMENT_CHOICES,
                                   default=ASSESSMENT_PENDING,
                               )
+    # New hires start on probation; the Confirmation action (see
+    # views.EmployeeConfirmView) is the only thing that flips this to
+    # 'confirmed'. Existing employees at the time this field was added were
+    # backfilled to 'confirmed' by that migration's data step — the default
+    # below only governs employees created after this field existed.
+    employment_status       = models.CharField(
+                                  max_length=20,
+                                  choices=EMPLOYMENT_STATUS_CHOICES,
+                                  default=EMPLOYMENT_STATUS_PROBATION,
+                              )
+    confirmation_date       = models.DateField(null=True, blank=True)
     failed_login_attempts   = models.PositiveSmallIntegerField(default=0)
     locked_until            = models.DateTimeField(null=True, blank=True)
     last_login_ip           = models.GenericIPAddressField(null=True, blank=True)
@@ -534,6 +653,83 @@ class Placement(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.position.title} ({self.effective_from} – {self.effective_to or "present"})'
+
+
+class HireAction(models.Model):
+    """Stage 1 of the two-stage Hire flow — a reservation record created by
+    the "Hire an employee" modal (action type, reason, effective date,
+    position) BEFORE any User row exists. The hiring wizard then fills in
+    the rest against this record; "Hire employee" (Stage 2, HireActionCompleteView)
+    is what actually creates the real User — mirroring the same sequence
+    EmployeeListCreateView.post already runs today (create_user, assign_position,
+    assign_weekly_off, leave allocation, welcome email), just triggered from
+    here instead of a single synchronous request.
+
+    Follows SeparationRequest's shape (apps/hrms/models.py) as the closest
+    existing effective-dated, stateful action: UUID pk, explicit db_table,
+    status choices, created_by, created_at/updated_at.
+    """
+    REASON_NEW_POSITION      = 'new_position'
+    REASON_REPLACEMENT       = 'replacement'
+    REASON_BACKFILL          = 'backfill'
+    REASON_BUSINESS_EXPANSION = 'business_expansion'
+    REASON_REHIRE            = 'rehire'
+    REASON_CHOICES = [
+        (REASON_NEW_POSITION,       'New position'),
+        (REASON_REPLACEMENT,        'Replacement'),
+        (REASON_BACKFILL,           'Backfill'),
+        (REASON_BUSINESS_EXPANSION, 'Business expansion'),
+        (REASON_REHIRE,             'Rehire'),
+    ]
+
+    STATUS_DRAFT     = 'draft'
+    STATUS_COMPLETED = 'completed'
+    STATUS_DISCARDED = 'discarded'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT,     'Draft'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_DISCARDED, 'Discarded'),
+    ]
+
+    id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reason         = models.CharField(max_length=30, choices=REASON_CHOICES)
+    effective_from = models.DateField()
+    position       = models.ForeignKey(Position, on_delete=models.PROTECT, related_name='hire_actions')
+    # Blank until the Employment step is saved — the employee number is only
+    # ever reserved once employment_type is known (each type has its own
+    # EmployeeCodeSeries), never at Stage 1 creation.
+    employment_type      = models.CharField(max_length=50, blank=True, choices=User.EMPLOYMENT_TYPE_CHOICES)
+    reserved_employee_id = models.CharField(max_length=20, blank=True)
+    # Everything else the wizard collects before a real User exists (personal
+    # identity, work location/mode, probation/notice period, weekly off/shift
+    # picks, salary structure + CTC, tax regime, family/education/asset entries
+    # not yet backed by their own row) — one flexible JSON blob rather than a
+    # long list of nullable columns for what is, by definition, transient
+    # draft state: it's only ever read once, by HireActionCompleteView, to
+    # build the real User/Placement/EmployeeSalaryConfig/etc. rows. Matches
+    # this app's existing convention for flexible field sets (e.g.
+    # LeavePolicy.applicable_* JSON) rather than inventing a new pattern.
+    draft_data     = models.JSONField(default=dict, blank=True)
+    # Uploaded on the Personal Identity step, before any User row exists —
+    # same field type/upload path/validation as User.profile_photo, just
+    # living here until Stage 2 copies it onto the real employee record
+    # (see HireActionCompleteView).
+    photo          = models.ImageField(upload_to=profile_photo_upload_path, null=True, blank=True)
+    status         = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True)
+    created_by     = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='hire_actions_created')
+    # Set only once Stage 2 completes — the real, permanent User record.
+    created_employee = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='hire_action_origin',
+    )
+    created_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_hire_actions'
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'Hire — {self.position.title} ({self.get_status_display()})'
 
 
 class PromotionRecord(models.Model):
@@ -1246,6 +1442,53 @@ class EmployeeCodeSettings(models.Model):
         return emp_id
 
 
+# ─── Employee Code Series (per employment type) ──────────────────────────────
+
+class EmployeeCodeSeries(models.Model):
+    """One numbering series per employment type — e.g. Permanent hires get
+    EMP00001, EMP00002…, Interns get their own INT00001 series, etc. Replaces
+    EmployeeCodeSettings' single global counter for the Hire wizard (which
+    reserves a number once Employment type is chosen, before the rest of
+    hiring is complete) — EmployeeCodeSettings itself is left in place and
+    still used by its 3 existing call sites (plain employee creation, portal-
+    to-employee conversion, bulk import) so nothing that already worked
+    changes; only the new Hire wizard calls generate_employee_id_for_type()."""
+    employment_type = models.CharField(max_length=50, unique=True, choices=User.EMPLOYMENT_TYPE_CHOICES)
+    prefix          = models.CharField(max_length=10, default='EMP')
+    padding         = models.PositiveSmallIntegerField(default=5)
+    next_sequence   = models.PositiveIntegerField(default=1)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_employee_code_series'
+        ordering = ['employment_type']
+
+    def __str__(self) -> str:
+        return f'{self.employment_type}: {self.prefix} (padding {self.padding})'
+
+    @classmethod
+    def generate_employee_id_for_type(cls, employment_type: str) -> str:
+        """Same reserve-and-increment pattern as EmployeeCodeSettings.generate_employee_id,
+        scoped to one series per employment type. get_or_create's defaults seed
+        a brand-new employment type's series from EmployeeCodeSettings' own
+        current prefix/padding (not a hardcoded 'EMP'/5) so a type added after
+        this feature shipped still starts from a sensible, already-configured
+        format rather than silently reverting to the class default."""
+        from django.db import transaction as _tx
+
+        with _tx.atomic():
+            base = EmployeeCodeSettings.get()
+            series = cls.objects.select_for_update().get_or_create(
+                employment_type=employment_type,
+                defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': 1},
+            )[0]
+            seq    = str(series.next_sequence).zfill(series.padding)
+            emp_id = f'{series.prefix}{seq}'
+            series.next_sequence += 1
+            series.save(update_fields=['next_sequence', 'updated_at'])
+        return emp_id
+
+
 # ─── Birthday Settings (singleton) ───────────────────────────────────────────
 
 class BirthdaySettings(models.Model):
@@ -1398,6 +1641,16 @@ class EmployeeProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
 
     # Personal
+    # Set at hire time on the Hire wizard's Personal identity step.
+    salutation         = models.CharField(max_length=10, blank=True)
+    middle_name        = models.CharField(max_length=100, blank=True)
+    # Defaults to "salutation first middle last" if never explicitly
+    # overridden — see the Hire wizard's own "+ Suggest" button — but stored
+    # as its own field (not derived on every read) since HR can rename it
+    # afterward independent of the legal name fields on User.full_name.
+    display_name       = models.CharField(max_length=150, blank=True)
+    nationality        = models.CharField(max_length=100, blank=True, default='Indian')
+    place_of_birth     = models.CharField(max_length=150, blank=True)
     date_of_birth      = models.DateField(null=True, blank=True)
     gender             = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
     marital_status     = models.CharField(max_length=20, choices=MARITAL_CHOICES, blank=True)
@@ -1468,6 +1721,41 @@ class EmployeeProfile(models.Model):
         help_text='10-character PAN (e.g. ABCDE1234F) — unique per person, encrypted at rest.',
     )
     pan_number_hash    = models.CharField(max_length=64, blank=True, db_index=True)
+    aadhaar_number     = EncryptedCharField(max_length=255, blank=True, help_text='12-digit Aadhaar number issued by UIDAI')
+
+    # Provident Fund / ESI coverage — uan_number/esi_number above already
+    # store the *numbers*; these are the separate "is this employee covered
+    # at all" declarations and PF's own member ID, none of which existed
+    # before (uan_number alone doesn't say whether PF applies).
+    pf_covered  = models.BooleanField(default=True, help_text='Whether this employee is covered under the Provident Fund scheme')
+    pf_number   = EncryptedCharField(max_length=255, blank=True, help_text='EPF member/account ID (distinct from the UAN)')
+    esi_covered = models.BooleanField(default=False, help_text='Whether this employee is covered under ESI — normally auto-eligible below the wage threshold')
+
+    DISABILITY_VISUAL       = 'visual'
+    DISABILITY_HEARING      = 'hearing'
+    DISABILITY_LOCOMOTOR    = 'locomotor'
+    DISABILITY_INTELLECTUAL = 'intellectual'
+    DISABILITY_MULTIPLE     = 'multiple'
+    DISABILITY_OTHER        = 'other'
+    DISABILITY_TYPE_CHOICES = [
+        (DISABILITY_VISUAL,       'Visual'),
+        (DISABILITY_HEARING,      'Hearing'),
+        (DISABILITY_LOCOMOTOR,    'Locomotor'),
+        (DISABILITY_INTELLECTUAL, 'Intellectual'),
+        (DISABILITY_MULTIPLE,     'Multiple'),
+        (DISABILITY_OTHER,        'Other'),
+    ]
+    # Voluntary self-declarations — record-keeping obligations under the
+    # RPwD Act 2016 and EPF Form 11 respectively, not something a private
+    # employer requires for its own sake. Neither existed on this model at all.
+    is_disabled                   = models.BooleanField(default=False, help_text='Specially abled declaration (RPwD Act 2016)')
+    disability_type               = models.CharField(max_length=20, choices=DISABILITY_TYPE_CHOICES, blank=True)
+    disability_percentage         = models.PositiveSmallIntegerField(null=True, blank=True)
+    disability_certificate_number = models.CharField(max_length=50, blank=True)
+    is_international_worker       = models.BooleanField(default=False, help_text='International Worker declaration (EPF Form 11)')
+    international_worker_country  = models.CharField(max_length=100, blank=True)
+    passport_number    = EncryptedCharField(max_length=255, blank=True)
+    passport_expiry    = models.DateField(null=True, blank=True)
 
     # Emergency Contact
     emergency_name         = models.CharField(max_length=150, blank=True)
@@ -1751,6 +2039,115 @@ class WorkExperienceRecord(models.Model):
 
     def __str__(self) -> str:
         return f'{self.employee.full_name} — {self.employer_name}'
+
+
+class FamilyMember(models.Model):
+    """One row per dependant/family member — a genuine, unbounded add/remove
+    list (same shape as WorkExperienceRecord above), captured for both
+    emergency/EPF-nomination purposes. `is_dependent` mirrors the mockup's
+    own per-relationship default (Spouse/Child default Yes, Sibling No) —
+    enforced client-side only, stored as submitted."""
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    RELATIONSHIP_CHOICES = [
+        ('father',  'Father'),
+        ('mother',  'Mother'),
+        ('spouse',  'Spouse'),
+        ('child',   'Child'),
+        ('sibling', 'Sibling'),
+    ]
+    GENDER_CHOICES = [
+        ('male',   'Male'),
+        ('female', 'Female'),
+        ('other',  'Other'),
+    ]
+
+    employee     = models.ForeignKey('User', on_delete=models.CASCADE, related_name='family_members')
+    name         = models.CharField(max_length=150)
+    relationship = models.CharField(max_length=10, choices=RELATIONSHIP_CHOICES)
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender       = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
+    blood_group  = models.CharField(max_length=5, blank=True)
+    is_dependent = models.BooleanField(default=False)
+    order        = models.PositiveSmallIntegerField(default=0)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_family_members'
+        ordering = ['order', 'created_at']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.name} ({self.get_relationship_display()})'
+
+
+class EPFNominee(models.Model):
+    """One row per EPF/gratuity nominee. The nominee's name/relationship
+    come from FamilyMember rather than being re-typed — matches the
+    mockup's own "pick from family" UX and keeps the two lists in sync by
+    construction rather than by a separate sync step. `share_percentage`
+    across an employee's nominees must sum to 100% per scheme — enforced in
+    the view layer (apps/accounts/views_family_nomination.py), not the DB,
+    same convention as everything else in this "bespoke onboarding step"
+    family (see services_education_experience.py's docstring)."""
+    id     = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    SCHEME_CHOICES = [
+        ('epf_eps',  'EPF + EPS'),
+        ('gratuity', 'Gratuity'),
+        ('both',     'Both'),
+    ]
+
+    employee         = models.ForeignKey('User', on_delete=models.CASCADE, related_name='epf_nominees')
+    family_member    = models.ForeignKey(FamilyMember, on_delete=models.CASCADE, related_name='nominations')
+    scheme           = models.CharField(max_length=10, choices=SCHEME_CHOICES, default='epf_eps')
+    share_percentage = models.PositiveSmallIntegerField(default=0)
+    order            = models.PositiveSmallIntegerField(default=0)
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_epf_nominees'
+        ordering = ['order', 'created_at']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — nominee {self.family_member.name} ({self.share_percentage}%)'
+
+
+class CompanyAsset(models.Model):
+    """One row per physical asset issued to an employee — a genuine,
+    unbounded add/remove list, same shape as the other bespoke-step models
+    above. `returned_at` stays null while the asset is still with the
+    employee; this app has no separate asset-inventory/stock model, so an
+    asset row exists only in the context of the employee it's issued to."""
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    ASSET_TYPE_CHOICES = [
+        ('laptop',       'Laptop'),
+        ('mobile_phone', 'Mobile Phone'),
+        ('monitor',      'Monitor'),
+        ('headset',      'Headset'),
+        ('sim_card',     'SIM Card'),
+    ]
+    CONDITION_CHOICES = [
+        ('new',         'New'),
+        ('good',        'Good'),
+        ('refurbished', 'Refurbished'),
+    ]
+
+    employee    = models.ForeignKey('User', on_delete=models.CASCADE, related_name='company_assets')
+    asset_type  = models.CharField(max_length=20, choices=ASSET_TYPE_CHOICES)
+    tag_number  = models.CharField(max_length=100, blank=True)
+    condition   = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='new')
+    issued_at   = models.DateField(null=True, blank=True)
+    returned_at = models.DateField(null=True, blank=True)
+    order       = models.PositiveSmallIntegerField(default=0)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_company_assets'
+        ordering = ['order', 'created_at']
+
+    def __str__(self) -> str:
+        return f'{self.employee.full_name} — {self.get_asset_type_display()}'
 
 
 PAN_RE = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]$')

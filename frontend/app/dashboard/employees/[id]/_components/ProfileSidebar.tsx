@@ -12,7 +12,7 @@ export default function ProfileSidebar({
   return (
     <nav
       className="rounded-xl border p-1 sticky top-4 self-start"
-      style={{ background: "#fff", borderColor: "var(--outline-v)" }}
+      style={{ background: "var(--surface)", borderColor: "var(--outline-v)" }}
     >
       <ul className="flex flex-col gap-0.5">
         {PROFILE_SECTIONS.map((s) => {

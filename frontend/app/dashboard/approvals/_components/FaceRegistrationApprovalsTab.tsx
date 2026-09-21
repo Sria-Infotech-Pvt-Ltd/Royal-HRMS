@@ -5,11 +5,12 @@ import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 import type { FaceRegistrationDecisionPayload, PaginatedFaceRegistrations } from "@/types/faceRegistration";
 
 function fmtDate(dateStr: string): string {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(dateStr);
 }
 
 function fmtScore(score: number | null): string {

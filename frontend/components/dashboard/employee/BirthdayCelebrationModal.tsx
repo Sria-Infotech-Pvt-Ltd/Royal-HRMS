@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { formatDate } from "@/lib/formatDate";
 import type { BirthdayEmployee } from "@/types/employeeDashboard";
 
 function initials(name: string): string {
@@ -42,7 +43,7 @@ export default function BirthdayCelebrationModal({ employee, onClose }: Props) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const today = formatDate(new Date());
 
   const overlay = (
     <div
@@ -56,7 +57,7 @@ export default function BirthdayCelebrationModal({ employee, onClose }: Props) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: "#fff", borderRadius: 16, width: "min(420px, 100%)",
+          background: "var(--surface)", borderRadius: 16, width: "min(420px, 100%)",
           padding: "32px 28px", textAlign: "center", position: "relative",
           boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
         }}

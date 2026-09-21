@@ -15,12 +15,12 @@ import type { SessionPayload } from "@/lib/session";
 interface Props { session: SessionPayload }
 
 const QUICK_ACTIONS = [
-  { href: "/dashboard/leave",         icon: "ti-beach",       bg: "rgba(27,138,107,0.12)", color: "var(--success)", label: "Apply Leave"  },
-  { href: "/dashboard/my-payslip",    icon: "ti-receipt",     bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "My Payslips"  },
-  { href: "/dashboard/my-attendance", icon: "ti-clock",       bg: "rgba(14,124,134,0.12)", color: "var(--info)",    label: "Attendance"   },
-  { href: "/dashboard/expenses",      icon: "ti-wallet",      bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "My Expenses"  },
-  { href: "/dashboard/documents",     icon: "ti-folder",      bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Documents"    },
-  { href: "/dashboard/profile",       icon: "ti-user-circle", bg: "rgba(14,124,134,0.12)", color: "var(--info)",    label: "My Profile"   },
+  { href: "/dashboard/leave",         icon: "ti-beach",       bg: "rgba(23,144,90,0.12)", color: "var(--success)", label: "Apply Leave"  },
+  { href: "/dashboard/my-payslip",    icon: "ti-receipt",     bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "My Payslips"  },
+  { href: "/dashboard/my-attendance", icon: "ti-clock",       bg: "rgba(37,99,235,0.12)", color: "var(--info)",    label: "Attendance"   },
+  { href: "/dashboard/expenses",      icon: "ti-wallet",      bg: "rgba(162,98,12,0.12)", color: "var(--warn)",    label: "My Expenses"  },
+  { href: "/dashboard/documents",     icon: "ti-folder",      bg: "rgba(124,58,237,0.12)",  color: "var(--primary)", label: "Documents"    },
+  { href: "/dashboard/profile",       icon: "ti-user-circle", bg: "rgba(37,99,235,0.12)", color: "var(--info)",    label: "My Profile"   },
 ];
 
 export default function EmployeeDashboard({ session }: Props) {

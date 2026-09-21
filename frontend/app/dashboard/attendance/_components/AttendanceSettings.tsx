@@ -17,7 +17,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
     >
       <span style={{
         position: "absolute", top: 3, left: on ? 19 : 3,
-        width: 14, height: 14, borderRadius: "50%", background: "#fff",
+        width: 14, height: 14, borderRadius: "50%", background: "var(--surface)",
         transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
       }} />
     </button>

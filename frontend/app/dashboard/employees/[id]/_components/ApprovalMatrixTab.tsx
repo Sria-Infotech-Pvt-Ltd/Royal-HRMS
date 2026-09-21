@@ -19,8 +19,8 @@ interface PickerEmployee {
 }
 
 const SELECT_CLS =
-  "w-full px-3.5 py-[7px] rounded-md border text-[13px] outline-none transition-all bg-white appearance-none cursor-pointer" +
-  " focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(30,78,140,0.10)]";
+  "w-full px-3.5 py-[7px] rounded-md border text-[13px] outline-none transition-all bg-[var(--surface)] appearance-none cursor-pointer" +
+  " focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(124,58,237,0.10)]";
 const CHEVRON = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f5d75' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`;
 const SELECT_STYLE = {
   borderColor: "#d3dae8",
@@ -264,7 +264,7 @@ function ApproverCell({ name, label, isOverride }: {
         {isOverride ? (
           <span style={{
             fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 20,
-            background: "rgba(30,78,140,0.10)", color: "var(--primary)",
+            background: "rgba(124,58,237,0.10)", color: "var(--primary)",
             textTransform: "uppercase", letterSpacing: "0.04em",
           }}>
             Override

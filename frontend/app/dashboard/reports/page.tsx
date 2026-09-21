@@ -1,19 +1,137 @@
-import ComingSoon from "@/components/ComingSoon";
+"use client";
+
+// Reports hub — a curated set of links to the reporting/analytics surfaces
+// that already exist scattered across other modules (Audit Log, Leave
+// Analytics, Attendance, Payroll), rather than a new reporting engine.
+// The overview/capability/operational-tools sections above the original
+// tile grid follow the same pattern already built for Dashboard/
+// Organization/Attendance/Leave/Payroll/Performance.
+
+import { useRouter } from "next/navigation";
+import { usePermission } from "@/hooks/usePermission";
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
+import {
+  KpiTile, OverviewRow, QuickActionTile, WeeklyBarChart, BrandBanner,
+  CapabilityGrid, OperationalToolsGrid, PlatformSafeguards,
+} from "@/components/dashboard/ModuleOverviewKit";
+
+const REPORT_ITEMS = [
+  {
+    id: "audit", route: "/dashboard/settings/audit", permission: "audit.view",
+    icon: "ti-history", iconClass: "sc-system",
+    label: "Audit Log", desc: "Every recorded action — views, edits, approvals and reveals.",
+  },
+  {
+    id: "leave-analytics", route: "/dashboard/leave?tab=analytics", permission: "leave.view",
+    icon: "ti-chart-bar", iconClass: "sc-modules",
+    label: "Leave Analytics", desc: "Leave utilisation trends by type, department and branch.",
+  },
+  {
+    id: "attendance", route: "/dashboard/attendance", permission: "attendance.create",
+    icon: "ti-clock", iconClass: "sc-modules",
+    label: "Attendance Overview", desc: "Presence, exceptions and regularization queue.",
+  },
+  {
+    id: "payroll", route: "/dashboard/payroll", permission: "payroll.view",
+    icon: "ti-report-money", iconClass: "sc-modules",
+    label: "Payroll", desc: "Cycle readiness, salary revisions and statutory returns.",
+  },
+] as const;
+
+const CAPABILITIES = [
+  { title: "Workforce analytics", desc: "Headcount, joins, exits, tenure spans and vacancy trends.", href: "/dashboard/employees" },
+  { title: "Lifecycle reports", desc: "Hiring, probation, moves, promotions, pay changes and separations.", href: "/dashboard/employees" },
+  { title: "Time analytics", desc: "Attendance, overtime, absence and leave utilization.", href: "/dashboard/attendance" },
+  { title: "Payroll analytics", desc: "Cost, variance, deductions, arrears and final settlements.", href: "/dashboard/payroll" },
+  { title: "Compliance reports", desc: "Statutory readiness, document expiry and consent/retention status.", href: "/dashboard/settings/audit" },
+  { title: "Audit reports", desc: "Views, edits, approvals, exports and role changes.", href: "/dashboard/settings/audit" },
+  { title: "Scheduled delivery", desc: "Role-filtered reports delivered on controlled schedules.", href: "/dashboard/settings" },
+  { title: "Data exports", desc: "Masked, permission-aware CSV and finance/API outputs.", href: "/dashboard/employees" },
+];
+
+const OPERATIONAL_TOOLS = [
+  { title: "Build custom report", desc: "Choose dimensions, measures, filters and access.", href: "/dashboard/employees" },
+  { title: "Schedule report", desc: "Set recipients, frequency and expiry.", href: "/dashboard/settings" },
+  { title: "Export employee register", desc: "Download a permission-aware snapshot.", href: "/dashboard/employees" },
+  { title: "Open audit explorer", desc: "Filter immutable events by actor and record.", href: "/dashboard/settings/audit" },
+  { title: "Attrition analysis", desc: "Review voluntary and involuntary trends.", href: "/dashboard/employees" },
+  { title: "Data-quality report", desc: "Track completeness, duplicates and exceptions.", href: "/dashboard/employees" },
+];
+
+interface OverviewRowData { name: string; context: string; status_label: string; status_kind: "success" | "error" | "warn"; link: string }
+interface OverviewData {
+  exports_today: number; audit_events_30d: number; weekly_chart: { label: string; count: number }[];
+  overview_rows: OverviewRowData[];
+}
 
 export default function ReportsPage() {
+  const router = useRouter();
+  const canAudit     = usePermission("audit.view");
+  const canLeave      = usePermission("leave.view");
+  const canAttendance = usePermission("attendance.create");
+  const canPayroll    = usePermission("payroll.view");
+  const { data } = useFetch<OverviewData>(API.dashboard.reportsOverview);
+
+  const has: Record<string, boolean> = {
+    audit: canAudit, "leave-analytics": canLeave, attendance: canAttendance, payroll: canPayroll,
+  };
+  const visible = REPORT_ITEMS.filter(item => has[item.id]);
+
   return (
-    <ComingSoon
-      icon="ti-chart-bar"
-      title="Reports & Analytics"
-      description="Comprehensive HR analytics and exportable reports across all modules — headcount, attendance, payroll, leave utilisation, and recruitment funnel."
-      features={[
-        "Headcount and attrition reports",
-        "Attendance and punctuality analytics",
-        "Payroll cost and variance reports",
-        "Leave utilisation by department and branch",
-        "Recruitment funnel and time-to-hire metrics",
-        "Export to Excel, PDF, and CSV",
-      ]}
-    />
+    <div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Reports</div>
+      <div className="pagehead">
+        <div>
+          <h1>People <em>reports</em></h1>
+          <p className="lede">
+            Run trusted workforce, attendance, payroll and compliance reports with role-aware access.
+          </p>
+        </div>
+        <button className="btn btn-filled" onClick={() => router.push("/dashboard/employees")}>Build custom report</button>
+      </div>
+
+      <div className="stats">
+        <KpiTile label="SAVED REPORTS" value={visible.length} sub="Available to you" tone="brand" />
+        <KpiTile label="SCHEDULED" value="—" sub="Not yet configured" tone="warn" />
+        <KpiTile label="EXPORTS TODAY" value={data?.exports_today ?? "—"} sub="Audit-tracked" tone="ok" />
+        <KpiTile label="AUDIT EVENTS" value={data?.audit_events_30d ?? "—"} sub="Last 30 days" tone="brand" />
+      </div>
+
+      <div className="module-grid">
+        <div className="module-card">
+          <div className="mc-head">
+            <div className="mc-title">Reports overview</div>
+            <div className="mc-sub">Current records and items requiring attention.</div>
+          </div>
+          <div style={{ padding: "0 20px 4px" }}>
+            {!data || data.overview_rows.length === 0 ? (
+              <div className="empty-state"><i className="ti ti-chart-bar" /><h3>Nothing to report yet</h3></div>
+            ) : data.overview_rows.map((row, i) => (
+              <OverviewRow key={i} label={row.name} sub={row.context} chip={row.status_label} chipTone={row.status_kind} onOpen={() => router.push(row.link)} />
+            ))}
+          </div>
+        </div>
+
+        <div className="module-card">
+          <div className="mc-head">
+            <div className="mc-title">Quick actions</div>
+            <div className="mc-sub">Common tasks for your current role.</div>
+          </div>
+          <div className="quick-grid">
+            <QuickActionTile title="Headcount report" sub="Employees by unit and location" onClick={() => router.push("/dashboard/employees")} />
+            <QuickActionTile title="New joiners" sub="Onboarding and probation" onClick={() => router.push("/dashboard/employees")} />
+            <QuickActionTile title="Leave utilization" sub="Balances and trends" onClick={() => router.push("/dashboard/leave?tab=analytics")} />
+            <QuickActionTile title="Compensation summary" sub="Restricted to payroll roles" onClick={() => router.push("/dashboard/payroll")} />
+          </div>
+          <WeeklyBarChart data={data?.weekly_chart ?? []} />
+        </div>
+      </div>
+
+      <BrandBanner />
+      <CapabilityGrid title="Complete capability coverage" sub="Lifecycle functions designed for multi-year HR operations." items={CAPABILITIES} onOpen={router.push} />
+      <OperationalToolsGrid title="Operational tools" sub="Role-aware tools with effective dates, approval states and audit events." items={OPERATIONAL_TOOLS} onLaunch={router.push} />
+      <PlatformSafeguards />
+    </div>
   );
 }

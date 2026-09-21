@@ -7,6 +7,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { PayrollCycle, EmployeePayslip } from "@/types/payroll";
+import { formatDate } from "@/lib/formatDate";
 
 const STATUS_LABEL: Record<string, string> = {
   draft:                "Draft",
@@ -33,7 +34,7 @@ function fmt(n: string | number | undefined) {
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 function period(cycle: PayrollCycle) {

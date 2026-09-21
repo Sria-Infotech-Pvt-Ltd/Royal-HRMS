@@ -1,3 +1,5 @@
+import { formatDate } from "@/lib/formatDate";
+
 // ─── Endpoints ────────────────────────────────────────────────────────────────
 export const DOCUMENTS_BASE   = "/documents/";
 export const DOCUMENTS_STATS  = "/documents/stats/";
@@ -90,22 +92,16 @@ export function getFileTypeMeta(fileType: string): FileTypeMeta {
 // ─── Category metadata ────────────────────────────────────────────────────────
 
 export const CATEGORY_META: Record<DocCategory, { label: string; color: string; bg: string; icon: string }> = {
-  policy:   { label: "Policy",   color: "var(--primary)", bg: "rgba(30,78,140,0.10)",  icon: "ti-shield-check"    },
-  form:     { label: "Form",     color: "var(--info)",    bg: "rgba(14,124,134,0.10)", icon: "ti-file-description" },
-  template: { label: "Template", color: "var(--success)", bg: "rgba(27,138,107,0.10)", icon: "ti-table"            },
+  policy:   { label: "Policy",   color: "var(--primary)", bg: "rgba(124,58,237,0.10)",  icon: "ti-shield-check"    },
+  form:     { label: "Form",     color: "var(--info)",    bg: "rgba(37,99,235,0.10)", icon: "ti-file-description" },
+  template: { label: "Template", color: "var(--success)", bg: "rgba(23,144,90,0.10)", icon: "ti-table"            },
   other:    { label: "Other",    color: "var(--outline)", bg: "var(--bg-low)",          icon: "ti-file"             },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 export function formatUploadedAt(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-IN", {
-      day: "numeric", month: "short", year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
+  return formatDate(iso);
 }
 
 // Accepted MIME types for the file input

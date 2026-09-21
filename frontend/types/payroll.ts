@@ -19,7 +19,7 @@ export interface SalaryComponent {
   id: string;
   name: string;
   component_type: "earning" | "deduction" | "allowance";
-  calculation_type: "percentage_of_ctc" | "percentage_of_basic" | "fixed";
+  calculation_type: "percentage_of_ctc" | "percentage_of_basic" | "fixed" | "metro_hra_of_basic";
   value: string;
   is_taxable: boolean;
   is_active: boolean;

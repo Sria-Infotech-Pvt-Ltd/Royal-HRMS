@@ -243,8 +243,8 @@ export default function EmployeeCodeSettingsPage() {
                     gap: 8,
                     padding: "8px 12px",
                     borderRadius: "var(--radius)",
-                    background: idx === 0 ? "var(--primary-c, rgba(30,78,140,0.08))" : "var(--bg-low)",
-                    border: idx === 0 ? "1px solid rgba(30,78,140,0.2)" : "1px solid var(--outline-v)",
+                    background: idx === 0 ? "var(--primary-c, rgba(124,58,237,0.08))" : "var(--bg-low)",
+                    border: idx === 0 ? "1px solid rgba(124,58,237,0.2)" : "1px solid var(--outline-v)",
                   }}
                 >
                   <span style={{
@@ -261,7 +261,7 @@ export default function EmployeeCodeSettingsPage() {
                       fontSize: 10,
                       fontWeight: 600,
                       color: "var(--primary)",
-                      background: "rgba(30,78,140,0.1)",
+                      background: "rgba(124,58,237,0.1)",
                       padding: "2px 6px",
                       borderRadius: 4,
                       letterSpacing: "0.03em",

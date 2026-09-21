@@ -45,7 +45,7 @@ export default function StepIndicator({ steps, currentStep, highestSaved, onStep
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: isDone ? "var(--success)" : isActive ? "var(--primary)" : "#fff",
                 border: isDone ? "2.5px solid var(--success)" : isActive ? "2.5px solid var(--primary)" : "2px solid var(--outline-v)",
-                boxShadow: isActive ? "0 0 0 5px rgba(30,78,140,0.12), 0 4px 12px rgba(30,78,140,0.18)" : isDone ? "0 2px 8px rgba(27,138,107,0.18)" : "none",
+                boxShadow: isActive ? "0 0 0 5px rgba(124,58,237,0.12), 0 4px 12px rgba(124,58,237,0.18)" : isDone ? "0 2px 8px rgba(23,144,90,0.18)" : "none",
                 transition: "all 0.25s ease",
               }}>
                 {isDone

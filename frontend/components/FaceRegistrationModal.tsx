@@ -54,7 +54,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
     >
       <div
         className="relative flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "#fff", width: "min(440px, 92vw)", maxHeight: "88vh" }}
+        style={{ background: "var(--surface)", width: "min(440px, 92vw)", maxHeight: "88vh" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0" style={{ background: "var(--primary)" }}>
@@ -88,7 +88,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
 
           {phase === "idle" && (
             <FaceStatusPanel
-              icon="ti-face-id" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)"
+              icon="ti-face-id" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)"
               title={idleTitle}
               message={idleMessage}
               action={{ label: "Start", onClick: () => start(true) }}
@@ -97,14 +97,14 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
 
           {phase === "loading_models" && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
               title="Preparing face recognition" message="Loading models…"
             />
           )}
 
           {phase === "requesting_camera" && (
             <FaceStatusPanel
-              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
+              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
               title="Requesting camera access" message="Please allow camera access in the browser prompt."
             />
           )}
@@ -144,7 +144,7 @@ export default function FaceRegistrationModal({ onClose, mode = "register" }: Fa
 
           {phase === "submitting" && (
             <FaceStatusPanel
-              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
+              icon="ti-loader-2" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
               title="Submitting" message="Sending your registration for approval…"
             />
           )}

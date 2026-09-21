@@ -6,6 +6,7 @@ import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { FieldOption } from "../../_data";
+import { formatDate } from "@/lib/formatDate";
 
 interface Props {
   employeeId: string;
@@ -63,8 +64,7 @@ const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
 const INR = (n: string | number) =>
   `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const fmtDate = (d: string) => formatDate(d);
 
 const labelFor = (options: FieldOption[], value: string) =>
   options.find(o => o.value === value)?.label ?? value;

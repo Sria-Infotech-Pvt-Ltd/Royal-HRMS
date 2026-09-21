@@ -54,6 +54,13 @@ class Branch(models.Model):
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     is_headquarter = models.BooleanField(default=False)
+    # Metro classification per Income Tax HRA exemption rules (Delhi, Mumbai,
+    # Kolkata, Chennai = 50% of Basic+DA; everywhere else = 40%). City-level,
+    # not state-level (e.g. Pune is non-metro despite being in Maharashtra
+    # alongside metro Mumbai) — deliberately on Branch, not State, for that
+    # reason. Read by SalaryComponent.CALC_METRO_HRA in payroll's HRA
+    # computation (apps/payroll/views/cycles.py:_compute_employee_payslip).
+    is_metro = models.BooleanField(default=False)
     # Which of the company's (state-wise) GST registrations this branch's own
     # invoices/documents should use — needed once a state has more than one
     # GSTIN on file (e.g. two branches in the same state registered under

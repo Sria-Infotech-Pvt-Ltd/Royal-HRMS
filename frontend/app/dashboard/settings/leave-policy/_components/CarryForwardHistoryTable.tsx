@@ -1,6 +1,7 @@
 "use client";
 
 import type { CarryForwardHistoryResponse } from "@/types/leave";
+import { formatDateTime } from "@/lib/formatDate";
 
 interface Props {
   history: CarryForwardHistoryResponse | null;
@@ -11,10 +12,7 @@ interface Props {
 
 function fmtDateTime(iso: string): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  const datePart = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  const timePart = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
-  return `${datePart}, ${timePart}`;
+  return formatDateTime(iso);
 }
 
 export default function CarryForwardHistoryTable({ history, loading, page, onPageChange }: Props) {

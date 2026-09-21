@@ -2,6 +2,7 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDateTime } from "@/lib/formatDate";
 import type { PayrollCycle, PayrollSettings, ManagerApprovalStatus } from "@/types/payroll";
 
 interface Props {
@@ -13,10 +14,7 @@ interface Props {
 
 function fmt(dateStr: string | null | undefined) {
   if (!dateStr) return null;
-  return new Date(dateStr).toLocaleString("en-IN", {
-    day: "2-digit", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  return formatDateTime(dateStr);
 }
 
 export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Props) {
@@ -189,7 +187,7 @@ export default function ApprovalStep({ cycleId, settings, onNext, onBack }: Prop
               {myRowPending && !isL1Done && (
                 <div style={{
                   padding: "14px 16px", borderRadius: "var(--radius)",
-                  border: "1.5px solid var(--primary)", background: "rgba(30,78,140,0.06)",
+                  border: "1.5px solid var(--primary)", background: "rgba(124,58,237,0.06)",
                   marginTop: 4,
                 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>

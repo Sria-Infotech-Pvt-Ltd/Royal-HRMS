@@ -21,7 +21,7 @@ export default function FaceConsentPanel({ noticeText, onAcknowledge, onCancel }
       <div className="flex items-start gap-3 mb-4">
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "rgba(30,78,140,0.08)" }}
+          style={{ background: "rgba(124,58,237,0.08)" }}
         >
           <i className="ti ti-shield-lock" style={{ fontSize: 18, color: "var(--primary)" }} />
         </div>

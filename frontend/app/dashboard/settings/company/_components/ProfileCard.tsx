@@ -29,7 +29,7 @@ export default function ProfileCard({ icon, title, subtitle, action, collapsed, 
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-            background: "rgba(30,78,140,0.1)", color: "var(--primary)",
+            background: "rgba(124,58,237,0.1)", color: "var(--primary)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             <i className={`ti ${icon}`} style={{ fontSize: 16 }} />

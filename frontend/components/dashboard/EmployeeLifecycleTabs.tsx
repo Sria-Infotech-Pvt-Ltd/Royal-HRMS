@@ -68,7 +68,7 @@ function EmployeeRow({ emp, tab }: { emp: LifecycleEmployee; tab: Tab }) {
         </div>
       )}
       {tab === "work_anniversaries" && (
-        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 20, background: "rgba(181,101,29,0.12)", color: "var(--warn)", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 20, background: "rgba(162,98,12,0.12)", color: "var(--warn)", whiteSpace: "nowrap" }}>
           {emp.years !== undefined ? `${emp.years} ${emp.years === 1 ? "year" : "years"}` : anniversaryDate(emp)}
         </span>
       )}
@@ -118,7 +118,7 @@ export default function EmployeeLifecycleTabs() {
             {!loading && (
               <span style={{
                 fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 10,
-                background: active === tab.key ? "rgba(30,78,140,0.12)" : "var(--bg-high)",
+                background: active === tab.key ? "rgba(124,58,237,0.12)" : "var(--bg-high)",
                 color: active === tab.key ? "var(--primary)" : "var(--on-variant)",
               }}>
                 {count(tab.key)}

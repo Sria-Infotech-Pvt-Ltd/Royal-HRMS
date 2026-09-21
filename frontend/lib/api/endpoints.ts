@@ -26,6 +26,7 @@ export const API = {
   },
 
   orgStructure: {
+    overview: "/org-structure/overview/",
     units: {
       list: "/org-structure/units/",
       detail: (id: string) => `/org-structure/units/${id}/`,
@@ -57,6 +58,7 @@ export const API = {
     myPhoto: "/employees/me/photo/",
     detail: (id: string) => `/employees/${id}/`,
     promotions: (id: string) => `/employees/${id}/promotions/`,
+    actionHistory: (id: string) => `/employees/${id}/action-history/`,
     profile: (id: string) => `/employees/${id}/profile/`,
     reportingManager: (id: string) => `/employees/${id}/reporting-manager/`,
     hr: (id: string) => `/employees/${id}/hr/`,
@@ -64,9 +66,19 @@ export const API = {
     documents: (id: string) => `/employees/${id}/documents/`,
     customFileFields: (id: string) => `/employees/${id}/custom-file-fields/`,
     resetPassword: (id: string) => `/employees/${id}/reset-password/`,
+    revealSensitive: (id: string) => `/employees/${id}/reveal-sensitive/`,
+    confirm: (id: string) => `/employees/${id}/confirm/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",
+  },
+
+  hireActions: {
+    list:         "/hire-actions/",
+    detail:       (id: string) => `/hire-actions/${id}/`,
+    complete:     (id: string) => `/hire-actions/${id}/complete/`,
+    scanDocument: (id: string) => `/hire-actions/${id}/scan-document/`,
+    photo:        (id: string) => `/hire-actions/${id}/photo/`,
   },
 
   roles: {
@@ -164,6 +176,12 @@ export const API = {
     experience: "/onboarding/experience/",
     experienceSummary: "/onboarding/experience/summary/",
     experienceDetail: (id: string) => `/onboarding/experience/${id}/`,
+    family: "/onboarding/family/",
+    familyDetail: (id: string) => `/onboarding/family/${id}/`,
+    nominees: "/onboarding/nominees/",
+    nomineeDetail: (id: string) => `/onboarding/nominees/${id}/`,
+    assets: "/onboarding/assets/",
+    assetDetail: (id: string) => `/onboarding/assets/${id}/`,
     submit: "/onboarding/",
     approvals: "/onboarding/approvals/",
     pipeline: "/onboarding/approvals/?view=pipeline",
@@ -182,6 +200,12 @@ export const API = {
       experience: (userId: string) => `/onboarding/employees/${userId}/experience/`,
       experienceSummary: (userId: string) => `/onboarding/employees/${userId}/experience/summary/`,
       experienceDetail: (userId: string, id: string) => `/onboarding/employees/${userId}/experience/${id}/`,
+      family: (userId: string) => `/onboarding/employees/${userId}/family/`,
+      familyDetail: (userId: string, id: string) => `/onboarding/employees/${userId}/family/${id}/`,
+      nominees: (userId: string) => `/onboarding/employees/${userId}/nominees/`,
+      nomineeDetail: (userId: string, id: string) => `/onboarding/employees/${userId}/nominees/${id}/`,
+      assets: (userId: string) => `/onboarding/employees/${userId}/assets/`,
+      assetDetail: (userId: string, id: string) => `/onboarding/employees/${userId}/assets/${id}/`,
     },
   },
 
@@ -194,6 +218,11 @@ export const API = {
     approveExpense: (id: string) => `/expenses/${id}/approve/`,
   },
 
+  hrHelp: {
+    list: "/hr-help/requests/",
+    detail: (id: string) => `/hr-help/requests/${id}/`,
+  },
+
   expenses: {
     list: "/expenses/",
     stats: "/expenses/stats/",
@@ -201,6 +230,23 @@ export const API = {
     updateStatus: "/expenses/status/",
     detail: (id: string) => `/expenses/${id}/`,
     approve: (id: string) => `/expenses/${id}/approve/`,
+  },
+
+  performance: {
+    cycles:            "/performance/cycles/",
+    cycleDetail:       (id: string) => `/performance/cycles/${id}/`,
+    myGoals:           "/performance/goals/me/",
+    myGoalDetail:      (id: string) => `/performance/goals/me/${id}/`,
+    myReview:          "/performance/reviews/me/",
+    submitMyReview:    "/performance/reviews/me/submit/",
+    teamReviews:       "/performance/reviews/team/",
+    reviewDetail:      (id: string) => `/performance/reviews/${id}/`,
+    submitManagerReview: (id: string) => `/performance/reviews/${id}/submit/`,
+    calibrateReview:   (id: string) => `/performance/reviews/${id}/calibrate/`,
+    publishReview:     (id: string) => `/performance/reviews/${id}/publish/`,
+    acknowledgeReview: (id: string) => `/performance/reviews/${id}/acknowledge/`,
+    hrQueue:           "/performance/reviews/hr-queue/",
+    bannerSummary:     "/performance/banner-summary/",
   },
 
   separation: {
@@ -326,6 +372,10 @@ export const API = {
     weeklyDayPolicies: "/attendance/weekly-days/",
     weeklyDayPolicy: (id: string) => `/attendance/weekly-days/${id}/`,
 
+    // Working Hours Policies — doubles as "Shift" in the Hire wizard's Employment step
+    workingHoursPolicies: "/attendance/working-hours/",
+    workingHoursPolicy: (id: string) => `/attendance/working-hours/${id}/`,
+
     // Weekly Off Assignment (Attendance & Time tab)
     weeklyOffAssignments: "/attendance/weekly-off-assignments/",
     weeklyOffAssignmentsBulk: "/attendance/weekly-off-assignments/bulk/",
@@ -361,6 +411,7 @@ export const API = {
   payroll: {
     // Settings
     settings: "/payroll/settings/",
+    salaryPreview: "/payroll/salary-preview/",
 
     // Salary structures
     structures: "/payroll/structures/",
@@ -413,6 +464,12 @@ export const API = {
     myPayslips: "/payroll/my-payslips/",
     acknowledgePayslip: (id: string) => `/payroll/my-payslips/${id}/acknowledge/`,
 
+    // Tax declarations
+    taxDeclarations: "/payroll/tax-declarations/",
+    myTaxDeclaration: "/payroll/tax-declarations/me/",
+    submitTaxDeclaration: "/payroll/tax-declarations/me/submit/",
+    approveTaxDeclaration: (id: string) => `/payroll/tax-declarations/${id}/approve/`,
+
     // Queries
     queries: "/payroll/queries/",
     resolveQuery: (id: string) => `/payroll/queries/${id}/resolve/`,
@@ -441,6 +498,14 @@ export const API = {
     hrActionQueue:         "/dashboard/hr/action-queue/",
     hrRecruitmentFunnel:   "/dashboard/hr/recruitment-funnel/",
     hrAttendanceSummary:   "/dashboard/hr/attendance-summary/",
+    overview:              "/dashboard/hr/overview/",
+    lifecycleRegister:     "/dashboard/hr/lifecycle-register/",
+    attendanceOverview:    "/dashboard/module/attendance-overview/",
+    leaveOverview:         "/dashboard/module/leave-overview/",
+    payrollOverview:       "/dashboard/module/payroll-overview/",
+    performanceOverview:   "/dashboard/module/performance-overview/",
+    reportsOverview:       "/dashboard/module/reports-overview/",
+    settingsOverview:      "/dashboard/module/settings-overview/",
     hrDepartmentHeadcount: "/dashboard/department-headcount/",
     hrEmployeeLifecycle:   "/dashboard/hr/employee-lifecycle/",
     hrBirthdaysToday:      "/dashboard/hr/birthdays/today/",

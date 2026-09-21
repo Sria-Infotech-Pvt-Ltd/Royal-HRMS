@@ -42,8 +42,8 @@ export default function EmpPromotionCelebration() {
       style={{
         padding: "16px 20px",
         borderRadius: 10,
-        background: "linear-gradient(135deg, rgba(27,138,107,0.10), rgba(30,78,140,0.06))",
-        border: "1px solid rgba(27,138,107,0.25)",
+        background: "linear-gradient(135deg, rgba(23,144,90,0.10), rgba(124,58,237,0.06))",
+        border: "1px solid rgba(23,144,90,0.25)",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>

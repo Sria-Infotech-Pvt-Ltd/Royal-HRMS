@@ -160,7 +160,7 @@ export default function RoleFormFields({ form, errors, permissionsMap, onChange,
                       cursor:         "pointer",
                       transition:     "all 0.15s",
                       border:         active ? "1.5px solid var(--primary)" : "1.5px solid var(--outline-v)",
-                      background:     active ? "rgba(30,78,140,0.10)"       : "transparent",
+                      background:     active ? "rgba(124,58,237,0.10)"       : "transparent",
                       color:          active ? "var(--primary)"              : "var(--on-variant)",
                     }}
                   >
@@ -261,7 +261,7 @@ function ModuleBlock({
       </label>
 
       {/* Individual action checkboxes */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px 12px", padding: "10px 14px", background: "#fff" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px 12px", padding: "10px 14px", background: "var(--surface)" }}>
         {perms.map(perm => (
           <label key={perm.codename} className="module-check">
             <input

@@ -63,7 +63,7 @@ class BranchSerializer(serializers.ModelSerializer):
             'state', 'state_name', 'city', 'city_name', 'new_city_name',
             'hr', 'hr_name',
             'gst_registration', 'gst_registration_gstin',
-            'employees_count', 'status', 'is_headquarter',
+            'employees_count', 'status', 'is_headquarter', 'is_metro',
             'latitude', 'longitude', 'allowed_radius_meters', 'geofencing_enabled',
             'has_coordinates',
             'created_at', 'updated_at',

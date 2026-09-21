@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -74,8 +75,7 @@ interface PagedResponse<T> { results: T[]; count: number; }
 const INR = (n: string | number) =>
   "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const fmtDate = (d: string) => formatDate(d);
 
 const fmtMonth = (d: string) =>
   new Date(d).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -86,8 +86,8 @@ function initials(name: string) {
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; color: string }> = {
   paid:        { label: "Paid",         bg: "var(--success-c)",        color: "var(--success)"     },
-  sent:        { label: "Received",     bg: "rgba(30, 78, 140, 0.12)", color: "var(--primary)"     },
-  acknowledged:{ label: "Acknowledged", bg: "rgba(173, 149, 207, 0.15)", color: "var(--purple)"    },
+  sent:        { label: "Received",     bg: "rgba(124, 58, 237, 0.12)", color: "var(--primary)"     },
+  acknowledged:{ label: "Acknowledged", bg: "rgba(167, 139, 250, 0.15)", color: "var(--purple)"    },
   draft:       { label: "Processing",   bg: "var(--bg-high)",          color: "var(--on-variant)"  },
   closed:      { label: "Closed",       bg: "var(--bg-high)",          color: "var(--on-variant)"  },
 };
@@ -287,7 +287,7 @@ export default function MyPayslipPage() {
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
                     className={`w-full text-left px-4 py-2.5 flex items-center justify-between border-l-2 transition-colors ${
-                      active ? "border-[var(--primary)] bg-[rgba(30,78,140,0.08)]" : "border-transparent hover:bg-[var(--bg-low)]"
+                      active ? "border-[var(--primary)] bg-[rgba(124,58,237,0.08)]" : "border-transparent hover:bg-[var(--bg-low)]"
                     }`}
                   >
                     <div>
@@ -372,7 +372,7 @@ export default function MyPayslipPage() {
                   sub: lopDays > 0 ? `${INR(lopAmt)} deducted` : "no LOP",
                 },
               ].map((item, i) => (
-                <div key={i} className="flex-1 text-center py-3 border-[var(--outline-v)]" style={{ background: "#fff", borderRightWidth: i < 2 ? 1 : 0, borderRightStyle: "solid" }}>
+                <div key={i} className="flex-1 text-center py-3 border-[var(--outline-v)]" style={{ background: "var(--surface)", borderRightWidth: i < 2 ? 1 : 0, borderRightStyle: "solid" }}>
                   <div className="text-2xl font-extrabold" style={{ color: item.color }}>{item.value}</div>
                   <div className="text-[11px] font-medium mt-0.5" style={{ color: "var(--on-variant)" }}>{item.label}</div>
                   <div className="text-[10px]" style={{ color: "var(--outline)" }}>{item.sub}</div>

@@ -12,42 +12,23 @@ import {
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
+import RolePreviewSwitcher from "@/components/dashboard/RolePreviewSwitcher";
+import DarkModeToggle from "@/components/dashboard/DarkModeToggle";
+import DashboardFooter from "@/components/dashboard/DashboardFooter";
 import { useFetch } from "@/hooks/useFetch";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
+import { NAV_ICONS } from "@/components/dashboard/NavIcons";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-const PAGE_TITLES: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/dashboard/settings": "Settings",
-  "/dashboard/profile": "My Profile",
-  "/dashboard/settings/permissions": "Roles & Permissions",
-  "/dashboard/employees": "Employees",
-  "/dashboard/attendance": "Attendance & Time",
-  "/dashboard/my-attendance": "My Attendance",
-  "/dashboard/payroll": "Payroll Management",
-  "/dashboard/leave": "Leave Management",
-  "/dashboard/expenses": "Expense Claims",
-  "/dashboard/documents": "Document Center",
-  "/dashboard/separation": "Separation & Exit",
-  "/dashboard/interview-list": "Interview List",
-  "/dashboard/candidate-review": "Candidate Review & Onboarding",
-  "/dashboard/assessments":      "Assessment Management",
-  "/dashboard/email-logs": "Email Logs",
-  "/dashboard/face-id-registrations": "Face ID Registrations",
-  "/dashboard/org-chart": "Organization Management",
-  "/dashboard/announcements": "Announcements",
-  "/dashboard/my-payslip": "My Payslips",
-  "/dashboard/my-requests": "My Requests",
-  "/dashboard/approvals": "Team Approvals",
-  "/dashboard/branches":                    "Branch Management",
-  "/dashboard/settings/attendance-config":  "Attendance Rules",
-  "/dashboard/referrals":                   "My Referrals",
-  "/dashboard/settings/referral-rules":     "Referral Rules",
-};
-
+// The reference app's confirmed exact site map — 9 top-level nav modules
+// in this exact order, nothing more, nothing less.
+const CORE_NAV_IDS = [
+  "dashboard", "org-chart", "employees", "attendance", "leave",
+  "payroll", "performance", "reports", "settings",
+];
 
 export default function DashboardShell({
   session,
@@ -64,24 +45,26 @@ export default function DashboardShell({
   // again for the cookie to refresh.
   const { data: myProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me);
 
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const brandName = "Aira HRMS";
-
-  const pageTitle = PAGE_TITLES[pathname]
-    ?? (pathname.startsWith("/dashboard/employees/") ? "Employee Profile"
-    : pathname.startsWith("/dashboard/separation/") ? "Separation Request"
-    : brandName);
   const visibleNav = buildNav(session.permissions ?? []);
-  const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry) && !entry.comingSoon);
+  // Top-nav layout (matching the AIRA mockup's single-row navlinks) has no
+  // room for the sidebar's section subheadings — every entry renders as one
+  // flat, horizontally scrollable strip, section labels dropped, order kept.
+  const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry));
+  // Only the mockup's 9 core links render in the top nav — everything else
+  // stays reachable through its own existing page (e.g. Settings' own tile
+  // grid), just not flattened into this row.
+  const coreNavItems = CORE_NAV_IDS
+    .map(id => navItems.find(item => item.id === id))
+    .filter((item): item is NavItem => !!item);
   const canSearchEmployees = (session.permissions ?? []).includes("employees.view");
 
   // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
   // item's path prefix (both "audit" and its parent "settings"). Only the
   // item with the longest — i.e. most specific — matching path should light up.
   const activeNavId = navItems
-    .filter(item => pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/")))
+    .filter(item => !item.comingSoon && (pathname === item.path || (item.path !== "/dashboard" && pathname.startsWith(item.path + "/"))))
     .sort((a, b) => b.path.length - a.path.length)[0]?.id;
 
   async function handleLogout() {
@@ -97,200 +80,122 @@ export default function DashboardShell({
 
   function navigate(path: string) {
     router.push(path);
-    setMobileOpen(false);
+    setMobileNavOpen(false);
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden">
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-[150] md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* ══════════════════ SIDEBAR ══════════════════ */}
-      <aside
-        className={[
-          "bg-white flex flex-col overflow-hidden z-[200] h-screen",
-          "border-r border-[var(--outline-v)]",
-          // Mobile: fixed overlay drawer, slides in/out via transform
-          "fixed left-0 top-0 w-[240px]",
-          "transition-transform duration-200",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-          // Desktop: part of the normal flow, width-transitions
-          "md:relative md:translate-x-0 md:flex-shrink-0 md:transition-[width]",
-          collapsed ? "md:w-14" : "md:w-[240px]",
-        ].join(" ")}
-      >
-        {/* Sidebar header */}
-        <div className="h-[68px] px-3 pr-2 flex items-center gap-2 border-b border-[var(--outline-v)] flex-shrink-0">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            {collapsed ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src="/logo-icon.png"
-                alt="Aira HRMS"
-                className="sidebar-logo-collapsed"
-              />
-            ) : (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/logo-icon.png"
-                  alt="Aira HRMS"
-                  className="sidebar-logo-expanded"
-                />
-                <span className="sidebar-brand-text">{brandName}</span>
-              </>
-            )}
+      {/* ══════════════════ TOP NAV ══════════════════ */}
+      <header className="topnav flex-wrap md:flex-nowrap">
+        {/* Brand */}
+        <div className="brandmark">
+          <span className="sq">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+              <path d="M12 3 21 8v8l-9 5-9-5V8z" />
+            </svg>
+          </span>
+          <div className="brandcopy">
+            <strong>AIRA</strong>
+            <small>Artificial Intelligence Resources Assistance</small>
           </div>
-          <button
-            className="w-7 h-7 rounded-[6px] flex items-center justify-center bg-transparent text-[var(--outline)] cursor-pointer hover:bg-[var(--bg-mid)] flex-shrink-0 text-sm border-none"
-            onClick={() => setCollapsed(v => !v)}
-            title={collapsed ? "Expand" : "Collapse"}
-            suppressHydrationWarning
-          >
-            <i className={`ti ${collapsed ? "ti-layout-sidebar-right" : "ti-layout-sidebar-left-collapse"}`} />
-          </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-2">
-          {visibleNav.map((entry, idx) => {
-            if (isSection(entry)) {
-              return (
-                <div key={`section-${idx}`} className="px-2 mt-3 mb-1">
-                  {!collapsed && (
-                    <span className="text-[10px] font-semibold text-[var(--outline)] tracking-[0.06em] uppercase px-2">
-                      {entry.section}
-                    </span>
-                  )}
-                  {collapsed && <div className="border-t border-[var(--outline-v)] mx-1" />}
-                </div>
-              );
-            }
-            const item = entry as NavItem;
+        {/* Mobile nav toggle */}
+        <button
+          className="iconbtn md:hidden flex-shrink-0"
+          onClick={() => setMobileNavOpen(v => !v)}
+          title={mobileNavOpen ? "Close menu" : "Open menu"}
+          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+          suppressHydrationWarning
+        >
+          <i className="ti ti-menu-2" />
+        </button>
+
+        {/* Horizontal scrollable nav links — order:3 on mobile so it drops to
+            its own full-width row below brand+utilities, matching the
+            mockup's own responsive behavior for a long, narrow topnav. */}
+        <nav
+          className={[
+            "navlinks",
+            mobileNavOpen ? "flex" : "hidden md:flex",
+            "order-3 md:order-none basis-full md:basis-auto",
+          ].join(" ")}
+        >
+          {coreNavItems.map(item => {
             const isActive = !item.comingSoon && item.id === activeNavId;
             if (item.comingSoon) {
               return (
-                <div key={item.id} className="px-2 mb-px">
-                  <div
-                    className="flex items-center gap-2.5 px-2 py-2 rounded-lg w-full text-[13px] whitespace-nowrap"
-                    style={{ color: "var(--outline)", cursor: "not-allowed", opacity: 0.6 }}
-                    title={collapsed ? `${item.label} — Coming Soon` : undefined}
-                    suppressHydrationWarning
-                  >
-                    <i className={`ti ${item.icon} text-[18px] flex-shrink-0`} />
-                    {!collapsed && (
-                      <>
-                        <span className="overflow-hidden text-ellipsis whitespace-nowrap flex-1">{item.label}</span>
-                        <span style={{ fontSize: 9, fontWeight: 700, background: "var(--outline-v)", color: "var(--outline)", padding: "1px 5px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.04em" }}>
-                          SOON
-                        </span>
-                      </>
-                    )}
-                  </div>
+                <div
+                  key={item.id}
+                  className="navlink"
+                  style={{ cursor: "not-allowed", opacity: 0.6 }}
+                  title={`${item.label} — Coming Soon`}
+                >
+                  {NAV_ICONS[item.id]}
+                  {item.topNavLabel ?? item.label}
+                  <span style={{ fontSize: 8.5, fontWeight: 700, background: "var(--line)", color: "var(--faint)", padding: "1px 5px", borderRadius: 99, letterSpacing: "0.04em" }}>
+                    SOON
+                  </span>
                 </div>
               );
             }
             return (
-              <div key={item.id} className="px-2 mb-px">
-                <button
-                  className={[
-                    "flex items-center gap-2.5 px-2 py-2 rounded-lg cursor-pointer w-full text-left border-none font-[inherit] text-[13px] whitespace-nowrap transition-all duration-[0.12s]",
-                    isActive
-                      ? "font-medium text-[var(--primary)] bg-[rgba(30,78,140,0.10)]"
-                      : "text-[var(--on-variant)] bg-transparent hover:bg-[var(--bg-low)] hover:text-[var(--on-bg)]",
-                  ].join(" ")}
-                  onClick={() => navigate(item.path)}
-                  title={collapsed ? item.label : undefined}
-                  suppressHydrationWarning
-                >
-                  <i className={`ti ${item.icon} text-[18px] flex-shrink-0`} />
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1 whitespace-normal leading-snug">{item.label}</span>
-                      {item.badge && (
-                        <span className="text-[10px] font-semibold bg-[var(--primary)] text-white px-1.5 py-px rounded-full flex-shrink-0">
-                          {item.badge}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                key={item.id}
+                className={`navlink${isActive ? " on" : ""}`}
+                onClick={() => navigate(item.path)}
+                suppressHydrationWarning
+              >
+                {NAV_ICONS[item.id]}
+                {item.topNavLabel ?? item.label}
+                {item.badge && (
+                  <span className="text-[9.5px] font-bold bg-[var(--brand)] text-white px-1.5 py-px rounded-full flex-shrink-0">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
             );
           })}
         </nav>
 
-        {/* Footer — user card */}
-        <div className="border-t border-[var(--outline-v)] p-2 flex-shrink-0">
+        {/* Right-side utilities */}
+        <div className="navright order-2 md:order-none">
+          <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
+          <RolePreviewSwitcher currentRoleName={session.role} />
+          <DarkModeToggle />
+          <NotificationBell />
           <button
-            className="flex items-center gap-2 p-2 rounded-lg cursor-pointer w-full bg-transparent border-none font-[inherit] text-left hover:bg-[var(--bg-low)] transition-all duration-[0.12s]"
+            className="who-chip"
             onClick={() => navigate("/dashboard/profile")}
             title="My Profile"
             suppressHydrationWarning
           >
-            <Avatar text={initials(session.name)} size={30} photoUrl={myProfile?.profile_photo_url} />
-            {!collapsed && (
-              <div className="flex-1 overflow-hidden text-left">
-                <div className="text-xs font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--on-bg)]">
-                  {session.name}
-                </div>
-                <div className="text-[10px] text-[var(--on-variant)]">{session.role}</div>
-              </div>
-            )}
+            <Avatar text={initials(session.name)} size={24} photoUrl={myProfile?.profile_photo_url} />
+            <span className="whitespace-nowrap hidden lg:inline">{session.name}</span>
           </button>
-        </div>
-      </aside>
-
-      {/* ══════════════════ MAIN AREA ══════════════════ */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-
-        {/* Top header */}
-        <header className="h-[68px] px-3 md:px-6 flex items-center gap-2 md:gap-4 bg-white border-b border-[var(--outline-v)] flex-shrink-0">
-
-          {/* Mobile menu toggle */}
           <button
-            className="md:hidden flex items-center justify-center w-8 h-8 bg-transparent border-none text-[var(--on-variant)] text-xl cursor-pointer rounded-lg hover:bg-[var(--bg-mid)]"
-            onClick={() => setMobileOpen(v => !v)}
-            title={mobileOpen ? "Close menu" : "Open menu"}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            className="iconbtn"
+            onClick={handleLogout}
+            title="Sign out"
             suppressHydrationWarning
           >
-            <i className="ti ti-menu-2" />
+            <i className="ti ti-logout text-[16px]" />
           </button>
+        </div>
+      </header>
 
-          {/* Page title */}
-          <h1 className="text-base font-semibold text-[var(--on-bg)] flex-1">{pageTitle}</h1>
-
-          <div className="flex items-center gap-2">
-            {/* Search bar */}
-            <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
-
-            {/* Notifications */}
-            <NotificationBell />
-
-            {/* Logout */}
-            <button
-              className="w-[34px] h-[34px] rounded-lg flex items-center justify-center bg-transparent text-[var(--outline)] border-none cursor-pointer hover:bg-[var(--bg-mid)]"
-              onClick={handleLogout}
-              title="Sign out"
-              suppressHydrationWarning
-            >
-              <i className="ti ti-logout text-[18px]" />
-            </button>
-          </div>
-        </header>
-
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[var(--bg)]">
+      {/* ══════════════════ CONTENT ══════════════════ */}
+      <main className="flex-1 overflow-y-auto bg-[var(--bg)]">
+        <div className="px-6 py-4 md:px-10 md:py-6">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
+
+      {/* Footer is a sibling of <main>, not a child inside its scroll area —
+          it stays put at the bottom of the viewport (like the header stays
+          put at the top) instead of scrolling away with page content. */}
+      <DashboardFooter />
     </div>
   );
 }

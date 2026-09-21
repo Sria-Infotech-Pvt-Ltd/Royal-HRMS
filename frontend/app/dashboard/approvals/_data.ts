@@ -1,6 +1,7 @@
 import { LeaveRequest, fmtDate as fmtDateOnly } from "../leave/_data";
 import type { SeparationRequest } from "@/types/separation";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import { formatDate } from "@/lib/formatDate";
 
 // ─── Kind-specific request shapes (as returned by their own list endpoints) ───
 
@@ -138,7 +139,7 @@ export function fmtSubmitted(raw: string): string {
   const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
   const d = new Date(iso);
   if (isNaN(d.getTime())) return raw;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 export function toSortableTime(raw: string): number {

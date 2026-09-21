@@ -47,7 +47,7 @@ export default function HrConsole({ firstName }: Props) {
     <div
       className="mb-20"
       style={{
-        background: "linear-gradient(135deg, #1a3a6e 0%, #0e2447 100%)",
+        background: "linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%)",
         borderRadius: 10,
         overflow: "hidden",
         position: "relative",

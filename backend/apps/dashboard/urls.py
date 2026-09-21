@@ -1,6 +1,14 @@
 from django.urls import path
 
 from apps.dashboard import views
+from apps.dashboard.views.module_overviews import (
+    AttendanceOverviewView,
+    LeaveOverviewView,
+    PayrollOverviewView,
+    PerformanceOverviewView,
+    ReportsOverviewView,
+    SettingsOverviewView,
+)
 
 urlpatterns = [
     # ── System Admin Dashboard ────────────────────────────────────────────────
@@ -27,6 +35,16 @@ urlpatterns = [
     path('hr/birthdays/today/',                views.HRBirthdayTodayView.as_view()),
     path('hr/birthdays/upcoming/',             views.HRBirthdayUpcomingView.as_view()),
     path('hr/attendance-summary/',             views.HRAttendanceSummaryView.as_view()),
+    path('hr/overview/',                       views.HRDashboardOverviewView.as_view()),
+    path('hr/lifecycle-register/',             views.HRLifecycleActionRegisterView.as_view()),
+
+    # ── Module overview landings ─────────────────────────────────────────────
+    path('module/attendance-overview/',        AttendanceOverviewView.as_view()),
+    path('module/leave-overview/',             LeaveOverviewView.as_view()),
+    path('module/payroll-overview/',           PayrollOverviewView.as_view()),
+    path('module/performance-overview/',       PerformanceOverviewView.as_view()),
+    path('module/reports-overview/',           ReportsOverviewView.as_view()),
+    path('module/settings-overview/',          SettingsOverviewView.as_view()),
 
     # ── Manager / Team Lead Dashboard ────────────────────────────────────────
     path('manager/', views.ManagerDashboardView.as_view(), name='manager-dashboard'),

@@ -463,6 +463,11 @@ class LeavePolicyView(APIView):
             'lwp':       {'annual_days': 0,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Salary deducted. Requires HR approval. No carry-forward.'},
             'maternity': {'annual_days': 90, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Up to 180 days per Maternity Benefit Act. HR approval required.'},
             'paternity': {'annual_days': 5,  'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'Within 15 days of child\'s birth. Birth certificate required.'},
+            'bereavement': {'annual_days': 5, 'can_carry_forward': False, 'max_carry_forward_days': 0, 'policy_note': 'For the loss of an immediate family member.'},
+            # Not a fixed annual allotment (earned per instance of extra worked
+            # time, credited separately) — annual_days=0 here is informational
+            # only; neither accrual task touches this policy's balance.
+            'comp_off':    {'annual_days': 0,  'can_carry_forward': True,  'max_carry_forward_days': 5, 'carry_forward_type': 'limited', 'policy_note': 'Earned for approved extra worked time (e.g. weekend/holiday work).'},
         }
         for lt, kwargs in defaults.items():
             if lt not in existing:

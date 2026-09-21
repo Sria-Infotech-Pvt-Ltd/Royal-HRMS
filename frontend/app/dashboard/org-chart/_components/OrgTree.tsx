@@ -84,7 +84,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
               onClick={e => { e.stopPropagation(); toggle(`u${u.id}`); }}
             />
           ) : <span className="orgnode-caret" />}
-          <span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(30,78,140,0.12))", color: "var(--primary)" }}>O</span>
+          <span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(124,58,237,0.12))", color: "var(--primary)" }}>O</span>
           <span className="orgnode-name">{u.name}</span>
         </div>
         {!isCollapsed && (
@@ -150,7 +150,7 @@ export default function OrgTree({ units, positions, search, branchFilter, select
       <style>{`
         .orgnode { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:8px; cursor:pointer; }
         .orgnode:hover { background: var(--bg-low); }
-        .orgnode-sel { background: rgba(30,78,140,0.1); }
+        .orgnode-sel { background: rgba(124,58,237,0.1); }
         .orgnode-sel .orgnode-name { color: var(--primary); font-weight: 600; }
         .orgnode-caret { width:15px; height:15px; flex-shrink:0; font-size:13px; color: var(--outline); }
         .orgnode-glyph { width:21px; height:21px; border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:750; }

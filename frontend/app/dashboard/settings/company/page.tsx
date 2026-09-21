@@ -6,6 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
 import type { CompanyData } from "@/types/company";
+import { formatDateTime } from "@/lib/formatDate";
 import EntityIdentityCard from "./_components/EntityIdentityCard";
 import OtherRegistrationsCard from "./_components/OtherRegistrationsCard";
 import GSTRegistrationsSection from "./_components/GSTRegistrationsSection";
@@ -261,7 +262,7 @@ export default function CompanyInfoPage() {
       {savedAt && !saveSuccess && (
         <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}>
           <i className="ti ti-clock" style={{ fontSize: 14 }} />
-          Last saved: {new Date(savedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+          Last saved: {formatDateTime(savedAt)}
         </div>
       )}
 

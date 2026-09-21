@@ -361,7 +361,7 @@ export default function ReferralsPage() {
                   {rules.map((rule, idx) => (
                     <div key={rule.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 14, padding: "20px 22px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(30,78,140,0.09)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(124,58,237,0.09)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <i className={`ti ${rule.icon}`} style={{ fontSize: 18, color: "var(--primary)" }} />
                         </div>
                         <div>

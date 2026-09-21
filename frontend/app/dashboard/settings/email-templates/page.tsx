@@ -373,7 +373,7 @@ export default function EmailTemplatesPage() {
           {/* Header preview */}
           <div style={{ padding: "20px 24px", borderRight: "1px solid var(--outline-v)" }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Header</div>
-            <div style={{ background: "#fff", borderRadius: 6, padding: "16px 20px", textAlign: "center", borderBottom: "3px solid #4f46e5", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ background: "var(--surface)", borderRadius: 6, padding: "16px 20px", textAlign: "center", borderBottom: "3px solid #4f46e5", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
               {currentLogo ? (
                 <img src={currentLogo} alt={company?.company_name ?? "Logo"} style={{ maxHeight: 60, maxWidth: 200, objectFit: "contain" }} />
               ) : (
@@ -401,7 +401,7 @@ export default function EmailTemplatesPage() {
               <label style={{ fontSize: 12, fontWeight: 500, color: "var(--on-variant)", display: "block", marginBottom: 6 }}>Logo</label>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {currentLogo && (
-                  <img src={currentLogo} alt="Logo" style={{ height: 44, maxWidth: 140, objectFit: "contain", borderRadius: 4, border: "1px solid var(--outline-v)", background: "#fff", padding: 4 }} />
+                  <img src={currentLogo} alt="Logo" style={{ height: 44, maxWidth: 140, objectFit: "contain", borderRadius: 4, border: "1px solid var(--outline-v)", background: "var(--surface)", padding: 4 }} />
                 )}
                 <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoChange} />
                 <button className="btn btn-ghost btn-sm" onClick={() => logoInputRef.current?.click()} suppressHydrationWarning>
@@ -605,7 +605,7 @@ export default function EmailTemplatesPage() {
                 <div className="et-cards-grid" style={{ display: "grid", gap: 10 }}>
                   {group.map(template => (
                     <div key={template.id} className="et-card" style={{
-                      background: "#fff", border: "1px solid var(--outline-v)",
+                      background: "var(--surface)", border: "1px solid var(--outline-v)",
                       borderRadius: "var(--radius)", padding: "14px 16px",
                       display: "flex", alignItems: "flex-start", gap: 12,
                       opacity: template.is_active ? 1 : 0.6,
@@ -645,7 +645,7 @@ export default function EmailTemplatesPage() {
                         >
                           <span style={{
                             position: "absolute", top: 3, left: template.is_active ? 17 : 3,
-                            width: 14, height: 14, borderRadius: "50%", background: "#fff",
+                            width: 14, height: 14, borderRadius: "50%", background: "var(--surface)",
                             transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
                           }} />
                         </button>

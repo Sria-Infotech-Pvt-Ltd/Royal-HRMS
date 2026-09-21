@@ -76,25 +76,27 @@ export default function GlobalSearch({ navItems, canSearchEmployees }: Props) {
   const hasResults = employees.length > 0 || matchingPages.length > 0;
 
   return (
-    <div ref={boxRef} className="hidden md:block relative min-w-[240px]">
-      <div className="flex items-center gap-2 px-3 py-2 border-[1.5px] border-[var(--outline-v)] rounded-lg bg-[var(--bg)]">
-        <i className="ti ti-search text-base text-[var(--outline)]" />
+    <div ref={boxRef} className="relative w-full sm:w-auto sm:min-w-[240px]">
+      <div className="navsearch">
+        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0 }}>
+          <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+        </svg>
         <input
           type="text"
-          placeholder="Search anything..."
-          className="border-none bg-transparent text-[var(--on-bg)] text-[13px] flex-1 outline-none"
+          placeholder="Search…"
           value={query}
           onChange={e => handleChange(e.target.value)}
           onFocus={() => trimmed && setOpen(true)}
           onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}
           suppressHydrationWarning
         />
+        <span className="kbd">⌘K</span>
       </div>
 
       {showResults && (
         <div style={{
           position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 300,
-          background: "#fff", border: "1px solid var(--outline-v)", borderRadius: 8,
+          background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 8,
           boxShadow: "var(--shadow-md)", maxHeight: 320, overflowY: "auto",
         }}>
           {loading ? (

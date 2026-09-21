@@ -22,7 +22,7 @@ function RadioCard({ active, title, subtitle, onClick }: { active: boolean; titl
         flex: 1, display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer",
         padding: "12px 14px", borderRadius: 8,
         border: `1.5px solid ${active ? "var(--primary)" : "var(--outline-v)"}`,
-        background: active ? "rgba(30,78,140,0.05)" : "transparent",
+        background: active ? "rgba(124,58,237,0.05)" : "transparent",
         transition: "border-color 0.15s, background 0.15s",
       }}
     >

@@ -312,7 +312,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
                                         <span style={{ color: "var(--info)" }}>{fmt(val as string)}</span>
                                       </div>
                                     ))}
-                                    <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(27,138,107,0.06)", borderRadius: "var(--radius)" }}>
+                                    <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(23,144,90,0.06)", borderRadius: "var(--radius)" }}>
                                       <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Net Pay Payable</div>
                                       <div style={{ fontWeight: 800, fontSize: 18, color: "var(--success)" }}>{fmt(p.net_pay)}</div>
                                     </div>

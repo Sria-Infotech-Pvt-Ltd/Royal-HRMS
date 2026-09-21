@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.payroll.views.settings import PayrollSettingsView
+from apps.payroll.views.salary_preview import SalaryPreviewView
 from apps.payroll.views.structures import (
     SalaryStructureListView,
     SalaryStructureDetailView,
@@ -37,6 +38,12 @@ from apps.payroll.views.attendance_approval import (
     AttendancePendingCyclesView,
     CycleAttendanceSummaryView,
     CycleEmployeeDailyView,
+)
+from apps.payroll.views.tax_declarations import (
+    MyTaxDeclarationView,
+    SubmitTaxDeclarationView,
+    TaxDeclarationListView,
+    ApproveTaxDeclarationView,
 )
 from apps.payroll.views.payslips import (
     CyclePayslipListView,
@@ -90,6 +97,9 @@ urlpatterns = [
     path('employee-salary/<uuid:pk>/', EmployeeSalaryConfigDetailView.as_view(), name='employee-salary-detail'),
     path('employee-salary/history/<str:employee_pk>/', EmployeeSalaryHistoryView.as_view(), name='employee-salary-history'),
 
+    # ── Salary preview (Hire wizard) ──────────────────────────────────────────
+    path('salary-preview/', SalaryPreviewView.as_view(), name='salary-preview'),
+
     # ── Attendance approval (manager + HR) ──────────────────────────────────
     path('cycles/pending-approval/', AttendancePendingCyclesView.as_view(), name='payroll-pending-approval'),
     path('cycles/<uuid:pk>/attendance-summary/', CycleAttendanceSummaryView.as_view(), name='payroll-attendance-summary'),
@@ -139,4 +149,10 @@ urlpatterns = [
     path('adjustments/', PayrollAdjustmentListCreateView.as_view(), name='payroll-adjustment-list'),
     path('adjustments/bulk-import/', PayrollAdjustmentBulkImportView.as_view(), name='payroll-adjustment-bulk-import'),
     path('adjustments/<uuid:pk>/', PayrollAdjustmentDeleteView.as_view(), name='payroll-adjustment-delete'),
+
+    # ── Tax declarations ─────────────────────────────────────────────────────
+    path('tax-declarations/', TaxDeclarationListView.as_view(), name='tax-declaration-list'),
+    path('tax-declarations/me/', MyTaxDeclarationView.as_view(), name='my-tax-declaration'),
+    path('tax-declarations/me/submit/', SubmitTaxDeclarationView.as_view(), name='submit-tax-declaration'),
+    path('tax-declarations/<uuid:pk>/approve/', ApproveTaxDeclarationView.as_view(), name='approve-tax-declaration'),
 ]

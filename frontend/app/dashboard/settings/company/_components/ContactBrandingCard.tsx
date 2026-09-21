@@ -63,7 +63,7 @@ export default function ContactBrandingCard({
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{
             width: 44, height: 44, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-            background: displayLogo ? "var(--bg-low)" : "rgba(30,78,140,0.12)",
+            background: displayLogo ? "var(--bg-low)" : "rgba(124,58,237,0.12)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             {displayLogo

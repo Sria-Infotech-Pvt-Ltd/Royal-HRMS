@@ -5460,3 +5460,154 @@ Removed manual entry of Total Experience entirely. `services_education_experienc
 - **Settlement's gratuity/bonus/reimbursements/advances/TDS/other-adjustment are manual-entry-only, not computed** — only pro-rata salary, EL encashment, and notice-period shortfall are auto-computed. This matches actual India F&F practice (researched, not assumed) where those other components depend on policy/negotiation specifics this codebase doesn't model.
 - **`apps.accounts.tests.PasswordResetFlowTests.test_forgot_password_does_not_reveal_account_existence` still fails, pre-existing and unrelated** — same one noted in the prior session's entry; not touched again this round.
 - **Open deploy issue, not yet resolved**: the CI deploy step (`git fetch` + fast-forward on the deploy server) is currently failing with `Your local changes to the following files would be overwritten by merge: frontend/package-lock.json`. This is the same file the 8 Sep lockfile-drift fix (above) touched — the deploy server's own working copy has an uncommitted, locally-modified `package-lock.json` that diverges from origin's, blocking the fast-forward on every push since. A first attempt to fix it on the server ("updated package.json") did not resolve it, which suggests either `npm install` was re-run there (regenerating the lockfile again, recreating the same kind of drift instead of removing it) or the fix was applied in a different path/worktree than the one the deploy script actually pulls into. Needs `git status`/`git diff frontend/package-lock.json` run directly on the server, in the exact directory the deploy script uses, to confirm which — then `git checkout -- frontend/package-lock.json` to discard the drift (not `npm install`, which would just regenerate a new one) before re-running the deploy.
+
+---
+
+# Team Context — Strict Reference-Replication Pass (Global Shell, Employee Directory, Hire Wizard)
+
+The user asked for the AIRA HRMS UI to be replicated pixel/color/class-exact against a reference
+mockup, initially described only in prose (a very long, detailed text spec covering 9 admin pages,
+a two-part Hire flow, and an Employee Self-Service shell). Partway through, the actual reference
+artifact was found already sitting in the repo at `frontend/public/reference.html` — a real,
+complete, single-file snapshot (title: "AIRA Employee Directory") containing the exact CSS and DOM
+for the global shell, Employee Directory page, its Hire wizard (9 steps), detail drawer, "Perform
+an action" pattern, drafts popover, and toast — but not the other 8 admin pages or the ESS
+shell, which exist only in the user's prose description.
+
+## 1. Design tokens reconciled, not duplicated
+
+This app's existing design system (`frontend/app/globals.css`) already used the same hex values as
+the reference's tokens under different names (`--primary` roughly equals reference `--brand`, `--on-bg` equals
+`--ink`, etc.) — confirmed field-by-field before touching anything. One real bug found this way:
+dark-mode's accent was blue (#7fa3de) instead of the reference's purple (#a78bfa) — fixed in
+`globals.css`. New `frontend/app/aira-theme.css` holds the literal reference CSS (extracted
+verbatim from `public/reference.html`'s style block) plus a small alias layer mapping the
+reference's literal token names onto this app's existing values — imported in `app/layout.tsx`
+after `globals.css`.
+
+## 2. Critical bug: verbatim CSS copy silently broke buttons/modals app-wide
+
+The reference file's own `.btn` and `.modal`/`.modal-body` rules have the exact same class names as
+this app's pre-existing, universally-used classes (`.btn` + `.btn-filled`/`.btn-ghost` used by
+nearly every button in the app; `.modal`/`.modal-body` used by the shared `components/Modal.tsx`
+on every modal). Because `aira-theme.css` loads after `globals.css`, its same-specificity rules
+were silently winning the cascade and would have changed every button's padding/border/background
+and stretched every modal to max-width:1060px with overflow:hidden (clipping scrollable content)
+app-wide, not just on the pages being replicated. Found via a systematic diff of every
+top-level class selector between the two CSS files (comm -12 on sorted grep output). Fixed by
+removing the reference's own `.btn*`/`.modal`/`.modal-backdrop`/`.modal-body` (x3)/`.drawer` rules
+from `aira-theme.css` entirely — nothing built this session ever needed the literal reference class
+names for these, since everything already used this app's own `btn btn-filled`/`btn btn-ghost` and
+the shared `<Modal>` component. Anyone doing a similar reference-CSS import in future should run
+this same diff first — bare, generic-sounding class names (`.btn`, `.modal`, `.card`, `.stat`) are
+exactly the ones most likely to already exist for something else in a codebase this size.
+
+## 3. Global shell rebuilt against the real DOM
+
+`components/dashboard/DashboardShell.tsx`: brand mark, all 9 nav icons (Dashboard/Organization/
+Employees/Attendance/Leave/Payroll/Performance/Reports/Settings — confirmed exact site map, no
+"Recruitment" tab, correcting an earlier wrong guess made before the real file was found), search
+icon, notification/theme-toggle icons — all swapped from Tabler icon-font glyphs to byte-exact
+inline SVGs copied from the reference DOM (`components/dashboard/NavIcons.tsx`, new). Long nav
+labels shortened via a new `topNavLabel` field on `NavItem` (`lib/navConfig.ts`) so the sidebar can
+keep a fuller label while the flat top nav shows the reference's shorter one ("Leave Management"
+became "Leave", "Organization Management" became "Organization") — fixes real truncation bugs
+("Leave Manage" cut off mid-word). `RolePreviewSwitcher.tsx` converted from a custom
+button+listbox to a real native select (matching the reference exactly) while preserving all
+real behavior (permission gate, preview toast, ESS auto-routing). `DashboardFooter.tsx` rebuilt to
+the exact real markup (generated logo text, button nav links not anchor tags, not an img
+logo). Also fixed a real hardcoded border-white on the notification badge that never respected dark
+mode, and a `.sel`/`.who-chip` overflow bug (role dropdown text was being hard-clipped at
+max-width:150px, too narrow for "HR Business Partner"; the account chip could overflow with a
+long name/email) — both given ellipsis plus a wider cap.
+
+## 4. Employee Directory rebuilt against the real DOM
+
+Table converted from a real table element to the reference's actual CSS-grid row markup (`.tbl-wrap`/
+`.tbl-h`/`.rows`/`.tr`, exact column ratio 2.1fr 1.5fr 1.35fr 1.05fr .95fr .9fr 1.3fr 46px).
+Avatar now uses the confirmed real per-person HSL formula (hsl(hue 58% 92%) bg /
+hsl(hue 52% 34%) text, hashed per employee — new `personAvatarTint()` in `_data.ts`) and a
+rounded-square shape (border-radius:10px, not circular — new `shape` prop on `Avatar.tsx`,
+scoped only to the table row; every other avatar usage, e.g. header/drawer, stays circular).
+Stat cards match the exact real structure (`.top` wrapping label+icon side by side, not
+icon-absolutely-positioned; `.metricline` combining the number and a bold-highlighted caption on
+one line) — this fix lives in the shared `ModuleOverviewKit.tsx`/`EmployeeStatCards.tsx`, so it
+also corrected every other module page's stat tiles that reuse the same components.
+`WeeklyBarChart` rewritten to the real `.chart-bars i` pattern (gradient bars with the label
+rendered as text inside the bar, not separate bar+label elements).
+
+Built a genuinely real "Drafts" popover — it was previously fake (just applied an "onboarding"
+status filter). Backend: new GET on `HireActionListCreateView`
+(`backend/apps/accounts/views_hire.py`) listing the current user's own draft HireAction rows from
+the database (not the reference's localStorage-only approach, which loses drafts on a new device).
+Frontend: new `DraftsPopover.tsx` with real Resume (opens the wizard via a new
+`initialHireActionId` prop on `HireEmployeeModal.tsx`) / Delete (existing discard endpoint) actions.
+
+## 5. Hire wizard — sidebar, intent modal, and most field steps converted
+
+Confirmed the wizard was already a real modal (not a page route as first, wrongly, assumed
+and asked the user about) — `HireWizardClient.tsx` always renders inside the shared Modal,
+opened only from `HireEmployeeModal.tsx`; there is no page.tsx under
+`/dashboard/hire/[hireActionId]/` at all. `HireWizardSidebar.tsx` converted to the exact real
+`.wiz-nav`/`.step`/`.c`/`.t1`/`.t2`/`.tag` classes. `HireEmployeeModal.tsx` (the Stage-1 intent
+modal) converted to `.f`/`.finput`/`.g2`/`.g3`/`.section-label` — content already matched the
+reference almost verbatim. Added one shared `.stephead` in `HireWizardClient.tsx` (dynamic per
+current step from its STEPS array) after discovering each step used to render its own h2 with
+no shared header existing — removing those per-step headers during conversion without this would
+have silently left several steps with no title at all (caught and fixed before it shipped).
+Converted to real field classes: `EmploymentStep.tsx`, `StatutoryAccountsStep.tsx` (incl. its
+Yes/No Toggle to `.seg`), `BasicPayStep.tsx`/`DocumentsChecklistStep.tsx` (headers),
+`ReviewStep.tsx` (banner/meter/summary cards to `.rvcard`/`.kv`), `EmergencyContactsList.tsx`
+(to `.rrow`/`.etag`/`.mini`/`.add`), `AddressFields.tsx`, `EmployeePhotoUpload.tsx`
+(to `.photorow`/`.photodrop`/`.filebtn`), `ScanFillModal.tsx`. `ActionMenu.tsx`'s Confirmation modal
+("Perform an action") rewritten onto the shared Modal component instead of a raw fixed-position
+div.
+
+Deliberately left unconverted, on purpose: `FamilyNominationStep.tsx`/`EducationChecklist.tsx`/
+`ExperienceList.tsx`/`AssetsList.tsx` (all under `app/onboarding/_components/`) are shared with the
+separate, already-shipped self-service onboarding wizard (`app/onboarding/page.tsx` imports all
+four) — restyling them would change that unrelated feature's look too, so they were left as-is.
+Toast (`ToastProvider.tsx`) and the detail drawer (`EmployeeDrawer.tsx`) already use this app's own
+working, pre-existing `.toast`/`.toast-container` and `.drawer`/`.drawer-header`/`.drawer-body`
+systems and were left alone.
+
+## Key Files Changed
+
+| File(s) | What changed |
+|---|---|
+| `frontend/app/aira-theme.css` (new) | Verbatim reference CSS + token aliases; conflicting `.btn`/`.modal`/`.modal-body`/`.drawer`/`.toast` rules removed |
+| `frontend/app/globals.css` | Dark-mode accent fixed to purple; `.sel`/`.who-chip` overflow fixes |
+| `frontend/app/layout.tsx` | Imports `aira-theme.css` after `globals.css` |
+| `frontend/components/dashboard/DashboardShell.tsx`, `NavIcons.tsx` (new), `DashboardFooter.tsx`, `GlobalSearch.tsx`, `DarkModeToggle.tsx`, `RolePreviewSwitcher.tsx`, `NotificationBell.tsx` | Global shell rebuilt against the real reference DOM |
+| `frontend/lib/navConfig.ts` | `topNavLabel` field added; `leave`/`org-chart` get shorter top-nav labels |
+| `frontend/app/dashboard/employees/_components/EmployeeTable.tsx`, `EmployeeTableRow.tsx`, `EmployeeStatCards.tsx`, `EmployeeDirectoryHeader.tsx`, `Avatar.tsx`, `_data.ts` | Grid-based table, real avatar tint/shape, real stat structure |
+| `frontend/app/dashboard/employees/_components/DraftsPopover.tsx` (new), `HireEmployeeModal.tsx` | Real backend-backed Drafts popover plus resume-into-wizard |
+| `backend/apps/accounts/views_hire.py` | New GET on `HireActionListCreateView` for the drafts list |
+| `frontend/components/dashboard/ModuleOverviewKit.tsx`, `OverviewList.tsx`, `QuickActionsGrid.tsx` | Shared stat/module-grid/chart classes fixed (ripples correctly into every module page) |
+| `frontend/app/dashboard/hire/[hireActionId]/_components/*` | Wizard sidebar, intent-adjacent steps, review cards, emergency contacts, address fields, photo upload, scan-fill — converted to real field classes |
+| `frontend/app/dashboard/employees/[id]/_components/ActionMenu.tsx` | "Perform an action" confirm modal now uses the shared Modal |
+| `frontend/hooks/useEmployees.ts` renamed to `.tsx` | Now contains JSX for bold-highlighted stat captions |
+
+## Notes for Next Developer
+
+- `frontend/public/reference.html` is real ground truth, but only for the Employee Directory
+  page (its title says exactly that) — it includes the global shell, that page, its Hire
+  wizard, drawer, and drafts popover, but not the other 8 admin pages or the ESS shell. Don't
+  assume it covers more than it does; those other surfaces were built from the user's prose
+  description only and haven't been pixel-checked against anything real.
+- Before ever importing another reference CSS file wholesale, diff its top-level class names
+  against globals.css first (comm -12 on sorted `grep -oE "^\.[a-zA-Z][a-zA-Z0-9_-]*"` output
+  from both files) — see section 2 above for why this matters and what it silently broke last time.
+- The Hire wizard is a modal, not a route — there is no page.tsx under
+  `/dashboard/hire/[hireActionId]/`. If someone asks for a "resume via URL" feature, that's new
+  work, not something already there.
+- Employee (self-service) preview still shares the standard DashboardShell top nav — `/dashboard/ess`
+  is a normal child route of `app/dashboard/layout.tsx`, so selecting "Employee (self-service)" in
+  the role preview switcher does not swap to a different shell/nav, only the page content changes.
+  The user has flagged this as looking wrong and is expected to send a screenshot next session to
+  clarify exactly what they want changed there before any ESS-shell work starts.
+- ESS shell (`app/dashboard/ess/`) is fully built and real (Home/Profile/Appraisals/Expenses/
+  Growth/HR Help/Policies/Tax tabs) but has not been converted to reference-exact classes,
+  because no real reference markup for it exists anywhere (confirmed via grep — reference.html
+  has zero `.ess-*` occurrences). Don't guess-convert it from the prose spec alone; wait for real
+  reference material (a screenshot at minimum) the way the rest of this pass did.

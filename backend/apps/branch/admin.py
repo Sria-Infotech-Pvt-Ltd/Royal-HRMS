@@ -25,8 +25,8 @@ class BranchAdmin(admin.ModelAdmin):
     # override, no signal) and is always 0. The real count is computed live,
     # matching BranchSerializer.get_employees_count (apps/branch/serializers.py)
     # exactly, so admin and API never disagree.
-    list_display  = ('branch_code', 'branch_name', 'city', 'state', 'status', 'is_headquarter', 'geofencing_enabled', 'employees_count')
-    list_filter   = ('status', 'is_headquarter', 'geofencing_enabled', 'state')
+    list_display  = ('branch_code', 'branch_name', 'city', 'state', 'status', 'is_headquarter', 'is_metro', 'geofencing_enabled', 'employees_count')
+    list_filter   = ('status', 'is_headquarter', 'is_metro', 'geofencing_enabled', 'state')
     search_fields = ('branch_code', 'branch_name')
     autocomplete_fields = ('state', 'city')
     readonly_fields = ('created_at', 'updated_at')

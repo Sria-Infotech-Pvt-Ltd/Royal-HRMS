@@ -127,7 +127,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
     >
       <div
         className="relative flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-        style={{ background: "#fff", width: "min(440px, 92vw)", maxHeight: "88vh" }}
+        style={{ background: "var(--surface)", width: "min(440px, 92vw)", maxHeight: "88vh" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0" style={{ background: "var(--primary)" }}>
@@ -156,7 +156,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
           {mode === "choose" && (
             <>
               <FaceStatusPanel
-                icon="ti-user-circle" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)"
+                icon="ti-user-circle" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)"
                 title="Add a profile photo"
                 message="JPG, JPEG, or PNG, between 100 KB and 200 KB. Choose one photo, or capture a new one with your camera."
                 action={{ label: "Capture Photo", onClick: handleChooseCamera }}
@@ -181,7 +181,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
 
           {mode === "camera" && cameraPhase === "requesting_camera" && (
             <FaceStatusPanel
-              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(30,78,140,0.08)" spinning
+              icon="ti-camera" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)" spinning
               title="Requesting camera access" message="Please allow camera access in the browser prompt."
             />
           )}

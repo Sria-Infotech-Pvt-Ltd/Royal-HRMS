@@ -8,6 +8,7 @@ import {
 } from "@/hooks/useHRFaceRegistration";
 import HRFaceCaptureModal from "./_components/HRFaceCaptureModal";
 import type { FaceRegistrationEmployee, FaceRegistrationStatus } from "@/types/faceRegistration";
+import { formatDate } from "@/lib/formatDate";
 
 const STATUS_BADGE: Record<FaceRegistrationStatus, { label: string; cls: string }> = {
   approved: { label: "Approved", cls: "badge-success" },
@@ -112,7 +113,7 @@ export default function FaceIdRegistrationsPage() {
                     width: "100%", textAlign: "left", display: "flex", flexDirection: "column",
                     gap: 2, padding: "9px 12px", cursor: "pointer", border: "none",
                     borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
-                    background: selected?.uuid === e.uuid ? "var(--primary-c, rgba(30,78,140,0.07))" : "transparent",
+                    background: selected?.uuid === e.uuid ? "var(--primary-c, rgba(124,58,237,0.07))" : "transparent",
                   }}
                 >
                   <span style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)" }}>{e.full_name}</span>
@@ -159,7 +160,7 @@ export default function FaceIdRegistrationsPage() {
 
                 {status?.status === "approved" && status.approved_at && (
                   <div style={{ fontSize: 12, color: "var(--on-variant)", marginBottom: 16 }}>
-                    Registered on {new Date(status.approved_at).toLocaleDateString()}
+                    Registered on {formatDate(status.approved_at)}
                     {status.approved_by_name ? ` by ${status.approved_by_name}` : ""}.
                   </div>
                 )}

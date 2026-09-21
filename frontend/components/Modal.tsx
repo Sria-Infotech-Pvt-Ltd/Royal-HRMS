@@ -57,7 +57,14 @@ export default function Modal({
       <div
         className={`modal${size === "lg" ? " modal-lg" : ""}`}
         style={{
-          ...(maxWidth ? { maxWidth } : undefined),
+          // The `.modal`/`.modal-lg` classes set a fixed `width`, and CSS
+          // `max-width` can only shrink a fixed width, never grow it — so a
+          // maxWidth larger than the class's width (e.g. 1100 vs .modal-lg's
+          // 780) would otherwise be silently ignored. Setting `width` here
+          // makes it the actual target size; deliberately NOT setting inline
+          // `max-width` too, so the class's own `max-width: 95vw` keeps
+          // capping it responsively on narrow viewports.
+          ...(maxWidth ? { width: maxWidth } : undefined),
           ...(scrollBody ? { display: "flex", flexDirection: "column", maxHeight: "90vh" } : undefined),
         }}
       >

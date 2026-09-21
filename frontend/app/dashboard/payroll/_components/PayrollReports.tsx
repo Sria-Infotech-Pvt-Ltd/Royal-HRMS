@@ -161,7 +161,7 @@ export default function PayrollReports() {
       <div className="card" style={{ maxWidth: 560 }}>
         <div style={{ padding: "16px 20px" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "var(--radius)", background: "rgba(30,78,140,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "var(--radius)", background: "rgba(124,58,237,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className="ti ti-building-bank" style={{ fontSize: 20, color: "var(--primary)" }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>

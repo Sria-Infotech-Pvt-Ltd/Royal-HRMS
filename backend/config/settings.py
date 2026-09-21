@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'apps.dashboard',
     'apps.payroll',
     'apps.voice_commands',
+    'apps.performance',
 ]
 
 MIDDLEWARE = [
@@ -311,6 +312,14 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'apps.hrms.tasks.reset_annual_leave_balances',
         'schedule': crontab(hour=0, minute=1, day_of_month=1, month_of_year=1),
     },
+    # Runs on the 1st of every month at 00:01 IST — tops up 1/12th of
+    # annual_days for LeavePolicy rows with accrual_frequency='monthly'.
+    # Additive to reset-annual-leave-balances above, not overlapping with it
+    # (that task excludes monthly-frequency policies from its own credit).
+    'accrue-monthly-leave-balances': {
+        'task':     'apps.hrms.tasks.accrue_monthly_leave_balances',
+        'schedule': crontab(hour=0, minute=1, day_of_month=1),
+    },
     # Runs daily at 00:10 IST — deducts any carried-forward leave whose
     # carry_forward_expiry_date has passed and is still unused. Offset 10 min
     # past midnight so it runs after send-birthday-wishes (00:05) rather than
@@ -324,6 +333,13 @@ CELERY_BEAT_SCHEDULE = {
     'send-payroll-approval-reminders': {
         'task':     'apps.payroll.tasks.send_payroll_approval_reminders',
         'schedule': crontab(hour=10, minute=0),
+    },
+    # Runs daily at 00:15 IST — closes any 'active' review cycle whose
+    # period_end has passed, so late submissions stop being accepted.
+    # Offset 15 min past midnight, after expire-unused-carry-forward (00:10).
+    'close-review-cycles': {
+        'task':     'apps.performance.tasks.close_expired_review_cycles',
+        'schedule': crontab(hour=0, minute=15),
     },
 }
 

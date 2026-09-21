@@ -2,6 +2,7 @@
 
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 
 interface BranchPayrollStatus {
   branch_id:   string;
@@ -54,7 +55,7 @@ const STATUS_BADGE: Record<string, string> = {
 
 function fmt(dateStr: string | null) {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(dateStr);
 }
 
 export default function BranchStatusOverview({ onRunBranch, onResumeBranch }: Props) {

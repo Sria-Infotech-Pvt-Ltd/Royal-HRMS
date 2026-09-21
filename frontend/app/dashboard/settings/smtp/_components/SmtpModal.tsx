@@ -7,6 +7,7 @@ import {
   type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type ProviderKey,
 } from "../_data";
 import Modal from "@/components/Modal";
+import { formatDateTime } from "@/lib/formatDate";
 
 interface Props {
   entry:   ApiSmtpEntry | null;  // null = add mode
@@ -64,7 +65,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
           </div>
           {!isAddMode && (
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>
-              Last updated: {new Date(entry.updated_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+              Last updated: {formatDateTime(entry.updated_at)}
             </div>
           )}
         </>

@@ -95,6 +95,7 @@ def _compute_employee_payslip(
     salary_config, components, branch_config, statutory, adjustments, structure,
     lop_days=Decimal('0'), total_working_days=26, cycle_month=None,
     esi_covered_earlier_this_period=False, proration_factor=Decimal('1'),
+    is_metro=False,
 ) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
@@ -125,6 +126,9 @@ def _compute_employee_payslip(
             amount = monthly_ctc * component.value / 100
         elif component.calculation_type == SalaryComponent.CALC_PCT_BASIC:
             amount = basic * component.value / 100
+        elif component.calculation_type == SalaryComponent.CALC_METRO_HRA:
+            metro_pct = Decimal('50') if is_metro else Decimal('40')
+            amount = basic * metro_pct / 100
         else:
             amount = component.value
 
@@ -560,6 +564,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             cycle_month=cycle.cycle_start.month,
             esi_covered_earlier_this_period=employee.id in esi_covered_earlier_ids,
             proration_factor=proration_factor_by_emp.get(employee.id, Decimal('1')),
+            is_metro=branch_obj.is_metro if branch_obj else False,
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──

@@ -112,7 +112,8 @@ class MultiTurnSlotFillingTests(SimpleTestCase):
         result = handle_transcript(self.request, 'apply for leave')
         self.assertEqual(result['message'], (
             'What type of leave would you like to apply for — Casual Leave, Earned Leave, '
-            'Sick Leave, Leave Without Pay, Maternity Leave, or Paternity Leave?'
+            'Sick Leave, Leave Without Pay, Maternity Leave, Paternity Leave, Bereavement Leave, '
+            'or Compensatory Off?'
         ))
         self.mock_execute.assert_not_called()
 

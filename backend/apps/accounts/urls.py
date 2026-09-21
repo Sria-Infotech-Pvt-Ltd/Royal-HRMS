@@ -5,6 +5,9 @@ from apps.accounts.views_email_log import (
     EmailLogResendView,
 )
 from apps.accounts.views_reset_password import EmployeePasswordResetView
+from apps.accounts.views_hire import HireActionDetailView, HireActionListCreateView, HireActionPhotoView
+from apps.accounts.views_hire_complete import HireActionCompleteView
+from apps.accounts.views_hire_scan import HireActionScanDocumentView
 from apps.accounts.views_onboarding_hr import (
     HREmployeeCustomFieldFileValueView,
     HREmployeeOnboardingDocumentView,
@@ -23,6 +26,22 @@ from apps.accounts.views_education_experience import (
     HREmployeeTotalExperienceView,
     TotalExperienceView,
 )
+from apps.accounts.views_family_nomination import (
+    FamilyMemberDetailView,
+    FamilyMemberListView,
+    HREmployeeFamilyMemberDetailView,
+    HREmployeeFamilyMemberListView,
+    HREmployeeNomineeDetailView,
+    HREmployeeNomineeListView,
+    NomineeDetailView,
+    NomineeListView,
+)
+from apps.accounts.views_assets import (
+    AssetDetailView,
+    AssetListView,
+    HREmployeeAssetDetailView,
+    HREmployeeAssetListView,
+)
 from apps.accounts.views import (
     ApprovalWorkflowRuleView,
     AuditLogListView,
@@ -36,7 +55,10 @@ from apps.accounts.views import (
     EmployeeDetailView,
     EmployeeDocumentView,
     EmployeeProfileDocumentView,
+    EmployeeConfirmView,
+    EmployeeActionHistoryView,
     EmployeePromotionHistoryView,
+    EmployeeRevealSensitiveView,
     EmployeeReportingManagerView,
     HRListView,
     ManagerListView,
@@ -65,6 +87,7 @@ from apps.accounts.views import (
     JobTemplateDetailView,
     LoginView,
     LogoutView,
+    OrgOverviewView,
     OrgUnitDeactivateView,
     OrgUnitDetailView,
     OrgUnitListCreateView,
@@ -118,10 +141,13 @@ urlpatterns = [
     path('employees/hrs/',                                       HRListView.as_view(),                   name='employee-hr-list'),
     path('employees/managers/',                                  ManagerListView.as_view(),              name='employee-manager-list'),
     path('employees/<str:employee_id>/promotions/',               EmployeePromotionHistoryView.as_view(), name='employee-promotion-history'),
+    path('employees/<str:employee_id>/action-history/',           EmployeeActionHistoryView.as_view(), name='employee-action-history'),
     path('employees/<str:employee_id>/reporting-manager/',       EmployeeReportingManagerView.as_view(), name='employee-reporting-manager'),
     path('employees/<str:employee_id>/approval-matrix/',         EmployeeApprovalMatrixView.as_view(),   name='employee-approval-matrix'),
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
     path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
+    path('employees/<str:employee_id>/reveal-sensitive/',        EmployeeRevealSensitiveView.as_view(),  name='employee-reveal-sensitive'),
+    path('employees/<str:employee_id>/confirm/',                  EmployeeConfirmView.as_view(),          name='employee-confirm'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
     path('employees/<uuid:pk>/reset-password/',                   EmployeePasswordResetView.as_view(),    name='employee-reset-password'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
@@ -156,6 +182,16 @@ urlpatterns = [
     path('onboarding/experience/summary/',           TotalExperienceView.as_view(),    name='onboarding-experience-summary'),
     path('onboarding/experience/<str:pk>/',          ExperienceDetailView.as_view(),   name='onboarding-experience-detail'),
 
+    # Family members, EPF nominees, and company assets — same bespoke-step
+    # shape as Education/Experience above (see views_family_nomination.py /
+    # views_assets.py).
+    path('onboarding/family/',                       FamilyMemberListView.as_view(),   name='onboarding-family'),
+    path('onboarding/family/<str:pk>/',              FamilyMemberDetailView.as_view(), name='onboarding-family-detail'),
+    path('onboarding/nominees/',                     NomineeListView.as_view(),        name='onboarding-nominees'),
+    path('onboarding/nominees/<str:pk>/',            NomineeDetailView.as_view(),      name='onboarding-nominees-detail'),
+    path('onboarding/assets/',                       AssetListView.as_view(),          name='onboarding-assets'),
+    path('onboarding/assets/<str:pk>/',              AssetDetailView.as_view(),        name='onboarding-assets-detail'),
+
     # PIN code -> District/State lookup, used by the address fields in step
     # 0 of both wizards (see views_pincode.py).
     path('onboarding/pincode-lookup/<str:pincode>/', PincodeLookupView.as_view(),      name='onboarding-pincode-lookup'),
@@ -173,6 +209,12 @@ urlpatterns = [
     path('onboarding/employees/<str:user_id>/experience/',           HREmployeeExperienceListView.as_view(),       name='onboarding-employee-experience'),
     path('onboarding/employees/<str:user_id>/experience/summary/',   HREmployeeTotalExperienceView.as_view(),      name='onboarding-employee-experience-summary'),
     path('onboarding/employees/<str:user_id>/experience/<str:pk>/',  HREmployeeExperienceDetailView.as_view(),     name='onboarding-employee-experience-detail'),
+    path('onboarding/employees/<str:user_id>/family/',               HREmployeeFamilyMemberListView.as_view(),     name='onboarding-employee-family'),
+    path('onboarding/employees/<str:user_id>/family/<str:pk>/',      HREmployeeFamilyMemberDetailView.as_view(),   name='onboarding-employee-family-detail'),
+    path('onboarding/employees/<str:user_id>/nominees/',             HREmployeeNomineeListView.as_view(),          name='onboarding-employee-nominees'),
+    path('onboarding/employees/<str:user_id>/nominees/<str:pk>/',    HREmployeeNomineeDetailView.as_view(),        name='onboarding-employee-nominees-detail'),
+    path('onboarding/employees/<str:user_id>/assets/',               HREmployeeAssetListView.as_view(),            name='onboarding-employee-assets'),
+    path('onboarding/employees/<str:user_id>/assets/<str:pk>/',      HREmployeeAssetDetailView.as_view(),          name='onboarding-employee-assets-detail'),
 
     # Onboarding field configuration (HR settings screen)
     path('settings/onboarding-fields/',              OnboardingFieldConfigView.as_view(), name='onboarding-field-settings'),
@@ -184,6 +226,15 @@ urlpatterns = [
 
     # Org Structure — the frontend /dashboard/org-chart page now calls these
     # instead of the old computed-from-User.department endpoint (removed)
+    path('org-structure/overview/',                       OrgOverviewView.as_view(),              name='org-overview'),
+
+    # Two-stage Hire flow
+    path('hire-actions/',              HireActionListCreateView.as_view(), name='hire-action-list'),
+    path('hire-actions/<uuid:pk>/',    HireActionDetailView.as_view(),     name='hire-action-detail'),
+    path('hire-actions/<uuid:pk>/complete/', HireActionCompleteView.as_view(), name='hire-action-complete'),
+    path('hire-actions/<uuid:pk>/scan-document/', HireActionScanDocumentView.as_view(), name='hire-action-scan-document'),
+    path('hire-actions/<uuid:pk>/photo/',      HireActionPhotoView.as_view(),      name='hire-action-photo'),
+
     path('org-structure/units/',                          OrgUnitListCreateView.as_view(),        name='org-unit-list'),
     path('org-structure/units/<uuid:pk>/',                OrgUnitDetailView.as_view(),            name='org-unit-detail'),
     path('org-structure/units/<uuid:pk>/deactivate/',     OrgUnitDeactivateView.as_view(),        name='org-unit-deactivate'),

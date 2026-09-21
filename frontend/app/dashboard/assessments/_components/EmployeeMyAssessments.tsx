@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 
 interface MyAssignment {
   id: string;
@@ -27,7 +28,7 @@ interface MyAssessmentData {
 
 function fmt(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(iso);
 }
 
 export default function EmployeeMyAssessments() {

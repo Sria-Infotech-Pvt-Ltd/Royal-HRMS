@@ -122,7 +122,7 @@ export default function ApprovalRulesPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div style={{
                           width: 32, height: 32, borderRadius: 8,
-                          background: "var(--primary-c, rgba(30,78,140,0.10))",
+                          background: "var(--primary-c, rgba(124,58,237,0.10))",
                           display: "flex", alignItems: "center", justifyContent: "center",
                           flexShrink: 0,
                         }}>

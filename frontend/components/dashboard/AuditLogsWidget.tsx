@@ -9,14 +9,14 @@ const PAGE_SIZE = 10;
 const MODULES = ["All", "Employee", "Auth", "Leave", "Expense", "Payroll", "Settings", "Recruitment", "Attendance"];
 
 const ACTION_CHIP: Record<string, { bg: string; color: string }> = {
-  CREATE:  { bg: "rgba(27,138,107,0.12)",  color: "var(--success)" },
-  UPDATE:  { bg: "rgba(181,101,29,0.12)",  color: "var(--warn)"    },
-  DELETE:  { bg: "rgba(192,57,43,0.12)",   color: "var(--error)"   },
-  LOGIN:   { bg: "rgba(14,124,134,0.12)",  color: "var(--info)"    },
-  LOGOUT:  { bg: "rgba(14,124,134,0.08)",  color: "var(--info)"    },
-  EXPORT:  { bg: "rgba(30,78,140,0.12)",   color: "var(--primary)" },
-  APPROVE: { bg: "rgba(27,138,107,0.12)",  color: "var(--success)" },
-  REJECT:  { bg: "rgba(192,57,43,0.12)",   color: "var(--error)"   },
+  CREATE:  { bg: "rgba(23,144,90,0.12)",  color: "var(--success)" },
+  UPDATE:  { bg: "rgba(162,98,12,0.12)",  color: "var(--warn)"    },
+  DELETE:  { bg: "rgba(194,58,47,0.12)",   color: "var(--error)"   },
+  LOGIN:   { bg: "rgba(37,99,235,0.12)",  color: "var(--info)"    },
+  LOGOUT:  { bg: "rgba(37,99,235,0.08)",  color: "var(--info)"    },
+  EXPORT:  { bg: "rgba(124,58,237,0.12)",   color: "var(--primary)" },
+  APPROVE: { bg: "rgba(23,144,90,0.12)",  color: "var(--success)" },
+  REJECT:  { bg: "rgba(194,58,47,0.12)",   color: "var(--error)"   },
 };
 
 function chipStyle(action: string): { bg: string; color: string } {

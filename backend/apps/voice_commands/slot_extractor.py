@@ -27,6 +27,10 @@ _LEAVE_TYPE_SYNONYMS = {
     'without pay': 'lwp',
     'maternity': 'maternity',
     'paternity': 'paternity',
+    'bereavement': 'bereavement',
+    'compensatory': 'comp_off',
+    'compensatory off': 'comp_off',
+    'comp off': 'comp_off',
 }
 _VALID_LEAVE_TYPES = frozenset(key for key, _ in LEAVE_TYPE_CHOICES)
 
@@ -42,6 +46,8 @@ _LEAVE_TYPE_LABELS_HI = {
     'lwp': 'अवैतनिक छुट्टी',
     'maternity': 'मातृत्व छुट्टी',
     'paternity': 'पितृत्व छुट्टी',
+    'bereavement': 'शोक अवकाश',
+    'comp_off': 'प्रतिपूरक अवकाश',
 }
 _LEAVE_TYPE_CHOICES_PROMPT_HI = (
     ', '.join(_LEAVE_TYPE_LABELS_HI[key] for key, _ in LEAVE_TYPE_CHOICES[:-1])

@@ -4,6 +4,8 @@ from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
+from core.date_utils import format_date_display
+
 logger = logging.getLogger(__name__)
 
 _LEAVE_LABELS = {
@@ -408,7 +410,7 @@ def _on_promotion_record_created(sender, instance, created, **kwargs):
         # designation itself actually moved.
         return
 
-    effective = instance.effective_date.strftime('%d %B %Y')
+    effective = format_date_display(instance.effective_date)
     message = f'Congratulations! You have been promoted to {instance.new_designation}. Your new designation is effective from {effective}.'
     if instance.remarks:
         message += f' {instance.remarks}'
@@ -574,7 +576,7 @@ def _notify_separation_created(sep_request_id) -> None:
         'employee_name':      employee.full_name or employee.email,
         'separation_type':    sep_request.get_separation_type_display(),
         'reason':             sep_request.get_reason_display(),
-        'last_working_day':   sep_request.proposed_last_working_day.strftime('%d %b %Y'),
+        'last_working_day':   format_date_display(sep_request.proposed_last_working_day),
         'notice_period_days': str(sep_request.notice_period_days),
     })
     first_stage = sep_request.approval_stages.order_by('sequence').first()
@@ -587,7 +589,7 @@ def _notify_separation_created(sep_request_id) -> None:
             'employee_name':     employee.full_name or employee.email,
             'separation_type':   sep_request.get_separation_type_display(),
             'reason':            sep_request.get_reason_display(),
-            'last_working_day':  sep_request.proposed_last_working_day.strftime('%d %b %Y'),
+            'last_working_day':  format_date_display(sep_request.proposed_last_working_day),
             'stage_name':        first_stage.get_stage_display(),
         })
 
@@ -627,7 +629,7 @@ def _dispatch_separation_status(instance, employee, ref_id, new_status) -> None:
                 'employee_name':    employee.full_name or employee.email,
                 'separation_type':  instance.get_separation_type_display(),
                 'reason':           instance.get_reason_display(),
-                'last_working_day': instance.proposed_last_working_day.strftime('%d %b %Y'),
+                'last_working_day': format_date_display(instance.proposed_last_working_day),
                 'stage_name':       next_stage.get_stage_display(),
             })
     elif new_status == SEP_APPROVED:
@@ -637,7 +639,7 @@ def _dispatch_separation_status(instance, employee, ref_id, new_status) -> None:
         _send_separation_email(employee, 'separation_approved', {
             'employee_name':    employee.full_name or employee.email,
             'separation_type':  instance.get_separation_type_display(),
-            'last_working_day': instance.proposed_last_working_day.strftime('%d %b %Y'),
+            'last_working_day': format_date_display(instance.proposed_last_working_day),
         })
     elif new_status == SEP_REJECTED:
         _notify(employee, 'Separation Request Rejected',

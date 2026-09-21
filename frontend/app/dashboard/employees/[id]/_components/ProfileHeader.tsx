@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import { formatDate } from "@/lib/formatDate";
 import {
   experienceFrom,
-  formatDate,
   fullName,
   initials,
   avatarColor,
@@ -16,8 +16,19 @@ import {
 } from "../../_data";
 import Avatar from "../../_components/Avatar";
 import StatusBadge from "../../_components/StatusBadge";
+import ActionMenu from "./ActionMenu";
 
-export default function ProfileHeader({ employee, employeeUuid }: { employee: Employee; employeeUuid: string }) {
+export default function ProfileHeader({
+  employee,
+  employeeUuid,
+  onSelectTab,
+  onConfirmed,
+}: {
+  employee: Employee;
+  employeeUuid: string;
+  onSelectTab: (tab: string) => void;
+  onConfirmed: (employmentStatus: string, confirmationDate: string | null) => void;
+}) {
   const router = useRouter();
   const exp = experienceFrom(employee.dateOfJoining);
   const canResetPassword = usePermission("employees.reset_password");
@@ -71,6 +82,7 @@ export default function ProfileHeader({ employee, employeeUuid }: { employee: Em
         </div>
 
         <div className="flex items-center gap-2">
+          <ActionMenu employee={employee} onSelectTab={onSelectTab} onConfirmed={onConfirmed} />
           {canResetPassword && (
             <button
               onClick={handleResetPassword}
@@ -80,7 +92,7 @@ export default function ProfileHeader({ employee, employeeUuid }: { employee: Em
               style={{
                 borderColor: "var(--outline-v)",
                 color: "var(--on-bg)",
-                background: "#fff",
+                background: "var(--surface)",
               }}
             >
               <i className={`ti ${resetting ? "ti-loader-2 animate-spin" : "ti-key"} text-[14px]`} />
@@ -94,7 +106,7 @@ export default function ProfileHeader({ employee, employeeUuid }: { employee: Em
             style={{
               borderColor: "var(--outline-v)",
               color: "var(--on-bg)",
-              background: "#fff",
+              background: "var(--surface)",
             }}
           >
             <i className="ti ti-arrow-left text-[14px]" />
@@ -118,7 +130,7 @@ export default function ProfileHeader({ employee, employeeUuid }: { employee: Em
       {/* identity card */}
       <div
         className="rounded-xl border p-5 sm:p-6"
-        style={{ background: "#fff", borderColor: "var(--outline-v)" }}
+        style={{ background: "var(--surface)", borderColor: "var(--outline-v)" }}
       >
         <div className="flex flex-col sm:flex-row gap-5">
           {/* avatar — no camera badge here: the profile photo endpoint is

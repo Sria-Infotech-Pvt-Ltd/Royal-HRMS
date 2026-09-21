@@ -17,6 +17,8 @@ import StepIndicator from "./_components/StepIndicator";
 import BasicDetailsCard, { type BasicDetails } from "./_components/BasicDetailsCard";
 import EducationChecklist, { type EducationEntry } from "./_components/EducationChecklist";
 import ExperienceList, { type ExperienceEntry } from "./_components/ExperienceList";
+import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "./_components/FamilyNominationStep";
+import AssetsList, { type AssetEntry } from "./_components/AssetsList";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,7 +45,7 @@ const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 // backend step number itself. That split is what lets HR-created custom
 // sections (step 5+, see OnboardingSection) slot in between Emergency
 // Contact and Documents without shifting Documents'/Face ID's own identity.
-type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "face" | "education" | "experience" };
+type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "face" | "education" | "experience" | "family-nomination" | "assets" };
 
 // Education and Experience are their own bespoke steps now (a fixed
 // checklist and a real add/remove list respectively — neither fits the
@@ -52,13 +54,16 @@ type WizardStep = { step: number; label: string; shortLabel: string; icon: strin
 // convention as Face ID's `step: -1` below — neither ever round-trips
 // through /onboarding/step/<n>/, so no real step number is needed, and
 // this sidesteps any future collision with HR-created custom sections
-// (server-assigned, always >= 5, growing forever).
+// (server-assigned, always >= 5, growing forever). Family & Nomination
+// (-4) and Assets (-5) follow the exact same sentinel convention.
 const BUILTIN_STEPS: WizardStep[] = [
   { step: 0,  label: "Personal",          shortLabel: "Personal",   icon: "ti-user",          kind: "fields" },
   { step: -2, label: "Education",         shortLabel: "Education",  icon: "ti-school",        kind: "education" },
   { step: -3, label: "Experience",        shortLabel: "Experience", icon: "ti-briefcase",     kind: "experience" },
   { step: 2,  label: "Bank Details",      shortLabel: "Bank",       icon: "ti-building-bank", kind: "fields" },
   { step: 3,  label: "Emergency Contact", shortLabel: "Emergency",  icon: "ti-urgent",         kind: "fields" },
+  { step: -4, label: "Family & Nomination", shortLabel: "Family",   icon: "ti-users",         kind: "family-nomination" },
+  { step: -5, label: "Assets",            shortLabel: "Assets",     icon: "ti-device-laptop", kind: "assets" },
 ];
 
 const DOCUMENTS_STEP: WizardStep = { step: 4, label: "Documents", shortLabel: "Documents", icon: "ti-files", kind: "documents" };
@@ -171,6 +176,23 @@ export default function OnboardingPage() {
   const tempExperienceIdRef = useRef(0);
   const deletedExperienceIdsRef = useRef<Set<string>>(new Set());
 
+  // Family & Nomination — two related lists reconciled together (see
+  // saveFamilyNominationEntries() below): Family is always saved FIRST so
+  // any nominee referencing a not-yet-created (`temp-`) family member gets
+  // translated to the real id the family save just returned.
+  const [familyEntries, setFamilyEntries] = useState<FamilyEntry[]>([]);
+  const [nomineeEntries, setNomineeEntries] = useState<NomineeEntry[]>([]);
+  const [familyNominationErr, setFamilyNominationErr] = useState<string | null>(null);
+  const tempFamilyIdRef = useRef(0);
+  const tempNomineeIdRef = useRef(0);
+  const deletedFamilyIdsRef = useRef<Set<string>>(new Set());
+  const deletedNomineeIdsRef = useRef<Set<string>>(new Set());
+
+  const [assetEntries, setAssetEntries] = useState<AssetEntry[]>([]);
+  const [assetErr, setAssetErr] = useState<string | null>(null);
+  const tempAssetIdRef = useRef(0);
+  const deletedAssetIdsRef = useRef<Set<string>>(new Set());
+
   // Total Experience (Years) is derived server-side from the experience
   // entries themselves (see backend's _compute_total_experience_years) —
   // refetched after every successful saveExperienceEntries() so the
@@ -190,6 +212,15 @@ export default function OnboardingPage() {
       setExperienceEntries(r.data?.data ?? []);
     }).catch(() => {});
     refetchTotalExperience();
+    clientApi.get<{ data: FamilyEntry[] }>(API.onboarding.family).then(r => {
+      setFamilyEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get<{ data: NomineeEntry[] }>(API.onboarding.nominees).then(r => {
+      setNomineeEntries(r.data?.data ?? []);
+    }).catch(() => {});
+    clientApi.get<{ data: AssetEntry[] }>(API.onboarding.assets).then(r => {
+      setAssetEntries(r.data?.data ?? []);
+    }).catch(() => {});
   }, [refetchTotalExperience]);
 
   function handleAddEducation() {
@@ -325,6 +356,158 @@ export default function OnboardingPage() {
     }
   }
 
+  function handleAddFamily() {
+    tempFamilyIdRef.current += 1;
+    setFamilyEntries(prev => [...prev, {
+      id: `temp-${tempFamilyIdRef.current}`,
+      name: "", relationship: "", date_of_birth: "", gender: "", blood_group: "", is_dependent: false,
+    }]);
+  }
+  function handleFamilyFieldChange(id: string, field: keyof FamilyEntry, value: string | boolean) {
+    setFamilyEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+  function handleRemoveFamily(id: string) {
+    if (!id.startsWith("temp-")) deletedFamilyIdsRef.current.add(id);
+    setFamilyEntries(prev => prev.filter(e => e.id !== id));
+    // A nominee pointing at the family member just removed no longer has
+    // anything to reference — drop it locally too, same as the family
+    // member's own real row cascading server-side (see CompanyAsset's
+    // sibling model docstring for the cascade behavior this mirrors).
+    setNomineeEntries(prev => prev.filter(n => n.family_member !== id));
+  }
+
+  function handleAddNominee() {
+    tempNomineeIdRef.current += 1;
+    setNomineeEntries(prev => [...prev, {
+      id: `temp-${tempNomineeIdRef.current}`,
+      family_member: "", scheme: "epf_eps", share_percentage: "",
+    }]);
+  }
+  function handleNomineeFieldChange(id: string, field: keyof NomineeEntry, value: string) {
+    setNomineeEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+  function handleRemoveNominee(id: string) {
+    if (!id.startsWith("temp-")) deletedNomineeIdsRef.current.add(id);
+    setNomineeEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  // Reconciles Family first, then Nominees — a nominee referencing a
+  // `temp-` family id gets translated to the real id the family save just
+  // returned, via `idMap`, before nominees are sent at all.
+  async function saveFamilyNominationEntries(): Promise<boolean> {
+    for (const entry of familyEntries) {
+      if (!entry.name.trim()) {
+        setFamilyNominationErr("Name is required for every family member — remove any blank ones, or fill them in.");
+        return false;
+      }
+    }
+    for (const entry of nomineeEntries) {
+      if (!entry.family_member) {
+        setFamilyNominationErr("Select a family member for every nominee — remove any incomplete ones, or fill them in.");
+        return false;
+      }
+    }
+    setFamilyNominationErr(null);
+    try {
+      for (const id of deletedFamilyIdsRef.current) {
+        await clientApi.delete(API.onboarding.familyDetail(id));
+      }
+      deletedFamilyIdsRef.current.clear();
+
+      const idMap = new Map<string, string>();
+      const savedFamily: FamilyEntry[] = [];
+      for (const entry of familyEntries) {
+        const payload = {
+          name: entry.name.trim(),
+          relationship: entry.relationship,
+          date_of_birth: entry.date_of_birth || null,
+          gender: entry.gender,
+          blood_group: entry.blood_group,
+          is_dependent: entry.is_dependent,
+        };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: FamilyEntry }>(API.onboarding.family, payload)
+          : await clientApi.patch<{ data: FamilyEntry }>(API.onboarding.familyDetail(entry.id), payload);
+        const saved = res.data?.data ?? entry;
+        if (isNew) idMap.set(entry.id, saved.id);
+        savedFamily.push(saved);
+      }
+      setFamilyEntries(savedFamily);
+
+      for (const id of deletedNomineeIdsRef.current) {
+        await clientApi.delete(API.onboarding.nomineeDetail(id));
+      }
+      deletedNomineeIdsRef.current.clear();
+
+      const savedNominees: NomineeEntry[] = [];
+      for (const entry of nomineeEntries) {
+        const realFamilyId = idMap.get(entry.family_member) ?? entry.family_member;
+        const payload = {
+          family_member: realFamilyId,
+          scheme: entry.scheme,
+          share_percentage: entry.share_percentage || "0",
+        };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: NomineeEntry }>(API.onboarding.nominees, payload)
+          : await clientApi.patch<{ data: NomineeEntry }>(API.onboarding.nomineeDetail(entry.id), payload);
+        savedNominees.push(res.data?.data ?? { ...entry, family_member: realFamilyId });
+      }
+      setNomineeEntries(savedNominees);
+      return true;
+    } catch (err: unknown) {
+      setFamilyNominationErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      return false;
+    }
+  }
+
+  function handleAddAsset() {
+    tempAssetIdRef.current += 1;
+    setAssetEntries(prev => [...prev, {
+      id: `temp-${tempAssetIdRef.current}`,
+      asset_type: "", tag_number: "", condition: "new",
+    }]);
+  }
+  function handleAssetFieldChange(id: string, field: keyof AssetEntry, value: string) {
+    setAssetEntries(prev => prev.map(e => (e.id === id ? { ...e, [field]: value } : e)));
+  }
+  function handleRemoveAsset(id: string) {
+    if (!id.startsWith("temp-")) deletedAssetIdsRef.current.add(id);
+    setAssetEntries(prev => prev.filter(e => e.id !== id));
+  }
+
+  async function saveAssetEntries(): Promise<boolean> {
+    for (const entry of assetEntries) {
+      if (!entry.asset_type) {
+        setAssetErr("Select an asset type for every entry — remove any incomplete ones, or fill them in.");
+        return false;
+      }
+    }
+    setAssetErr(null);
+    try {
+      for (const id of deletedAssetIdsRef.current) {
+        await clientApi.delete(API.onboarding.assetDetail(id));
+      }
+      deletedAssetIdsRef.current.clear();
+
+      const saved: AssetEntry[] = [];
+      for (const entry of assetEntries) {
+        const payload = { asset_type: entry.asset_type, tag_number: entry.tag_number, condition: entry.condition };
+        const isNew = entry.id.startsWith("temp-");
+        const res = isNew
+          ? await clientApi.post<{ data: AssetEntry }>(API.onboarding.assets, payload)
+          : await clientApi.patch<{ data: AssetEntry }>(API.onboarding.assetDetail(entry.id), payload);
+        saved.push(res.data?.data ?? entry);
+      }
+      setAssetEntries(saved);
+      return true;
+    } catch (err: unknown) {
+      setAssetErr((err as { message?: string })?.message ?? "Failed to save. Please try again.");
+      return false;
+    }
+  }
+
   const steps = useMemo<WizardStep[]>(() => {
     // OnboardingSection also carries label/icon-override rows for the 4
     // built-ins (steps 0-3, renameable from Settings) — this wizard keeps
@@ -353,7 +536,8 @@ export default function OnboardingPage() {
   useEffect(() => {
     let highest = -1;
     for (let i = 0; i < steps.length; i++) {
-      const passes = steps[i].kind === "experience" || completedStepNumbers.includes(steps[i].step);
+      const passes = steps[i].kind === "experience" || steps[i].kind === "family-nomination" || steps[i].kind === "assets"
+        || completedStepNumbers.includes(steps[i].step);
       if (!passes) break;
       highest = i;
     }
@@ -498,6 +682,8 @@ export default function OnboardingPage() {
     // the same message twice on screen.
     if (currentStepEarly.kind === "education") return saveEducationEntries();
     if (currentStepEarly.kind === "experience") return saveExperienceEntries();
+    if (currentStepEarly.kind === "family-nomination") return saveFamilyNominationEntries();
+    if (currentStepEarly.kind === "assets") return saveAssetEntries();
 
     // Required-ness is settings-driven now (see Settings > Onboarding
     // Fields) — fieldConfig[step] covers each company's own visible+required
@@ -696,7 +882,7 @@ export default function OnboardingPage() {
             display: "flex", alignItems: "center", gap: 7,
             padding: "10px 18px", borderRadius: 10,
             border: "1.5px solid var(--outline-v)",
-            background: "#fff",
+            background: "var(--surface)",
             boxShadow: "0 2px 12px rgba(0,0,0,0.10)",
             cursor: loggingOut ? "not-allowed" : "pointer",
             fontSize: ".84rem", fontWeight: 500,
@@ -739,7 +925,7 @@ export default function OnboardingPage() {
         {/* ── Form card ── */}
         <div style={CARD_STYLE}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--outline-v)" }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(30,78,140,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(124,58,237,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <i className={`ti ${steps[tab].icon}`} style={{ fontSize: 18, color: "var(--primary)" }} />
             </div>
             <div>
@@ -825,6 +1011,28 @@ export default function OnboardingPage() {
               error={experienceErr}
             />
           )}
+          {steps[tab].kind === "family-nomination" && (
+            <FamilyNominationStep
+              familyEntries={familyEntries}
+              nomineeEntries={nomineeEntries}
+              onAddFamily={handleAddFamily}
+              onFamilyFieldChange={handleFamilyFieldChange}
+              onRemoveFamily={handleRemoveFamily}
+              onAddNominee={handleAddNominee}
+              onNomineeFieldChange={handleNomineeFieldChange}
+              onRemoveNominee={handleRemoveNominee}
+              error={familyNominationErr}
+            />
+          )}
+          {steps[tab].kind === "assets" && (
+            <AssetsList
+              entries={assetEntries}
+              onAdd={handleAddAsset}
+              onFieldChange={handleAssetFieldChange}
+              onRemove={handleRemoveAsset}
+              error={assetErr}
+            />
+          )}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2rem", paddingTop: "1.25rem", borderTop: "1px solid var(--outline-v)" }}>
             <button className="btn btn-ghost" onClick={() => setTab(t => t - 1)} disabled={tab === 0 || saving} type="button">
@@ -878,7 +1086,7 @@ export default function OnboardingPage() {
           display: "flex", alignItems: "center", gap: 7,
           padding: "10px 18px", borderRadius: 10,
           border: "1.5px solid var(--outline-v)",
-          background: "#fff",
+          background: "var(--surface)",
           boxShadow: "0 2px 12px rgba(0,0,0,0.10)",
           cursor: loggingOut ? "not-allowed" : "pointer",
           fontSize: ".84rem", fontWeight: 500,
@@ -914,9 +1122,9 @@ const ROOT_STYLE: React.CSSProperties = {
 };
 
 const CARD_STYLE: React.CSSProperties = {
-  background: "#fff",
+  background: "var(--surface)",
   borderRadius: 16,
   padding: "2rem",
-  boxShadow: "0 4px 24px rgba(30,78,140,0.08), 0 1px 4px rgba(0,0,0,0.04)",
-  border: "1px solid rgba(30,78,140,0.08)",
+  boxShadow: "0 4px 24px rgba(124,58,237,0.08), 0 1px 4px rgba(0,0,0,0.04)",
+  border: "1px solid rgba(124,58,237,0.08)",
 };

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import { Poppins } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import "./aira-theme.css";
 import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
 import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
 
-const poppins = Poppins({
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -36,7 +37,7 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.46.0/dist/tabler-icons.min.css"
         />
       </head>
-      <body className={poppins.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
+      <body className={inter.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
         <ToastProvider>
           {children}
           {/* Global floating action button — every authenticated page and

@@ -34,7 +34,7 @@ export interface RoleOption {
 
 export type Selected = { type: "unit" | "position" | "person"; id: string } | null;
 
-export default function OrgStructureClient() {
+export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { onBack?: () => void; initialSelectedUnitId?: string }) {
   const canEdit = useAnyPermission("org_structure.create", "org_structure.edit", "org_structure.delete");
   const canDelete = usePermission("org_structure.delete");
 
@@ -47,7 +47,9 @@ export default function OrgStructureClient() {
   const [loading,    setLoading]    = useState(true);
   const [loadError,  setLoadError]  = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<Selected>(null);
+  const [selected, setSelected] = useState<Selected>(
+    initialSelectedUnitId ? { type: "unit", id: initialSelectedUnitId } : null,
+  );
   const [search,   setSearch]   = useState("");
   const [branchFilter, setBranchFilter] = useState("");
 
@@ -146,6 +148,14 @@ export default function OrgStructureClient() {
     <>
       <div className="page-header">
         <div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
+            >
+              <i className="ti ti-arrow-left" /> Back to overview
+            </button>
+          )}
           <div className="page-title">Organization Management</div>
           <div className="page-sub">Org units, the positions inside them, and who holds each seat. Modeled on positions, so structure exists before anyone is hired.</div>
         </div>
@@ -238,7 +248,7 @@ export default function OrgStructureClient() {
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: "10px 16px", borderTop: "1px solid var(--outline-v)", background: "var(--bg-low)", fontSize: 11, color: "var(--on-variant)" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(30,78,140,0.12))", color: "var(--primary)" }}>O</span> Org unit</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--primary-container, rgba(124,58,237,0.12))", color: "var(--primary)" }}>O</span> Org unit</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--info-c)", color: "var(--info)" }}>S</span> Position</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span className="orgnode-glyph" style={{ background: "var(--success-c)", color: "var(--success)" }}>P</span> Employee</span>
             <span><i className="ti ti-crown" style={{ color: "var(--warn)" }} /> Chief</span>
