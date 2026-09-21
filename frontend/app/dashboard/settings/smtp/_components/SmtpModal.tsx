@@ -3,15 +3,21 @@
 import { useState } from "react";
 import {
   EMPTY_SMTP_FORM, apiEntryToForm, validateSmtpForm,
-  type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type SmtpType,
+  PROVIDER_META, PROVIDER_PRESETS,
+  type ApiSmtpEntry, type SmtpForm, type SmtpFormErrors, type SmtpType, type Provider,
 } from "../_data";
 import Modal from "@/components/Modal";
 
 interface Props {
-  entry:   ApiSmtpEntry | null;  // null = add mode
-  saving:  boolean;
-  onClose: () => void;
-  onSave:  (form: SmtpForm) => Promise<void>;
+  entry:    ApiSmtpEntry | null;  // null = add mode
+  /** Add mode only — the provider chosen in ProviderSelectModal just before
+   *  this opened. Drives the prefilled/locked host/port/TLS section below. */
+  provider?: Exclude<Provider, "">;
+  saving:   boolean;
+  onClose:  () => void;
+  onSave:   (form: SmtpForm) => Promise<void>;
+  /** Add mode only — reopens ProviderSelectModal instead of closing outright. */
+  onChangeProvider?: () => void;
 }
 
 const SMTP_TYPES: { value: SmtpType; label: string; sub: string; icon: string }[] = [
@@ -29,12 +35,24 @@ const SMTP_TYPES: { value: SmtpType; label: string; sub: string; icon: string }[
   },
 ];
 
-export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
+export default function SmtpModal({ entry, provider, saving, onClose, onSave, onChangeProvider }: Props) {
   const isAddMode = entry === null;
+  // Undefined only in edit mode (provider isn't passed there); add mode
+  // always comes from ProviderSelectModal, so this is always set when needed.
+  const preset = provider ? PROVIDER_PRESETS[provider] : null;
 
-  const [form,   setForm]   = useState<SmtpForm>(
-    isAddMode ? { ...EMPTY_SMTP_FORM } : apiEntryToForm(entry)
-  );
+  const [form,   setForm]   = useState<SmtpForm>(() => {
+    if (!isAddMode) return apiEntryToForm(entry);
+    if (!preset) return { ...EMPTY_SMTP_FORM };
+    return {
+      ...EMPTY_SMTP_FORM,
+      provider: provider!,
+      smtpType: preset.smtpType,
+      host:     preset.host,
+      port:     preset.port,
+      useTls:   preset.useTls,
+    };
+  });
   const [errors, setErrors] = useState<SmtpFormErrors>({});
 
   const isLocal = form.smtpType === "local";
@@ -89,7 +107,33 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
       }
     >
 
-          {/* ── Type switcher ─────────────────────────────────────────────── */}
+          {/* ── Add mode: provider chosen in the picker — compact header + Change provider ── */}
+          {isAddMode && preset && provider && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              paddingBottom: 14, marginBottom: 20, borderBottom: "1px solid var(--outline-v)",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: PROVIDER_META[provider].iconBg, color: PROVIDER_META[provider].iconColor,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <i className={`ti ${PROVIDER_META[provider].icon}`} style={{ fontSize: 16 }} />
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{PROVIDER_META[provider].label}</span>
+              </div>
+              {onChangeProvider && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={onChangeProvider} suppressHydrationWarning>
+                  <i className="ti ti-arrow-left" /> Change provider
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Edit mode only — Type switcher (unchanged, pre-existing UI for already-saved configs) ── */}
+          {!isAddMode && (
+            <>
           <div style={{ display: "flex", gap: 0, marginBottom: 20, borderRadius: 8, overflow: "hidden", border: "1px solid var(--outline-v)" }}>
             {([ ["local", "ti-mail", "Basic SMTP / Gmail"], ["server", "ti-server", "Dedicated Server"] ] as [SmtpType, string, string][]).map(([val, icon, label]) => (
               <button
@@ -129,10 +173,13 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
               </span>
             )}
           </div>
+            </>
+          )}
 
           <div className="smtp-form-grid">
 
-            {/* ── SMTP Type selector — full width ── */}
+            {/* ── SMTP Type selector — full width — edit mode only ── */}
+            {!isAddMode && (
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
               <label className="field-label">SMTP Type <span style={{ color: "var(--error)" }}>*</span></label>
               <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
@@ -172,6 +219,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                 })}
               </div>
             </div>
+            )}
 
             {/* Configuration Name — full width */}
             <div className="field-group" style={{ gridColumn: "1 / -1" }}>
@@ -191,10 +239,14 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                 <div className="field-group">
                   <label className="field-label">SMTP Host <span style={{ color: "var(--error)" }}>*</span></label>
                   <input className="field-input" placeholder="smtp.gmail.com"
-                    value={form.host}
+                    value={form.host} disabled={!!preset?.hostLocked}
                     onChange={e => { patch({ host: e.target.value }); clearErr("host"); }}
                     suppressHydrationWarning />
                   {errors.host && <span className="field-error">{errors.host}</span>}
+                  {preset?.hostHint && (
+                    <p style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 5, lineHeight: 1.4 }}
+                      dangerouslySetInnerHTML={{ __html: preset.hostHint }} />
+                  )}
                 </div>
 
                 {/* Port + TLS */}
@@ -202,11 +254,13 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                   <label className="field-label">Port</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <input className="field-input" type="number" value={form.port}
+                      disabled={!!preset?.hostLocked}
                       onChange={e => patch({ port: Number(e.target.value) })}
                       style={{ flex: 1 }}
                       suppressHydrationWarning />
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: preset?.hostLocked ? "default" : "pointer", whiteSpace: "nowrap" }}>
                       <input type="checkbox" checked={form.useTls}
+                        disabled={!!preset?.hostLocked}
                         onChange={e => patch({ useTls: e.target.checked })}
                         style={{ accentColor: "var(--primary)" }}
                         suppressHydrationWarning />
@@ -223,6 +277,11 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                     onChange={e => { patch({ username: e.target.value }); clearErr("username"); }}
                     suppressHydrationWarning />
                   {errors.username && <span className="field-error">{errors.username}</span>}
+                  {preset?.usernameHint && (
+                    <p style={{ fontSize: 11.5, color: "var(--on-variant)", marginTop: 5, lineHeight: 1.4 }}>
+                      {preset.usernameHint}
+                    </p>
+                  )}
                 </div>
 
                 {/* Password */}

@@ -15,6 +15,7 @@ import {
   applyDocumentTypeConfig,
   applyFieldConfig,
   customFieldKeys,
+  fullName,
   type ApiDocument,
   type DetailValues,
   type DocEntry,
@@ -25,6 +26,7 @@ import {
   type Gender,
 } from "../_data";
 import ProfileHeader from "./_components/ProfileHeader";
+import ResetPasswordModal from "./_components/ResetPasswordModal";
 import ProfileTabBar from "./_components/ProfileTabBar";
 import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
@@ -199,6 +201,7 @@ export default function EmployeeProfilePage({
   const canEdit = usePermission("employees.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const [employee,          setEmployee]          = useState<Employee | null>(null);
   const [employeeUuid,      setEmployeeUuid]      = useState<string>("");
@@ -528,7 +531,19 @@ export default function EmployeeProfilePage({
 
   return (
     <div>
-      <ProfileHeader employee={employee} />
+      <ProfileHeader
+        employee={employee}
+        canResetPassword={canEdit}
+        onResetPassword={() => setShowResetPassword(true)}
+      />
+
+      {showResetPassword && (
+        <ResetPasswordModal
+          employeeId={id}
+          employeeName={fullName(employee)}
+          onClose={() => setShowResetPassword(false)}
+        />
+      )}
 
       {isPendingOnboarding ? (
         <div className="bg-white rounded-xl border border-[var(--outline-v)] p-14 text-center mt-4">

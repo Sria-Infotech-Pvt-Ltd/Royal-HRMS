@@ -101,8 +101,29 @@ def _get_smtp_connection() -> tuple[object, str]:
 # ─── Email helpers ────────────────────────────────────────────────────────────
 
 def _html_to_text(html: str) -> str:
-    
-    return re.sub(r'<[^>]+>', '', html).strip()
+    """
+    Plain-text MIME alternative for _build_message(). Block-level tags are
+    turned into a newline BEFORE the remaining tags are stripped — without
+    this, two elements with no literal whitespace between them in the
+    source (e.g. '...{temp_password}<br><strong>Login URL:</strong>...',
+    the exact shape of the credential-email bodies below) collapse into one
+    fused word once tags are removed with no replacement. That silently
+    glued a temporary password directly onto the word "Login" in the
+    plain-text part of every credential email — invisible in the HTML
+    rendering most clients show, but corrupting the password for anyone
+    whose mail client/gateway renders or copies from the plain-text part
+    instead (plain-text-preference settings, some corporate gateways,
+    screen readers) — producing "Invalid credentials" on an apparently
+    correct copy-paste.
+    """
+    text = re.sub(r'<\s*(br)\s*/?\s*>', '\n', html, flags=re.IGNORECASE)
+    text = re.sub(r'<\s*/\s*(p|div|tr|li|h[1-6])\s*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    # Collapse the blank-line runs paragraph tags produce, and any trailing
+    # per-line whitespace left over from a stripped tag.
+    text = re.sub(r'[ \t]+(\n)', r'\1', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 
 def _build_message(
@@ -244,6 +265,17 @@ def _company_email_wrapper(body: str, company_name: str, logo_url: str,
                 padding:16px 24px;font-size:12px;color:#888888;
                 border-top:1px solid #eeeeee;">
       {footer_text}
+    </div>
+
+    <!-- Royal HRMS platform link — the product's own site, distinct from
+         the tenant company's own website/address line above. Fixed, not
+         tenant-configurable, same category of constant as BRAND_NAME/
+         BRAND_LOGO on the frontend login page. -->
+    <div style="background:#f8f8fb;text-align:center;
+                padding:10px 24px 16px;font-size:11px;color:#aaaaaa;
+                border-top:1px solid #eeeeee;">
+      Visit Royal HRMS<br/>
+      <a href="https://royalhrms.com" style="color:#4f46e5;text-decoration:none;">royalhrms.com</a>
     </div>
 
   </div>

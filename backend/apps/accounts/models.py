@@ -503,6 +503,27 @@ class SMTPSettings(models.Model):
         LOCAL  = 'local',  'Local (Gmail / Custom SMTP)'
         SERVER = 'server', 'Server (Dedicated Mail Server)'
 
+    class Provider(models.TextChoices):
+        """
+        UI-only convenience label layered on top of the existing generic
+        host/port/username/password/use_tls fields — every provider here
+        sends over plain SMTP, so nothing about the send path (_get_smtp_
+        connection, send_template_email, etc.) needs to know or care which
+        of these a row was created from. Blank ('') covers every row that
+        existed before this field was added — deliberately NOT backfilled
+        to any specific choice, so a pre-existing config is simply treated
+        as "unspecified/custom", matching its prior (provider-less) behavior
+        exactly.
+        """
+        GMAIL      = 'gmail',            'Gmail'
+        AMAZON_SES = 'amazon_ses',       'Amazon SES'
+        ZOHO       = 'zoho_mail',        'Zoho Mail'
+        BREVO      = 'brevo',            'Brevo (Sendinblue)'
+        RESEND     = 'resend',           'Resend'
+        OUTLOOK365 = 'outlook365',       'Outlook / Office 365'
+        CUSTOM     = 'custom_smtp',      'Custom SMTP'
+        DEDICATED  = 'dedicated_server', 'Dedicated Mail Server'
+
     class Priority(models.TextChoices):
         NORMAL = 'normal', 'Normal'
         HIGH   = 'high',   'High'
@@ -517,6 +538,12 @@ class SMTPSettings(models.Model):
                               max_length=10,
                               choices=SMTPType.choices,
                               default=SMTPType.LOCAL,
+                          )
+    provider            = models.CharField(
+                              max_length=20,
+                              choices=Provider.choices,
+                              blank=True,
+                              default='',
                           )
     host                = models.CharField(max_length=255)
     port                = models.PositiveIntegerField(default=587)

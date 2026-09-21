@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
+from unittest.mock import patch
+
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -23,6 +26,51 @@ def _login(client: APIClient, email: str, password: str = 'TestPass123!'):
     )
     assert resp.status_code == 200, resp.data
     return resp
+
+
+class HtmlToTextCredentialEmailTests(SimpleTestCase):
+    """
+    Regression test for the "Invalid credentials" support issue: an
+    employee copies Company Code / Login Email / Temporary Password from
+    the credential email and pastes them into login, and sometimes gets
+    "Invalid credentials" despite pasting correctly.
+
+    Root cause: _html_to_text() (the plain-text MIME alternative every
+    credential email attaches alongside its HTML part) stripped tags with
+    no replacement whitespace. The employee-creation and admin-reset email
+    bodies build the password/URL lines as directly-adjacent literals with
+    no space between '<br>' and the next '<strong>' — e.g.
+    '...{temp_password}<br><strong>Login URL:...' — so the plain-text part
+    rendered as '...{temp_password}Login URL: https://...', gluing the
+    literal word "Login" onto the end of the real password. Any mail
+    client/gateway that shows or lets the recipient copy from the
+    plain-text part (rather than the HTML part) then yields a password
+    that can never pass check_password(), regardless of a byte-perfect
+    copy-paste on the employee's end. No database is needed to test this
+    — it is a pure string transformation.
+    """
+
+    def test_br_and_closing_tags_become_newlines_not_nothing(self):
+        from apps.accounts.utils import _html_to_text
+        self.assertEqual(_html_to_text('A<br>B'), 'A\nB')
+        self.assertEqual(_html_to_text('<p>A</p><p>B</p>'), 'A\nB')
+
+    def test_password_is_not_glued_to_adjacent_label_in_plaintext_part(self):
+        from apps.accounts.utils import _html_to_text
+        temp_password = 'aB3xK9mQ7Zwp'
+        login_url = 'https://royalhrms.com/login'
+        # Exact shape of the real credential-email bodies (employee-creation
+        # welcome email and admin-reset email in views.py).
+        body = (
+            f'<strong>Temporary Password:</strong> {temp_password}<br>'
+            f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
+        )
+        text = _html_to_text(body)
+        self.assertIn(temp_password, text)
+        self.assertNotIn(temp_password + 'Login', text)
+        # The password must appear as its own separated token, not fused
+        # to any neighbouring word on either side.
+        self.assertRegex(text, rf'(?<![A-Za-z0-9]){re.escape(temp_password)}(?![A-Za-z0-9])')
 
 
 class LoginFlowTests(TestCase):
@@ -318,3 +366,147 @@ class OnboardingApprovalReferralBonusTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertFalse(self.ReferralBonus.objects.filter(candidate=self.candidate).exists())
+
+
+class EmployeeResetPasswordTests(TestCase):
+    """Covers the new admin-triggered Reset Password button on the Employee
+    Profile page (EmployeeResetPasswordView).
+
+    Two email outcomes are both exercised for real, not just assumed:
+    - SMTP left unconfigured (same convention as PasswordResetFlowTests
+      above) drives the "email delivery failed" branch — no network call
+      happens, _get_smtp_connection() raises RuntimeError on its own.
+    - A mocked SMTP backend drives the "email sent successfully" branch
+      without an actual network call.
+    In both cases the security-relevant change itself (new password,
+    forced change on next login, unlocked account, audit log) is asserted
+    directly against the database, and the response body is asserted to
+    never contain the generated password.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        hr_role = make_role('hr', permission_codenames=['employees.edit'])
+        self.hr_user = make_user(
+            'hrreset@test.com', role=hr_role, password='TestPass123!',
+            employee_id='EMPHR001', full_name='HR Admin',
+        )
+        employee_role = make_role('employee')
+        self.employee = make_user(
+            'target@test.com', role=employee_role, password='OldPass123!',
+            employee_id='EMPTARGET1', full_name='Target Employee',
+            failed_login_attempts=2,
+        )
+
+    def _reset_url(self, employee_id: str | None = None):
+        return reverse(
+            'employee-reset-password',
+            kwargs={'employee_id': employee_id or self.employee.employee_id},
+        )
+
+    def test_permission_denied_without_employees_edit(self):
+        no_perm_role = make_role('reset_test_no_perm')
+        make_user('noperm@test.com', role=no_perm_role, password='TestPass123!')
+        _login(self.client, 'noperm@test.com', password='TestPass123!')
+
+        resp = self.client.post(self._reset_url(), {}, format='json')
+        self.assertEqual(resp.status_code, 403)
+
+        # Confirm nothing changed — a denied request must be a true no-op.
+        self.employee.refresh_from_db()
+        self.assertTrue(self.employee.check_password('OldPass123!'))
+
+    def test_reset_changes_password_and_forces_change_even_if_email_fails(self):
+        old_hash = self.employee.password
+        _login(self.client, 'hrreset@test.com', password='TestPass123!')
+
+        resp = self.client.post(self._reset_url(), {}, format='json')
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(resp.data['data']['email_sent'])
+        self.assertIn('could not be sent', resp.data['message'])
+        # The generated temp password must never appear anywhere in the response.
+        self.assertNotIn('password', resp.data['data'])
+
+        self.employee.refresh_from_db()
+        self.assertNotEqual(self.employee.password, old_hash)
+        self.assertFalse(self.employee.check_password('OldPass123!'))
+        self.assertTrue(self.employee.must_change_password)
+        self.assertEqual(self.employee.failed_login_attempts, 0)
+        self.assertIsNone(self.employee.locked_until)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action='employee_password_reset', object_id=str(self.employee.id),
+            ).exists()
+        )
+
+    @patch('django.core.mail.backends.smtp.EmailBackend.send_messages', return_value=1)
+    def test_reset_reports_email_sent_when_smtp_succeeds(self, mock_send):
+        from apps.accounts.models import SMTPSettings
+        SMTPSettings.objects.create(
+            name='Reset Test SMTP', host='smtp.example.com', port=587,
+            username='test@example.com', password='irrelevant',
+            from_email='test@example.com', is_active=True,
+        )
+        _login(self.client, 'hrreset@test.com', password='TestPass123!')
+
+        resp = self.client.post(self._reset_url(), {}, format='json')
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(resp.data['data']['email_sent'])
+        self.assertIn('New credentials sent', resp.data['message'])
+        self.assertNotIn('password', resp.data['data'])
+        mock_send.assert_called_once()
+
+        self.employee.refresh_from_db()
+        self.assertTrue(self.employee.must_change_password)
+
+    def test_admin_cannot_reset_own_password(self):
+        _login(self.client, 'hrreset@test.com', password='TestPass123!')
+        resp = self.client.post(self._reset_url(self.hr_user.employee_id), {}, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+        self.hr_user.refresh_from_db()
+        self.assertTrue(self.hr_user.check_password('TestPass123!'))
+
+
+class CompanyEmailWrapperFooterTests(SimpleTestCase):
+    """
+    Regression test for the Royal HRMS website footer link added to
+    _company_email_wrapper() — the single shared wrapper every company-level
+    email (onboarding welcome/Branch Admin, onboarding submitted/approved/
+    rejected, password reset, OTP, SMTP test, and every other EmailTemplate-
+    driven notification across the app) passes through before sending. Pure
+    string function, no database needed.
+    """
+
+    def test_royalhrms_link_appears_exactly_once_and_existing_content_is_preserved(self):
+        from apps.accounts.utils import _company_email_wrapper
+
+        body = "<p>Hi <strong>Test Employee</strong>,</p><p>Your account has been created.</p>"
+        old_footer_text = "royalstaffing.in &nbsp;|&nbsp; Surat, Gujarat"
+        html = _company_email_wrapper(
+            body, "Royal Staffing", "", "royalstaffing.in", "Surat, Gujarat",
+        )
+
+        # The new link is present, clickable, and appears exactly once.
+        self.assertEqual(html.count('href="https://royalhrms.com"'), 1)
+        self.assertIn("Visit Royal HRMS", html)
+        self.assertIn("royalhrms.com", html)
+
+        # Nothing about the existing header/body/footer was altered.
+        self.assertIn(body, html)
+        self.assertIn(old_footer_text, html)
+        self.assertIn("Royal Staffing", html)
+
+    def test_wrapper_still_renders_with_no_company_website_or_address(self):
+        from apps.accounts.utils import _company_email_wrapper
+
+        # A brand-new company with no website/address configured yet — the
+        # existing fallback-to-company-name footer behavior must still work
+        # alongside the new, always-present Royal HRMS link.
+        html = _company_email_wrapper("<p>Body</p>", "New Co", "", "", "")
+        self.assertIn("New Co", html)
+        self.assertEqual(html.count('href="https://royalhrms.com"'), 1)
+

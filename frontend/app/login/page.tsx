@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import clientApi, { resetSessionExpired } from "@/lib/clientApi";
 import { saveAuth } from "@/lib/auth";
@@ -38,8 +38,21 @@ interface LoginApiResponse {
 const BRAND_NAME = "Royal HRMS";
 const BRAND_LOGO = "/logo.png";
 
+// useSearchParams (reads ?company_code=&email= — set only by the redirect
+// after a successful Set New Password, see app/change-password/page.tsx)
+// requires a Suspense boundary around it for the production build — see
+// AGENTS.md, this Next.js build is stricter here.
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [companyCode, setCompanyCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +61,21 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+
+  // Pre-fill Company Code / Email only — carried forward as plain, non-secret
+  // convenience values via the URL after a forced password change (see
+  // change-password/page.tsx's redirect). The password field is never
+  // touched here and is never present in this URL. Runs once on mount, then
+  // strips the query string so a refresh/back-navigation doesn't keep
+  // re-reading it and it doesn't linger in browser history.
+  useEffect(() => {
+    const qCode  = searchParams.get("company_code");
+    const qEmail = searchParams.get("email");
+    if (qCode)  setCompanyCode(qCode);
+    if (qEmail) setEmail(qEmail);
+    if (qCode || qEmail) router.replace("/login");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();

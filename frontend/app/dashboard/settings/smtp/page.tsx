@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
 import SmtpModal from "./_components/SmtpModal";
+import ProviderSelectModal from "./_components/ProviderSelectModal";
 import {
   SMTP_BASE, smtpDetail, smtpActivate, SMTP_TEST,
   formToPayload,
-  type ApiSmtpEntry, type ApiSmtpResponse, type SmtpForm,
+  type ApiSmtpEntry, type ApiSmtpResponse, type SmtpForm, type Provider,
 } from "./_data";
 
 export default function SmtpSettingsPage() {
@@ -19,6 +20,8 @@ export default function SmtpSettingsPage() {
   const [error,       setError]       = useState<string | null>(null);
 
   const [editing,     setEditing]     = useState<ApiSmtpEntry | null | "add">(null);
+  const [showProviderPicker, setShowProviderPicker] = useState(false);
+  const [addProvider, setAddProvider] = useState<Exclude<Provider, ""> | undefined>(undefined);
   const [saving,      setSaving]      = useState(false);
   const [activating,  setActivating]  = useState<number | null>(null);
   const [deleting,    setDeleting]    = useState<number | null>(null);
@@ -194,7 +197,7 @@ export default function SmtpSettingsPage() {
           <button className="btn btn-ghost" onClick={() => router.push("/dashboard/settings")} suppressHydrationWarning>
             <i className="ti ti-arrow-left" /> Back
           </button>
-          <button className="btn btn-filled btn-sm" onClick={() => setEditing("add")} style={{ gap: 6 }} suppressHydrationWarning>
+          <button className="btn btn-filled btn-sm" onClick={() => setShowProviderPicker(true)} style={{ gap: 6 }} suppressHydrationWarning>
             <i className="ti ti-plus" /> Add SMTP
           </button>
         </div>
@@ -387,13 +390,23 @@ export default function SmtpSettingsPage() {
         </div>
       )}
 
+      {/* Provider picker — shown first when adding a new config */}
+      {showProviderPicker && (
+        <ProviderSelectModal
+          onClose={() => setShowProviderPicker(false)}
+          onSelect={p => { setAddProvider(p); setShowProviderPicker(false); setEditing("add"); }}
+        />
+      )}
+
       {/* Add / Edit modal */}
       {editing !== null && (
         <SmtpModal
           entry={isAddMode ? null : editEntry}
+          provider={isAddMode ? addProvider : undefined}
           saving={saving}
-          onClose={() => setEditing(null)}
+          onClose={() => { setEditing(null); setAddProvider(undefined); }}
           onSave={isAddMode ? handleCreate : handleUpdate}
+          onChangeProvider={isAddMode ? () => { setEditing(null); setShowProviderPicker(true); } : undefined}
         />
       )}
 

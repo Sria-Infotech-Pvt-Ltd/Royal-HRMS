@@ -7,6 +7,7 @@ import { usePermission } from "@/hooks/usePermission";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
+import ScrollableSelect from "@/components/ScrollableSelect";
 
 interface StateObj {
   id: number;
@@ -446,8 +447,15 @@ export default function BranchManagement() {
 
     const name = f.name.trim();
     const splitAt = name.indexOf(" ");
+    // A single-word name (no space) is legitimate here — this form has one
+    // "Full name" field, unlike Add Employee's separate, always-required
+    // First/Last Name fields — so it must NOT fall back to duplicating the
+    // first name into last_name. The backend now accepts a blank last_name
+    // for branch-admin-capable roles specifically (see last_name_required
+    // in EmployeeListCreateView.post) and builds full_name without a
+    // trailing space in that case.
     const first_name = splitAt === -1 ? name : name.slice(0, splitAt);
-    const last_name  = splitAt === -1 ? name : name.slice(splitAt + 1).trim() || name;
+    const last_name  = splitAt === -1 ? "" : name.slice(splitAt + 1).trim();
     await clientApi.post(API.employees.list, {
       first_name, last_name,
       email: f.email.trim(),
@@ -882,42 +890,36 @@ export default function BranchManagement() {
               <div className="form-row cols-2">
                 <div className="field-group">
                   <label className="field-label">State/Region *</label>
-                  <select
-                    className={`field-input${fieldErrors.state ? " field-error" : ""}`}
+                  <ScrollableSelect
                     value={editForm.state}
-                    onChange={e => {
+                    hasError={!!fieldErrors.state}
+                    placeholder="Select State"
+                    options={states.map(s => ({ value: String(s.id), label: s.name }))}
+                    onChange={value => {
                       setFieldErrors(prev => { const n = {...prev}; delete n.state; delete n.city; delete n.new_city_name; return n; });
                       setNewCityName("");
-                      setEditForm({ ...editForm, state: e.target.value, city: "" });
+                      setEditForm({ ...editForm, state: value, city: "" });
                     }}
-                  >
-                    <option value="">Select State</option>
-                    {states.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+                  />
                   {fieldErrors.state && <p className="field-error-msg">{fieldErrors.state}</p>}
                 </div>
                 <div className="field-group">
                   <label className="field-label">City *</label>
-                  <select
-                    className={`field-input${fieldErrors.city ? " field-error" : ""}`}
+                  <ScrollableSelect
                     value={editForm.city}
-                    onChange={e => {
-                      setFieldErrors(prev => { const n = {...prev}; delete n.city; delete n.branch_code; delete n.new_city_name; return n; });
-                      if (e.target.value !== OTHER_CITY) setNewCityName("");
-                      setEditForm({ ...editForm, city: e.target.value });
-                    }}
                     disabled={!editForm.state || citiesLoading}
-                  >
-                    <option value="">
-                      {!editForm.state ? "Select a state first" : citiesLoading ? "Loading cities…" : "Select City"}
-                    </option>
-                    {cities.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                    {editForm.state && <option value={OTHER_CITY}>Other (type city name)</option>}
-                  </select>
+                    hasError={!!fieldErrors.city}
+                    placeholder={!editForm.state ? "Select a state first" : citiesLoading ? "Loading cities…" : "Select City"}
+                    options={[
+                      ...cities.map(c => ({ value: String(c.id), label: c.name })),
+                      ...(editForm.state ? [{ value: OTHER_CITY, label: "Other (type city name)" }] : []),
+                    ]}
+                    onChange={value => {
+                      setFieldErrors(prev => { const n = {...prev}; delete n.city; delete n.branch_code; delete n.new_city_name; return n; });
+                      if (value !== OTHER_CITY) setNewCityName("");
+                      setEditForm({ ...editForm, city: value });
+                    }}
+                  />
                   {fieldErrors.city && <p className="field-error-msg">{fieldErrors.city}</p>}
                   {editForm.city === OTHER_CITY && (
                     <div style={{ marginTop: "8px" }}>
@@ -981,7 +983,7 @@ export default function BranchManagement() {
               </div>
               <div className="form-row">
                 <div className="field-group">
-                  <label className="field-label">Address *</label>
+                  <label className="field-label">Branch Address *</label>
                   <textarea
                     className={`field-input${fieldErrors.address ? " field-error" : ""}`}
                     value={editForm.address}
@@ -989,7 +991,7 @@ export default function BranchManagement() {
                       setFieldErrors(prev => { const n = {...prev}; delete n.address; return n; });
                       setEditForm({ ...editForm, address: e.target.value });
                     }}
-                    placeholder="Full branch address"
+                    placeholder="Building/Street, Area, Landmark, etc."
                   />
                   {fieldErrors.address && <p className="field-error-msg">{fieldErrors.address}</p>}
                 </div>

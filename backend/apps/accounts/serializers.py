@@ -225,6 +225,10 @@ class LogoutSerializer(serializers.Serializer):
 class SMTPSettingsSerializer(serializers.ModelSerializer):
     password_display  = serializers.SerializerMethodField()
     smtp_type_display = serializers.CharField(source='get_smtp_type_display', read_only=True)
+    # provider itself is a plain model CharField (blank=True, required=False
+    # automatically since it has a model default) — only the _display needs
+    # declaring explicitly, same pattern as smtp_type_display above.
+    provider_display  = serializers.CharField(source='get_provider_display', read_only=True)
     password          = serializers.CharField(write_only=True, required=False, max_length=255)
 
     class Meta:
@@ -232,13 +236,14 @@ class SMTPSettingsSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name',
             'smtp_type', 'smtp_type_display',
+            'provider', 'provider_display',
             'host', 'port', 'username',
             'password', 'password_display',
             'use_tls', 'sender_name', 'from_email', 'bcc_email',
             'priority', 'receiver_email_type',
             'is_active', 'updated_at',
         )
-        read_only_fields = ('id', 'updated_at', 'password_display', 'smtp_type_display', 'is_active')
+        read_only_fields = ('id', 'updated_at', 'password_display', 'smtp_type_display', 'provider_display', 'is_active')
 
     def get_password_display(self, obj: SMTPSettings) -> str:
         return '••••••••' if obj.password else ''

@@ -14,7 +14,15 @@ import Avatar from "../../_components/Avatar";
 import StatusBadge from "../../_components/StatusBadge";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 
-export default function ProfileHeader({ employee }: { employee: Employee }) {
+interface Props {
+  employee: Employee;
+  /** Gated on the same permission as profile editing (employees.edit) —
+   *  matches every other admin action already on this page. */
+  canResetPassword?: boolean;
+  onResetPassword?: () => void;
+}
+
+export default function ProfileHeader({ employee, canResetPassword, onResetPassword }: Props) {
   const router = useRouter();
   const user = useCurrentUser();
   const exp = experienceFrom(employee.dateOfJoining);
@@ -42,19 +50,36 @@ export default function ProfileHeader({ employee }: { employee: Employee }) {
           </h1>
         </div>
 
-        <button
-          onClick={() => router.push("/dashboard/employees")}
-          suppressHydrationWarning
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
-          style={{
-            borderColor: "var(--outline-v)",
-            color: "var(--on-bg)",
-            background: "#fff",
-          }}
-        >
-          <i className="ti ti-arrow-left text-[14px]" />
-          Back
-        </button>
+        <div className="flex items-center gap-2">
+          {canResetPassword && onResetPassword && (
+            <button
+              onClick={onResetPassword}
+              suppressHydrationWarning
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
+              style={{
+                borderColor: "var(--outline-v)",
+                color: "var(--on-bg)",
+                background: "#fff",
+              }}
+            >
+              <i className="ti ti-key text-[14px]" />
+              Reset Password
+            </button>
+          )}
+          <button
+            onClick={() => router.push("/dashboard/employees")}
+            suppressHydrationWarning
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
+            style={{
+              borderColor: "var(--outline-v)",
+              color: "var(--on-bg)",
+              background: "#fff",
+            }}
+          >
+            <i className="ti ti-arrow-left text-[14px]" />
+            Back
+          </button>
+        </div>
       </div>
 
       {/* identity card */}

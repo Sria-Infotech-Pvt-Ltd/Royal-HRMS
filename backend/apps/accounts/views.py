@@ -2977,10 +2977,19 @@ class EmployeeListCreateView(APIView):
             except (ValueError, ValidationError):
                 role_for_dept_check = None
         department_required = not (role_for_dept_check and role_for_dept_check.can_manage_branch)
+        # Same reasoning and same condition as department_required above —
+        # the Branch Admin quick-assign form (BranchManagement.tsx
+        # applyLeaderRole) collects a single "Full name" field, which may
+        # legitimately be one word (no last name to split out). Scoped by
+        # role capability, not by which frontend screen submitted the
+        # request, so the regular Add Employee form's own separate,
+        # always-required Last Name field is completely unaffected for
+        # every other role.
+        last_name_required = not (role_for_dept_check and role_for_dept_check.can_manage_branch)
 
         errs = {}
         if not first_name:      errs['first_name']      = 'First name is required.'
-        if not last_name:       errs['last_name']       = 'Last name is required.'
+        if not last_name and last_name_required: errs['last_name'] = 'Last name is required.'
         if not email:           errs['email']           = 'Email is required.'
         if not role_id:         errs['role']            = 'Role is required.'
         if department_required and not department: errs['department'] = 'Department is required.'
@@ -3100,7 +3109,11 @@ class EmployeeListCreateView(APIView):
             last_name=last_name,
             date_of_joining=date_of_joining or None,
         )
-        full_name = f'{first_name} {last_name}'
+        # .strip() avoids a trailing space when last_name is legitimately
+        # blank (single-word Branch Admin names, see last_name_required
+        # above) — first_name/last_name are already individually stripped
+        # above, so this has no effect on the normal two-part-name case.
+        full_name = f'{first_name} {last_name}'.strip()
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -3800,6 +3813,119 @@ class EmployeeDetailView(APIView):
 
     def post(self, request, employee_id: str):
         return self.put(request, employee_id)
+
+
+class EmployeeResetPasswordView(APIView):
+    """
+    POST /employees/<employee_id>/reset-password/ — HR/admin-triggered reset
+    from the Employee Profile page. Generates a new system-chosen temporary
+    password (same 12-char pattern as EmployeeListCreateView.post) and
+    forces a change on next login, matching the must_change_password
+    precedent every other "system sets the password" path already follows
+    (employee creation, bulk import, self-service ResetPasswordView). The
+    new password is emailed using the same credential-email shape as the
+    employee-creation welcome email — never returned in this response or
+    otherwise exposed to the frontend.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, employee_id: str):
+        if not _has_perm(request.user, 'employees.edit'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        # Same self-action guard already used by delete() above — resetting
+        # your own password here would silently email the new password to
+        # yourself instead of showing it, which is confusing UX; Change
+        # Password (self-service) is the correct path for one's own account.
+        if employee.id == request.user.id:
+            return error('Use Change Password from your own account instead.')
+
+        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+
+        with transaction.atomic():
+            employee.set_password(temp_password)
+            employee.must_change_password  = True
+            employee.failed_login_attempts = 0
+            employee.locked_until          = None
+            employee.save(update_fields=[
+                'password', 'must_change_password', 'failed_login_attempts', 'locked_until', 'updated_at',
+            ])
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'employee_password_reset',
+            module     = 'employees',
+            object_id  = str(employee.id),
+            changes    = {'employee_id': employee.employee_id, 'full_name': employee.full_name},
+            branch     = employee.branch,
+            ip_address = get_client_ip(request),
+        )
+
+        email_sent  = False
+        email_error = ''
+        try:
+            from apps.accounts.utils import (
+                _get_smtp_connection, _build_message, _company_email_wrapper,
+                _get_company_branding,
+            )
+
+            company_name, logo_url, website, address = _get_company_branding()
+            company_name = company_name or 'Royal HRMS'
+            # Same FRONTEND_URL + '/login' convention as the employee-creation
+            # welcome email and the company-provisioning email.
+            login_url = f'{settings.FRONTEND_URL}/login'
+
+            body = (
+                f'<p>Hi <strong>{employee.full_name}</strong>,</p>'
+                f'<p>Your {company_name} account password was just reset by an administrator.'
+                f' Use the credentials below to log in:</p>'
+                f'<p>'
+                f'<strong>Login Email:</strong> {employee.email}<br>'
+                f'<strong>Temporary Password:</strong> {temp_password}<br>'
+                f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
+                f'</p>'
+                f'<p>You will be asked to set a new password on your next login.</p>'
+                f'<p style="color:#b91c1c;">If you were not expecting this, contact your HR representative immediately.</p>'
+                f'<p>— HR Team</p>'
+            )
+            html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
+
+            connection, from_email = _get_smtp_connection()
+            msg = _build_message(
+                subject=f'Your {company_name} password has been reset',
+                html_body=html_body,
+                from_email=from_email,
+                to=[employee.email],
+                connection=connection,
+            )
+            msg.send(fail_silently=False)
+            logger.info('Password-reset email sent to %s (reset by %s)', employee.email, request.user.email)
+            email_sent = True
+        except Exception as exc:
+            logger.error('Password-reset email failed for %s: %s', employee.email, exc)
+            email_error = str(exc)
+
+        logger.info('Password reset for employee %s by %s', employee.employee_id, request.user.email)
+
+        # The reset itself already succeeded (password changed, account
+        # unlocked) regardless of email outcome — same "still 2xx either way,
+        # only the message differs" reasoning as the employee-creation
+        # welcome email above, since telling the admin "failed" here would
+        # misrepresent a security-sensitive change that already took effect.
+        if email_sent:
+            return success(
+                f'Password reset. New credentials sent to {employee.email}.',
+                data={'email_sent': True},
+            )
+        return success(
+            f'Password reset, but the notification email could not be sent '
+            f'({email_error or "unknown error"}). Share the new password with '
+            f'{employee.full_name} manually — check Settings → SMTP.',
+            data={'email_sent': False},
+        )
 
 
 class EmployeePromotionHistoryView(APIView):
