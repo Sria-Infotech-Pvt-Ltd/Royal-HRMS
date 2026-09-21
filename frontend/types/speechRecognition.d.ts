@@ -7,10 +7,19 @@
 // only declarations inside `declare global` are visible outside it.
 
 declare global {
+  interface SpeechRecognitionAlternativeLike {
+    readonly transcript: string;
+    // Per spec this is always present (0 when the engine doesn't estimate
+    // one), but keep it optional here since Chromium's real-world behavior
+    // isn't verified against every engine/OS combination — callers must
+    // treat a missing value as "no confidence signal", not "confidence 0".
+    readonly confidence?: number;
+  }
+
   interface SpeechRecognitionResultLike {
     readonly isFinal: boolean;
     readonly length: number;
-    [index: number]: { readonly transcript: string };
+    [index: number]: SpeechRecognitionAlternativeLike;
   }
 
   interface SpeechRecognitionResultListLike {

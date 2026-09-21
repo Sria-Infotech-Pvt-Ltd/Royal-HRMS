@@ -34,6 +34,13 @@ export interface VoiceParseResult {
   // Phase 4: drives which language POST /api/voice/speak/ is asked to
   // synthesize this response's spoken text in.
   language: "en" | "hi";
+  // True only when this response is a low/mid-confidence "did you mean X?"
+  // clarification question (backend apps/voice_commands/conversation_clarification.py)
+  // — nothing has executed yet, so it's safe to silently discard the mic
+  // transcript that produced it and retry through Hindi STT. False for every
+  // other awaiting_input turn (ordinary slot-filling questions already ran
+  // real logic and shouldn't be retried) and for every terminal outcome.
+  is_clarification: boolean;
 }
 
 export type VoiceCommandStatus = "idle" | "listening" | "processing";

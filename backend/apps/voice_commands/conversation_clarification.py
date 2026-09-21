@@ -9,7 +9,7 @@ from apps.voice_commands.approval_extractor import parse_yes_no
 from apps.voice_commands.audit import log_clarification_outcome
 from apps.voice_commands.clarification import clear_pending, set_pending
 from apps.voice_commands.executor import INTENT_CLOCK_IN, INTENT_CLOCK_OUT
-from apps.voice_commands.language import get_current_language, text
+from apps.voice_commands.language import get_current_language, set_current_language, text
 from apps.voice_commands.matcher import DEFAULT_LANG, get_conversational
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,17 @@ def start_clarification(
     llm_fallback.py's low-confidence classification (source='llm') — stashed
     in pending state so continue_clarification below can tag the outcome
     with the right clarification_type for voice_review_report.
+
+    response_language (same leaked-contextvar class of bug Phase 3.1 already
+    fixed once for conversation_stt_confirmation.py's start_stt_confirmation
+    — see that function's docstring): handle_transcript() has already called
+    set_current_language() for THIS turn before this function ever runs, so
+    get_current_language() here is exactly the response language the
+    original candidate-intent utterance resolved to. Stashed so a confirmed
+    "yes" answer (continue_clarification below) can restore it before
+    dispatching — otherwise the yes/no answer's own turn (which typically
+    carries no STT language signal of its own) re-resolves to English
+    regardless of what language the confirmed command was actually in.
     """
     phrase = matched_phrase or candidate_intent
     set_pending(request.user.id, candidate_intent, {
@@ -102,6 +113,7 @@ def start_clarification(
         'attendance_mode': attendance_mode,
         'lang': lang,
         'source': source,
+        'response_language': get_current_language(),
     })
     logger.info(
         'Voice command clarification: user=%s transcript=%r candidate=%s confidence=%s',
@@ -112,8 +124,14 @@ def start_clarification(
     # the candidate might itself be registered conversational: false (e.g.
     # clock_in, check_leave_balance), but THIS turn is a yes/no question
     # regardless, and needs the same mic/typed-answer follow-up UI apply_leave
-    # gets. See _payload below.
-    return _payload(candidate_intent, confidence, None, question, awaiting_input=True, conversational=True)
+    # gets. See _payload below. is_clarification=True: this is the "did you
+    # mean X?" question itself — nothing has executed yet, so it's safe for
+    # the frontend to silently discard this transcript and retry through
+    # Hindi STT rather than treating it as a completed turn.
+    return _payload(
+        candidate_intent, confidence, None, question,
+        awaiting_input=True, conversational=True, is_clarification=True,
+    )
 
 
 def continue_clarification(
@@ -143,7 +161,10 @@ def continue_clarification(
         set_pending(request.user.id, candidate_intent, slots)
         log_clarification_outcome(request, clarification_type, 're_asked')
         question = text(_REASK_MESSAGE).format(phrase=matched_phrase)
-        return _payload(candidate_intent, None, None, question, awaiting_input=True, conversational=True)
+        return _payload(
+            candidate_intent, None, None, question,
+            awaiting_input=True, conversational=True, is_clarification=True,
+        )
 
     clear_pending(request.user.id)
 
@@ -152,6 +173,19 @@ def continue_clarification(
         return _payload(CLARIFICATION_DECLINED_INTENT, None, None, text(_DECLINED_MESSAGE), conversational=True)
 
     log_clarification_outcome(request, clarification_type, 'confirmed')
+
+    # Restore the ORIGINAL utterance's response language before dispatching —
+    # unlike conversation_stt_confirmation.py's equivalent fix, this path
+    # never re-enters handle_transcript (dispatch_matched_intent is called
+    # directly), so nothing else will set_current_language() for us. Without
+    # this, a confirmed Hindi command answered with a plain "yes"/"haan"
+    # would dispatch — and every executor message it produces would render —
+    # in English, since the yes/no answer's own turn carries no STT language
+    # signal of its own. See start_clarification's response_language
+    # docstring above for where this was stashed.
+    response_language = slots.get('response_language')
+    if response_language is not None:
+        set_current_language(response_language)
 
     outcome = dispatch_matched_intent(
         request, candidate_intent, slots.get('original_text', ''), None,
@@ -185,7 +219,7 @@ def continue_clarification(
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    conversational: Optional[bool] = None,
+    conversational: Optional[bool] = None, is_clarification: bool = False,
 ) -> dict:
     """
     Small, deliberate duplicate of conversation.py's own private _payload —
@@ -200,6 +234,14 @@ def _payload(
     where it's actually set); included for shape-consistency with every
     other _payload builder so the frontend can rely on the key always being
     present. language (Phase 3): see conversation.py's own _payload docstring.
+
+    is_clarification defaults False; both call sites in this module that ask
+    a "did you mean X?" question (start_clarification, and the re-ask branch
+    of continue_clarification) pass True explicitly — a clarification
+    question hasn't executed anything yet, so the frontend can safely
+    discard the mic transcript that produced it and silently retry through
+    Hindi STT. Every other outcome this module returns (declined, confirmed
+    dispatch) is terminal and keeps the default False.
     """
     return {
         'intent': intent,
@@ -211,4 +253,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }

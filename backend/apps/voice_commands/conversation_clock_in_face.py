@@ -226,7 +226,7 @@ def _finish_punch(
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    conversational: Optional[bool] = None,
+    conversational: Optional[bool] = None, is_clarification: bool = False,
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload —
     same reasoning conversation_clarification.py's own copy gives (avoids a
@@ -234,7 +234,12 @@ def _payload(
     registry lookup: clock_in/clock_out are registered conversational: false
     (a single-turn command in the common case), true only for the mid-dialogue
     turns this module itself produces. language (Phase 3): see conversation.py's
-    own _payload docstring."""
+    own _payload docstring.
+
+    is_clarification defaults False — every awaiting_input turn in this
+    module asks for facial proof (or retries it), never a "did you mean
+    intent X?" question; kept for payload shape-consistency across every
+    builder."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -245,4 +250,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }

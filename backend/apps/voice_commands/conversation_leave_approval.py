@@ -112,12 +112,18 @@ def _continue_leave_approval_confirmation(request, intent: str, pending: dict, a
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    speech_message: Optional[str] = None,
+    speech_message: Optional[str] = None, is_clarification: bool = False,
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload —
     same reasoning conversation_payroll.py's docstring gives for its own copy
     (avoiding a circular import back into conversation.py). speech_message,
-    language (Phase 3): see conversation.py's own _payload docstring."""
+    language (Phase 3): see conversation.py's own _payload docstring.
+
+    is_clarification defaults False — every awaiting_input turn in this
+    module (asking who's meant, re-asking a yes/no approve/reject
+    confirmation) is a normal slot-filling/action-confirmation question that
+    already narrowed to a specific request, never a "did you mean intent X?"
+    question; kept for payload shape-consistency across every builder."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -128,4 +134,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }

@@ -469,7 +469,7 @@ def _continue_apply_leave(request, pending: dict, answer_text: str) -> dict:
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    speech_message: Optional[str] = None,
+    speech_message: Optional[str] = None, is_clarification: bool = False,
 ) -> dict:
     """
     speech_message is the redacted stand-in for `message` that VoiceParseView's
@@ -511,6 +511,14 @@ def _payload(
     Hindi counterpart to select, so the frontend can rely on the key always
     being there — same reasoning speech_message's own always-present-but-
     often-None shape already follows.
+
+    is_clarification defaults False here — every call site in this module is
+    either a terminal outcome or a normal slot-filling question (e.g.
+    _continue_apply_leave asking for a missing leave slot), never the
+    low/mid-confidence "did you mean X?" question itself (that lives in
+    conversation_clarification.py's own _payload, the only place this is
+    ever explicitly True). Present on every response for the same
+    always-there reasoning as language/speech_message above.
     """
     return {
         'intent': intent,
@@ -522,4 +530,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }

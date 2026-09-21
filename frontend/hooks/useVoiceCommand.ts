@@ -7,6 +7,7 @@ import { API } from "@/lib/api/endpoints";
 import { captureAndTranscribeViaSarvam } from "@/lib/voiceSttFallback";
 import { fetchSpeechAudio, type TtsLanguage } from "@/lib/voiceTts";
 import { createAutoListenScheduler, shouldAutoListenAfterSpeaking } from "@/lib/voiceAutoListen";
+import { shouldAttemptHindiRecovery, shouldDeferForLowConfidence } from "@/lib/voiceHindiRecovery";
 import type { VoiceCommandStatus, VoiceParseResult } from "@/types/voice";
 
 type NormalisedError = { message?: string };
@@ -95,13 +96,6 @@ function estimateReadingTimeMs(displayedText: string): number {
 const VOICE_LANG = "en";
 const VOICE_LOCALE = "en-US";
 
-// Mirrors backend apps/voice_commands/matcher.py's NO_MATCH_INTENT verbatim —
-// the one outcome that triggers the Sarvam-STT retry below, since it's the
-// single value the rule engine AND the sarvam-105b LLM fallback tier both
-// have to agree on before either gives up (see conversation.py's
-// handle_transcript).
-const NO_MATCH_INTENT = "no_match";
-
 // The two intents that ever hit PunchService.record_punch() server-side —
 // only these can come back with the geofencing rejection below.
 const CLOCK_INTENTS = new Set(["clock_in", "clock_out"]);
@@ -142,6 +136,9 @@ interface VoiceParseOutcome {
   // a locally-constructed error) rather than leaving it undefined, so speak()
   // always has a language to request TTS in.
   language: TtsLanguage;
+  // See types/voice.ts's VoiceParseResult.is_clarification. Defaults to
+  // false when absent, same reasoning as `language` above.
+  isClarification: boolean;
 }
 
 type LocationResult = { latitude: number; longitude: number } | { errorMessage: string };
@@ -223,6 +220,7 @@ async function postVoiceParse(transcript: string, lang: string, extra?: VoicePar
     success: data?.success ?? true,
     result: data?.result,
     language: data?.language === "hi" ? "hi" : "en",
+    isClarification: !!data?.is_clarification,
   };
 }
 
@@ -385,6 +383,14 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const transcriptRef = useRef({ final: "", interim: "" });
+  // Lowest confidence seen across every FINAL recognition chunk in the
+  // current listening session — one bad chunk makes the whole transcript
+  // suspect, so the minimum (not e.g. the last chunk's value) is what
+  // shouldDeferForLowConfidence checks. Reset at the start of each session
+  // (beginRecognition below); undefined means no chunk this session ever
+  // reported a confidence value at all (see speechRecognition.d.ts's own
+  // note on real-world support being inconsistent).
+  const minConfidenceRef = useRef<number | undefined>(undefined);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -847,17 +853,21 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
         // Hindi-STT retry: only for a transcript that actually came from the
         // mic (a typed answer is already exactly what the user meant — a
-        // surprise mic capture "retrying" it would help nothing) and only on
-        // a genuine, final no-match, meaning both the rule engine and the
-        // sarvam-105b classification tier already declined it server-side
-        // (see backend conversation.py's handle_transcript). The browser's
-        // Web Speech API is unreliable for Hindi; this is the one silent
-        // recovery attempt for "that transcript might have been garbled
-        // Hindi, not just an unmatched English phrase" before showing the
-        // normal failure. Exactly one retry — if Sarvam can't help either,
-        // or the resubmitted transcript still no-matches, everything below
+        // surprise mic capture "retrying" it would help nothing), and only
+        // when shouldAttemptHindiRecovery says this outcome is safe to
+        // discard — a genuine final no-match (both the rule engine and the
+        // sarvam-105b classification tier already declined it server-side),
+        // OR a response that matched but only reached a low/mid-confidence
+        // "did you mean X?" clarification question (isClarification) —
+        // nothing has executed yet in that case either, so it's just as safe
+        // to silently retry instead of making the user sit through the
+        // clarification turn for what may have been mistranscribed Hindi.
+        // The browser's Web Speech API is unreliable for Hindi; this is the
+        // one silent recovery attempt before showing/asking the normal
+        // outcome. Exactly one retry — if Sarvam can't help either, or the
+        // resubmitted transcript still doesn't clear, everything below
         // behaves exactly as if this retry had never been attempted.
-        if (sourceIsVoice && !outcome.success && outcome.intent === NO_MATCH_INTENT) {
+        if (sourceIsVoice && shouldAttemptHindiRecovery(sourceIsVoice, outcome)) {
           const sarvamResult = await captureAndTranscribeViaSarvam();
           if (sarvamResult) {
             displayTranscript = sarvamResult.transcript;
@@ -983,6 +993,34 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     }
   }, [showToast, submitTranscript]);
 
+  // Pre-emptive Hindi-STT recovery for a LOW-CONFIDENCE browser transcript —
+  // called from onend BEFORE the transcript is ever dispatched to
+  // /voice/parse/, per shouldDeferForLowConfidence's own docstring: a
+  // confident-LOOKING but wrong transcript could otherwise trigger a
+  // stateful action (clock in/out, a leave cancellation) on the very first
+  // dispatch, before submitTranscript's own POST-dispatch retry ever gets a
+  // chance to run. sourceIsVoice=false on the Sarvam resubmit (this already
+  // used the one Sarvam attempt for this session — no chaining a second);
+  // if Sarvam can't help either, falls back to dispatching the ORIGINAL
+  // browser transcript normally (sourceIsVoice=true), still eligible for
+  // submitTranscript's own no-match/clarification retry if it turns out
+  // that transcript doesn't clear either.
+  const attemptHindiRecoveryThenSubmit = useCallback(
+    async (originalTranscript: string) => {
+      setStatus("processing");
+      const sarvamResult = await captureAndTranscribeViaSarvam();
+      if (sarvamResult) {
+        await submitTranscript(
+          sarvamResult.transcript, false, sarvamResult.languageProbability, sarvamResult.wasLanguageHinted,
+          sarvamResult.detectedLanguage
+        );
+      } else {
+        await submitTranscript(originalTranscript, true);
+      }
+    },
+    [submitTranscript]
+  );
+
   // Second+ turn of the clock_in/clock_out facial-proof dialogue —
   // VoiceCommandButton calls this once FaceVerificationModal produces a
   // captured descriptor, resubmitting the SAME original transcript
@@ -1087,13 +1125,21 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
 
       transcriptRef.current = { final: "", interim: "" };
       setInterimTranscript("");
+      minConfidenceRef.current = undefined;
 
       recognition.onresult = (event) => {
         let interim = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const piece = event.results[i][0].transcript;
+          const alternative = event.results[i][0];
+          const piece = alternative.transcript;
           if (event.results[i].isFinal) {
             transcriptRef.current.final += piece;
+            if (typeof alternative.confidence === "number") {
+              minConfidenceRef.current =
+                minConfidenceRef.current === undefined
+                  ? alternative.confidence
+                  : Math.min(minConfidenceRef.current, alternative.confidence);
+            }
           } else {
             interim += piece;
           }
@@ -1130,10 +1176,19 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
         recognitionRef.current = null;
         const transcript = (transcriptRef.current.final || transcriptRef.current.interim).trim();
         if (transcript) {
-          // sourceIsVoice=true — this transcript came from the mic, so a
-          // final no-match is eligible for the Sarvam-STT retry (see
-          // submitTranscript's own comment on that branch).
-          submitTranscript(transcript, true);
+          // Checked BEFORE the first dispatch — see shouldDeferForLowConfidence's
+          // own docstring for why this can't wait until after a normal
+          // submitTranscript call. minConfidenceRef is the lowest confidence
+          // seen across every final chunk this session (see its own
+          // declaration above).
+          if (shouldDeferForLowConfidence(minConfidenceRef.current)) {
+            void attemptHindiRecoveryThenSubmit(transcript);
+          } else {
+            // sourceIsVoice=true — this transcript came from the mic, so a
+            // no-match/clarification outcome is eligible for the Sarvam-STT
+            // retry (see submitTranscript's own comment on that branch).
+            submitTranscript(transcript, true);
+          }
         } else {
           // Recognition ended (e.g. the silence timeout fired) with nothing
           // usable ever recognized — same non-English-speech case onerror's
@@ -1171,7 +1226,10 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
     } else {
       beginRecognition();
     }
-  }, [showToast, submitTranscript, attemptSilentSpeechFallback, resetSilenceTimer, clearSilenceTimer, cancelSpeech]);
+  }, [
+    showToast, submitTranscript, attemptSilentSpeechFallback, attemptHindiRecoveryThenSubmit,
+    resetSilenceTimer, clearSilenceTimer, cancelSpeech,
+  ]);
 
   // Breaks the declaration-order cycle noted at startListeningRef's own
   // declaration above. A ref write belongs in an effect, not render body

@@ -153,12 +153,18 @@ def continue_stt_confirmation(
 def _payload(
     intent: str, confidence: Optional[float], result, message: str,
     awaiting_input: bool = False, success: bool = True,
-    conversational: Optional[bool] = None,
+    conversational: Optional[bool] = None, is_clarification: bool = False,
 ) -> dict:
     """Small, deliberate duplicate of conversation.py's own private _payload
     — same circular-import reasoning conversation_clarification.py's own
     copy documents. language (Phase 3): see conversation.py's own _payload
-    docstring."""
+    docstring.
+
+    is_clarification defaults False — this module's "was that transcript
+    right?" question is a distinct kind of yes/no turn from the "did you
+    mean X?" intent clarification (conversation_clarification.py is the only
+    place this is ever explicitly True); kept here for payload
+    shape-consistency across every builder."""
     return {
         'intent': intent,
         'confidence': confidence,
@@ -169,4 +175,5 @@ def _payload(
         'awaiting_input': awaiting_input,
         'success': success,
         'language': get_current_language(),
+        'is_clarification': is_clarification,
     }
