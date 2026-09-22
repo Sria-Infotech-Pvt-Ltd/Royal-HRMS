@@ -21,7 +21,7 @@ import { useFaceRegistrationCard } from "@/hooks/useFaceRegistrationCard";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
 import type { Employee } from "@/app/dashboard/employees/_data";
-import ProfileCorrectionModal from "@/app/dashboard/ess/_components/ProfileCorrectionModal";
+import ProfileEditModal from "@/app/dashboard/employees/_components/ProfileEditModal";
 import ChangePasswordForm from "./ChangePasswordForm";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
@@ -49,7 +49,26 @@ interface ProfileData {
   reporting_manager:  AssignedPerson | null;
   reporting_approver: AssignedPerson | null;
   hr:                 AssignedPerson | null;
-  profile:           { date_of_birth: string | null } | null;
+  profile:           {
+    date_of_birth: string | null;
+    current_address?: string | null;
+    current_address_line2?: string | null;
+    current_village?: string | null;
+    current_district?: string | null;
+    current_state?: string | null;
+    current_pin_code?: string | null;
+    permanent_address?: string | null;
+    permanent_address_line2?: string | null;
+    permanent_village?: string | null;
+    permanent_district?: string | null;
+    permanent_state?: string | null;
+    permanent_pin_code?: string | null;
+    permanent_same_as_current?: boolean;
+    emergency_name?: string | null;
+    emergency_relationship?: string | null;
+    emergency_phone?: string | null;
+    emergency_email?: string | null;
+  } | null;
   profile_photo_url: string | null;
 }
 
@@ -121,15 +140,15 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   // instead of the HR-ticket "Request profile correction" flow, which is
   // for employees who genuinely need someone else's approval.
   const canEditDirectly = (session.permissions ?? []).includes("employees.edit");
-  const { data: profile, loading, error: profileError } = useFetch<ProfileData>(API.employees.me);
+  const { data: profile, loading, error: profileError, refetch: refetchProfile } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
   const { data: documentTypeConfigData } = useFetch<DocumentTypeConfig[]>(API.onboarding.documentTypeConfig);
   const docEntries = buildDocEntries(docs ?? [], documentTypeConfigData ?? []);
   const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
 
   const [showRecord, setShowRecord] = useState(false);
-  const [showCorrection, setShowCorrection] = useState(false);
-  const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [savedJustNow, setSavedJustNow] = useState(false);
 
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const { state: faceCardState, loading: faceCardLoading, notes: faceRejectionNotes, refetch: refetchFaceStatus } = useFaceRegistrationCard();
@@ -176,9 +195,9 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
         </div>
       )}
 
-      {correctionSubmitted && (
+      {savedJustNow && (
         <div className="alert alert-success mb-16">
-          <i className="ti ti-circle-check" /> Your correction request was submitted and will appear in My Requests.
+          <i className="ti ti-circle-check" /> Your profile was updated.
         </div>
       )}
 
@@ -259,11 +278,11 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           ) : (
             <button
               type="button"
-              onClick={() => setShowCorrection(true)}
+              onClick={() => setShowEdit(true)}
               style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
             >
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
-              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Submit changes to contact, address or personal information</div>
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my details</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
             </button>
           )}
         </div>
@@ -425,15 +444,16 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
           onClose={() => setShowRecord(false)}
           onRequestCorrection={canEditDirectly
             ? () => router.push(`/dashboard/employees/${profile.employee_id}`)
-            : () => { setShowRecord(false); setShowCorrection(true); }}
-          correctionLabel={canEditDirectly ? "Edit my record" : undefined}
+            : () => { setShowRecord(false); setShowEdit(true); }}
+          correctionLabel="Edit my record"
         />
       )}
 
-      {showCorrection && (
-        <ProfileCorrectionModal
-          onClose={() => setShowCorrection(false)}
-          onSubmitted={() => { setShowCorrection(false); setCorrectionSubmitted(true); }}
+      {showEdit && profile && (
+        <ProfileEditModal
+          profile={profile}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => { setShowEdit(false); setSavedJustNow(true); refetchProfile(); }}
         />
       )}
 
