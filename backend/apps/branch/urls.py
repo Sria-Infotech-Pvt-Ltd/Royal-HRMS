@@ -6,6 +6,7 @@ from apps.branch.views import (
     BranchGeofencingView,
     BranchListCreateView,
     BranchPreviewCodeView,
+    BranchReassignAdminView,
     BranchStatsView,
     CityListView,
     StateListView,
@@ -27,8 +28,9 @@ urlpatterns = [
 
     # Branch CRUD (single base URL)
     path('branches/', BranchListCreateView.as_view(), name='branch-list-create'),
-    path('branches/<int:pk>/',             BranchDetailView.as_view(),     name='branch-detail'),
-    path('branches/<int:pk>/geofencing/',  BranchGeofencingView.as_view(), name='branch-geofencing'),
+    path('branches/<int:pk>/',                BranchDetailView.as_view(),        name='branch-detail'),
+    path('branches/<int:pk>/geofencing/',     BranchGeofencingView.as_view(),    name='branch-geofencing'),
+    path('branches/<int:pk>/reassign-admin/', BranchReassignAdminView.as_view(), name='branch-reassign-admin'),
 
     # Multi-branch access management
     path('employee-access/',          EmployeeBranchAccessListCreateView.as_view(), name='employee-branch-access-list'),
