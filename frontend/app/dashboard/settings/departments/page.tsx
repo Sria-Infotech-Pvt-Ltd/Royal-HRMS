@@ -20,6 +20,7 @@ interface Designation {
 
 const BLANK_DEPT  = { name: "", description: "", is_active: true };
 const BLANK_DESIG = { name: "", is_active: true };
+const DEPT_PAGE_SIZE = 6;
 
 const PALETTE = [
   { bg: "rgba(30,78,140,0.12)",  solid: "#1e4e8c", fg: "var(--primary)"  },
@@ -51,6 +52,7 @@ export default function DepartmentsPage() {
   const [pageError,    setPageError]    = useState<string | null>(null);
   const [saveError,    setSaveError]    = useState<string | null>(null);
   const [search,       setSearch]       = useState("");
+  const [deptPage,     setDeptPage]     = useState(1);
 
   const [deptModal,    setDeptModal]    = useState<"add" | "edit" | null>(null);
   const [deptForm,     setDeptForm]     = useState(BLANK_DEPT);
@@ -107,6 +109,9 @@ export default function DepartmentsPage() {
     else setDesignations([]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
+  // Reset to page 1 whenever the search text changes, so a new search never
+  // leaves the user stranded on a page number that no longer has results.
+  useEffect(() => { setDeptPage(1); }, [search]);
 
   // ── Department CRUD ────────────────────────────────────────────────────────
 
@@ -202,6 +207,17 @@ export default function DepartmentsPage() {
   const filtered   = departments.filter(d => d.name.toLowerCase().includes(search.toLowerCase()));
   const totalDesig = departments.reduce((s, d) => s + d.designation_count, 0);
 
+  const deptTotalPages = Math.max(1, Math.ceil(filtered.length / DEPT_PAGE_SIZE));
+  const pagedDepts     = filtered.slice((deptPage - 1) * DEPT_PAGE_SIZE, deptPage * DEPT_PAGE_SIZE);
+
+  // Recalculates after any change that can shrink the list (delete, search
+  // narrowing) — clamps back to the new last page instead of leaving the
+  // user on an empty page. A no-op guard (only fires when actually out of
+  // range) so it never fights the search-reset effect above.
+  useEffect(() => {
+    if (deptPage > deptTotalPages) setDeptPage(deptTotalPages);
+  }, [deptPage, deptTotalPages]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -272,10 +288,9 @@ export default function DepartmentsPage() {
             />
           </div>
 
-          {/* List — capped height + internal scroll so a long department list
-              doesn't push the whole page down; sticky wrapper above still
-              keeps this panel in view as the page scrolls. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 560, overflowY: "auto", paddingRight: 4 }}>
+          {/* List — paginated (DEPT_PAGE_SIZE per page) instead of internally
+              scrolling, so a long department list doesn't need a scrollbar. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {loading ? (
               <div style={{ textAlign: "center", padding: "32px 0", color: "var(--on-variant)", fontSize: 13 }}>
                 <Spin /> &nbsp;Loading departments…
@@ -285,7 +300,7 @@ export default function DepartmentsPage() {
                 {search ? "No departments match your search." : "No departments yet — click Add Department to get started."}
               </div>
             ) : (
-              filtered.map(dept => {
+              pagedDepts.map(dept => {
                 const c      = pal(dept.name);
                 const active = selected?.id === dept.id;
                 return (
@@ -363,6 +378,38 @@ export default function DepartmentsPage() {
               })
             )}
           </div>
+
+          {/* Pagination — only shown once there's more than one page */}
+          {!loading && filtered.length > 0 && deptTotalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flexWrap: "wrap", marginTop: 12 }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setDeptPage(p => Math.max(1, p - 1))}
+                disabled={deptPage === 1}
+                style={{ padding: "4px 10px" }}
+              >
+                <i className="ti ti-chevron-left" />
+              </button>
+              {Array.from({ length: deptTotalPages }, (_, i) => i + 1).map(n => (
+                <button
+                  key={n}
+                  className={n === deptPage ? "btn btn-filled btn-sm" : "btn btn-ghost btn-sm"}
+                  onClick={() => setDeptPage(n)}
+                  style={{ padding: "4px 10px", minWidth: 30 }}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setDeptPage(p => Math.min(deptTotalPages, p + 1))}
+                disabled={deptPage === deptTotalPages}
+                style={{ padding: "4px 10px" }}
+              >
+                <i className="ti ti-chevron-right" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── RIGHT: detail panel — hidden on mobile when nothing selected ── */}
