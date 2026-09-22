@@ -154,6 +154,25 @@ def continue_clarification(
     clarification_type = slots.get('source', 'rule_engine')
     decision = parse_yes_no(answer_text)
 
+    # Restore the ORIGINAL utterance's response language up front — before
+    # ANY of the three branches below build their response — not just the
+    # confirmed/dispatch one. All three (re-ask, declined, confirmed) call
+    # text()/_payload() and read the ambient language exactly the same way,
+    # and this whole function only ever runs on a SEPARATE turn (the yes/no
+    # answer itself) that typically carries no STT language signal of its
+    # own — a quiet "haan" answering a Hindi clarification would otherwise
+    # get an English re-ask/decline message just as readily as an English
+    # dispatch, mid-conversation, in the same language the user has been
+    # replying in throughout. Unlike conversation_stt_confirmation.py's
+    # equivalent fix, this path never re-enters handle_transcript
+    # (dispatch_matched_intent is called directly for confirmed dispatches),
+    # so nothing else will set_current_language() for us. See
+    # start_clarification's response_language docstring above for where
+    # this was stashed.
+    response_language = slots.get('response_language')
+    if response_language is not None:
+        set_current_language(response_language)
+
     if decision is None:
         # Not a recognizable yes/no — re-ask the same question, don't guess.
         # Re-storing extends the clarification's 120s window, same pattern
@@ -173,19 +192,6 @@ def continue_clarification(
         return _payload(CLARIFICATION_DECLINED_INTENT, None, None, text(_DECLINED_MESSAGE), conversational=True)
 
     log_clarification_outcome(request, clarification_type, 'confirmed')
-
-    # Restore the ORIGINAL utterance's response language before dispatching —
-    # unlike conversation_stt_confirmation.py's equivalent fix, this path
-    # never re-enters handle_transcript (dispatch_matched_intent is called
-    # directly), so nothing else will set_current_language() for us. Without
-    # this, a confirmed Hindi command answered with a plain "yes"/"haan"
-    # would dispatch — and every executor message it produces would render —
-    # in English, since the yes/no answer's own turn carries no STT language
-    # signal of its own. See start_clarification's response_language
-    # docstring above for where this was stashed.
-    response_language = slots.get('response_language')
-    if response_language is not None:
-        set_current_language(response_language)
 
     outcome = dispatch_matched_intent(
         request, candidate_intent, slots.get('original_text', ''), None,
