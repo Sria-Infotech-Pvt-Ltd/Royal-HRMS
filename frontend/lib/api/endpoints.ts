@@ -45,6 +45,7 @@ export const API = {
     distribution: "/branch/branches/distribution/",
     previewCode: "/branch/branches/preview-code/",
     detail: (id: string | number) => `/branch/branches/${id}/`,
+    reassignAdmin: (id: string | number) => `/branch/branches/${id}/reassign-admin/`,
     states: "/branch/states/",
     cities: (stateId: string | number) => `/branch/states/${stateId}/cities/`,
   },

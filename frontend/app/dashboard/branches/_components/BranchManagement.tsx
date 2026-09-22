@@ -36,6 +36,9 @@ interface Branch {
   longitude:             number | null;
   allowed_radius_meters: number | null;
   has_coordinates:       boolean;
+  hr:       string | null;
+  hr_name:  string | null;
+  hr_email: string | null;
 }
 
 function geofenceBadge(branch: Branch): { label: string; cls: string } {
@@ -265,6 +268,21 @@ export default function BranchManagement() {
   >(null);
   const [transferChecking, setTransferChecking] = useState(false);
 
+  // View Branch modal — read-only detail view, opened from the eye icon.
+  const [viewBranch, setViewBranch] = useState<Branch | null>(null);
+
+  // Reassign Branch Admin — opened either from the View modal or from the
+  // "Change Branch Admin" button on the Edit form. Two-stage: pick an
+  // eligible employee, then an explicit confirm step (same pattern as
+  // transferConfirm above) before the API call actually runs.
+  const [reassignFor, setReassignFor]           = useState<Branch | null>(null);
+  const [reassignEmployees, setReassignEmployees] = useState<ApiEmployeeOption[]>([]);
+  const [reassignSearch, setReassignSearch]     = useState("");
+  const [reassignSelectedId, setReassignSelectedId] = useState("");
+  const [reassignConfirming, setReassignConfirming] = useState(false);
+  const [reassignSaving, setReassignSaving]     = useState(false);
+  const [reassignError, setReassignError]       = useState<string | null>(null);
+
   const [editForm, setEditForm] = useState({
     id:             0,
     branch_code:    "",
@@ -464,6 +482,49 @@ export default function BranchManagement() {
       branch: branchName,
       date_of_joining: new Date().toISOString().slice(0, 10),
     });
+  };
+
+  const openReassign = (branch: Branch) => {
+    setReassignError(null);
+    setReassignSearch("");
+    setReassignSelectedId("");
+    setReassignConfirming(false);
+    setReassignFor(branch);
+    clientApi.get<{ data: { results: ApiEmployeeOption[] } }>(API.employees.list, {
+      params: { page_size: 50, status: "active" },
+    }).then(res => {
+      const results = res.data.data?.results ?? [];
+      setReassignEmployees(
+        results.filter(emp =>
+          emp.role !== "system_admin" &&
+          // branch.hr is the admin's real DB pk; emp.id is their employee_id
+          // code (see accounts/views.py _employee_dict) — different formats,
+          // so exclude by email instead, which both sides actually share.
+          emp.email !== (branch.hr_email ?? ""),
+        ),
+      );
+    }).catch(() => setReassignEmployees([]));
+  };
+
+  const doReassign = async () => {
+    if (!reassignFor || !reassignSelectedId) return;
+    setReassignSaving(true);
+    setReassignError(null);
+    try {
+      await clientApi.post(API.branches.reassignAdmin(reassignFor.id), {
+        employee_id: reassignSelectedId,
+      });
+      setReassignFor(null);
+      setReassignConfirming(false);
+      setViewBranch(null);
+      setInviteAlert({ type: "success", text: `Branch Admin for ${reassignFor.branch_name} was reassigned successfully.` });
+      fetchData();
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setReassignError(e.message ?? "Failed to reassign Branch Admin.");
+    } finally {
+      setReassignSaving(false);
+    }
   };
 
   const doSave = async () => {
@@ -753,48 +814,59 @@ export default function BranchManagement() {
                   </div>
                 </div>
 
-                {canEdit && (
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
-                      onClick={() => {
-                        setSaveError(null);
-                        setFieldErrors({});
-                        setLeaderErrors({});
-                        setBranchAdminForm(EMPTY_LEADER);
-                        setTransferConfirm(null);
-                        setModalMode("edit");
-                        setNewCityName("");
-                        setEditForm({
-                          id:             branch.id,
-                          branch_code:    branch.branch_code,
-                          branch_name:    branch.branch_name,
-                          address:        branch.address,
-                          state:          branch.state.toString(),
-                          city:           branch.city.toString(),
-                          status:         branch.status.toLowerCase(),
-                          is_headquarter: branch.is_headquarter,
-                          geofencing_enabled:    branch.geofencing_enabled ?? false,
-                          latitude:              branch.latitude?.toString() ?? "",
-                          longitude:             branch.longitude?.toString() ?? "",
-                          allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
-                        });
-                      }}
-                    >
-                      <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
-                      onClick={() => { setDeleteError(null); setDeleteConfirm(branch); }}
-                      title={`Delete ${branch.branch_name}`}
-                      aria-label={`Delete ${branch.branch_name}`}
-                    >
-                      <i className="ti ti-trash" style={{ fontSize: "16px" }} />
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
+                    onClick={() => setViewBranch(branch)}
+                    title={`View ${branch.branch_name}`}
+                    aria-label={`View ${branch.branch_name}`}
+                  >
+                    <i className="ti ti-eye" style={{ fontSize: "16px" }} />
+                  </button>
+                  {canEdit && (
+                    <>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
+                        onClick={() => {
+                          setSaveError(null);
+                          setFieldErrors({});
+                          setLeaderErrors({});
+                          setBranchAdminForm(EMPTY_LEADER);
+                          setTransferConfirm(null);
+                          setModalMode("edit");
+                          setNewCityName("");
+                          setEditForm({
+                            id:             branch.id,
+                            branch_code:    branch.branch_code,
+                            branch_name:    branch.branch_name,
+                            address:        branch.address,
+                            state:          branch.state.toString(),
+                            city:           branch.city.toString(),
+                            status:         branch.status.toLowerCase(),
+                            is_headquarter: branch.is_headquarter,
+                            geofencing_enabled:    branch.geofencing_enabled ?? false,
+                            latitude:              branch.latitude?.toString() ?? "",
+                            longitude:             branch.longitude?.toString() ?? "",
+                            allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
+                          });
+                        }}
+                      >
+                        <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
+                        onClick={() => { setDeleteError(null); setDeleteConfirm(branch); }}
+                        title={`Delete ${branch.branch_name}`}
+                        aria-label={`Delete ${branch.branch_name}`}
+                      >
+                        <i className="ti ti-trash" style={{ fontSize: "16px" }} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -1009,6 +1081,38 @@ export default function BranchManagement() {
                 </div>
               )}
 
+              {modalMode === "edit" && (() => {
+                const current = branches.find(b => b.id === editForm.id) ?? null;
+                return (
+                  <div style={{ marginTop: "4px", marginBottom: "20px", paddingTop: "18px", paddingBottom: "4px", borderTop: "1px solid var(--outline-v)" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)", marginBottom: "14px" }}>
+                      Branch Admin
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "12px 16px", background: "var(--bg-low)", borderRadius: "var(--radius)" }}>
+                      <div>
+                        {current?.hr_name ? (
+                          <>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--on-bg)" }}>{current.hr_name}</div>
+                            <div style={{ fontSize: "12px", color: "var(--on-variant)", marginTop: "2px" }}>{current.hr_email}</div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: "13px", color: "var(--on-variant)" }}>No Branch Admin assigned</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ border: "1px solid var(--outline-v)", whiteSpace: "nowrap" }}
+                        onClick={() => current && openReassign(current)}
+                      >
+                        <i className="ti ti-replace" style={{ marginRight: "6px" }} />
+                        {current?.hr_name ? "Change Branch Admin" : "Assign Branch Admin"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="form-row cols-2">
                 <div className="field-group">
                   <label className="field-label">Status *</label>
@@ -1211,6 +1315,189 @@ export default function BranchManagement() {
           <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
             Are you sure you want to delete <strong>{deleteConfirm.branch_name}</strong>? This action cannot be undone.
           </p>
+        </Modal>
+      )}
+
+      {viewBranch && (
+        <Modal
+          title={
+            <>
+              <i className="ti ti-building-skyscraper" style={{ marginRight: "8px" }} />
+              {viewBranch.branch_name}
+            </>
+          }
+          onClose={() => setViewBranch(null)}
+          size="lg"
+          footer={<button className="btn btn-ghost" onClick={() => setViewBranch(null)}>Close</button>}
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            <div className="field-group">
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Branch Name</div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.branch_name}</div>
+            </div>
+            <div className="field-group">
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Branch Code</div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.branch_code}</div>
+            </div>
+            <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Address</div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.address}</div>
+            </div>
+            <div className="field-group">
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>State</div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.state_name}</div>
+            </div>
+            <div className="field-group">
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>City</div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.city_name}</div>
+            </div>
+            <div className="field-group">
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Status</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", fontWeight: 500, color: viewBranch.status === "active" ? "var(--success)" : "var(--on-variant)" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: viewBranch.status === "active" ? "var(--success)" : "var(--outline)" }} />
+                {viewBranch.status.charAt(0).toUpperCase() + viewBranch.status.slice(1)}
+              </div>
+            </div>
+            <div className="field-group">
+              <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Employees</div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.employees_count}</div>
+            </div>
+
+            <div className="field-group" style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--outline-v)", paddingTop: "14px", marginTop: "2px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--primary)", marginBottom: "10px" }}>Geofencing</div>
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "13px" }}>
+                <span className={`badge ${geofenceBadge(viewBranch).cls}`}>{geofenceBadge(viewBranch).label}</span>
+                {viewBranch.geofencing_enabled && viewBranch.has_coordinates && (
+                  <>
+                    <span><strong>Latitude:</strong> {viewBranch.latitude}</span>
+                    <span><strong>Longitude:</strong> {viewBranch.longitude}</span>
+                    <span><strong>Radius:</strong> {viewBranch.allowed_radius_meters} m</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="field-group" style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--outline-v)", paddingTop: "14px", marginTop: "2px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--primary)", marginBottom: "10px" }}>Branch Admin</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                <div>
+                  {viewBranch.hr_name ? (
+                    <>
+                      <div style={{ fontSize: "14px", fontWeight: 500 }}>{viewBranch.hr_name}</div>
+                      <div style={{ fontSize: "12px", color: "var(--on-variant)", marginTop: "2px" }}>{viewBranch.hr_email}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: "13px", color: "var(--on-variant)" }}>No Branch Admin assigned</div>
+                  )}
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ border: "1px solid var(--outline-v)", whiteSpace: "nowrap" }}
+                    onClick={() => openReassign(viewBranch)}
+                  >
+                    <i className="ti ti-replace" style={{ marginRight: "6px" }} />
+                    {viewBranch.hr_name ? "Change Branch Admin" : "Assign Branch Admin"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {reassignFor && (
+        <Modal
+          title={
+            <>
+              <i className="ti ti-replace" style={{ marginRight: "8px", color: "var(--primary)" }} />
+              {reassignConfirming ? "Confirm Reassignment" : `Change Branch Admin — ${reassignFor.branch_name}`}
+            </>
+          }
+          onClose={() => { if (!reassignSaving) { setReassignFor(null); setReassignConfirming(false); } }}
+          closeDisabled={reassignSaving}
+          maxWidth="480px"
+          zIndex={1010}
+          footer={
+            reassignConfirming ? (
+              <>
+                <button className="btn btn-ghost" onClick={() => setReassignConfirming(false)} disabled={reassignSaving}>Back</button>
+                <button className="btn btn-filled" onClick={doReassign} disabled={reassignSaving}>
+                  {reassignSaving ? (
+                    <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Reassigning…</>
+                  ) : "Yes, Reassign"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-ghost" onClick={() => setReassignFor(null)}>Cancel</button>
+                <button
+                  className="btn btn-filled"
+                  disabled={!reassignSelectedId}
+                  onClick={() => setReassignConfirming(true)}
+                >
+                  Continue
+                </button>
+              </>
+            )
+          }
+        >
+          {reassignError && (
+            <div className="alert alert-error mb-16">
+              <i className="ti ti-alert-circle" /> {reassignError}
+            </div>
+          )}
+
+          {reassignConfirming ? (
+            (() => {
+              const newAdmin = reassignEmployees.find(e => e.id === reassignSelectedId);
+              return (
+                <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+                  {reassignFor.hr_name ? (
+                    <>This will remove Branch Admin access from <strong>{reassignFor.hr_name}</strong> (their attendance, leave, payroll, and other historical records will not be affected) and assign it to <strong>{newAdmin?.full_name}</strong> for <strong>{reassignFor.branch_name}</strong>.</>
+                  ) : (
+                    <>This will assign <strong>{newAdmin?.full_name}</strong> as Branch Admin for <strong>{reassignFor.branch_name}</strong>.</>
+                  )}
+                </p>
+              );
+            })()
+          ) : (
+            <div className="field-group">
+              <input
+                type="text"
+                className="field-input"
+                value={reassignSearch}
+                onChange={e => setReassignSearch(e.target.value)}
+                placeholder="Search by name, email, or employee ID…"
+                style={{ marginBottom: "8px" }}
+              />
+              <select
+                className="field-input"
+                value={reassignSelectedId}
+                onChange={e => setReassignSelectedId(e.target.value)}
+              >
+                <option value="">— Select eligible employee —</option>
+                {reassignEmployees
+                  .filter(e =>
+                    !reassignSearch.trim() ||
+                    e.full_name.toLowerCase().includes(reassignSearch.trim().toLowerCase()) ||
+                    e.email.toLowerCase().includes(reassignSearch.trim().toLowerCase()) ||
+                    e.employee_id.toLowerCase().includes(reassignSearch.trim().toLowerCase()),
+                  )
+                  .map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name} ({e.employee_id}) — {e.branch || "no branch"}
+                    </option>
+                  ))}
+              </select>
+              {reassignEmployees.length === 0 && (
+                <p style={{ fontSize: "12px", color: "var(--on-variant)", marginTop: "8px" }}>
+                  No eligible employees found. An employee must be active and have completed onboarding to become Branch Admin.
+                </p>
+              )}
+            </div>
+          )}
         </Modal>
       )}
     </>

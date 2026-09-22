@@ -4,13 +4,14 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.db.models.deletion import ProtectedError
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
-from apps.accounts.models import AuditLog, User
+from apps.accounts.models import AuditLog, PromotionRecord, Role, User
 from apps.branch.models import Branch, City, State
 from apps.branch.serializers import BranchSerializer, CitySerializer, StateSerializer
 from apps.branch.utils import generate_branch_code
@@ -31,6 +32,40 @@ def _branch_out_of_scope(user, branch) -> bool:
     if _has_perm(user, 'settings.edit'):
         return False
     return (user.branch or '').strip().lower() != (branch.branch_name or '').strip().lower()
+
+
+def _cascade_hr(branch: Branch, old_hr_id) -> None:
+    """When branch HR changes, update hr field for all employees in that branch
+    who were pointing at the old HR (preserves manual overrides). Module-level
+    (not a BranchDetailView method) so BranchReassignAdminView can reuse it
+    without duplicating the logic.
+    """
+    if branch.hr_id == old_hr_id:
+        return
+    base_qs = User.objects.filter(branch__iexact=branch.branch_name, is_active=True)
+    if branch.hr_id:
+        base_qs = base_qs.exclude(pk=branch.hr_id)
+
+    if branch.hr_id:
+        # Update employees whose hr still points at the old HR value
+        base_qs.filter(hr_id=old_hr_id).update(hr_id=branch.hr_id)
+    else:
+        base_qs.filter(hr_id=old_hr_id).update(hr=None)
+
+
+def _branch_admin_role():
+    """
+    The Branch Admin role, resolved by capability (can_manage_branch=True)
+    rather than by name, and excluding any role that also carries
+    settings.edit — mirrors the exact resolution logic the frontend already
+    uses in applyLeaderRole() (BranchManagement.tsx), so both paths that can
+    grant this role agree on which one it is.
+    """
+    return (
+        Role.objects.filter(can_manage_branch=True, is_active=True)
+        .exclude(role_permissions__permission__codename='settings.edit')
+        .first()
+    )
 
 
 # ─── State & City (cascading dropdowns) ──────────────────────────────────────
@@ -191,23 +226,6 @@ class BranchDetailView(APIView):
         except Branch.DoesNotExist:
             return None
 
-    def _cascade_hr(self, branch: Branch, old_hr_id) -> None:
-        """When branch HR changes, update hr field for all employees in that branch
-        who were pointing at the old HR (preserves manual overrides).
-        """
-        if branch.hr_id == old_hr_id:
-            return
-        from apps.accounts.models import User
-        base_qs = User.objects.filter(branch__iexact=branch.branch_name, is_active=True)
-        if branch.hr_id:
-            base_qs = base_qs.exclude(pk=branch.hr_id)
-
-        if branch.hr_id:
-            # Update employees whose hr still points at the old HR value
-            base_qs.filter(hr_id=old_hr_id).update(hr_id=branch.hr_id)
-        else:
-            base_qs.filter(hr_id=old_hr_id).update(hr=None)
-
     def get(self, request, pk):
         if not _has_perm(request.user, 'branches.view'):
             return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
@@ -237,7 +255,7 @@ class BranchDetailView(APIView):
                 'A branch with this name or code already exists.',
                 http_status=status.HTTP_409_CONFLICT,
             )
-        self._cascade_hr(updated, old_hr_id)
+        _cascade_hr(updated, old_hr_id)
         AuditLog.objects.create(
             user=request.user, action='branch_updated', module='branch',
             object_id=str(updated.pk),
@@ -266,7 +284,7 @@ class BranchDetailView(APIView):
                 'A branch with this name or code already exists.',
                 http_status=status.HTTP_409_CONFLICT,
             )
-        self._cascade_hr(updated, old_hr_id)
+        _cascade_hr(updated, old_hr_id)
         AuditLog.objects.create(
             user=request.user, action='branch_updated', module='branch',
             object_id=str(updated.pk),
@@ -316,6 +334,164 @@ class BranchDetailView(APIView):
         )
         logger.info('Branch "%s" deleted by %s', code, request.user.email)
         return success(f'Branch "{code}" deleted successfully.')
+
+
+class BranchReassignAdminView(APIView):
+    """
+    POST /api/branch/branches/<pk>/reassign-admin/  — { "employee_id": "<uuid>" }
+
+    Safely replaces a branch's Branch Admin with another eligible employee,
+    in one atomic step:
+      - demotes the previous admin (if any) back to the base Employee role
+        (their historical attendance/leave/payroll records are untouched —
+        this only ever changes their `role`/`branch` fields)
+      - promotes the target employee to Branch Admin and assigns them to
+        this branch
+      - repoints Branch.hr at the new admin, cascading via the same
+        _cascade_hr() helper BranchDetailView.put/patch already use
+      - audit-logs both sides of the change
+
+    Reuses the exact same role-resolution logic as the Add-Branch "assign an
+    existing employee" flow (applyLeaderRole in BranchManagement.tsx) rather
+    than introducing a second way to decide what "the Branch Admin role" is.
+    Gated on branches.edit — the same permission that already guards every
+    other branch-admin-affecting action (BranchDetailView.put/patch), so this
+    doesn't loosen who can change a branch's admin.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'branches.edit'):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        try:
+            branch = Branch.objects.select_related('hr').get(pk=pk)
+        except Branch.DoesNotExist:
+            return error('Branch not found.', http_status=status.HTTP_404_NOT_FOUND)
+        if _branch_out_of_scope(request.user, branch):
+            return error(_PERM_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+
+        employee_id = (request.data.get('employee_id') or '').strip() if isinstance(request.data.get('employee_id'), str) else request.data.get('employee_id')
+        if not employee_id:
+            return error('employee_id is required.')
+        try:
+            # Looked up by the employee_id code (e.g. "EMP001"), not the row's
+            # real pk — matches _get_employee()'s convention in accounts/views.py,
+            # which is what the frontend's employee picker actually sends as
+            # ApiEmployeeOption.id (see accounts/views.py _employee_dict: 'id' is
+            # user.employee_id, 'uuid' is the real pk — two different fields).
+            new_admin = User.objects.select_related('role').get(employee_id=employee_id)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if not new_admin.is_active:
+            return error(f'{new_admin.full_name} is inactive and cannot be assigned as Branch Admin.')
+        if new_admin.must_change_password:
+            return error(
+                f'{new_admin.full_name} has not completed onboarding yet and cannot be '
+                'assigned as Branch Admin.'
+            )
+        if new_admin.role and new_admin.role.role_permissions.filter(permission__codename='settings.edit').exists():
+            return error(
+                f'{new_admin.full_name} is a Company Admin — reassign them from the '
+                'Employees page instead of through Branch Admin reassignment.'
+            )
+
+        old_admin = branch.hr
+        if old_admin and old_admin.pk == new_admin.pk:
+            return error(f'{new_admin.full_name} is already the Branch Admin for this branch.')
+
+        branch_admin_role = _branch_admin_role()
+        if not branch_admin_role:
+            return error(
+                'No Branch Admin role is configured for this company.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        employee_role = Role.objects.filter(name='employee', is_active=True).first()
+        if old_admin and not employee_role:
+            return error(
+                'The base Employee role is not configured for this company — '
+                'cannot safely reassign.',
+                http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        ip_address     = get_client_ip(request)
+        effective_date = timezone.now().date()
+        remarks        = f'Branch Admin reassignment for {branch.branch_name}.'
+        with transaction.atomic():
+            if old_admin and old_admin.pk != new_admin.pk:
+                old_role_name = old_admin.role.name if old_admin.role else None
+                old_admin.role = employee_role
+                old_admin.save(update_fields=['role', 'updated_at'])
+                AuditLog.objects.create(
+                    user=request.user, action='branch_admin_removed', module='employees',
+                    object_id=str(old_admin.id),
+                    changes={
+                        'employee_id': old_admin.employee_id, 'full_name': old_admin.full_name,
+                        'branch': branch.branch_name,
+                        'role': {'from': old_role_name, 'to': employee_role.name},
+                    },
+                    branch=old_admin.branch, ip_address=ip_address,
+                )
+                # Same history mechanism EmployeeDetailView.put() uses for any
+                # role change — keeps this reassignment visible on the old
+                # admin's own Promotion History tab, not just in AuditLog.
+                PromotionRecord.objects.create(
+                    employee=old_admin, previous_role=old_role_name or '',
+                    new_role=employee_role.name,
+                    previous_designation=old_admin.designation or '',
+                    new_designation=old_admin.designation or '',
+                    effective_date=effective_date, remarks=remarks, promoted_by=request.user,
+                )
+
+            new_role_name = new_admin.role.name if new_admin.role else None
+            old_new_admin_branch = new_admin.branch
+            new_admin.role = branch_admin_role
+            new_admin.branch = branch.branch_name
+            new_admin.save(update_fields=['role', 'branch', 'updated_at'])
+            AuditLog.objects.create(
+                user=request.user, action='branch_admin_assigned', module='employees',
+                object_id=str(new_admin.id),
+                changes={
+                    'employee_id': new_admin.employee_id, 'full_name': new_admin.full_name,
+                    'branch': {'from': old_new_admin_branch, 'to': branch.branch_name},
+                    'role': {'from': new_role_name, 'to': branch_admin_role.name},
+                },
+                branch=branch.branch_name, ip_address=ip_address,
+            )
+            PromotionRecord.objects.create(
+                employee=new_admin, previous_role=new_role_name or '',
+                new_role=branch_admin_role.name,
+                previous_designation=new_admin.designation or '',
+                new_designation=new_admin.designation or '',
+                effective_date=effective_date, remarks=remarks, promoted_by=request.user,
+            )
+
+            old_hr_id = branch.hr_id
+            branch.hr = new_admin
+            branch.save(update_fields=['hr', 'updated_at'])
+            _cascade_hr(branch, old_hr_id)
+
+            AuditLog.objects.create(
+                user=request.user, action='branch_admin_reassigned', module='branch',
+                object_id=str(branch.pk),
+                changes={
+                    'branch_code': branch.branch_code, 'branch_name': branch.branch_name,
+                    'previous_admin': {'id': str(old_admin.id), 'name': old_admin.full_name} if old_admin else None,
+                    'new_admin': {'id': str(new_admin.id), 'name': new_admin.full_name},
+                },
+                branch=branch.branch_name, ip_address=ip_address,
+            )
+
+        logger.info(
+            'Branch "%s" admin reassigned from %s to %s by %s',
+            branch.branch_code, old_admin.email if old_admin else '(none)',
+            new_admin.email, request.user.email,
+        )
+        branch.refresh_from_db()
+        return success(
+            f'Branch Admin for "{branch.branch_name}" reassigned to {new_admin.full_name}.',
+            data=BranchSerializer(branch).data,
+        )
 
 
 # ─── Branch Geofencing ───────────────────────────────────────────────────────
