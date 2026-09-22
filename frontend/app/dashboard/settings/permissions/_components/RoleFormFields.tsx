@@ -90,7 +90,7 @@ export default function RoleFormFields({ form, errors, permissionsMap, onChange,
             onChange={e => onChange({ can_manage_team: e.target.checked })}
           />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-surface)" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
               Can manage team
             </div>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>

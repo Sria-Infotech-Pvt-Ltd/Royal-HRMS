@@ -17,8 +17,10 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -29,7 +31,7 @@ from core.pagination import paginate, paginated_data
 from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, get_client_ip, success
 
-from apps.attendance.models import AttendanceCorrection
+from apps.attendance.models import AttendanceCorrection, WorkingHoursPolicy, WeeklyTimesheetSubmission
 from apps.attendance.serializers_my_attendance import (
     CalendarSerializer,
     CorrectionReadSerializer,
@@ -174,6 +176,72 @@ class TodayAttendanceView(APIView):
         return success(
             "Today's attendance retrieved successfully.",
             TodayAttendanceSerializer(session).data,
+        )
+
+
+class MyShiftView(APIView):
+    """
+    GET /api/attendance/my-shift/
+
+    Real-but-approximate "what shift am I on" for the ESS Home tab —
+    there is no per-employee WorkingHoursPolicy assignment field on User
+    today, so this returns the organization's own default policy (the one
+    HR/admin marked is_default=True), not a guessed/hardcoded shift name.
+    IsAuthenticated only (not attendance.view) since this is non-sensitive,
+    org-wide default info every employee should be able to read about
+    their own working hours.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        policy = WorkingHoursPolicy.objects.filter(is_active=True, is_default=True).first()
+        if not policy:
+            return success('No default shift configured.', None)
+        return success('Default shift retrieved.', {
+            'name': policy.name,
+            'start_time': policy.start_time.strftime('%H:%M'),
+            'end_time': policy.end_time.strftime('%H:%M'),
+        })
+
+
+class MyWeeklyTimesheetView(APIView):
+    """
+    GET  /api/attendance/my-weekly-timesheet/  — real hours logged this week
+         (summed from AttendanceRecord, see AttendanceDashboardService.
+         get_week_hours) plus whether this week's already been submitted.
+    POST /api/attendance/my-weekly-timesheet/  — real submit action, backed
+         by WeeklyTimesheetSubmission (idempotent per employee+week).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _week_bounds(today):
+        week_start = today - timedelta(days=today.weekday())  # Monday
+        week_end = week_start + timedelta(days=6)
+        return week_start, week_end
+
+    def get(self, request: Request) -> Response:
+        today = timezone.localdate()
+        week_start, week_end = self._week_bounds(today)
+        data = AttendanceDashboardService.get_week_hours(request.user, week_start, week_end)
+        submission = WeeklyTimesheetSubmission.objects.filter(
+            employee=request.user, week_start=week_start,
+        ).first()
+        data['submitted'] = submission is not None
+        data['submitted_at'] = submission.submitted_at.isoformat() if submission else None
+        return success('Weekly timesheet retrieved.', data)
+
+    def post(self, request: Request) -> Response:
+        today = timezone.localdate()
+        week_start, _ = self._week_bounds(today)
+        _, created = WeeklyTimesheetSubmission.objects.get_or_create(
+            employee=request.user, week_start=week_start,
+        )
+        return success(
+            'Timesheet submitted.' if created else 'Timesheet already submitted for this week.',
+            {'week_start': week_start.isoformat()},
         )
 
 

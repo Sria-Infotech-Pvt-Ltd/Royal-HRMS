@@ -135,7 +135,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
       }
     >
           {/* Instructions */}
-          <div style={{ padding: "12px 14px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
+          <div style={{ padding: "12px 14px", borderRadius: 8, background: "color-mix(in srgb, var(--primary) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--primary) 15%, transparent)", marginBottom: 20, fontSize: 12, color: "var(--on-variant)", lineHeight: 1.6 }}>
             <div style={{ fontWeight: 600, color: "var(--primary)", marginBottom: 4, fontSize: 12 }}>
               <i className="ti ti-info-circle" style={{ marginRight: 5 }} />File Requirements
             </div>
@@ -163,7 +163,7 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             style={{
               border: `2px dashed ${file ? "var(--primary)" : "var(--outline-v)"}`,
               borderRadius: 10, padding: "28px 20px", textAlign: "center",
-              cursor: "pointer", background: file ? "rgba(124,58,237,0.04)" : "var(--bg-low)",
+              cursor: "pointer", background: file ? "color-mix(in srgb, var(--primary) 4%, transparent)" : "var(--bg-low)",
               transition: "border-color 0.15s, background 0.15s", marginBottom: 16,
             }}
           >
@@ -209,15 +209,15 @@ export default function BulkImportModal({ onClose, onSuccess }: Props) {
             <div>
               <div style={{ borderRadius: 8, border: "1px solid var(--outline-v)", overflow: "hidden", marginBottom: 16 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center" }}>
-                  <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: "rgba(34,197,94,0.08)" }}>
+                  <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: "color-mix(in srgb, var(--success) 8%, transparent)" }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: "var(--success)" }}>{result.created}</div>
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Created</div>
                   </div>
-                  <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: result.skipped > 0 ? "rgba(234,179,8,0.1)" : undefined }}>
+                  <div style={{ padding: "12px 8px", borderRight: "1px solid var(--outline-v)", background: result.skipped > 0 ? "color-mix(in srgb, var(--warn) 10%, transparent)" : undefined }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: result.skipped > 0 ? "var(--warn)" : "var(--on-variant)" }}>{result.skipped}</div>
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Skipped</div>
                   </div>
-                  <div style={{ padding: "12px 8px", background: result.failed > 0 ? "rgba(239,68,68,0.08)" : undefined }}>
+                  <div style={{ padding: "12px 8px", background: result.failed > 0 ? "color-mix(in srgb, var(--error) 8%, transparent)" : undefined }}>
                     <div style={{ fontSize: 22, fontWeight: 700, color: result.failed > 0 ? "var(--error)" : "var(--on-variant)" }}>{result.failed}</div>
                     <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>Failed</div>
                   </div>

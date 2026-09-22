@@ -1,27 +1,37 @@
 "use client";
 
 import { useState } from "react";
+import Modal from "@/components/Modal";
 import LeaveDashboard from "./_components/LeaveDashboard";
 import ApplyLeaveForm from "./_components/ApplyLeaveForm";
 import TeamCalendar   from "./_components/TeamCalendar";
 import LeaveAnalytics from "./_components/LeaveAnalytics";
+import UpcomingHolidaysCard from "./_components/UpcomingHolidaysCard";
+import TeamCoverageCard from "./_components/TeamCoverageCard";
+import LeavePolicyGuidanceCard from "./_components/LeavePolicyGuidanceCard";
 
-type TabId = "dashboard" | "apply" | "calendar" | "analytics";
+type DetailTab = "dashboard" | "apply" | "calendar" | "analytics";
 
-interface Props { initialTab?: TabId; onBack?: () => void }
+interface Props {
+  onBack?:     () => void;
+  // Deep links (Reports' "leave-analytics" tile, ManagerDashboard's
+  // "apply_leave" action item, page.tsx's own ?tab= query) still land
+  // straight on the intended surface — now opened as a modal on top of the
+  // one continuous page instead of switching to a different sub-tab.
+  initialTab?: DetailTab;
+}
 
-// Approving leave/expense/attendance-correction requests — for both managers
-// and HR — lives entirely in the Approvals module (/dashboard/approvals) now.
-// This page is scoped to applying for and tracking one's own leave only.
-export default function LeavePageClient({ initialTab = "dashboard", onBack }: Props) {
-  const tabs: { id: TabId; label: string }[] = [
-    { id: "dashboard", label: "Dashboard"    },
-    { id: "apply",     label: "Apply Leave"  },
-    { id: "calendar",  label: "Team Calendar" },
-    { id: "analytics", label: "Analytics"    },
-  ];
-
-  const [active, setActive] = useState<TabId>(initialTab);
+// One continuous page (balances, requests, holidays, team coverage, policy
+// guidance) — matching the reference layout, which never shows the old
+// Dashboard/Apply Leave/Team Calendar/Analytics sub-tab bar. "Request leave"
+// opens the same real Apply Leave form as before, now in a modal instead of
+// a tab switch; Team Calendar and Analytics stay fully reachable (their real
+// fetches and functionality are unchanged) via modals opened from this page
+// rather than being gated behind tabs.
+export default function LeavePageClient({ onBack, initialTab = "dashboard" }: Props) {
+  const [showApply,    setShowApply]    = useState(initialTab === "apply");
+  const [showCalendar, setShowCalendar] = useState(initialTab === "calendar");
+  const [showAnalytics, setShowAnalytics] = useState(initialTab === "analytics");
 
   return (
     <div>
@@ -35,29 +45,46 @@ export default function LeavePageClient({ initialTab = "dashboard", onBack }: Pr
               <i className="ti ti-arrow-left" /> Back to overview
             </button>
           )}
-          <div className="page-title">Leave Management</div>
-          <div className="page-sub">Apply for leave and track your own requests</div>
+          <div className="page-title">Leave</div>
+          <div className="page-sub">Balances, requests, holidays and team coverage.</div>
+        </div>
+        <div className="page-actions" style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={() => setShowAnalytics(true)} suppressHydrationWarning>
+            <i className="ti ti-chart-bar" /> Analytics
+          </button>
+          <button className="btn btn-filled" onClick={() => setShowApply(true)} suppressHydrationWarning>
+            Request leave
+          </button>
         </div>
       </div>
 
-      <div className="tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActive(tab.id)}
-            className={`tab${active === tab.id ? " active" : ""}`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <LeaveDashboard
+          onApply={() => setShowApply(true)}
+          onViewCalendar={() => setShowCalendar(true)}
+        />
+        <UpcomingHolidaysCard />
+        <TeamCoverageCard onOpenFullCalendar={() => setShowCalendar(true)} />
+        <LeavePolicyGuidanceCard />
       </div>
 
-      <div>
-        {active === "dashboard" && <LeaveDashboard onApply={() => setActive("apply")} onViewCalendar={() => setActive("calendar")} />}
-        {active === "apply"     && <ApplyLeaveForm onCancel={() => setActive("dashboard")} />}
-        {active === "calendar"  && <TeamCalendar />}
-        {active === "analytics" && <LeaveAnalytics />}
-      </div>
+      {showApply && (
+        <Modal title="Request leave" onClose={() => setShowApply(false)} size="lg" bodyStyle={{ padding: 0 }}>
+          <ApplyLeaveForm onCancel={() => setShowApply(false)} />
+        </Modal>
+      )}
+
+      {showCalendar && (
+        <Modal title="Team calendar" onClose={() => setShowCalendar(false)} size="lg">
+          <TeamCalendar />
+        </Modal>
+      )}
+
+      {showAnalytics && (
+        <Modal title="Leave analytics" onClose={() => setShowAnalytics(false)} size="lg">
+          <LeaveAnalytics />
+        </Modal>
+      )}
     </div>
   );
 }

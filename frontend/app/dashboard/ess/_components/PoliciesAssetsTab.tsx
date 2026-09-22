@@ -46,11 +46,14 @@ const STATUS_BADGE: Record<string, string> = {
   open: "badge-warn", in_progress: "badge-info", resolved: "badge-success",
 };
 
-interface Props {
-  onNavigateToDocuments: () => void;
+function formatMonthYear(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
-export default function PoliciesAssetsTab({ onNavigateToDocuments }: Props) {
+export default function PoliciesAssetsTab() {
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
   const { data: assets, loading: assetsLoading, error: assetsError } =
@@ -70,7 +73,7 @@ export default function PoliciesAssetsTab({ onNavigateToDocuments }: Props) {
         <div>
           <h2 style={{ margin: 0, fontSize: 20 }}>Policies &amp; assets</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--on-variant)" }}>
-            Company policies, your issued equipment, and asset requests.
+            Access company guidance and track assigned equipment.
           </p>
         </div>
         <button className="btn btn-filled" onClick={() => setIsRequestModalOpen(true)}>
@@ -82,9 +85,13 @@ export default function PoliciesAssetsTab({ onNavigateToDocuments }: Props) {
         policies={policyList}
         loading={policiesLoading}
         error={policiesError}
-        onNavigateToDocuments={onNavigateToDocuments}
       />
-      <AssignedAssetsCard assets={assetList} loading={assetsLoading} error={assetsError} />
+      <AssignedAssetsCard
+        assets={assetList}
+        loading={assetsLoading}
+        error={assetsError}
+        onReportIssue={() => setIsRequestModalOpen(true)}
+      />
       <AssetRequestsCard requests={assetRequests} loading={requestsLoading} error={requestsError} />
       <PolicyQuickReferenceGrid />
 
@@ -98,17 +105,20 @@ export default function PoliciesAssetsTab({ onNavigateToDocuments }: Props) {
   );
 }
 
-function CompanyPoliciesCard({ policies, loading, error, onNavigateToDocuments }: {
-  policies: ApiDocument[]; loading: boolean; error: string | null; onNavigateToDocuments: () => void;
+function CompanyPoliciesCard({ policies, loading, error }: {
+  policies: ApiDocument[]; loading: boolean; error: string | null;
 }) {
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div className="card-title"><i className="ti ti-file-text" /> Company policies</div>
-        <button className="btn btn-ghost btn-sm" onClick={onNavigateToDocuments}>
+        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
           <i className="ti ti-folder" /> Document Center
-        </button>
+        </a>
       </div>
+      <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
+        Read the current published version before raising an exception.
+      </p>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
@@ -124,11 +134,17 @@ function CompanyPoliciesCard({ policies, loading, error, onNavigateToDocuments }
       ) : (
         <div style={{ padding: "4px 24px 16px" }}>
           {policies.map(doc => (
-            <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-variant)", gap: 12 }}>
+            <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--outline-v)", gap: 12 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{doc.title}</div>
+                {/* Real version/effective_date from the Document model when set (policy
+                    documents only — see accounts/models.py:Document.version/effective_date).
+                    Falls back to the plain category label for any document that has no
+                    version set, rather than fabricating one. */}
                 <div style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                  {CATEGORY_META[doc.category].label} · Effective {formatDate(doc.updated_at || doc.uploaded_at)}
+                  {doc.version
+                    ? <>v{doc.version}{doc.effective_date && <> · Effective {formatMonthYear(doc.effective_date)}</>}</>
+                    : CATEGORY_META[doc.category].label}
                 </div>
               </div>
               <a className="btn btn-ghost btn-sm" href={doc.file_url} target="_blank" rel="noreferrer">
@@ -142,14 +158,17 @@ function CompanyPoliciesCard({ policies, loading, error, onNavigateToDocuments }
   );
 }
 
-function AssignedAssetsCard({ assets, loading, error }: {
-  assets: ApiAsset[]; loading: boolean; error: string | null;
+function AssignedAssetsCard({ assets, loading, error, onReportIssue }: {
+  assets: ApiAsset[]; loading: boolean; error: string | null; onReportIssue: () => void;
 }) {
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-header">
         <div className="card-title"><i className="ti ti-device-laptop" /> Assigned assets</div>
       </div>
+      <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
+        Report a missing or damaged asset through an IT request.
+      </p>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
       {loading ? (
         <div className="empty-state">
@@ -192,6 +211,11 @@ function AssignedAssetsCard({ assets, loading, error }: {
           </table>
         </div>
       )}
+      <div style={{ padding: "0 24px 20px" }}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onReportIssue}>
+          <i className="ti ti-alert-triangle" /> Report asset issue
+        </button>
+      </div>
     </div>
   );
 }
@@ -213,8 +237,8 @@ function AssetRequestsCard({ requests, loading, error }: {
       ) : requests.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-clipboard-list" />
-          <h3>No asset requests yet</h3>
-          <p>Requests submitted via &quot;Request an asset&quot; will be tracked here.</p>
+          <h3>No asset requests</h3>
+          <p>IT &amp; Facilities will track requests here.</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -243,12 +267,15 @@ function AssetRequestsCard({ requests, loading, error }: {
 }
 
 const QUICK_REFERENCE = [
-  { icon: "ti-beach", title: "Leave", text: "Apply at least 2 days ahead where possible; carried-forward leave expires per policy." },
-  { icon: "ti-clock", title: "Attendance", text: "Clock in/out within the geofenced radius; corrections need a manager's approval." },
-  { icon: "ti-receipt", title: "Expenses", text: "Attach a receipt for every claim over the category's no-receipt threshold." },
-  { icon: "ti-device-laptop", title: "Assets", text: "Report a lost or damaged asset to HR immediately to avoid recovery charges." },
+  { label: "LEAVE",      text: "Submit dates and reason; manager checks balance and coverage." },
+  { label: "ATTENDANCE", text: "Original punches are retained when a correction is approved." },
+  { label: "EXPENSES",   text: "Provide date, amount, receipt reference and business purpose." },
+  { label: "ASSETS",     text: "Assigned equipment is tracked; damage or loss is routed to IT." },
 ];
 
+// Reuses the exact gray "var(--bg-mid)" tile pattern ProfileSummaryTab.tsx
+// uses for "My record at a glance", rather than inventing a second card
+// visual style for the same kind of label/value tile.
 function PolicyQuickReferenceGrid() {
   return (
     <div className="card">
@@ -256,15 +283,13 @@ function PolicyQuickReferenceGrid() {
         <div className="card-title"><i className="ti ti-info-circle" /> Policy quick reference</div>
       </div>
       <p style={{ margin: "0 24px 8px", fontSize: 12, color: "var(--on-variant)" }}>
-        Illustrative demo guidance only — refer to the documents above for the current policy.
+        Illustrative demo guidance only; the actual company policy must be supplied and approved before operational use.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, padding: "8px 24px 24px" }}>
+      <div style={{ padding: "4px 24px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         {QUICK_REFERENCE.map(tile => (
-          <div key={tile.title} style={{ border: "1px solid var(--outline-variant)", borderRadius: 10, padding: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, fontWeight: 600, fontSize: 13 }}>
-              <i className={`ti ${tile.icon}`} /> {tile.title}
-            </div>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--on-variant)" }}>{tile.text}</p>
+          <div key={tile.label} style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>{tile.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--on-bg)", marginTop: 4 }}>{tile.text}</div>
           </div>
         ))}
       </div>

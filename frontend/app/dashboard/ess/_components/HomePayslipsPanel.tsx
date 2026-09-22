@@ -3,10 +3,13 @@
 // Right-column "Payslips & documents" panel. Payslip rows come from the same
 // /payroll/my-payslips/ fetch HomeTab.tsx already makes for the stat tile —
 // this just renders the most recent few plus a download link. "Form 16" and
-// "Employment letter" have no dedicated endpoint/document-type in this repo
-// (documents/_data.ts only models generic policy/form/template/other
-// categories), so those two quick links route into the Documents tab itself
-// rather than a fabricated direct-download URL.
+// "Employment letter" are company-issued documents with no dedicated
+// endpoint/document-type in this repo, so those two quick links go straight
+// to the shared Document Center (/dashboard/documents, category=form/other)
+// rather than a fabricated direct-download URL. They intentionally do NOT
+// route into the ESS "Documents" tab — that tab is MyDocumentsTab, a
+// personal "submit my own document for verification" screen, not a place to
+// browse company-provided forms/letters.
 
 interface HomePayslipRow {
   cycle:       string;
@@ -16,12 +19,11 @@ interface HomePayslipRow {
 }
 
 interface Props {
-  payslips:     HomePayslipRow[];
-  onViewAll:    () => void;
-  onOpenDocuments: () => void;
+  payslips:  HomePayslipRow[];
+  onViewAll: () => void;
 }
 
-export default function HomePayslipsPanel({ payslips, onViewAll, onOpenDocuments }: Props) {
+export default function HomePayslipsPanel({ payslips, onViewAll }: Props) {
   return (
     <div className="card">
       <div className="card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -57,12 +59,12 @@ export default function HomePayslipsPanel({ payslips, onViewAll, onOpenDocuments
       )}
 
       <div style={{ display: "flex", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--outline-v)" }}>
-        <button onClick={onOpenDocuments} className="btn btn-ghost btn-sm">
+        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
           <i className="ti ti-file-invoice" /> Form 16
-        </button>
-        <button onClick={onOpenDocuments} className="btn btn-ghost btn-sm">
+        </a>
+        <a href="/dashboard/documents" className="btn btn-ghost btn-sm">
           <i className="ti ti-mail" /> Employment letter
-        </button>
+        </a>
       </div>
     </div>
   );

@@ -334,6 +334,7 @@ def _employee_dict(user: User) -> dict:
         'emergency_relationship': p.emergency_relationship if p else '',
         'emergency_phone':        p.emergency_phone        if p else '',
         'emergency_email':        p.emergency_email        if p else '',
+        'personal_email':         p.personal_email         if p else '',
         # HR-created custom fields (Settings > Onboarding Fields) — see
         # OnboardingFieldConfig/EmployeeProfile.custom_field_values.
         'custom_field_values': (p.custom_field_values or {}) if p else {},
@@ -393,6 +394,14 @@ def _employee_dict(user: User) -> dict:
         'full_name':      user.full_name,
         'email':          user.email,
         'phone':          user.phone,
+        # Public ImageKit URL (or None) — same field name/shape as
+        # MyProfileSerializer.profile_photo_url, so every consumer of this
+        # dict (Employee Directory, Employee full-profile drawer/page) can
+        # render the real uploaded photo instead of always falling back to
+        # initials. profile_photo's storage backend (ImageKitStorage) is
+        # public-by-design and already returns an absolute CDN URL, so no
+        # request.build_absolute_uri() wrapping is needed here.
+        'profile_photo_url': user.profile_photo.url if user.profile_photo else None,
         'department':     user.department,
         'designation':    user.designation,
         'position_id':    str(current_placement.position_id) if current_placement else None,
@@ -425,6 +434,9 @@ def _employee_dict(user: User) -> dict:
         'last_working_day':   active_separation.proposed_last_working_day.isoformat() if active_separation else None,
         'org_unit_name':        org_unit_name,
         'org_unit_parent_name': org_unit_parent_name,
+        # Real Position.grade (e.g. "L2") this employee currently holds —
+        # None when unassigned, rather than a fabricated pay-scale string.
+        'position_grade': current_placement.position.grade if (current_placement and current_placement.position.grade) else None,
     }
 
     # Managers ARE the reporting manager for others — they have no reporting manager themselves.
@@ -3840,6 +3852,7 @@ _PROFILE_FIELD_KEYS = frozenset({
     'account_holder_name', 'account_type', 'account_number', 'ifsc_code',
     'bank_name', 'bank_branch_name',
     'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
+    'personal_email',
     # uan_number/name_as_per_aadhar/esi_number were already declared on
     # EmployeeProfileSerializer and (for the first two) already rendered as
     # editable fields on this page's EPF/Statutory tab — but missing from
@@ -4477,6 +4490,43 @@ class EmployeeActionHistoryView(APIView):
             row['effective_to'] = '9999-12-31' if row['is_current'] else rows[i + 1]['effective_from']
 
         return success('Action history retrieved.', data=rows)
+
+
+class EmployeeAuditTrailView(APIView):
+    """GET /employees/<employee_id>/audit-trail/ — the Employee Drawer's
+    "Audit Trail" section. Self-viewers (ESS "My Profile" → "Open full
+    employee profile") get a real AuditLog row recorded for their own view
+    every time this is called, then see their own record's most recent
+    entries — mirrors EmployeeActionHistoryView's is_self bypass so an
+    ordinary employee (who normally lacks audit.view) can see who/when their
+    own record was looked at, without exposing the org-wide audit log. A
+    viewer with audit.view (HR/Admin) can look up anyone's trail without
+    logging a "view" event for themselves — only the self-service path
+    is itself an event worth recording."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, employee_id: str):
+        is_self = request.user.employee_id == employee_id
+        if not is_self and not _has_perm(request.user, 'audit.view'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or (not is_self and _employee_out_of_branch_scope(request.user, employee)):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if is_self:
+            AuditLog.objects.create(
+                user=request.user, action='profile_viewed_self', module='employees',
+                object_id=str(employee.id), branch=employee.branch or '',
+            )
+
+        rows = (
+            AuditLog.objects
+            .filter(module='employees', object_id=str(employee.id))
+            .select_related('user', 'user__role')
+            .order_by('-created_at')[:5]
+        )
+        return success('Audit trail retrieved.', data=AuditLogSerializer(rows, many=True).data)
 
 
 class EmployeeRevealSensitiveView(APIView):
@@ -6808,6 +6858,32 @@ class MyProfileView(APIView):
 
         logger.info('Profile updated by %s', request.user.email)
         return success('Profile updated successfully.')
+
+
+class MyEmploymentLetterPdfView(APIView):
+    """Streams a real, on-demand-rendered employment verification letter PDF
+    for the caller's own record (see services_employment_letter.py — mirrors
+    payroll's MyPayslipPdfView pattern). Backs the ESS Employment tab's
+    "Employment verification letter" download row."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.accounts.services_employment_letter import render_employment_letter_pdf
+
+        pdf_bytes = render_employment_letter_pdf(request.user)
+        filename = f'employment-letter-{request.user.employee_id or request.user.pk}.pdf'
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        AuditLog.objects.create(
+            user=request.user, action='employment_letter_downloaded', module='accounts',
+            object_id=str(request.user.pk),
+            changes={'employee_id': request.user.employee_id or ''},
+            branch=request.user.branch or '',
+            ip_address=get_client_ip(request),
+        )
+        return response
 
 
 # ─── HR & Manager dropdown lists ─────────────────────────────────────────────

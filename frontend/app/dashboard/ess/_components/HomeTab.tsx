@@ -124,18 +124,18 @@ export default function HomeTab({ onNavigate, status }: Props) {
   ];
 
   const primaryActions = [
-    { icon: "ti-beach",       title: "Request leave",            sub: "Check balance and submit dates",       onClick: () => onNavigate("leave") },
-    { icon: "ti-clock-edit",  title: "Regularize attendance",     sub: "Correct a missing or late punch",      onClick: () => onNavigate("attendance") },
-    { icon: "ti-receipt",     title: "Download payslip",          sub: "Monthly salary statements",            onClick: () => onNavigate("payslips") },
-    { icon: "ti-user-circle", title: "View my full profile",      sub: "Personal, bank and emergency details", onClick: () => onNavigate("profile") },
-    { icon: "ti-folder",      title: "Upload document",           sub: "Add a document to your profile",       onClick: () => onNavigate("documents") },
-    { icon: "ti-headset",     title: "Ask HR",                    sub: "Raise and track a support request",    onClick: () => onNavigate("hrHelp") },
+    { icon: "ti-beach",       title: "Request leave",            sub: "Check balance and submit dates",             onClick: () => onNavigate("leave") },
+    { icon: "ti-clock-edit",  title: "Regularize attendance",     sub: "Correct a missing or late punch",            onClick: () => onNavigate("attendance") },
+    { icon: "ti-receipt",     title: "Download payslip",          sub: "View monthly salary statements",             onClick: () => onNavigate("payslips") },
+    { icon: "ti-user-circle", title: "View my full profile",      sub: "Open the same employee record used by Admin", onClick: () => onNavigate("profile") },
+    { icon: "ti-folder",      title: "Upload document",           sub: "Submit declarations or certificates",        onClick: () => onNavigate("documents") },
+    { icon: "ti-headset",     title: "Ask HR",                    sub: "Raise and track a support request",          onClick: () => onNavigate("hrHelp") },
   ];
 
   const secondaryActions = [
-    { icon: "ti-wallet",         title: "Claim an expense",   sub: "Submit a reimbursement claim",        onClick: () => onNavigate("expenses") },
-    { icon: "ti-file-text",      title: "Complete appraisal", sub: "Finish your review for this cycle",   onClick: () => onNavigate("appraisals") },
-    { icon: "ti-shield-check",   title: "Read policies",      sub: "Company policies and shared assets",  onClick: () => onNavigate("assets") },
+    { icon: "ti-wallet",         title: "Claim an expense",   sub: "Submit a work expense for approval",          onClick: () => onNavigate("expenses") },
+    { icon: "ti-file-text",      title: "Complete appraisal", sub: "Self-review, outcome and development plan",   onClick: () => onNavigate("appraisals") },
+    { icon: "ti-shield-check",   title: "Read policies",      sub: "Company guidance and assigned assets",        onClick: () => onNavigate("assets") },
   ];
 
   return (
@@ -149,11 +149,10 @@ export default function HomeTab({ onNavigate, status }: Props) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-          <HomeTodayPanel status={status} stats={attStats} />
+          <HomeTodayPanel status={status} />
           <HomePayslipsPanel
             payslips={payslips?.results ?? []}
             onViewAll={() => onNavigate("payslips")}
-            onOpenDocuments={() => onNavigate("documents")}
           />
         </div>
       </div>

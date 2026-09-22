@@ -31,6 +31,13 @@ class PayrollSettingsSerializer(serializers.ModelSerializer):
             'edli_rate',
             'edli_wage_ceiling',
             'epf_admin_rate',
+            # Exposed so the ESS payslip screen can show a real "Gratuity
+            # provision" figure (basic * gratuity_rate / 100 — same formula
+            # services_estimate.py already uses for the Hire wizard CTC
+            # preview) instead of fabricating one. Gratuity itself is still
+            # not persisted per payslip anywhere (see the model docstring),
+            # so this stays a live estimate rather than a historical record.
+            'gratuity_rate',
             'created_at',
             'updated_at',
         ]
@@ -373,6 +380,7 @@ class EmployeePayslipSerializer(serializers.ModelSerializer):
             'pt_deduction',
             'lwf_employee',
             'lwf_employer',
+            'income_tax',
             'adjustments_earning',
             'adjustments_deduction',
             'total_deductions',

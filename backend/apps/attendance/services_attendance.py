@@ -617,7 +617,8 @@ class AttendanceDashboardService:
         holiday_dates = cls._holiday_dates(month_start, month_end, branch_name)
         off_dates     = cls._weekly_off_dates(employee, month_start, month_end)
 
-        working_days = days_present = lop_pending = 0
+        working_days = days_present = lop_pending = missing_punch = 0
+        late_dates: list[date] = []
         for day_num in range(1, days_in_month + 1):
             cur = date(year, month, day_num)
             if cur > today:
@@ -630,6 +631,10 @@ class AttendanceDashboardService:
                 days_present += 1
             elif key == AttendanceRecord.STATUS_ABSENT:
                 lop_pending += 1
+            elif key == AttendanceRecord.STATUS_INCOMPLETE:
+                missing_punch += 1
+            if key == AttendanceRecord.STATUS_LATE:
+                late_dates.append(cur)
 
         late_arrivals = sum(1 for r in records_list if r.is_late)
         total_minutes = sum(r.total_working_minutes for r in records_list)
@@ -640,6 +645,32 @@ class AttendanceDashboardService:
             if working_days else 0
         )
 
+        # Expected minutes/day comes from the org's configured shift (start,
+        # end, break deduction) — not a hardcoded number — falling back to a
+        # standard 8h day only when no AttendanceWorkingHours row exists yet.
+        settings_obj = _get_settings()
+        working_hours = getattr(settings_obj, 'working_hours', None)
+        if working_hours:
+            shift_minutes = (
+                (working_hours.shift_end.hour * 60 + working_hours.shift_end.minute)
+                - (working_hours.shift_start.hour * 60 + working_hours.shift_start.minute)
+                - working_hours.break_duration_minutes
+            )
+        else:
+            shift_minutes = 8 * 60
+        expected_minutes = working_days * max(shift_minutes, 0)
+        work_hours_pct = (
+            round(total_minutes / expected_minutes * 100)
+            if expected_minutes else 0
+        )
+
+        # "Regularized" late arrivals: late-arrival dates this month that
+        # already have an approved correction request against them.
+        from apps.attendance.models import AttendanceCorrection
+        late_arrivals_regularized = AttendanceCorrection.objects.filter(
+            employee=employee, date__in=late_dates, status=AttendanceCorrection.STATUS_APPROVED,
+        ).count() if late_dates else 0
+
         return {
             'days_present':      days_present,
             'late_arrivals':     late_arrivals,
@@ -647,6 +678,33 @@ class AttendanceDashboardService:
             'avg_hours_per_day': avg_hours,
             'attendance_percentage': attendance_pct,
             'working_days':      working_days,
+            'missing_punch':     missing_punch,
+            'total_work_minutes': total_minutes,
+            'work_hours_percentage': work_hours_pct,
+            'late_arrivals_regularized': late_arrivals_regularized,
+        }
+
+    @classmethod
+    def get_week_hours(cls, employee, week_start: date, week_end: date) -> dict:
+        """
+        Real hours logged this week, summed from actual AttendanceRecord rows
+        (`total_working_minutes`) — not a fabricated number. `target_hours`
+        is the standard 5-day, 8-hour work week (40h), the same assumption
+        used everywhere else in this codebase that a generic target is
+        needed; it is not this specific employee's contracted hours (no
+        per-employee weekly-hours field exists), so it's a labeled default,
+        not a per-person fact.
+        """
+        records = list(
+            AttendanceRecord.objects
+            .filter(employee=employee, date__gte=week_start, date__lte=week_end)
+        )
+        logged_minutes = sum(r.total_working_minutes for r in records)
+        return {
+            'hours_logged':  round(logged_minutes / 60, 1),
+            'target_hours':  40.0,
+            'week_start':    week_start.isoformat(),
+            'week_end':      week_end.isoformat(),
         }
 
     @classmethod

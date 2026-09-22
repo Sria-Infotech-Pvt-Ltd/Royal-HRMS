@@ -26,9 +26,9 @@ const FIELDS: { key: keyof AppraisalReflectionForm; label: string; placeholder: 
 
 export default function AppraisalReflectionFields({ value, disabled, onChange }: Props) {
   return (
-    <>
+    <div className="form-row cols-2 mb-16">
       {FIELDS.map(field => (
-        <div key={field.key} className="field-group mb-16">
+        <div key={field.key} className="field-group">
           <label className="field-label">{field.label}</label>
           <textarea
             className="field-input"
@@ -40,6 +40,6 @@ export default function AppraisalReflectionFields({ value, disabled, onChange }:
           />
         </div>
       ))}
-    </>
+    </div>
   );
 }

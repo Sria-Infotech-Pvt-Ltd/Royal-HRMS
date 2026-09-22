@@ -3,12 +3,11 @@
 import { useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import Modal from "@/components/Modal";
+import RequestModal from "@/components/RequestModal";
 
 type ExpenseCategory = "travel" | "meals" | "equipment" | "other";
 
 interface FormState {
-  title:       string;
   amount:      string;
   category:    ExpenseCategory | "";
   date:        string;
@@ -27,7 +26,11 @@ const CATEGORIES: { value: ExpenseCategory; label: string; icon: string }[] = [
   { value: "other",     label: "Other",     icon: "ti-dots-circle-horizontal" },
 ];
 
-const EMPTY: FormState = { title: "", amount: "", category: "", date: "", description: "" };
+const CATEGORY_LABEL: Record<ExpenseCategory, string> = Object.fromEntries(
+  CATEGORIES.map(c => [c.value, c.label]),
+) as Record<ExpenseCategory, string>;
+
+const EMPTY: FormState = { amount: "", category: "", date: "", description: "" };
 
 type FormErrors = Partial<Record<keyof FormState | "receipt" | "submit", string>>;
 
@@ -68,7 +71,6 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
 
   function validate(): boolean {
     const errs: FormErrors = {};
-    if (!form.title.trim())            errs.title    = "Expense title is required.";
     if (!form.amount)                  errs.amount   = "Amount is required.";
     else if (Number(form.amount) <= 0) errs.amount   = "Amount must be greater than zero.";
     if (!form.category)                errs.category = "Please select a category.";
@@ -82,8 +84,17 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
     if (!validate()) return;
     setSubmitting(true);
     try {
+      // The model's `title` field has no dedicated input in this form (the
+      // real screen only asks for category/date/amount/purpose/receipt) —
+      // the backend serializer allows it blank, so a short label derived
+      // from the category and purpose is sent instead of leaving it empty.
+      const category = form.category as ExpenseCategory;
+      const derivedTitle = form.description.trim()
+        ? form.description.trim().slice(0, 60)
+        : CATEGORY_LABEL[category];
+
       const formData = new FormData();
-      formData.append("title",        form.title.trim());
+      formData.append("title",        derivedTitle);
       formData.append("amount",       form.amount);
       formData.append("category",     form.category);
       formData.append("expense_date", form.date);
@@ -106,68 +117,18 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
   }
 
   return (
-    <Modal
-      title={
-        <>
-          <i className="ti ti-wallet" style={{ marginRight: 8 }} />
-          Submit New Expense
-        </>
-      }
+    <RequestModal
+      title={<><i className="ti ti-wallet" style={{ marginRight: 8 }} />Expense claim</>}
       onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
-            Cancel
-          </button>
-          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-            {submitting
-              ? <><i className="ti ti-loader-2 spin" /> Submitting…</>
-              : <><i className="ti ti-send" /> Submit Expense</>
-            }
-          </button>
-        </>
-      }
+      onSubmit={handleSubmit}
+      submitting={submitting}
+      error={errors.submit}
     >
-      {errors.submit && (
-            <div className="alert alert-error" style={{ marginBottom: 16 }}>
-              <i className="ti ti-alert-circle" /><div>{errors.submit}</div>
-            </div>
-          )}
-
-          {/* Title */}
-          <div className="field-group mb-16">
-            <label className="field-label">
-              Expense Title <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              type="text"
-              className={`field-input${errors.title ? " field-error" : ""}`}
-              placeholder="e.g. Client visit to Mumbai"
-              value={form.title}
-              onChange={e => setField("title", e.target.value)}
-            />
-            {errors.title && <p className="field-error-msg">{errors.title}</p>}
-          </div>
-
-          {/* Amount + Category */}
-          <div className="form-row cols-2">
+          {/* Category + Date */}
+          <div className="form-row cols-2 mb-16">
             <div className="field-group">
               <label className="field-label">
-                Amount (₹) <span style={{ color: "var(--error)" }}>*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                className={`field-input${errors.amount ? " field-error" : ""}`}
-                placeholder="0.00"
-                value={form.amount}
-                onChange={e => setField("amount", e.target.value)}
-              />
-              {errors.amount && <p className="field-error-msg">{errors.amount}</p>}
-            </div>
-            <div className="field-group">
-              <label className="field-label">
-                Category <span style={{ color: "var(--error)" }}>*</span>
+                Expense Category <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <select
                 className={`field-input field-select${errors.category ? " field-error" : ""}`}
@@ -181,33 +142,48 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
               </select>
               {errors.category && <p className="field-error-msg">{errors.category}</p>}
             </div>
+            <div className="field-group">
+              <label className="field-label">
+                Expense Date <span style={{ color: "var(--error)" }}>*</span>
+              </label>
+              <input
+                type="date"
+                className={`field-input${errors.date ? " field-error" : ""}`}
+                placeholder="dd-mm-yyyy"
+                value={form.date}
+                onChange={e => setField("date", e.target.value)}
+              />
+              {errors.date && <p className="field-error-msg">{errors.date}</p>}
+            </div>
           </div>
 
-          {/* Date */}
-          <div className="field-group mb-16">
-            <label className="field-label">
-              Date <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              type="date"
-              className={`field-input${errors.date ? " field-error" : ""}`}
-              value={form.date}
-              onChange={e => setField("date", e.target.value)}
-            />
-            {errors.date && <p className="field-error-msg">{errors.date}</p>}
-          </div>
-
-          {/* Description */}
-          <div className="field-group mb-16">
-            <label className="field-label">Description</label>
-            <textarea
-              className="field-input"
-              rows={3}
-              placeholder="Optional notes about this expense…"
-              value={form.description}
-              onChange={e => setField("description", e.target.value)}
-              style={{ resize: "vertical" }}
-            />
+          {/* Amount + Business purpose */}
+          <div className="form-row cols-2 mb-16">
+            <div className="field-group">
+              <label className="field-label">
+                Amount (₹) <span style={{ color: "var(--error)" }}>*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                className={`field-input${errors.amount ? " field-error" : ""}`}
+                placeholder="Amount"
+                value={form.amount}
+                onChange={e => setField("amount", e.target.value)}
+              />
+              {errors.amount && <p className="field-error-msg">{errors.amount}</p>}
+            </div>
+            <div className="field-group">
+              <label className="field-label">Business purpose</label>
+              <textarea
+                className="field-input"
+                rows={1}
+                placeholder="Describe the business purpose"
+                value={form.description}
+                onChange={e => setField("description", e.target.value)}
+                style={{ resize: "vertical" }}
+              />
+            </div>
           </div>
 
           {/* Receipt upload — mandatory, multiple */}
@@ -272,6 +248,6 @@ export default function ExpenseFormModal({ onClose, onSaved }: Props) {
               Your expense will be sent for approval. Approved expenses are reimbursed in the next payroll cycle.
             </span>
           </div>
-    </Modal>
+    </RequestModal>
   );
 }

@@ -145,6 +145,12 @@ export default function DocumentCenterPage() {
       fd.append("title",    uploadForm.title.trim());
       fd.append("category", uploadForm.category);
       if (uploadForm.description.trim()) fd.append("description", uploadForm.description.trim());
+      // Version/effective date only make sense for policy documents — sent
+      // only when the category is "policy" and the field was filled in.
+      if (uploadForm.category === "policy") {
+        if (uploadForm.version.trim())      fd.append("version", uploadForm.version.trim());
+        if (uploadForm.effective_date)      fd.append("effective_date", uploadForm.effective_date);
+      }
       fd.append("file", uploadForm.file!);
 
       const res = await clientApi.post(DOCUMENTS_BASE, fd);
@@ -445,6 +451,8 @@ export default function DocumentCenterPage() {
               {/* Metadata rows */}
               {([
                 { label: "Category",    value: selected.category_display },
+                ...(selected.version        ? [{ label: "Version",         value: `v${selected.version}` }] : []),
+                ...(selected.effective_date ? [{ label: "Effective date",  value: formatUploadedAt(selected.effective_date) }] : []),
                 { label: "Uploaded by", value: selected.uploaded_by_name },
                 { label: "Upload date", value: formatUploadedAt(selected.uploaded_at) },
                 { label: "Access",      value: selected.branch_name ? `Branch: ${selected.branch_name}` : "All Employees" },
@@ -657,6 +665,26 @@ export default function DocumentCenterPage() {
                 </select>
                 {uploadErrors.category && <span className="field-error">{uploadErrors.category}</span>}
               </div>
+
+              {/* Version / effective date — only meaningful for policy documents */}
+              {uploadForm.category === "policy" && (
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Version <span style={{ fontSize: 11, color: "var(--outline)" }}>(optional)</span></label>
+                    <input className="field-input" placeholder="e.g. 3.2"
+                      value={uploadForm.version}
+                      onChange={e => setUploadForm(p => ({ ...p, version: e.target.value }))}
+                      suppressHydrationWarning />
+                  </div>
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Effective date <span style={{ fontSize: 11, color: "var(--outline)" }}>(optional)</span></label>
+                    <input className="field-input" type="date"
+                      value={uploadForm.effective_date}
+                      onChange={e => setUploadForm(p => ({ ...p, effective_date: e.target.value }))}
+                      suppressHydrationWarning />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="modal-footer" style={{ flexShrink: 0 }}>

@@ -875,6 +875,12 @@ HR_HELP_TOPIC_CHOICES = [
     # been issued. Reuses this generic support-request model rather than a new
     # dedicated one, same as every other HR help topic.
     ('asset_request',    'Asset request'),
+    # Submitted from ESS -> My Profile -> "Request profile correction" — a
+    # change to an already-onboarded employee's own record (contact,
+    # address, personal details), distinct from the onboarding-time edit
+    # flow. Reuses this generic support-request model rather than a new
+    # dedicated one, same as asset_request above.
+    ('profile_correction', 'Profile correction'),
     ('other',            'Other'),
 ]
 
@@ -925,3 +931,67 @@ class HRHelpRequest(models.Model):
 
     def __str__(self) -> str:
         return f'HR Help #{self.request_number or self.id} — {self.get_topic_display()}'
+
+
+# ─── Employee document submission (ESS -> Documents) ─────────────────────────
+# Deliberately separate from the org-wide Document Center (apps.accounts:
+# DocumentListCreateView) — that model is a shared policies/forms/templates
+# repository with real file upload/preview/delete. This is a much smaller,
+# self-service "submit a document of mine for HR to verify" record. Per the
+# ESS Documents spec ("This demo records submission metadata; it does not
+# retain the file"), no file is actually stored — only the picked filename.
+
+EMP_DOC_IDENTITY   = 'identity'
+EMP_DOC_EDUCATION  = 'education'
+EMP_DOC_EMPLOYMENT = 'employment'
+EMP_DOC_TAX_PROOF  = 'tax_proof'
+EMP_DOC_BENEFITS   = 'benefits'
+EMP_DOC_OTHER      = 'other'
+
+EMPLOYEE_DOCUMENT_CATEGORY_CHOICES = [
+    (EMP_DOC_IDENTITY,   'Identity'),
+    (EMP_DOC_EDUCATION,  'Education'),
+    (EMP_DOC_EMPLOYMENT, 'Employment'),
+    (EMP_DOC_TAX_PROOF,  'Tax proof'),
+    (EMP_DOC_BENEFITS,   'Benefits'),
+    (EMP_DOC_OTHER,      'Other'),
+]
+
+EMP_DOC_PENDING  = 'pending'
+EMP_DOC_VERIFIED = 'verified'
+EMP_DOC_REJECTED = 'rejected'
+
+EMPLOYEE_DOCUMENT_STATUS_CHOICES = [
+    (EMP_DOC_PENDING,  'Pending'),
+    (EMP_DOC_VERIFIED, 'Verified'),
+    (EMP_DOC_REJECTED, 'Rejected'),
+]
+
+
+class EmployeeDocumentSubmission(models.Model):
+    """A single employee's 'submit a document for verification' record —
+    category + filename + optional expiry date in, a pending/verified/
+    rejected review state out. No file bytes are stored (see module note
+    above); `reviewed_at`/`reviewed_by` are provided for a future HR review
+    step, kept null until that review UI exists."""
+    id           = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee     = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='document_submissions')
+    category     = models.CharField(max_length=20, choices=EMPLOYEE_DOCUMENT_CATEGORY_CHOICES)
+    file_name    = models.CharField(max_length=255)
+    expiry_date  = models.DateField(null=True, blank=True)
+    status       = models.CharField(max_length=10, choices=EMPLOYEE_DOCUMENT_STATUS_CHOICES, default=EMP_DOC_PENDING, db_index=True)
+    reviewed_at  = models.DateTimeField(null=True, blank=True)
+    reviewed_by  = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_document_submissions',
+    )
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    created_at   = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'hrms_employee_document_submissions'
+        ordering = ['-submitted_at']
+
+    def __str__(self) -> str:
+        return f'{self.file_name} ({self.get_category_display()}) — {self.employee_id}'

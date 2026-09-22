@@ -39,8 +39,8 @@
   --header-h: 56px;
   --radius: 10px;
   --radius-lg: 16px;
-  --shadow: 0 1px 4px rgba(124, 58, 237, 0.08), 0 0 0 1px rgba(124, 58, 237, 0.06);
-  --shadow-md: 0 4px 16px rgba(124, 58, 237, 0.12);
+  --shadow: 0 1px 4px color-mix(in srgb, var(--primary) 8%, transparent), 0 0 0 1px color-mix(in srgb, var(--primary) 6%, transparent);
+  --shadow-md: 0 4px 16px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 *,
@@ -354,6 +354,17 @@ tr:hover td {
   border: none;
 }
 
+/* Pressed feedback — without this, clicking a button gives no visual
+   confirmation at all until its hover color happens to still apply. */
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .btn-sm {
   padding: 5px 12px;
   font-size: 12px;
@@ -372,7 +383,11 @@ tr:hover td {
 }
 
 .btn-filled:hover {
-  background: #6d28d9;
+  background: var(--secondary);
+}
+
+.btn-filled:active {
+  background: color-mix(in srgb, var(--secondary) 85%, black);
 }
 
 .btn-outline {
@@ -383,6 +398,10 @@ tr:hover td {
 
 .btn-outline:hover {
   background: var(--sec-c);
+}
+
+.btn-outline:active {
+  background: color-mix(in srgb, var(--sec-c) 70%, var(--primary));
 }
 
 .btn-ghost {
@@ -396,13 +415,21 @@ tr:hover td {
   color: var(--on-bg);
 }
 
+.btn-ghost:active {
+  background: color-mix(in srgb, var(--bg-mid) 70%, var(--outline-v));
+}
+
 .btn-danger {
   background: var(--error);
   color: #fff;
 }
 
 .btn-danger:hover {
-  background: #9e2f26;
+  background: color-mix(in srgb, var(--error) 80%, black);
+}
+
+.btn-danger:active {
+  background: color-mix(in srgb, var(--error) 65%, black);
 }
 
 .btn-success {
@@ -411,7 +438,11 @@ tr:hover td {
 }
 
 .btn-success:hover {
-  background: #12703f;
+  background: color-mix(in srgb, var(--success) 80%, black);
+}
+
+.btn-success:active {
+  background: color-mix(in srgb, var(--success) 65%, black);
 }
 
 .btn i {
@@ -663,10 +694,14 @@ textarea.field-input {
   background: var(--bg-mid);
 }
 
+.ess-tab:active {
+  background: color-mix(in srgb, var(--bg-mid) 70%, var(--outline-v));
+}
+
 .ess-tab.active {
   color: var(--primary);
   font-weight: 700;
-  background: rgba(124, 58, 237, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 /* Alert */
@@ -1121,13 +1156,13 @@ textarea.field-input {
 
 .upload-zone:hover {
   border-color: var(--primary);
-  background: rgba(124, 58, 237, 0.04);
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
 }
 
 /* A file has been picked — same visual treatment as :hover, but persistent */
 .upload-zone--active {
   border-color: var(--primary);
-  background: rgba(124, 58, 237, 0.04);
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
 }
 
 .upload-zone--active i {
@@ -1251,7 +1286,13 @@ textarea.field-input {
 .qa-tile:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.qa-tile:active {
+  transform: translateY(0) scale(0.98);
+  border-color: var(--primary);
+  background: var(--sec-c);
 }
 
 .qa-icon {
@@ -1282,7 +1323,7 @@ textarea.field-input {
 }
 
 .anc-card:hover {
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .anc-card.pinned {
@@ -1327,7 +1368,12 @@ textarea.field-input {
 .doc-tile:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.doc-tile:active {
+  transform: translateY(0) scale(0.98);
+  background: var(--sec-c);
 }
 
 .doc-icon {
@@ -1351,12 +1397,12 @@ textarea.field-input {
 }
 
 .doc-icon.xls {
-  background: rgba(23, 144, 90, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   color: var(--success);
 }
 
 .doc-icon.policy {
-  background: rgba(124, 58, 237, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--primary);
 }
 
@@ -1688,7 +1734,12 @@ textarea.field-input {
 .settings-card-tile:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.settings-card-tile:active {
+  transform: translateY(0) scale(0.98);
+  background: var(--sec-c);
 }
 
 .settings-card-icon {
@@ -1703,12 +1754,12 @@ textarea.field-input {
 }
 
 .sc-company {
-  background: rgba(124, 58, 237, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--primary);
 }
 
 .sc-modules {
-  background: rgba(23, 144, 90, 0.12);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
   color: var(--success);
 }
 
@@ -1826,6 +1877,11 @@ textarea.field-input {
   background: #6d28d9;
 }
 
+.login-submit-btn:active {
+  background: #5b21b6;
+  transform: scale(0.99);
+}
+
 .login-submit-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
@@ -1871,7 +1927,7 @@ textarea.field-input {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: rgba(124, 58, 237, 0.08);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2230,7 +2286,11 @@ html[data-theme="dark"] {
 }
 
 .ann-card:hover {
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.ann-card:active {
+  background: var(--sec-c);
 }
 
 .ann-card.pinned {
@@ -2684,7 +2744,10 @@ html[data-theme="dark"] {
 /* Drawer / Slide Panel */
 .drawer-overlay { position: fixed; inset: 0; background: rgba(28,28,25,0.4); z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; backdrop-filter: blur(2px); }
 .drawer-overlay.open { opacity: 1; pointer-events: auto; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; max-width: 100vw; background: var(--surface); box-shadow: -4px 0 24px rgba(0,0,0,0.1); z-index: 1001; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; }
+/* Widened from 480px — the reference full-profile drawer's 2-column field
+   grid (Personal Details/Employment & Assignment/etc.) needs real room; at
+   480px those columns were cramped compared to the reference layout. */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(860px, 92vw); max-width: 100vw; background: var(--surface); box-shadow: -4px 0 24px rgba(0,0,0,0.1); z-index: 1001; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; }
 .drawer.open { transform: translateX(0); }
 .drawer-header { padding: 20px 24px; border-bottom: 1px solid var(--outline-v); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
 .drawer-title { font-size: 16px; font-weight: 600; color: var(--on-bg); }
@@ -2711,7 +2774,7 @@ html[data-theme="dark"] {
 
 /* Scope banner — signals that every section below it applies only to the
    currently selected record (e.g. one leave type), not to all records. */
-.scope-banner { margin-bottom: 20px; padding: 18px 24px; background: rgba(124, 58, 237, 0.05); border: 1px solid var(--primary); border-radius: var(--radius-lg); }
+.scope-banner { margin-bottom: 20px; padding: 18px 24px; background: color-mix(in srgb, var(--primary) 5%, transparent); border: 1px solid var(--primary); border-radius: var(--radius-lg); }
 
 /* ============================================================
    TEAM APPROVALS — enterprise redesign (Keka / Darwinbox style)
@@ -2723,7 +2786,7 @@ html[data-theme="dark"] {
   --ta-surface: #ffffff;
   --ta-primary: var(--primary);
   --ta-primary-hover: #6d28d9;
-  --ta-primary-soft: rgba(124, 58, 237, 0.10);
+  --ta-primary-soft: color-mix(in srgb, var(--primary) 10%, transparent);
   --ta-success: #22C55E;
   --ta-success-soft: rgba(34, 197, 94, 0.12);
   --ta-warning: #F59E0B;

@@ -48,7 +48,7 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
     <div className="tr grid-cols-emp" onClick={() => onOpen(e.id)}>
       <div className="who">
         <div style={isExited ? { filter: "grayscale(1)", opacity: 0.65 } : undefined}>
-          <Avatar text={initials(e.firstName, e.lastName)} size={32} color={tint.bg} textColor={tint.text} shape="square" className="av" />
+          <Avatar text={initials(e.firstName, e.lastName)} size={32} color={tint.bg} textColor={tint.text} shape="square" className="av" photoUrl={e.photoUrl} />
         </div>
         <div className="min-w-0">
           <div className="n truncate">{fullName(e)}</div>

@@ -26,6 +26,8 @@ from apps.attendance.views.settings_view import AttendanceSettingsAPIView
 from apps.attendance.views.my_attendance import (
     AttendancePunchView,
     TodayAttendanceView,
+    MyShiftView,
+    MyWeeklyTimesheetView,
     AttendanceStatsView,
     AttendanceSummaryView,
     AttendanceCalendarView,
@@ -89,6 +91,8 @@ __all__ = [
     'AttendanceSettingsAPIView',
     'AttendancePunchView',
     'TodayAttendanceView',
+    'MyShiftView',
+    'MyWeeklyTimesheetView',
     'AttendanceStatsView',
     'AttendanceSummaryView',
     'AttendanceCalendarView',

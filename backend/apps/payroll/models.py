@@ -562,6 +562,13 @@ class EmployeePayslip(models.Model):
     pt_deduction = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     lwf_employee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     lwf_employer = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Monthly TDS estimate — real FY2026-27 slab computation (see
+    # apps/payroll/services_income_tax.py), resolved against the employee's
+    # EmployeeTaxDeclaration (regime + declared investments) at the time this
+    # payslip was computed. Zero on payslips computed before this field
+    # existed (never backfilled automatically for real, already-paid cycles —
+    # see the backfill note in services_income_tax.py's module docstring).
+    income_tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     # One-time adjustments (additions/deductions/arrears) applied before net pay
     adjustments_earning   = models.DecimalField(max_digits=10, decimal_places=2, default=0)

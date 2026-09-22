@@ -12,6 +12,8 @@ import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ClockInButton from "@/components/ClockInButton";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
 
+interface Shift { name: string; start_time: string; end_time: string }
+
 interface HomeProfile {
   full_name:         string;
   employee_id:       string;
@@ -32,18 +34,19 @@ function initials(name: string): string {
 }
 
 interface Props {
-  // Real per-employee "today" state — clocked_in / clock_in_time — used in
-  // place of the mockup's fixed "General shift · 09:30-18:30" text, since no
-  // endpoint exposes an individual employee's assigned shift hours to ESS
-  // (attendance/settings is the org-wide default and is gated behind
-  // settings.view, which most employees don't hold). Passed down from
-  // HomeTab so this and HomeTodayPanel share one fetch instead of two.
+  // Real per-employee "today" state, passed down from HomeTab so this and
+  // HomeTodayPanel share one fetch instead of two.
   status: AttendanceStatus | null;
   onPunchSuccess: () => void;
 }
 
 export default function HomeBanner({ status, onPunchSuccess }: Props) {
   const { data: profile } = useFetch<HomeProfile>(API.employees.me);
+  // Org-wide default shift (no per-employee shift assignment exists yet —
+  // see /attendance/my-shift/'s own docstring). Falls back to the real
+  // clock-in status line when no default is configured, rather than a
+  // fabricated shift string.
+  const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
 
   const firstName = (profile?.full_name ?? "").split(" ")[0] || "there";
   const now = new Date();
@@ -51,28 +54,35 @@ export default function HomeBanner({ status, onPunchSuccess }: Props) {
   const dateLabel = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
   const subtitleParts = [
-    profile && [profile.designation, profile.department].filter(Boolean).join(", "),
+    profile?.designation,
     profile?.employee_id,
-    profile?.branch,
+    profile?.department,
   ].filter(Boolean);
 
-  const statusLabel = status?.clocked_in
-    ? `Clocked in · ${status.clock_in_time ?? "—"}`
-    : "Not clocked in yet";
+  // shift is {} (not null) from the backend when no default shift is
+  // configured — check for a real field, not just object truthiness.
+  const statusLabel = shift?.start_time
+    ? `${shift.name} · ${shift.start_time}-${shift.end_time}`
+    : status?.clocked_in
+      ? `Clocked in · ${status.clock_in_time ?? "—"}`
+      : "Not clocked in yet";
 
   return (
     <div
-      className="mb-20"
-      style={{ background: "linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%)", borderRadius: "var(--radius-lg)", padding: "22px 26px", position: "relative", overflow: "hidden" }}
+      className="mb-16"
+      style={{ background: "linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)", borderRadius: "var(--radius-lg)", padding: "26px 30px", position: "relative", overflow: "hidden" }}
     >
-      <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.06)", pointerEvents: "none" }} />
+      {/* Text on this card always uses var(--on-primary) rather than a literal
+          white so it stays readable against the primary/secondary gradient's
+          lighter dark-mode tones, not just the darker light-mode ones. */}
+      <div style={{ position: "absolute", top: -50, right: -50, width: 180, height: 180, borderRadius: "50%", border: "1px solid color-mix(in srgb, var(--on-primary) 6%, transparent)", pointerEvents: "none" }} />
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <Avatar text={initials(profile?.full_name ?? firstName)} size={52} photoUrl={profile?.profile_photo_url} />
+          <Avatar text={initials(profile?.full_name ?? firstName)} size={60} shape="square" photoUrl={profile?.profile_photo_url} />
           <div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1.25 }}>{greeting}</div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.72)" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-primary)", lineHeight: 1.25 }}>{greeting}</div>
+            <div style={{ fontSize: 13, color: "color-mix(in srgb, var(--on-primary) 72%, transparent)" }}>
               {subtitleParts.length > 0 ? subtitleParts.join(" · ") : "Welcome to your workspace"}
             </div>
           </div>
@@ -80,8 +90,8 @@ export default function HomeBanner({ status, onPunchSuccess }: Props) {
 
         <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{dateLabel}</div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>{statusLabel}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-primary)" }}>{dateLabel}</div>
+            <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--on-primary) 65%, transparent)" }}>{statusLabel}</div>
           </div>
           <ClockInButton onPunchSuccess={onPunchSuccess} />
         </div>

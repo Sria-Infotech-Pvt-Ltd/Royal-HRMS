@@ -8,7 +8,7 @@
 // since that model only stores topic + priority + free text.
 
 import { useState } from "react";
-import Modal from "@/components/Modal";
+import RequestModal from "@/components/RequestModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
@@ -66,27 +66,20 @@ export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
   }
 
   return (
-    <Modal
+    <RequestModal
       title={<><i className="ti ti-device-laptop" /> Request an asset</>}
       onClose={onClose}
-      closeDisabled={submitting}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button className="btn btn-filled" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit request"}
-          </button>
-        </>
-      }
+      onSubmit={handleSubmit}
+      submitting={submitting}
+      error={error}
     >
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-      <div className="field-group" style={{ marginBottom: 16 }}>
+      <div className="field-group mb-16">
         <label className="field-label">Asset type</label>
         <select className="field-input field-select" value={assetType} onChange={e => setAssetType(e.target.value)}>
           {ASSET_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
       </div>
-      <div className="field-group" style={{ marginBottom: 16 }}>
+      <div className="field-group mb-16">
         <label className="field-label">Needed by</label>
         <input
           type="date"
@@ -105,6 +98,6 @@ export default function AssetRequestModal({ onClose, onSubmitted }: Props) {
           placeholder="Describe why this asset is needed"
         />
       </div>
-    </Modal>
+    </RequestModal>
   );
 }

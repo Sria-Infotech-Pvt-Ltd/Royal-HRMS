@@ -7,12 +7,21 @@ import { useState } from "react";
 import { useToast } from "@/components/ToastProvider";
 import clientApi from "@/lib/clientApi";
 import {
-  LeaveBalance, LeaveRequest, LeaveStats, PaginatedResponse,
-  fmtShortDate,
+  LeaveBalance, LeaveRequest, PaginatedResponse, ReqStatus,
+  STATUS_BADGE, fmtShortDate,
 } from "../_data";
-import StatusCell from "./StatusCell";
 import LopBadge from "./LopBadge";
 import LeaveRequestDetailModal from "./LeaveRequestDetailModal";
+
+// Short pill text for this card only — "PENDING"/"APPROVED" rather than
+// StatusCell's longer "Pending Manager Approval" wording used elsewhere.
+const SHORT_STATUS_LABEL: Record<ReqStatus, string> = {
+  pending:    "PENDING",
+  l2_pending: "PENDING",
+  approved:   "APPROVED",
+  rejected:   "REJECTED",
+  cancelled:  "CANCELLED",
+};
 
 interface Props {
   onApply:        () => void;
@@ -42,14 +51,13 @@ export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
   const { data: requests, refetch: refetchRequests, loading } = useFetch<PaginatedResponse<LeaveRequest>>(
     API.leave.requests
   );
-  const { data: stats } = useFetch<LeaveStats>(
-    API.leave.stats + `?year=${currentYear}&scope=own`
-  );
 
   const balanceMap = Object.fromEntries((balances ?? []).map(b => [b.leave_type, b]));
   const requestList = requests?.results ?? [];
   const recentRequests = requestList.slice(0, RECENT_COUNT);
-  const lopBalance = balanceMap["lwp"];
+  // Total days already used (deducted) across every leave type this year —
+  // the same balance rows the accrued cards above read from.
+  const usedThisYear = (balances ?? []).reduce((sum, b) => sum + Number(b.used_days), 0);
 
   async function cancelMine(id: string) {
     try {
@@ -79,7 +87,7 @@ export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
                 <div>
                   <div className="stat-label">{label}</div>
                   <div className="stat-value">{available}</div>
-                  <div className="stat-sub">Available</div>
+                  <div className="stat-sub">days available</div>
                 </div>
                 <div className={`stat-icon ${iconClass}`} style={{ float: "none", margin: 0 }}>
                   <i className={`ti ${icon}`} />
@@ -96,37 +104,30 @@ export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
           );
         })}
 
-        {/* Loss of Pay — shown the same shape as the accrued balances; most
-            policies don't cap LWP, so fall back to the running LOP-days-taken
-            count when the balance endpoint has no fixed total for it. */}
+        {/* Used This Year — total leave days already used (deducted) across every
+            leave type this calendar year, summed from the same real balance
+            rows the accrued cards above read from (not a separate fabricated
+            count). */}
         <div className="stat-card">
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
-              <div className="stat-label">Loss of Pay (LOP)</div>
-              <div className="stat-value" style={{ color: "var(--warn)" }}>
-                {lopBalance ? Number(lopBalance.total_days) - Number(lopBalance.used_days) : "—"}
-              </div>
-              <div className="stat-sub">Available</div>
+              <div className="stat-label">Used This Year</div>
+              <div className="stat-value">{usedThisYear}</div>
+              <div className="stat-sub">days approved</div>
             </div>
             <div className="stat-icon si-warn" style={{ float: "none", margin: 0 }}>
-              <i className="ti ti-coin-off" />
+              <i className="ti ti-calendar-stats" />
             </div>
-          </div>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: lopBalance && Number(lopBalance.total_days) > 0 ? `${Math.round((Number(lopBalance.used_days) / Number(lopBalance.total_days)) * 100)}%` : "0%", background: "var(--warn)" }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "var(--on-variant)" }}>
-            <span>Used: {lopBalance ? Number(lopBalance.used_days) : (stats?.lop_days ?? 0)}</span>
-            <span>Total: {lopBalance ? Number(lopBalance.total_days) : "No cap"}</span>
           </div>
         </div>
       </div>
 
-      {/* Recent Leave Requests — latest 5 only; full history lives in My Requests */}
+      {/* My leave requests — latest 5 only; full history lives in My Requests */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title">
-            <i className="ti ti-list-details" /> Recent Leave Requests
+          <div>
+            <div className="card-title"><i className="ti ti-list-details" /> My leave requests</div>
+            <div className="page-sub" style={{ marginTop: 2 }}>Approval status and history.</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-ghost btn-sm" onClick={onViewCalendar} suppressHydrationWarning>
@@ -140,7 +141,7 @@ export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
             </a>
           </div>
         </div>
-        <div className="table-wrap">
+        <div className="card-body" style={{ padding: 0 }}>
           {loading ? (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <i className="ti ti-loader-2" style={{ fontSize: 24, color: "var(--outline-v)" }} />
@@ -150,39 +151,34 @@ export default function LeaveDashboard({ onApply, onViewCalendar }: Props) {
               No leave requests yet. Click <strong>Apply Leave</strong> to get started.
             </div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Leave Type</th>
-                  <th>From Date</th>
-                  <th>To Date</th>
-                  <th style={{ textAlign: "center" }}>Days</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                  <th style={{ textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRequests.map(r => (
-                  <tr key={r.id} onClick={() => setDetailRequest(r)} style={{ cursor: "pointer" }}>
-                    <td>{r.leave_type_display}</td>
-                    <td>{fmtShortDate(r.start_date)}</td>
-                    <td>{fmtShortDate(r.end_date)}</td>
-                    <td style={{ textAlign: "center", fontWeight: 700 }}>
-                      {r.total_days}
+            recentRequests.map((r, idx) => {
+              const dateLabel = r.start_date === r.end_date
+                ? fmtShortDate(r.start_date)
+                : `${fmtShortDate(r.start_date)} - ${fmtShortDate(r.end_date)}`;
+              const approver = r.l2_approver_name || r.l1_approver_name || r.approved_by || null;
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => setDetailRequest(r)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "12px 20px", cursor: "pointer",
+                    borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
+                      {r.leave_type_display} · {dateLabel}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+                      {r.total_days} day{r.total_days === 1 ? "" : "s"} · {r.reason || approver || "—"}
                       <LopBadge request={r} />
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <StatusCell request={r} />
-                    </td>
-                    <td style={{ textAlign: "right" }} onClick={e => e.stopPropagation()}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setDetailRequest(r)} suppressHydrationWarning>
-                        <i className="ti ti-eye" /> View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                  <span className={STATUS_BADGE[r.status]}>{SHORT_STATUS_LABEL[r.status]}</span>
+                </div>
+              );
+            })
           )}
         </div>
       </div>

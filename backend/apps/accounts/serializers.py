@@ -1300,6 +1300,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'description',
             'category', 'category_display',
+            'version', 'effective_date',
             'file', 'file_url', 'file_name', 'file_type',
             'file_size', 'file_size_display',
             'branch', 'branch_name',
@@ -1365,6 +1366,12 @@ class DocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'Invalid category. Choose from: {", ".join(sorted(valid))}.'
             )
+        return value
+
+    def validate_version(self, value: str) -> str:
+        value = value.strip() if value else ''
+        if len(value) > 20:
+            raise serializers.ValidationError('Version must be under 20 characters.')
         return value
 
     def validate_file(self, value) -> object:
@@ -2059,6 +2066,10 @@ class MyProfileSerializer(serializers.ModelSerializer):
     reporting_approver = serializers.SerializerMethodField()
     hr                 = serializers.SerializerMethodField()
     profile_photo_url  = serializers.SerializerMethodField()
+    # ESS "Employment" tab's "Current assignment" tiles (EMPLOYMENT STATUS,
+    # NOTICE PERIOD) — both fields already existed on the User model but
+    # were never exposed to the employee's own profile endpoint before.
+    employment_status_display = serializers.CharField(source='get_employment_status_display', read_only=True)
 
     class Meta:
         model  = User
@@ -2067,6 +2078,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'department', 'designation', 'branch', 'employee_type',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
             'work_location', 'onboarding_status', 'assessment_status',
+            'employment_status', 'employment_status_display', 'notice_period_days',
             'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',
         ]

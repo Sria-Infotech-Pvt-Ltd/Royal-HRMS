@@ -1,6 +1,7 @@
 import { LeaveRequest } from "../leave/_data";
 import type { Expense } from "../expenses/_components/ExpenseClaims";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import { HR_HELP_DOCUMENT_TOPIC, type HrHelpRequest } from "@/types/hrHelp";
 import { formatDate } from "@/lib/formatDate";
 
 // ─── Correction request shape (own corrections, /attendance/corrections/my/) ──
@@ -41,8 +42,12 @@ export interface PaginatedResponse<T> {
 
 // ─── Unified "my request" shape ───────────────────────────────────────────────
 
-export type MyRequestKind = "leave" | "expense" | "attendance_correction" | "wfh";
-export type DisplayStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type MyRequestKind = "leave" | "expense" | "attendance_correction" | "wfh" | "hr_help";
+// "completed" is distinct from "approved": it only applies to a resolved
+// HRHelpRequest whose topic is document_request (e.g. an employment letter
+// request) — a deliverable actually handed back, not just an approved
+// workflow step. See hrHelpToDisplayStatus below for the real signal used.
+export type DisplayStatus = "pending" | "approved" | "rejected" | "cancelled" | "completed";
 
 export interface MyRequestItem {
   key:            string; // unique across kinds — `${kind}:${id}`
@@ -57,7 +62,7 @@ export interface MyRequestItem {
   approver:       string;
   lastUpdated:    string;
   canCancel:      boolean;
-  raw:            LeaveRequest | Expense | MyCorrectionRequest | WorkFromHomeRequest;
+  raw:            LeaveRequest | Expense | MyCorrectionRequest | WorkFromHomeRequest | HrHelpRequest;
 }
 
 // ─── Tabs / badges ──────────────────────────────────────────────────────────────
@@ -68,20 +73,29 @@ export const REQUEST_TABS: { key: "all" | MyRequestKind; label: string; icon: st
   { key: "wfh",                   label: "Work From Home",       icon: "ti-home-2"        },
   { key: "expense",               label: "Expense",               icon: "ti-receipt"       },
   { key: "attendance_correction", label: "Attendance Correction", icon: "ti-clock-edit"    },
+  { key: "hr_help",               label: "HR Help",              icon: "ti-headset"       },
 ];
 
+// bg derives from the same token as color via color-mix, rather than a fixed
+// rgba tint — two of the previous rgba values didn't even match their own
+// color token's hex (leave/expense), and none of them adapted to dark mode.
 export const TYPE_META: Record<MyRequestKind, { label: string; icon: string; color: string; bg: string }> = {
-  leave:                 { label: "Leave",                 icon: "ti-beach",     color: "var(--success)", bg: "rgba(22,163,74,0.10)"  },
-  wfh:                   { label: "Work From Home",        icon: "ti-home-2",    color: "var(--primary)", bg: "rgba(124,58,237,0.10)"  },
-  expense:               { label: "Expense",               icon: "ti-receipt",   color: "var(--warn)",    bg: "rgba(217,119,6,0.10)"  },
-  attendance_correction: { label: "Attendance Correction", icon: "ti-clock-edit", color: "var(--info)",    bg: "rgba(37,99,235,0.10)" },
+  leave:                 { label: "Leave",                 icon: "ti-beach",     color: "var(--success)", bg: "color-mix(in srgb, var(--success) 10%, transparent)"  },
+  wfh:                   { label: "Work From Home",        icon: "ti-home-2",    color: "var(--primary)", bg: "color-mix(in srgb, var(--primary) 10%, transparent)"  },
+  expense:               { label: "Expense",               icon: "ti-receipt",   color: "var(--warn)",    bg: "color-mix(in srgb, var(--warn) 10%, transparent)"  },
+  attendance_correction: { label: "Attendance Correction", icon: "ti-clock-edit", color: "var(--info)",    bg: "color-mix(in srgb, var(--info) 10%, transparent)" },
+  hr_help:               { label: "HR Help",               icon: "ti-headset",   color: "var(--on-variant)", bg: "color-mix(in srgb, var(--on-variant) 10%, transparent)" },
 };
 
+// "completed" uses badge-info (blue) rather than badge-success (green,
+// already "approved") — a genuinely distinct colour for a genuinely
+// distinct real state, not a re-skin of approved.
 export const STATUS_BADGE_CLASS: Record<DisplayStatus, string> = {
   pending:   "badge badge-warn",
   approved:  "badge badge-success",
   rejected:  "badge badge-error",
   cancelled: "badge badge-neutral",
+  completed: "badge badge-info",
 };
 
 export const STATUS_LABEL: Record<DisplayStatus, string> = {
@@ -89,6 +103,7 @@ export const STATUS_LABEL: Record<DisplayStatus, string> = {
   approved:  "Approved",
   rejected:  "Rejected",
   cancelled: "Cancelled",
+  completed: "Completed",
 };
 
 export const STATUS_FILTERS: { key: "all" | DisplayStatus; label: string }[] = [
@@ -97,6 +112,7 @@ export const STATUS_FILTERS: { key: "all" | DisplayStatus; label: string }[] = [
   { key: "approved",  label: "Approved"     },
   { key: "rejected",  label: "Rejected"     },
   { key: "cancelled", label: "Cancelled"    },
+  { key: "completed", label: "Completed"    },
 ];
 
 const PUNCH_LABEL: Record<MyCorrectionRequest["punch_type"], string> = {
@@ -139,6 +155,20 @@ export function toDisplayStatus(status: string): DisplayStatus {
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
   return "cancelled";
+}
+
+/** HRHelpRequest has its own status vocabulary (open/in_progress/resolved),
+ *  not the pending/approved/rejected/cancelled set the other request kinds
+ *  use — so it needs its own mapping rather than reusing toDisplayStatus
+ *  (which would otherwise fall through "resolved" into "cancelled").
+ *  "resolved" only becomes "completed" for topic === document_request
+ *  (e.g. an employment letter) — the real, already-stored distinction that
+ *  makes a resolved *document* request different from a resolved query;
+ *  everything else resolved is a plain "approved"/closed outcome. */
+export function hrHelpToDisplayStatus(status: HrHelpRequest["status"], topic: string): DisplayStatus {
+  if (status === "open" || status === "in_progress") return "pending";
+  if (topic === HR_HELP_DOCUMENT_TOPIC) return "completed";
+  return "approved";
 }
 
 function fmtDateOnly(iso: string): string {
@@ -228,6 +258,38 @@ export function correctionToMyItem(r: MyCorrectionRequest): MyRequestItem {
     displayStatus:   toDisplayStatus(r.status),
     approver:        r.l2_approver_name || r.l1_approver_name || "—",
     lastUpdated:     r.reviewed_at || r.created_at,
+    canCancel:       false,
+    raw:             r,
+  };
+}
+
+// EmployeeRequestModal.tsx has no dedicated "request type" field on the
+// backend — it folds the picked type (e.g. "Employment letter") into the
+// free-text message as "Request type: <label>. Subject: ...". Recover it
+// here purely for display so the row reads "Employment letter" rather than
+// the coarser topic_display ("Document request"); when the request came
+// from elsewhere (e.g. HrHelpTab.tsx's plain form) the prefix is absent and
+// this falls back to topic_display — no data is invented either way.
+const REQUEST_TYPE_PREFIX = /^Request type:\s*([^.]+)\./;
+
+function hrHelpTitle(r: HrHelpRequest): string {
+  const match = REQUEST_TYPE_PREFIX.exec(r.message);
+  return match ? match[1].trim() : r.topic_display;
+}
+
+export function hrHelpToMyItem(r: HrHelpRequest): MyRequestItem {
+  return {
+    key:             `hr_help:${r.id}`,
+    kind:            "hr_help",
+    id:              r.id,
+    requestCode:     r.request_ref,
+    title:           hrHelpTitle(r),
+    detailSecondary: r.message.length > 80 ? `${r.message.slice(0, 80)}…` : r.message,
+    submittedAt:     r.created_at,
+    status:          r.status,
+    displayStatus:   hrHelpToDisplayStatus(r.status, r.topic),
+    approver:        r.assigned_to_name || "—",
+    lastUpdated:     r.resolved_at || r.updated_at,
     canCancel:       false,
     raw:             r,
   };

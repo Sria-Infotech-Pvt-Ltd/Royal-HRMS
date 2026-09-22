@@ -56,9 +56,11 @@ export const API = {
     managerList: "/employees/managers/",
     me: "/employees/me/",
     myPhoto: "/employees/me/photo/",
+    myEmploymentLetterPdf: "/employees/me/employment-letter/",
     detail: (id: string) => `/employees/${id}/`,
     promotions: (id: string) => `/employees/${id}/promotions/`,
     actionHistory: (id: string) => `/employees/${id}/action-history/`,
+    auditTrail: (id: string) => `/employees/${id}/audit-trail/`,
     profile: (id: string) => `/employees/${id}/profile/`,
     reportingManager: (id: string) => `/employees/${id}/reporting-manager/`,
     hr: (id: string) => `/employees/${id}/hr/`,
@@ -223,6 +225,13 @@ export const API = {
     detail: (id: string) => `/hr-help/requests/${id}/`,
   },
 
+  // ESS "Documents" self-service submission list — deliberately separate
+  // from the org-wide Document Center (see documents/_data.ts's own
+  // DOCUMENTS_BASE, which stays untouched for that shared repository).
+  myDocuments: {
+    submissions: "/document-submissions/",
+  },
+
   expenses: {
     list: "/expenses/",
     stats: "/expenses/stats/",
@@ -322,6 +331,8 @@ export const API = {
     punch: "/attendance/punch/",
     geofenceCheck: "/attendance/geofence-check/",
     today: "/attendance/today/",
+    myShift: "/attendance/my-shift/",
+    myWeeklyTimesheet: "/attendance/my-weekly-timesheet/",
     stats: "/attendance/stats/",
     summary: "/attendance/summary/",
     calendar: "/attendance/calendar/",
@@ -463,6 +474,8 @@ export const API = {
     // Employee self-service
     myPayslips: "/payroll/my-payslips/",
     acknowledgePayslip: (id: string) => `/payroll/my-payslips/${id}/acknowledge/`,
+    logPayslipDownload: (id: string) => `/payroll/my-payslips/${id}/log-download/`,
+    payslipPdf: (id: string) => `/payroll/my-payslips/${id}/pdf/`,
 
     // Tax declarations
     taxDeclarations: "/payroll/tax-declarations/",

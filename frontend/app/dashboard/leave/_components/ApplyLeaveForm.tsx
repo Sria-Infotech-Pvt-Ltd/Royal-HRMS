@@ -33,7 +33,7 @@ const BLANK: LeaveForm = {
 function Lbl({ text, required }: { text: string; required?: boolean }) {
   return (
     <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5 uppercase tracking-wide">
-      {text}{required && <span className="text-red-500 ml-0.5 normal-case">*</span>}
+      {text}{required && <span className="text-[var(--error)] ml-0.5 normal-case">*</span>}
     </label>
   );
 }
@@ -41,7 +41,7 @@ function Lbl({ text, required }: { text: string; required?: boolean }) {
 function Err({ msg }: { msg?: string }) {
   if (!msg) return null;
   return (
-    <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+    <p className="text-xs text-[var(--error)] mt-1 flex items-center gap-1">
       <i className="ti ti-alert-circle text-xs" /> {msg}
     </p>
   );
@@ -156,8 +156,8 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="bg-[var(--surface)] rounded-3xl border border-[var(--outline-v)] shadow-lg p-10 text-center w-full max-w-md">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-            <i className="ti ti-circle-check text-4xl text-green-600" />
+          <div className="w-20 h-20 rounded-full bg-[var(--success-c)] flex items-center justify-center mx-auto mb-6">
+            <i className="ti ti-circle-check text-4xl text-[var(--success)]" />
           </div>
           <h2 className="text-xl font-bold text-[var(--on-bg)] mb-2">Request Submitted!</h2>
           <p className="text-sm text-[var(--on-variant)] mb-1">
@@ -171,7 +171,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               Apply Another
             </button>
             <button onClick={onCancel}
-              className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white"
+              className="px-6 py-2.5 rounded-xl text-sm font-semibold text-[var(--on-primary)]"
               style={{ background: "var(--primary)" }}>
               Back to Dashboard
             </button>
@@ -182,7 +182,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   }
 
   const INPUT     = "w-full border border-[var(--outline-v)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--on-bg)] bg-[var(--surface)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-c)] placeholder:text-[var(--on-variant)]";
-  const INPUT_ERR = "w-full border border-red-400 rounded-xl px-3.5 py-2.5 text-sm text-[var(--on-bg)] bg-red-50 outline-none";
+  const INPUT_ERR = "w-full border border-[var(--error)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--on-bg)] bg-[var(--error-c)] outline-none";
 
   return (
     <div className="flex flex-col gap-0">
@@ -265,7 +265,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                     <button key={opt.val}
                       onClick={() => { setField("duration", opt.val); if (opt.val !== "full_day") setField("to_date", ""); }}
                       className={["flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
-                        form.duration === opt.val ? "text-white border-[var(--primary)]" : "border-[var(--outline-v)] text-[var(--on-variant)] bg-[var(--bg-low)] hover:bg-[var(--surface)]"].join(" ")}
+                        form.duration === opt.val ? "text-[var(--on-primary)] border-[var(--primary)]" : "border-[var(--outline-v)] text-[var(--on-variant)] bg-[var(--bg-low)] hover:bg-[var(--surface)]"].join(" ")}
                       style={form.duration === opt.val ? { background: "var(--primary)" } : {}}>
                       <i className={`ti ${opt.icon} text-sm`} />
                       {opt.label}
@@ -306,17 +306,17 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                   server preview below arrives, so the two never disagree on screen. */}
               {!preview && workDays > 0 && (
                 <div className={["flex items-center justify-between gap-3 rounded-xl px-4 py-3 border",
-                  overLimit ? "bg-red-50 border-red-200" : "border-[var(--primary-c)]"].join(" ")}
-                  style={overLimit ? {} : { background: "rgba(124,58,237,0.05)" }}>
+                  overLimit ? "bg-[var(--error-c)] border-[var(--error)]" : "border-[var(--primary-c)]"].join(" ")}
+                  style={overLimit ? {} : { background: "color-mix(in srgb, var(--primary) 5%, transparent)" }}>
                   <div className="flex items-center gap-2">
-                    <i className={`ti ${overLimit ? "ti-alert-triangle text-red-500" : "ti-calendar-check"} text-sm`}
+                    <i className={`ti ${overLimit ? "ti-alert-triangle text-[var(--error)]" : "ti-calendar-check"} text-sm`}
                       style={!overLimit ? { color: "var(--primary)" } : {}} />
-                    <span className={`text-sm font-bold ${overLimit ? "text-red-600" : "text-[var(--primary)]"}`}>
+                    <span className={`text-sm font-bold ${overLimit ? "text-[var(--error)]" : "text-[var(--primary)]"}`}>
                       {workDays} working day{workDays !== 1 ? "s" : ""}
                     </span>
                   </div>
                   {!ltConfig.isLwp && overLimit && (
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--error-c)] text-[var(--error)]">
                       Exceeds balance by {workDays - available}d
                     </span>
                   )}
@@ -332,11 +332,11 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               {preview && (
                 <div className="rounded-xl border border-[var(--outline-v)] bg-[var(--bg-low)] px-4 py-3.5 flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-3">
-                    <span className={["text-sm font-bold", preview.lop_days > 0 ? "text-amber-700" : "text-[var(--primary)]"].join(" ")}>
+                    <span className={["text-sm font-bold", preview.lop_days > 0 ? "text-[var(--warn)]" : "text-[var(--primary)]"].join(" ")}>
                       {preview.actual_leave_days} working day{preview.actual_leave_days !== 1 ? "s" : ""}
                     </span>
                     {preview.lop_days > 0 && (
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--warn-c)] text-[var(--warn)]">
                         {preview.lop_days}d will be LOP
                       </span>
                     )}
@@ -352,7 +352,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                     <span className="text-[var(--on-variant)]">Leave Days Used</span>
                     <span className="font-semibold text-[var(--on-bg)] text-right">{preview.leave_days_used}</span>
                     <span className="text-[var(--on-variant)]">LOP Days</span>
-                    <span className={["font-semibold text-right", preview.lop_days > 0 ? "text-amber-700" : "text-[var(--on-bg)]"].join(" ")}>
+                    <span className={["font-semibold text-right", preview.lop_days > 0 ? "text-[var(--warn)]" : "text-[var(--on-bg)]"].join(" ")}>
                       {preview.lop_days}
                     </span>
                   </div>
@@ -396,7 +396,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               )}
 
               {insufficientBalance && (
-                <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5">
+                <div className="flex items-start gap-2 text-xs text-[var(--error)] bg-[var(--error-c)] border border-[var(--error)] rounded-lg px-3.5 py-2.5">
                   <i className="ti ti-alert-triangle mt-0.5 flex-shrink-0" />
                   <span>Insufficient leave balance for the selected dates. This request cannot be submitted.</span>
                 </div>
@@ -414,7 +414,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
                 className={[(errors.reason ? INPUT_ERR : INPUT), "resize-none"].join(" ")} />
               <div className="flex justify-between mt-1">
                 <Err msg={errors.reason} />
-                <span className={`text-xs ml-auto ${form.reason.length > 450 ? "text-amber-500" : "text-[var(--on-variant)]"}`}>
+                <span className={`text-xs ml-auto ${form.reason.length > 450 ? "text-[var(--warn)]" : "text-[var(--on-variant)]"}`}>
                   {form.reason.length}/500
                 </span>
               </div>
@@ -424,23 +424,23 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               <div className="flex items-center gap-2 mb-1.5">
                 <Lbl text="Supporting Document" />
                 {ltConfig.requiresDoc
-                  ? <span className="text-xs font-semibold text-red-500 -mt-1.5">(Required)</span>
+                  ? <span className="text-xs font-semibold text-[var(--error)] -mt-1.5">(Required)</span>
                   : <span className="text-xs text-[var(--on-variant)] -mt-1.5">(Optional)</span>}
               </div>
               {docFile ? (
-                <div className="flex items-center gap-3 p-3.5 bg-green-50 border border-green-200 rounded-xl">
-                  <i className="ti ti-file-check text-green-600 text-lg" />
+                <div className="flex items-center gap-3 p-3.5 bg-[var(--success-c)] border border-[var(--success)] rounded-xl">
+                  <i className="ti ti-file-check text-[var(--success)] text-lg" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-green-800 truncate">{docFile.name}</p>
-                    <p className="text-xs text-green-600">Attached successfully</p>
+                    <p className="text-sm font-medium text-[var(--success)] truncate">{docFile.name}</p>
+                    <p className="text-xs text-[var(--success)]">Attached successfully</p>
                   </div>
-                  <button onClick={() => setDocFile(null)} className="text-[var(--on-variant)] hover:text-red-500">
+                  <button onClick={() => setDocFile(null)} className="text-[var(--on-variant)] hover:text-[var(--error)]">
                     <i className="ti ti-x" />
                   </button>
                 </div>
               ) : (
                 <label className={["flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl py-7 px-4 cursor-pointer transition-all",
-                  errors.doc ? "border-red-300 bg-red-50" : "border-[var(--outline-v)] bg-[var(--bg-low)] hover:border-[var(--primary)] hover:bg-[rgba(124,58,237,0.06)]"].join(" ")}>
+                  errors.doc ? "border-[var(--error)] bg-[var(--error-c)]" : "border-[var(--outline-v)] bg-[var(--bg-low)] hover:border-[var(--primary)] hover:bg-[color-mix(in_srgb,var(--primary)_6%,transparent)]"].join(" ")}>
                   <i className="ti ti-cloud-upload text-[var(--on-variant)] text-2xl" />
                   <div className="text-center">
                     <p className="text-sm font-medium text-[var(--on-bg)]">Click to upload or drag & drop</p>
@@ -487,7 +487,7 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
               Cancel
             </button>
             <button onClick={handleSubmit} disabled={submitting || insufficientBalance}
-              className="flex items-center gap-2 px-7 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md"
+              className="flex items-center gap-2 px-7 py-2.5 rounded-xl text-sm font-semibold text-[var(--on-primary)] shadow-md"
               style={{ background: submitting || insufficientBalance ? "var(--primary-c)" : "var(--primary)", cursor: submitting || insufficientBalance ? "not-allowed" : "pointer" }}>
               {submitting
                 ? <><i className="ti ti-loader-2" /> Submitting…</>

@@ -2,13 +2,15 @@
 
 import type { FieldDef } from "../_data";
 
-const BORDER     = "#d3dae8";
-const BORDER_ERR = "#c23a2f";
+// These reuse the app's shared tokens (globals.css) rather than one-off hex
+// literals so this shared field control stays correct in dark mode too.
+const BORDER     = "var(--outline-v)";
+const BORDER_ERR = "var(--error)";
 
 const INPUT =
   "w-full px-3.5 py-[7px] rounded-md border text-[13px] text-[var(--on-bg)] transition-all outline-none" +
-  " bg-[var(--surface)] placeholder:text-[#a5b0c2]" +
-  " focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(124,58,237,0.10)]";
+  " bg-[var(--surface)] placeholder:text-[var(--on-variant)]" +
+  " focus:border-[var(--primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--primary)_10%,transparent)]";
 
 /** Fixed label column width — keeps all inputs aligned */
 const LABEL_W = "140px";
@@ -73,7 +75,7 @@ export default function FormField({
             disabled
             suppressHydrationWarning
             className={INPUT + " cursor-not-allowed"}
-            style={{ borderColor: BORDER, background: "#f3eefe", color: "#7c3aed", fontWeight: 600 }}
+            style={{ borderColor: BORDER, background: "var(--sec-c)", color: "var(--primary)", fontWeight: 600 }}
           />
         );
 
@@ -89,7 +91,7 @@ export default function FormField({
               disabled
               suppressHydrationWarning
               className={INPUT + " cursor-not-allowed"}
-              style={{ borderColor: BORDER, background: "#f3eefe", color: "#7c3aed", fontWeight: 600 }}
+              style={{ borderColor: BORDER, background: "var(--sec-c)", color: "var(--primary)", fontWeight: 600 }}
             />
           );
         }
@@ -151,7 +153,7 @@ export default function FormField({
             disabled={disabled}
             suppressHydrationWarning
             className={INPUT + " resize-none" + (disabled ? " cursor-not-allowed" : "")}
-            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "#f3eefe" : undefined }}
+            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "var(--sec-c)" : undefined }}
           />
         );
 
@@ -165,7 +167,7 @@ export default function FormField({
             disabled={disabled}
             suppressHydrationWarning
             className={INPUT + (disabled ? " cursor-not-allowed" : "")}
-            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "#f3eefe" : undefined }}
+            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "var(--sec-c)" : undefined }}
           />
         );
 
@@ -185,7 +187,7 @@ export default function FormField({
             disabled={disabled}
             suppressHydrationWarning
             className={INPUT + (disabled ? " cursor-not-allowed" : "")}
-            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "#f3eefe" : undefined }}
+            style={{ borderColor: disabled ? BORDER : borderColor, background: disabled ? "var(--sec-c)" : undefined }}
           />
         );
     }

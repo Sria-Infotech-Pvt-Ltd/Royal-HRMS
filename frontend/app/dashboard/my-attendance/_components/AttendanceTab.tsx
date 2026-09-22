@@ -36,15 +36,16 @@ export default function AttendanceTab() {
     else { setMonth(m => m + 1); }
   }
 
-  const daysPresent  = stats?.days_present          ?? "—";
-  const lateArrivals = stats?.late_arrivals         ?? "—";
-  const lopPending   = stats?.lop_pending           ?? 0;
-  const avgHours     = stats?.avg_hours_per_day     ?? "—";
-  const workingDays  = stats?.working_days          ?? "—";
-  const presentPct   = stats && stats.working_days ? (stats.days_present / stats.working_days) * 100 : 0;
-  const latePct      = stats && stats.working_days ? (stats.late_arrivals / stats.working_days) * 100 : 0;
-  const avgHoursPct  = stats ? Math.min((stats.avg_hours_per_day / 9) * 100, 100) : 0;
-  const attPct       = stats?.attendance_percentage ?? 0;
+  const daysPresent   = stats?.days_present          ?? "—";
+  const lateArrivals  = stats?.late_arrivals         ?? "—";
+  const workingDays   = stats?.working_days          ?? "—";
+  const missingPunch  = stats?.missing_punch         ?? "—";
+  const regularized   = stats?.late_arrivals_regularized ?? 0;
+  const workHours     = stats ? `${Math.round(stats.total_work_minutes / 60)}h` : "—";
+  const workHoursPct  = stats?.work_hours_percentage ?? 0;
+  const presentPct    = stats && stats.working_days ? (stats.days_present / stats.working_days) * 100 : 0;
+  const latePct       = stats && stats.working_days ? (stats.late_arrivals / stats.working_days) * 100 : 0;
+  const missingPct    = stats && stats.working_days ? (stats.missing_punch / stats.working_days) * 100 : 0;
 
   return (
     <div>
@@ -56,7 +57,7 @@ export default function AttendanceTab() {
           <div className="stat-card">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
               <div>
-                <div className="stat-label">Days Present</div>
+                <div className="stat-label">Present</div>
                 <div className="stat-value">{isLoading ? <Spinner /> : daysPresent}</div>
                 <div className="stat-sub">{isLoading ? "" : `of ${workingDays} working days`}</div>
               </div>
@@ -70,9 +71,23 @@ export default function AttendanceTab() {
           <div className="stat-card">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
               <div>
+                <div className="stat-label">Work Hours</div>
+                <div className="stat-value">{isLoading ? <Spinner /> : workHours}</div>
+                <div className="stat-sub">{isLoading ? "" : `${workHoursPct}% of expected`}</div>
+              </div>
+              <div className="stat-icon si-info"><i className="ti ti-clock" /></div>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${Math.min(workHoursPct, 100)}%`, background: "var(--info)" }} />
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+              <div>
                 <div className="stat-label">Late Arrivals</div>
                 <div className="stat-value" style={{ color: "var(--warn)" }}>{isLoading ? <Spinner /> : lateArrivals}</div>
-                <div className="stat-sub">{isLoading ? "" : `${lopPending} LOP pending`}</div>
+                <div className="stat-sub">{isLoading ? "" : `${regularized} regularized`}</div>
               </div>
               <div className="stat-icon si-warn"><i className="ti ti-clock-exclamation" /></div>
             </div>
@@ -84,28 +99,14 @@ export default function AttendanceTab() {
           <div className="stat-card">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
               <div>
-                <div className="stat-label">Avg Hours / Day</div>
-                <div className="stat-value">{isLoading ? <Spinner /> : avgHours}</div>
-                <div className="stat-sub">Required: 9.0 hrs</div>
+                <div className="stat-label">Missing Punch</div>
+                <div className="stat-value" style={{ color: "var(--error)" }}>{isLoading ? <Spinner /> : missingPunch}</div>
+                <div className="stat-sub">no action required</div>
               </div>
-              <div className="stat-icon si-info"><i className="ti ti-clock" /></div>
+              <div className="stat-icon si-error"><i className="ti ti-alert-triangle" /></div>
             </div>
             <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${avgHoursPct}%`, background: "var(--info)" }} />
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-              <div>
-                <div className="stat-label">Attendance %</div>
-                <div className="stat-value" style={{ color: "var(--success)" }}>{isLoading ? <Spinner /> : stats ? `${stats.attendance_percentage}%` : "—"}</div>
-                <div className="stat-sub">Above threshold</div>
-              </div>
-              <div className="stat-icon si-success"><i className="ti ti-chart-bar" /></div>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${Math.min(attPct, 100)}%`, background: "var(--success)" }} />
+              <div className="progress-fill" style={{ width: `${Math.min(missingPct, 100)}%`, background: "var(--error)" }} />
             </div>
           </div>
         </div>

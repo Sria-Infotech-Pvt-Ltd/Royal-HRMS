@@ -130,7 +130,7 @@ export default function TeamCalendar() {
                     <>
                       <div className={[
                         "w-6 h-6 rounded-full flex items-center justify-center text-xs mb-1 font-medium",
-                        isToday ? "bg-[var(--primary)] text-white font-bold" : isWeekend ? "text-[var(--on-variant)]" : "text-[var(--on-variant)]",
+                        isToday ? "bg-[var(--primary)] text-[var(--on-primary)] font-bold" : isWeekend ? "text-[var(--on-variant)]" : "text-[var(--on-variant)]",
                       ].join(" ")}>
                         {day}
                       </div>

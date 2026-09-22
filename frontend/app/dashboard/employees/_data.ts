@@ -55,6 +55,9 @@ export interface Employee {
   orgUnitName?: string | null;
   /** Immediate parent OrgUnit name (e.g. "Software Services"), shown as gray subtext under orgUnitName. */
   orgUnitParentName?: string | null;
+  /** Real uploaded profile photo (ImageKit CDN URL), or null when the
+   * employee has never uploaded one — Avatar falls back to initials. */
+  photoUrl?: string | null;
   /** all the long-tail profile fields, keyed by FieldDef.key */
   details: DetailValues;
   /** repeatable sections, keyed by TableSection.id */
@@ -518,6 +521,7 @@ export interface ApiEmployee {
   last_working_day?: string | null;
   org_unit_name?: string | null;
   org_unit_parent_name?: string | null;
+  profile_photo_url?: string | null;
 }
 
 export function apiToEmployee(u: ApiEmployee): Employee {
@@ -543,6 +547,7 @@ export function apiToEmployee(u: ApiEmployee): Employee {
     lastWorkingDay: u.last_working_day ?? null,
     orgUnitName: u.org_unit_name ?? null,
     orgUnitParentName: u.org_unit_parent_name ?? null,
+    photoUrl: u.profile_photo_url ?? null,
     details: {
       code:          u.employee_id,
       firstName:     u.first_name,

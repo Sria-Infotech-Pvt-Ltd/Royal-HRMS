@@ -12,6 +12,7 @@ from .views import (
     ExpenseListCreateView,
     ExpenseStatsView,
     ExpenseStatusListView,
+    EmployeeDocumentSubmissionListCreateView,
     HolidayDetailView,
     HolidayListCreateView,
     HRHelpRequestDetailView,
@@ -134,4 +135,11 @@ urlpatterns = [
     # HR Help
     path('hr-help/requests/',            HRHelpRequestListCreateView.as_view(), name='hr-help-request-list'),
     path('hr-help/requests/<uuid:pk>/',  HRHelpRequestDetailView.as_view(),     name='hr-help-request-detail'),
+
+    # Employee document submissions (ESS -> Documents self-service).
+    # NOTE: deliberately NOT nested under "documents/" — apps.accounts.urls
+    # (mounted at the same "api/" prefix, included before this file) already
+    # defines "documents/<str:pk>/" for the shared Document Center, which
+    # would swallow "documents/submissions/" as pk="submissions".
+    path('document-submissions/', EmployeeDocumentSubmissionListCreateView.as_view(), name='employee-document-submission-list-create'),
 ]

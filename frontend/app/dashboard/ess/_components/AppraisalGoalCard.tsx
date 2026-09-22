@@ -6,6 +6,14 @@
 // that file's length down, same composition pattern HomeTab.tsx's siblings
 // (HomeBanner.tsx etc.) use.
 
+const RATING_OPTIONS: { value: string; label: string }[] = [
+  { value: "1", label: "1 · Below expectations" },
+  { value: "2", label: "2 · Developing" },
+  { value: "3", label: "3 · Meets expectations" },
+  { value: "4", label: "4 · Exceeds expectations" },
+  { value: "5", label: "5 · Outstanding" },
+];
+
 export interface AppraisalGoalFormValue {
   self_rating: string;
   outcome_measure: string;
@@ -54,7 +62,7 @@ export default function AppraisalGoalCard({ goal, value, disabled, onChange }: P
             onChange={e => onChange(goal.id, "self_rating", e.target.value)}
           >
             <option value="">Choose rating</option>
-            {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+            {RATING_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
         <div className="field-group">

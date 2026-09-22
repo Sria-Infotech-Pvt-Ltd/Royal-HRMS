@@ -7,10 +7,19 @@ import RegularizationModal from "./RegularizationModal";
 import MyCorrectionDetailModal from "../../my-requests/_components/MyCorrectionDetailModal";
 import {
   MyCorrectionRequest, PaginatedResponse, STATUS_BADGE_CLASS, STATUS_LABEL,
-  fmtSubmitted, fmtTime12h, toDisplayStatus,
+  toDisplayStatus,
 } from "../../my-requests/_data";
 
 const RECENT_COUNT = 5;
+
+// "2 September correction" — day (no leading zero) + full month name, matching
+// the reference copy pattern for a request row's title.
+function correctionDateLabel(dateStr: string): string {
+  if (!dateStr) return "Correction";
+  const d = new Date(dateStr + "T12:00:00");
+  if (isNaN(d.getTime())) return "Correction";
+  return `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "long" })} correction`;
+}
 
 export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { autoOpenNew?: boolean }) {
   const [showNew, setShowNew] = useState(autoOpenNew);
@@ -58,32 +67,25 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
         </div>
       </div>
 
-      {/* Quick Action */}
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div>
-        </div>
-        <div className="card-body">
-          <div className="qa-grid">
-            <button className="qa-tile" onClick={() => setShowNew(true)} suppressHydrationWarning>
-              <div className="qa-icon si-warn"><i className="ti ti-file-description" /></div>
-              <span className="qa-label">Request Attendance Correction</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* The page-level "Regularize attendance" button (my-attendance/_client.tsx)
+          already opens this same new-correction modal via autoOpenNew — the
+          "Quick Actions" card that used to duplicate that single tile here
+          was removed as a redundant second clickable for the same action. */}
 
       {error && <div className="alert alert-error"><i className="ti ti-alert-circle" /> {error}</div>}
 
-      {/* Recent corrections — latest 5; full history lives in My Requests */}
+      {/* Attendance requests — latest 5; full history lives in My Requests */}
       <div className="card">
         <div className="card-header">
-          <div className="card-title"><i className="ti ti-clock-edit" /> Recent Correction Requests</div>
+          <div>
+            <div className="card-title"><i className="ti ti-clock-edit" /> Attendance requests</div>
+            <div className="page-sub" style={{ marginTop: 2 }}>Corrections remain visible beside original punches.</div>
+          </div>
           <a href="/dashboard/my-requests?tab=attendance_correction" className="btn btn-ghost btn-sm">
             View All Corrections <i className="ti ti-arrow-right" />
           </a>
         </div>
-        <div className="table-wrap">
+        <div className="card-body" style={{ padding: 0 }}>
           {loading ? (
             <div style={{ padding: "40px 20px", textAlign: "center" }}>
               <i className="ti ti-loader-2 spin" style={{ fontSize: 24, color: "var(--primary)" }} />
@@ -95,41 +97,33 @@ export default function AttendanceCorrectionsTab({ autoOpenNew = false }: { auto
               <p>Use Request Attendance Correction above if a punch was missed or recorded incorrectly.</p>
             </div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Check-In</th>
-                  <th>Check-Out</th>
-                  <th>Reason</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                  <th style={{ textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map(r => {
-                  const displayStatus = toDisplayStatus(r.status);
-                  const checkIn  = r.punch_type !== "OUT" ? fmtTime12h(r.requested_in  ?? r.original_in)  : "—";
-                  const checkOut = r.punch_type !== "IN"  ? fmtTime12h(r.requested_out ?? r.original_out) : "—";
-                  return (
-                    <tr key={r.id} onClick={() => setDetail(r)} style={{ cursor: "pointer" }}>
-                      <td>{fmtSubmitted(r.date)}</td>
-                      <td className="font-mono text-xs">{checkIn}</td>
-                      <td className="font-mono text-xs">{checkOut}</td>
-                      <td>{r.reason}</td>
-                      <td style={{ textAlign: "center" }}>
-                        <span className={STATUS_BADGE_CLASS[displayStatus]}>{STATUS_LABEL[displayStatus]}</span>
-                      </td>
-                      <td style={{ textAlign: "right" }} onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setDetail(r)} suppressHydrationWarning>
-                          <i className="ti ti-eye" /> View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            recent.map((r, idx) => {
+              const displayStatus = toDisplayStatus(r.status);
+              const approver = r.l2_approver_name || r.l1_approver_name || null;
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => setDetail(r)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "12px 20px", cursor: "pointer",
+                    borderTop: idx === 0 ? "none" : "1px solid var(--outline-v)",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>
+                      {correctionDateLabel(r.date)}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 2 }}>
+                      {displayStatus === "approved" && approver
+                        ? `Approved by ${approver}`
+                        : STATUS_LABEL[displayStatus]} · View details
+                    </div>
+                  </div>
+                  <span className={STATUS_BADGE_CLASS[displayStatus]}>{STATUS_LABEL[displayStatus].toUpperCase()}</span>
+                </div>
+              );
+            })
           )}
         </div>
       </div>

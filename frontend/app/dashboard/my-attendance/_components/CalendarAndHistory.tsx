@@ -36,44 +36,48 @@ export default function CalendarAndHistory({ month, year, calendar, history, isL
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button
-            onClick={() => setTab("calendar")}
-            className={`btn btn-sm ${tab === "calendar" ? "btn-filled" : "btn-ghost"}`}
-          >
-            <i className="ti ti-calendar" /> Calendar
-          </button>
-          <button
-            onClick={() => setTab("history")}
-            className={`btn btn-sm ${tab === "history" ? "btn-filled" : "btn-ghost"}`}
-          >
-            <i className="ti ti-list-details" /> History
-          </button>
+      <div className="card-header" style={{ flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <div>
+          <div className="card-title">
+            {isLoading ? "Loading…" : `${MONTH_NAMES[month - 1]} ${year}`}
+          </div>
+          <div className="page-sub" style={{ marginTop: 2 }}>Daily attendance and approved leave.</div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {tab === "calendar" && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginRight: 8 }}>
-              {LEGEND.map(item => (
-                <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 8px", background: item.bg, border: "1px solid var(--outline-v)", borderRadius: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: item.color, display: "inline-block" }} />
-                  <span style={{ fontSize: 10, fontWeight: 500, color: item.color }}>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => setTab("calendar")}
+              className={`btn btn-sm ${tab === "calendar" ? "btn-filled" : "btn-ghost"}`}
+            >
+              <i className="ti ti-calendar" /> Calendar
+            </button>
+            <button
+              onClick={() => setTab("history")}
+              className={`btn btn-sm ${tab === "history" ? "btn-filled" : "btn-ghost"}`}
+            >
+              <i className="ti ti-list-details" /> History
+            </button>
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={onPrev} disabled={isLoading}>
             <i className="ti ti-chevron-left" />
           </button>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)", minWidth: 130, textAlign: "center" }}>
-            {isLoading ? "Loading…" : `${MONTH_NAMES[month - 1]} ${year}`}
-          </span>
           <button className="btn btn-ghost btn-sm" onClick={onNext} disabled={isLoading}>
             <i className="ti ti-chevron-right" />
           </button>
         </div>
       </div>
+
+      {tab === "calendar" && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+          {LEGEND.map(item => (
+            <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 8px", background: item.bg, border: "1px solid var(--outline-v)", borderRadius: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: item.color, display: "inline-block" }} />
+              <span style={{ fontSize: 10, fontWeight: 500, color: item.color }}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {tab === "calendar"
         ? <AttendanceCalendar year={year} month={month} data={calendar} onRegularize={onRegularize} readOnly={readOnly} />

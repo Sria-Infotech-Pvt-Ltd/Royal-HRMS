@@ -1570,6 +1570,12 @@ class Document(models.Model):
     title       = models.CharField(max_length=200)
     description = models.TextField(blank=True, default='')
     category    = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_OTHER)
+    # Only meaningful for CATEGORY_POLICY documents (e.g. "3.2") — left blank
+    # for forms/templates/other where a version string has no meaning. The
+    # ESS Policies & assets tab falls back to showing the category alone
+    # when this is blank rather than fabricating a version.
+    version         = models.CharField(max_length=20, blank=True, default='')
+    effective_date  = models.DateField(null=True, blank=True)
     file        = models.FileField(upload_to=document_center_upload_path, storage=AuthenticatedImageKitStorage())
     file_name   = models.CharField(max_length=255)
     file_type   = models.CharField(max_length=10)       # PDF / DOCX / XLSX …
@@ -1656,6 +1662,10 @@ class EmployeeProfile(models.Model):
     marital_status     = models.CharField(max_length=20, choices=MARITAL_CHOICES, blank=True)
     father_name        = models.CharField(max_length=150, blank=True)
     blood_group        = models.CharField(max_length=5, choices=BLOOD_CHOICES, blank=True)
+    # Distinct from User.email (the work email, used for login) — a
+    # personal address the employee can be reached on outside the org,
+    # shown alongside work email on the profile record.
+    personal_email     = models.EmailField(blank=True)
     current_address       = models.TextField(blank=True)
     # current_address/permanent_address hold only the house/street/area line —
     # village, district, state and PIN code are broken out into their own

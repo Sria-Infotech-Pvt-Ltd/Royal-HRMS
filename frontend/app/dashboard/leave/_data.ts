@@ -18,12 +18,14 @@ export interface LeaveTypeConfig {
 }
 
 export const LEAVE_TYPE_CONFIG: Record<LeaveTypeKey, LeaveTypeConfig> = {
-  casual:    { key: "casual",    label: "Casual Leave",      shortLabel: "CL",  icon: "ti-beach",          color: "#7c3aed", bg: "rgba(124,58,237,0.1)",    isLwp: false, requiresDoc: false },
-  earned:    { key: "earned",    label: "Earned Leave",      shortLabel: "EL",  icon: "ti-calendar-check", color: "#17905a", bg: "rgba(23,144,90,0.1)",   isLwp: false, requiresDoc: false },
-  sick:      { key: "sick",      label: "Sick Leave",        shortLabel: "SL",  icon: "ti-stethoscope",    color: "#2563eb", bg: "rgba(37,99,235,0.1)",   isLwp: false, requiresDoc: true  },
-  lwp:       { key: "lwp",       label: "Leave Without Pay", shortLabel: "LWP", icon: "ti-coin-off",       color: "#a2620c", bg: "rgba(162,98,12,0.1)",   isLwp: true,  requiresDoc: false },
-  maternity: { key: "maternity", label: "Maternity Leave",   shortLabel: "ML",  icon: "ti-heart",          color: "#a78bfa", bg: "rgba(167,139,250,0.12)", isLwp: false, requiresDoc: true  },
-  paternity: { key: "paternity", label: "Paternity Leave",   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "#a78bfa", bg: "rgba(167,139,250,0.1)",  isLwp: false, requiresDoc: true  },
+  // color/bg reuse this app's design tokens (see globals.css) so these chips
+  // stay theme-correct in dark mode instead of a fixed light-mode rgba tint.
+  casual:    { key: "casual",    label: "Casual Leave",      shortLabel: "CL",  icon: "ti-beach",          color: "var(--primary)",   bg: "color-mix(in srgb, var(--primary) 10%, transparent)",   isLwp: false, requiresDoc: false },
+  earned:    { key: "earned",    label: "Earned Leave",      shortLabel: "EL",  icon: "ti-calendar-check", color: "var(--success)",   bg: "color-mix(in srgb, var(--success) 10%, transparent)",   isLwp: false, requiresDoc: false },
+  sick:      { key: "sick",      label: "Sick Leave",        shortLabel: "SL",  icon: "ti-stethoscope",    color: "var(--info)",      bg: "color-mix(in srgb, var(--info) 10%, transparent)",      isLwp: false, requiresDoc: true  },
+  lwp:       { key: "lwp",       label: "Leave Without Pay", shortLabel: "LWP", icon: "ti-coin-off",       color: "var(--warn)",      bg: "color-mix(in srgb, var(--warn) 10%, transparent)",      isLwp: true,  requiresDoc: false },
+  maternity: { key: "maternity", label: "Maternity Leave",   shortLabel: "ML",  icon: "ti-heart",          color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 12%, transparent)", isLwp: false, requiresDoc: true  },
+  paternity: { key: "paternity", label: "Paternity Leave",   shortLabel: "PL",  icon: "ti-baby-carriage",  color: "var(--primary-c)", bg: "color-mix(in srgb, var(--primary-c) 10%, transparent)", isLwp: false, requiresDoc: true  },
 };
 
 export const LEAVE_TYPES_LIST = Object.values(LEAVE_TYPE_CONFIG);

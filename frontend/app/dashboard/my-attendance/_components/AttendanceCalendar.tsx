@@ -12,7 +12,8 @@ interface Props {
   readOnly?:    boolean;
 }
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Monday-first week (M-S columns), matching the reference layout.
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // Keyed by the display strings the backend sends (STATUS_DISPLAY_MAP capitalises all values)
 const STATUS_LABELS: Record<string, string> = {
@@ -32,7 +33,9 @@ const NON_WORKING = new Set(['Weekly Off', 'Holiday']);
 
 export default function AttendanceCalendar({ year, month, data, onRegularize, readOnly = false }: Props) {
   const jsMonth    = month - 1;  // convert to 0-indexed for Date API
-  const firstDay   = new Date(year, jsMonth, 1).getDay();
+  // getDay() is 0=Sun..6=Sat; shift so 0=Mon..6=Sun to match the Monday-first
+  // column order above.
+  const firstDay   = (new Date(year, jsMonth, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, jsMonth + 1, 0).getDate();
   const now        = new Date();
   const isCurrentMonth = now.getFullYear() === year && now.getMonth() === jsMonth;
@@ -86,7 +89,9 @@ export default function AttendanceCalendar({ year, month, data, onRegularize, re
                     <div style={{
                       width: 22, height: 22, borderRadius: "50%",
                       background: isToday ? "var(--primary)" : "transparent",
-                      color: isToday ? "#fff" : (record ? fg : "var(--outline-v)"),
+                      // var(--on-primary), not a literal white, so the "today" badge
+                      // text stays readable against --primary's lighter dark-mode tone.
+                      color: isToday ? "var(--on-primary)" : (record ? fg : "var(--outline-v)"),
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 11, fontWeight: isToday ? 700 : 500,
                     }}>

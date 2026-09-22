@@ -77,6 +77,13 @@ export default function HrHelpTab() {
 
   return (
     <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">HR Help</div>
+          <div className="page-sub">Submit a request and track its status with HR.</div>
+        </div>
+      </div>
+
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <div className="card-title"><i className="ti ti-headset" /> Create HR request</div>

@@ -190,6 +190,10 @@ class StatsSerializer(serializers.Serializer):
     avg_hours_per_day     = serializers.FloatField()
     attendance_percentage = serializers.IntegerField()
     working_days          = serializers.IntegerField()
+    missing_punch              = serializers.IntegerField()
+    total_work_minutes         = serializers.IntegerField()
+    work_hours_percentage      = serializers.IntegerField()
+    late_arrivals_regularized  = serializers.IntegerField()
 
 
 class MonthlySummarySerializer(serializers.Serializer):

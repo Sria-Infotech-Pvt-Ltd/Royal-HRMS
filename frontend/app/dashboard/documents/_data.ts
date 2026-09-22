@@ -19,6 +19,10 @@ export interface ApiDocument {
   description:       string;
   category:          DocCategory;
   category_display:  string;
+  // Only meaningful for category === "policy" — blank/null for other
+  // categories (forms/templates/other never carry a version number).
+  version:           string;
+  effective_date:    string | null;  // ISO date (YYYY-MM-DD), or null
   file:              string;
   file_url:          string;
   file_name:         string;
@@ -41,14 +45,18 @@ export interface ApiStatsResponse {
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
 export interface DocUploadForm {
-  title:       string;
-  description: string;
-  category:    DocCategory | "";
-  file:        File | null;
+  title:          string;
+  description:    string;
+  category:       DocCategory | "";
+  // Only shown/settable in the UI when category === "policy" — optional for
+  // every other category, so leaving them blank never blocks an upload.
+  version:        string;
+  effective_date: string;  // ISO date (YYYY-MM-DD) or "" if unset
+  file:           File | null;
 }
 
 export const EMPTY_UPLOAD_FORM: DocUploadForm = {
-  title: "", description: "", category: "", file: null,
+  title: "", description: "", category: "", version: "", effective_date: "", file: null,
 };
 
 export type DocUploadErrors = Partial<Record<keyof DocUploadForm, string>>;

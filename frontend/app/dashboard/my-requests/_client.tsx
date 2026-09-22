@@ -10,11 +10,14 @@ import LeaveRequestDetailModal from "../leave/_components/LeaveRequestDetailModa
 import type { Expense } from "../expenses/_components/ExpenseClaims";
 import ExpenseDetailModal from "../expenses/_components/ExpenseDetailModal";
 import MyCorrectionDetailModal from "./_components/MyCorrectionDetailModal";
+import HrHelpDetailModal from "./_components/HrHelpDetailModal";
+import EmployeeRequestModal from "./_components/EmployeeRequestModal";
 import type { WorkFromHomeRequest } from "@/types/workFromHome";
+import type { HrHelpRequest } from "@/types/hrHelp";
 import {
   DisplayStatus, MyCorrectionRequest, MyRequestItem, MyRequestKind, PaginatedResponse,
   REQUEST_TABS, STATUS_BADGE_CLASS, STATUS_FILTERS, STATUS_LABEL, TYPE_META,
-  correctionToMyItem, expenseToMyItem, fmtSubmitted, leaveToMyItem, toSortableTime, wfhToMyItem,
+  correctionToMyItem, expenseToMyItem, fmtSubmitted, hrHelpToMyItem, leaveToMyItem, toSortableTime, wfhToMyItem,
 } from "./_data";
 
 type SortKey = "submittedAt" | "lastUpdated" | "status";
@@ -50,6 +53,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
   const [sortDir,      setSortDir]      = useState<"asc" | "desc">("desc");
 
   const [detailItem, setDetailItem] = useState<MyRequestItem | null>(null);
+  const [showNewRequest, setShowNewRequest] = useState(false);
 
   const { data: leaveRaw,      loading: leaveLoading,      error: leaveError,      refetch: refetchLeave } =
     useFetch<PaginatedResponse<LeaveRequest>>(`${API.leave.requests}?page_size=100`);
@@ -59,13 +63,16 @@ export default function MyRequestsClient({ initialTab }: Props) {
     useFetch<PaginatedResponse<MyCorrectionRequest>>(`${API.attendance.myCorrections}?page_size=100`);
   const { data: wfhRaw,        loading: wfhLoading,        error: wfhError } =
     useFetch<PaginatedResponse<WorkFromHomeRequest>>(`${API.workFromHome.requests}?page_size=100`);
+  const { data: hrHelpRaw,     loading: hrHelpLoading,     error: hrHelpError,     refetch: refetchHrHelp } =
+    useFetch<PaginatedResponse<HrHelpRequest>>(`${API.hrHelp.list}?page_size=100`);
 
   const allItems: MyRequestItem[] = useMemo(() => [
     ...(leaveRaw?.results ?? []).map(leaveToMyItem),
     ...(expenseRaw?.results ?? []).map(expenseToMyItem),
     ...(correctionRaw?.results ?? []).map(correctionToMyItem),
     ...(wfhRaw?.results ?? []).map(wfhToMyItem),
-  ], [leaveRaw, expenseRaw, correctionRaw, wfhRaw]);
+    ...(hrHelpRaw?.results ?? []).map(hrHelpToMyItem),
+  ], [leaveRaw, expenseRaw, correctionRaw, wfhRaw, hrHelpRaw]);
 
   const tabCounts = useMemo(() => ({
     all: allItems.length,
@@ -73,6 +80,7 @@ export default function MyRequestsClient({ initialTab }: Props) {
     expense: allItems.filter(i => i.kind === "expense").length,
     attendance_correction: allItems.filter(i => i.kind === "attendance_correction").length,
     wfh: allItems.filter(i => i.kind === "wfh").length,
+    hr_help: allItems.filter(i => i.kind === "hr_help").length,
   }), [allItems]);
 
   const filtered = useMemo(() => {
@@ -128,8 +136,8 @@ export default function MyRequestsClient({ initialTab }: Props) {
     }
   }
 
-  const loading = leaveLoading || expenseLoading || correctionLoading || wfhLoading;
-  const loadError = leaveError || expenseError || correctionError || wfhError;
+  const loading = leaveLoading || expenseLoading || correctionLoading || wfhLoading || hrHelpLoading;
+  const loadError = leaveError || expenseError || correctionError || wfhError || hrHelpError;
 
   return (
     <div>
@@ -137,6 +145,11 @@ export default function MyRequestsClient({ initialTab }: Props) {
         <div>
           <div className="page-title">My Requests</div>
           <div className="page-sub">Track every leave, expense, and attendance correction request you&rsquo;ve submitted</div>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-filled" onClick={() => setShowNewRequest(true)}>
+            <i className="ti ti-plus" /> New request
+          </button>
         </div>
       </div>
 
@@ -295,6 +308,24 @@ export default function MyRequestsClient({ initialTab }: Props) {
         <MyCorrectionDetailModal
           request={detailItem.raw as MyCorrectionRequest}
           onClose={() => setDetailItem(null)}
+        />
+      )}
+
+      {detailItem?.kind === "hr_help" && (
+        <HrHelpDetailModal
+          request={detailItem.raw as HrHelpRequest}
+          onClose={() => setDetailItem(null)}
+        />
+      )}
+
+      {showNewRequest && (
+        <EmployeeRequestModal
+          onClose={() => setShowNewRequest(false)}
+          onSubmitted={() => {
+            setShowNewRequest(false);
+            showToast("Your request was submitted.", "success");
+            refetchHrHelp();
+          }}
         />
       )}
     </div>

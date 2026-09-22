@@ -28,7 +28,7 @@ function DecisionRow({
   actionedAt:     string | null;
 }) {
   const label = decisionStatus ? (DECISION_LABEL[decisionStatus] ?? decisionStatus) : "Pending";
-  const dotClass = decisionStatus === "approved" ? "bg-green-500" : decisionStatus === "rejected" ? "bg-red-500" : "bg-amber-400";
+  const dotClass = decisionStatus === "approved" ? "bg-[var(--success)]" : decisionStatus === "rejected" ? "bg-[var(--error)]" : "bg-[var(--warn)]";
 
   return (
     <div className="flex gap-3">
@@ -92,7 +92,7 @@ export default function LeaveRequestDetailModal({
             </div>
           )}
           {error && (
-            <div className="flex items-center gap-1.5 text-xs text-red-500">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--error)]">
               <i className="ti ti-alert-circle" /> Could not refresh — showing last known details.
             </div>
           )}
@@ -111,7 +111,7 @@ export default function LeaveRequestDetailModal({
               {r.lop_days > 0 ? (
                 <div className="mt-1.5 flex flex-col gap-0.5">
                   <span>{r.leave_type_display}: {r.total_days - r.lop_days} day{(r.total_days - r.lop_days) !== 1 ? "s" : ""}</span>
-                  <span className="text-amber-600 font-medium">LOP: {r.lop_days} day{r.lop_days !== 1 ? "s" : ""}</span>
+                  <span className="text-[var(--warn)] font-medium">LOP: {r.lop_days} day{r.lop_days !== 1 ? "s" : ""}</span>
                   <span className="text-[var(--on-bg)] font-semibold">Total: {r.total_days} day{r.total_days !== 1 ? "s" : ""}</span>
                 </div>
               ) : (
@@ -197,7 +197,7 @@ export default function LeaveRequestDetailModal({
                   onClose();
                 }
               }}
-              className="px-5 py-2.5 rounded-xl border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+              className="px-5 py-2.5 rounded-xl border border-[var(--error)] text-sm font-medium text-[var(--error)] hover:bg-[var(--error-c)] transition-colors"
             >
               Cancel Request
             </button>
@@ -207,7 +207,7 @@ export default function LeaveRequestDetailModal({
           {onReject && (r.can_approve ?? true) && (
             <button
               onClick={() => { onReject(); onClose(); }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors"
+              className="btn-danger flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
             >
               <i className="ti ti-x" /> Reject
             </button>
@@ -215,7 +215,7 @@ export default function LeaveRequestDetailModal({
           {onApprove && (r.can_approve ?? true) && (
             <button
               onClick={() => { onApprove(); onClose(); }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors"
+              className="btn-success flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
             >
               <i className="ti ti-check" /> Approve
             </button>

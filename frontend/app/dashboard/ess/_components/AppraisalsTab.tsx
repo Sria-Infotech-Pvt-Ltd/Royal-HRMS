@@ -58,20 +58,12 @@ const EMPTY_GOAL_VALUE: AppraisalGoalFormValue = {
   self_rating: "", outcome_measure: "", evidence_reference: "", self_comments: "",
 };
 
-const STATUS_PILL_LABEL: Record<string, string> = {
+const STATUS_LINK_LABEL: Record<string, string> = {
   not_started:    "Self-review draft",
   self_review:    "Awaiting manager review",
   hr_calibration: "Awaiting HR calibration",
   published:      "Published",
   completed:      "Acknowledged",
-};
-
-const STATUS_PILL_CLASS: Record<string, string> = {
-  not_started:    "badge-neutral",
-  self_review:    "badge-warn",
-  hr_calibration: "badge-warn",
-  published:      "badge-info",
-  completed:      "badge-success",
 };
 
 function reviewCode(cycleName: string, employeeCode: string): string {
@@ -194,8 +186,7 @@ export default function AppraisalsTab() {
   }
 
   const goalList = goals ?? [];
-  const pillLabel = STATUS_PILL_LABEL[review.status] ?? review.status_display;
-  const pillClass = STATUS_PILL_CLASS[review.status] ?? "badge-neutral";
+  const statusLinkLabel = STATUS_LINK_LABEL[review.status] ?? review.status_display;
   const needsAcknowledge = !!review.published_at && !review.acknowledged_at;
 
   return (
@@ -207,7 +198,7 @@ export default function AppraisalsTab() {
             {review.cycle_name} · {review.employee_name} · {reviewCode(review.cycle_name, review.employee_code)}
           </p>
         </div>
-        <span className={`badge ${pillClass}`}>{pillLabel}</span>
+        <span style={{ color: "var(--primary)", fontWeight: 600, fontSize: 13, whiteSpace: "nowrap" }}>{statusLinkLabel}</span>
       </div>
 
       {err && <div className="alert alert-error mb-16">{err}</div>}

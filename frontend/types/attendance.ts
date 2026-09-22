@@ -22,6 +22,10 @@ export interface AttendanceStats {
   avg_hours_per_day:     number;
   attendance_percentage: number;
   working_days:          number;
+  missing_punch:              number;
+  total_work_minutes:         number;
+  work_hours_percentage:      number;
+  late_arrivals_regularized:  number;
 }
 
 export interface MonthlySummary {

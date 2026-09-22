@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import models as django_models
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
@@ -211,7 +212,7 @@ class UpdatePayslipReimbBonusView(APIView):
         payslip.total_deductions = (
             payslip.lop_deduction + payslip.pf_employee
             + payslip.esi_employee + payslip.pt_deduction + payslip.lwf_employee
-            + payslip.adjustments_deduction
+            + payslip.income_tax + payslip.adjustments_deduction
         )
         payslip.net_pay = payslip.gross_earnings - payslip.total_deductions
         updated_fields.extend(['gross_earnings', 'total_deductions', 'net_pay'])
@@ -402,6 +403,85 @@ class AcknowledgePayslipView(APIView):
         payslip.status = EmployeePayslip.STATUS_ACKNOWLEDGED
         payslip.save(update_fields=['status', 'updated_at'])
         return success('Payslip acknowledged.')
+
+
+class MyPayslipPdfView(APIView):
+    """Streams a real, on-demand-rendered PDF for the caller's own payslip
+    (see services_payslip_pdf.py — no cycle-run step ever populates the
+    payslip_pdf FileField, so this generates from the payslip's real
+    stored figures instead of relying on that field)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from datetime import date
+        from apps.accounts.utils import get_company_financial_year_config, get_fy_start_year
+        from apps.payroll.services_payslip_pdf import render_payslip_pdf
+
+        if not _has_perm(request.user, 'payroll.view_own'):
+            return error('You do not have permission to view payslips.', http_status=403)
+
+        payslip = get_object_or_404(EmployeePayslip, pk=pk, employee=request.user)
+
+        # Real YTD figures for the same FY the payslip falls in — mirrors
+        # the frontend's own computeYtd() so the PDF's YTD section always
+        # matches what the Payslips screen shows.
+        config = get_company_financial_year_config()
+        fy_start_year = get_fy_start_year(payslip.cycle.cycle_start, config['financial_year_start_month'])
+        month_names = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December',
+        ]
+        fy_start_month = month_names.index(config['financial_year_start_month']) + 1
+        fy_start_date = date(fy_start_year, fy_start_month, 1)
+
+        ytd_qs = EmployeePayslip.objects.filter(
+            employee=request.user, cycle__cycle_start__gte=fy_start_date,
+            cycle__cycle_start__lte=payslip.cycle.cycle_start,
+        )
+        ytd_agg = ytd_qs.aggregate(
+            gross=django_models.Sum('gross_earnings'),
+            net=django_models.Sum('net_pay'),
+            income_tax=django_models.Sum('income_tax'),
+        )
+        ytd = {
+            'gross': ytd_agg['gross'] or 0,
+            'net': ytd_agg['net'] or 0,
+            'income_tax': ytd_agg['income_tax'] or 0,
+            'periods': ytd_qs.count(),
+        }
+
+        pdf_bytes = render_payslip_pdf(payslip, ytd=ytd)
+        filename = f'payslip-{payslip.cycle.cycle_start.strftime("%Y-%m")}.pdf'
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class LogPayslipDownloadView(APIView):
+    """Records an audit-trail entry when an employee downloads their own
+    payslip PDF — backs the "Downloads are ... recorded in the audit trail"
+    notice on the ESS Payslips screen. The frontend calls this right before
+    opening payslip_pdf. Employer-side viewing/download of another
+    employee's payslip already goes through payroll.view-gated endpoints and
+    isn't logged here."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from apps.accounts.models import AuditLog
+        from core.responses import get_client_ip
+
+        payslip = get_object_or_404(EmployeePayslip, pk=pk, employee=request.user)
+
+        AuditLog.objects.create(
+            user=request.user, action='payslip_downloaded', module='payroll',
+            object_id=str(payslip.id),
+            changes={'cycle': str(payslip.cycle_id), 'net_pay': str(payslip.net_pay)},
+            branch=request.user.branch or '',
+            ip_address=get_client_ip(request),
+        )
+        return success('Download recorded.')
 
 
 class PayslipQueryListView(APIView):

@@ -42,13 +42,23 @@ export default function Avatar({
 
   return (
     <div
-      className={`${shapeClass} flex items-center justify-center font-semibold flex-shrink-0 ${color ? "" : "bg-[var(--primary)]"} ${textColor ? "" : "text-white"} ${className}`}
+      className={`${shapeClass} flex items-center justify-center font-semibold flex-shrink-0 ${className}`}
       style={{
         width: size,
         height: size,
         fontSize: Math.round(size * 0.36),
-        ...(color ? { backgroundColor: color } : {}),
-        ...(textColor ? { color: textColor } : {}),
+        // Plain Tailwind utilities (rounded-full, flex-shrink-0, etc.) compile
+        // fine under this project's Tailwind v2 JIT pipeline, but arbitrary
+        // values containing a CSS var() call — e.g. the `bg-[var(--primary)]`
+        // / `text-white` classes this used to conditionally apply — never
+        // made it into the compiled CSS at all (confirmed empty across every
+        // build chunk), leaving the initials fallback with no background.
+        // Inline styles sidestep that JIT gap entirely, matching the pattern
+        // already used here for the `color`/`textColor` props.
+        backgroundColor: color ?? "var(--primary)",
+        // var(--on-primary), not a literal white, so the default (no custom
+        // `color` prop) stays readable against --primary's dark-mode tone too.
+        color: textColor ?? "var(--on-primary)",
       }}
     >
       {text}

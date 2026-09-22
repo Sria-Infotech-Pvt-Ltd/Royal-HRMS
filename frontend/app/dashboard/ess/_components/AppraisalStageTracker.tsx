@@ -27,7 +27,7 @@ interface Step {
 
 function dotClass(state: StepState): string {
   if (state === "done") return "tl-success";
-  if (state === "current") return "tl-info";
+  if (state === "current") return "tl-warn";
   return "tl-neutral";
 }
 

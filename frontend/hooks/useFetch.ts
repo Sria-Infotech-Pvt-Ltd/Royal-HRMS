@@ -30,7 +30,14 @@ export function useFetch<T>(url: string | null): FetchState<T> {
       .get<{ data: T }>(url)
       .then(r => {
         if (ticket !== counter.current) return;
-        setData(r.data?.data ?? (r.data as T));
+        // Unwrap the {success, message, data} envelope by checking for the
+        // "data" key's presence, not its truthiness — a `?? fallback` here
+        // would treat a legitimate `data: null` (e.g. "nothing configured
+        // yet") as absent and fall back to the whole envelope object,
+        // which is truthy and has none of T's real fields.
+        const body = r.data as unknown;
+        const hasEnvelope = body !== null && typeof body === "object" && "data" in body;
+        setData(hasEnvelope ? (body as { data: T }).data : (body as T));
         setError(null);
       })
       .catch((err: unknown) => {

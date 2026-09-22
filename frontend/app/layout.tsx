@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import "./aira-theme.css";
+// Self-hosted (not an external CDN) so every icon in the app doesn't
+// depend on jsdelivr being reachable — imported (not a manual <link>) so
+// Next.js bundles it and resolves its font url()s itself.
+import "@tabler/icons-webfont/dist/tabler-icons.min.css";
 import SessionExpiredOverlay from "@/components/SessionExpiredOverlay";
 import VoiceCommandButton from "@/components/VoiceCommandButton";
 import { ToastProvider } from "@/components/ToastProvider";
@@ -32,10 +36,6 @@ export default function RootLayout({
         <link rel="icon" type="image/png" href="/logo-icon.png" sizes="any" />
         <link rel="shortcut icon" href="/logo.svg" />
         <link rel="apple-touch-icon" href="/logo-icon.png" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.46.0/dist/tabler-icons.min.css"
-        />
       </head>
       <body className={inter.className} style={{ minHeight: "100vh" }} suppressHydrationWarning>
         <ToastProvider>

@@ -142,6 +142,7 @@ export default function ProfileHeader({
               text={initials(employee.firstName, employee.lastName)}
               size={80}
               color={avatarColor(employee.department)}
+              photoUrl={employee.photoUrl}
             />
           </div>
 

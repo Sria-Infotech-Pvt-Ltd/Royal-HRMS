@@ -1937,3 +1937,29 @@ class FaceVerificationAttempt(models.Model):
     def __str__(self) -> str:
         outcome = 'matched' if self.is_match else (self.rejection_reason or 'mismatch')
         return f'{self.employee_id} — {self.source} face attempt ({outcome})'
+
+
+class WeeklyTimesheetSubmission(models.Model):
+    """
+    A real, minimal "I've reviewed my hours this week" acknowledgement —
+    backs the ESS Home/Attendance "Submit timesheet" button. Deliberately
+    NOT a full timesheet-entry system (no per-task/per-project hour
+    breakdown exists anywhere in this codebase) — just a real, persisted
+    record that an employee submitted for a given week, since the
+    reference UI's "Submit timesheet" button needs a genuine backend
+    action behind it rather than a no-op.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='weekly_timesheet_submissions',
+    )
+    week_start = models.DateField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'attendance_weekly_timesheet_submission'
+        unique_together = [('employee', 'week_start')]
+        ordering = ['-week_start']
+
+    def __str__(self) -> str:
+        return f'{self.employee_id} — week of {self.week_start}'

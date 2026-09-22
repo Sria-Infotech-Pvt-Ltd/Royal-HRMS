@@ -21,6 +21,11 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
         <div className="card-header">
           <div className="card-title"><i className="ti ti-history" /> Activity history</div>
         </div>
+        <div style={{ padding: "0 20px 4px" }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--on-variant)" }}>
+            Each stage change is recorded in this browser-local demo.
+          </p>
+        </div>
         <div style={{ padding: "8px 20px 16px" }}>
           {entries.length === 0 ? (
             <p style={{ fontSize: 13, color: "var(--on-variant)", margin: 0 }}>No activity recorded yet.</p>
@@ -28,10 +33,10 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
             <div className="timeline">
               {entries.map((entry, idx) => (
                 <div key={idx} className="tl-item">
-                  <div className="tl-dot tl-neutral"><i className="ti ti-point" /></div>
+                  <div className="tl-dot tl-success"><i className="ti ti-check" /></div>
                   <div className="tl-body">
-                    <div className="tl-title">{entry.label} — {entry.actor}</div>
-                    <div className="tl-desc">{formatDateTime(entry.at)}</div>
+                    <div className="tl-title">{entry.label}</div>
+                    <div className="tl-desc">{entry.actor} · {formatDateTime(entry.at)}</div>
                   </div>
                 </div>
               ))}
@@ -41,10 +46,12 @@ export default function AppraisalActivityHistory({ entries }: { entries: Apprais
       </div>
 
       <div className="card">
-        <div style={{ padding: "16px 20px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <i className="ti ti-eye-off" style={{ color: "var(--on-variant)", marginTop: 2 }} />
+        <div className="card-header">
+          <div className="card-title"><i className="ti ti-eye-off" /> Review visibility</div>
+        </div>
+        <div style={{ padding: "0 20px 16px" }}>
           <p style={{ fontSize: 12, color: "var(--on-variant)", margin: 0 }}>
-            Manager notes and calibrated ratings stay hidden until the outcome is published.
+            Manager notes and calibrated ratings stay hidden until the outcome is published. This demo does not make payroll or promotion changes.
           </p>
         </div>
       </div>

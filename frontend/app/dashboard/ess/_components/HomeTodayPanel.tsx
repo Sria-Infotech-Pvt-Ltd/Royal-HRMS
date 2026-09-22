@@ -1,50 +1,95 @@
 "use client";
 
-// Right-column "Today" panel — today's clock status, a this-month attendance
-// snapshot standing in for "weekly timesheet status" (no week-scoped ESS
-// endpoint exists yet — see HomeTab.tsx note), and upcoming holidays via the
-// existing EmpUpcomingHolidays widget (already used elsewhere, not duplicated).
+// Right-column "Today" panel — real shift (org default WorkingHoursPolicy,
+// via the new /attendance/my-shift/ endpoint — there's no per-employee shift
+// assignment field yet, so this is honestly the org-wide default, not a
+// per-person value) with a derived on-time/late/upcoming status, and the
+// next real upcoming holiday. No "weekly timesheet hours logged" row here —
+// this app has no timesheet-submission feature to source that from, so it's
+// left out rather than shown with a fabricated number.
 
+import { useFetch } from "@/hooks/useFetch";
+import { API } from "@/lib/api/endpoints";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
-import type { AttendanceStats } from "@/types/attendance";
-import EmpUpcomingHolidays from "@/components/dashboard/employee/EmpUpcomingHolidays";
+import type { HolidayListData } from "@/types/holidays";
+import WeeklyTimesheetCard from "./WeeklyTimesheetCard";
+
+interface Shift {
+  name: string;
+  start_time: string;
+  end_time: string;
+}
 
 interface Props {
   status: AttendanceStatus | null;
-  stats:  AttendanceStats | null;
 }
 
-function Row({ icon, label, value }: { icon: string; label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid var(--outline-v)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--on-variant)" }}>
-        <i className={`ti ${icon}`} /> {label}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)" }}>{value}</div>
-    </div>
-  );
+function shiftBadge(status: AttendanceStatus | null, shift: Shift): { label: string; tone: "ok" | "warn" | "neutral" } {
+  if (!status?.clocked_in) {
+    const now = new Date();
+    const [startH, startM] = shift.start_time.split(":").map(Number);
+    const startMinutes = startH * 60 + startM;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    return nowMinutes < startMinutes ? { label: "UPCOMING", tone: "neutral" } : { label: "NOT CLOCKED IN", tone: "warn" };
+  }
+  if (!status.clock_in_time) return { label: "ON TIME", tone: "ok" };
+  const [inH, inM] = status.clock_in_time.split(":").map(Number);
+  const [startH, startM] = shift.start_time.split(":").map(Number);
+  const late = inH * 60 + inM > startH * 60 + startM + 15; // matches this app's own grace-period convention elsewhere
+  return late ? { label: "LATE", tone: "warn" } : { label: "ON TIME", tone: "ok" };
 }
 
-export default function HomeTodayPanel({ status, stats }: Props) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title"><i className="ti ti-calendar-time" /> Today</div>
-        </div>
-        <div style={{ padding: "4px 20px 16px" }}>
-          <Row icon="ti-login" label="Clock in" value={status?.clock_in_time ?? "—"} />
-          <Row icon="ti-logout" label="Clock out" value={status?.clock_out_time ?? "—"} />
-          <Row icon="ti-clock" label="Hours logged today" value={status?.working_hours || "—"} />
-          <Row
-            icon="ti-calendar-stats"
-            label="Days present this month"
-            value={stats ? `${stats.days_present}/${stats.working_days}` : "—"}
-          />
-        </div>
-      </div>
+const BADGE_CLASS: Record<"ok" | "warn" | "neutral", string> = {
+  ok: "badge-success", warn: "badge-warn", neutral: "badge-neutral",
+};
 
-      <EmpUpcomingHolidays />
+export default function HomeTodayPanel({ status }: Props) {
+  const { data: shift } = useFetch<Shift | null>(API.attendance.myShift);
+  const { data: holidayData } = useFetch<HolidayListData>(API.leave.holidays);
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const nextHoliday = (holidayData?.holidays ?? [])
+    .filter(h => h.is_active && h.date >= todayIso)
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title"><i className="ti ti-calendar-time" /> Today</div>
+      </div>
+      <div style={{ padding: "4px 20px 16px", fontSize: 12, color: "var(--on-variant)" }}>
+        Your schedule and attendance status.
+      </div>
+      <div style={{ padding: "0 20px 16px" }}>
+        {/* The backend's success() envelope turns a "no default shift
+            configured" response's data=None into data:{} (an empty
+            object), not null — so `shift` alone being truthy doesn't mean
+            it has real fields. Check for an actual field instead. */}
+        {!!shift?.start_time && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--outline-v)" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-bg)" }}>{shift.name}</div>
+              <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>{shift.start_time}–{shift.end_time}</div>
+            </div>
+            {(() => { const b = shiftBadge(status, shift); return <span className={`badge ${BADGE_CLASS[b.tone]}`}>{b.label}</span>; })()}
+          </div>
+        )}
+        <WeeklyTimesheetCard compact />
+        {nextHoliday && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--on-bg)" }}>{nextHoliday.name}</div>
+              <div style={{ fontSize: 11.5, color: "var(--on-variant)" }}>
+                {new Date(nextHoliday.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long" })}
+              </div>
+            </div>
+            <span className="badge badge-neutral">UPCOMING</span>
+          </div>
+        )}
+        {!shift?.start_time && !nextHoliday && (
+          <div style={{ fontSize: 12.5, color: "var(--on-variant)", padding: "10px 0" }}>Nothing scheduled to show yet.</div>
+        )}
+      </div>
     </div>
   );
 }

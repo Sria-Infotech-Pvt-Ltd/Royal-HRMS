@@ -25,11 +25,13 @@ from apps.payroll.models import (
     ManagerAttendanceApproval,
     SalaryTransferBatch,
     BranchPayrollConfig,
+    EmployeeTaxDeclaration,
 )
 from apps.payroll.serializers import (
     PayrollCycleSerializer,
     ManagerAttendanceApprovalSerializer,
 )
+from apps.payroll.services_income_tax import estimate_monthly_tds
 from apps.accounts.models import AuditLog, User
 from apps.attendance.models import AttendanceRecord, AttendanceSettings, AttendanceLateMarkRules
 from apps.branch.models import Branch
@@ -47,7 +49,7 @@ _PAYSLIP_FIELDS = [
     'annual_ctc', 'monthly_ctc', 'basic', 'hra', 'special_allowance', 'other_earnings',
     'reimbursements', 'bonus', 'gross_earnings', 'total_working_days', 'lop_days',
     'lop_deduction', 'pf_wage_base', 'pf_employee', 'pf_employer', 'esi_employee', 'esi_employer',
-    'pt_deduction', 'lwf_employee', 'lwf_employer', 'adjustments_earning',
+    'pt_deduction', 'lwf_employee', 'lwf_employer', 'income_tax', 'adjustments_earning',
     'adjustments_deduction', 'total_deductions', 'net_pay', 'status',
 ]
 
@@ -95,7 +97,7 @@ def _compute_employee_payslip(
     salary_config, components, branch_config, statutory, adjustments, structure,
     lop_days=Decimal('0'), total_working_days=26, cycle_month=None,
     esi_covered_earlier_this_period=False, proration_factor=Decimal('1'),
-    is_metro=False,
+    is_metro=False, tax_regime='new', declared_investments=None,
 ) -> dict:
     """
     Pure calculation for one employee — byte-identical formulas to the
@@ -113,6 +115,11 @@ def _compute_employee_payslip(
     component computed against the full basic, then scaled by the same
     factor as that basic, ends up correctly prorated too) while leaving the
     calculation loop itself untouched.
+
+    tax_regime/declared_investments: this employee's real EmployeeTaxDeclaration
+    for the cycle's financial year (regime + declared 80C/80D/80CCD1B/HRA
+    amounts), resolved by the caller — see apps/payroll/services_income_tax.py
+    for the real slab computation this feeds into.
     """
     monthly_ctc = salary_config.monthly_ctc
     basic = Decimal('0')
@@ -220,8 +227,10 @@ def _compute_employee_payslip(
         Decimal('0'),
     )
 
+    income_tax = estimate_monthly_tds(gross, tax_regime, declared_investments)
+
     total_deductions = (
-        lop_deduction + pf_employee + esi_employee + pt + lwf_employee + adj_deduction
+        lop_deduction + pf_employee + esi_employee + pt + lwf_employee + income_tax + adj_deduction
     )
     net_pay = gross + adj_earning - total_deductions
 
@@ -247,6 +256,7 @@ def _compute_employee_payslip(
         'pt_deduction':          pt,
         'lwf_employee':          lwf_employee,
         'lwf_employer':          lwf_employer,
+        'income_tax':            income_tax,
         'adjustments_earning':   adj_earning,
         'adjustments_deduction': adj_deduction,
         'total_deductions':      total_deductions,
@@ -393,6 +403,19 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
     adjustments_by_employee = defaultdict(list)
     for adj in PayrollAdjustment.objects.filter(employee_id__in=employee_ids, month=adj_month):
         adjustments_by_employee[adj.employee_id].append(adj)
+
+    # ── Bulk fetch: this cycle's financial-year tax declaration per employee ──
+    # India's FY runs Apr-Mar; an employee who never submitted a declaration
+    # for this FY gets the same REGIME_NEW / no-declared-investments default
+    # EmployeeTaxDeclaration.tax_regime itself defaults to — see
+    # services_income_tax.estimate_monthly_tds.
+    fy_start = cycle.cycle_start.year if cycle.cycle_start.month >= 4 else cycle.cycle_start.year - 1
+    tax_declaration_by_employee = {
+        d.employee_id: d
+        for d in EmployeeTaxDeclaration.objects.filter(
+            employee_id__in=employee_ids, financial_year_start=fy_start,
+        )
+    }
 
     # ── Load attendance LOP rules from settings ───────────────────────────
     att_settings = (
@@ -557,6 +580,7 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
         emp_lop      = absent_days + (half_days * Decimal('0.5')) + late_lop
         # Use actual working days from attendance records; fall back to settings default if no records
         emp_working_days = working_days_by_emp.get(employee.id) or 26
+        tax_declaration = tax_declaration_by_employee.get(employee.id)
         computed[employee.id] = _compute_employee_payslip(
             salary_config, components, branch_config, statutory, adjustments, structure,
             lop_days=emp_lop,
@@ -565,6 +589,8 @@ def _run_payroll_processing(cycle: PayrollCycle, selected_employee_codes=None) -
             esi_covered_earlier_this_period=employee.id in esi_covered_earlier_ids,
             proration_factor=proration_factor_by_emp.get(employee.id, Decimal('1')),
             is_metro=branch_obj.is_metro if branch_obj else False,
+            tax_regime=tax_declaration.tax_regime if tax_declaration else EmployeeTaxDeclaration.REGIME_NEW,
+            declared_investments=tax_declaration.declared_investments if tax_declaration else None,
         )
 
     # ── Write phase: bulk_create + bulk_update instead of update_or_create per employee ──

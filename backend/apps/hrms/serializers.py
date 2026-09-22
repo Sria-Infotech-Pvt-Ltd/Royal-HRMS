@@ -24,6 +24,7 @@ from .models import (
     SeparationApprovalStage, SeparationHandoverTask, SeparationClearance,
     SeparationDocument, SeparationActivity, SeparationSettlement,
     HRHelpRequest,
+    EmployeeDocumentSubmission,
 )
 
 logger = logging.getLogger(__name__)
@@ -1132,4 +1133,28 @@ class HRHelpRequestRespondSerializer(serializers.ModelSerializer):
     class Meta:
         model  = HRHelpRequest
         fields = ['status', 'response', 'assigned_to']
+
+
+class EmployeeDocumentSubmissionSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display    = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model  = EmployeeDocumentSubmission
+        fields = [
+            'id', 'category', 'category_display', 'file_name', 'expiry_date',
+            'status', 'status_display', 'submitted_at', 'reviewed_at', 'created_at', 'updated_at',
+        ]
+
+
+class EmployeeDocumentSubmissionCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = EmployeeDocumentSubmission
+        fields = ['category', 'file_name', 'expiry_date']
+
+    def validate_file_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Please choose a file.')
+        return value
         extra_kwargs = {'response': {'required': False}, 'assigned_to': {'required': False}}

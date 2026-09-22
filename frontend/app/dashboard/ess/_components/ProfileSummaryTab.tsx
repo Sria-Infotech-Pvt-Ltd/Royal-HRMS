@@ -1,11 +1,13 @@
 "use client";
 
-// Landing view for the ESS "My Profile" tab. "View employee record" / "Open
-// full employee profile" open the exact same read-only Employee Drawer
-// Admin sees from the Employee Directory (self-service mode: no edit/
-// reveal-sensitive controls) — matching this page's own subtitle ("The
-// same employee record and layout used by Admin"). "Request profile
-// correction" is the one real edit surface (ProfileClient), reused as-is.
+// Landing view for the ESS "My Profile" tab. "Open full employee profile"
+// opens the exact same read-only Employee Drawer Admin sees from the
+// Employee Directory (self-service mode: no edit/reveal-sensitive controls)
+// — matching this page's own subtitle ("The same employee record and
+// layout used by Admin"). "Request profile correction" opens a focused
+// request modal (same reuse pattern as the other ESS "New X" modals —
+// Tax/Expense/Asset request — submitting via the generic HR Help endpoint),
+// not the old full-page ProfileClient editor.
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
@@ -13,6 +15,7 @@ import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
 import type { Employee } from "@/app/dashboard/employees/_data";
+import ProfileCorrectionModal from "./ProfileCorrectionModal";
 
 interface ProfileSummaryData {
   employee_id:      string;
@@ -25,8 +28,14 @@ interface ProfileSummaryData {
   date_of_joining:  string | null;
   date_joined:      string | null;
   work_location:    string | null;
+  status:           string | null;
+  reporting_manager?: { name: string | null } | null;
   profile:          { date_of_birth: string | null } | null;
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  active: "Active", onboarding: "Onboarding", inactive: "Exited",
+};
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -49,13 +58,11 @@ function toDrawerEmployee(d: ProfileSummaryData): Employee {
   };
 }
 
-interface Props {
-  onOpenFullProfile: () => void;
-}
-
-export default function ProfileSummaryTab({ onOpenFullProfile }: Props) {
+export default function ProfileSummaryTab() {
   const { data } = useFetch<ProfileSummaryData>(API.employees.me);
   const [showRecord, setShowRecord] = useState(false);
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctionSubmitted, setCorrectionSubmitted] = useState(false);
 
   return (
     <div>
@@ -69,23 +76,25 @@ export default function ProfileSummaryTab({ onOpenFullProfile }: Props) {
         </div>
       </div>
 
+      {correctionSubmitted && (
+        <div className="alert alert-success mb-16">
+          <i className="ti ti-circle-check" /> Your correction request was submitted and will appear in My Requests.
+        </div>
+      )}
+
       <div className="card mb-16">
         <div style={{ padding: "18px 20px 4px" }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Profile controls</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review your official record or request an approved correction.</div>
         </div>
-        <div style={{ padding: "12px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div style={{ padding: "12px 20px 20px", display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+          {/* "View employee record" used to sit here as a second button
+              opening the exact same drawer as the page's own "Open full
+              employee profile" action above — a redundant duplicate
+              clickable, removed rather than kept for parity's sake. */}
           <button
             type="button"
-            onClick={() => setShowRecord(true)}
-            style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
-          >
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
-          </button>
-          <button
-            type="button"
-            onClick={onOpenFullProfile}
+            onClick={() => setShowCorrection(true)}
             style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
           >
             <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Request profile correction</div>
@@ -116,11 +125,39 @@ export default function ProfileSummaryTab({ onOpenFullProfile }: Props) {
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK LOCATION</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.work_location || "—"}</div>
           </div>
+          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>REPORTING MANAGER</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.reporting_manager?.name || "CEO Office"}</div>
+          </div>
+          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>MOBILE NUMBER</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.phone || "—"}</div>
+          </div>
+          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK EMAIL</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.email || "—"}</div>
+          </div>
+          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYMENT STATUS</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{(data?.status && STATUS_LABEL[data.status]) || "—"}</div>
+          </div>
         </div>
       </div>
 
       {showRecord && data && (
-        <EmployeeDrawer employee={toDrawerEmployee(data)} mode="self" onClose={() => setShowRecord(false)} />
+        <EmployeeDrawer
+          employee={toDrawerEmployee(data)}
+          mode="self"
+          onClose={() => setShowRecord(false)}
+          onRequestCorrection={() => { setShowRecord(false); setShowCorrection(true); }}
+        />
+      )}
+
+      {showCorrection && (
+        <ProfileCorrectionModal
+          onClose={() => setShowCorrection(false)}
+          onSubmitted={() => { setShowCorrection(false); setCorrectionSubmitted(true); }}
+        />
       )}
     </div>
   );

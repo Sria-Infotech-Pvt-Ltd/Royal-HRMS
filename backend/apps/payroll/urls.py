@@ -53,6 +53,8 @@ from apps.payroll.views.payslips import (
     DispatchPayslipsView,
     MyPayslipsView,
     AcknowledgePayslipView,
+    LogPayslipDownloadView,
+    MyPayslipPdfView,
     PayslipQueryListView,
     PayslipQueryResolveView,
     ExpenseSummaryForCycleView,
@@ -140,6 +142,8 @@ urlpatterns = [
     # ── Employee self-service ────────────────────────────────────────────────
     path('my-payslips/', MyPayslipsView.as_view(), name='my-payslips'),
     path('my-payslips/<uuid:pk>/acknowledge/', AcknowledgePayslipView.as_view(), name='payslip-acknowledge'),
+    path('my-payslips/<uuid:pk>/log-download/', LogPayslipDownloadView.as_view(), name='payslip-log-download'),
+    path('my-payslips/<uuid:pk>/pdf/', MyPayslipPdfView.as_view(), name='payslip-pdf'),
 
     # ── Payslip queries ──────────────────────────────────────────────────────
     path('queries/', PayslipQueryListView.as_view(), name='payslip-query-list'),
