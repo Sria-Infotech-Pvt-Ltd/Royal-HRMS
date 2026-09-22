@@ -272,8 +272,10 @@ export default function DepartmentsPage() {
             />
           </div>
 
-          {/* List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* List — capped height + internal scroll so a long department list
+              doesn't push the whole page down; sticky wrapper above still
+              keeps this panel in view as the page scrolls. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 560, overflowY: "auto", paddingRight: 4 }}>
             {loading ? (
               <div style={{ textAlign: "center", padding: "32px 0", color: "var(--on-variant)", fontSize: 13 }}>
                 <Spin /> &nbsp;Loading departments…
@@ -475,7 +477,7 @@ export default function DepartmentsPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(210px, 100%), 1fr))" }}>
+                  <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(210px, 100%), 1fr))", maxHeight: 560, overflowY: "auto", paddingRight: 4 }}>
                     {designations.map(d => (
                       <div
                         key={d.id}
