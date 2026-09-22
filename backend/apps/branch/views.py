@@ -60,10 +60,23 @@ def _branch_admin_role():
     settings.edit — mirrors the exact resolution logic the frontend already
     uses in applyLeaderRole() (BranchManagement.tsx), so both paths that can
     grant this role agree on which one it is.
+
+    order_by('id'): if a company ever has MORE than one role satisfying this
+    filter (the seeded 'branch_admin' role, accounts.0052_seed_branch_admin_role,
+    plus a custom one an admin later flags can_manage_branch=True), Postgres
+    does not guarantee row order without an explicit ORDER BY — .first() was
+    picking a nondeterministic candidate (confirmed directly: a test fixture
+    with a second qualifying role occasionally got assigned it instead of the
+    seeded one). Ordering by id at least makes THIS function's own answer
+    stable across calls; full parity with applyLeaderRole()'s own pick in
+    that same rare multi-role case is a separate, pre-existing question this
+    doesn't attempt to solve (that picker has the identical "first match
+    in whatever order the API returned" shape).
     """
     return (
         Role.objects.filter(can_manage_branch=True, is_active=True)
         .exclude(role_permissions__permission__codename='settings.edit')
+        .order_by('id')
         .first()
     )
 
@@ -399,6 +412,24 @@ class BranchReassignAdminView(APIView):
         old_admin = branch.hr
         if old_admin and old_admin.pk == new_admin.pk:
             return error(f'{new_admin.full_name} is already the Branch Admin for this branch.')
+
+        # Guards a real data-integrity gap: below, a successful reassignment
+        # sets new_admin.branch to THIS branch — if new_admin is already
+        # Branch.hr for a DIFFERENT (active) branch, that other branch's own
+        # `hr` FK would be left pointing at someone whose `branch` field no
+        # longer matches it (they'd have "moved" branches without that other
+        # branch's admin slot ever being vacated or cascaded). Scoped to
+        # active branches only — a stale hr pointer on a long-inactive
+        # branch isn't worth blocking a legitimate reassignment over.
+        other_branch = new_admin.managed_branches.filter(
+            status=Branch.STATUS_ACTIVE,
+        ).exclude(pk=branch.pk).first()
+        if other_branch:
+            return error(
+                f'{new_admin.full_name} is already the Branch Admin for '
+                f'"{other_branch.branch_name}" — reassign that branch to someone '
+                'else first before assigning them here.'
+            )
 
         branch_admin_role = _branch_admin_role()
         if not branch_admin_role:
