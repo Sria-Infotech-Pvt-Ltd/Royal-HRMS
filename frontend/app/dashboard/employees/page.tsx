@@ -20,6 +20,7 @@ import StatusBadge from "./_components/StatusBadge";
 import AddEmployeeModal  from "./_components/AddEmployeeModal";
 import BulkImportModal  from "./_components/BulkImportModal";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
+import Modal from "@/components/Modal";
 
 /* ── API response shape ─────────────────────────────────────── */
 export interface ApiEmployee {
@@ -110,6 +111,7 @@ export default function EmployeesPage() {
   const [showModal,   setShowModal]   = useState(false);
   const [showImport,  setShowImport]  = useState(false);
   const [toggling,    setToggling]    = useState<string | null>(null);
+  const [statusConfirm, setStatusConfirm] = useState<Employee | null>(null);
   const [page,        setPage]        = useState(1);
   const [totalPages,  setTotalPages]  = useState(1);
   const [totalCount,  setTotalCount]  = useState(0);
@@ -197,10 +199,13 @@ export default function EmployeesPage() {
     router.push(`/dashboard/employees/${id}`);
   }
 
-  async function toggleStatus(employee: Employee) {
+  function toggleStatus(employee: Employee) {
+    setStatusConfirm(employee);
+  }
+
+  async function doToggleStatus(employee: Employee) {
     const isCurrentlyActive = employee.status !== "inactive";
-    const label = isCurrentlyActive ? "deactivate" : "activate";
-    if (!window.confirm(`Are you sure you want to ${label} ${fullName(employee)}?`)) return;
+    setStatusConfirm(null);
     setToggling(employee.id);
     try {
       await clientApi.patch(API.employees.detail(employee.id), { is_active: !isCurrentlyActive });
@@ -482,6 +487,35 @@ export default function EmployeesPage() {
           onSuccess={() => fetchEmployees(search, 1)}
         />
       )}
+
+      {/* ── Activate/Deactivate Confirm Modal ── */}
+      {statusConfirm && (() => {
+        const isCurrentlyActive = statusConfirm.status !== "inactive";
+        const label = isCurrentlyActive ? "Deactivate" : "Activate";
+        return (
+          <Modal
+            title={`${label} Employee`}
+            onClose={() => setStatusConfirm(null)}
+            maxWidth="420px"
+            footer={
+              <>
+                <button className="btn btn-ghost" onClick={() => setStatusConfirm(null)}>Cancel</button>
+                <button
+                  className="btn btn-filled"
+                  style={isCurrentlyActive ? { background: "var(--error)" } : undefined}
+                  onClick={() => doToggleStatus(statusConfirm)}
+                >
+                  {label}
+                </button>
+              </>
+            }
+          >
+            <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
+              Are you sure you want to {label.toLowerCase()} <strong>{fullName(statusConfirm)}</strong>?
+            </p>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
