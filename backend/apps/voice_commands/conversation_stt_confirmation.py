@@ -6,7 +6,7 @@ from typing import Callable, Optional
 from apps.voice_commands.approval_extractor import parse_yes_no
 from apps.voice_commands.audit import log_clarification_outcome, log_stt_confirmation_started
 from apps.voice_commands.clarification import clear_pending, set_pending
-from apps.voice_commands.language import get_current_language, text
+from apps.voice_commands.language import get_current_language, set_current_language, text
 from apps.voice_commands.matcher import DEFAULT_LANG, NO_MATCH_INTENT, get_conversational
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,19 @@ def continue_stt_confirmation(
     lang = slots.get('lang', DEFAULT_LANG)
     response_language = slots.get('response_language')
     decision = parse_yes_no(answer_text)
+
+    # Restore the ORIGINAL utterance's response language up front — the
+    # re-ask/declined branches below build their own response directly
+    # (unlike the confirmed branch, which re-enters handle_transcript via
+    # handle_transcript_fn and replays this explicitly through its own
+    # response_language parameter — see this function's own docstring;
+    # setting it again here too is harmless, since that re-entrant call
+    # immediately overrides it the same way regardless). Without this, a
+    # quiet "haan"/"nahi" answering a Hindi "was that transcript right?"
+    # question would get an English re-ask/decline message — same class of
+    # bug as conversation_clarification.py's continue_clarification fix.
+    if response_language is not None:
+        set_current_language(response_language)
 
     if decision is None:
         set_pending(request.user.id, pending['intent'], slots)
