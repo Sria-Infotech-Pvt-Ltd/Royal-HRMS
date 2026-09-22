@@ -140,7 +140,9 @@ export default function DashboardShell({
           <NotificationBell />
           <button
             className="who-chip"
-            onClick={() => navigate("/dashboard/profile")}
+            onClick={() => navigate(
+              pathname.startsWith("/dashboard/ess") ? "/dashboard/ess?tab=profile" : "/dashboard/profile",
+            )}
             title="My Profile"
             suppressHydrationWarning
           >

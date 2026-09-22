@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { SessionPayload } from "@/lib/session";
 import { useAttendanceStatus } from "@/hooks/useEmployeeDashboard";
 import HomeBanner from "./_components/HomeBanner";
@@ -41,9 +41,19 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 // `session` is accepted for backward compatibility with the server
 // component that renders this shell but is no longer used directly here —
 // every tab fetches its own data client-side.
+const TAB_IDS = new Set<string>(TABS.map(t => t.id));
+
 export default function EssShellClient({ session: _session }: { session: SessionPayload }) {
   const [tab, setTab] = useState<TabId>("home");
   const { data: status, refetch: refetchStatus } = useAttendanceStatus();
+
+  // Deep links (e.g. the top-nav avatar chip's "?tab=profile" while already
+  // in the ESS shell) land straight on the intended tab instead of always
+  // resetting to Home.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (requested && TAB_IDS.has(requested)) setTab(requested as TabId);
+  }, []);
 
   return (
     <div>
