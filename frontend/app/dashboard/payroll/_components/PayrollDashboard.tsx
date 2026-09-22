@@ -18,6 +18,9 @@ interface Props {
   onRunPayroll: (month?: string, year?: string) => void;
   onResumeCycle: (id: string, status: string, cycleStart?: string) => void;
   canResume: boolean;
+  /** "Employees w/ Salary" KPI card jumps straight to the Salary Setup tab
+      in one click, instead of making the user find and click the tab themselves. */
+  onGoToSalarySetup?: () => void;
 }
 interface PagedResponse<T> { results: T[]; count: number; }
 
@@ -71,7 +74,9 @@ function cycleForMonth(cycles: PayrollCycle[], calYear: number, calMonth: number
 const DETAIL_STATUSES   = new Set(["paid", "closed"]);
 const TERMINAL_STATUSES = new Set(["paid", "closed", "cancelled"]);
 
-export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume }: Props) {
+const PENDING_CYCLES_SECTION_ID = "payroll-pending-cycles";
+
+export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResume, onGoToSalarySetup }: Props) {
   const router = useRouter();
   const { data: cyclesPage, loading: cyclesLoading, refetch } =
     useFetch<PagedResponse<PayrollCycle>>(API.payroll.cycles);
@@ -132,9 +137,20 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
   const { firstDay, days } = getCalendarDates(calYear, calMonth);
   const calDates = Array.from({ length: days }, (_, i) => i + 1);
 
+  function scrollToPendingCycles() {
+    document.getElementById(PENDING_CYCLES_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const STATS = [
-    { label: "Employees w/ Salary", value: empCount > 0 ? String(empCount) : "—", sub: "CTC configured",          icon: "ti-users",         cls: "si-primary" },
-    { label: "Pending Cycles",       value: String(pending.length),                sub: pending.length > 0 ? `${pending.length} need action` : "All up to date", icon: "ti-clock", cls: pending.length > 0 ? "si-warn" : "si-success" },
+    {
+      label: "Employees w/ Salary", value: empCount > 0 ? String(empCount) : "—", sub: "CTC configured", icon: "ti-users", cls: "si-primary",
+      onClick: onGoToSalarySetup, title: "Go to Salary Setup",
+    },
+    {
+      label: "Pending Cycles", value: String(pending.length), sub: pending.length > 0 ? `${pending.length} need action` : "All up to date", icon: "ti-clock", cls: pending.length > 0 ? "si-warn" : "si-success",
+      onClick: pending.length > 0 ? scrollToPendingCycles : undefined,
+      title: pending.length > 0 ? "Jump to pending cycles" : undefined,
+    },
     { label: "Paid This Year",       value: String(paid.length),                   sub: "Completed payroll runs",  icon: "ti-circle-check",  cls: "si-success"  },
     { label: "Next Pay Day",         value: payDay ? `${payDay} ${MONTHS_LONG[nowMonth]}` : "—", sub: settings ? `Cycle ${settings.cycle_start_day}–${settings.cycle_end_day}` : "Not configured", icon: "ti-calendar-event", cls: "si-info" },
     { label: "Total Payroll Runs",   value: String(cycles.length),                 sub: "All time",                icon: "ti-history",       cls: "si-primary"  },
@@ -146,7 +162,15 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
       {/* Stats row */}
       <div className="stats-grid" style={{ marginBottom: 0 }}>
         {STATS.map(s => (
-          <div key={s.label} className="stat-card">
+          <div
+            key={s.label}
+            className="stat-card"
+            role={s.onClick ? "button" : undefined}
+            tabIndex={s.onClick ? 0 : undefined}
+            onClick={s.onClick}
+            title={s.title}
+            style={s.onClick ? { cursor: "pointer" } : undefined}
+          >
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
               <div>
                 <div className="stat-label">{s.label}</div>
@@ -373,7 +397,7 @@ export default function PayrollDashboard({ onRunPayroll, onResumeCycle, canResum
 
       {/* Pending cycles — action required */}
       {pending.length > 0 && (
-        <div className="card">
+        <div className="card" id={PENDING_CYCLES_SECTION_ID}>
           <div className="card-header">
             <div className="card-title">
               <i className="ti ti-alert-circle" style={{ color: "var(--warn)" }} />

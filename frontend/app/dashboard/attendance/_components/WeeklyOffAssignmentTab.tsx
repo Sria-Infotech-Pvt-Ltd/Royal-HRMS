@@ -158,7 +158,7 @@ export default function WeeklyOffAssignmentTab() {
             lockedBranchName={effectiveBranch}
           />
           <select className="field-input field-select" style={{ width: 180 }} value={department} onChange={e => { setDepartment(e.target.value); setPage(1); }}>
-            <option value="">All Departments</option>
+            <option value="">All Org Units</option>
             {departments.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
           <select className="field-input field-select" style={{ width: 180 }} value={pattern} onChange={e => { setPattern(e.target.value); setPage(1); }}>
@@ -323,7 +323,7 @@ export default function WeeklyOffAssignmentTab() {
             <div className="field-group">
               <label className="field-label">Department</label>
               <select className="field-input field-select" value={bulkDept} onChange={e => setBulkDept(e.target.value)}>
-                <option value="">All Departments</option>
+                <option value="">All Org Units</option>
                 {departments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>

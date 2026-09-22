@@ -5611,3 +5611,140 @@ systems and were left alone.
   because no real reference markup for it exists anywhere (confirmed via grep — reference.html
   has zero `.ess-*` occurrences). Don't guess-convert it from the prose spec alone; wait for real
   reference material (a screenshot at minimum) the way the rest of this pass did.
+
+# Team Context — ESS/Admin Profile Rework, Notification Fixes, Attendance/Payroll/Directory Click-Throughs, Mockup Cleanup
+
+## 1. ESS "My Profile" and admin "My Profile" both switched to a gated summary pattern
+
+`app/dashboard/ess/_components/ProfileSummaryTab.tsx` (reverted to its committed shape) and
+`app/dashboard/profile/ProfileClient.tsx` (rebuilt) now both show: a "Profile controls" card
+(View employee record / Request profile correction tiles), a compact "My record at a glance"
+4-field grid (Employee ID, DOB, DOJ, Work location), and an "Open full employee profile" button
+that opens the shared `EmployeeDrawer` (mode="self") — full detail is read-only there, not inline
+editable. Admin's page dropped its old tabbed inline-edit form (Personal/Work/Education/Bank
+tabs with real `useState`/`PATCH` editing) — Documents, Face ID, Change Password, and Separation
+stay as directly-actionable cards below since those have no approval concept.
+
+Important nuance: a user who holds `employees.edit` (admin/HR) editing their OWN record has no
+one to approve a correction, so `ProfileClient.tsx` branches on
+`session.permissions.includes("employees.edit")` — if true, the tile/drawer button reads "Edit my
+record" and routes straight to `/dashboard/employees/${employee_id}` (the real edit page) instead
+of opening `ProfileCorrectionModal` (the HR-ticket approval flow). Plain employees without that
+permission still go through the request flow. `EmployeeDrawer.tsx` gained a `correctionLabel`
+prop for this label override.
+
+`EmployeeDrawer.tsx`/`EmployeeFullRecordBody.tsx` were also redesigned to match reference
+screenshots: fields are grouped into boxed `SectionCard` cards (two per row — Personal Details |
+Employment & Assignment, Contact & Address | Emergency Contact, Basic Pay | Government IDs &
+Bank), each row rendered via a new shared `Row` component (label left, bold value right) instead
+of the old stacked two-column `Field` grid. `EmployeeDrawerParts.tsx` now exports `SectionCard`/
+`Row` (old `SectionTitle`/`Field`/`PillField` removed — no other remaining consumers).
+`EmployeeDrawerAuditTrail.tsx`/`EmployeeDrawerLeaveCard.tsx` updated to render inside `SectionCard`.
+Drawer footer reordered: "Request profile correction" (filled) + "Request leave" (outline) on one
+row, "Close" alone on the row below (was previously all three inline together).
+
+## 2. Two real backend bugs found and fixed while chasing "no notification dot"
+
+`apps/notifications/signals.py` only fired a bell notification for Promotion and Separation
+actions in the "Perform an action" modal — Confirmation (`EmployeeConfirmView.post`, only wrote
+`AuditLog`) and Pay change (`EmployeeSalaryConfigListView.post`, no notification hook at all)
+silently never notified the employee. Added `_on_employee_confirmed` (post_save on
+`accounts.User`, narrowed to the exact `update_fields` that view saves so no other `User.save()`
+call anywhere accidentally fires it) and `_on_salary_config_created` (post_save on
+`payroll.EmployeeSalaryConfig`, `created=True` only). Added two new `notification_type`/`module`
+choices (`employee_confirmed`/`confirmation`, `salary_updated`/`payroll`) to
+`apps/notifications/models.py` — migration `notifications/0009_alter_notification_module_and_more`.
+Frontend: `NotificationBell.tsx`'s `MODULE_ROUTES` and `types/notifications.ts`'s
+`NotificationModule` updated to match.
+
+Separately: the notification dropdown panel rendering see-through (page content bleeding through
+it, in both light and dark theme) was traced to `.topnav` in `aira-theme.css` having
+`backdrop-filter: blur(14px)` — the panel was a DOM descendant of that header and inherited its
+compositing/stacking context. Fixed by portalling the panel to `document.body` via `createPortal`
+(same pattern already used by `ProfilePhotoModal.tsx`/`FaceRegistrationModal.tsx`), positioned
+with `position: fixed` coordinates computed from the bell button's `getBoundingClientRect()`.
+Click-outside handling now checks both the button ref and a new panel ref since the panel is no
+longer a DOM child of the button's container.
+
+## 3. Org Unit "department" filter dropdowns were empty — real seed-data gap, not a bug
+
+`useDepartmentOptions.ts` (used by every "All Departments"/"All Org Units" filter in Attendance)
+sources its list from `OrgUnit.objects.filter(is_department_level=True)` for unrestricted
+(system_admin) users — `is_department_level` is a deliberate admin-set flag (see its docstring in
+`apps/accounts/models.py`; there's already a toggle for it in Organization -> select unit -> "This
+unit counts as a department"), and none of the 44 seeded org units had ever had it turned on, so
+every such dropdown came back empty. Flagged the 30 leaf units that actually have positions under
+them (leaf = zero children, has at least one Position) directly in the dev DB — matches what the
+Employee Directory already shows as each person's "department" (`_employee_dict`'s
+`org_unit_name`, the employee's direct/leaf Position.org_unit). Excluded one stray zero-position
+test unit ("mulugu"). Also renamed the stale "All Departments" label to "All Org Units" in
+`AttendanceTab.tsx`/`CorrectionsTab.tsx`/`UnpunchesTab.tsx`/`WeeklyOffAssignmentTab.tsx` (x2) to
+match the Employee Directory's existing wording — the underlying data source was already
+OrgUnit-based, only the label text was stale.
+
+## 4. Click-through added to KPI/stat cards on Attendance, Payroll, and Employee Directory
+
+User's ask: "decrease clicks in the complete UI" — started with the concrete case (Attendance's
+Present/Absent/Late/On Leave cards did nothing when clicked) and extended the same pattern to two
+more pages once asked for more:
+
+- Attendance (`AttendanceDetailClient.tsx`/`AttendanceTab.tsx`): the 4 top KPI cards and the
+  summary chip row are now both wired to a single lifted `status` filter (backend already
+  supported `?status=` on `AttendanceListFilterSerializer` — this was frontend-only wiring).
+  Clicking a KPI card switches to the Attendance tab's Team Day View and sets the filter in one
+  click; clicking a chip (or the same status again) toggles it in place without losing the
+  existing date/branch/department filters.
+- Payroll (`PayrollDashboard.tsx`/`PayrollDetailClient.tsx`): "Employees w/ Salary" card now
+  jumps straight to the Salary Setup tab (`onGoToSalarySetup` prop). "Pending Cycles" card
+  scrolls to the existing "Action Required" pending-cycles table section below (via a plain DOM
+  `id` + `scrollIntoView`, not a React ref — a ref-based version tripped the `react-hooks/refs`
+  lint rule when the ref-touching closure was stored inside a plain data array consumed by
+  `.map()`; anything reading `ref.current` needs to be a directly-named handler function
+  referenced straight from JSX, not routed through a data object).
+- Employee Directory (`EmployeeStatCards.tsx`/`useEmployees.tsx`): all 4 stat cards (Total
+  Headcount, Active, Onboarding/Probation, Notice Period) now call the existing `emp.setStatus`
+  filter setter — the status dropdown in the toolbar was already wired to the same state, so this
+  was purely additive. "Onboarding / Probation" combines two filter values into one displayed
+  count; its click defaults to `"onboarding"` (no combined filter option exists to represent both
+  at once).
+
+## 5. Removed the generic "reference-mockup" filler blocks project-wide
+
+User: "remove this images part from the project when ever there" — referring to the
+`BrandBanner`/`CapabilityGrid`/`OperationalToolsGrid`/`PlatformSafeguards` blocks (the "Complete
+capability coverage" / "Operational tools" / "Platform safeguards" sections) that a prior
+reference-replication pass had added to several module pages. Found via
+`grep -rl "Complete capability coverage\|Operational tools\|Platform safeguards"` — appeared in 6
+files:
+
+- Deleted entirely (dead code, never imported/rendered — only referenced from stale code
+  comments): `AttendanceOverviewClient.tsx`, `LeaveOverviewClient.tsx`, `OrgOverviewClient.tsx`,
+  `PayrollOverviewClient.tsx`. Cleaned up the now-inaccurate "unwired, not deleted" comments in
+  `attendance/page.tsx`, `leave/page.tsx`, `payroll/page.tsx`,
+  `org-chart/_components/OrgChartPageClient.tsx` that referenced them.
+- Edited in place (still-live pages): `reports/page.tsx` and `settings/page.tsx` — removed the
+  `<BrandBanner />`/`<CapabilityGrid .../>`/`<OperationalToolsGrid .../>`/`<PlatformSafeguards />`
+  JSX plus their now-unused `CAPABILITIES`/`OPERATIONAL_TOOLS` data arrays and imports, keeping
+  every other real section (Reports: KPI row, Reports Overview + Quick Actions module cards;
+  Settings: KPI row, category pills, the real 15-item `SETTINGS_ITEMS` tile grid) untouched.
+- Removed the now-fully-unused `BrandBanner`/`CapabilityGrid`/`TileDef`/`OperationalToolsGrid`/
+  `PlatformSafeguards` exports from the shared `components/dashboard/ModuleOverviewKit.tsx` —
+  confirmed via grep that no file anywhere still imported them before deleting.
+
+## Notes for Next Developer
+
+- The "Perform an action" modal's 5 actions (Promotion/Org assignment/Pay change/Confirmation/
+  Separation) still don't ALL create a `PromotionRecord`/notification — a pure Org assignment
+  that moves someone's position/department without changing their designation creates no history
+  row and thus no notification either (see `EmployeeDetailView.put`'s `promotion_changed =
+  'designation' in changes or 'role' in changes` gate). Flagged to the user, not fixed — fixing it
+  means deciding whether every reassignment should get a history row, not just designation changes.
+- `is_department_level` on `OrgUnit` is a manual per-unit admin toggle, not something to ever
+  derive/bulk-set programmatically again without asking — the one-time backfill in section 3
+  above was a judgment call for this dev/demo dataset specifically (flagged the actual leaf units
+  with real positions), not a rule to reapply blindly if more org units are added later without a
+  human deciding whether each new one should count as a "department."
+- `ModuleOverviewKit.tsx` now only exports `KpiTile`/`OverviewRow`/`QuickActionTile`/
+  `WeeklyBarChart` — if a future reference-replication pass wants the capability-grid/safeguards
+  look again, it needs to be rebuilt from scratch (deliberately deleted, not commented out, since
+  grep confirmed zero real consumers).

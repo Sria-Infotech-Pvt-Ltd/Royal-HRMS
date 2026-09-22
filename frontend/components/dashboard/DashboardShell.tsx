@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
@@ -12,7 +11,6 @@ import {
 } from "@/lib/navConfig";
 import { NotificationBell } from "@/components/NotificationBell";
 import GlobalSearch from "@/components/dashboard/GlobalSearch";
-import RolePreviewSwitcher from "@/components/dashboard/RolePreviewSwitcher";
 import DarkModeToggle from "@/components/dashboard/DarkModeToggle";
 import DashboardFooter from "@/components/dashboard/DashboardFooter";
 import { useFetch } from "@/hooks/useFetch";
@@ -22,13 +20,6 @@ import { NAV_ICONS } from "@/components/dashboard/NavIcons";
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 }
-
-// The reference app's confirmed exact site map — 9 top-level nav modules
-// in this exact order, nothing more, nothing less.
-const CORE_NAV_IDS = [
-  "dashboard", "org-chart", "employees", "attendance", "leave",
-  "payroll", "performance", "reports", "settings",
-];
 
 export default function DashboardShell({
   session,
@@ -45,19 +36,12 @@ export default function DashboardShell({
   // again for the cookie to refresh.
   const { data: myProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me);
 
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const visibleNav = buildNav(session.permissions ?? []);
   // Top-nav layout (matching the AIRA mockup's single-row navlinks) has no
   // room for the sidebar's section subheadings — every entry renders as one
   // flat, horizontally scrollable strip, section labels dropped, order kept.
   const navItems = visibleNav.filter((entry): entry is NavItem => !isSection(entry));
-  // Only the mockup's 9 core links render in the top nav — everything else
-  // stays reachable through its own existing page (e.g. Settings' own tile
-  // grid), just not flattened into this row.
-  const coreNavItems = CORE_NAV_IDS
-    .map(id => navItems.find(item => item.id === id))
-    .filter((item): item is NavItem => !!item);
   const canSearchEmployees = (session.permissions ?? []).includes("employees.view");
 
   // Nested paths (e.g. "/dashboard/settings/audit") match more than one nav
@@ -80,7 +64,6 @@ export default function DashboardShell({
 
   function navigate(path: string) {
     router.push(path);
-    setMobileNavOpen(false);
   }
 
   return (
@@ -101,28 +84,18 @@ export default function DashboardShell({
           </div>
         </div>
 
-        {/* Mobile nav toggle */}
-        <button
-          className="iconbtn md:hidden flex-shrink-0"
-          onClick={() => setMobileNavOpen(v => !v)}
-          title={mobileNavOpen ? "Close menu" : "Open menu"}
-          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-          suppressHydrationWarning
-        >
-          <i className="ti ti-menu-2" />
-        </button>
-
-        {/* Horizontal scrollable nav links — order:3 on mobile so it drops to
-            its own full-width row below brand+utilities, matching the
-            mockup's own responsive behavior for a long, narrow topnav. */}
+        {/* Horizontal scrollable nav links — hidden on the ESS shell, which
+            has its own complete tab bar (Home/My profile/Attendance/...);
+            showing both stacked one above the other is redundant. */}
+        {!pathname.startsWith("/dashboard/ess") && (
         <nav
           className={[
             "navlinks",
-            mobileNavOpen ? "flex" : "hidden md:flex",
+            "flex",
             "order-3 md:order-none basis-full md:basis-auto",
           ].join(" ")}
         >
-          {coreNavItems.map(item => {
+          {navItems.map(item => {
             const isActive = !item.comingSoon && item.id === activeNavId;
             if (item.comingSoon) {
               return (
@@ -132,7 +105,7 @@ export default function DashboardShell({
                   style={{ cursor: "not-allowed", opacity: 0.6 }}
                   title={`${item.label} — Coming Soon`}
                 >
-                  {NAV_ICONS[item.id]}
+                  {NAV_ICONS[item.id] ?? <i className={`ti ${item.icon}`} style={{ fontSize: 14 }} />}
                   {item.topNavLabel ?? item.label}
                   <span style={{ fontSize: 8.5, fontWeight: 700, background: "var(--line)", color: "var(--faint)", padding: "1px 5px", borderRadius: 99, letterSpacing: "0.04em" }}>
                     SOON
@@ -147,7 +120,7 @@ export default function DashboardShell({
                 onClick={() => navigate(item.path)}
                 suppressHydrationWarning
               >
-                {NAV_ICONS[item.id]}
+                {NAV_ICONS[item.id] ?? <i className={`ti ${item.icon}`} style={{ fontSize: 14 }} />}
                 {item.topNavLabel ?? item.label}
                 {item.badge && (
                   <span className="text-[9.5px] font-bold bg-[var(--brand)] text-white px-1.5 py-px rounded-full flex-shrink-0">
@@ -158,11 +131,11 @@ export default function DashboardShell({
             );
           })}
         </nav>
+        )}
 
         {/* Right-side utilities */}
         <div className="navright order-2 md:order-none">
           <GlobalSearch navItems={navItems} canSearchEmployees={canSearchEmployees} />
-          <RolePreviewSwitcher currentRoleName={session.role} />
           <DarkModeToggle />
           <NotificationBell />
           <button

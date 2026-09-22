@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
 import type { Notification, NotificationModule } from "@/types/notifications";
@@ -13,6 +14,8 @@ const MODULE_ROUTES: Record<NotificationModule, string> = {
   holiday:        "/dashboard/attendance",
   permission:     "/dashboard/leave",
   promotion:      "/dashboard/profile",
+  confirmation:   "/dashboard/profile",
+  payroll:        "/dashboard/payroll",
 };
 
 function relativeTime(iso: string): string {
@@ -34,18 +37,33 @@ export function NotificationBell() {
     notifications, unreadCount, isLoading, fetchNotifications, markRead, markAllRead,
   } = useNotifications();
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef  = useRef<HTMLDivElement>(null);
+  // The header (.topnav) has `backdrop-filter: blur(14px)` for its own
+  // translucent look — a dropdown rendered as its DOM descendant inherits
+  // that element's compositing/stacking context, which is what made the
+  // panel render see-through (page content bleeding into it) in both light
+  // and dark mode. Portalling to <body> and positioning with fixed
+  // coordinates removes it from that stacking context entirely.
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
     if (open) fetchNotifications();
   }, [open, fetchNotifications]);
 
   useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -58,8 +76,9 @@ export function NotificationBell() {
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <button
+        ref={buttonRef}
         className="iconbtn relative"
         title="Notifications"
         onClick={() => setOpen(v => !v)}
@@ -75,8 +94,12 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-[42px] w-[340px] bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] shadow-lg z-50 overflow-hidden">
+      {open && coords && createPortal(
+        <div
+          ref={panelRef}
+          className="fixed w-[340px] rounded-xl border border-[var(--outline-v)] shadow-lg z-[1000] overflow-hidden"
+          style={{ top: coords.top, right: coords.right, background: "var(--surface)" }}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--outline-v)]">
             <span className="text-sm font-semibold text-[var(--on-bg)]">Notifications</span>
             {unreadCount > 0 && (
@@ -130,7 +153,8 @@ export function NotificationBell() {
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

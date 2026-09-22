@@ -24,6 +24,8 @@ NOTIFICATION_TYPE_CHOICES = [
     ('separation_status',      'Separation Status Update'),
     ('document_uploaded',      'Document Uploaded'),
     ('password_reset',         'Password Reset'),
+    ('employee_confirmed',     'Employee Confirmed'),
+    ('salary_updated',         'Salary Updated'),
 ]
 
 MODULE_CHOICES = [
@@ -39,6 +41,8 @@ MODULE_CHOICES = [
     ('expense',        'Expense'),
     ('separation',     'Separation'),
     ('documents',      'Documents'),
+    ('confirmation',   'Confirmation'),
+    ('payroll',        'Payroll'),
 ]
 
 

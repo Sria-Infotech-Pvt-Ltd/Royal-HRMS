@@ -7,7 +7,7 @@
 // keep EmployeeDrawer.tsx under this codebase's ~300-line guideline.
 
 import { useLeaveBalances } from "@/hooks/useEmployeeDashboard";
-import { SectionTitle } from "./EmployeeDrawerParts";
+import { SectionCard, Row } from "./EmployeeDrawerParts";
 
 // Real LeaveBalance.leave_type codes (apps/hrms/models.py LEAVE_TYPE_CHOICES)
 // → the labels/ordering this card shows — display-only, the balances
@@ -37,24 +37,21 @@ export default function EmployeeDrawerLeaveCard() {
     });
 
   return (
-    <>
-      <SectionTitle icon="ti-beach" title={`Leave${leaveData?.year ? ` · ${leaveData.year}` : ""}`} />
+    <SectionCard icon="ti-beach" title={`Leave${leaveData?.year ? ` · ${leaveData.year}` : ""}`}>
       {leaveBalances.length === 0 ? (
         <p style={{ fontSize: 12, color: "var(--on-variant)" }}>No leave balances found. Contact HR to credit your leave.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <>
           {leaveBalances.map(b => (
-            <div key={b.leave_type} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ fontSize: 13 }}>Balance — {LEAVE_LABEL[b.leave_type] ?? b.leave_type}</div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{b.remaining} of {b.total_days} days</div>
-            </div>
+            <Row
+              key={b.leave_type}
+              label={`Balance — ${LEAVE_LABEL[b.leave_type] ?? b.leave_type}`}
+              value={`${b.remaining} of ${b.total_days} days`}
+            />
           ))}
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 13 }}>Loss of pay</div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>{leaveData?.lop_days ?? 0} days</div>
-          </div>
-        </div>
+          <Row label="Loss of pay" value={`${leaveData?.lop_days ?? 0} days`} />
+        </>
       )}
-    </>
+    </SectionCard>
   );
 }

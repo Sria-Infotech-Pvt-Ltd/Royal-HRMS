@@ -25,11 +25,22 @@ const TODAY_LABEL = new Date().toLocaleDateString("en-IN", {
   weekday: "short", day: "numeric", month: "short", year: "numeric",
 });
 
-export default function AttendanceDetailClient({ initialTab, onBack }: { initialTab?: string; onBack: () => void }) {
+export default function AttendanceDetailClient({ initialTab, onBack }: { initialTab?: string; onBack?: () => void }) {
   const [active, setActive]       = useState<TabId>((initialTab as TabId) || "attendance");
   const [viewMode, setViewMode]   = useState<"team" | "employee">("team");
   const [preEmployee, setPreEmployee] = useState<string | null>(null);
   const [preMonth, setPreMonth]   = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+
+  // One click from a KPI card straight to the matching filtered rows below —
+  // switches to the Attendance tab's Team Day View (where the status filter
+  // applies) and sets the filter, instead of making the user land on the tab
+  // and then hunt for the right chip themselves.
+  function jumpToStatus(status: string) {
+    setActive("attendance");
+    setViewMode("team");
+    setStatusFilter(status);
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -64,12 +75,14 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
       {/* Page header */}
       <div className="page-header">
         <div>
-          <button
-            onClick={onBack}
-            style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
-          >
-            <i className="ti ti-arrow-left" /> Back to overview
-          </button>
+          {onBack && (
+            <button
+              onClick={onBack}
+              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
+            >
+              <i className="ti ti-arrow-left" /> Back to overview
+            </button>
+          )}
           <div className="page-title">
             Attendance &amp; Time{!unrestricted && effectiveBranch ? ` — ${effectiveBranch}` : ""}
           </div>
@@ -94,7 +107,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
 
       {/* Summary stat cards */}
       <div className="stats-grid mb-24">
-        <div className="stat-card">
+        <button type="button" className="stat-card" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => jumpToStatus("present")} title="View present employees">
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">Present Today</div>
@@ -106,9 +119,9 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${pct(cards?.present_today)}%`, background: "var(--success)" }} />
           </div>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button type="button" className="stat-card" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => jumpToStatus("absent")} title="View absent employees">
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">Absent</div>
@@ -120,9 +133,9 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${pct(cards?.absent)}%`, background: "var(--error)" }} />
           </div>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button type="button" className="stat-card" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => jumpToStatus("late")} title="View late arrivals">
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">Late Arrivals</div>
@@ -134,9 +147,9 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${pct(cards?.late_arrivals)}%`, background: "var(--warn)" }} />
           </div>
-        </div>
+        </button>
 
-        <div className="stat-card">
+        <button type="button" className="stat-card" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => jumpToStatus("on_leave")} title="View employees on leave">
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
             <div>
               <div className="stat-label">On Leave</div>
@@ -148,7 +161,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${pct(cards?.on_leave)}%`, background: "var(--info)" }} />
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Tab bar */}
@@ -195,7 +208,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
               </button>
             </div>
             {viewMode === "team"
-              ? <AttendanceTab onMutated={refetchDashboard} />
+              ? <AttendanceTab onMutated={refetchDashboard} status={statusFilter} onStatusChange={setStatusFilter} />
               : <EmployeeMonthView initialEmployee={preEmployee} initialMonth={preMonth} />
             }
           </>

@@ -89,6 +89,7 @@ function EmployeesPageInner() {
         onOpen={open}
         onToggleStatus={emp.toggleStatus}
         onRetry={() => emp.fetchEmployees()}
+        onActionApplied={() => emp.fetchEmployees()}
       />
 
       <Pagination

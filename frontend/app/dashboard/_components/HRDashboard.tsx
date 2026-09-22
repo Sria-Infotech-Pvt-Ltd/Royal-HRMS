@@ -1,89 +1,81 @@
 "use client";
 
-// Workforce dashboard — pixel-for-pixel replication of the reference
-// mockup's layout, spacing and copy. The KPI row and "Dashboard overview"
-// status panel pull real numbers from HRDashboardOverviewView
-// (apps/dashboard/views/overview.py) via useDashboardOverview — the
-// mockup's own static "Interactive Demo Data" framing is kept as a literal
-// label (badge) elsewhere, not as an excuse to fabricate the underlying
-// numbers. No capability-hub section on this page — the reference's exact
-// site map shows one only on Organization/Attendance/Leave/Payroll/Reports/
-// Settings, not Dashboard or Performance.
-
-import { useRouter } from "next/navigation";
-import type { SessionPayload } from "@/lib/session";
-import { useDashboardOverview } from "@/hooks/useDashboardOverview";
-import { StatCard } from "@/components/dashboard/StatCard";
-import OverviewList from "@/components/dashboard/OverviewList";
-import QuickActionsGrid from "@/components/dashboard/QuickActionsGrid";
+import DeptHeadcountChart        from "@/components/dashboard/DeptHeadcountChart";
+import AnnouncementCard          from "@/components/dashboard/AnnouncementCard";
+import HrConsole                 from "@/components/dashboard/hr/HrConsole";
+import HrAttendanceSummary       from "@/components/dashboard/hr/HrAttendanceSummary";
+import HrActionQueue             from "@/components/dashboard/hr/HrActionQueue";
+import HrRecruitmentFunnel       from "@/components/dashboard/hr/HrRecruitmentFunnel";
+import HrAttendanceCard          from "@/components/dashboard/hr/HrAttendanceCard";
+import HrEmployeeLifecycleTabs   from "@/components/dashboard/hr/HrEmployeeLifecycleTabs";
+import HrBirthdaysWidget         from "@/components/dashboard/hr/HrBirthdaysWidget";
+import { API }                   from "@/lib/api/endpoints";
+import type { SessionPayload }   from "@/lib/session";
 
 interface Props { session: SessionPayload }
 
+const QUICK_ACTIONS = [
+  { href: "/dashboard/interview-list",   icon: "ti-users",        bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Interview List"    },
+  { href: "/dashboard/leave",            icon: "ti-beach",        bg: "rgba(27,138,107,0.12)", color: "var(--success)", label: "Leave Approvals"   },
+  { href: "/dashboard/payroll",          icon: "ti-report-money", bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "Run Payroll"       },
+  { href: "/dashboard/employees",        icon: "ti-id-badge",     bg: "rgba(14,124,134,0.12)", color: "var(--info)",    label: "Employees"         },
+  { href: "/dashboard/candidate-review", icon: "ti-user-check",   bg: "rgba(181,101,29,0.12)", color: "var(--warn)",    label: "Review Candidates" },
+  { href: "/dashboard/settings",         icon: "ti-settings",     bg: "rgba(30,78,140,0.12)",  color: "var(--primary)", label: "Settings"          },
+];
+
 export default function HRDashboard({ session }: Props) {
-  void session;
-  const router = useRouter();
-  const { data } = useDashboardOverview();
+  const firstName = session.name.split(" ")[0];
 
   return (
-    <div>
-      <div className="pagehead">
-        <div>
-          <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>Dashboard / Overview</div>
-          <h1>Workforce <em>dashboard</em></h1>
-          <p className="lede">
-            A live view of people operations, payroll readiness and work requiring attention.
-          </p>
+    <>
+      {/* Row 1 — Console banner with live KPIs */}
+      <HrConsole firstName={firstName} />
+
+      {/* Announcement */}
+      <AnnouncementCard />
+
+      {/* Quick Actions */}
+      <div className="card mb-20">
+        <div className="card-header">
+          <div className="card-title"><i className="ti ti-bolt" /> Quick Actions</div>
         </div>
-        <button className="btn btn-filled" onClick={() => router.push("/dashboard/approvals")}>
-          Review alerts
-        </button>
+        <div className="card-body">
+          <div className="qa-grid">
+            {QUICK_ACTIONS.map(action => (
+              <a key={action.href} href={action.href} className="qa-tile">
+                <div className="qa-icon" style={{ background: action.bg, color: action.color }}>
+                  <i className={`ti ${action.icon}`} />
+                </div>
+                <span className="qa-label">{action.label}</span>
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="stats">
-        <StatCard label="TOTAL HEADCOUNT" value={data?.total_headcount ?? "—"} sub={data ? `+${data.new_this_month} this month` : ""} tone="brand" />
-        <StatCard label="PRESENT TODAY" value={data?.present_today ?? "—"} sub={data ? `${data.attendance_pct}% attendance` : ""} tone="ok" />
-        <StatCard label="PAYROLL READY" value={data?.payroll_ready ?? "—"} sub={data ? `${data.payroll_blocked} records blocked` : ""} tone="warn" />
-        <StatCard label="OPEN REQUESTS" value={data?.open_requests ?? "—"} sub={data ? "awaiting you" : ""} tone="crit" />
+      {/* Row 2 — Attendance + Action Queue | Funnel + Attendance Card */}
+      <div className="grid-2 mb-16">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <HrAttendanceSummary />
+          <HrActionQueue />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <HrRecruitmentFunnel />
+          <HrAttendanceCard />
+        </div>
       </div>
 
-      <div className="module-grid">
-        <OverviewList
-          title="Dashboard overview"
-          emptyIcon="ti-layout-dashboard"
-          items={[
-            {
-              label: "Payroll readiness", sub: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-              chip: data ? `${data.payroll_ready} of ${data.payroll_total} ready` : "—", chipTone: "warn",
-              onOpen: () => router.push("/dashboard/payroll"),
-            },
-            {
-              label: "Onboarding", sub: "Employees still onboarding",
-              chip: data ? `${data.onboarding_in_progress} in progress` : "—", chipTone: "warn",
-              onOpen: () => router.push("/dashboard/employees"),
-            },
-            {
-              label: "Attendance", sub: "Today · all locations",
-              chip: data ? `${data.attendance_exceptions_today} exceptions` : "—", chipTone: "error",
-              onOpen: () => router.push("/dashboard/attendance"),
-            },
-            {
-              label: "Compliance", sub: "Required document uploads",
-              chip: data ? `${data.compliance_pct}% complete` : "—", chipTone: "success",
-              onOpen: () => router.push("/dashboard/settings/audit"),
-            },
-          ]}
-        />
-
-        <QuickActionsGrid
-          items={[
-            { title: "Hire an employee", sub: "Start the guided onboarding flow", onClick: () => router.push("/dashboard/employees") },
-            { title: "Review leave", sub: "Requests need a decision", onClick: () => router.push("/dashboard/leave") },
-            { title: "Run payroll checks", sub: "Resolve blocked records", onClick: () => router.push("/dashboard/payroll") },
-            { title: "Export workforce report", sub: "Download the current snapshot", onClick: () => router.push("/dashboard/reports") },
-          ]}
-          chartData={data?.weekly_attendance ?? []}
-        />
+      {/* Row 3 — Lifecycle | Dept Headcount */}
+      <div className="grid-2 mb-16">
+        <HrEmployeeLifecycleTabs />
+        <DeptHeadcountChart endpoint={API.dashboard.hrDepartmentHeadcount} />
       </div>
-    </div>
+
+      {/* Row 4 — Birthdays | placeholder */}
+      <div className="grid-2">
+        <HrBirthdaysWidget />
+        <div />
+      </div>
+    </>
   );
 }

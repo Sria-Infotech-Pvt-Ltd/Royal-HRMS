@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { fullName, initials, personAvatarTint, type Employee } from "../_data";
 import Avatar from "./Avatar";
 import EmployeeRowActionsMenu, { type RowAction } from "./EmployeeRowActionsMenu";
+import PerformActionModal from "./PerformActionModal";
 import StatusPill from "@/components/employees/StatusPill";
 
 function slashDate(iso: string | null | undefined): string {
@@ -21,26 +23,31 @@ interface Props {
   toggling: boolean;
   onOpen: (id: string) => void;
   onToggleStatus: (employee: Employee) => void;
+  /** Refetches the directory after a "Perform an action" apply. */
+  onActionApplied: () => void;
 }
 
-export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEdit, toggling, onOpen, onToggleStatus }: Props) {
+export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEdit, toggling, onOpen, onToggleStatus, onActionApplied }: Props) {
   const router = useRouter();
   const onNotice = e.status === "active" && !!e.lastWorkingDay;
   const isExited = e.status === "inactive";
   const tint = personAvatarTint(e.id);
+  const [showActionModal, setShowActionModal] = useState(false);
 
   const actions: RowAction[] = [
     { label: "View", icon: "ti-eye", onClick: () => onOpen(e.id) },
     ...(canEditOnboarding && e.status === "onboarding"
       ? [{ label: "Complete onboarding", icon: "ti-clipboard-check", tone: "warn", onClick: () => router.push(`/dashboard/employees/${e.id}/onboarding`) } satisfies RowAction]
       : []),
-    ...(canEdit
-      ? [{
-          label: e.status === "inactive" ? "Activate" : "Deactivate",
-          icon: e.status === "inactive" ? "ti-user-check" : "ti-user-off",
-          tone: e.status === "inactive" ? "success" : "danger",
-          onClick: () => onToggleStatus(e),
-        } satisfies RowAction]
+    // Replaces the old standalone "Deactivate" toggle — Separation (inside
+    // the unified modal below) is the real offboarding path; a manually
+    // reactivated/deactivated account outside that flow is still available
+    // for admins directly on the Employee Detail page if ever needed.
+    ...(canEdit && !isExited
+      ? [{ label: "Perform an action", icon: "ti-bolt", onClick: () => setShowActionModal(true) } satisfies RowAction]
+      : []),
+    ...(canEdit && isExited
+      ? [{ label: "Activate", icon: "ti-user-check", tone: "success", onClick: () => onToggleStatus(e) } satisfies RowAction]
       : []),
   ];
 
@@ -84,6 +91,13 @@ export default function EmployeeTableRow({ employee: e, canEditOnboarding, canEd
       </div>
       <div onClick={ev => ev.stopPropagation()}>
         <EmployeeRowActionsMenu actions={actions.map(a => ({ ...a, onClick: toggling ? () => {} : a.onClick }))} />
+        {showActionModal && (
+          <PerformActionModal
+            employee={e}
+            onClose={() => setShowActionModal(false)}
+            onApplied={onActionApplied}
+          />
+        )}
       </div>
     </div>
   );

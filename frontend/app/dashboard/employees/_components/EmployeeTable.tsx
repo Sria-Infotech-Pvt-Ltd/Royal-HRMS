@@ -15,10 +15,12 @@ interface Props {
   onOpen: (id: string) => void;
   onToggleStatus: (employee: Employee) => void;
   onRetry: () => void;
+  /** Refetches the directory after a "Perform an action" apply. */
+  onActionApplied: () => void;
 }
 
 export default function EmployeeTable({
-  employees, loading, fetchError, canEditOnboarding, canEdit, togglingId, onOpen, onToggleStatus, onRetry,
+  employees, loading, fetchError, canEditOnboarding, canEdit, togglingId, onOpen, onToggleStatus, onRetry, onActionApplied,
 }: Props) {
   return (
     <div className="tbl-wrap">
@@ -58,6 +60,7 @@ export default function EmployeeTable({
                     toggling={togglingId === e.id}
                     onOpen={onOpen}
                     onToggleStatus={onToggleStatus}
+                    onActionApplied={onActionApplied}
                   />
                 ))}
               </div>

@@ -21,13 +21,9 @@ import ActionMenu from "./ActionMenu";
 export default function ProfileHeader({
   employee,
   employeeUuid,
-  onSelectTab,
-  onConfirmed,
 }: {
   employee: Employee;
   employeeUuid: string;
-  onSelectTab: (tab: string) => void;
-  onConfirmed: (employmentStatus: string, confirmationDate: string | null) => void;
 }) {
   const router = useRouter();
   const exp = experienceFrom(employee.dateOfJoining);
@@ -82,7 +78,7 @@ export default function ProfileHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <ActionMenu employee={employee} onSelectTab={onSelectTab} onConfirmed={onConfirmed} />
+          <ActionMenu employee={employee} />
           {canResetPassword && (
             <button
               onClick={handleResetPassword}

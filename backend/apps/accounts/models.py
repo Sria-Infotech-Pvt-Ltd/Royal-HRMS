@@ -754,6 +754,32 @@ class PromotionRecord(models.Model):
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='promotions_made',
     )
+    # Populated by the "Perform an action" modal (Employee Directory / Employee
+    # Detail page) — covers both its Promotion and Org assignment action types,
+    # since both piggyback on this same PUT-driven record. blank=True/no
+    # default keeps every pre-existing row (created before this field existed)
+    # valid with an empty reason rather than a fabricated one.
+    PROMOTION_REASON_PERFORMANCE   = 'performance_based'
+    PROMOTION_REASON_ROLE_CHANGE   = 'role_change'
+    PROMOTION_REASON_MARKET        = 'market_correction'
+    PROMOTION_REASON_RESTRUCTURING = 'restructuring'
+    ORG_REASON_TEAM_RESTRUCTURING  = 'team_restructuring'
+    ORG_REASON_MANAGER_CHANGE      = 'manager_change'
+    ORG_REASON_LOCATION_TRANSFER   = 'location_transfer'
+    ORG_REASON_DEPARTMENT_CHANGE   = 'department_change'
+    REASON_OTHER                   = 'other'
+    REASON_CHOICES = [
+        (PROMOTION_REASON_PERFORMANCE,   'Performance based'),
+        (PROMOTION_REASON_ROLE_CHANGE,   'Role change'),
+        (PROMOTION_REASON_MARKET,        'Market correction'),
+        (PROMOTION_REASON_RESTRUCTURING, 'Restructuring'),
+        (ORG_REASON_TEAM_RESTRUCTURING,  'Team restructuring'),
+        (ORG_REASON_MANAGER_CHANGE,      'Manager change'),
+        (ORG_REASON_LOCATION_TRANSFER,   'Location transfer'),
+        (ORG_REASON_DEPARTMENT_CHANGE,   'Department change'),
+        (REASON_OTHER,                   'Other'),
+    ]
+    reason = models.CharField(max_length=30, choices=REASON_CHOICES, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

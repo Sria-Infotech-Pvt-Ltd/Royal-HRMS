@@ -553,10 +553,6 @@ export default function EmployeeProfilePage({
       <ProfileHeader
         employee={employee}
         employeeUuid={employeeUuid}
-        onSelectTab={setTab}
-        onConfirmed={(employmentStatus, confirmationDate) => {
-          setEmployee(prev => (prev ? { ...prev, employmentStatus, confirmationDate } : prev));
-        }}
       />
 
       {isPendingOnboarding ? (

@@ -187,10 +187,12 @@ export function useEmployees() {
     {
       label: "TOTAL HEADCOUNT", value: empStats.total, icon: "ti-users", tint: "primary" as const,
       sub: <>across {empStats.departments} org units · <b>+{empStats.new_this_month}</b> this month</>,
+      onClick: () => setStatus("all"),
     },
     {
       label: "ACTIVE", value: empStats.active, icon: "ti-user-check", tint: "success" as const,
       sub: `${activePct}% of headcount`,
+      onClick: () => setStatus("active"),
     },
     {
       label: "ONBOARDING / PROBATION", value: empStats.onboarding_or_probation, icon: "ti-clock", tint: "warn" as const,
@@ -198,11 +200,15 @@ export function useEmployees() {
         ? <><b>{empStats.needs_reporting_manager}</b> need a reporting manager</>
         : "all assigned a reporting manager",
       subTone: empStats.needs_reporting_manager > 0 ? "warn" as const : undefined,
+      // The card combines two distinct filter values into one count — jumps
+      // to "onboarding" (the more common of the two) rather than nothing.
+      onClick: () => setStatus("onboarding"),
     },
     {
       label: "NOTICE PERIOD", value: empStats.notice_period, icon: "ti-alert-triangle", tint: "error" as const,
       sub: "exit clearance opens automatically",
       subTone: "crit" as const,
+      onClick: () => setStatus("notice_period"),
     },
   ], [empStats, activePct]);
 

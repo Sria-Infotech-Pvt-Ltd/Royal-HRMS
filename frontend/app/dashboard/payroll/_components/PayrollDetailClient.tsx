@@ -24,7 +24,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
 interface ResumeState { cycleId: string; status: string; cycleStart?: string; }
 interface BranchWizardState { branchId?: string; branchName?: string; }
 
-export default function PayrollDetailClient({ initialTab, onBack }: { initialTab?: TabId; onBack: () => void }) {
+export default function PayrollDetailClient({ initialTab, onBack }: { initialTab?: TabId; onBack?: () => void }) {
   const canCreate = usePermission("payroll.create");
   const user      = useCurrentUser();
 
@@ -88,12 +88,14 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
     <div>
       <div className="page-header">
         <div>
-          <button
-            onClick={onBack}
-            style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
-          >
-            <i className="ti ti-arrow-left" /> Back to overview
-          </button>
+          {onBack && (
+            <button
+              onClick={onBack}
+              style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--primary)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0, marginBottom: 8 }}
+            >
+              <i className="ti ti-arrow-left" /> Back to overview
+            </button>
+          )}
           <div className="page-title">Payroll Management</div>
           <div className="page-sub">
             Process, approve and disburse salaries —{" "}
@@ -166,6 +168,7 @@ export default function PayrollDetailClient({ initialTab, onBack }: { initialTab
                 onRunPayroll={openFresh}
                 onResumeCycle={openResume}
                 canResume={canCreate}
+                onGoToSalarySetup={() => setActive("salary_setup")}
               />
             </>
           )}

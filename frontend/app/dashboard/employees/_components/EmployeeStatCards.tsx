@@ -10,6 +10,10 @@ export interface EmployeeStatCard {
   sub: ReactNode;
   /** Tints the .sub caption text — matches the reference's .sub.w (warn) / .sub.c (crit) modifiers. */
   subTone?: "warn" | "crit";
+  /** Jumps the table below straight to this status in one click — set to the
+      matching status filter (or "all" to clear it), rather than making the
+      user open the status dropdown themselves. */
+  onClick?: () => void;
 }
 
 const TINT_CLASS: Record<EmployeeStatCard["tint"], string> = {
@@ -27,7 +31,14 @@ export default function EmployeeStatCards({ stats }: Props) {
   return (
     <div className="stats">
       {stats.map(st => (
-        <div key={st.label} className="stat">
+        <div
+          key={st.label}
+          className="stat"
+          role={st.onClick ? "button" : undefined}
+          tabIndex={st.onClick ? 0 : undefined}
+          onClick={st.onClick}
+          style={st.onClick ? { cursor: "pointer" } : undefined}
+        >
           <div className="top">
             <div className="lbl">{st.label}</div>
             <div className={`ico ${TINT_CLASS[st.tint]}`}>

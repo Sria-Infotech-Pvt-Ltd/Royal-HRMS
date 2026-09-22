@@ -33,10 +33,6 @@ interface ProfileSummaryData {
   profile:          { date_of_birth: string | null } | null;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  active: "Active", onboarding: "Onboarding", inactive: "Exited",
-};
-
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -87,11 +83,15 @@ export default function ProfileSummaryTab() {
           <div style={{ fontWeight: 700, fontSize: 15 }}>Profile controls</div>
           <div style={{ fontSize: 12.5, color: "var(--on-variant)", marginTop: 2 }}>Review your official record or request an approved correction.</div>
         </div>
-        <div style={{ padding: "12px 20px 20px", display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-          {/* "View employee record" used to sit here as a second button
-              opening the exact same drawer as the page's own "Open full
-              employee profile" action above — a redundant duplicate
-              clickable, removed rather than kept for parity's sake. */}
+        <div style={{ padding: "12px 20px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => setShowRecord(true)}
+            style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
+            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
+          </button>
           <button
             type="button"
             onClick={() => setShowCorrection(true)}
@@ -124,22 +124,6 @@ export default function ProfileSummaryTab() {
           <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK LOCATION</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.work_location || "—"}</div>
-          </div>
-          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>REPORTING MANAGER</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.reporting_manager?.name || "CEO Office"}</div>
-          </div>
-          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>MOBILE NUMBER</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.phone || "—"}</div>
-          </div>
-          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>WORK EMAIL</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{data?.email || "—"}</div>
-          </div>
-          <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--on-variant)", letterSpacing: "0.04em" }}>EMPLOYMENT STATUS</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--on-bg)", marginTop: 4 }}>{(data?.status && STATUS_LABEL[data.status]) || "—"}</div>
           </div>
         </div>
       </div>

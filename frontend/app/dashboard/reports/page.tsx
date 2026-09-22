@@ -3,17 +3,13 @@
 // Reports hub — a curated set of links to the reporting/analytics surfaces
 // that already exist scattered across other modules (Audit Log, Leave
 // Analytics, Attendance, Payroll), rather than a new reporting engine.
-// The overview/capability/operational-tools sections above the original
-// tile grid follow the same pattern already built for Dashboard/
-// Organization/Attendance/Leave/Payroll/Performance.
 
 import { useRouter } from "next/navigation";
 import { usePermission } from "@/hooks/usePermission";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import {
-  KpiTile, OverviewRow, QuickActionTile, WeeklyBarChart, BrandBanner,
-  CapabilityGrid, OperationalToolsGrid, PlatformSafeguards,
+  KpiTile, OverviewRow, QuickActionTile, WeeklyBarChart,
 } from "@/components/dashboard/ModuleOverviewKit";
 
 const REPORT_ITEMS = [
@@ -38,26 +34,6 @@ const REPORT_ITEMS = [
     label: "Payroll", desc: "Cycle readiness, salary revisions and statutory returns.",
   },
 ] as const;
-
-const CAPABILITIES = [
-  { title: "Workforce analytics", desc: "Headcount, joins, exits, tenure spans and vacancy trends.", href: "/dashboard/employees" },
-  { title: "Lifecycle reports", desc: "Hiring, probation, moves, promotions, pay changes and separations.", href: "/dashboard/employees" },
-  { title: "Time analytics", desc: "Attendance, overtime, absence and leave utilization.", href: "/dashboard/attendance" },
-  { title: "Payroll analytics", desc: "Cost, variance, deductions, arrears and final settlements.", href: "/dashboard/payroll" },
-  { title: "Compliance reports", desc: "Statutory readiness, document expiry and consent/retention status.", href: "/dashboard/settings/audit" },
-  { title: "Audit reports", desc: "Views, edits, approvals, exports and role changes.", href: "/dashboard/settings/audit" },
-  { title: "Scheduled delivery", desc: "Role-filtered reports delivered on controlled schedules.", href: "/dashboard/settings" },
-  { title: "Data exports", desc: "Masked, permission-aware CSV and finance/API outputs.", href: "/dashboard/employees" },
-];
-
-const OPERATIONAL_TOOLS = [
-  { title: "Build custom report", desc: "Choose dimensions, measures, filters and access.", href: "/dashboard/employees" },
-  { title: "Schedule report", desc: "Set recipients, frequency and expiry.", href: "/dashboard/settings" },
-  { title: "Export employee register", desc: "Download a permission-aware snapshot.", href: "/dashboard/employees" },
-  { title: "Open audit explorer", desc: "Filter immutable events by actor and record.", href: "/dashboard/settings/audit" },
-  { title: "Attrition analysis", desc: "Review voluntary and involuntary trends.", href: "/dashboard/employees" },
-  { title: "Data-quality report", desc: "Track completeness, duplicates and exceptions.", href: "/dashboard/employees" },
-];
 
 interface OverviewRowData { name: string; context: string; status_label: string; status_kind: "success" | "error" | "warn"; link: string }
 interface OverviewData {
@@ -127,11 +103,6 @@ export default function ReportsPage() {
           <WeeklyBarChart data={data?.weekly_chart ?? []} />
         </div>
       </div>
-
-      <BrandBanner />
-      <CapabilityGrid title="Complete capability coverage" sub="Lifecycle functions designed for multi-year HR operations." items={CAPABILITIES} onOpen={router.push} />
-      <OperationalToolsGrid title="Operational tools" sub="Role-aware tools with effective dates, approval states and audit events." items={OPERATIONAL_TOOLS} onLaunch={router.push} />
-      <PlatformSafeguards />
     </div>
   );
 }

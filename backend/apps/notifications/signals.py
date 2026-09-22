@@ -653,6 +653,49 @@ def _dispatch_separation_status(instance, employee, ref_id, new_status) -> None:
         })
 
 
+# ─── Employee Confirmation ──────────────────────────────────────────────────────
+
+@receiver(post_save, sender='accounts.User')
+def _on_employee_confirmed(sender, instance, created, update_fields, **kwargs):
+    """"Perform an action" modal's Confirmation action flips
+    employment_status straight on the User row (EmployeeConfirmView.post) —
+    no dated history model of its own, unlike Promotion/Separation, so this
+    is the only hook point available. Narrowed to the exact update_fields
+    that view saves, so no other User.save() call anywhere (profile edits,
+    login timestamps, etc.) accidentally fires this."""
+    if created or not update_fields:
+        return
+    if set(update_fields) != {'employment_status', 'confirmation_date', 'updated_at'}:
+        return
+    if instance.employment_status != 'confirmed':
+        return
+    effective = format_date_display(instance.confirmation_date) if instance.confirmation_date else ''
+    _notify(
+        instance, 'You Have Been Confirmed!',
+        f'Your employment has been confirmed, effective {effective}.' if effective
+        else 'Your employment has been confirmed.',
+        'employee_confirmed', 'confirmation', str(instance.id),
+    )
+
+
+# ─── Salary / Pay Change ────────────────────────────────────────────────────────
+
+@receiver(post_save, sender='payroll.EmployeeSalaryConfig')
+def _on_salary_config_created(sender, instance, created, **kwargs):
+    """"Perform an action" modal's Pay change action assigns a new active
+    EmployeeSalaryConfig row (EmployeeSalaryConfigListView.post) rather than
+    editing one in place — every new row here is a real compensation change
+    worth notifying the employee about."""
+    if not created:
+        return
+    _notify(
+        instance.employee, 'Compensation Updated',
+        f'Your annual CTC has been updated to ₹{instance.annual_ctc:,.0f}, '
+        f'effective {format_date_display(instance.effective_from)}.',
+        'salary_updated', 'payroll', str(instance.id),
+    )
+
+
 # ─── Document Center ────────────────────────────────────────────────────────────
 
 @receiver(post_save, sender='accounts.Document')

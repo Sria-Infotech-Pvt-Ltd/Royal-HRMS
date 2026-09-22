@@ -3966,6 +3966,16 @@ class EmployeeDetailView(APIView):
             employee.phone = phone
             update_fields.append('phone')
 
+        if 'work_location' in data:
+            # "Org assignment" action (Perform an action modal) — a plain
+            # descriptive field with no locking/onboarding rule attached,
+            # unlike phone/employee_type/full_name above.
+            work_location = (data.get('work_location') or '').strip()
+            if employee.work_location != work_location:
+                changes['work_location'] = {'from': employee.work_location, 'to': work_location}
+            employee.work_location = work_location
+            update_fields.append('work_location')
+
         if 'employee_type' in data:
             employee_type = (data.get('employee_type') or '').strip()
             if locked and employee_type != employee.employee_type:
@@ -4131,6 +4141,15 @@ class EmployeeDetailView(APIView):
         else:
             effective_date = timezone.now().date()
         remarks = (data.get('remarks') or '').strip()
+        # "Perform an action" modal's Reason field (Promotion/Org assignment) —
+        # validated against PromotionRecord.REASON_CHOICES so an unrecognised
+        # value never silently gets stored; blank stays blank for every other
+        # caller of this same PUT (plain field edits carry no reason at all).
+        reason_raw = (data.get('reason') or '').strip()
+        if reason_raw and reason_raw not in dict(PromotionRecord.REASON_CHOICES):
+            return error('reason must be one of the recognised action reasons.')
+        if reason_raw:
+            changes['reason'] = reason_raw
 
         if position_obj is not None:
             # "Reassign Position" — a dated event like a promotion, not a
@@ -4189,6 +4208,7 @@ class EmployeeDetailView(APIView):
                     effective_date        = effective_date,
                     remarks               = remarks,
                     promoted_by           = request.user,
+                    reason                = reason_raw,
                 )
 
         employee = _get_employee(employee_id)
@@ -4314,6 +4334,15 @@ class EmployeeDetailView(APIView):
         return self.put(request, employee_id)
 
 
+# "Perform an action" modal's Confirmation reason options — new
+# categorisation for this action, not previously defined anywhere.
+CONFIRMATION_REASON_CHOICES = [
+    ('probation_completed',  'Probation completed'),
+    ('extended_probation',   'Extended probation'),
+    ('other',                'Other'),
+]
+
+
 class EmployeeConfirmView(APIView):
     """POST /employees/<employee_id>/confirm/ — the Confirmation action
     (probation -> confirmed). A one-time flip, not a dated/effective-ranged
@@ -4343,6 +4372,13 @@ class EmployeeConfirmView(APIView):
         else:
             effective_date = timezone.now().date()
         remarks = (request.data.get('remarks') or '').strip()
+        # "Perform an action" modal's Reason field — Confirmation is a
+        # one-shot flip with no dated history model of its own (see this
+        # view's own docstring), so the reason is recorded on the AuditLog
+        # entry rather than a new column, same as `remarks` already is.
+        reason = (request.data.get('reason') or '').strip()
+        if reason and reason not in dict(CONFIRMATION_REASON_CHOICES):
+            return error('reason must be one of the recognised confirmation reasons.')
 
         employee.employment_status = User.EMPLOYMENT_STATUS_CONFIRMED
         employee.confirmation_date = effective_date
@@ -4358,6 +4394,7 @@ class EmployeeConfirmView(APIView):
                 'full_name':         employee.full_name,
                 'confirmation_date': effective_date.isoformat(),
                 'remarks':           remarks,
+                'reason':            reason,
             },
             branch     = employee.branch,
             ip_address = get_client_ip(request),

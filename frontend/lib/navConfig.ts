@@ -32,7 +32,10 @@ const ALL_NAV: NavEntry[] = [
   { section: "Workforce" },
   { id: "employees", icon: "ti-id-badge", label: "Employees", path: "/dashboard/employees", permission: "employees.view" },
   { id: "org-chart", icon: "ti-sitemap", label: "Organization Management", path: "/dashboard/org-chart", permission: "org_chart.view", topNavLabel: "Organization" },
-  { id: "performance", icon: "ti-target-arrow", label: "Performance", path: "/dashboard/performance", permission: "performance.manage_cycles" },
+  // Performance nav item removed for now (admin-side review-cycle management
+  // page) — the ESS "Growth"/"Appraisals" self-service tabs still use the
+  // same apps.performance backend and are unaffected; only this top-level
+  // admin entry point is hidden.
   { id: "branches", icon: "ti-building-skyscraper", label: "Company Codes", path: "/dashboard/branches", permission: "branches.view" },
 
   { section: "Time & Pay" },

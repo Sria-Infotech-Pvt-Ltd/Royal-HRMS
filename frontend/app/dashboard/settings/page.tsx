@@ -4,30 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
-import {
-  KpiTile, BrandBanner,
-  CapabilityGrid, OperationalToolsGrid, PlatformSafeguards,
-} from "@/components/dashboard/ModuleOverviewKit";
-
-const CAPABILITIES = [
-  { title: "Role-based access", desc: "Employee, manager, HR, payroll, finance, auditor and administrator roles.", href: "/dashboard/settings/permissions" },
-  { title: "Field security", desc: "Mask and separately authorize salary, bank, IDs, medical and discipline data.", href: "/dashboard/settings/permissions" },
-  { title: "Workflow designer", desc: "Approval levels, conditions, delegation, SLA and escalation.", href: "/dashboard/settings/approval-rules" },
-  { title: "Retention controls", desc: "Purpose, consent, legal hold, retention and erasure workflows.", href: "/dashboard/settings/audit" },
-  { title: "Integrations", desc: "Attendance, identity, payroll, finance, email and API connections.", href: "/dashboard/settings/smtp" },
-  { title: "Continuity", desc: "Backups, restoration tests, monitoring and disaster recovery records.", href: "/dashboard/settings/audit" },
-  { title: "Environment controls", desc: "Development, test and production separation with change approvals.", href: "/dashboard/settings/audit" },
-  { title: "System audit", desc: "Immutable configuration, access, export and integration event history.", href: "/dashboard/settings/audit" },
-];
-
-const OPERATIONAL_TOOLS = [
-  { title: "Role matrix", desc: "Review module, action and field permissions.", href: "/dashboard/settings/permissions" },
-  { title: "Workflow designer", desc: "Configure approvals and exception routes.", href: "/dashboard/settings/approval-rules" },
-  { title: "Integration center", desc: "Monitor APIs, imports and export jobs.", href: "/dashboard/settings/smtp" },
-  { title: "Backup & restore", desc: "Review backups and restoration evidence.", href: "/dashboard/settings/audit" },
-  { title: "Retention schedule", desc: "Configure purpose-based retention and holds.", href: "/dashboard/settings/audit" },
-  { title: "System health", desc: "Inspect jobs, failures, capacity and alerts.", href: "/dashboard/settings/audit" },
-];
+import { KpiTile } from "@/components/dashboard/ModuleOverviewKit";
 
 interface OverviewData { admin_roles: number; audit_events_30d: number }
 
@@ -156,11 +133,6 @@ export default function SettingsPage() {
           );
         })}
       </div>
-
-      <BrandBanner />
-      <CapabilityGrid title="Complete capability coverage" sub="Lifecycle functions designed for multi-year HR operations." items={CAPABILITIES} onOpen={router.push} />
-      <OperationalToolsGrid title="Operational tools" sub="Role-aware tools with effective dates, approval states and audit events." items={OPERATIONAL_TOOLS} onLaunch={router.push} />
-      <PlatformSafeguards />
     </div>
   );
 }

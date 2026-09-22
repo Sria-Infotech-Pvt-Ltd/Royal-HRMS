@@ -2,6 +2,8 @@
 // out purely to keep that file under this codebase's ~300-line guideline.
 "use client";
 
+import type { ReactNode } from "react";
+
 export const STATUS_BADGE: Record<string, string> = {
   Active: "badge-success",
   "Notice Period": "badge-warn",
@@ -9,29 +11,28 @@ export const STATUS_BADGE: Record<string, string> = {
   Exited: "badge-neutral",
 };
 
-export function SectionTitle({ icon, title }: { icon: string; title: string }) {
+/** Boxed, labelled section — the record's fields are grouped into these
+    cards (two per row on wide screens) rather than one long stacked list. */
+export function SectionCard({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", marginTop: 22, marginBottom: 12 }}>
-      <i className={`ti ${icon}`} /> {title}
+    <div style={{ background: "var(--bg-mid)", borderRadius: "var(--radius)", padding: "14px 16px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--on-variant)", marginBottom: 12 }}>
+        <i className={`ti ${icon}`} /> {title}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>{children}</div>
     </div>
   );
 }
 
-export function Field({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
+/** One label/value line within a SectionCard — label left, bold value right. */
+export function Row({ label, value, valueNode, mono }: {
+  label: string; value?: string | null; valueNode?: ReactNode; mono?: boolean;
+}) {
   return (
-    <div>
-      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{label}</div>
-      <div style={{ fontSize: 13, fontFamily: mono ? "Menlo, Consolas, monospace" : undefined }}>{value || "—"}</div>
-    </div>
-  );
-}
-
-export function PillField({ label, value, badgeClass }: { label: string; value: string | null | undefined; badgeClass: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{label}</div>
-      <div style={{ marginTop: 2 }}>
-        {value ? <span className={`badge ${badgeClass}`}>{value}</span> : <span style={{ fontSize: 13 }}>—</span>}
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+      <div style={{ fontSize: 13, color: "var(--on-variant)" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, textAlign: "right", fontFamily: mono ? "Menlo, Consolas, monospace" : undefined }}>
+        {valueNode ?? (value || "—")}
       </div>
     </div>
   );

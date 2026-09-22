@@ -16,6 +16,11 @@ import AttendanceDetailDrawer from "./AttendanceDetailDrawer";
 
 interface Props {
   onMutated?: () => void;
+  /** Lifted up so the parent's KPI stat-cards (Present/Absent/Late/On Leave) can
+      jump straight to the matching filtered rows in one click, and the summary
+      chips below stay in sync with whatever triggered the filter. */
+  status: string;
+  onStatusChange: (status: string) => void;
 }
 
 interface BranchOption { id: number; branch_name: string }
@@ -58,7 +63,7 @@ function toQuery(params: Record<string, string | number | undefined>): string {
   return query ? `?${query}` : "";
 }
 
-export default function AttendanceTab({ onMutated }: Props) {
+export default function AttendanceTab({ onMutated, status, onStatusChange }: Props) {
   const { showToast } = useToast();
   const user            = useCurrentUser();
   const unrestricted    = isUnrestrictedUser(user);
@@ -83,7 +88,12 @@ export default function AttendanceTab({ onMutated }: Props) {
   const branches    = Array.isArray(branchData) ? branchData : (branchData?.results ?? []);
   const departments = useDepartmentOptions(unrestricted, effectiveBranch);
 
-  const filters = { date, branch, department };
+  const filters = { date, branch, department, status };
+
+  function toggleStatus(key: string) {
+    onStatusChange(status === key ? "" : key);
+    setPage(1);
+  }
 
   // Wait for the user to resolve before firing any request — otherwise an
   // hr_admin's very first fetch would briefly go out unscoped.
@@ -162,7 +172,7 @@ export default function AttendanceTab({ onMutated }: Props) {
           value={department}
           onChange={e => { setDepartment(e.target.value); setPage(1); }}
         >
-          <option value="">All Departments</option>
+          <option value="">All Org Units</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <div style={{ flex: 1 }} />
@@ -178,15 +188,29 @@ export default function AttendanceTab({ onMutated }: Props) {
         )}
       </div>
 
-      {/* Summary chips */}
+      {/* Summary chips — click one to filter the table below to that status;
+          click again (or the KPI card that opened this tab) to clear it. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        {CHIP_CONFIG.map(item => (
-          <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 6, fontSize: 12 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: item.color, flexShrink: 0, display: "inline-block" }} />
-            <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{chips?.[item.key] ?? 0}</span>
-            <span style={{ color: "var(--on-variant)", fontSize: 11 }}>{item.label}</span>
-          </div>
-        ))}
+        {CHIP_CONFIG.map(item => {
+          const isActive = status === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => toggleStatus(item.key)}
+              style={{
+                display: "flex", alignItems: "center", gap: 7, padding: "5px 12px",
+                background: isActive ? `color-mix(in srgb, ${item.color} 14%, var(--surface))` : "var(--surface)",
+                border: `1px solid ${isActive ? item.color : "var(--outline-v)"}`,
+                borderRadius: 6, fontSize: 12, cursor: "pointer",
+              }}
+            >
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: item.color, flexShrink: 0, display: "inline-block" }} />
+              <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{chips?.[item.key] ?? 0}</span>
+              <span style={{ color: "var(--on-variant)", fontSize: 11 }}>{item.label}</span>
+            </button>
+          );
+        })}
         <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 6, fontSize: 11, marginLeft: "auto", color: "var(--on-variant)" }}>
           Total: {records?.count ?? 0} employees
         </div>
