@@ -2,6 +2,7 @@ export interface EmployeeBulkImportCreatedRow {
   row:         number;
   identifier:  string;
   employee_id: string;
+  email_sent:  boolean;
 }
 
 export interface EmployeeBulkImportSkippedRow {

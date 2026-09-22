@@ -179,6 +179,67 @@ def send_otp_email(email: str, otp: str, full_name: str) -> None:
     msg.send(fail_silently=False)
 
 
+def send_employee_welcome_email(user, temp_password: str) -> bool:
+    """
+    Sends the "your account is ready" credentials email for a newly created
+    employee — the exact HTML/subject/company-branding
+    EmployeeListCreateView.post() has always built inline, factored out here
+    so EmployeeBulkImportView.post() can send the identical email per row
+    instead of a second, drifting implementation.
+
+    Never raises — a failed email must not roll back or block processing of
+    an already-created account. Returns True/False so the caller can report
+    success per-row exactly as the single-create endpoint already does.
+
+    temp_password is used only to compose this one message — it is never
+    persisted, and the exception message logged on failure never includes it
+    (only the recipient email and the exception itself).
+    """
+    from apps.tenants.utils import get_current_company_code
+
+    try:
+        company_name, logo_url, website, address = _get_company_branding()
+        company_name = company_name or 'Royal HRMS'
+        # Same FRONTEND_URL + '/login' convention as the company-provisioning
+        # welcome email (see apps.tenants.utils.send_company_provisioned_email).
+        company_code = get_current_company_code()
+        company_code_line = (
+            f'<strong>Company ID:</strong> {company_code}<br>' if company_code else ''
+        )
+        login_url = f'{settings.FRONTEND_URL}/login'
+
+        body = (
+            f'<p>Hi <strong>{user.full_name}</strong>,</p>'
+            f'<p>Your {company_name} account has been created.'
+            f' Use the credentials below to log in:</p>'
+            f'<p>'
+            f'{company_code_line}'
+            f'<strong>Employee ID:</strong> {user.employee_id}<br>'
+            f'<strong>Login Email:</strong> {user.email}<br>'
+            f'<strong>Temporary Password:</strong> {temp_password}<br>'
+            f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
+            f'</p>'
+            f'<p>You will be asked to change your password on first login.</p>'
+            f'<p>— HR Team</p>'
+        )
+        html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
+
+        connection, from_email = _get_smtp_connection()
+        msg = _build_message(
+            subject=f'Welcome to {company_name} — Your Login Credentials',
+            html_body=html_body,
+            from_email=from_email,
+            to=[user.email],
+            connection=connection,
+        )
+        msg.send(fail_silently=False)
+        logger.info('Welcome email sent to %s', user.email)
+        return True
+    except Exception as exc:
+        logger.error('Welcome email failed for %s: %s', user.email, exc)
+        return False
+
+
 def send_test_email(recipient_email: str, smtp_config: dict) -> None:
     
     sender_name = smtp_config.get('sender_name', '').strip()

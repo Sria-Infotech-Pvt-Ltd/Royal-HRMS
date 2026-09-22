@@ -3208,58 +3208,8 @@ class EmployeeListCreateView(APIView):
                 ip_address=get_client_ip(request),
             )
 
-        try:
-            from apps.accounts.utils import (
-                _get_smtp_connection, _build_message, _company_email_wrapper,
-                _get_company_branding,
-            )
-            from apps.tenants.utils import get_current_company_code
-
-            company_name, logo_url, website, address = _get_company_branding()
-            company_name = company_name or 'Royal HRMS'
-            # Captured before `connection` below is reassigned to the SMTP
-            # connection object — get_current_company_code() needs the real
-            # (Django DB) `connection` name, not this local shadow of it.
-            company_code = get_current_company_code()
-            company_code_line = (
-                f'<strong>Company ID:</strong> {company_code}<br>' if company_code else ''
-            )
-            # Same FRONTEND_URL + '/login' convention as the company-provisioning
-            # welcome email (see apps.tenants.utils.send_company_provisioned_email)
-            # — every tenant shares the one /login page, company ID is entered
-            # there, so no per-company portal_url lookup is needed here.
-            login_url = f'{settings.FRONTEND_URL}/login'
-
-            body = (
-                f'<p>Hi <strong>{full_name}</strong>,</p>'
-                f'<p>Your {company_name} account has been created.'
-                f' Use the credentials below to log in:</p>'
-                f'<p>'
-                f'{company_code_line}'
-                f'<strong>Employee ID:</strong> {employee_id}<br>'
-                f'<strong>Login Email:</strong> {email}<br>'
-                f'<strong>Temporary Password:</strong> {temp_password}<br>'
-                f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
-                f'</p>'
-                f'<p>You will be asked to change your password on first login.</p>'
-                f'<p>— HR Team</p>'
-            )
-            html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
-
-            connection, from_email = _get_smtp_connection()
-            msg = _build_message(
-                subject=f'Welcome to {company_name} — Your Login Credentials',
-                html_body=html_body,
-                from_email=from_email,
-                to=[email],
-                connection=connection,
-            )
-            msg.send(fail_silently=False)
-            logger.info('Welcome email sent to %s', email)
-            email_sent = True
-        except Exception as exc:
-            logger.error('Welcome email failed for %s: %s', email, exc)
-            email_sent = False
+        from apps.accounts.utils import send_employee_welcome_email
+        email_sent = send_employee_welcome_email(user, temp_password)
 
         logger.info('Employee %s (%s) created by %s', employee_id, email, request.user.email)
         # The account itself was created successfully either way — only the
@@ -6459,6 +6409,7 @@ class EmployeeBulkImportView(APIView):
         # Pre-load lookup tables once for the entire batch.
         from apps.branch.models import Branch as _Branch
         from apps.accounts.models import EmployeeProfile
+        from apps.accounts.utils import send_employee_welcome_email
 
         # branch: lower_name → exact branch_name stored on User
         branch_map: dict = {}
@@ -6677,11 +6628,23 @@ class EmployeeBulkImportView(APIView):
                 from apps.hrms.views.leave import _allocate_leaves_for_employee
                 _allocate_leaves_for_employee(user, user.date_of_joining)
 
+                # Same welcome/credentials email EmployeeListCreateView.post()
+                # sends for a single employee — this bulk path had been
+                # missing it entirely (the account was created but no email
+                # was ever sent). A failed send is recorded per-row below but
+                # must never undo the already-created account or stop the
+                # rest of the batch — see send_employee_welcome_email's
+                # docstring for why it never raises.
+                email_sent = send_employee_welcome_email(user, temp_password)
+
                 seen_emails.add(email)
                 created_ids.append(employee_id)
                 created_rows.append({'row': idx, 'identifier': email,
-                                     'employee_id': employee_id})
-                logger.info('Bulk import: employee %s (%s) created', employee_id, email)
+                                     'employee_id': employee_id, 'email_sent': email_sent})
+                logger.info(
+                    'Bulk import: employee %s (%s) created, welcome email %s',
+                    employee_id, email, 'sent' if email_sent else 'FAILED',
+                )
 
             except Exception as exc:
                 logger.error('Bulk import row %d failed (%s): %s', idx, email, exc)
