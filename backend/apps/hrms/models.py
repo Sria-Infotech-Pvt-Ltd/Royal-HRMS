@@ -473,8 +473,6 @@ class SeparationApprovalStage(models.Model):
     stage    = models.CharField(max_length=20, choices=SEP_STAGE_CHOICES)
     sequence = models.PositiveSmallIntegerField()  # 1, 2 — action order
 
-    # Left null when the stage resolves to a role/branch rather than one
-    # specific person (e.g. an unassigned HR, or the branch-admin fallback).
     approver = models.ForeignKey(
         'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='separation_approval_stages',
