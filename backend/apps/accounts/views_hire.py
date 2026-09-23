@@ -104,6 +104,8 @@ class HireActionListCreateView(APIView):
             effective_from = datetime.strptime(effective_from, '%Y-%m-%d').date()
         except ValueError:
             return error('Effective from must be a valid date.')
+        if effective_from < timezone.localdate():
+            return error('Effective from cannot be in the past.')
         if not position_id:
             return error('Select a position.')
         position = Position.objects.filter(pk=position_id, is_active=True).first()

@@ -27,9 +27,10 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
 }) {
   const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const [hireActionId, setHireActionId] = useState<string | null>(initialHireActionId ?? null);
   const [reason, setReason] = useState("");
-  const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [effectiveFrom, setEffectiveFrom] = useState(todayStr);
   const [orgUnitId, setOrgUnitId] = useState("");
   const [positionId, setPositionId] = useState("");
   const [err, setErr] = useState("");
@@ -52,6 +53,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
   async function submit() {
     if (!reason)         { setErr("Select a reason.");        return; }
     if (!effectiveFrom)  { setErr("Effective from is required."); return; }
+    if (effectiveFrom < todayStr) { setErr("Effective from cannot be in the past."); return; }
     if (!positionId)     { setErr("Select a position.");      return; }
     setSaving(true);
     setErr("");
@@ -106,7 +108,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
           <div className="f">
             <label>Effective from <span className="req">*</span></label>
-            <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} className="finput" />
+            <input type="date" min={todayStr} value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} className="finput" />
             <p className="hint">This becomes the date of joining.</p>
           </div>
         </div>
