@@ -17,6 +17,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import PhoneInput from "@/components/PhoneInput";
+import LanguagesSelect from "@/components/LanguagesSelect";
 import type { ProfileForm } from "@/app/onboarding/_types";
 import type { OnboardingFieldConfigByStep, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import DynamicStepFields from "@/app/onboarding/_components/DynamicStepFields";
@@ -444,12 +445,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Languages known <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
-                  <div className="flex gap-2">
-                    <input value={identityExtras.languages_known} onChange={e => setIdentityExtras(x => ({ ...x, languages_known: e.target.value }))}
-                      placeholder="e.g. Telugu, Hindi, English" className="field-input" />
-                    <button type="button" onClick={() => setIdentityExtras(x => ({ ...x, languages_known: x.languages_known || "Telugu, Hindi, English" }))}
-                      className="btn btn-ghost btn-sm" style={{ whiteSpace: "nowrap" }}>+ Suggest</button>
-                  </div>
+                  <LanguagesSelect value={identityExtras.languages_known}
+                    onChange={v => setIdentityExtras(x => ({ ...x, languages_known: v }))} />
                 </div>
               </div>
 
