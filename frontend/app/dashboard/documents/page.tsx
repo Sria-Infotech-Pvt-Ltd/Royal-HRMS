@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { usePermission } from "@/hooks/usePermission";
 import DocPreviewBody from "./_components/DocPreviewBody";
+import DocumentTile from "./_components/DocumentTile";
 import {
   DOCUMENTS_BASE, DOCUMENTS_STATS, documentDetail,
-  CATEGORY_META, DOC_ACCEPT, EMPTY_UPLOAD_FORM, formatUploadedAt,
+  DOC_ACCEPT, EMPTY_UPLOAD_FORM, formatUploadedAt,
   getFileTypeMeta, validateUploadForm,
   type ApiDocument, type ApiStatsResponse, type DocCategory,
   type DocUploadErrors, type DocUploadForm,
@@ -370,44 +371,9 @@ export default function DocumentCenterPage() {
       {/* Document grid */}
       {!loading && !error && documents.length > 0 && (
         <div className="doc-grid">
-          {documents.map(doc => {
-            const fm = getFileTypeMeta(doc.file_type);
-            const cm = CATEGORY_META[doc.category] ?? CATEGORY_META.other;
-            return (
-              <div key={doc.id} className="doc-tile" onClick={() => setSelected(doc)}>
-                {/* Icon */}
-                <div className={`doc-icon ${fm.iconClass}`}>
-                  <i className={`ti ${fm.icon}`} />
-                </div>
-
-                {/* Name */}
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--on-bg)", lineHeight: 1.4, wordBreak: "break-word" }}>
-                  {doc.title}
-                </div>
-
-                {/* Type + size */}
-                <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                  {fm.label} · {doc.file_size_display}
-                </div>
-
-                {/* Date + uploader */}
-                <div style={{ fontSize: 11, color: "var(--outline)", marginTop: 2 }}>
-                  Uploaded {formatUploadedAt(doc.uploaded_at)}
-                </div>
-                <div style={{ fontSize: 11, color: "var(--outline)" }}>
-                  by {doc.uploaded_by_name}
-                </div>
-
-                {/* Category badge */}
-                <div style={{ marginTop: 4 }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: cm.bg, color: cm.color, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    <i className={`ti ${cm.icon}`} style={{ fontSize: 10 }} />
-                    {cm.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+          {documents.map(doc => (
+            <DocumentTile key={doc.id} doc={doc} onOpen={setSelected} />
+          ))}
         </div>
       )}
 
