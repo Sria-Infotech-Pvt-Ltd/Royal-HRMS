@@ -17,7 +17,7 @@ export default function StatutoryConfigTab() {
   const { data: states } = useFetch<StateOption[]>(API.branches.states);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [newStateId, setNewStateId] = useState("");
   const [draft, setDraft] = useState<Partial<StatutoryConfig>>({});
@@ -30,9 +30,9 @@ export default function StatutoryConfigTab() {
     setDraft(prev => ({ ...prev, [key]: value }));
   }
 
-  function flash(text: string) {
-    setMsg(text);
-    setTimeout(() => setMsg(null), 3000);
+  function flash(text: string, isError = false) {
+    setMsg({ text, isError });
+    setTimeout(() => setMsg(null), isError ? 5000 : 3000);
   }
 
   function selectConfig(id: string) {
@@ -61,8 +61,43 @@ export default function StatutoryConfigTab() {
     setSlabs(updated);
   }
 
+  function validateDraft(): string | null {
+    if (current.esi_applicable) {
+      const ceiling = Number(current.esi_wage_ceiling ?? 0);
+      if (Number.isNaN(ceiling) || ceiling < 0) return "ESI wage ceiling must be a non-negative number.";
+      for (const [label, val] of [
+        ["ESI employee rate", current.esi_employee_rate], ["ESI employer rate", current.esi_employer_rate],
+      ] as const) {
+        const n = Number(val ?? 0);
+        if (Number.isNaN(n) || n < 0 || n > 100) return `${label} must be between 0 and 100.`;
+      }
+    }
+    if (current.lwf_applicable) {
+      for (const [label, val] of [
+        ["LWF employee amount", current.lwf_employee_amount], ["LWF employer amount", current.lwf_employer_amount],
+      ] as const) {
+        const n = Number(val ?? 0);
+        if (Number.isNaN(n) || n < 0) return `${label} cannot be negative.`;
+      }
+    }
+    if (current.pt_applicable) {
+      let prevMin: number | null = null;
+      for (let i = 0; i < currentSlabs.length; i++) {
+        const slab = currentSlabs[i];
+        if (slab.min < 0) return `Slab ${i + 1}: min cannot be negative.`;
+        if (slab.max !== null && slab.max <= slab.min) return `Slab ${i + 1}: max must be greater than min.`;
+        if (slab.amount < 0) return `Slab ${i + 1}: PT amount cannot be negative.`;
+        if (prevMin !== null && slab.min < prevMin) return "PT slabs must be ordered by ascending min.";
+        prevMin = slab.min;
+      }
+    }
+    return null;
+  }
+
   async function saveConfig() {
     if (!selectedId) return;
+    const validationErr = validateDraft();
+    if (validationErr) { flash(validationErr, true); return; }
     setSaving(true);
     try {
       await clientApi.put(API.payroll.statutoryDetail(selectedId), draft);
@@ -70,7 +105,7 @@ export default function StatutoryConfigTab() {
       refetch();
       flash("Statutory config saved.");
     } catch {
-      flash("Failed to save.");
+      flash("Failed to save.", true);
     } finally {
       setSaving(false);
     }
@@ -87,7 +122,7 @@ export default function StatutoryConfigTab() {
       setSelectedId(res.data.data.id);
       flash("Config created.");
     } catch {
-      flash("A config for this state may already exist.");
+      flash("A config for this state may already exist.", true);
     } finally {
       setSaving(false);
     }
@@ -134,8 +169,8 @@ export default function StatutoryConfigTab() {
       {/* Config panel */}
       <div className="flex-1">
         {msg && (
-          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.startsWith("Failed") || msg.startsWith("A config") ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
-            {msg}
+          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.isError ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
+            {msg.text}
           </div>
         )}
 

@@ -110,6 +110,52 @@ class StatutoryConfigSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Due months must not contain duplicates.')
         return value
 
+    def validate_esi_wage_ceiling(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('ESI wage ceiling cannot be negative.')
+        return value
+
+    def validate_esi_employee_rate(self, value):
+        if value is not None and not (0 <= value <= 100):
+            raise serializers.ValidationError('ESI employee rate must be between 0 and 100.')
+        return value
+
+    def validate_esi_employer_rate(self, value):
+        if value is not None and not (0 <= value <= 100):
+            raise serializers.ValidationError('ESI employer rate must be between 0 and 100.')
+        return value
+
+    def validate_lwf_employee_amount(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('LWF employee amount cannot be negative.')
+        return value
+
+    def validate_lwf_employer_amount(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('LWF employer amount cannot be negative.')
+        return value
+
+    def validate_pt_slabs(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('pt_slabs must be a list of slabs.')
+        prev_min = None
+        for i, slab in enumerate(value):
+            if not isinstance(slab, dict):
+                raise serializers.ValidationError(f'Slab {i + 1} must be an object with min/max/amount.')
+            slab_min, slab_max, amount = slab.get('min'), slab.get('max'), slab.get('amount')
+            if not isinstance(slab_min, (int, float)) or isinstance(slab_min, bool) or slab_min < 0:
+                raise serializers.ValidationError(f'Slab {i + 1}: min must be a non-negative number.')
+            if slab_max is not None and (not isinstance(slab_max, (int, float)) or isinstance(slab_max, bool)):
+                raise serializers.ValidationError(f'Slab {i + 1}: max must be a number or left blank for no upper limit.')
+            if slab_max is not None and slab_max <= slab_min:
+                raise serializers.ValidationError(f'Slab {i + 1}: max must be greater than min.')
+            if not isinstance(amount, (int, float)) or isinstance(amount, bool) or amount < 0:
+                raise serializers.ValidationError(f'Slab {i + 1}: PT amount must be a non-negative number.')
+            if prev_min is not None and slab_min < prev_min:
+                raise serializers.ValidationError('Slabs must be ordered by ascending min.')
+            prev_min = slab_min
+        return value
+
     def validate(self, data):
         frequency = data.get('lwf_frequency', getattr(self.instance, 'lwf_frequency', StatutoryConfig.LWF_MONTHLY))
         due_months = data.get('lwf_due_months', getattr(self.instance, 'lwf_due_months', None) or [])
