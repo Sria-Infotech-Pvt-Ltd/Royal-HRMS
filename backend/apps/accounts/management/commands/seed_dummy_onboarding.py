@@ -168,7 +168,7 @@ class Command(BaseCommand):
                     user.must_change_password = False
                     user.save(update_fields=['onboarding_status', 'must_change_password', 'updated_at'])
 
-                    from apps.hrms.views.leave import _allocate_leaves_for_employee
+                    from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
                     _allocate_leaves_for_employee(user, user.date_of_joining)
 
             if dry_run:

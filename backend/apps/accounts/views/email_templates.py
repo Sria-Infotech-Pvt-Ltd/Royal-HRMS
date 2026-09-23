@@ -624,7 +624,7 @@ class ResolveTemplateVariablesView(APIView):
             if not _has_perm(request.user, 'leave.approve'):
                 return error(self._DENIED, http_status=status.HTTP_403_FORBIDDEN)
             from apps.hrms.models import LeaveRequest, REQ_PENDING
-            from apps.hrms.views.leave import _can_approve_at_stage
+            from apps.hrms.views.leave_shared import _can_approve_at_stage
             try:
                 leave_request = LeaveRequest.objects.select_related('employee').get(pk=entity_id)
             except (LeaveRequest.DoesNotExist, ValueError, ValidationError):

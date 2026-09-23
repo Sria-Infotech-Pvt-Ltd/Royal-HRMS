@@ -4,7 +4,7 @@ from typing import Optional
 
 from apps.attendance.views.hr_attendance import HRAttendanceDashboardView
 from apps.hrms.models import REQ_L2_PENDING, REQ_PENDING
-from apps.hrms.views.leave import LeaveApprovalView, LeaveRequestListCreateView
+from apps.hrms.views.leave_requests import LeaveApprovalView, LeaveRequestListCreateView
 from apps.voice_commands.approval_extractor import match_employee_name
 from apps.voice_commands.executor_result import ExecutionResult
 from apps.voice_commands.language import LANG_HI, get_current_language, text

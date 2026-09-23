@@ -167,7 +167,7 @@ class Command(BaseCommand):
                         user.branch = default_branch.branch_name
                         user.save(update_fields=["branch", "updated_at"])
 
-                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
                 _allocate_leaves_for_employee(user, user.date_of_joining)
 
                 from apps.attendance.models import WeeklyDayPolicy

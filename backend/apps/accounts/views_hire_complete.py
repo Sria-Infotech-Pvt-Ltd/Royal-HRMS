@@ -216,7 +216,7 @@ class HireActionCompleteView(APIView):
             if auto_fields:
                 user.save(update_fields=[*auto_fields, 'updated_at'])
 
-            from apps.hrms.views.leave import _allocate_leaves_for_employee
+            from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
             _allocate_leaves_for_employee(user, user.date_of_joining)
 
             from apps.attendance.models import WeeklyDayPolicy

@@ -12,7 +12,7 @@ from apps.hrms.models import (
     LeaveRequest,
 )
 from apps.hrms.serializers import LeaveBalanceSerializer, LeaveRequestSerializer
-from apps.hrms.views.leave import LeaveRequestListCreateView
+from apps.hrms.views.leave_requests import LeaveRequestListCreateView
 
 from apps.voice_commands.executor_result import ExecutionResult
 from apps.voice_commands.language import text

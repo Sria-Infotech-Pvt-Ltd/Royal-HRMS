@@ -457,7 +457,7 @@ class EmployeeListCreateView(APIView):
                 user.save(update_fields=[*auto_fields, 'updated_at'])
 
             # Auto-allocate leave balances based on active leave policies
-            from apps.hrms.views.leave import _allocate_leaves_for_employee
+            from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
             _allocate_leaves_for_employee(user, user.date_of_joining)
 
             # Auto-assign all default assessments to the new employee

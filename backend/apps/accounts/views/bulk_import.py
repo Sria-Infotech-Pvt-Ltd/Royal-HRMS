@@ -375,7 +375,7 @@ class EmployeeBulkImportView(APIView):
                 # same step EmployeeListCreateView.post() does for a single
                 # employee; this bulk path re-implements creation separately
                 # and had been missing it entirely.
-                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
                 _allocate_leaves_for_employee(user, user.date_of_joining)
 
                 seen_emails.add(email)

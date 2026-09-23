@@ -312,7 +312,7 @@ class OnboardingApprovalView(APIView):
 
             if needs_conversion:
                 # Auto-allocate leave balances after candidate→employee conversion
-                from apps.hrms.views.leave import _allocate_leaves_for_employee
+                from apps.hrms.views.leave_shared import _allocate_leaves_for_employee
                 _allocate_leaves_for_employee(target, target.date_of_joining)
 
             # Create initial salary config if CTC was provided at approval time
