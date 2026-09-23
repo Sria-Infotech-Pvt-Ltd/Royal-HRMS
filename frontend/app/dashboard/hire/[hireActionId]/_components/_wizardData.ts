@@ -67,6 +67,27 @@ export function emptyEmergencyContact(id: string, isPrimary: boolean): Emergency
   return { id, name: "", relationship: "", phone: "", alternate_phone: "", email: "", address: "", is_primary: isPrimary };
 }
 
+// Personal Identity step validation constants/helpers.
+export const HAS_DIGIT_RE = /\d/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Statutory & accounts step validation — standard PAN (5 letters, 4 digits,
+// 1 letter) and IFSC (4 letters, a literal 0, 6 alphanumerics) formats.
+export const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+export const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+export const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
+export const MIN_HIRE_AGE_YEARS = 18;
+export const MAX_PLAUSIBLE_AGE_YEARS = 100;
+// PhoneInput stores "+<dial> <national>" — count digits everywhere (dial
+// code included) rather than trying to re-split it, so this only needs one
+// simple floor: 8 total digits comfortably covers every real dial-code +
+// national-number combination in PhoneInput's own country list (the
+// shortest, dial code "1", pairs with a 10-digit US/Canada number) while
+// still catching an obviously truncated/garbage entry.
+export const MIN_PHONE_DIGITS = 8;
+export function phoneDigitCount(value: string): number {
+  return value.replace(/\D/g, "").length;
+}
+
 export interface HireActionData {
   id: string; reason: string; reason_display: string; effective_from: string; position: string;
   position_title: string; org_unit_name: string; grade: string;

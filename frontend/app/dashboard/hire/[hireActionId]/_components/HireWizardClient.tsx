@@ -45,6 +45,8 @@ import {
   emptyEmergencyContact,
   type HireActionData,
   STEPS,
+  HAS_DIGIT_RE, EMAIL_RE, PAN_RE, IFSC_RE, MS_PER_YEAR, MIN_HIRE_AGE_YEARS, MAX_PLAUSIBLE_AGE_YEARS,
+  MIN_PHONE_DIGITS, phoneDigitCount,
 } from "./_wizardData";
 
 export default function HireWizardClient({ hireActionId, onClose, onHired }: { hireActionId: string; onClose: () => void; onHired: () => void }) {
@@ -206,18 +208,58 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
   function validateCurrentStep(): string | null {
     switch (tab) {
-      case 0:
-        if (!firstName.trim() || !lastName.trim()) return "First name and last name are required.";
-        if (!email.trim()) return "Email is required.";
+      case 0: {
+        // Matches the 7 fields step 1's own sidebar badge (STEPS[0].required)
+        // already advertises as required: First name, Last name, Date of
+        // birth, Gender, Nationality, Personal email, Mobile number.
+        if (!firstName.trim()) return "First name is required.";
+        if (HAS_DIGIT_RE.test(firstName)) return "First name cannot contain numbers.";
+        if (!lastName.trim()) return "Last name is required.";
+        if (HAS_DIGIT_RE.test(lastName)) return "Last name cannot contain numbers.";
+        if (middleName.trim() && HAS_DIGIT_RE.test(middleName)) return "Middle name cannot contain numbers.";
+
+        if (!form.date_of_birth) return "Date of birth is required.";
+        const dob = new Date(form.date_of_birth);
+        if (Number.isNaN(dob.getTime())) return "Date of birth is not a valid date.";
+        if (dob > new Date()) return "Date of birth cannot be in the future.";
+        const ageYears = (Date.now() - dob.getTime()) / MS_PER_YEAR;
+        if (ageYears < MIN_HIRE_AGE_YEARS) return `Employee must be at least ${MIN_HIRE_AGE_YEARS} years old.`;
+        if (ageYears > MAX_PLAUSIBLE_AGE_YEARS) return "That date of birth doesn't look right — please check it.";
+
+        if (!form.gender) return "Gender is required.";
+        if (!nationality.trim()) return "Nationality is required.";
+
+        if (!email.trim()) return "Personal email is required.";
+        if (!EMAIL_RE.test(email.trim())) return "Enter a valid email address.";
+
+        if (!phone.trim()) return "Mobile number is required.";
+        if (phoneDigitCount(phone) < MIN_PHONE_DIGITS) return "Enter a valid mobile number.";
+        if (identityExtras.alternate_mobile.trim() && phoneDigitCount(identityExtras.alternate_mobile) < MIN_PHONE_DIGITS) {
+          return "Enter a valid alternate mobile number, or leave it blank.";
+        }
         return null;
+      }
       case 1:
         if (!employment.employment_type) return "Select an employment type.";
         if (!employment.role) return "Select a role.";
         if (!employment.branch) return "Select a company code.";
         return null;
-      case 3:
-        if (!statutory.pan_number.trim() || !statutory.aadhaar_number.trim()) return "PAN and Aadhaar are required.";
+      case 3: {
+        // Matches the 5 fields this step's own sidebar badge already
+        // advertises as required: PAN, Aadhaar, Account holder name,
+        // Account number, IFSC code.
+        if (!statutory.pan_number.trim()) return "PAN is required.";
+        if (!PAN_RE.test(statutory.pan_number.trim())) return "Enter a valid PAN (format: ABCDE1234F).";
+        if (!statutory.aadhaar_number.trim()) return "Aadhaar is required.";
+        if (statutory.aadhaar_number.trim().length !== 12) return "Aadhaar must be exactly 12 digits.";
+        if (!statutory.account_holder_name.trim()) return "Account holder name is required.";
+        if (HAS_DIGIT_RE.test(statutory.account_holder_name)) return "Account holder name cannot contain numbers.";
+        if (!statutory.account_number.trim()) return "Account number is required.";
+        if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
+        if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
+        if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
         return null;
+      }
       default:
         return null;
     }
