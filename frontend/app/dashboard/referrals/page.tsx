@@ -6,155 +6,11 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermission } from "@/hooks/usePermission";
-import { Branch, Candidate, CandidateStatus, fmtDate, initials } from "@/app/dashboard/interview-list/_data";
-import Modal from "@/components/Modal";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ReferralRule {
-  id:        number;
-  icon:      string;
-  title:     string;
-  body:      string;
-  order:     number;
-  is_active: boolean;
-}
-
-interface ReferralStats {
-  total_referred: number;
-  in_pipeline:    number;
-  selected:       number;
-  converted:      number;
-}
-
-interface ReferralListResponse {
-  results:     Candidate[];
-  count:       number;
-  stats:       ReferralStats;
-}
-
-// ── Status display ─────────────────────────────────────────────────────────────
-
-const STATUS_META: Record<CandidateStatus, { label: string; cls: string }> = {
-  pending:             { label: "Pending",        cls: "badge-neutral" },
-  screening:           { label: "Screening",      cls: "badge-info"    },
-  interview_scheduled: { label: "Scheduled",      cls: "badge-info"    },
-  interview_done:      { label: "Interview Done", cls: "badge-warn"    },
-  selected:            { label: "Selected",       cls: "badge-success" },
-  offer_sent:          { label: "Offer Sent",     cls: "badge-success" },
-  rejected:            { label: "Rejected",       cls: "badge-error"   },
-  converted:           { label: "Converted",      cls: "badge-neutral" },
-};
-
-const RELATIONSHIP_OPTIONS = [
-  "Friend / Acquaintance",
-  "Former Colleague",
-  "Professional Contact",
-  "Family Member",
-  "Ex-Employee at Previous Company",
-  "Other",
-];
-
-const EMPTY_FORM = {
-  name: "", email: "", phone: "", position_applied: "", branch: "", relationship: "", notes: "",
-};
-
-// ── Candidate table (reused by both "My" and "All" tabs) ──────────────────────
-
-function ReferralTable({
-  candidates, loading, error, search, onSearch,
-}: {
-  candidates: Candidate[];
-  loading: boolean;
-  error: string | null;
-  search: string;
-  onSearch: (v: string) => void;
-}) {
-  const filtered = search
-    ? candidates.filter(c =>
-        `${c.name} ${c.position_applied} ${c.referral_by_name}`
-          .toLowerCase().includes(search.toLowerCase()))
-    : candidates;
-
-  return (
-    <>
-      <div className="card-header">
-        <span className="card-title">
-          <i className="ti ti-users" /> {filtered.length} Referral{filtered.length !== 1 ? "s" : ""}
-        </span>
-        <div className="search-bar">
-          <i className="ti ti-search" />
-          <input placeholder="Search by name, position…" value={search}
-            onChange={e => onSearch(e.target.value)} suppressHydrationWarning />
-        </div>
-      </div>
-
-      {error && (
-        <div className="alert alert-error" style={{ margin: "0 20px 12px" }}>
-          <i className="ti ti-alert-circle" /><div>{error}</div>
-        </div>
-      )}
-
-      <div className="table-wrap">
-        {loading ? (
-          <div className="text-center py-10"><i className="ti ti-loader-2 spin text-3xl" /></div>
-        ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <i className="ti ti-user-plus" />
-            <h3>No referrals found</h3>
-            <p>Try adjusting your search or submit a new referral.</p>
-          </div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Candidate</th><th>Position</th><th>Company Code</th>
-                <th>Referred By</th><th>Status</th><th>Referred On</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(c => (
-                <tr key={c.id}>
-                  <td>
-                    <div className="flex items-center gap-3">
-                      <div className="user-avatar" style={{ width: 32, height: 32, fontSize: 12, flexShrink: 0 }}>
-                        {initials(c.name)}
-                      </div>
-                      <div>
-                        <strong>{c.name}</strong>
-                        <div className="text-xs text-[var(--on-variant)]">{c.email}</div>
-                        {c.phone && <div className="text-xs text-[var(--on-variant)]">{c.phone}</div>}
-                      </div>
-                    </div>
-                  </td>
-                  <td>{c.position_applied}</td>
-                  <td>
-                    {c.branch_name
-                      ? <span className="badge badge-neutral" style={{ fontSize: 11 }}>{c.branch_name}</span>
-                      : <span className="text-xs text-[var(--on-variant)]">—</span>}
-                  </td>
-                  <td>
-                    {c.referral_by_name
-                      ? <span style={{ fontSize: 12, color: "#7c3aed", display: "flex", alignItems: "center", gap: 4 }}>
-                          <i className="ti ti-user-plus" style={{ fontSize: 11 }} />{c.referral_by_name}
-                        </span>
-                      : <span className="text-xs text-[var(--on-variant)]">—</span>}
-                  </td>
-                  <td>
-                    <span className={`badge ${STATUS_META[c.status]?.cls ?? "badge-neutral"}`}>
-                      {STATUS_META[c.status]?.label ?? c.status}
-                    </span>
-                  </td>
-                  <td className="text-xs">{fmtDate(c.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </>
-  );
-}
+import { Branch } from "@/app/dashboard/interview-list/_data";
+import ReferralTable from "./ReferralTable";
+import ReferralRulesTab from "./ReferralRulesTab";
+import ReferSomeoneModal from "./ReferSomeoneModal";
+import { type ReferralRule, type ReferralListResponse, EMPTY_FORM } from "./_data";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -340,142 +196,24 @@ export default function ReferralsPage() {
 
         {/* ── Tab: Referral Rules ── */}
         {tab === "rules" && (
-          <div style={{ padding: "28px 32px" }}>
-            {rulesLoading ? (
-              <div className="text-center py-10"><i className="ti ti-loader-2 spin text-3xl" /></div>
-            ) : rules.length === 0 ? (
-              <div className="empty-state">
-                <i className="ti ti-file-text" />
-                <h3>No rules configured</h3>
-                <p>An admin can add referral rules from{" "}
-                  <strong>Settings → Referral Rules</strong>.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="alert alert-info" style={{ marginBottom: 24 }}>
-                  <i className="ti ti-info-circle" />
-                  <div>These rules govern the Employee Referral Programme. Please read them carefully before submitting a referral.</div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 20, marginBottom: 28 }}>
-                  {rules.map((rule, idx) => (
-                    <div key={rule.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 14, padding: "20px 22px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(124,58,237,0.09)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <i className={`ti ${rule.icon}`} style={{ fontSize: 18, color: "var(--primary)" }} />
-                        </div>
-                        <div>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                            Rule {idx + 1}
-                          </span>
-                          <p style={{ fontWeight: 700, fontSize: 14, color: "var(--on-bg)", margin: 0 }}>{rule.title}</p>
-                        </div>
-                      </div>
-                      <p style={{ fontSize: 13, color: "var(--on-variant)", lineHeight: 1.65, margin: 0 }}>{rule.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <ReferralRulesTab rules={rules} loading={rulesLoading} />
         )}
 
       </div>
 
       {/* ── Refer Someone Modal ── */}
       {showModal && (
-        <Modal
-          title={<>Refer Someone<div style={{ fontSize: 12, color: "var(--on-variant)", margin: 0, fontWeight: 400 }}>Share a great candidate and earn a referral bonus</div></>}
+        <ReferSomeoneModal
+          form={form}
+          setField={setField}
+          formError={formError}
+          saving={saving}
+          isAdmin={isAdmin}
+          myBranch={myBranch}
+          branches={branches}
+          onSubmit={handleSubmit}
           onClose={() => setShowModal(false)}
-          size="lg"
-          maxWidth={680}
-        >
-              {formError && (
-                <div className="alert alert-error" style={{ marginBottom: 20 }}>
-                  <i className="ti ti-alert-circle" /><div>{formError}</div>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit}>
-                <p style={{ fontWeight: 700, fontSize: 11, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 16 }}>
-                  Candidate Information
-                </p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px", marginBottom: 16 }}>
-                  <div className="field-group">
-                    <label className="field-label">Full Name <span style={{ color: "var(--error)" }}>*</span></label>
-                    <input className="field-input" placeholder="e.g. Rahul Sharma"
-                      value={form.name} onChange={e => setField("name", e.target.value)}
-                      required suppressHydrationWarning />
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">Email Address <span style={{ color: "var(--error)" }}>*</span></label>
-                    <input type="email" className="field-input" placeholder="candidate@email.com"
-                      value={form.email} onChange={e => setField("email", e.target.value)}
-                      required suppressHydrationWarning />
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">Phone Number</label>
-                    <input className="field-input" placeholder="+91 9876543210"
-                      value={form.phone} onChange={e => setField("phone", e.target.value)}
-                      suppressHydrationWarning />
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">Position Applied For <span style={{ color: "var(--error)" }}>*</span></label>
-                    <input className="field-input" placeholder="e.g. Senior Developer"
-                      value={form.position_applied} onChange={e => setField("position_applied", e.target.value)}
-                      required suppressHydrationWarning />
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">Company Code{isAdmin && <span style={{ color: "var(--error)" }}> *</span>}</label>
-                    {isAdmin ? (
-                      <select
-                        className="field-input field-select"
-                        value={form.branch}
-                        onChange={e => setField("branch", e.target.value)}
-                        required
-                        suppressHydrationWarning
-                      >
-                        <option value="">Select Company Code…</option>
-                        {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name}</option>)}
-                      </select>
-                    ) : (
-                      <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
-                        <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
-                        {myBranch || "Not assigned"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">Your Relationship <span style={{ color: "var(--error)" }}>*</span></label>
-                    <select className="field-input field-select"
-                      value={form.relationship} onChange={e => setField("relationship", e.target.value)}
-                      required suppressHydrationWarning>
-                      <option value="">Select relationship</option>
-                      {RELATIONSHIP_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="field-group" style={{ marginBottom: 20 }}>
-                  <label className="field-label">Why would they be a great fit?</label>
-                  <textarea className="field-input" rows={3}
-                    placeholder="Share their experience, skills, and why you're recommending them…"
-                    value={form.notes} onChange={e => setField("notes", e.target.value)}
-                    suppressHydrationWarning style={{ resize: "vertical" }} />
-                </div>
-                <div className="alert alert-info" style={{ marginBottom: 20 }}>
-                  <i className="ti ti-info-circle" />
-                  <div>By submitting this referral you confirm the candidate has consented to share their information and has not applied in the last 12 months.</div>
-                </div>
-                <div style={{ display: "flex", gap: 12 }}>
-                  <button type="submit" className="btn btn-filled" disabled={saving} suppressHydrationWarning>
-                    {saving ? <><i className="ti ti-loader-2 spin" /> Submitting…</> : <><i className="ti ti-send" /> Submit Referral</>}
-                  </button>
-                  <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)} suppressHydrationWarning>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-        </Modal>
+        />
       )}
     </>
   );
