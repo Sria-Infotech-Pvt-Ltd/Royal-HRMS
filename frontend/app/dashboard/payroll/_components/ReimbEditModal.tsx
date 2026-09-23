@@ -32,6 +32,7 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
   const [manualMode, setManualMode] = useState(expenses.length === 0);
   const [manualAmount, setManualAmount] = useState(payslip.reimbursements);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   function toggle(id: string) {
     setChecked(prev => {
@@ -46,6 +47,18 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
     .reduce((s, e) => s + Number(e.amount), 0);
 
   async function handleSave() {
+    setErr(null);
+    if (manualMode || expenses.length === 0) {
+      const amount = Number(manualAmount);
+      if (manualAmount.trim() === "" || Number.isNaN(amount)) {
+        setErr("Enter a reimbursement amount.");
+        return;
+      }
+      if (amount < 0) {
+        setErr("Reimbursement amount cannot be negative.");
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload = manualMode
@@ -86,6 +99,12 @@ export default function ReimbEditModal({ payslip, summary, onSaved, onClose }: P
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {err && (
+          <div className="alert alert-error">
+            <i className="ti ti-alert-circle" />
+            <span>{err}</span>
+          </div>
+        )}
         {/* Mode toggle */}
         {expenses.length > 0 && (
           <div style={{ display: "flex", gap: 8 }}>

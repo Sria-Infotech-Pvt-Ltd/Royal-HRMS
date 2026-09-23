@@ -31,6 +31,7 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
     () => payslip.bonus_breakdown?.length ? payslip.bonus_breakdown : []
   );
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   function addEntry() {
     setEntries(prev => [...prev, emptyEntry()]);
@@ -54,6 +55,17 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
   const total = entries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   async function handleSave() {
+    setErr(null);
+    // A blank amount is a still-being-filled-in row — dropped silently
+    // below, same as before this validation existed. A NEGATIVE or
+    // non-numeric amount is a real mistake and must block saving with a
+    // specific message, not be silently discarded along with blank rows.
+    for (const e of entries) {
+      if (e.amount.trim() === "") continue;
+      const amt = Number(e.amount);
+      if (Number.isNaN(amt)) { setErr(`Enter a valid amount for the ${e.type} bonus.`); return; }
+      if (amt < 0) { setErr(`${e.type} bonus amount cannot be negative.`); return; }
+    }
     const valid = entries.filter(e => Number(e.amount) > 0);
     setSaving(true);
     try {
@@ -94,6 +106,12 @@ export default function BonusEditModal({ payslip, referralSummary, onSaved, onCl
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {err && (
+          <div className="alert alert-error">
+            <i className="ti ti-alert-circle" />
+            <span>{err}</span>
+          </div>
+        )}
         {/* Referral suggestions */}
         {referrals.length > 0 && (
           <div style={{ background: "var(--bg-low)", borderRadius: 8, padding: "10px 14px" }}>

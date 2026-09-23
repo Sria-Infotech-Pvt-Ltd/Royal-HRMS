@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import ConfirmModal from "@/components/ConfirmModal";
 import type { EligibleEmployee, EmployeePayslip, ProcessPayrollResult } from "@/types/payroll";
 
 interface Props {
@@ -23,6 +24,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
   const [processErr, setProcessErr] = useState<string | null>(null);
   const [expanded, setExpanded]     = useState<string | null>(null);
   const [skipped, setSkipped]       = useState<string[]>([]);
+  const [showRecomputeConfirm, setShowRecomputeConfirm] = useState(false);
 
   // Always fetch payslips — if they already exist (cycle previously computed), show results directly.
   const { data: payslipPage, loading, refetch } =
@@ -66,6 +68,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
   }
 
   async function runProcess() {
+    setShowRecomputeConfirm(false);
     setProcessing(true);
     setProcessErr(null);
     try {
@@ -206,7 +209,7 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
             <div className="card-header">
               <div className="card-title"><i className="ti ti-cash" /> Earnings Breakdown</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-outline btn-sm" onClick={runProcess} disabled={processing}>
+                <button className="btn btn-outline btn-sm" onClick={() => setShowRecomputeConfirm(true)} disabled={processing}>
                   {processing
                     ? <><i className="ti ti-loader-2 animate-spin" /> Recomputing…</>
                     : <><i className="ti ti-calculator" /> Recompute</>}
@@ -362,6 +365,18 @@ export default function EarningsDeductionsStep({ cycleId, onNext, onBack }: Prop
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
           <button className="btn btn-ghost" onClick={onBack}><i className="ti ti-arrow-left" /> Back</button>
         </div>
+      )}
+
+      {showRecomputeConfirm && (
+        <ConfirmModal
+          title="Recompute payroll?"
+          body={`This recalculates salaries for all ${payslips.length} employee${payslips.length !== 1 ? "s" : ""} in this cycle from scratch, overwriting the current figures — including any manual bonus or reimbursement adjustments already made on these payslips. This cannot be undone.`}
+          confirmLabel="Recompute"
+          danger
+          saving={processing}
+          onConfirm={runProcess}
+          onCancel={() => setShowRecomputeConfirm(false)}
+        />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import ConfirmModal from "@/components/ConfirmModal";
 import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
 
 interface Props {
@@ -24,12 +25,14 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
 
   const [marking, setMarking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const payslips = payslipPage?.results ?? [];
   const totalNet = payslips.reduce((s, p) => s + Number(p.net_pay), 0);
   const isPaid   = cycle?.status === "paid" || cycle?.status === "closed";
 
   async function markPaid() {
+    setShowConfirm(false);
     setMarking(true);
     setErr(null);
     try {
@@ -148,7 +151,7 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
           {!isPaid && (
             <button
               className="btn btn-success"
-              onClick={markPaid}
+              onClick={() => setShowConfirm(true)}
               disabled={marking || payslips.length === 0}
             >
               {marking
@@ -171,6 +174,17 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
           </button>
         </div>
       </div>
+
+      {showConfirm && (
+        <ConfirmModal
+          title="Mark payroll as paid?"
+          body={`This marks all ${payslips.length} payslip${payslips.length !== 1 ? "s" : ""} (total ${fmt(totalNet)}) as paid and closes this payroll run. This does not itself transfer money — it records that the transfer already happened. This cannot be undone.`}
+          confirmLabel="Mark All Paid"
+          saving={marking}
+          onConfirm={markPaid}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 }

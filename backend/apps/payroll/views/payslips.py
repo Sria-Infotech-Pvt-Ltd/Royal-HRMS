@@ -155,9 +155,12 @@ class UpdatePayslipReimbBonusView(APIView):
             updated_fields.append('reimbursements')
         elif 'reimbursements' in request.data and settings_obj and settings_obj.enable_reimbursements:
             try:
-                payslip.reimbursements = Decimal(str(request.data['reimbursements']))
+                reimb_amount = Decimal(str(request.data['reimbursements']))
             except (InvalidOperation, TypeError, ValueError):
                 return error('reimbursements must be a valid number.')
+            if reimb_amount < 0:
+                return error('Reimbursement amount cannot be negative.')
+            payslip.reimbursements = reimb_amount
             updated_fields.append('reimbursements')
 
         # Bonuses: prefer breakdown (typed) over flat amount
@@ -166,19 +169,22 @@ class UpdatePayslipReimbBonusView(APIView):
             if not isinstance(breakdown, list):
                 return error('bonus_breakdown must be a list.')
             try:
-                payslip.bonus = sum(
-                    (Decimal(str(e.get('amount', 0) or 0)) for e in breakdown),
-                    Decimal('0'),
-                )
+                entry_amounts = [Decimal(str(e.get('amount', 0) or 0)) for e in breakdown]
             except (InvalidOperation, TypeError, ValueError):
                 return error('bonus_breakdown amounts must be valid numbers.')
+            if any(amt < 0 for amt in entry_amounts):
+                return error('Bonus amounts cannot be negative.')
+            payslip.bonus = sum(entry_amounts, Decimal('0'))
             payslip.bonus_breakdown = breakdown
             updated_fields.extend(['bonus_breakdown', 'bonus'])
         elif 'bonus' in request.data and settings_obj and settings_obj.enable_bonuses:
             try:
-                payslip.bonus = Decimal(str(request.data['bonus']))
+                bonus_amount = Decimal(str(request.data['bonus']))
             except (InvalidOperation, TypeError, ValueError):
                 return error('bonus must be a valid number.')
+            if bonus_amount < 0:
+                return error('Bonus amount cannot be negative.')
+            payslip.bonus = bonus_amount
             updated_fields.append('bonus')
 
         other_earnings_total = sum(
@@ -188,9 +194,14 @@ class UpdatePayslipReimbBonusView(APIView):
 
         if 'lop_days' in request.data:
             try:
-                payslip.lop_days = Decimal(str(request.data['lop_days']))
+                lop_days_value = Decimal(str(request.data['lop_days']))
             except (InvalidOperation, TypeError, ValueError):
                 return error('lop_days must be a valid number.')
+            if lop_days_value < 0:
+                return error('LOP days cannot be negative.')
+            if lop_days_value > payslip.total_working_days:
+                return error(f'LOP days cannot exceed the {payslip.total_working_days} working days in this cycle.')
+            payslip.lop_days = lop_days_value
             # LOP is prorated against the base salary (basic+HRA+special+other)
             # only — never payslip.gross_earnings, which this same view just
             # folded bonus/reimbursements into below and persists. Reading

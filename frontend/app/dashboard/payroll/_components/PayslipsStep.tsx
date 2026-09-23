@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
+import ConfirmModal from "@/components/ConfirmModal";
 import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
 
 interface Props {
@@ -36,6 +37,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
 
   const [dispatching, setDispatching] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const payslips  = payslipPage?.results ?? [];
   const totalNet  = payslips.reduce((s, p) => s + Number(p.net_pay), 0);
@@ -43,6 +45,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
   const cycleDispatched = cycle?.status === "query_window_open" || allSent;
 
   async function dispatch() {
+    setShowConfirm(false);
     setDispatching(true);
     setErr(null);
     try {
@@ -78,7 +81,7 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
             ) : (
               <button
                 className="btn btn-filled btn-sm"
-                onClick={dispatch}
+                onClick={() => setShowConfirm(true)}
                 disabled={dispatching || payslips.length === 0}
               >
                 {dispatching
@@ -187,6 +190,17 @@ export default function PayslipsStep({ cycleId, onNext, onBack }: Props) {
           </button>
         </div>
       </div>
+
+      {showConfirm && (
+        <ConfirmModal
+          title="Dispatch payslips?"
+          body={`This will email payslips to all ${payslips.length} employee${payslips.length !== 1 ? "s" : ""} in this cycle (total net pay ${fmt(totalNet)}). Employees will be able to view and query them immediately. This cannot be undone.`}
+          confirmLabel="Dispatch All"
+          saving={dispatching}
+          onConfirm={dispatch}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 }
