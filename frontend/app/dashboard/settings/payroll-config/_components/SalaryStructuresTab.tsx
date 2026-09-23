@@ -51,15 +51,15 @@ export default function SalaryStructuresTab() {
   const [showAddComp, setShowAddComp] = useState(false);
   const [compForm, setCompForm] = useState<ComponentFormState>(EMPTY_COMP);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Sidebar item (name, default flag) from the list; components from the detail
   const selectedItem = structures?.find(s => s.id === selectedId) ?? null;
   const components   = selectedDetail?.components ?? [];
 
-  function flash(text: string) {
-    setMsg(text);
-    setTimeout(() => setMsg(null), 3000);
+  function flash(text: string, isError = false) {
+    setMsg({ text, isError });
+    setTimeout(() => setMsg(null), isError ? 5000 : 3000);
   }
 
   function selectStructure(id: string) {
@@ -82,7 +82,7 @@ export default function SalaryStructuresTab() {
       refetchList();
       flash("Salary structure created.");
     } catch {
-      flash("Failed to create structure.");
+      flash("Failed to create structure.", true);
     } finally {
       setSaving(false);
     }
@@ -94,12 +94,18 @@ export default function SalaryStructuresTab() {
       refetchList();
       refetchDetail();
     } catch {
-      flash("Failed to update default.");
+      flash("Failed to update default.", true);
     }
   }
 
   async function addComponent() {
     if (!selectedId || !compForm.name.trim() || !compForm.value) return;
+    const value = Number(compForm.value);
+    if (Number.isNaN(value) || value < 0) { flash("Enter a non-negative value.", true); return; }
+    if ((compForm.calculation_type === "percentage_of_ctc" || compForm.calculation_type === "percentage_of_basic") && value > 100) {
+      flash("Percentage cannot exceed 100.", true);
+      return;
+    }
     setSaving(true);
     try {
       await clientApi.post(API.payroll.components(selectedId), {
@@ -115,7 +121,7 @@ export default function SalaryStructuresTab() {
       refetchDetail();
       flash("Component added.");
     } catch {
-      flash("Failed to add component.");
+      flash("Failed to add component.", true);
     } finally {
       setSaving(false);
     }
@@ -127,7 +133,7 @@ export default function SalaryStructuresTab() {
       await clientApi.put(API.payroll.component(selectedId, comp.id), { is_active: !comp.is_active });
       refetchDetail();
     } catch {
-      flash("Failed to update component.");
+      flash("Failed to update component.", true);
     }
   }
 
@@ -177,8 +183,8 @@ export default function SalaryStructuresTab() {
       {/* Components panel */}
       <div className="flex-1">
         {msg && (
-          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.startsWith("Failed") ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
-            {msg}
+          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.isError ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
+            {msg.text}
           </div>
         )}
 

@@ -187,6 +187,16 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate(self, data):
+        value = data.get('value', getattr(self.instance, 'value', None))
+        calc_type = data.get('calculation_type', getattr(self.instance, 'calculation_type', None))
+        if value is not None:
+            if value < 0:
+                raise serializers.ValidationError({'value': 'Value cannot be negative.'})
+            if calc_type in ('percentage_of_ctc', 'percentage_of_basic') and value > 100:
+                raise serializers.ValidationError({'value': 'Percentage cannot exceed 100.'})
+        return data
+
 
 class SalaryStructureSerializer(serializers.ModelSerializer):
     components = SalaryComponentSerializer(many=True, read_only=True)
