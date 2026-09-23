@@ -11,6 +11,7 @@ import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { useToast } from "@/components/ToastProvider";
 import BranchFilterSelect from "@/components/BranchFilterSelect";
 import Modal from "@/components/Modal";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -78,6 +79,7 @@ export default function WeeklyOffAssignmentTab() {
   const [bulkDept, setBulkDept] = useState("");
   const [bulking, setBulking] = useState(false);
   const [bulkErr, setBulkErr] = useState<string | null>(null);
+  const [confirmBulk, setConfirmBulk] = useState(false);
 
   const branch = unrestricted ? branchInput : effectiveBranch;
 
@@ -125,6 +127,7 @@ export default function WeeklyOffAssignmentTab() {
   }
 
   async function handleBulkAssign() {
+    setConfirmBulk(false);
     setBulking(true);
     setBulkErr(null);
     try {
@@ -295,7 +298,7 @@ export default function WeeklyOffAssignmentTab() {
               <button className="btn btn-ghost" onClick={() => setShowBulk(false)} disabled={bulking} suppressHydrationWarning>Cancel</button>
               <button
                 className="btn btn-filled"
-                onClick={handleBulkAssign}
+                onClick={() => setConfirmBulk(true)}
                 disabled={bulking || !bulkPattern || !bulkDate || (!bulkBranch && !bulkDept && unrestricted)}
                 suppressHydrationWarning
               >
@@ -341,6 +344,26 @@ export default function WeeklyOffAssignmentTab() {
           </div>
         </Modal>
       )}
+
+      {confirmBulk && (() => {
+        const scopeBranch = unrestricted ? (bulkBranch || null) : effectiveBranch;
+        const scopeParts = [
+          scopeBranch ? `Company Code ${branches.find(b => String(b.id) === bulkBranch)?.branch_name ?? scopeBranch}` : null,
+          bulkDept ? `Department ${bulkDept}` : null,
+        ].filter(Boolean);
+        const scopeText = scopeParts.length > 0 ? scopeParts.join(", ") : "every active employee (no branch/department filter)";
+        const patternName = patterns.find(p => p.id === bulkPattern)?.name ?? "the selected pattern";
+        return (
+          <ConfirmModal
+            title="Bulk-assign weekly off pattern?"
+            body={`This assigns "${patternName}" effective ${bulkDate} to every active employee matching: ${scopeText}. The exact number of employees affected is resolved on the server and isn't known until this runs.`}
+            confirmLabel="Assign to Matching Employees"
+            saving={bulking}
+            onConfirm={handleBulkAssign}
+            onCancel={() => setConfirmBulk(false)}
+          />
+        );
+      })()}
     </>
   );
 }
