@@ -29,7 +29,8 @@ export default function SalarySetupTab() {
 
   const [modal, setModal] = useState<SalaryModalState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [modalErr, setModalErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   const salaryConfigs = salaryPage?.results ?? [];
@@ -48,6 +49,7 @@ export default function SalarySetupTab() {
 
   function openModal(employee: Employee) {
     const current = configById.get(employee.uuid) ?? null;
+    setModalErr(null);
     setModal({
       employee,
       current,
@@ -57,13 +59,16 @@ export default function SalarySetupTab() {
     });
   }
 
-  function flash(text: string) {
-    setMsg(text);
-    setTimeout(() => setMsg(null), 3000);
+  function flash(text: string, isError = false) {
+    setMsg({ text, isError });
+    setTimeout(() => setMsg(null), isError ? 5000 : 3000);
   }
 
   async function save() {
     if (!modal || !modal.annual_ctc) return;
+    setModalErr(null);
+    const ctc = Number(modal.annual_ctc);
+    if (Number.isNaN(ctc) || ctc <= 0) { setModalErr("Annual CTC must be greater than 0."); return; }
     setSaving(true);
     try {
       await clientApi.post(API.payroll.employeeSalary, {
@@ -75,8 +80,9 @@ export default function SalarySetupTab() {
       setModal(null);
       refetchSalaries();
       flash("Salary config saved.");
-    } catch {
-      flash("Failed to save salary config.");
+    } catch (err: unknown) {
+      const message = (err as { message?: string })?.message || "Failed to save salary config.";
+      setModalErr(message);
     } finally {
       setSaving(false);
     }
@@ -109,9 +115,9 @@ export default function SalarySetupTab() {
       </div>
 
       {msg && (
-        <div className={`alert ${msg.startsWith("Failed") ? "alert-error" : "alert-success"}`}>
-          <i className={`ti ${msg.startsWith("Failed") ? "ti-alert-circle" : "ti-circle-check"}`} />
-          {msg}
+        <div className={`alert ${msg.isError ? "alert-error" : "alert-success"}`}>
+          <i className={`ti ${msg.isError ? "ti-alert-circle" : "ti-circle-check"}`} />
+          {msg.text}
         </div>
       )}
 
@@ -211,6 +217,12 @@ export default function SalarySetupTab() {
           }
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {modalErr && (
+              <div className="alert alert-error" style={{ marginBottom: 0 }}>
+                <i className="ti ti-alert-circle" />
+                <span>{modalErr}</span>
+              </div>
+            )}
             <div style={{ padding: "10px 14px", background: "var(--bg-low)", borderRadius: "var(--radius)", fontSize: 12, color: "var(--on-variant)" }}>
               <strong>{modal.employee.employee_id}</strong> · {modal.employee.department} · {modal.employee.branch}
             </div>

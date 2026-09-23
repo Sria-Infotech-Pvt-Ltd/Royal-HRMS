@@ -315,6 +315,11 @@ class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
 
+    def validate_annual_ctc(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('Annual CTC must be greater than 0.')
+        return value
+
     def validate(self, attrs):
         # linked_promotion must belong to the same employee this config is
         # being assigned to — otherwise a crafted request could tag one
