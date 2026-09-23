@@ -24,6 +24,7 @@ from .models import (
     SeparationApprovalStage, SeparationHandoverTask, SeparationClearance,
     SeparationDocument, SeparationActivity, SeparationSettlement,
     HRHelpRequest,
+    HR_HELP_RESOLVED,
     EmployeeDocumentSubmission,
 )
 
@@ -1133,6 +1134,19 @@ class HRHelpRequestRespondSerializer(serializers.ModelSerializer):
     class Meta:
         model  = HRHelpRequest
         fields = ['status', 'response', 'assigned_to']
+
+    def validate(self, attrs):
+        new_status = attrs.get('status', getattr(self.instance, 'status', None))
+        # A response is optional while a ticket is open/in-progress, but
+        # resolving it with no explanation leaves the employee with nothing
+        # telling them how their request was actually addressed.
+        if new_status == HR_HELP_RESOLVED:
+            response = attrs.get('response', getattr(self.instance, 'response', '') or '')
+            if not response.strip():
+                raise serializers.ValidationError({
+                    'response': 'Enter a response explaining the resolution before marking this request resolved.',
+                })
+        return attrs
 
 
 class EmployeeDocumentSubmissionSerializer(serializers.ModelSerializer):

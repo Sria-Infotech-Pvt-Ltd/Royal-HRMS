@@ -204,8 +204,12 @@ function HrHelpRow({ entry, canRespond, onUpdated }: { entry: ApiHrHelpRequest; 
   const [err, setErr] = useState<string | null>(null);
 
   async function save() {
-    setSaving(true);
     setErr(null);
+    if (status === "resolved" && !response.trim()) {
+      setErr("Enter a response explaining the resolution before marking this request resolved.");
+      return;
+    }
+    setSaving(true);
     try {
       await clientApi.patch(API.hrHelp.detail(entry.id), { status, response });
       onUpdated();
@@ -252,7 +256,9 @@ function HrHelpRow({ entry, canRespond, onUpdated }: { entry: ApiHrHelpRequest; 
                 </div>
               </div>
               <div className="field-group" style={{ marginBottom: 10 }}>
-                <label className="field-label">Response</label>
+                <label className="field-label">
+                  Response {status === "resolved" && <span style={{ color: "var(--error)" }}>*</span>}
+                </label>
                 <textarea className="field-input" rows={2} value={response} onChange={e => setResponse(e.target.value)} />
               </div>
               <button className="btn btn-filled btn-sm" onClick={save} disabled={saving}>
