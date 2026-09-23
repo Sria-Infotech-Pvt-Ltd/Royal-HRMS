@@ -10,144 +10,13 @@ import type { OrgUnit } from "@/types/orgStructure";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 import Modal from "@/components/Modal";
-import { formatDate, formatDateTime } from "@/lib/formatDate";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Category      = "general" | "policy" | "event" | "celebration";
-type Visibility    = "all" | "department" | "branch";
-// The Branch field is now its own always-present field in the form, separate
-// from Visibility — so the form only ever chooses between these two; "branch"
-// targeting is derived from the Branch field instead (see handleSave).
-type FormVisibility = "all" | "department";
-
-interface Announcement {
-  id:                     number;
-  title:                  string;
-  body:                   string;
-  category:               Category;
-  visibility:             Visibility;
-  target_org_unit:        string | null;
-  target_org_unit_name:   string;
-  target_branch:          number | null;
-  target_branch_name:     string;
-  is_pinned:              boolean;
-  send_email:             boolean;
-  posted_by:              string | null;
-  posted_by_name:         string;
-  posted_by_role:         string;
-  views_count:            number;
-  reactions_count:        number;
-  has_reacted:            boolean;
-  can_edit:               boolean;
-  created_at:             string;
-  updated_at:             string;
-}
-
-interface PageMeta {
-  count:           number;
-  page:            number;
-  page_size:       number;
-  total_pages:     number;
-  pinned_count:    number;
-  total_reactions: number;
-  total_views:     number;
-  results:         Announcement[];
-}
-
-interface Branch     { id: number; branch_name: string; branch_code: string }
-
-type FormState = {
-  title:             string;
-  body:              string;
-  category:          Category | "";
-  visibility:        FormVisibility;
-  target_org_unit:   string;
-  target_branch:     string;
-  is_pinned:         boolean;
-  send_email:        boolean;
-};
-
-type FormErrors = Partial<Record<keyof FormState, string>>;
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const CATEGORIES: { value: Category; label: string }[] = [
-  { value: "general",     label: "General"     },
-  { value: "policy",      label: "Policy"      },
-  { value: "event",       label: "Event"       },
-  { value: "celebration", label: "Celebration" },
-];
-
-const VISIBILITY_OPTIONS: { value: FormVisibility; label: string }[] = [
-  { value: "all",        label: "All Employees" },
-  { value: "department", label: "By Department" },
-];
-
-const FILTERS = [
-  { value: "",            label: "All Posts"   },
-  { value: "general",     label: "General"     },
-  { value: "policy",      label: "Policy"      },
-  { value: "event",       label: "Event"       },
-  { value: "celebration", label: "Celebration" },
-];
-
-const EMPTY_FORM: FormState = {
-  title: "", body: "", category: "", visibility: "all",
-  target_org_unit: "", target_branch: "",
-  is_pinned: false, send_email: true,
-};
-
-// Kept for reference — no longer used; canPost is now permission-based
-// const POSTER_ROLES = new Set(["hr_admin", "system_admin", "manager"]);
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function initials(name: string): string {
-  return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1)  return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)  return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7)  return `${days}d ago`;
-  return formatDate(iso);
-}
-
-function fullDateTime(iso: string): string {
-  return formatDateTime(iso);
-}
-
-const CAT_BADGE: Record<Category, string> = {
-  general:     "badge-info",
-  policy:      "badge-warn",
-  event:       "badge-success",
-  celebration: "badge-primary",
-};
-
-const CAT_LABEL: Record<Category, string> = {
-  general:     "General",
-  policy:      "Policy",
-  event:       "Event",
-  celebration: "Celebration",
-};
-
-const AVATAR_COLORS = [
-  { bg: "rgba(124,58,237,0.15)",  color: "#7c3aed" },
-  { bg: "rgba(37,99,235,0.15)", color: "#2563eb" },
-  { bg: "rgba(23,144,90,0.15)", color: "#17905a" },
-  { bg: "rgba(162,98,12,0.15)", color: "#a2620c" },
-];
-function avatarColor(name: string) {
-  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
-}
-
-function viewKey(id: number) { return `ann_viewed_${id}`; }
+import AnnouncementCard from "./AnnouncementCard";
+import {
+  type Category, type Visibility, type FormVisibility, type Announcement, type PageMeta,
+  type Branch, type FormState, type FormErrors,
+  CATEGORIES, VISIBILITY_OPTIONS, FILTERS, EMPTY_FORM,
+  initials, fullDateTime, CAT_BADGE, CAT_LABEL, avatarColor, viewKey,
+} from "./_data";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -443,8 +312,6 @@ export default function AnnouncementsPage() {
     { label: "Total Views",     value: meta?.total_views     ?? 0, icon: "ti-eye",          cls: "si-info"    },
   ];
 
-  const BODY_PREVIEW = 220;
-
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -527,105 +394,16 @@ export default function AnnouncementsPage() {
       {/* ── Announcement cards ───────────────────────────────────────────── */}
       {!loading && meta && meta.results.length > 0 && (
         <div className="ann-cards-list">
-          {meta.results.map(ann => {
-            const av = avatarColor(ann.posted_by_name);
-
-            return (
-              <div
-                key={ann.id}
-                className={`ann-card${ann.is_pinned ? " pinned" : ""}`}
-                onClick={() => setViewTarget(ann)}
-              >
-                <div className="ann-card-body">
-                  {/* ── Author row ─────────────────────────────────────── */}
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                      background: av.bg, color: av.color,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: 700, fontSize: 14,
-                    }}>
-                      {initials(ann.posted_by_name)}
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{ann.posted_by_name}</span>
-                        {ann.posted_by_role && (
-                          <span style={{ fontSize: 11, color: "var(--on-variant)" }}>{ann.posted_by_role}</span>
-                        )}
-                        {ann.is_pinned && (
-                          <span className="badge badge-warn" style={{ fontSize: 10 }}>
-                            <i className="ti ti-pin" /> Pinned
-                          </span>
-                        )}
-                        <span className={`badge ${CAT_BADGE[ann.category]}`} style={{ fontSize: 10, textTransform: "capitalize" }}>
-                          {CAT_LABEL[ann.category]}
-                        </span>
-                        {ann.visibility !== "all" && (
-                          <span className="badge badge-neutral" style={{ fontSize: 10 }}>
-                            <i className={`ti ${ann.visibility === "department" ? "ti-sitemap" : "ti-building"}`} />
-                            {" "}{ann.visibility === "department" ? ann.target_org_unit_name : ann.target_branch_name}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--on-variant)", marginTop: 2 }}>
-                        {timeAgo(ann.created_at)}
-                        {ann.updated_at !== ann.created_at && " · edited"}
-                      </div>
-                    </div>
-
-                    {ann.can_edit && (
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-ghost btn-sm" title="Edit" onClick={() => openEdit(ann)} suppressHydrationWarning>
-                          <i className="ti ti-pencil" />
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          title="Delete"
-                          style={{ color: "var(--error)" }}
-                          onClick={() => { setDeleteErr(null); setDeleteId(ann.id); }}
-                          suppressHydrationWarning
-                        >
-                          <i className="ti ti-trash" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── Title ─────────────────────────────────────────── */}
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>
-                    {ann.title}
-                  </div>
-
-                  {/* ── Body preview ─────────────────────────────────── */}
-                  <div className="ann-body-preview">
-                    {ann.body.length <= BODY_PREVIEW ? ann.body : ann.body.slice(0, BODY_PREVIEW) + "…"}
-                  </div>
-                  {ann.body.length > BODY_PREVIEW && (
-                    <span className="ann-read-more">Read more</span>
-                  )}
-
-                  {/* ── Footer ────────────────────────────────────────── */}
-                  <div className="ann-card-footer">
-                    <button
-                      onClick={e => { e.stopPropagation(); toggleReact(ann); }}
-                      className={`ann-view-react-btn${ann.has_reacted ? " reacted" : ""}`}
-                      suppressHydrationWarning
-                    >
-                      <i className={`ti ${ann.has_reacted ? "ti-heart-filled" : "ti-heart"}`} style={{ fontSize: 16 }} />
-                      {ann.reactions_count > 0 && ann.reactions_count}
-                    </button>
-
-                    <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--on-variant)" }}>
-                      <i className="ti ti-eye" style={{ fontSize: 15 }} />
-                      {ann.views_count > 0 ? ann.views_count : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {meta.results.map(ann => (
+            <AnnouncementCard
+              key={ann.id}
+              ann={ann}
+              onOpen={setViewTarget}
+              onEdit={openEdit}
+              onDelete={id => { setDeleteErr(null); setDeleteId(id); }}
+              onToggleReact={toggleReact}
+            />
+          ))}
         </div>
       )}
 
