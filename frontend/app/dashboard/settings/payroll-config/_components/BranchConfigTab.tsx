@@ -22,10 +22,9 @@ export default function BranchConfigTab() {
 
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
   const [draft, setDraft] = useState<Partial<BranchPayrollConfig>>({});
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
 
   const configByBranch = new Map((configs ?? []).map(c => [c.branch, c]));
   const selectedBranch = branches.find(b => b.id === selectedBranchId) ?? null;
@@ -42,9 +41,9 @@ export default function BranchConfigTab() {
     setDraft({});
   }
 
-  function flash(text: string) {
-    setMsg(text);
-    setTimeout(() => setMsg(null), 3000);
+  function flash(text: string, isError = false) {
+    setMsg({ text, isError });
+    setTimeout(() => setMsg(null), isError ? 5000 : 3000);
   }
 
   function validateDraft(): string | null {
@@ -68,8 +67,7 @@ export default function BranchConfigTab() {
   async function saveConfig() {
     if (!selectedBranchId) return;
     const validationErr = validateDraft();
-    if (validationErr) { setSaveErr(validationErr); return; }
-    setSaveErr(null);
+    if (validationErr) { flash(validationErr, true); return; }
     setSaving(true);
     try {
       if (existingConfig) {
@@ -80,8 +78,8 @@ export default function BranchConfigTab() {
       setDraft({});
       refetch();
       flash("Branch config saved.");
-    } catch {
-      flash("Failed to save.");
+    } catch (err: unknown) {
+      flash((err as { message?: string })?.message || "Failed to save.", true);
     } finally {
       setSaving(false);
     }
@@ -96,8 +94,8 @@ export default function BranchConfigTab() {
       setDraft({});
       refetch();
       flash("Override removed — branch will use system defaults.");
-    } catch {
-      flash("Failed to remove override.");
+    } catch (err: unknown) {
+      flash((err as { message?: string })?.message || "Failed to remove override.", true);
     } finally {
       setSaving(false);
     }
@@ -146,13 +144,8 @@ export default function BranchConfigTab() {
       {/* Config panel */}
       <div className="flex-1">
         {msg && (
-          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.startsWith("Failed") ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
-            {msg}
-          </div>
-        )}
-        {saveErr && (
-          <div className="mb-3 px-4 py-2.5 rounded-lg text-sm font-medium bg-[var(--error-c)] text-[var(--error)]">
-            {saveErr}
+          <div className={`mb-3 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.isError ? "bg-[var(--error-c)] text-[var(--error)]" : "bg-[var(--success-c)] text-[var(--success)]"}`}>
+            {msg.text}
           </div>
         )}
 
