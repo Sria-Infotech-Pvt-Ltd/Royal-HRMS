@@ -1025,6 +1025,32 @@ class SeparationSettlementSerializer(serializers.ModelSerializer):
     def get_can_finalize(self, obj):
         return self.get_can_edit(obj)
 
+    # Every manual field here except other_adjustment_amount is documented
+    # as a one-directional figure (gratuity/bonus/reimbursements always add,
+    # advances/TDS always subtract — see MANUAL_FIELDS' addsToNet in the
+    # frontend) — a negative value would silently flip that direction and
+    # corrupt net_payable_amount. other_adjustment_amount is deliberately
+    # signed (+/-) and excluded from this check.
+    def _validate_nonnegative(self, value, label):
+        if value is not None and value < 0:
+            raise serializers.ValidationError(f'{label} cannot be negative.')
+        return value
+
+    def validate_gratuity_amount(self, value):
+        return self._validate_nonnegative(value, 'Gratuity')
+
+    def validate_statutory_bonus_amount(self, value):
+        return self._validate_nonnegative(value, 'Statutory bonus')
+
+    def validate_reimbursements_amount(self, value):
+        return self._validate_nonnegative(value, 'Reimbursements')
+
+    def validate_advances_recovery_amount(self, value):
+        return self._validate_nonnegative(value, 'Advances recovery')
+
+    def validate_tds_amount(self, value):
+        return self._validate_nonnegative(value, 'TDS')
+
     def validate(self, data):
         if self.instance and self.instance.status == SEP_SETTLEMENT_FINALIZED:
             raise serializers.ValidationError('This settlement is already finalized and can no longer be edited.')

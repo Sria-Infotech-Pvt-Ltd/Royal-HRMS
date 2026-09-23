@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import { useToast } from "@/components/ToastProvider";
+import ConfirmModal from "@/components/ConfirmModal";
 import type { SeparationRequest, SettlementItem } from "@/types/separation";
 import { fmtDateTime } from "../../_workflow";
 
@@ -34,6 +35,7 @@ export default function SettlementSection({ r }: Props) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [confirmFinalize, setConfirmFinalize] = useState(false);
 
   function extractError(err: unknown, fallback: string): string {
     return (err as { response?: { data?: { message?: string } }; message?: string })
@@ -69,6 +71,7 @@ export default function SettlementSection({ r }: Props) {
   }
 
   async function finalize() {
+    setConfirmFinalize(false);
     setFinalizing(true);
     try {
       await clientApi.post(API.separation.settlementFinalize(r.id), {});
@@ -160,7 +163,7 @@ export default function SettlementSection({ r }: Props) {
                   <button className="btn btn-ghost btn-sm" onClick={startEdit} suppressHydrationWarning>
                     <i className="ti ti-edit" /> Edit
                   </button>
-                  <button className="btn btn-success btn-sm" onClick={finalize} disabled={finalizing} suppressHydrationWarning>
+                  <button className="btn btn-success btn-sm" onClick={() => setConfirmFinalize(true)} disabled={finalizing} suppressHydrationWarning>
                     {finalizing ? "Finalizing…" : <><i className="ti ti-check" /> Finalize</>}
                   </button>
                 </div>
@@ -208,6 +211,18 @@ export default function SettlementSection({ r }: Props) {
           </div>
         )}
       </div>
+
+      {confirmFinalize && (
+        <ConfirmModal
+          title="Finalize this settlement?"
+          body={`This locks the full & final settlement at a net payable of ${INR(settlement.net_payable_amount)}. Once finalized, no field on this settlement — gratuity, bonus, reimbursements, advances, TDS, or adjustments — can be edited again. This cannot be undone.`}
+          confirmLabel="Finalize"
+          danger
+          saving={finalizing}
+          onConfirm={finalize}
+          onCancel={() => setConfirmFinalize(false)}
+        />
+      )}
     </div>
   );
 }
