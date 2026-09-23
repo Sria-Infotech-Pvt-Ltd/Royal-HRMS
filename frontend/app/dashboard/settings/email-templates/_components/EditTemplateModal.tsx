@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import clientApi from "@/lib/clientApi";
-import { formatDateTime } from "@/lib/formatDate";
+import TemplatePreviewColumn from "./TemplatePreviewColumn";
+import VariablesSidebar from "./VariablesSidebar";
 import {
   validateTemplateForm, EMPTY_TEMPLATE_FORM, toSlug, catValue,
   ATTACHMENT_ACCEPT_ATTR, fileKind, FILE_KIND_META, formatBytes,
@@ -356,19 +357,6 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
     await onSave(latest);
   }
 
-  // Highlight {VARIABLE} tokens with a coloured span, and sanitize — this
-  // renders straight into the DOM via dangerouslySetInnerHTML below, and a
-  // saved template's subject/body can have been authored by a different
-  // admin (or pasted from an external source) at any point in the past, so
-  // it's stored, not-necessarily-trusted HTML like any other.
-  function highlightVars(html: string): string {
-    const withHighlights = html.replace(
-      /\{([A-Za-z][A-Za-z0-9_]*)\}/g,
-      '<span style="background:rgba(234,167,0,0.18);color:#a06800;padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:0.88em;font-weight:600">{$1}</span>'
-    );
-    return DOMPurify.sanitize(withHighlights);
-  }
-
   // Extract {VARIABLE} tokens from subject + body (strips HTML tags before scanning body)
   const detectedTags = (() => {
     const plainBody = form.body.replace(/<[^>]*>/g, " ");
@@ -703,100 +691,17 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
           </div>
 
           {/* Middle: live preview */}
-          <div className={`et-col-preview${mobileTab === "preview" ? " et-tab-active" : ""}`} style={{ overflowY: "auto", borderRight: "1px solid var(--outline-v)", background: "#fafbfc", display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--outline)", letterSpacing: "0.08em", textTransform: "uppercase", padding: "14px 14px 10px", flexShrink: 0 }}>
-              Live Preview
-            </div>
-            <div style={{ padding: "0 14px 16px", flex: 1, overflowY: "auto" }}>
-              {/* Subject preview */}
-              <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Subject</div>
-              <div style={{ fontSize: 12, color: "var(--on-bg)", marginBottom: 14, padding: "8px 10px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--outline-v)", lineHeight: 1.5, wordBreak: "break-word" }}
-                dangerouslySetInnerHTML={{ __html: highlightVars(form.subject) || '<span style="color:var(--outline);font-style:italic">No subject yet…</span>' }} />
-
-              {/* Body preview */}
-              <div style={{ fontSize: 10, fontWeight: 600, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Body</div>
-              {form.body ? (
-                <div style={{ fontSize: 12, lineHeight: 1.75, padding: "12px 12px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--outline-v)", wordBreak: "break-word", overflowX: "auto" }}
-                  dangerouslySetInnerHTML={{ __html: highlightVars(form.body) }} />
-              ) : (
-                <div style={{ fontSize: 12, color: "var(--outline)", fontStyle: "italic", padding: "12px 12px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--outline-v)" }}>
-                  Body will appear here…
-                </div>
-              )}
-            </div>
-          </div>
+          <TemplatePreviewColumn subject={form.subject} body={form.body} active={mobileTab === "preview"} />
 
           {/* Right: variable tags sidebar */}
-          <div className={`et-col-sidebar${mobileTab === "sidebar" ? " et-tab-active" : ""}`} style={{ overflowY: "auto", background: "var(--bg-low)" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--outline)", letterSpacing: "0.08em", textTransform: "uppercase", padding: "14px 14px 10px" }}>
-              Available Tags
-            </div>
-
-            {/* Predefined variables */}
-            {variables.length > 0 && (
-              <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-                {variables.map(v => {
-                  const tag = `{${v}}`;
-                  return (
-                    <button key={v} type="button" suppressHydrationWarning
-                      onClick={() => insertTag(tag)}
-                      title={`Insert ${tag}`}
-                      style={{ textAlign: "left", padding: "5px 9px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.12)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--primary)", cursor: "pointer" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(124,58,237,0.14)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "rgba(124,58,237,0.06)")}>
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Newly typed tags detected in subject/body */}
-            {newTags.length > 0 && (
-              <>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--outline)", letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px 14px 6px", borderTop: variables.length ? "1px solid var(--outline-v)" : "none" }}>
-                  Detected Tags
-                </div>
-                <div style={{ padding: "0 10px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
-                  {newTags.map(v => {
-                    const tag = `{${v}}`;
-                    return (
-                      <button key={v} type="button" suppressHydrationWarning
-                        onClick={() => insertTag(tag)}
-                        title={`Insert ${tag}`}
-                        style={{ textAlign: "left", padding: "5px 9px", background: "rgba(234,167,0,0.08)", border: "1px solid rgba(234,167,0,0.3)", borderRadius: 4, fontSize: 11, fontFamily: "ui-monospace, monospace", color: "#a06800", cursor: "pointer" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(234,167,0,0.16)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "rgba(234,167,0,0.08)")}>
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {variables.length === 0 && newTags.length === 0 && (
-              <div style={{ padding: "8px 14px 14px", fontSize: 12, color: "var(--on-variant)", lineHeight: 1.5 }}>
-                Type <code style={{ fontSize: 11 }}>{"{VARIABLE}"}</code> in the subject or body to see tags here.
-              </div>
-            )}
-
-            {/* Last updated */}
-            {!isAddMode && (
-              <div style={{ borderTop: "1px solid var(--outline-v)", padding: "12px 14px", fontSize: 11, color: "var(--outline)" }}>
-                <div style={{ marginBottom: 2 }}>Last updated</div>
-                <div style={{ color: "var(--on-variant)", fontWeight: 500 }}>
-                  {formatDateTime(template.updated_at)}
-                </div>
-                {template.is_builtin && (
-                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
-                    <i className="ti ti-shield-check" style={{ fontSize: 12, color: "var(--success)" }} />
-                    <span style={{ color: "var(--success)", fontWeight: 600, fontSize: 11 }}>Built-in template</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <VariablesSidebar
+            active={mobileTab === "sidebar"}
+            variables={variables}
+            newTags={newTags}
+            onInsert={insertTag}
+            isAddMode={isAddMode}
+            template={template}
+          />
         </div>
 
         {/* ── Attachment bar ── */}
