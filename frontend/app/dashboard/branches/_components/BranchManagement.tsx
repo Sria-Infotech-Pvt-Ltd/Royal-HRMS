@@ -9,200 +9,15 @@ import { isUnrestrictedUser } from "@/lib/auth";
 import Modal from "@/components/Modal";
 import ToggleSwitch from "@/components/ToggleSwitch";
 import type { GSTRegistration } from "@/types/company";
-
-interface StateObj {
-  id: number;
-  name: string;
-}
-
-interface CityObj {
-  id: number;
-  name: string;
-}
-
-interface Branch {
-  id:             number;
-  branch_code:    string;
-  branch_name:    string;
-  is_headquarter: boolean;
-  is_metro:       boolean;
-  address:        string;
-  state:          number;
-  state_name:     string;
-  city:           number;
-  city_name:      string;
-  gst_registration:       string | null;
-  gst_registration_gstin: string | null;
-  employees_count: number;
-  status:         string;
-  geofencing_enabled:    boolean;
-  latitude:              number | null;
-  longitude:             number | null;
-  allowed_radius_meters: number | null;
-  has_coordinates:       boolean;
-}
-
-function geofenceBadge(branch: Branch): { label: string; cls: string } {
-  if (!branch.geofencing_enabled) return { label: "Disabled", cls: "badge-neutral" };
-  if (!branch.has_coordinates)    return { label: "No Coordinates", cls: "badge-warn" };
-  return { label: "Active", cls: "badge-success" };
-}
-
-function LeaderFields({
-  label, form, setForm, employees, errors, prefix,
-}: {
-  label: string;
-  form: LeaderForm;
-  setForm: (updater: (f: LeaderForm) => LeaderForm) => void;
-  employees: ApiEmployeeOption[];
-  errors: Record<string, string>;
-  prefix: string;
-}) {
-  function set<K extends keyof LeaderForm>(k: K, v: LeaderForm[K]) {
-    setForm(f => ({ ...f, [k]: v }));
-  }
-
-  const filtered = form.search.trim()
-    ? employees.filter(e =>
-        e.full_name.toLowerCase().includes(form.search.trim().toLowerCase()) ||
-        e.email.toLowerCase().includes(form.search.trim().toLowerCase()) ||
-        e.employee_id.toLowerCase().includes(form.search.trim().toLowerCase()),
-      )
-    : employees;
-
-  return (
-    <div style={{ marginBottom: "18px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-        <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--primary)" }}>{label}</div>
-        {employees.length > 0 && (
-          <label className="module-check" style={{ fontSize: "12px", fontWeight: 400 }}>
-            <input
-              type="checkbox"
-              checked={form.mode === "existing"}
-              onChange={e => set("mode", e.target.checked ? "existing" : "new")}
-            />
-            <span>Assign an existing employee instead</span>
-          </label>
-        )}
-      </div>
-
-      {form.mode === "existing" ? (
-        <div className="field-group">
-          <input
-            type="text"
-            className="field-input"
-            value={form.search}
-            onChange={e => set("search", e.target.value)}
-            placeholder="Search by name, email, or employee ID…"
-            style={{ marginBottom: "8px" }}
-          />
-          <select
-            className={`field-input field-select${errors[`${prefix}Employee`] ? " field-error" : ""}`}
-            value={form.employeeId}
-            onChange={e => set("employeeId", e.target.value)}
-          >
-            <option value="">— Select employee —</option>
-            {filtered.map(e => (
-              <option key={e.id} value={e.id}>
-                {e.full_name} ({e.employee_id}) — {e.branch || "no branch"}
-              </option>
-            ))}
-          </select>
-          {errors[`${prefix}Employee`] && <p className="field-error-msg">{errors[`${prefix}Employee`]}</p>}
-        </div>
-      ) : (
-        <>
-          <div className="form-row cols-2" style={{ marginBottom: "8px" }}>
-            <div className="field-group">
-              <input
-                type="text"
-                className={`field-input${errors[`${prefix}Name`] ? " field-error" : ""}`}
-                value={form.name}
-                onChange={e => set("name", e.target.value)}
-                placeholder="Full name"
-              />
-              {errors[`${prefix}Name`] && <p className="field-error-msg">{errors[`${prefix}Name`]}</p>}
-            </div>
-            <div className="field-group">
-              <input
-                type="email"
-                className={`field-input${errors[`${prefix}Email`] ? " field-error" : ""}`}
-                value={form.email}
-                onChange={e => set("email", e.target.value)}
-                placeholder="Work email"
-              />
-              {errors[`${prefix}Email`] && <p className="field-error-msg">{errors[`${prefix}Email`]}</p>}
-            </div>
-          </div>
-          <div className="field-group">
-            <input
-              type="text"
-              className={`field-input${errors[`${prefix}Designation`] ? " field-error" : ""}`}
-              value={form.designation}
-              onChange={e => set("designation", e.target.value)}
-              placeholder="Designation"
-            />
-            {errors[`${prefix}Designation`] && <p className="field-error-msg">{errors[`${prefix}Designation`]}</p>}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-interface BranchStats {
-  total_branches:          number;
-  total_employees:         number;
-  total_active_branches:   number;
-  total_inactive_branches: number;
-  total_cities:            number;
-}
-
-interface BranchDistribution {
-  branch:      string;
-  branch_code: string;
-  employees:   number;
-}
-
-type Envelope<T> = { status: string; message: string; data: T };
-type Paginated<T> = { count: number; page: number; page_size: number; total_pages: number; results: T[] };
-
-interface ApiRole {
-  id: number; name: string; display_name: string;
-  can_manage_branch: boolean; permissions: string[];
-}
-interface ApiEmployeeOption {
-  id: string; uuid: string; employee_id: string; full_name: string; email: string; branch: string; role: string;
-}
-
-interface LeaderForm {
-  // "new" invites a brand-new person via the same create-and-email-credentials
-  // flow as the Employees page; "existing" instead re-roles/re-branches an
-  // employee who's already in the company (a transfer, not a new hire).
-  // No department field — a Branch Admin oversees every department in the
-  // branch, not one, unlike every other role.
-  mode: "new" | "existing";
-  name: string; email: string; designation: string;
-  employeeId: string; search: string;
-}
-const EMPTY_LEADER: LeaderForm = {
-  mode: "new", name: "", email: "", designation: "Branch Manager",
-  employeeId: "", search: "",
-};
-
-// A leader row counts as "in use" the moment it's touched — once it is,
-// every field that mode needs becomes required together.
-function isLeaderActive(f: LeaderForm): boolean {
-  return f.mode === "existing"
-    ? !!f.employeeId
-    : !!(f.name.trim() || f.email.trim());
-}
-
-const EMAIL_RE = /^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
-
-const OTHER_CITY = "__other__";
-const BRANCH_NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9 &\-.]*[A-Za-z0-9])?$/;
-const CITY_NAME_RE   = /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/;
+import {
+  type StateObj, type CityObj, type Branch, type BranchStats, type BranchDistribution,
+  type Envelope, type Paginated, type ApiRole, type ApiEmployeeOption, type LeaderForm,
+  EMPTY_LEADER, isLeaderActive, EMAIL_RE, OTHER_CITY, BRANCH_NAME_RE, CITY_NAME_RE,
+} from "./_data";
+import LeaderFields from "./LeaderFields";
+import BranchCard from "./BranchCard";
+import EmployeeDistributionChart from "./EmployeeDistributionChart";
+import { TransferConfirmModal, HqConfirmModal, DeleteConfirmModal, type TransferConfirmState } from "./BranchConfirmModals";
 
 export default function BranchManagement() {
   const user      = useCurrentUser();
@@ -245,9 +60,7 @@ export default function BranchManagement() {
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [leaderEmployees, setLeaderEmployees] = useState<ApiEmployeeOption[]>([]);
   const [inviteAlert, setInviteAlert] = useState<{ type: "warn" | "success"; text: string } | null>(null);
-  const [transferConfirm, setTransferConfirm] = useState<
-    { employee: ApiEmployeeOption; reportsCount: number; hrForCount: number } | null
-  >(null);
+  const [transferConfirm, setTransferConfirm] = useState<TransferConfirmState | null>(null);
   const [transferChecking, setTransferChecking] = useState(false);
 
   const [editForm, setEditForm] = useState({
@@ -593,6 +406,32 @@ export default function BranchManagement() {
     doSave();
   };
 
+  const handleEditBranch = (branch: Branch) => {
+    setSaveError(null);
+    setFieldErrors({});
+    setLeaderErrors({});
+    setBranchAdminForm(EMPTY_LEADER);
+    setTransferConfirm(null);
+    setModalMode("edit");
+    setNewCityName("");
+    setEditForm({
+      id:             branch.id,
+      branch_code:    branch.branch_code,
+      branch_name:    branch.branch_name,
+      address:        branch.address,
+      state:          branch.state.toString(),
+      city:           branch.city.toString(),
+      gst_registration: branch.gst_registration ?? "",
+      status:         branch.status.toLowerCase(),
+      is_headquarter: branch.is_headquarter,
+      is_metro:       branch.is_metro ?? false,
+      geofencing_enabled:    branch.geofencing_enabled ?? false,
+      latitude:              branch.latitude?.toString() ?? "",
+      longitude:             branch.longitude?.toString() ?? "",
+      allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
+    });
+  };
+
   const doDelete = async () => {
     if (!deleteConfirm) return;
     setDeleting(true);
@@ -718,113 +557,13 @@ export default function BranchManagement() {
       {visibleBranches.length > 0 ? (
         <div className="grid-2 mb-24">
           {visibleBranches.map(branch => (
-            <div key={branch.id} className="card" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-              <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                    <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "var(--primary)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>
-                      <i className="ti ti-building-skyscraper" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--on-bg)" }}>{branch.branch_name}</div>
-                      <div style={{ fontSize: "12px", color: "var(--on-variant)", marginTop: "2px" }}>{branch.branch_code}</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    {branch.is_headquarter && (
-                      <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
-                        <i className="ti ti-star-filled" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> HEADQUARTER
-                      </span>
-                    )}
-                    {branch.is_metro && (
-                      <span className="badge" style={{ background: "var(--bg-high)", color: "var(--on-variant)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", padding: "4px 8px" }}>
-                        <i className="ti ti-map-pin" style={{ fontSize: "10px", marginRight: "2px", color: "var(--on-variant)" }} /> METRO
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px", flex: 1 }}>
-                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--on-variant)", alignItems: "flex-start" }}>
-                    <i className="ti ti-map-pin" style={{ fontSize: "14px", color: "var(--outline)", marginTop: "2px" }} />
-                    <span>{branch.address}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", color: "var(--on-variant)", alignItems: "center" }}>
-                    <i className="ti ti-flag" style={{ fontSize: "14px", color: "var(--outline)" }} />
-                    <span>{branch.city_name}, {branch.state_name}</span>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "16px", padding: "12px 16px", background: "var(--bg-low)", borderRadius: "var(--radius)", marginBottom: "16px" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Employees</div>
-                    <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--on-bg)" }}>{branch.employees_count}</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Status</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 500, color: branch.status === "active" ? "var(--success)" : "var(--on-variant)" }}>
-                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: branch.status === "active" ? "var(--success)" : "var(--outline)" }} />
-                      {branch.status.charAt(0).toUpperCase() + branch.status.slice(1)}
-                    </div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "11px", color: "var(--on-variant)", marginBottom: "2px" }}>Geofencing</div>
-                    <span className={`badge ${geofenceBadge(branch).cls}`}>{geofenceBadge(branch).label}</span>
-                    {branch.geofencing_enabled && branch.has_coordinates && (
-                      <div style={{ fontSize: "11px", color: "var(--on-variant)", marginTop: "4px" }}>
-                        {branch.allowed_radius_meters} m radius<br />
-                        {branch.latitude}, {branch.longitude}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {canEdit && (
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", width: "100%" }}>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ flex: 1, justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0" }}
-                      onClick={() => {
-                        setSaveError(null);
-                        setFieldErrors({});
-                        setLeaderErrors({});
-                        setBranchAdminForm(EMPTY_LEADER);
-                        setTransferConfirm(null);
-                        setModalMode("edit");
-                        setNewCityName("");
-                        setEditForm({
-                          id:             branch.id,
-                          branch_code:    branch.branch_code,
-                          branch_name:    branch.branch_name,
-                          address:        branch.address,
-                          state:          branch.state.toString(),
-                          city:           branch.city.toString(),
-                          gst_registration: branch.gst_registration ?? "",
-                          status:         branch.status.toLowerCase(),
-                          is_headquarter: branch.is_headquarter,
-                          is_metro:       branch.is_metro ?? false,
-                          geofencing_enabled:    branch.geofencing_enabled ?? false,
-                          latitude:              branch.latitude?.toString() ?? "",
-                          longitude:             branch.longitude?.toString() ?? "",
-                          allowed_radius_meters: branch.allowed_radius_meters?.toString() ?? "150",
-                        });
-                      }}
-                    >
-                      <i className="ti ti-edit" style={{ fontSize: "16px", marginRight: "6px" }} /> Edit
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ width: "40px", justifyContent: "center", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "8px 0", color: "var(--error)" }}
-                      onClick={() => { setDeleteError(null); setDeleteConfirm(branch); }}
-                      title={`Delete ${branch.branch_name}`}
-                      aria-label={`Delete ${branch.branch_name}`}
-                    >
-                      <i className="ti ti-trash" style={{ fontSize: "16px" }} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <BranchCard
+              key={branch.id}
+              branch={branch}
+              canEdit={canEdit}
+              onEdit={handleEditBranch}
+              onDelete={b => { setDeleteError(null); setDeleteConfirm(b); }}
+            />
           ))}
         </div>
       ) : (
@@ -835,51 +574,7 @@ export default function BranchManagement() {
         </div>
       )}
 
-      {distribution.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
-              <i className="ti ti-chart-bar" /> Employee Distribution by Company Code
-            </div>
-          </div>
-          <div className="card-body">
-            <div style={{ position: "relative", height: "260px", paddingLeft: "40px", paddingBottom: "40px", paddingTop: "20px" }}>
-              {/* Y-axis grid lines */}
-              <div style={{ position: "absolute", inset: "20px 0 40px 40px", display: "flex", flexDirection: "column-reverse", justifyContent: "space-between" }}>
-                {[0, 2, 4, 6, 8].map(val => (
-                  <div key={val} style={{ borderBottom: val === 0 ? "1px solid var(--outline)" : "1px dashed var(--outline-v)", position: "relative", width: "100%" }}>
-                    <span style={{ position: "absolute", left: "-24px", top: "-8px", fontSize: "11px", color: "var(--on-variant)" }}>{val}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Bars */}
-              <div style={{ position: "absolute", inset: "20px 0 40px 40px", display: "flex", alignItems: "flex-end", justifyContent: "space-around" }}>
-                {distribution.map((dist, i) => {
-                  const maxEmp = Math.max(...distribution.map(d => d.employees), 8);
-                  const heightPct = (dist.employees / maxEmp) * 100;
-                  const colors = ["var(--primary)", "var(--info)", "var(--secondary)", "var(--warn)"];
-                  return (
-                    <div key={dist.branch_code} style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end", zIndex: 1, position: "relative" }}>
-                      <div style={{
-                        width: "36px",
-                        height: `${heightPct}%`,
-                        background: colors[i % colors.length],
-                        borderRadius: "6px 6px 0 0",
-                        transition: "height 0.3s ease",
-                        cursor: "pointer"
-                      }} title={`${dist.branch}: ${dist.employees} Employees`} />
-                      <div style={{ position: "absolute", bottom: "-30px", fontSize: "12px", color: "var(--on-variant)", whiteSpace: "nowrap", textAlign: "center" }}>
-                        {dist.branch}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <EmployeeDistributionChart distribution={distribution} />
 
       {modalMode && (
         <Modal
@@ -1202,110 +897,25 @@ export default function BranchManagement() {
       )}
 
       {transferConfirm && (
-        <Modal
-          title={
-            <>
-              <i className="ti ti-arrows-right-left" style={{ marginRight: "8px", color: "var(--primary)" }} />
-              Move {transferConfirm.employee.full_name}?
-            </>
-          }
+        <TransferConfirmModal
+          state={transferConfirm}
           onClose={() => setTransferConfirm(null)}
-          maxWidth="440px"
-          zIndex={1010}
-          footer={
-            <>
-              <button className="btn btn-ghost" onClick={() => setTransferConfirm(null)}>Cancel</button>
-              <button
-                className="btn btn-filled"
-                onClick={() => { setTransferConfirm(null); doSave(); }}
-              >
-                Yes, Move Them
-              </button>
-            </>
-          }
-        >
-          <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6, marginBottom: (transferConfirm.reportsCount > 0 || transferConfirm.hrForCount > 0) ? "14px" : 0 }}>
-            <strong>{transferConfirm.employee.full_name}</strong> currently belongs to{" "}
-            <strong>{transferConfirm.employee.branch || "no Company Code"}</strong>. This will move them to the new Company Code
-            and change their role to Company Code Admin.
-          </p>
-          {(transferConfirm.reportsCount > 0 || transferConfirm.hrForCount > 0) && (
-            <div className="alert alert-warn">
-              <i className="ti ti-alert-triangle" />
-              <div>
-                {transferConfirm.reportsCount > 0 && (
-                  <div>They currently manage {transferConfirm.reportsCount} {transferConfirm.reportsCount === 1 ? "employee" : "employees"} — that reporting line won&apos;t be reassigned automatically.</div>
-                )}
-                {transferConfirm.hrForCount > 0 && (
-                  <div>They&apos;re the assigned HR for {transferConfirm.hrForCount} {transferConfirm.hrForCount === 1 ? "employee" : "employees"} — that assignment won&apos;t be reassigned automatically.</div>
-                )}
-              </div>
-            </div>
-          )}
-        </Modal>
+          onConfirm={() => { setTransferConfirm(null); doSave(); }}
+        />
       )}
 
       {hqConfirm && (
-        <Modal
-          title={
-            <>
-              <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--warn)" }} />
-              Change Headquarter?
-            </>
-          }
-          onClose={() => setHqConfirm(false)}
-          maxWidth="420px"
-          zIndex={1010}
-          footer={
-            <>
-              <button className="btn btn-ghost" onClick={() => setHqConfirm(false)}>Cancel</button>
-              <button className="btn btn-filled" onClick={doSave}>Yes, Change HQ</button>
-            </>
-          }
-        >
-          <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-            Another branch is already marked as the headquarter. Setting this branch as HQ will remove the HQ status from the existing one. Do you want to continue?
-          </p>
-        </Modal>
+        <HqConfirmModal onClose={() => setHqConfirm(false)} onConfirm={doSave} />
       )}
 
       {deleteConfirm && (
-        <Modal
-          title={
-            <>
-              <i className="ti ti-alert-triangle" style={{ marginRight: "8px", color: "var(--error)" }} />
-              Delete Company Code?
-            </>
-          }
+        <DeleteConfirmModal
+          branchName={deleteConfirm.branch_name}
+          deleting={deleting}
+          error={deleteError}
           onClose={() => setDeleteConfirm(null)}
-          closeDisabled={deleting}
-          maxWidth="420px"
-          zIndex={1010}
-          footer={
-            <>
-              <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancel</button>
-              <button
-                className="btn btn-filled"
-                style={{ background: "var(--error)" }}
-                onClick={doDelete}
-                disabled={deleting}
-              >
-                {deleting
-                  ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite", marginRight: "6px" }} />Deleting…</>
-                  : "Yes, Delete"}
-              </button>
-            </>
-          }
-        >
-          {deleteError && (
-            <div className="alert alert-error mb-16">
-              <i className="ti ti-alert-circle" /> {deleteError}
-            </div>
-          )}
-          <p style={{ fontSize: "14px", color: "var(--on-variant)", lineHeight: 1.6 }}>
-            Are you sure you want to delete <strong>{deleteConfirm.branch_name}</strong>? This action cannot be undone.
-          </p>
-        </Modal>
+          onConfirm={doDelete}
+        />
       )}
     </>
   );
