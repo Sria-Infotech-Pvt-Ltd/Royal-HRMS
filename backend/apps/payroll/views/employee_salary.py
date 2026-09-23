@@ -11,7 +11,7 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, first_error, success
 from apps.payroll.models import EmployeeSalaryConfig
 from apps.payroll.serializers import EmployeeSalaryConfigSerializer
-from apps.payroll.views.cycles import _is_admin
+from apps.payroll.views.shared import _is_admin
 
 User = get_user_model()
 

@@ -23,16 +23,20 @@ from apps.payroll.views.employee_salary import (
     EmployeeSalaryConfigDetailView,
     EmployeeSalaryHistoryView,
 )
-from apps.payroll.views.cycles import (
+from apps.payroll.views.cycle_list_detail import (
     PayrollCycleListView,
     PayrollCycleDetailView,
+    BranchPayrollStatusView,
+)
+from apps.payroll.views.cycle_attendance_approval import (
     AttendanceApprovalView,
     ManagerAttendanceApprovalListView,
+)
+from apps.payroll.views.process_actions import (
     ProcessPayrollView,
     CycleEligibleEmployeesView,
     MarkCyclePaidView,
     CancelPayrollCycleView,
-    BranchPayrollStatusView,
 )
 from apps.payroll.views.attendance_approval import (
     AttendancePendingCyclesView,

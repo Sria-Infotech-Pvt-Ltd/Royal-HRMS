@@ -28,7 +28,7 @@ from core.responses import error, get_client_ip, success
 
 from apps.accounts.models import AuditLog
 from apps.payroll.models import EmployeePayslip, PayrollCycle, SalaryTransferBatch, SalaryTransferItem
-from apps.payroll.views.cycles import _is_admin, _resolve_user_branch
+from apps.payroll.views.shared import _is_admin, _resolve_user_branch
 
 logger = logging.getLogger(__name__)
 

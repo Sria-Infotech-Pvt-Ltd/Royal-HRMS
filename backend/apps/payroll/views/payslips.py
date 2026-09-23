@@ -21,7 +21,7 @@ from apps.payroll.models import (
     PayrollSettings,
 )
 from apps.payroll.serializers import EmployeePayslipSerializer, PayslipQuerySerializer
-from apps.payroll.views.cycles import _is_admin
+from apps.payroll.views.shared import _is_admin
 from apps.payroll.views.employee_salary import _resolve_employee
 
 logger = logging.getLogger(__name__)

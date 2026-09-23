@@ -60,7 +60,7 @@ from apps.payroll.models import (
     SalaryStructure,
     StatutoryConfig,
 )
-from apps.payroll.views.cycles import _compute_employee_payslip
+from apps.payroll.views.shared import _compute_employee_payslip
 from apps.payroll.services_income_tax import estimate_monthly_tds
 from apps.performance.models import (
     CYCLE_ACTIVE,
