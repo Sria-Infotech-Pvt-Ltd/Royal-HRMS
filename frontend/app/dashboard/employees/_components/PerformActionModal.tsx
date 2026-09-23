@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import { useFetch } from "@/hooks/useFetch";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
@@ -42,10 +43,9 @@ const dayBefore = (iso: string) => {
   d.setDate(d.getDate() - 1);
   return d.toISOString().slice(0, 10);
 };
-const slash = (iso: string) => {
-  if (!iso || iso === "9999-12-31") return "31/12/9999";
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+const DATE_FMT = (iso: string) => {
+  if (!iso || iso === "9999-12-31") return "31-12-9999";
+  return formatDate(iso);
 };
 
 export default function PerformActionModal({ employee, onClose, onApplied }: {
@@ -143,7 +143,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
     }
     if (actionType === "separation") {
       rows.push({ key: "employment_status", label: "Employee status", before: "Active", after: "Notice Period" });
-      rows.push({ key: "last_working_day", label: "Last working day", before: "—", after: lastWorkingDay ? slash(lastWorkingDay) : null });
+      rows.push({ key: "last_working_day", label: "Last working day", before: "—", after: lastWorkingDay ? DATE_FMT(lastWorkingDay) : null });
     }
     return rows;
   }, [actionType, positionId, positionOptions, annualCtc, managerId, managerOptions, workLocation, detail, employee, currentStatusLabel, lastWorkingDay, currentManagerName]);
@@ -154,7 +154,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
     { key: "work_location", label: "Work location", value: detail?.work_location || "—" },
     { key: "reporting_manager", label: "Reporting manager", value: currentManagerName || "CEO Office" },
     { key: "employment_status", label: "Status", value: currentStatusLabel },
-    { key: "record_range", label: "Current record date range", value: currentRecord ? `${slash(currentRecord.effective_from)} – ${slash(currentRecord.effective_to)}` : "—" },
+    { key: "record_range", label: "Current record date range", value: currentRecord ? `${DATE_FMT(currentRecord.effective_from)} – ${DATE_FMT(currentRecord.effective_to)}` : "—" },
   ].filter(r => r.key === "record_range" || !changedFieldKeys.includes(r.key === "position" ? "position" : r.key)).map(r => ({ label: r.label, value: r.value }));
 
   const route = actionType ? approvalRouteFor(actionType, currentManagerName, false) : "";
@@ -239,7 +239,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
     >
       <div className="space-y-4">
         <p className="hint">
-          {fullName(employee)} · {employee.code} — current record runs {currentRecord ? `${slash(currentRecord.effective_from)} to ${slash(currentRecord.effective_to)}` : "— to 31/12/9999"}
+          {fullName(employee)} · {employee.code} — current record runs {currentRecord ? `${DATE_FMT(currentRecord.effective_from)} to ${DATE_FMT(currentRecord.effective_to)}` : "— to 31-12-9999"}
         </p>
 
         {err && (
@@ -302,7 +302,7 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
               diffRows={diffRows}
               notChangedRows={notChangedRows}
               route={route}
-              effectiveFromLabel={slash(effectiveFrom)}
+              effectiveFromLabel={DATE_FMT(effectiveFrom)}
               raisedByName={currentUser?.name ?? "—"}
               raisedByRole={currentUser?.role ?? "—"}
               // Safe: this whole block only renders inside `{actionType && (...)}`,
@@ -310,8 +310,8 @@ export default function PerformActionModal({ employee, onClose, onApplied }: {
               reversibility={reversibility as { text: string; tone: "purple" | "amber" }}
               separationConfirmed={separationConfirmed}
               setSeparationConfirmed={setSeparationConfirmed}
-              delimitedToLabel={dayBefore(effectiveFrom) === "—" ? "—" : slash(dayBefore(effectiveFrom))}
-              newRecordFromLabel={slash(effectiveFrom)}
+              delimitedToLabel={dayBefore(effectiveFrom) === "—" ? "—" : DATE_FMT(dayBefore(effectiveFrom))}
+              newRecordFromLabel={DATE_FMT(effectiveFrom)}
             />
           </>
         )}

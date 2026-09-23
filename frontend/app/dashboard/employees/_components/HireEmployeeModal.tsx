@@ -3,6 +3,7 @@
 import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import HireWizardClient from "@/app/dashboard/hire/[hireActionId]/_components/HireWizardClient";
@@ -147,7 +148,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
           <div className="flex justify-between text-[12.5px]">
             <span style={{ color: "var(--muted)" }}>First record</span>
-            <span className="font-semibold">{effectiveFrom || "—"} → 31/12/9999</span>
+            <span className="font-semibold">{effectiveFrom ? formatDate(effectiveFrom) : "—"} → 31-12-9999</span>
           </div>
           <div className="flex justify-between text-[12.5px]">
             <span style={{ color: "var(--muted)" }}>Employee number</span>
@@ -155,7 +156,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
         </div>
         <p className="hint">
-          Creates the first record, valid {effectiveFrom || "—"} → 31/12/9999.
+          Creates the first record, valid {effectiveFrom ? formatDate(effectiveFrom) : "—"} → 31-12-9999.
         </p>
       </div>
     </Modal>

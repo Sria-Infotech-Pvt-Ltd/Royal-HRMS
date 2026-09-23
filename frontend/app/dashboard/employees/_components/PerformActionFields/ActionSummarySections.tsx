@@ -96,7 +96,7 @@ export default function ActionSummarySections({
       </div>
 
       <p className="hint">
-        Current record will be delimited to {delimitedToLabel}; the new record runs {newRecordFromLabel} → 31/12/9999.
+        Current record will be delimited to {delimitedToLabel}; the new record runs {newRecordFromLabel} → 31-12-9999.
       </p>
     </>
   );
