@@ -22,6 +22,7 @@ export const API = {
       detail: (id: string) => `/platform-admin/companies/${id}/`,
       revealPassword: (id: string) => `/platform-admin/companies/${id}/reveal-password/`,
       systemAdmin:    (id: string) => `/platform-admin/companies/${id}/system-admin/`,
+      systemAdminResetPassword: (id: string) => `/platform-admin/companies/${id}/system-admin/reset-password/`,
     },
     admins: {
       list: "/platform-admin/admins/",

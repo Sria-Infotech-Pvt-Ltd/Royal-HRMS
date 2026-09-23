@@ -53,6 +53,37 @@ def _set_platform_cookies(resp, access: str, refresh: str | None = None) -> None
         )
 
 
+def _get_client_or_none(pk):
+    try:
+        return Client.objects.get(pk=pk)
+    except Client.DoesNotExist:
+        return None
+
+
+def _resolve_system_admin():
+    """
+    Resolves a tenant's System Admin by capability (role carries
+    settings.edit) rather than by the literal name "system_admin" — same
+    reasoning as apps.accounts.views' role-resolution helpers. Must be
+    called from inside a `with client:` block (imports apps.accounts.models
+    locally, only valid once that tenant's schema is active).
+
+    If a company somehow has more than one such account, the
+    earliest-created (lowest id) is treated as "the" System Admin — a
+    company is provisioned with exactly one, so this only matters if one
+    was added since. Shared by CompanySystemAdminView (view/change email)
+    and CompanySystemAdminResetPasswordView (reset password) so both agree
+    on which account "the System Admin" refers to.
+    """
+    from apps.accounts.models import User
+    return (
+        User.objects
+        .filter(role__role_permissions__permission__codename='settings.edit')
+        .order_by('id')
+        .first()
+    )
+
+
 def _log_platform_action(request, action: str, target_company: Client | None = None, changes: dict | None = None) -> None:
     """
     Every platform-admin action that changes something gets a row here —
@@ -399,20 +430,7 @@ class CompanySystemAdminView(APIView):
     permission_classes     = [IsPlatformAdmin]
 
     def _get_client(self, pk):
-        try:
-            return Client.objects.get(pk=pk)
-        except Client.DoesNotExist:
-            return None
-
-    def _resolve_system_admin(self):
-        """Must be called from inside a `with client:` block."""
-        from apps.accounts.models import User
-        return (
-            User.objects
-            .filter(role__role_permissions__permission__codename='settings.edit')
-            .order_by('id')
-            .first()
-        )
+        return _get_client_or_none(pk)
 
     def get(self, request, pk):
         client = self._get_client(pk)
@@ -420,7 +438,7 @@ class CompanySystemAdminView(APIView):
             return error('Company not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         with client:
-            admin = self._resolve_system_admin()
+            admin = _resolve_system_admin()
             if not admin:
                 return error('No System Admin account found for this company.', http_status=status.HTTP_404_NOT_FOUND)
             return success('System Admin retrieved.', data={
@@ -443,7 +461,7 @@ class CompanySystemAdminView(APIView):
             from apps.accounts.models import AuditLog, User
             from apps.accounts.utils import send_email_change_notifications
 
-            admin = self._resolve_system_admin()
+            admin = _resolve_system_admin()
             if not admin:
                 return error('No System Admin account found for this company.', http_status=status.HTTP_404_NOT_FOUND)
 
@@ -518,6 +536,127 @@ class CompanySystemAdminView(APIView):
             'email': new_email, 'full_name': admin.full_name,
             'new_email_sent': new_sent, 'old_email_sent': old_sent,
         })
+
+
+class CompanySystemAdminResetPasswordView(APIView):
+    """
+    POST /platform-admin/companies/<pk>/system-admin/reset-password/
+    { "platform_admin_password": "..." }
+
+    Resets a company's System Admin password — gated on the ACTING Platform
+    Admin's OWN current password (never the System Admin's), verified via
+    PlatformAdmin.check_password() — the same check_password/set_password
+    pair PlatformAdminChangePasswordView already uses for that admin's own
+    self-service password change (apps/tenants/views.py, further down this
+    file). A wrong password here changes nothing and returns a generic
+    error — it never reveals whether the company/System Admin themselves
+    exist, and never touches the System Admin's password.
+
+    After verification, mirrors EmployeeResetPasswordView
+    (apps/accounts/views.py) — the existing HR/admin-triggered "Reset
+    Password" action — field for field: same must_change_password /
+    failed_login_attempts / locked_until reset, same temporary-password
+    email via send_password_reset_email (shared, not duplicated), same
+    "still 2xx either way, only the message differs" handling of an email
+    delivery failure. The one difference is WHERE the target's schema comes
+    from: that view already runs inside the target's own tenant-schema
+    request; this one is public-schema platform-admin code, so it enters via
+    `with client:` first (same pattern CompanySystemAdminView already uses).
+
+    The temporary password itself is never included in the API response —
+    only whether the notification email succeeded (data={'email_sent': ...}),
+    matching EmployeeResetPasswordView's own contract; it is delivered by
+    email only, per this feature's explicit requirement, not by the separate
+    one-time-reveal mechanism CompanyRevealPasswordView uses for the
+    original provisioning password (that mechanism exists specifically to
+    work around async provisioning never having a synchronous response to
+    return it in — this action is synchronous, so no such gap exists here).
+    """
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def post(self, request, pk):
+        client = _get_client_or_none(pk)
+        if not client:
+            return error('Company not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        platform_admin_password = request.data.get('platform_admin_password') or ''
+        if not platform_admin_password:
+            return error(
+                'Your Platform Admin password is required.',
+                data={'platform_admin_password': 'This field is required.'},
+            )
+        # Verified against request.user (the PlatformAdmin making this
+        # request) — never against anything tenant-side. A wrong password
+        # here is intentionally indistinguishable from any other validation
+        # failure in the response; it changes nothing and is not logged.
+        if not request.user.check_password(platform_admin_password):
+            return error('Incorrect password. Nothing was changed.')
+
+        with client:
+            from apps.accounts.models import AuditLog
+
+            admin = _resolve_system_admin()
+            if not admin:
+                return error('No System Admin account found for this company.', http_status=status.HTTP_404_NOT_FOUND)
+
+            # Same generation convention already used elsewhere in this
+            # exact module for a platform-admin-initiated tenant credential
+            # (apps.tenants.services.generate_password, used by company
+            # provisioning) — already imported in this file.
+            temp_password = generate_password()
+
+            with transaction.atomic():
+                admin.set_password(temp_password)
+                admin.must_change_password  = True
+                admin.failed_login_attempts = 0
+                admin.locked_until          = None
+                admin.save(update_fields=[
+                    'password', 'must_change_password', 'failed_login_attempts', 'locked_until', 'updated_at',
+                ])
+
+            # Tenant-side audit trail — same shape EmployeeResetPasswordView
+            # already writes, so this company's own admins see it too, not
+            # just the platform-admin log below. `user` is left null: the
+            # actor here is a PlatformAdmin, a public-schema model this FK
+            # (which points at the tenant User model) cannot reference.
+            AuditLog.objects.create(
+                user       = None,
+                action     = 'system_admin_password_reset',
+                module     = 'employees',
+                object_id  = str(admin.id),
+                changes    = {
+                    'employee_id': admin.employee_id, 'full_name': admin.full_name,
+                    'changed_by_platform_admin': request.user.email,
+                },
+                branch     = admin.branch,
+                ip_address = get_client_ip(request),
+            )
+            logger.info(
+                'System Admin password reset for company %s (%s) by platform admin %s',
+                client.company_code, admin.email, request.user.email,
+            )
+
+            from apps.accounts.utils import send_password_reset_email
+            email_sent = send_password_reset_email(admin, temp_password)
+
+        # Back in the public schema — platform-level audit trail, separate
+        # from the tenant-side AuditLog row written above. Never includes
+        # the password.
+        _log_platform_action(
+            request, 'company_system_admin_password_reset', target_company=client,
+            changes={'system_admin_email': admin.email, 'system_admin_name': admin.full_name},
+        )
+
+        if email_sent:
+            message = f'System Admin password reset. New credentials sent to {admin.email}.'
+        else:
+            message = (
+                f'System Admin password reset, but the notification email could not be sent — '
+                f'that company\'s SMTP settings may need attention. Share the new password with '
+                f'{admin.full_name} manually.'
+            )
+        return success(message, data={'email_sent': email_sent})
 
 
 class PlatformSMTPSettingsView(APIView):

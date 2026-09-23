@@ -240,12 +240,181 @@ def send_employee_welcome_email(user, temp_password: str) -> bool:
         return False
 
 
+def send_password_reset_email(user, temp_password: str) -> bool:
+    """
+    Sends the "your password was just reset by an administrator" email —
+    the exact HTML/subject EmployeeResetPasswordView.post() has always
+    built inline, factored out here so a Platform-Admin-initiated System
+    Admin password reset (CompanySystemAdminResetPasswordView) can send the
+    identical email without a second, drifting implementation.
+
+    Never raises — same "log and return False" contract as
+    send_employee_welcome_email; a failed email must never undo an
+    already-applied password change. temp_password is used only to compose
+    this one message — never persisted, never included in the exception
+    message logged on failure (only the recipient email and the exception
+    itself).
+    """
+    try:
+        company_name, logo_url, website, address = _get_company_branding()
+        company_name = company_name or 'Royal HRMS'
+        login_url = f'{settings.FRONTEND_URL}/login'
+
+        body = (
+            f'<p>Hi <strong>{user.full_name}</strong>,</p>'
+            f'<p>Your {company_name} account password was just reset by an administrator.'
+            f' Use the credentials below to log in:</p>'
+            f'<p>'
+            f'<strong>Login Email:</strong> {user.email}<br>'
+            f'<strong>Temporary Password:</strong> {temp_password}<br>'
+            f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a>'
+            f'</p>'
+            f'<p>You will be asked to set a new password on your next login.</p>'
+            f'<p style="color:#b91c1c;">If you were not expecting this, contact your HR representative immediately.</p>'
+            f'<p>— HR Team</p>'
+        )
+        html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
+
+        connection, from_email = _get_smtp_connection()
+        msg = _build_message(
+            subject=f'Your {company_name} password has been reset',
+            html_body=html_body,
+            from_email=from_email,
+            to=[user.email],
+            connection=connection,
+        )
+        msg.send(fail_silently=False)
+        logger.info('Password-reset email sent to %s', user.email)
+        return True
+    except Exception as exc:
+        logger.error('Password-reset email failed for %s: %s', user.email, exc)
+        return False
+
+
+def send_role_change_email(employee, previous_role: str, new_role: str, effective_date) -> bool:
+    """
+    Notifies an employee by email that their role has changed — the
+    missing email counterpart to the in-app role-change Notification (see
+    apps.notifications.signals._on_promotion_record_created).
+
+    Called only for a ROLE-ONLY change (no designation change in the same
+    edit) — when designation ALSO changed, send_designation_change_email()
+    is used instead (it covers the role change too, in one combined email,
+    so the signal handler never sends both for the same PromotionRecord).
+
+    Never raises — same "log and return False" contract as every other
+    email helper in this file; a failed send must never surface past an
+    already-committed role change (this is called from a
+    transaction.on_commit callback, after the change is already final).
+    """
+    try:
+        company_name, logo_url, website, address = _get_company_branding()
+        company_name = company_name or 'Royal HRMS'
+        old_role_display = (previous_role or '').replace('_', ' ').title() or 'your previous role'
+        new_role_display = (new_role or '').replace('_', ' ').title()
+        effective = effective_date.strftime('%d %B %Y')
+
+        body = (
+            f'<p>Hi <strong>{employee.full_name}</strong>,</p>'
+            f'<p>Your role at {company_name} has been updated:</p>'
+            f'<p>'
+            f'<strong>Previous Role:</strong> {old_role_display}<br>'
+            f'<strong>New Role:</strong> {new_role_display}<br>'
+            f'<strong>Effective:</strong> {effective}'
+            f'</p>'
+            f'<p>If you have any questions about this change, please contact your HR representative.</p>'
+            f'<p>— HR Team</p>'
+        )
+        html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
+
+        connection, from_email = _get_smtp_connection()
+        msg = _build_message(
+            subject=f'Your {company_name} role has been updated',
+            html_body=html_body,
+            from_email=from_email,
+            to=[employee.email],
+            connection=connection,
+        )
+        msg.send(fail_silently=False)
+        logger.info('Role-change email sent to %s', employee.email)
+        return True
+    except Exception as exc:
+        logger.error('Role-change email failed for %s: %s', employee.email, exc)
+        return False
+
+
+def send_designation_change_email(
+    employee, previous_designation: str, new_designation: str, effective_date,
+    previous_role: str | None = None, new_role: str | None = None,
+) -> bool:
+    """
+    Notifies an employee by email that their designation has changed — the
+    missing email counterpart to the existing in-app "Congratulations on
+    Your Promotion!" Notification (see
+    apps.notifications.signals._on_promotion_record_created).
+
+    previous_role/new_role are optional and only passed when role ALSO
+    changed in the same edit — this one email then covers both changes, so
+    the signal handler never sends this alongside send_role_change_email
+    for the same PromotionRecord (avoids a duplicate email for one edit,
+    same reasoning the existing in-app notification already applies).
+
+    Never raises — same "log and return False" contract as every other
+    email helper in this file; a failed send must never surface past an
+    already-committed change (called from a transaction.on_commit
+    callback, after the change is already final).
+    """
+    try:
+        company_name, logo_url, website, address = _get_company_branding()
+        company_name = company_name or 'Royal HRMS'
+        effective = effective_date.strftime('%d %B %Y')
+        role_also_changed = bool(new_role) and previous_role != new_role
+
+        body = (
+            f'<p>Hi <strong>{employee.full_name}</strong>,</p>'
+            f'<p>Congratulations! Your designation at {company_name} has been updated:</p>'
+            f'<p>'
+            f'<strong>Previous Designation:</strong> {previous_designation or "—"}<br>'
+            f'<strong>New Designation:</strong> {new_designation}<br>'
+        )
+        if role_also_changed:
+            old_role_display = (previous_role or '').replace('_', ' ').title() or 'your previous role'
+            new_role_display = (new_role or '').replace('_', ' ').title()
+            body += (
+                f'<strong>Previous Role:</strong> {old_role_display}<br>'
+                f'<strong>New Role:</strong> {new_role_display}<br>'
+            )
+        body += (
+            f'<strong>Effective:</strong> {effective}'
+            f'</p>'
+            f'<p>If you have any questions about this change, please contact your HR representative.</p>'
+            f'<p>— HR Team</p>'
+        )
+        html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
+
+        connection, from_email = _get_smtp_connection()
+        msg = _build_message(
+            subject=f'Your {company_name} designation has been updated',
+            html_body=html_body,
+            from_email=from_email,
+            to=[employee.email],
+            connection=connection,
+        )
+        msg.send(fail_silently=False)
+        logger.info('Designation-change email sent to %s', employee.email)
+        return True
+    except Exception as exc:
+        logger.error('Designation-change email failed for %s: %s', employee.email, exc)
+        return False
+
+
 def send_email_change_notifications(user, old_email: str) -> tuple[bool, bool]:
     """
     Sent after a system_admin's login email is changed (see
-    EmployeeChangeLoginEmailView) — one confirmation to the NEW address
-    (user.email, already updated by the caller) and one security alert to
-    the OLD address, so whoever still has that old inbox open finds out.
+    CompanySystemAdminView.post in apps.tenants.views) — one confirmation to
+    the NEW address (user.email, already updated by the caller) and one
+    security alert to the OLD address, so whoever still has that old inbox
+    open finds out.
 
     Never raises, same "log and return False" contract as
     send_employee_welcome_email. Deliberately never includes a password or

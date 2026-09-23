@@ -40,6 +40,14 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
   const [changingEmail,   setChangingEmail]   = useState(false);
   const [changeResult,    setChangeResult]    = useState<{ message: string; ok: boolean } | null>(null);
 
+  // Reset System Admin password — a separate sub-flow within the same
+  // modal, requiring the ACTING Platform Admin's own current password
+  // (never the System Admin's) before anything changes.
+  const [pwStep,               setPwStep]               = useState<"idle" | "verify" | "confirm">("idle");
+  const [platformAdminPassword, setPlatformAdminPassword] = useState("");
+  const [resettingPassword,    setResettingPassword]    = useState(false);
+  const [resetResult,          setResetResult]          = useState<{ message: string; ok: boolean } | null>(null);
+
   const visibleCompanies = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return companies;
@@ -102,6 +110,9 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
     setNewAdminEmail("");
     setConfirmingEmail(false);
     setChangeResult(null);
+    setPwStep("idle");
+    setPlatformAdminPassword("");
+    setResetResult(null);
     setSysAdminLoading(true);
     try {
       const { data } = await platformAdminApi.get<{ data: { full_name: string; email: string } }>(
@@ -160,6 +171,46 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
       setConfirmingEmail(false);
     } finally {
       setChangingEmail(false);
+    }
+  }
+
+  function startPasswordReset() {
+    setResetResult(null);
+    setSysAdminError("");
+    setPlatformAdminPassword("");
+    setPwStep("verify");
+  }
+
+  function continueToResetConfirm() {
+    setSysAdminError("");
+    if (!platformAdminPassword) {
+      setSysAdminError("Enter your Platform Admin password.");
+      return;
+    }
+    setPwStep("confirm");
+  }
+
+  async function confirmResetPassword() {
+    if (!sysAdminFor) return;
+    setResettingPassword(true);
+    setSysAdminError("");
+    try {
+      const { data } = await platformAdminApi.post<{ message: string; data?: { email_sent?: boolean } }>(
+        API.platformAdmin.companies.systemAdminResetPassword(sysAdminFor.id),
+        { platform_admin_password: platformAdminPassword },
+      );
+      setResetResult({ message: data.message, ok: data.data?.email_sent !== false });
+      setPwStep("idle");
+      setPlatformAdminPassword("");
+    } catch (err) {
+      // A wrong Platform Admin password (or any other rejection) sends
+      // them back to re-enter it — step 2 has no password field to fix on.
+      const message = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Failed to reset System Admin password.";
+      setSysAdminError(message);
+      setPwStep("verify");
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -312,12 +363,34 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
 
       {sysAdminFor && (
         <Modal
-          title={confirmingEmail ? "Confirm Email Change?" : "System Admin"}
+          title={
+            pwStep === "verify" ? "Reset System Admin Password" :
+            pwStep === "confirm" ? "Confirm Password Reset?" :
+            confirmingEmail ? "Confirm Email Change?" : "System Admin"
+          }
           onClose={closeSystemAdmin}
-          closeDisabled={changingEmail}
+          closeDisabled={changingEmail || resettingPassword}
           maxWidth={440}
           footer={
-            confirmingEmail ? (
+            pwStep === "verify" ? (
+              <>
+                <button className="btn btn-ghost" onClick={() => setPwStep("idle")} suppressHydrationWarning>
+                  Cancel
+                </button>
+                <button className="btn btn-filled" onClick={continueToResetConfirm} suppressHydrationWarning>
+                  Verify &amp; Continue
+                </button>
+              </>
+            ) : pwStep === "confirm" ? (
+              <>
+                <button className="btn btn-ghost" onClick={() => setPwStep("verify")} disabled={resettingPassword} suppressHydrationWarning>
+                  Back
+                </button>
+                <button className="btn btn-filled" onClick={confirmResetPassword} disabled={resettingPassword} suppressHydrationWarning>
+                  {resettingPassword ? "Resetting…" : "Reset Password"}
+                </button>
+              </>
+            ) : confirmingEmail ? (
               <>
                 <button className="btn btn-ghost" onClick={() => setConfirmingEmail(false)} disabled={changingEmail} suppressHydrationWarning>
                   Back
@@ -351,8 +424,14 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
                   <div>{changeResult.message}</div>
                 </div>
               )}
+              {resetResult && (
+                <div className={`alert ${resetResult.ok ? "alert-success" : "alert-warn"} mb-16`}>
+                  <i className={`ti ${resetResult.ok ? "ti-check" : "ti-alert-triangle"}`} />
+                  <div>{resetResult.message}</div>
+                </div>
+              )}
 
-              {sysAdminInfo && !confirmingEmail && (
+              {sysAdminInfo && pwStep === "idle" && !confirmingEmail && (
                 <>
                   <div className="field-group mb-16">
                     <span className="field-label">{sysAdminFor.company_name} — System Admin</span>
@@ -361,7 +440,7 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
                       <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 2 }}>{sysAdminInfo.email}</div>
                     </div>
                   </div>
-                  <div className="field-group">
+                  <div className="field-group mb-16">
                     <label className="field-label">Change Login Email</label>
                     <input
                       type="email"
@@ -381,7 +460,54 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
                       Continue
                     </button>
                   </div>
+                  <div className="field-group" style={{ borderTop: "1px solid var(--outline-v)", paddingTop: 14 }}>
+                    <label className="field-label">Password</label>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ border: "1px solid var(--outline-v)" }}
+                      onClick={startPasswordReset}
+                      suppressHydrationWarning
+                    >
+                      <i className="ti ti-key" /> Reset Password
+                    </button>
+                  </div>
                 </>
+              )}
+
+              {pwStep === "verify" && (
+                <div className="field-group">
+                  <p style={{ fontSize: 13, color: "var(--on-variant)", marginBottom: 12 }}>
+                    This will generate a new temporary password for {sysAdminFor.company_name}{"'"}s System Admin and
+                    email it to them. Enter your own Platform Admin password to continue.
+                  </p>
+                  <label className="field-label">Your Platform Admin Password</label>
+                  <input
+                    type="password"
+                    className="field-input"
+                    placeholder="Your password"
+                    value={platformAdminPassword}
+                    onChange={e => { setPlatformAdminPassword(e.target.value); setSysAdminError(""); }}
+                    autoFocus
+                    suppressHydrationWarning
+                  />
+                </div>
+              )}
+
+              {pwStep === "confirm" && sysAdminInfo && (
+                <div style={{ fontSize: 14 }}>
+                  <div className="field-group mb-16">
+                    <span className="field-label">{sysAdminFor.company_name} — System Admin</span>
+                    <div style={{ padding: "10px 12px", background: "var(--bg-low)", borderRadius: 8, marginTop: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{sysAdminInfo.full_name}</div>
+                      <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 2 }}>{sysAdminInfo.email}</div>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
+                    A new temporary password will be generated and sent to this email. Their current password will
+                    stop working immediately, and they{"'"}ll be asked to set a new one on next login.
+                  </p>
+                </div>
               )}
 
               {sysAdminInfo && confirmingEmail && (
