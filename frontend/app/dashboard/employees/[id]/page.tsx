@@ -27,6 +27,7 @@ import {
 } from "../_data";
 import ProfileHeader from "./_components/ProfileHeader";
 import ResetPasswordModal from "./_components/ResetPasswordModal";
+import ChangeSystemAdminEmailModal from "./_components/ChangeSystemAdminEmailModal";
 import ProfileTabBar from "./_components/ProfileTabBar";
 import ProfileSidebar from "./_components/ProfileSidebar";
 import ProfileForm from "./_components/ProfileForm";
@@ -199,9 +200,15 @@ export default function EmployeeProfilePage({
 }) {
   const { id } = use(params);
   const canEdit = usePermission("employees.edit");
+  // Same org-wide permission the backend's EmployeeChangeLoginEmailView
+  // gates on — the button below is additionally hidden unless this
+  // employee is themselves a System Admin (see below), matching the
+  // backend's own restriction that this can never target a regular employee.
+  const canManageSystemAdmins = usePermission("settings.edit");
   const [tab,       setTab]       = useState<string>("profile");
   const [sectionId, setSectionId] = useState<string>("personal");
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showChangeEmail,   setShowChangeEmail]   = useState(false);
 
   const [employee,          setEmployee]          = useState<Employee | null>(null);
   const [employeeUuid,      setEmployeeUuid]      = useState<string>("");
@@ -460,6 +467,11 @@ export default function EmployeeProfilePage({
     setBaseValues(v => ({ ...v, designation, ssRole: role }));
     setEmployee(prev => (prev ? { ...prev, designation } : prev));
   }
+  function onLoginEmailChanged(newEmail: string) {
+    setValues(v => ({ ...v, loginEmail: newEmail }));
+    setBaseValues(v => ({ ...v, loginEmail: newEmail }));
+    setEmployee(prev => (prev ? { ...prev, email: newEmail } : prev));
+  }
   async function onUploadDocument(documentType: string, file: File) {
     setDocUploadError("");
     setUploadingDocType(documentType);
@@ -535,6 +547,8 @@ export default function EmployeeProfilePage({
         employee={employee}
         canResetPassword={canEdit}
         onResetPassword={() => setShowResetPassword(true)}
+        canChangeEmail={canManageSystemAdmins && values.ssRole === "system_admin"}
+        onChangeEmail={() => setShowChangeEmail(true)}
       />
 
       {showResetPassword && (
@@ -542,6 +556,16 @@ export default function EmployeeProfilePage({
           employeeId={id}
           employeeName={fullName(employee)}
           onClose={() => setShowResetPassword(false)}
+        />
+      )}
+
+      {showChangeEmail && (
+        <ChangeSystemAdminEmailModal
+          employeeId={id}
+          employeeName={fullName(employee)}
+          currentEmail={values.loginEmail ?? employee.email}
+          onClose={() => setShowChangeEmail(false)}
+          onChanged={onLoginEmailChanged}
         />
       )}
 

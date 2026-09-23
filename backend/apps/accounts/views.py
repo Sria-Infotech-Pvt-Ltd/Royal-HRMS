@@ -3878,6 +3878,118 @@ class EmployeeResetPasswordView(APIView):
         )
 
 
+class EmployeeChangeLoginEmailView(APIView):
+    """
+    POST /employees/<employee_id>/change-email/ — { "new_email": "..." }
+
+    Changes a System Admin's login email in place — same User row, no other
+    field touched, role/permissions/employee record/attendance/leave/payroll
+    history all untouched. Deliberately a separate endpoint from
+    EmployeeDetailView.put() (which never accepts an 'email' field at all)
+    rather than adding email-editing to the generic employee-edit flow —
+    gated on settings.edit, the same org-wide "true admin" permission this
+    codebase already uses for every other company-wide-impact action, AND
+    restricted so the *target* must themselves hold settings.edit too —
+    this can only ever change a System Admin's own email, never a regular
+    employee's (use the Employees page for that).
+
+    Password is never touched here — see ChangePasswordView/
+    EmployeeResetPasswordView for that; this is an email-only change.
+
+    Sessions: not force-invalidated. CookieJWTAuthentication resolves
+    request.user by the access token's user_id claim (rest_framework_simplejwt
+    default), not by email, so an already-issued token keeps authenticating
+    fine after this — only a *new* login attempt needs the new email. The
+    token's own baked-in 'email' claim (see tokens.py RoleBasedRefreshToken)
+    does go stale until the holder next logs in or the refresh-token's other
+    volatile claims are re-derived — the same tradeoff this app already
+    makes for role/permission changes (see tokens.py _volatile_claims'
+    docstring), not a new one introduced here.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, employee_id: str):
+        if not _has_perm(request.user, 'settings.edit'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if not (employee.role and employee.role.role_permissions.filter(permission__codename='settings.edit').exists()):
+            return error(
+                'This action only changes a System Admin\'s login email. '
+                'Use the standard employee edit page for other employees.'
+            )
+
+        new_email_raw = (request.data.get('new_email') or '').strip()
+        if not new_email_raw:
+            return error('new_email is required.', data={'new_email': 'This field is required.'})
+        if not EMAIL_RE.match(new_email_raw):
+            return error('Enter a valid email address.', data={'new_email': 'Enter a valid email address.'})
+
+        new_email = User.objects.normalize_email(new_email_raw)
+        old_email = employee.email
+
+        if new_email.lower() == old_email.lower():
+            return error('That is already this account\'s login email.')
+
+        if User.objects.filter(email__iexact=new_email).exclude(pk=employee.pk).exists():
+            return error(
+                'Another account already uses this email address.',
+                data={'new_email': 'Already in use.'},
+            )
+
+        employee.email = new_email
+        employee.save(update_fields=['email', 'updated_at'])
+
+        AuditLog.objects.create(
+            user       = request.user,
+            action     = 'system_admin_email_changed',
+            module     = 'employees',
+            object_id  = str(employee.id),
+            changes    = {
+                'employee_id': employee.employee_id, 'full_name': employee.full_name,
+                'email': {'from': old_email, 'to': new_email},
+            },
+            branch     = employee.branch,
+            ip_address = get_client_ip(request),
+        )
+        logger.info(
+            'Login email changed for %s (%s -> %s) by %s',
+            employee.employee_id, old_email, new_email, request.user.email,
+        )
+
+        from apps.accounts.utils import send_email_change_notifications
+        new_sent, old_sent = send_email_change_notifications(employee, old_email)
+
+        # The change itself already succeeded (same "still 2xx either way"
+        # reasoning as EmployeeResetPasswordView above) — only the message
+        # differs, so the caller knows whether they still need to share the
+        # new login email manually.
+        if new_sent and old_sent:
+            message = f'Login email changed to {new_email}. Confirmation sent to both the new and previous address.'
+        elif new_sent:
+            message = (
+                f'Login email changed to {new_email}. Confirmation sent to the new address, but the '
+                f'security notice to the previous address ({old_email}) could not be sent.'
+            )
+        elif old_sent:
+            message = (
+                f'Login email changed to {new_email}, but the confirmation email to the new address could not '
+                f'be sent — share the new login email with them directly. (Security notice to the previous '
+                f'address was sent.)'
+            )
+        else:
+            message = (
+                f'Login email changed to {new_email}, but neither notification email could be sent — '
+                f'check Settings → SMTP and share the new login email directly.'
+            )
+
+        return success(message, data={
+            'email': new_email, 'new_email_sent': new_sent, 'old_email_sent': old_sent,
+        })
+
+
 class EmployeePromotionHistoryView(APIView):
     """GET /employees/<employee_id>/promotions/ — persisted promotion history
     for one employee (Employee > Promotion tab's history table). Read-only;

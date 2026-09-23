@@ -240,8 +240,78 @@ def send_employee_welcome_email(user, temp_password: str) -> bool:
         return False
 
 
+def send_email_change_notifications(user, old_email: str) -> tuple[bool, bool]:
+    """
+    Sent after a system_admin's login email is changed (see
+    EmployeeChangeLoginEmailView) — one confirmation to the NEW address
+    (user.email, already updated by the caller) and one security alert to
+    the OLD address, so whoever still has that old inbox open finds out.
+
+    Never raises, same "log and return False" contract as
+    send_employee_welcome_email. Deliberately never includes a password or
+    any credential — this only ever follows an email-field change, never a
+    password reset, and the account's existing password is left untouched
+    by the caller.
+
+    Returns (new_address_sent, old_address_sent).
+    """
+    try:
+        company_name, logo_url, website, address = _get_company_branding()
+        company_name = company_name or 'Royal HRMS'
+        login_url = f'{settings.FRONTEND_URL}/login'
+        connection, from_email = _get_smtp_connection()
+    except Exception as exc:
+        logger.error('Email-change notification setup failed for %s: %s', user.email, exc)
+        return False, False
+
+    new_sent = False
+    try:
+        new_body = (
+            f'<p>Hi <strong>{user.full_name}</strong>,</p>'
+            f'<p>Your {company_name} login email has been changed. You can now log in using:</p>'
+            f'<p><strong>New Login Email:</strong> {user.email}<br>'
+            f'<strong>Login URL:</strong> <a href="{login_url}">{login_url}</a></p>'
+            f'<p>Your password has not changed — use your existing password to log in with this new email.</p>'
+            f'<p style="color:#b91c1c;">If you did not request this change, contact your administrator immediately.</p>'
+            f'<p>— HR Team</p>'
+        )
+        new_html = _company_email_wrapper(new_body, company_name, logo_url, website, address)
+        msg = _build_message(
+            subject=f'Your {company_name} login email has changed',
+            html_body=new_html, from_email=from_email, to=[user.email], connection=connection,
+        )
+        msg.send(fail_silently=False)
+        logger.info('Email-change confirmation sent to new address %s', user.email)
+        new_sent = True
+    except Exception as exc:
+        logger.error('Email-change confirmation failed for new address %s: %s', user.email, exc)
+
+    old_sent = False
+    try:
+        old_body = (
+            f'<p>Hi,</p>'
+            f'<p>This is a security notification: the login email for your {company_name} account, '
+            f'previously <strong>{old_email}</strong>, was just changed to <strong>{user.email}</strong>.</p>'
+            f'<p>This address ({old_email}) will no longer be used to log in.</p>'
+            f'<p style="color:#b91c1c;">If you did not request this change, contact your administrator immediately.</p>'
+            f'<p>— HR Team</p>'
+        )
+        old_html = _company_email_wrapper(old_body, company_name, logo_url, website, address)
+        msg = _build_message(
+            subject=f'Security notice: your {company_name} login email was changed',
+            html_body=old_html, from_email=from_email, to=[old_email], connection=connection,
+        )
+        msg.send(fail_silently=False)
+        logger.info('Email-change security alert sent to old address %s', old_email)
+        old_sent = True
+    except Exception as exc:
+        logger.error('Email-change security alert failed for old address %s: %s', old_email, exc)
+
+    return new_sent, old_sent
+
+
 def send_test_email(recipient_email: str, smtp_config: dict) -> None:
-    
+
     sender_name = smtp_config.get('sender_name', '').strip()
     raw_from    = smtp_config.get('from_email', smtp_config['username'])
     from_email  = f'{sender_name} <{raw_from}>' if sender_name else raw_from

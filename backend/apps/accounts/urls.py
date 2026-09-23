@@ -8,6 +8,7 @@ from apps.accounts.views import (
     EmployeeApprovalMatrixView,
     EmployeeBulkImportView,
     EmployeeCodeSettingsView,
+    EmployeeChangeLoginEmailView,
     EmployeeCustomFieldFileValueView,
     EmployeeDetailView,
     EmployeeResetPasswordView,
@@ -84,6 +85,7 @@ urlpatterns = [
     path('employees/<str:employee_id>/documents/',               EmployeeProfileDocumentView.as_view(),  name='employee-documents'),
     path('employees/<str:employee_id>/custom-file-fields/',      EmployeeCustomFieldFileValueView.as_view(), name='employee-custom-file-fields'),
     path('employees/<str:employee_id>/reset-password/',          EmployeeResetPasswordView.as_view(),    name='employee-reset-password'),
+    path('employees/<str:employee_id>/change-email/',            EmployeeChangeLoginEmailView.as_view(), name='employee-change-login-email'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 

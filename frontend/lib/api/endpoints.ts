@@ -80,6 +80,7 @@ export const API = {
     documents: (id: string) => `/employees/${id}/documents/`,
     customFileFields: (id: string) => `/employees/${id}/custom-file-fields/`,
     resetPassword: (id: string) => `/employees/${id}/reset-password/`,
+    changeEmail:   (id: string) => `/employees/${id}/change-email/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",
