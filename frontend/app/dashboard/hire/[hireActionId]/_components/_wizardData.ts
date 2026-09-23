@@ -68,7 +68,11 @@ export function emptyEmergencyContact(id: string, isPrimary: boolean): Emergency
 }
 
 // Personal Identity step validation constants/helpers.
-export const HAS_DIGIT_RE = /\d/;
+// A person's name: Unicode letters (covers non-Latin scripts too), plus
+// spaces/apostrophes/hyphens/periods for names like "O'Brien", "Anne-Marie",
+// "A. K." — nothing else. Rejects digits AND symbols (e.g. "@#$%"), unlike a
+// bare digit-only check.
+export const NAME_RE = /^[\p{L}][\p{L} '.-]*$/u;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Statutory & accounts step validation — standard PAN (5 letters, 4 digits,
 // 1 letter) and IFSC (4 letters, a literal 0, 6 alphanumerics) formats.
@@ -77,16 +81,15 @@ export const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 export const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
 export const MIN_HIRE_AGE_YEARS = 18;
 export const MAX_PLAUSIBLE_AGE_YEARS = 100;
-// PhoneInput stores "+<dial> <national>" — count digits everywhere (dial
-// code included) rather than trying to re-split it, so this only needs one
-// simple floor: 8 total digits comfortably covers every real dial-code +
-// national-number combination in PhoneInput's own country list (the
-// shortest, dial code "1", pairs with a 10-digit US/Canada number) while
-// still catching an obviously truncated/garbage entry.
-export const MIN_PHONE_DIGITS = 8;
-export function phoneDigitCount(value: string): number {
-  return value.replace(/\D/g, "").length;
-}
+// National-number digit bounds (dial code excluded — see PhoneInput's own
+// nationalDigitCount) — 7 covers the shortest real mobile numbers (some
+// European/GCC countries); 10 is exactly a valid Indian mobile number, the
+// most common case here, and comfortably covers the rest of PhoneInput's
+// country list too (nothing in that list needs more than 10 national
+// digits). Anything past 10 is either a mistake or extra digits typed by
+// accident, not a longer valid number.
+export const MIN_NATIONAL_PHONE_DIGITS = 7;
+export const MAX_NATIONAL_PHONE_DIGITS = 10;
 
 export interface HireActionData {
   id: string; reason: string; reason_display: string; effective_from: string; position: string;

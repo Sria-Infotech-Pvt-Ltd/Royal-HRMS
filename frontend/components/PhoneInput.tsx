@@ -52,6 +52,13 @@ function splitValue(value: string): { country: CountryDialOption; national: stri
   return { country: DEFAULT_COUNTRY, national: trimmed };
 }
 
+/** Digit count of just the national number (dial code excluded) — used to
+ * validate a phone value stored by this component without conflating the
+ * dial code's own digits into a min/max length check on the actual number. */
+export function nationalDigitCount(value: string): number {
+  return splitValue(value).national.replace(/\D/g, "").length;
+}
+
 interface PhoneInputProps {
   value: string;
   onChange: (value: string) => void;

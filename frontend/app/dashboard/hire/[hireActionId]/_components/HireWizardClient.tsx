@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
-import PhoneInput from "@/components/PhoneInput";
+import PhoneInput, { nationalDigitCount } from "@/components/PhoneInput";
 import LanguagesSelect from "@/components/LanguagesSelect";
 import type { ProfileForm } from "@/app/onboarding/_types";
 import type { OnboardingFieldConfigByStep, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
@@ -45,8 +45,8 @@ import {
   emptyEmergencyContact,
   type HireActionData,
   STEPS,
-  HAS_DIGIT_RE, EMAIL_RE, PAN_RE, IFSC_RE, MS_PER_YEAR, MIN_HIRE_AGE_YEARS, MAX_PLAUSIBLE_AGE_YEARS,
-  MIN_PHONE_DIGITS, phoneDigitCount,
+  NAME_RE, EMAIL_RE, PAN_RE, IFSC_RE, MS_PER_YEAR, MIN_HIRE_AGE_YEARS, MAX_PLAUSIBLE_AGE_YEARS,
+  MIN_NATIONAL_PHONE_DIGITS, MAX_NATIONAL_PHONE_DIGITS,
 } from "./_wizardData";
 
 export default function HireWizardClient({ hireActionId, onClose, onHired }: { hireActionId: string; onClose: () => void; onHired: () => void }) {
@@ -213,10 +213,10 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         // already advertises as required: First name, Last name, Date of
         // birth, Gender, Nationality, Personal email, Mobile number.
         if (!firstName.trim()) return "First name is required.";
-        if (HAS_DIGIT_RE.test(firstName)) return "First name cannot contain numbers.";
+        if (!NAME_RE.test(firstName.trim())) return "First name can only contain letters, spaces, hyphens and apostrophes.";
         if (!lastName.trim()) return "Last name is required.";
-        if (HAS_DIGIT_RE.test(lastName)) return "Last name cannot contain numbers.";
-        if (middleName.trim() && HAS_DIGIT_RE.test(middleName)) return "Middle name cannot contain numbers.";
+        if (!NAME_RE.test(lastName.trim())) return "Last name can only contain letters, spaces, hyphens and apostrophes.";
+        if (middleName.trim() && !NAME_RE.test(middleName.trim())) return "Middle name can only contain letters, spaces, hyphens and apostrophes.";
 
         if (!form.date_of_birth) return "Date of birth is required.";
         const dob = new Date(form.date_of_birth);
@@ -233,9 +233,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (!EMAIL_RE.test(email.trim())) return "Enter a valid email address.";
 
         if (!phone.trim()) return "Mobile number is required.";
-        if (phoneDigitCount(phone) < MIN_PHONE_DIGITS) return "Enter a valid mobile number.";
-        if (identityExtras.alternate_mobile.trim() && phoneDigitCount(identityExtras.alternate_mobile) < MIN_PHONE_DIGITS) {
-          return "Enter a valid alternate mobile number, or leave it blank.";
+        {
+          const digits = nationalDigitCount(phone);
+          if (digits < MIN_NATIONAL_PHONE_DIGITS || digits > MAX_NATIONAL_PHONE_DIGITS) return "Enter a valid mobile number.";
+        }
+        if (identityExtras.alternate_mobile.trim()) {
+          const altDigits = nationalDigitCount(identityExtras.alternate_mobile);
+          if (altDigits < MIN_NATIONAL_PHONE_DIGITS || altDigits > MAX_NATIONAL_PHONE_DIGITS) {
+            return "Enter a valid alternate mobile number, or leave it blank.";
+          }
         }
         return null;
       }
@@ -253,7 +259,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (!statutory.aadhaar_number.trim()) return "Aadhaar is required.";
         if (statutory.aadhaar_number.trim().length !== 12) return "Aadhaar must be exactly 12 digits.";
         if (!statutory.account_holder_name.trim()) return "Account holder name is required.";
-        if (HAS_DIGIT_RE.test(statutory.account_holder_name)) return "Account holder name cannot contain numbers.";
+        if (!NAME_RE.test(statutory.account_holder_name.trim())) return "Account holder name can only contain letters, spaces, hyphens and apostrophes.";
         if (!statutory.account_number.trim()) return "Account number is required.";
         if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
         if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
