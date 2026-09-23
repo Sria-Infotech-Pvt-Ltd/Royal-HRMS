@@ -23,7 +23,7 @@ export default function PayrollConfigPage() {
   const router  = useRouter();
   const [tab,   setTab]   = useState<TabId>("run");
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [saveMsg, setSaveMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   const { data: settings, loading, refetch } = useFetch<PayrollSettings>(API.payroll.settings);
 
@@ -39,14 +39,15 @@ export default function PayrollConfigPage() {
     setSaveMsg(null);
     try {
       await clientApi.put(API.payroll.settings, form);
-      setSaveMsg("Settings saved.");
+      setSaveMsg({ text: "Settings saved.", isError: false });
       setForm({});
       refetch();
-    } catch {
-      setSaveMsg("Failed to save. Please try again.");
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || "Failed to save. Please try again.";
+      setSaveMsg({ text: msg, isError: true });
     } finally {
       setSaving(false);
-      setTimeout(() => setSaveMsg(null), 3000);
+      setTimeout(() => setSaveMsg(null), 5000);
     }
   }
 
@@ -82,8 +83,8 @@ export default function PayrollConfigPage() {
       </div>
 
       {saveMsg && (
-        <div className={`alert mb-4 ${saveMsg.startsWith("Failed") ? "alert-error" : "alert-success"}`}>
-          {saveMsg}
+        <div className={`alert mb-4 ${saveMsg.isError ? "alert-error" : "alert-success"}`}>
+          {saveMsg.text}
         </div>
       )}
 
