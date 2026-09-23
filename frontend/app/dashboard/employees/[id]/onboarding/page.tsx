@@ -16,6 +16,7 @@ import EducationChecklist, { type EducationEntry } from "@/app/onboarding/_compo
 import ExperienceList, { type ExperienceEntry } from "@/app/onboarding/_components/ExperienceList";
 import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "@/app/onboarding/_components/FamilyNominationStep";
 import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/AssetsList";
+import { EMPTY, PAN_RE, BUILTIN_STEPS, DOCUMENTS_STEP, type WizardStep } from "./_wizardSteps";
 
 // HR/Admin-side onboarding wizard — fills in an employee's onboarding profile
 // on their behalf (walk-in hires, or anyone who can't complete it themselves).
@@ -25,45 +26,6 @@ import AssetsList, { type AssetEntry } from "@/app/onboarding/_components/Assets
 // and Face ID is handled by pointing at the existing Face ID Registrations
 // admin page rather than an inline capture flow (that's an in-person capture
 // UX, not something to half-build here).
-
-const EMPTY: ProfileForm = {
-  date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
-  current_address: "", current_address_line2: "",
-  current_village: "", current_district: "", current_state: "", current_pin_code: "",
-  permanent_address: "", permanent_address_line2: "",
-  permanent_village: "", permanent_district: "", permanent_state: "", permanent_pin_code: "",
-  permanent_same_as_current: "false",
-  highest_qualification: "", institution: "", year_of_passing: "", specialization: "",
-  total_experience_years: "", previous_employer: "", previous_designation: "", leaving_reason: "",
-  account_number: "", ifsc_code: "", bank_name: "", bank_branch_name: "",
-  account_holder_name: "", account_type: "",
-  emergency_name: "", emergency_relationship: "", emergency_phone: "", emergency_email: "",
-  pan_number: "",
-};
-
-const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
-
-// Each entry carries its own real backend `step` number and a `kind` saying
-// which component renders it — `tab` (component state) is only ever an
-// index into the merged `steps` array below. Mirrors the identical split in
-// the self-service wizard (app/onboarding/page.tsx) — see its own comment
-// for the full reasoning.
-type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "education" | "experience" | "family-nomination" | "assets" };
-
-// Sentinel step numbers -2/-3/-4/-5 for Education/Experience/Family &
-// Nomination/Assets — same convention as the self-service wizard's own
-// BUILTIN_STEPS (see its comment for the full reasoning): none round-trip
-// through /onboarding/step/<n>/.
-const BUILTIN_STEPS: WizardStep[] = [
-  { step: 0,  label: "Personal",          shortLabel: "Personal",   icon: "ti-user",          kind: "fields" },
-  { step: -2, label: "Education",         shortLabel: "Education",  icon: "ti-school",        kind: "education" },
-  { step: -3, label: "Experience",        shortLabel: "Experience", icon: "ti-briefcase",     kind: "experience" },
-  { step: 2,  label: "Bank Details",      shortLabel: "Bank",       icon: "ti-building-bank", kind: "fields" },
-  { step: 3,  label: "Emergency Contact", shortLabel: "Emergency",  icon: "ti-urgent",        kind: "fields" },
-  { step: -4, label: "Family & Nomination", shortLabel: "Family",   icon: "ti-users",         kind: "family-nomination" },
-  { step: -5, label: "Assets",            shortLabel: "Assets",     icon: "ti-device-laptop", kind: "assets" },
-];
-const DOCUMENTS_STEP: WizardStep = { step: 4, label: "Documents", shortLabel: "Documents", icon: "ti-files", kind: "documents" };
 
 export default function HREmployeeOnboardingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
