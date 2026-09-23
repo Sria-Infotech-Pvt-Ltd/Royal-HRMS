@@ -71,6 +71,7 @@ export default function KtHandoverSection({ r, access }: Props) {
   }
 
   async function deleteTask(task: KtHandoverTask) {
+    if (!window.confirm(`Delete the handover task "${task.task}"?`)) return;
     try {
       await clientApi.delete(API.separation.taskDetail(r.id, task.id));
       showToast("Handover task deleted.", "success");

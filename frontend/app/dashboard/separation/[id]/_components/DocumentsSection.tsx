@@ -53,6 +53,8 @@ export default function DocumentsSection({ r, access }: Props) {
   }
 
   async function deleteDocument(doc: SeparationDocumentItem) {
+    const name = doc.name || doc.file_name || "this document";
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
     try {
       await clientApi.delete(API.separation.documentDetail(r.id, doc.id));
       showToast("Document deleted.", "success");
