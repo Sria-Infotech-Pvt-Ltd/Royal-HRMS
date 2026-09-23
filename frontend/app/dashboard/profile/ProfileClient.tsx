@@ -16,121 +16,21 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { SessionPayload } from "@/lib/session";
-import { formatDate } from "@/lib/formatDate";
 import { useFaceRegistrationCard } from "@/hooks/useFaceRegistrationCard";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
-import type { Employee } from "@/app/dashboard/employees/_data";
 import ProfileEditModal from "@/app/dashboard/employees/_components/ProfileEditModal";
 import ChangePasswordForm from "./ChangePasswordForm";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
 import ProfilePhotoModal from "@/components/ProfilePhotoModal";
 import SeparationCard from "./_components/SeparationCard";
+import ProfileDocumentsCard from "./ProfileDocumentsCard";
+import ProfileFaceIdCard from "./ProfileFaceIdCard";
 import type { DocumentTypeConfig } from "@/types/documentTypeConfig";
-import { PROFILE_SECTIONS, applyDocumentTypeConfig, type DocEntry } from "@/app/dashboard/employees/_data";
-
-interface AssignedPerson {
-  id:   string | null;
-  name: string | null;
-}
-
-interface ProfileData {
-  full_name:         string;
-  email:             string;
-  phone:             string | null;
-  employee_id:       string;
-  department:        string;
-  designation:       string;
-  branch:            string;
-  role_display:      string;
-  date_of_joining:   string | null;
-  date_joined:       string | null;
-  work_location:     string | null;
-  reporting_manager:  AssignedPerson | null;
-  reporting_approver: AssignedPerson | null;
-  hr:                 AssignedPerson | null;
-  profile:           {
-    date_of_birth: string | null;
-    current_address?: string | null;
-    current_address_line2?: string | null;
-    current_village?: string | null;
-    current_district?: string | null;
-    current_state?: string | null;
-    current_pin_code?: string | null;
-    permanent_address?: string | null;
-    permanent_address_line2?: string | null;
-    permanent_village?: string | null;
-    permanent_district?: string | null;
-    permanent_state?: string | null;
-    permanent_pin_code?: string | null;
-    permanent_same_as_current?: boolean;
-    emergency_name?: string | null;
-    emergency_relationship?: string | null;
-    emergency_phone?: string | null;
-    emergency_email?: string | null;
-  } | null;
-  profile_photo_url: string | null;
-}
-
-interface DocumentItem {
-  id:                    number;
-  document_type:         string;
-  document_type_display: string;
-  file_url:              string;
-  file_name:             string;
-  file_size:             number;
-  uploaded_at:           string;
-}
-
-const DOC_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
-
-function buildDocEntries(apiDocs: DocumentItem[], documentTypeConfig: DocumentTypeConfig[] = []): (DocEntry & { docId?: number })[] {
-  const docsSection = PROFILE_SECTIONS.find(s => s.id === "documents");
-  const configuredSection = docsSection ? applyDocumentTypeConfig(docsSection, documentTypeConfig) : undefined;
-  const base = configuredSection?.kind === "docs" ? configuredSection.documents : [];
-  return base.map(expected => {
-    const uploaded = apiDocs.find(d => d.document_type === expected.documentType);
-    if (!uploaded) return expected;
-    return {
-      ...expected,
-      fileUrl:  uploaded.file_url,
-      fileName: uploaded.file_name,
-      fileSize: uploaded.file_size,
-      docId:    uploaded.id,
-    };
-  });
-}
-
-function fmtBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function initials(name: string) {
-  return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-}
-
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return formatDate(d);
-}
-
-function toDrawerEmployee(d: ProfileData): Employee {
-  const [firstName, ...rest] = (d.full_name || "").split(" ");
-  return {
-    id: d.employee_id, code: d.employee_id,
-    firstName: firstName || "", middleName: "", lastName: rest.join(" "),
-    email: d.email, phone: d.phone ?? "",
-    department: d.department, designation: d.designation,
-    dateOfJoining: d.date_of_joining ?? d.date_joined ?? "", dateOfBirth: "",
-    location: d.branch, gender: "male",
-    status: "active", employmentStatus: "probation", confirmationDate: null,
-    details: {}, tables: {},
-  };
-}
+import {
+  type ProfileData, type DocumentItem,
+  buildDocEntries, initials, fmtDate, toDrawerEmployee,
+} from "./_profileClientData";
 
 export default function ProfileClient({ session }: { session: SessionPayload }) {
   const router = useRouter();
@@ -315,114 +215,19 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       </div>
 
       {/* ── Documents — true self-service, no approval needed ── */}
-      <div className="card mb-16">
-        <div className="card-header">
-          <span className="card-title"><i className="ti ti-file-description" />Documents</span>
-        </div>
-        <div className="card-body" style={{ padding: 0 }}>
-          {docEntries.map((doc, i) => {
-            const uploaded  = !!doc.fileUrl;
-            const uploading = uploadingDocType === doc.documentType;
-            return (
-              <div key={doc.documentType} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 16px",
-                borderBottom: i < docEntries.length - 1 ? "1px solid var(--bg-high)" : "none",
-              }}>
-                <i
-                  className={`ti ${uploading ? "ti-loader-2 spin" : uploaded ? "ti-file-check" : "ti-file-off"}`}
-                  style={{ color: uploaded ? "var(--success)" : "var(--on-variant)" }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: "var(--on-bg)" }}>{doc.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                    {uploading ? "Uploading…" : uploaded ? fmtBytes(doc.fileSize ?? 0) : "Not uploaded"}
-                  </div>
-                </div>
-                {uploaded ? (
-                  <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" title="Preview document">
-                    <i className="ti ti-eye" />
-                  </a>
-                ) : (
-                  <button type="button" disabled className="btn btn-ghost btn-sm" title="Not uploaded" style={{ opacity: 0.3, cursor: "not-allowed" }}>
-                    <i className="ti ti-eye" />
-                  </button>
-                )}
-                <label
-                  className="btn btn-ghost btn-sm"
-                  title={uploaded ? "Replace document" : "Upload document"}
-                  style={{ cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.5 : 1 }}
-                  suppressHydrationWarning
-                >
-                  <i className={`ti ${uploaded ? "ti-refresh" : "ti-upload"}`} />
-                  <input
-                    type="file"
-                    accept={DOC_ACCEPT}
-                    className="hidden"
-                    disabled={uploading}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (file) handleUploadDocument(doc.documentType, file);
-                    }}
-                  />
-                </label>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <ProfileDocumentsCard
+        docEntries={docEntries}
+        uploadingDocType={uploadingDocType}
+        onUploadDocument={handleUploadDocument}
+      />
 
       {/* ── Face ID — true self-service, no approval needed ── */}
       {!faceTabHidden && (
-        <div className="card mb-16">
-          <div className="card-header">
-            <span className="card-title"><i className="ti ti-face-id" />Face Registration</span>
-          </div>
-          <div className="card-body" style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" }}>
-            <i className="ti ti-face-id" style={{ fontSize: 22, color: "var(--on-variant)" }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {faceCardState === "approved" && (
-                <>
-                  <div style={{ fontSize: 13, color: "var(--success)" }}>
-                    <i className="ti ti-circle-check" style={{ marginRight: 4 }} />Face ID registered
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>Required for web clock-in/out — already verified.</div>
-                </>
-              )}
-              {faceCardState === "pending" && (
-                <>
-                  <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID pending HR approval</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>You&apos;ll be able to clock in with it once it&apos;s approved.</div>
-                </>
-              )}
-              {faceCardState === "rejected" && (
-                <>
-                  <div style={{ fontSize: 13, color: "var(--error)" }}>Face ID registration was rejected</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>{faceRejectionNotes || "Please update and resubmit."}</div>
-                </>
-              )}
-              {faceCardState === "not_registered" && (
-                <>
-                  <div style={{ fontSize: 13, color: "var(--on-bg)" }}>Face ID not yet registered</div>
-                  <div style={{ fontSize: 11, color: "var(--on-variant)" }}>
-                    Usually done during onboarding — register it below if you missed that step.
-                  </div>
-                </>
-              )}
-            </div>
-            {(faceCardState === "approved" || faceCardState === "rejected") && (
-              <button type="button" className="btn btn-primary btn-sm" suppressHydrationWarning onClick={() => setShowFaceRegistration(true)}>
-                <i className="ti ti-camera" /> Update My Face
-              </button>
-            )}
-            {faceCardState === "not_registered" && (
-              <button type="button" className="btn btn-primary btn-sm" suppressHydrationWarning onClick={() => setShowFaceRegistration(true)}>
-                <i className="ti ti-camera" /> Register My Face
-              </button>
-            )}
-          </div>
-        </div>
+        <ProfileFaceIdCard
+          faceCardState={faceCardState}
+          faceRejectionNotes={faceRejectionNotes}
+          onRegister={() => setShowFaceRegistration(true)}
+        />
       )}
 
       {/* ── Security — true self-service, no approval needed ── */}
