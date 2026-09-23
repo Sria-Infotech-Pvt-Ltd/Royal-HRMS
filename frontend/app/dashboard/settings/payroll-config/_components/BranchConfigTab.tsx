@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import ConfirmModal from "@/components/ConfirmModal";
 import type { BranchPayrollConfig, SalaryStructureListItem } from "@/types/payroll";
 
 interface BranchOption { id: string; branch_name: string; branch_code: string; state_name: string; }
@@ -23,6 +24,8 @@ export default function BranchConfigTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<BranchPayrollConfig>>({});
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
 
   const configByBranch = new Map((configs ?? []).map(c => [c.branch, c]));
   const selectedBranch = branches.find(b => b.id === selectedBranchId) ?? null;
@@ -44,8 +47,29 @@ export default function BranchConfigTab() {
     setTimeout(() => setMsg(null), 3000);
   }
 
+  function validateDraft(): string | null {
+    for (const [key, label] of [
+      ["pf_employee_rate", "PF Employee Rate"], ["pf_employer_rate", "PF Employer Rate"],
+    ] as const) {
+      const raw = current[key];
+      if (raw === undefined || raw === null || raw === "") continue;
+      const n = Number(raw);
+      if (Number.isNaN(n)) return `Enter a valid number for ${label}.`;
+      if (n < 0) return `${label} cannot be negative.`;
+      if (n > 100) return `${label} cannot exceed 100%.`;
+    }
+    const ceiling = current.pf_wage_ceiling;
+    if (ceiling !== undefined && ceiling !== null && ceiling !== "" && Number(ceiling) < 0) {
+      return "PF Wage Ceiling cannot be negative.";
+    }
+    return null;
+  }
+
   async function saveConfig() {
     if (!selectedBranchId) return;
+    const validationErr = validateDraft();
+    if (validationErr) { setSaveErr(validationErr); return; }
+    setSaveErr(null);
     setSaving(true);
     try {
       if (existingConfig) {
@@ -65,6 +89,7 @@ export default function BranchConfigTab() {
 
   async function removeConfig() {
     if (!existingConfig) return;
+    setConfirmRemove(false);
     setSaving(true);
     try {
       await clientApi.delete(API.payroll.branchConfigDetail(existingConfig.id));
@@ -125,6 +150,11 @@ export default function BranchConfigTab() {
             {msg}
           </div>
         )}
+        {saveErr && (
+          <div className="mb-3 px-4 py-2.5 rounded-lg text-sm font-medium bg-[var(--error-c)] text-[var(--error)]">
+            {saveErr}
+          </div>
+        )}
 
         {!selectedBranch ? (
           <div className="bg-[var(--surface)] rounded-xl border border-[var(--outline-v)] px-6 py-12 text-center text-[var(--outline)]">
@@ -152,7 +182,7 @@ export default function BranchConfigTab() {
               <div className="flex gap-2">
                 {existingConfig && !hasChanges && (
                   <button
-                    onClick={removeConfig}
+                    onClick={() => setConfirmRemove(true)}
                     disabled={saving}
                     className="px-3 py-1.5 text-[12px] font-medium text-[var(--error)] border border-[var(--error)] rounded-lg hover:bg-[var(--error-c)] disabled:opacity-50"
                   >
@@ -257,6 +287,18 @@ export default function BranchConfigTab() {
           </div>
         )}
       </div>
+
+      {confirmRemove && selectedBranch && (
+        <ConfirmModal
+          title="Remove PF override?"
+          body={`This removes the custom PF configuration for ${selectedBranch.branch_name}. The branch will immediately fall back to system defaults (${PF_DEFAULTS.rate}% employee / ${PF_DEFAULTS.rate}% employer on basic salary up to ₹${PF_DEFAULTS.ceiling}) for any payroll processed after this. This cannot be undone.`}
+          confirmLabel="Remove Override"
+          danger
+          saving={saving}
+          onConfirm={removeConfig}
+          onCancel={() => setConfirmRemove(false)}
+        />
+      )}
     </div>
   );
 }

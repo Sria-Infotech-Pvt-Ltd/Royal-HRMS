@@ -192,6 +192,26 @@ class BranchPayrollConfigSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'branch_name', 'branch_state', 'structure_name', 'created_at', 'updated_at']
 
+    def _validate_rate(self, value, label):
+        if value is None:
+            return value
+        if value < 0:
+            raise serializers.ValidationError(f'{label} cannot be negative.')
+        if value > 100:
+            raise serializers.ValidationError(f'{label} cannot exceed 100%.')
+        return value
+
+    def validate_pf_employee_rate(self, value):
+        return self._validate_rate(value, 'PF Employee Rate')
+
+    def validate_pf_employer_rate(self, value):
+        return self._validate_rate(value, 'PF Employer Rate')
+
+    def validate_pf_wage_ceiling(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('PF Wage Ceiling cannot be negative.')
+        return value
+
 
 class EmployeeSalaryConfigSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.full_name', read_only=True)
