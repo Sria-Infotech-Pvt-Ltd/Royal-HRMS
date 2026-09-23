@@ -18,6 +18,7 @@ import { usePermission } from "@/hooks/usePermission";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
+import ConfirmModal from "@/components/ConfirmModal";
 import TaxDeclarationModal from "./TaxDeclarationModal";
 import type { PagedResponse } from "@/app/dashboard/my-payslip/_components/types";
 import { currentFinancialYearStart } from "@/app/dashboard/my-payslip/_components/types";
@@ -244,12 +245,19 @@ export default function TaxTab({ onNavigateToDocuments }: Props) {
 function TaxHrQueue() {
   const { data: all, loading, error, refetch } = useFetch<ApiTaxDeclaration[]>(API.payroll.taxDeclarations);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [approveErr, setApproveErr] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<ApiTaxDeclaration | null>(null);
 
   async function approve(id: string) {
+    setConfirmTarget(null);
     setBusyId(id);
+    setApproveErr(null);
     try {
       await clientApi.post(API.payroll.approveTaxDeclaration(id));
       refetch();
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || "Failed to approve this declaration. Please try again.";
+      setApproveErr(msg);
     } finally {
       setBusyId(null);
     }
@@ -263,6 +271,11 @@ function TaxHrQueue() {
         <div className="card-title"><i className="ti ti-list-details" /> HR review queue</div>
       </div>
       {error && <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>{error}</div>}
+      {approveErr && (
+        <div className="alert alert-error" style={{ margin: "0 24px 16px" }}>
+          <i className="ti ti-alert-circle" /> {approveErr}
+        </div>
+      )}
       {loading ? (
         <div className="empty-state">
           <i className="ti ti-loader-2 spin" />
@@ -294,7 +307,7 @@ function TaxHrQueue() {
                   <td style={{ color: "var(--on-variant)" }}>{d.submitted_at ? formatDate(d.submitted_at) : "—"}</td>
                   <td>
                     {d.status === "submitted" && (
-                      <button className="btn btn-filled btn-sm" onClick={() => approve(d.id)} disabled={busyId === d.id}>
+                      <button className="btn btn-filled btn-sm" onClick={() => setConfirmTarget(d)} disabled={busyId === d.id}>
                         {busyId === d.id ? "Approving…" : "Approve"}
                       </button>
                     )}
@@ -304,6 +317,17 @@ function TaxHrQueue() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {confirmTarget && (
+        <ConfirmModal
+          title="Approve this tax declaration?"
+          body={`This locks ${confirmTarget.employee_name}'s FY ${confirmTarget.financial_year} declaration (${confirmTarget.tax_regime_display}, ${sectionsSummary(confirmTarget.declared_investments)}) — they will no longer be able to change their regime or declared investments for this financial year.`}
+          confirmLabel="Approve"
+          saving={busyId === confirmTarget.id}
+          onConfirm={() => approve(confirmTarget.id)}
+          onCancel={() => setConfirmTarget(null)}
+        />
       )}
     </div>
   );
