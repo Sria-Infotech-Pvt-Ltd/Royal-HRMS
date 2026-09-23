@@ -13,8 +13,6 @@ import FaceStatusPanel from "@/components/FaceStatusPanel";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png"];
 const ACCEPT_ATTR     = ".jpg,.jpeg,.png,image/jpeg,image/png";
-const MIN_SIZE        = 100 * 1024; // 100 KB
-const MAX_SIZE        = 200 * 1024; // 200 KB
 
 interface ProfilePhotoModalProps {
   onClose:    () => void;
@@ -89,12 +87,9 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
       setValidationError("Only JPG, JPEG, and PNG files are allowed.");
       return;
     }
-    if (file.size < MIN_SIZE || file.size > MAX_SIZE) {
-      setValidationError(
-        `Image must be between 100 KB and 200 KB (selected file is ${Math.round(file.size / 1024)} KB).`
-      );
-      return;
-    }
+    // No client-side size gate — the backend re-encodes/resizes whatever is
+    // uploaded to fit its storage size band, so any reasonable photo (a
+    // multi-MB phone/camera shot included) just works.
     applySelection(file);
   }
 
@@ -158,7 +153,7 @@ export default function ProfilePhotoModal({ onClose, onUploaded, hasExistingPhot
               <FaceStatusPanel
                 icon="ti-user-circle" iconColor="var(--primary)" iconBg="rgba(124,58,237,0.08)"
                 title="Add a profile photo"
-                message="JPG, JPEG, or PNG, between 100 KB and 200 KB. Choose one photo, or capture a new one with your camera."
+                message="JPG, JPEG, or PNG — resized automatically to fit. Choose one photo, or capture a new one with your camera."
                 action={{ label: "Capture Photo", onClick: handleChooseCamera }}
                 secondaryAction={{ label: "Upload from Device", onClick: handleChooseDevice }}
               />

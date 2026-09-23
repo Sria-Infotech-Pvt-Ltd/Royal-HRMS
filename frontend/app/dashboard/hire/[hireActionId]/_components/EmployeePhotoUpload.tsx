@@ -46,7 +46,7 @@ export default function EmployeePhotoUpload({ hireActionId, photoUrl, onPhotoCha
       <div>
         <div style={{ fontSize: 13, fontWeight: 700 }}>Employee photo</div>
         <div className="hint" style={{ margin: "3px 0 8px" }}>
-          Square JPG or PNG, at least 400×400px. Cropped to a circle on ID cards and reports.
+          JPG or PNG — resized automatically to fit. Cropped to a circle on ID cards and reports.
         </div>
         <label className="filebtn" style={{ cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.6 : 1 }}>
           {uploading ? "Uploading…" : "Upload file"}
