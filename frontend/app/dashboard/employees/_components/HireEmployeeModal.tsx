@@ -6,6 +6,8 @@ import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
+import { usePermission } from "@/hooks/usePermission";
+import type { Position } from "@/types/orgStructure";
 import HireWizardClient from "@/app/dashboard/hire/[hireActionId]/_components/HireWizardClient";
 
 // Stage 1 of the two-stage Hire flow — collects just enough to reserve a
@@ -27,6 +29,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
   onClose: () => void; onHired?: () => void; initialHireActionId?: string;
 }) {
   const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
+  const canCreatePosition = usePermission("org_structure.create");
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const [hireActionId, setHireActionId] = useState<string | null>(initialHireActionId ?? null);
@@ -37,9 +40,48 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const positionOptions = positionsForUnit(orgUnitId, /* vacantOnly */ true);
+  // The shared org-unit/position hook has no way to add a just-created
+  // Position to its list without a full refetch — kept here as a small
+  // local overlay instead, merged into positionOptions below, so a newly
+  // created position shows up (and gets auto-selected) immediately without
+  // waiting on/forcing a refetch of every org unit's positions.
+  const [extraPositions, setExtraPositions] = useState<Position[]>([]);
+  const [showCreatePosition, setShowCreatePosition] = useState(false);
+  const [newPosTitle, setNewPosTitle] = useState("");
+  const [newPosGrade, setNewPosGrade] = useState("");
+  const [creatingPosition, setCreatingPosition] = useState(false);
+  const [createPosErr, setCreatePosErr] = useState("");
+
+  const positionOptions = [
+    ...positionsForUnit(orgUnitId, /* vacantOnly */ true),
+    ...extraPositions.filter(p => p.org_unit === orgUnitId),
+  ];
   const selectedPosition = positionOptions.find(p => p.id === positionId);
   const departmentName = resolveDepartmentName(orgUnitId);
+
+  function openCreatePosition() {
+    setNewPosTitle(""); setNewPosGrade(""); setCreatePosErr("");
+    setShowCreatePosition(true);
+  }
+
+  async function createPosition() {
+    if (!newPosTitle.trim()) { setCreatePosErr("Position title is required."); return; }
+    setCreatingPosition(true);
+    setCreatePosErr("");
+    try {
+      const { data } = await clientApi.post<{ data: Position }>(API.orgStructure.positions.list, {
+        org_unit: orgUnitId, title: newPosTitle.trim(), grade: newPosGrade.trim(),
+        is_chief: false, job_template: null,
+      });
+      setExtraPositions(prev => [...prev, data.data]);
+      setPositionId(data.data.id);
+      setShowCreatePosition(false);
+    } catch (e) {
+      setCreatePosErr((e as { message?: string })?.message || "Could not create the position. Please try again.");
+    } finally {
+      setCreatingPosition(false);
+    }
+  }
 
   if (hireActionId) {
     return (
@@ -131,6 +173,17 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
               <option value="">{!orgUnitId ? "Select an org unit first" : "Select a position"}</option>
               {positionOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
+            {orgUnitId && !positionsLoading && canCreatePosition && !showCreatePosition && (
+              <button
+                type="button"
+                onClick={openCreatePosition}
+                className="hint"
+                style={{ background: "none", border: "none", padding: 0, marginTop: 4, cursor: "pointer", color: "var(--brand-ink)", textAlign: "left" }}
+              >
+                <i className="ti ti-plus" style={{ fontSize: 11, marginRight: 3 }} />
+                {positionOptions.length === 0 ? "No vacant position here — create one" : "Create a new position"}
+              </button>
+            )}
           </div>
         </div>
         {selectedPosition && (
@@ -138,6 +191,40 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
             Org unit → {selectedPosition.title} · {departmentName ?? units.find(u => u.id === orgUnitId)?.name}
             {selectedPosition.grade ? ` · Band ${selectedPosition.grade}` : ""}
           </p>
+        )}
+
+        {showCreatePosition && (
+          <div className="rounded-lg p-3.5 space-y-3" style={{ background: "var(--sunken)" }}>
+            <div className="section-label" style={{ margin: 0 }}>
+              New position in {units.find(u => u.id === orgUnitId)?.name}
+            </div>
+            {createPosErr && (
+              <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg" style={{ background: "var(--crit-bg)", color: "var(--crit)" }}>
+                <i className="ti ti-alert-circle text-[14px] mt-0.5 flex-shrink-0" />
+                <span className="text-[13px]">{createPosErr}</span>
+              </div>
+            )}
+            <div className="g2">
+              <div className="f">
+                <label>Position title <span className="req">*</span></label>
+                <input type="text" value={newPosTitle} onChange={e => setNewPosTitle(e.target.value)}
+                  placeholder="e.g. Senior Executive" className="finput" />
+              </div>
+              <div className="f">
+                <label>Grade / band</label>
+                <input type="text" value={newPosGrade} onChange={e => setNewPosGrade(e.target.value)}
+                  placeholder="Optional" className="finput" />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setShowCreatePosition(false)} disabled={creatingPosition} className="btn btn-ghost">
+                Cancel
+              </button>
+              <button type="button" onClick={createPosition} disabled={creatingPosition} className="btn btn-filled">
+                {creatingPosition ? "Creating…" : "Create position"}
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="section-label">Employee details — not changed by this action</div>
