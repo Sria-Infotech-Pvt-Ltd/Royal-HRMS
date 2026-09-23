@@ -20,25 +20,43 @@ interface PromotionRecord {
   id: string;
   fromDesignation: string;
   toDesignation: string;
+  designationChanged: boolean;
+  // Raw role values (e.g. "hr_admin"), not display labels — resolved via
+  // labelFor(roleOptions, ...) at render time, same as currentRole already is.
+  fromRole: string;
+  toRole: string;
   roleChanged: boolean;
   effectiveDate: string;
   updatedBy: string;
 }
 
 // Shape returned by GET /employees/{id}/promotions/ (backend PromotionRecord model, snake_case).
-interface ApiPromotionRecord {
+export interface ApiPromotionRecord {
   id: string;
   previous_designation: string;
   new_designation: string;
+  previous_role: string;
+  new_role: string;
   role_changed: boolean;
   effective_date: string;
   promoted_by: string;
 }
 
-const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
+// Exported for direct unit testing (see PromotionTab.test.ts) — this exact
+// mapping is where the "Branch Manager -> Branch Manager [Role change]"
+// production bug lived: a role-only change previously had no fromRole/
+// toRole/designationChanged fields at all, so the row always fell back to
+// showing designation values regardless of what actually changed.
+export const toPromotionRecord = (r: ApiPromotionRecord): PromotionRecord => ({
   id: r.id,
   fromDesignation: r.previous_designation || "—",
   toDesignation: r.new_designation || "—",
+  // The API only ever sends role_changed pre-computed; designation-changed
+  // is just as cheap to derive from the two values it already sends, so no
+  // backend change is needed for this fix.
+  designationChanged: r.previous_designation !== r.new_designation,
+  fromRole: r.previous_role || "—",
+  toRole: r.new_role || "—",
   roleChanged: r.role_changed,
   effectiveDate: r.effective_date,
   updatedBy: r.promoted_by || "—",
@@ -202,11 +220,23 @@ export default function PromotionTab({
                 {history.map(h => (
                   <tr key={h.id}>
                     <td>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span>{h.fromDesignation}</span>
-                        <i className="ti ti-arrow-right text-muted" />
-                        <span className="font-medium">{h.toDesignation}</span>
-                        {h.roleChanged && <span className="badge badge-warn">Role change</span>}
+                      <div className="flex flex-col gap-1">
+                        {h.designationChanged && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{h.fromDesignation}</span>
+                            <i className="ti ti-arrow-right text-muted" />
+                            <span className="font-medium">{h.toDesignation}</span>
+                            <span className="badge badge-info">Promotion</span>
+                          </div>
+                        )}
+                        {h.roleChanged && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{labelFor(roleOptions, h.fromRole)}</span>
+                            <i className="ti ti-arrow-right text-muted" />
+                            <span className="font-medium">{labelFor(roleOptions, h.toRole)}</span>
+                            <span className="badge badge-warn">Role change</span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="tabular-nums">{fmtDate(h.effectiveDate)}</td>
