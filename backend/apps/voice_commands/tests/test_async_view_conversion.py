@@ -48,6 +48,7 @@ from unittest.mock import MagicMock, patch
 
 from asgiref.sync import ThreadSensitiveContext, async_to_sync, sync_to_async
 from django.core.cache import cache
+from django.db import connection
 from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -119,6 +120,25 @@ class RealAsyncDispatchTests(SimpleTestCase):
         self.assertEqual(response.data['data']['transcript'], 'mujhe leave chahiye')
 
 
+def _activate_current_schema_on_this_thread(schema_name) -> None:
+    """
+    Sets connection.schema_name on whichever thread calls this — the
+    lightweight, backend-agnostic stand-in for what
+    apps.tenants.middleware.TenantSchemaMiddleware's real
+    connection.set_schema_to_public()/set_tenant() calls do at the top of
+    every real request (this project's local dev DB backend has neither
+    method). core.cache_keys.tenant_aware_key_func prefixes every cache key
+    with this value, so a dedicated worker thread that never ran that
+    middleware defaults to a DIFFERENT schema_name than whatever the test
+    process's main thread happens to be on — see this module's own
+    PendingStateConcurrencyTests bug note below for why that matters here.
+    A no-op for None (nothing to propagate — matches
+    tenant_aware_key_func's own "no tenant activated" fallback).
+    """
+    if schema_name is not None:
+        connection.schema_name = schema_name
+
+
 class PendingStateConcurrencyTests(SimpleTestCase):
     """Two concurrent async requests for the same user must not corrupt
     each other's Redis-backed pending-conversation state — see this
@@ -132,11 +152,34 @@ class PendingStateConcurrencyTests(SimpleTestCase):
     serialized instead. These two tests would still pass either way (they
     assert eventual-state correctness, not timing), but asyncio.run() here
     makes them genuinely exercise concurrent access, not just sequential
-    access that happens to look the same from the outside."""
+    access that happens to look the same from the outside.
+
+    Bug fixed 2026-09-23: both tests originally called set_pending/
+    get_pending inside a dedicated worker thread (mirroring a real request's
+    own ThreadSensitiveContext), then separately asserted final state via a
+    plain get_pending() call on the TEST's own main thread. That passed
+    fine standalone, but under `manage.py test`, django-tenants' test setup
+    activates a real tenant schema (e.g. "tenant_testco") on the main
+    thread for the whole run, while a brand-new worker thread — never
+    having run TenantSchemaMiddleware itself — defaults to "public".
+    tenant_aware_key_func (core/cache_keys.py) prefixes every cache key
+    with schema_name, so the writer thread's write and the main thread's
+    later read landed under two DIFFERENT keys — read back None every time,
+    100% reproducibly, not a race. Real requests never hit this: a single
+    request's middleware and business logic always run on the exact same
+    ThreadSensitiveContext-dedicated thread (this module's own docstring,
+    point 2), so schema_name is always consistent for a read that follows
+    its own write. self.schema_name below captures the main thread's real
+    schema once, and _activate_current_schema_on_this_thread propagates it
+    onto each worker thread first — exactly what the middleware itself
+    would have done there in production — so this test's writer/reader
+    genuinely share one schema, the same way one real tenant's request
+    would."""
 
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)
+        self.schema_name = getattr(connection, 'schema_name', None)
 
     def test_concurrent_set_and_get_for_the_same_user_do_not_corrupt_state(self):
         user_id = 999001
@@ -149,10 +192,11 @@ class PendingStateConcurrencyTests(SimpleTestCase):
             # executor and run fully serialized, proving nothing about
             # concurrent-request isolation.
             async with ThreadSensitiveContext():
-                await sync_to_async(set_pending, thread_sensitive=True)(
-                    user_id, 'apply_leave', {'leave_type': 'sick'},
-                )
-                return await sync_to_async(get_pending, thread_sensitive=True)(user_id)
+                def _write():
+                    _activate_current_schema_on_this_thread(self.schema_name)
+                    set_pending(user_id, 'apply_leave', {'leave_type': 'sick'})
+                    return get_pending(user_id)
+                return await sync_to_async(_write, thread_sensitive=True)()
 
         async def reader():
             async with ThreadSensitiveContext():
@@ -160,7 +204,10 @@ class PendingStateConcurrencyTests(SimpleTestCase):
                 # thread must never crash or see a torn/partial write —
                 # either None (writer hasn't committed yet) or the writer's
                 # complete, correct dict, never anything in between.
-                return await sync_to_async(get_pending, thread_sensitive=True)(user_id)
+                def _read():
+                    _activate_current_schema_on_this_thread(self.schema_name)
+                    return get_pending(user_id)
+                return await sync_to_async(_read, thread_sensitive=True)()
 
         async def run_both():
             return await asyncio.gather(writer(), reader())
@@ -186,15 +233,17 @@ class PendingStateConcurrencyTests(SimpleTestCase):
 
         async def write_leave():
             async with ThreadSensitiveContext():
-                await sync_to_async(set_pending, thread_sensitive=True)(
-                    user_id, 'apply_leave', {'leave_type': 'sick'},
-                )
+                def _write():
+                    _activate_current_schema_on_this_thread(self.schema_name)
+                    set_pending(user_id, 'apply_leave', {'leave_type': 'sick'})
+                await sync_to_async(_write, thread_sensitive=True)()
 
         async def write_correction():
             async with ThreadSensitiveContext():
-                await sync_to_async(set_pending, thread_sensitive=True)(
-                    user_id, 'request_attendance_correction', {'date': '2026-08-25'},
-                )
+                def _write():
+                    _activate_current_schema_on_this_thread(self.schema_name)
+                    set_pending(user_id, 'request_attendance_correction', {'date': '2026-08-25'})
+                await sync_to_async(_write, thread_sensitive=True)()
 
         async def run_both():
             await asyncio.gather(write_leave(), write_correction())
