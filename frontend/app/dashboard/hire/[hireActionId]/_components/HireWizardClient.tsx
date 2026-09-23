@@ -8,9 +8,10 @@
 // each step's own per-employee REST endpoint — there is no employee row to
 // attach those to until "Hire employee" on the Review step actually
 // creates one (HireActionCompleteView applies every list here to real rows
-// at that point). Sequential step-locking mirrors the self-service
-// wizard's own StepIndicator/highestSaved pattern, not the HR-onboarding
-// wizard's free-jump one — see the approved plan for why.
+// at that point). Steps are free-jump from the sidebar (HR can jump ahead
+// to Documents/Review without filling every earlier step first) — same
+// pattern as the HR-onboarding wizard, not the self-service wizard's
+// sequential step-locking.
 import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
@@ -321,7 +322,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     >
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <HireWizardSidebar steps={STEPS} currentStep={tab} highestSaved={highestSaved}
-          onStepClick={i => { if (i <= highestSaved + 1) setTab(i); }} missingByStep={missingByStep} />
+          onStepClick={setTab} missingByStep={missingByStep} />
 
         <div className="wiz-main" style={{ flex: 1, minWidth: 0 }}>
           <div className="stephead" style={{ padding: 0, marginBottom: 12 }}>

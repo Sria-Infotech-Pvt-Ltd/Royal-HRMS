@@ -24,12 +24,17 @@ interface Props {
 }
 
 // Left rail matching the reference mockup exactly: numbered circles (green
-// check once passed, purple while active, gray + locked otherwise), a
-// "RECORDS & COMPLIANCE" group header before step 5, and a running
-// "N fields still required" box listing the first couple of incomplete
-// steps' missing fields. Locking logic (isReachable/isDone) mirrors
-// app/onboarding/_components/StepIndicator.tsx's own — a step stays locked
-// until the one before it is actually saved.
+// check once passed, purple while active), a "RECORDS & COMPLIANCE" group
+// header before step 5, and a running "N fields still required" box listing
+// the first couple of incomplete steps' missing fields.
+//
+// Every step is always clickable — free-jump, like the HR-onboarding
+// wizard's own StepIndicator (app/onboarding/_components/StepIndicator.tsx
+// is the one that locks steps until the previous one is saved; this sidebar
+// deliberately does NOT mirror that anymore, since HR filling this out
+// needs to be able to jump ahead — e.g. to Documents or Review — without
+// being forced through every step in order first). `highestSaved` still
+// only drives the checkmark/"done" styling, not what's reachable.
 export default function HireWizardSidebar({ steps, currentStep, highestSaved, onStepClick, missingByStep }: Props) {
   const totalMissing = Object.values(missingByStep).reduce((n, arr) => n + arr.length, 0);
 
@@ -38,14 +43,12 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
       {steps.map((step, i) => {
         const isDone      = i <= highestSaved;
         const isActive    = i === currentStep;
-        const isReachable = i <= highestSaved + 1;
         return (
           <div key={step.label}>
             {step.group && <div className="navgrp">{step.group}</div>}
             <button
               type="button"
-              onClick={() => { if (isReachable) onStepClick(i); }}
-              disabled={!isReachable}
+              onClick={() => onStepClick(i)}
               className={`step${isActive ? " on" : ""}${isDone ? " done" : ""}`}
             >
               <div className="c">
