@@ -144,7 +144,8 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
     }
   }
 
-  async function deleteSavedLocation(id: string) {
+  async function deleteSavedLocation(id: string, label: string) {
+    if (!window.confirm(`Remove saved location "${label}"?`)) return;
     setDeletingId(id);
     try {
       await clientApi.delete(API.workFromHome.savedLocationDetail(id));
@@ -391,7 +392,7 @@ export default function RequestWfhForm({ onSubmitted }: { onSubmitted: () => voi
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteSavedLocation(loc.id)}
+                      onClick={() => deleteSavedLocation(loc.id, loc.label)}
                       disabled={deletingId === loc.id}
                       title="Remove"
                       className="bg-transparent border-none cursor-pointer p-1"
