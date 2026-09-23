@@ -26,77 +26,22 @@ import EmergencyContactsList, { type EmergencyContactEntry } from "./EmergencyCo
 import AddressFields, { EMPTY_ADDRESS_EXTRAS, type AddressExtras } from "./AddressFields";
 import ScanFillModal, { type ScanSuggestions } from "./ScanFillModal";
 import EmployeePhotoUpload from "./EmployeePhotoUpload";
-import HireWizardSidebar, { type HireStepDef } from "./HireWizardSidebar";
+import HireWizardSidebar from "./HireWizardSidebar";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "./EmploymentStep";
 import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "./BasicPayStep";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./StatutoryAccountsStep";
 import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, EMPTY_VERIFICATION, type VerificationDraft } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
-
-const EMPTY_FORM: ProfileForm = {
-  date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
-  current_address: "", current_address_line2: "", current_village: "", current_district: "",
-  current_state: "", current_pin_code: "", permanent_address: "", permanent_address_line2: "",
-  permanent_village: "", permanent_district: "", permanent_state: "", permanent_pin_code: "",
-  permanent_same_as_current: "false", highest_qualification: "", institution: "", year_of_passing: "",
-  specialization: "", total_experience_years: "", previous_employer: "", previous_designation: "",
-  leaving_reason: "", account_number: "", ifsc_code: "", bank_name: "", bank_branch_name: "",
-  account_holder_name: "", account_type: "", emergency_name: "", emergency_relationship: "",
-  emergency_phone: "", emergency_email: "", pan_number: "",
-};
-
-interface IdentityExtras {
-  mother_name: string;
-  languages_known: string;
-  alternate_mobile: string;
-  specially_abled: string;
-  international_worker: string;
-  category: string;
-}
-
-const EMPTY_IDENTITY_EXTRAS: IdentityExtras = {
-  mother_name: "", languages_known: "", alternate_mobile: "",
-  specially_abled: "no", international_worker: "no", category: "prefer_not_to_say",
-};
-
-// Excluded from the shared DynamicStepFields render for step 1 — the
-// repeatable EmergencyContactsList below replaces the single fixed set of
-// emergency_* fields that component would otherwise render.
-const EMERGENCY_BUILTIN_KEYS = new Set(["emergency_name", "emergency_relationship", "emergency_phone", "emergency_email"]);
-
-// Excluded from the shared DynamicStepFields render for step 1 — the
-// AddressFields component below replaces the generic reused current/
-// permanent address rendering with the exact reference layout (Landmark/
-// City/District row, explicit "+Suggest" buttons, Yes/No toggle).
-const ADDRESS_BUILTIN_KEYS = new Set([
-  "current_address", "current_address_line2", "current_village", "current_district", "current_state", "current_pin_code",
-  "permanent_address", "permanent_address_line2", "permanent_village", "permanent_district", "permanent_state", "permanent_pin_code",
-  "permanent_same_as_current",
-]);
-
-function emptyEmergencyContact(id: string, isPrimary: boolean): EmergencyContactEntry {
-  return { id, name: "", relationship: "", phone: "", alternate_phone: "", email: "", address: "", is_primary: isPrimary };
-}
-
-interface HireActionData {
-  id: string; reason: string; reason_display: string; effective_from: string; position: string;
-  position_title: string; org_unit_name: string; grade: string;
-  employment_type: string; reserved_employee_id: string; status: string;
-  draft_data: Record<string, unknown>;
-  photo_url: string | null;
-}
-
-const STEPS: HireStepDef[] = [
-  { label: "Personal identity", sub: "Name, photo, DOB, contact", required: 7 },
-  { label: "Employment", sub: "Role, reporting, work setup", required: 5 },
-  { label: "Basic pay", sub: "Wage types and pay scale" },
-  { label: "Statutory & accounts", sub: "PAN, PF, ESI, bank", required: 5, tag: { label: "Sensitive", tone: "sensitive" } },
-  { label: "Family & nomination", sub: "Dependants and nominees", group: "Records & compliance", tag: { label: "EPFO", tone: "info" } },
-  { label: "Education & experience", sub: "Qualifications, past employers" },
-  { label: "Documents", sub: "Joining paperwork" },
-  { label: "Assets", sub: "Laptop, phone, access card", tag: { label: "New", tone: "new" } },
-  { label: "Review", sub: "Confirm and hire" },
-];
+import {
+  EMPTY_FORM,
+  type IdentityExtras,
+  EMPTY_IDENTITY_EXTRAS,
+  EMERGENCY_BUILTIN_KEYS,
+  ADDRESS_BUILTIN_KEYS,
+  emptyEmergencyContact,
+  type HireActionData,
+  STEPS,
+} from "./_wizardData";
 
 export default function HireWizardClient({ hireActionId, onClose, onHired }: { hireActionId: string; onClose: () => void; onHired: () => void }) {
   const [action, setAction] = useState<HireActionData | null>(null);
