@@ -19,6 +19,7 @@
 
 import { useState } from "react";
 import RequestModal from "@/components/RequestModal";
+import ConfirmModal from "@/components/ConfirmModal";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 
@@ -41,11 +42,22 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
   const [handoverNotes, setHandoverNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  function validate(): boolean {
+    setError(null);
+    if (!lastDay) { setError("Please select your proposed last day."); return false; }
+    if (lastDay < todayIso()) { setError("Your proposed last day cannot be in the past."); return false; }
+    if (reason.trim().length < 10) { setError("Please describe your reason in at least 10 characters."); return false; }
+    return true;
+  }
 
   async function handleSubmit() {
-    setError(null);
-    if (!lastDay) { setError("Please select your proposed last day."); return; }
-    if (reason.trim().length < 10) { setError("Please describe your reason in at least 10 characters."); return; }
+    if (validate()) setShowConfirm(true);
+  }
+
+  async function confirmSubmit() {
+    setShowConfirm(false);
     setSubmitting(true);
     try {
       await clientApi.post(API.separation.list, {
@@ -67,6 +79,7 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
   }
 
   return (
+    <>
     <RequestModal
       title={<><i className="ti ti-logout" /> Resignation request</>}
       onClose={onClose}
@@ -80,6 +93,7 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
           <input
             type="date"
             className="field-input"
+            min={todayIso()}
             value={lastDay}
             onChange={e => setLastDay(e.target.value)}
           />
@@ -118,5 +132,18 @@ export default function ResignationRequestModal({ defaultNoticePeriodDays, onClo
         />
       </div>
     </RequestModal>
+
+    {showConfirm && (
+      <ConfirmModal
+        title="Submit this resignation request?"
+        body={`This submits a formal resignation with a proposed last day of ${lastDay} (${noticePeriodDays}-day notice) for HR approval.`}
+        confirmLabel="Submit Resignation"
+        danger
+        saving={submitting}
+        onConfirm={confirmSubmit}
+        onCancel={() => setShowConfirm(false)}
+      />
+    )}
+    </>
   );
 }
