@@ -430,37 +430,86 @@ def _on_announcement_save(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender='accounts.PromotionRecord')
 def _on_promotion_record_created(sender, instance, created, **kwargs):
-    if not created or instance.previous_designation == instance.new_designation:
-        # Role-only changes (no designation change) aren't a "promotion" in
-        # the sense this notification is about — only notify when the
-        # designation itself actually moved.
+    if not created:
+        return
+
+    designation_changed = instance.previous_designation != instance.new_designation
+    role_changed        = instance.previous_role != instance.new_role
+    if not designation_changed and not role_changed:
+        # PromotionRecord.objects.create() is only ever called when at
+        # least one of these actually changed (see EmployeeDetailView.put()'s
+        # promotion_changed guard) — this is a defensive no-op, not an
+        # expected case.
         return
 
     effective = instance.effective_date.strftime('%d %B %Y')
-    message = f'Congratulations! You have been promoted to {instance.new_designation}. Your new designation is effective from {effective}.'
-    if instance.remarks:
-        message += f' {instance.remarks}'
+    employee, promoted_by = instance.employee, instance.promoted_by
+    reference_id = str(instance.id)
+
+    if designation_changed:
+        # Unchanged from before for a designation-only change. When role
+        # ALSO changed in the same edit, the message is extended to mention
+        # it too — this is the one existing notification "appropriately
+        # communicating the combined change" (per the no-duplicate-
+        # notifications requirement), so no separate role-change
+        # notification is sent in that case; see the else branch below,
+        # which only ever fires for a role change with NO designation change.
+        message = f'Congratulations! You have been promoted to {instance.new_designation}. Your new designation is effective from {effective}.'
+        if role_changed:
+            new_role_display = instance.new_role.replace('_', ' ').title()
+            message += f' Your role has also been updated to {new_role_display}.'
+        if instance.remarks:
+            message += f' {instance.remarks}'
+        title, notification_type, module = 'Congratulations on Your Promotion!', 'promotion', 'promotion'
+    else:
+        # role_changed is guaranteed True here (guarded above) — the one
+        # case with no existing notification (previously silently skipped).
+        old_role_display = (instance.previous_role or '').replace('_', ' ').title() or 'your previous role'
+        new_role_display = instance.new_role.replace('_', ' ').title()
+        message = f'Your role has been updated from {old_role_display} to {new_role_display}, effective {effective}.'
+        if instance.remarks:
+            message += f' {instance.remarks}'
+        title, notification_type, module = 'Your Role Has Changed', 'role_change', 'role_change'
 
     # Deferred to transaction.on_commit: PromotionRecord.objects.create()
     # runs inside EmployeeDetailView.put()'s own transaction.atomic() block —
     # queuing the notification only after that transaction actually commits
-    # means a promotion that later rolls back (for any reason) can never
-    # have already notified the employee about a change that didn't happen.
-    employee, promoted_by = instance.employee, instance.promoted_by
-    reference_id = str(instance.id)
-
+    # means a change that later rolls back (for any reason) can never have
+    # already notified the employee about a change that didn't happen.
     def _send():
         # _notify() already swallows its own exceptions internally — this
         # extra try/except is defense-in-depth so that even a broken/mocked
-        # notification path can never surface past the promotion transaction,
-        # which has already committed successfully by the time this runs.
+        # notification path can never surface past this transaction, which
+        # has already committed successfully by the time this runs.
         try:
-            _notify(
-                employee, 'Congratulations on Your Promotion!', message,
-                'promotion', 'promotion', reference_id, promoted_by,
-            )
+            _notify(employee, title, message, notification_type, module, reference_id, promoted_by)
         except Exception:
-            logger.exception('Failed to send promotion notification for employee %s', employee.id)
+            logger.exception('Failed to send %s notification for employee %s', notification_type, employee.id)
+
+        # Email — exactly one per PromotionRecord, never both, same
+        # no-duplicate reasoning already applied to the in-app notification
+        # above. Designation change (with or without an accompanying role
+        # change) uses send_designation_change_email, which covers the role
+        # change too in that combined case; a role-only change uses
+        # send_role_change_email.
+        try:
+            if designation_changed:
+                from apps.accounts.utils import send_designation_change_email
+                send_designation_change_email(
+                    employee, instance.previous_designation, instance.new_designation, instance.effective_date,
+                    previous_role=instance.previous_role if role_changed else None,
+                    new_role=instance.new_role if role_changed else None,
+                )
+            else:
+                from apps.accounts.utils import send_role_change_email
+                send_role_change_email(
+                    employee, instance.previous_role, instance.new_role, instance.effective_date,
+                )
+        except Exception:
+            logger.exception(
+                '%s email failed for employee %s',
+                'Designation-change' if designation_changed else 'Role-change', employee.id,
+            )
 
     transaction.on_commit(_send)
 
