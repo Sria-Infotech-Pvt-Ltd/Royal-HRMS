@@ -490,6 +490,34 @@ class PayrollAnalyticsIntentMatchTests(SimpleTestCase):
         result = match_intent(normalize_transcript('show attendance dashboard'))
         self.assertEqual(result.intent, 'check_team_attendance')
 
+    def test_matches_whats_my_teams_attendance_today_as_check_team_attendance(self):
+        """
+        Regression guard for a reported bug (2026-09-23, HR/manager voice
+        testing): "what's my team's attendance today?" was read as the
+        caller's OWN attendance instead of the team's. It scored 85.19
+        against check_attendance_stats' own "what's my attendance rate" —
+        this intent's closest phrase at the time, "check the team's
+        attendance", only scored 71.43 — because no phrase here used "my
+        team" (only "the team"/bare "team"), so a manager's completely
+        natural way of referring to their own team collided with this app's
+        many "my attendance ..." personal phrases. Confirmed via direct
+        rapidfuzz scoring, not a matcher bug. Now registered directly as
+        "what's my team's attendance [today]" and near variants."""
+        result = match_intent(normalize_transcript("what's my team's attendance today?"))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertNotEqual(result.intent, 'check_attendance_stats')
+        self.assertGreaterEqual(result.confidence, 80)
+
+    def test_whats_my_teams_attendance_not_confused_with_check_attendance_summary(self):
+        result = match_intent(normalize_transcript("what's my team's attendance"))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertNotEqual(result.intent, 'check_attendance_summary')
+
+    def test_hows_my_teams_attendance_today_as_check_team_attendance(self):
+        result = match_intent(normalize_transcript("how's my team's attendance today"))
+        self.assertEqual(result.intent, 'check_team_attendance')
+        self.assertGreaterEqual(result.confidence, 80)
+
     # ── Payroll intents ──────────────────────────────────────────────────────
 
     def test_matches_check_my_payslip_exact_phrase(self):

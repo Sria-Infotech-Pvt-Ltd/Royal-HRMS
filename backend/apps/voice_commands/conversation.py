@@ -35,6 +35,7 @@ from apps.voice_commands.conversation_stt_confirmation import (
     continue_stt_confirmation,
     start_stt_confirmation,
 )
+from apps.voice_commands.correction_slot_extractor import next_missing_slot as next_missing_correction_slot
 from apps.voice_commands.correction_slot_extractor import strip_correction_slot_phrases
 from apps.voice_commands.executor import (
     INTENT_APPLY_LEAVE,
@@ -332,14 +333,39 @@ def _should_abandon_pending(pending: dict, fresh_match) -> bool:
        answer's shape — a date, a leave type, free text — makes a stray
        clarification-band coincidence far more likely and far less
        meaningful than it is for a plain yes/no turn).
+
+    One narrow exception to case 1: request_attendance_correction's own
+    punch-type question ("was this for your clock-in, clock-out, or both?")
+    expects an answer that is ALSO the literal registered phrase for the
+    real clock_in/clock_out intents (see correction_slot_extractor.
+    strip_correction_slot_phrases's own docstring on this exact collision)
+    — without carving that out, answering the question fires a real clock
+    punch instead of completing the correction request (bug reported
+    2026-09-23).
     """
     if fresh_match.intent != NO_MATCH_INTENT:
+        if _is_correction_punch_type_answer(pending, fresh_match):
+            return False
         return fresh_match.intent != pending['intent']
 
     stage = pending['slots'].get('stage')
     if stage not in (CLARIFICATION_STAGE, STT_CONFIRMATION_STAGE):
         return False
     return fresh_match.candidate_intent is not None and fresh_match.candidate_intent != pending['intent']
+
+
+def _is_correction_punch_type_answer(pending: dict, fresh_match) -> bool:
+    """True when `fresh_match` is a false-positive clock_in/clock_out match
+    that is actually the user answering request_attendance_correction's
+    still-pending punch-type question — see _should_abandon_pending's own
+    docstring for why this carve-out exists. Deliberately narrow: only fires
+    for this one pending intent, at this one slot, against these two
+    specific intents — every other abandonment case is untouched."""
+    return (
+        pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION
+        and fresh_match.intent in (INTENT_CLOCK_IN, INTENT_CLOCK_OUT)
+        and next_missing_correction_slot(pending['slots']) == 'punch_type'
+    )
 
 
 def _dispatch_pending(

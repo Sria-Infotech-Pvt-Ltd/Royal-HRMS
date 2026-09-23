@@ -923,7 +923,18 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
             // that's the value settle() already validated as still current
             // the instant this callback fires.
             if (shouldAutoListenAfterSpeaking(awaitingInput, awaitingFaceProof)) {
-              speak(spokenText, outcome.language, () => autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current));
+              const isSpeaking = speak(
+                spokenText, outcome.language, () => autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current)
+              );
+              if (!isSpeaking) {
+                // speak() only returns false synchronously (muted, or an
+                // empty spokenText) — no audio was attempted, so onEnd above
+                // will never fire. Same fallback shape speakThenDismiss
+                // already applies to its own isSpeaking check: schedule the
+                // reopen directly instead of leaving the mic stuck closed
+                // until the user taps it manually (bug reported 2026-09-23).
+                autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current);
+              }
             } else {
               speak(spokenText, outcome.language);
             }
@@ -1060,7 +1071,15 @@ export function useVoiceCommand(isMuted: boolean, isAuthenticated: boolean) {
           // a face-proof retry turn still expects a captured descriptor, not
           // speech, so it never auto-listens; any other voice-answer turn does.
           if (shouldAutoListenAfterSpeaking(awaitingInput, awaitingFaceProof)) {
-            speak(spokenText, outcome.language, () => autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current));
+            const isSpeaking = speak(
+              spokenText, outcome.language, () => autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current)
+            );
+            if (!isSpeaking) {
+              // Same fallback as submitTranscript's own awaitingInput branch —
+              // speak() only returns false synchronously (muted/empty text),
+              // so onEnd above would otherwise never fire.
+              autoListenSchedulerRef.current?.schedule(utteranceTokenRef.current);
+            }
           } else {
             speak(spokenText, outcome.language);
           }

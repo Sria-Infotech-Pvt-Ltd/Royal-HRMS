@@ -340,6 +340,36 @@ intents:
       # fix above. "checkteamattendance" scored only 55.56 against this
       # intent's own "check team attendance" and lost to
       # request_attendance_correction's "fix my attendance" instead.
+      - "what's my team's attendance today"
+      - "what's my team's attendance"
+      - "how's my team's attendance today"
+      - "how's my team's attendance"
+      - "how is my team's attendance"
+      - "what is my team's attendance today"
+      # Bug reported 2026-09-23 (HR/manager voice testing): a manager saying
+      # "my team" (not "the team") — a completely natural way for someone to
+      # refer to their OWN team — was being read as "my [own] attendance"
+      # instead. "what's my team's attendance today?" scored 85.19 against
+      # check_attendance_stats' own "what's my attendance rate" (this
+      # intent's closest phrase, "check the team's attendance", only scored
+      # 71.43) and confidently dispatched to the caller's PERSONAL stats
+      # instead of the team dashboard — above DEFAULT_CONFIDENCE_THRESHOLD,
+      # so it never even surfaced as a "did you mean" clarification.
+      # Deliberately no "show my team's attendance [today]" variant: it
+      # scored 71.79 against check_team_leave_queue's own borderline
+      # fragment "show my team's" (BORDERLINE['check_team_leave_queue'] in
+      # test_clarification_dispatch_matrix.py) vs that intent's real phrase
+      # "show my team's leave requests" at 65.12 — stealing the "did you
+      # mean" clarification for a truncated/ambiguous "show my team's ..."
+      # utterance away from the leave queue. The "what's"/"how's"/"how is"
+      # framings above cover the reported bug without that collision.
+      # token_sort_ratio scores the whole normalized utterance, so having
+      # zero registered phrase with "my team" (only "the team"/bare "team")
+      # meant every "my team's attendance ..." utterance was structurally
+      # closer to this app's many "my attendance ..." personal phrases than
+      # to any team one. These additions close that gap; the matcher always
+      # returns its single best-scoring phrase across every intent, so
+      # coverage here doesn't need to be exhaustive — just one confident hit.
 
   approve_leave:
     # Requires leave.approve — same codename LeaveApprovalView.post() itself

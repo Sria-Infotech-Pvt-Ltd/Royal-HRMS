@@ -266,7 +266,13 @@ class AbandonAndStartFreshTests(SimpleTestCase):
         self.mock_execute_clock_in.return_value = ExecutionResult(success=True, message='You have been clocked in successfully.')
 
         self.request = _fake_request()
-        self.store.set(42, INTENT_REQUEST_ATTENDANCE_CORRECTION, {'date': date(2026, 7, 20)})
+        # No 'date' pre-filled: the pending conversation is still awaiting the
+        # DATE slot here, not punch_type — deliberately, so this stays a
+        # genuine "user moved on to a different command" case rather than
+        # colliding with the punch_type carve-out in
+        # conversation._is_correction_punch_type_answer (see
+        # PunchTypeAnswerContinuesCorrectionTests below for that collision).
+        self.store.set(42, INTENT_REQUEST_ATTENDANCE_CORRECTION, {})
 
     def test_high_confidence_different_intent_drops_pending_and_dispatches_fresh(self):
         result = handle_transcript(self.request, 'clock in')
@@ -274,3 +280,60 @@ class AbandonAndStartFreshTests(SimpleTestCase):
         self.assertEqual(result['intent'], 'clock_in')
         self.assertIsNone(self.store.get(42))
         self.mock_execute_clock_in.assert_called_once()
+
+
+class PunchTypeAnswerContinuesCorrectionTests(SimpleTestCase):
+    """"clock in"/"clock out" are simultaneously the correct answer to
+    request_attendance_correction's own punch-type question AND the literal
+    registered phrases for the real clock_in/clock_out intents — regression
+    coverage for the bug reported 2026-09-23, where answering the punch-type
+    question with "clock in" abandoned the correction request and fired a
+    real clock-in instead of continuing the conversation. Mirrors
+    AbandonAndStartFreshTests' setUp, but with 'date' already filled so the
+    pending conversation is awaiting punch_type specifically."""
+
+    def setUp(self):
+        self.store = _FakePendingStore()
+        patchers = _patch_pending_store(self.store)
+        for p in patchers:
+            p.start()
+            self.addCleanup(p.stop)
+
+        mandatory_patcher = patch(
+            'apps.voice_commands.conversation_clock_in_face.is_face_verification_mandatory', return_value=False,
+        )
+        mandatory_patcher.start()
+        self.addCleanup(mandatory_patcher.stop)
+        clock_in_patcher = patch('apps.voice_commands.conversation_clock_in_face.execute_clock_in')
+        self.mock_execute_clock_in = clock_in_patcher.start()
+        self.addCleanup(clock_in_patcher.stop)
+        clock_out_patcher = patch('apps.voice_commands.conversation_clock_in_face.execute_clock_out')
+        self.mock_execute_clock_out = clock_out_patcher.start()
+        self.addCleanup(clock_out_patcher.stop)
+
+        self.request = _fake_request()
+        self.store.set(42, INTENT_REQUEST_ATTENDANCE_CORRECTION, {'date': date(2026, 7, 20)})
+
+    def test_clock_in_answer_advances_punch_type_instead_of_clocking_in(self):
+        result = handle_transcript(self.request, 'clock in')
+
+        self.mock_execute_clock_in.assert_not_called()
+        self.mock_execute_clock_out.assert_not_called()
+        self.assertEqual(result['intent'], INTENT_REQUEST_ATTENDANCE_CORRECTION)
+        self.assertTrue(result['awaiting_input'])
+        self.assertIn('clock-in time', result['message'].lower())
+        pending = self.store.get(42)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending['slots']['punch_type'], 'IN')
+
+    def test_clock_out_answer_advances_punch_type_instead_of_clocking_out(self):
+        result = handle_transcript(self.request, 'clock out')
+
+        self.mock_execute_clock_in.assert_not_called()
+        self.mock_execute_clock_out.assert_not_called()
+        self.assertEqual(result['intent'], INTENT_REQUEST_ATTENDANCE_CORRECTION)
+        self.assertTrue(result['awaiting_input'])
+        self.assertIn('clock-out time', result['message'].lower())
+        pending = self.store.get(42)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending['slots']['punch_type'], 'OUT')
