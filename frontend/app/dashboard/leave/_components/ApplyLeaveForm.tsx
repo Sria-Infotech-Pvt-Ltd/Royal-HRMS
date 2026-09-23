@@ -8,49 +8,11 @@ import { useToast } from "@/components/ToastProvider";
 import { getLeaveYear } from "@/lib/fiscalYear";
 import {
   LeaveBalance, LeavePolicy, LeavePreview, LeaveRequest,
-  LeaveTypeKey, DurationKey,
   LEAVE_TYPES_LIST, LEAVE_TYPE_CONFIG,
   calcWorkingDays, fmtDate,
 } from "../_data";
-
-interface LeaveForm {
-  leave_type:          LeaveTypeKey;
-  duration:            DurationKey;
-  from_date:           string;
-  to_date:             string;
-  reason:              string;
-  contact_during_leave: string;
-  handover_to:         string;
-  handover_notes:      string;
-}
-
-const BLANK: LeaveForm = {
-  leave_type: "casual", duration: "full_day",
-  from_date: "", to_date: "", reason: "",
-  contact_during_leave: "", handover_to: "", handover_notes: "",
-};
-
-function Lbl({ text, required }: { text: string; required?: boolean }) {
-  return (
-    <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5 uppercase tracking-wide">
-      {text}{required && <span className="text-[var(--error)] ml-0.5 normal-case">*</span>}
-    </label>
-  );
-}
-
-function Err({ msg }: { msg?: string }) {
-  if (!msg) return null;
-  return (
-    <p className="text-xs text-[var(--error)] mt-1 flex items-center gap-1">
-      <i className="ti ti-alert-circle text-xs" /> {msg}
-    </p>
-  );
-}
-
-function dayName(iso: string): string {
-  if (!iso) return "";
-  return new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
-}
+import { type LeaveForm, BLANK, Lbl, Err, dayName } from "./applyLeaveFormHelpers";
+import LeaveSubmittedScreen from "./LeaveSubmittedScreen";
 
 export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
   const { showToast } = useToast();
@@ -154,30 +116,12 @@ export default function ApplyLeaveForm({ onCancel }: { onCancel: () => void }) {
 
   if (submitted) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
-        <div className="bg-[var(--surface)] rounded-3xl border border-[var(--outline-v)] shadow-lg p-10 text-center w-full max-w-md">
-          <div className="w-20 h-20 rounded-full bg-[var(--success-c)] flex items-center justify-center mx-auto mb-6">
-            <i className="ti ti-circle-check text-4xl text-[var(--success)]" />
-          </div>
-          <h2 className="text-xl font-bold text-[var(--on-bg)] mb-2">Request Submitted!</h2>
-          <p className="text-sm text-[var(--on-variant)] mb-1">
-            Your <strong className="text-[var(--primary)]">{ltConfig.label}</strong> request for{" "}
-            <strong className="text-[var(--primary)]">{submitted.total_days} day{submitted.total_days !== 1 ? "s" : ""}</strong> has been sent for approval.
-          </p>
-          <p className="text-xs text-[var(--on-variant)] mb-8">{fmtDate(submitted.start_date)} → {fmtDate(submitted.end_date)}</p>
-          <div className="flex gap-3 justify-center">
-            <button onClick={() => { setForm(BLANK); setDocFile(null); setSubmitted(null); }}
-              className="px-5 py-2.5 rounded-xl border border-[var(--outline-v)] text-sm font-medium text-[var(--on-variant)] hover:bg-[var(--bg-low)]">
-              Apply Another
-            </button>
-            <button onClick={onCancel}
-              className="px-6 py-2.5 rounded-xl text-sm font-semibold text-[var(--on-primary)]"
-              style={{ background: "var(--primary)" }}>
-              Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
+      <LeaveSubmittedScreen
+        submitted={submitted}
+        leaveType={form.leave_type}
+        onApplyAnother={() => { setForm(BLANK); setDocFile(null); setSubmitted(null); }}
+        onCancel={onCancel}
+      />
     );
   }
 
