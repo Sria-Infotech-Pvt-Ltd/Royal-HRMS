@@ -1,14 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { StatutoryConfig } from "@/types/payroll";
+import { Section, ToggleRow, MonthSelect, NumField } from "./statutoryFormFields";
+import PtSlabsEditor, { type PTSlab } from "./PtSlabsEditor";
+import NewStatutoryConfigModal from "./NewStatutoryConfigModal";
 
 // State model uses integer PK in the backend
 interface StateOption { id: number; name: string; code: string; is_active: boolean; }
-interface PTSlab { min: number; max: number | null; amount: number; }
 
 export default function StatutoryConfigTab() {
   const { data: configs, loading, refetch } = useFetch<StatutoryConfig[]>(API.payroll.statutory);
@@ -17,11 +19,6 @@ export default function StatutoryConfigTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
-  // A click's target is resolved at mouseup, not mousedown — selecting text
-  // inside a field and releasing past the modal's edge would otherwise land
-  // on the overlay and close it mid-input. Only close when the gesture both
-  // started AND ended on the backdrop itself.
-  const mouseDownOnOverlay = useRef(false);
   const [newStateId, setNewStateId] = useState("");
   const [draft, setDraft] = useState<Partial<StatutoryConfig>>({});
 
@@ -172,80 +169,7 @@ export default function StatutoryConfigTab() {
                 />
 
                 {current.pt_applicable && (
-                  <div className="mt-4">
-                    <div className="text-[11px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-2">PT Slabs</div>
-                    <div className="border border-[var(--outline-v)] rounded-lg overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-[var(--bg-mid)] border-b border-[var(--outline-v)]">
-                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">Min (₹)</th>
-                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">Max (₹)</th>
-                            <th className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--on-variant)] uppercase">PT Amount (₹/mo)</th>
-                            <th className="px-3 py-2 w-10" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[var(--outline-v)]">
-                          {currentSlabs.map((slab, i) => (
-                            <tr key={i}>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={slab.min}
-                                  onChange={e => updateSlab(i, "min", e.target.value)}
-                                  className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={slab.max ?? ""}
-                                  placeholder="No limit"
-                                  onChange={e => updateSlab(i, "max", e.target.value)}
-                                  className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={slab.amount}
-                                  onChange={e => updateSlab(i, "amount", e.target.value)}
-                                  className="w-full rounded border border-[var(--outline-v)] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  onClick={() => removeSlab(i)}
-                                  className="text-[var(--error)] hover:text-[var(--error)] transition-colors p-1 rounded"
-                                  title="Remove slab"
-                                >
-                                  <i className="ti ti-trash text-sm" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                          {currentSlabs.length === 0 && (
-                            <tr>
-                              <td colSpan={4} className="px-3 py-4 text-center text-[var(--outline)] text-xs">
-                                No PT slabs defined — add one below
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    <button
-                      onClick={addSlab}
-                      className="mt-2 flex items-center gap-1.5 text-[12px] text-[var(--info)] border border-[var(--info)] hover:bg-[var(--info-c)] px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      <i className="ti ti-plus text-xs" /> Add Slab
-                    </button>
-                    <div className="mt-2 text-[11px] text-[var(--outline)]">
-                      Leave Max blank on the last slab to apply it to all higher incomes.
-                    </div>
-                  </div>
+                  <PtSlabsEditor slabs={currentSlabs} onAdd={addSlab} onRemove={removeSlab} onUpdate={updateSlab} />
                 )}
               </Section>
 
@@ -355,109 +279,15 @@ export default function StatutoryConfigTab() {
 
       {/* New state modal */}
       {showNew && (
-        <div
-          className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-4"
-          onMouseDown={e => { mouseDownOnOverlay.current = e.target === e.currentTarget; }}
-          onClick={e => mouseDownOnOverlay.current && e.target === e.currentTarget && setShowNew(false)}
-        >
-          <div className="bg-[var(--surface)] rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--outline-v)]">
-              <div className="font-semibold text-[var(--on-bg)]">Add State Config</div>
-              <button onClick={() => setShowNew(false)} className="p-1.5 rounded-lg text-[var(--outline)] hover:bg-[var(--bg-mid)]"><i className="ti ti-x" /></button>
-            </div>
-            <div className="px-6 py-5">
-              <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1.5">State</label>
-              <select
-                value={newStateId}
-                onChange={e => setNewStateId(e.target.value)}
-                className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
-              >
-                <option value="">Select a state</option>
-                {availableStates.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-              </select>
-              <div className="flex items-center justify-end gap-2 mt-4">
-                <button onClick={() => setShowNew(false)} className="px-4 py-2 text-sm text-[var(--on-variant)] border border-[var(--outline-v)] rounded-lg hover:bg-[var(--bg-mid)]">Cancel</button>
-                <button
-                  onClick={createConfig}
-                  disabled={saving || !newStateId}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-[var(--info)] text-white rounded-lg hover:bg-[var(--info)] disabled:opacity-50"
-                >
-                  {saving ? "Creating…" : "Create Config"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <NewStatutoryConfigModal
+          availableStates={availableStates}
+          newStateId={newStateId}
+          setNewStateId={setNewStateId}
+          saving={saving}
+          onClose={() => setShowNew(false)}
+          onCreate={createConfig}
+        />
       )}
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="px-5 py-4">
-      <div className="text-[11px] font-bold text-[var(--on-variant)] uppercase tracking-wider mb-3">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[13px] font-medium text-[var(--on-bg)]">{label}</span>
-      <button
-        onClick={() => onChange(!value)}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? "bg-[var(--info)]" : "bg-[var(--bg-mid)]"}`}
-      >
-        <span className={`inline-block h-3.5 w-3.5 rounded-full bg-[var(--surface)] shadow transition-transform ${value ? "translate-x-4" : "translate-x-0.5"}`} />
-      </button>
-    </div>
-  );
-}
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-function MonthSelect({
-  label, value, onChange, disabledMonth,
-}: {
-  label: string;
-  value: number | undefined;
-  onChange: (month: number | undefined) => void;
-  disabledMonth?: number;
-}) {
-  return (
-    <div>
-      <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{label}</label>
-      <select
-        value={value ?? ""}
-        onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
-        className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)] field-select"
-      >
-        <option value="">Select month</option>
-        {MONTH_NAMES.map((name, i) => (
-          <option key={name} value={i + 1} disabled={disabledMonth === i + 1}>{name}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function NumField({ label, value, onChange, step }: { label: string; value: string; onChange: (v: string) => void; step?: string }) {
-  return (
-    <div>
-      <label className="block text-[12px] font-semibold text-[var(--on-bg)] mb-1">{label}</label>
-      <input
-        type="number"
-        step={step ?? "1"}
-        min={0}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full rounded-lg border border-[var(--outline-v)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--info)]"
-      />
     </div>
   );
 }
