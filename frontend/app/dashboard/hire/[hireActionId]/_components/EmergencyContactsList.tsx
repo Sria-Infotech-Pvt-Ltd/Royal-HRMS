@@ -1,5 +1,7 @@
 "use client";
 
+import PhoneInput from "@/components/PhoneInput";
+
 // Repeatable Emergency Contacts card list for Hire wizard Step 1 — matches
 // the reference layout (bordered card per contact, Primary checkbox, Remove
 // link, "+ Add emergency contact" dashed button) rather than the single
@@ -64,13 +66,13 @@ export default function EmergencyContactsList({ entries, onAdd, onFieldChange, o
               </div>
               <div className="f">
                 <label>Phone</label>
-                <input value={c.phone} onChange={e => onFieldChange(c.id, "phone", e.target.value)} placeholder="+91 90000 00000" className="finput" />
+                <PhoneInput value={c.phone} onChange={v => onFieldChange(c.id, "phone", v)} placeholder="90000 00000" inputClassName="finput" />
               </div>
             </div>
             <div className="g3">
               <div className="f">
                 <label>Alternate phone <span className="tag">OPTIONAL</span></label>
-                <input value={c.alternate_phone} onChange={e => onFieldChange(c.id, "alternate_phone", e.target.value)} placeholder="Optional" className="finput" />
+                <PhoneInput value={c.alternate_phone} onChange={v => onFieldChange(c.id, "alternate_phone", v)} placeholder="Optional" inputClassName="finput" />
               </div>
               <div className="f">
                 <label>Email <span className="tag">OPTIONAL</span></label>

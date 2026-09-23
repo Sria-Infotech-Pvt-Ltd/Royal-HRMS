@@ -46,6 +46,23 @@ export const ADDRESS_BUILTIN_KEYS = new Set([
   "permanent_same_as_current",
 ]);
 
+// Excluded from the shared DynamicStepFields render on step 1 (Personal
+// identity) — every one of these already has its own hardcoded field
+// earlier in this same step (Date of birth/Gender/Marital status/Blood
+// group/Father's name — the "Basic details" grid) or on a LATER step
+// (Aadhaar/Passport — Statutory & accounts, step 4). Without this
+// exclusion, the org's onboarding-step-0 field config (meant for the
+// self-service onboarding wizard, which asks these in one combined step)
+// gets merged in wholesale and every one of these questions is asked
+// twice — worse for Aadhaar/Passport, since that second copy writes into
+// `form` while the real Statutory & accounts step reads from its own
+// separate `statutoryDraft` state, so anything typed into the step-1 copy
+// is silently never used.
+export const IDENTITY_STATUTORY_BUILTIN_KEYS = new Set([
+  "date_of_birth", "gender", "marital_status", "blood_group", "father_name",
+  "aadhaar_number", "passport_number", "passport_expiry",
+]);
+
 export function emptyEmergencyContact(id: string, isPrimary: boolean): EmergencyContactEntry {
   return { id, name: "", relationship: "", phone: "", alternate_phone: "", email: "", address: "", is_primary: isPrimary };
 }

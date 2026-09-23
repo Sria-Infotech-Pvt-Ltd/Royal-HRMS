@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import PhoneInput from "@/components/PhoneInput";
 import type { ProfileForm } from "@/app/onboarding/_types";
 import type { OnboardingFieldConfigByStep, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import DynamicStepFields from "@/app/onboarding/_components/DynamicStepFields";
@@ -39,6 +40,7 @@ import {
   EMPTY_IDENTITY_EXTRAS,
   EMERGENCY_BUILTIN_KEYS,
   ADDRESS_BUILTIN_KEYS,
+  IDENTITY_STATUTORY_BUILTIN_KEYS,
   emptyEmergencyContact,
   type HireActionData,
   STEPS,
@@ -501,12 +503,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Mobile number <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 90000 00000" className="field-input" />
+                  <PhoneInput value={phone} onChange={setPhone} placeholder="90000 00000" />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
-                  <input value={identityExtras.alternate_mobile} onChange={e => setIdentityExtras(x => ({ ...x, alternate_mobile: e.target.value }))}
-                    placeholder="Optional" className="field-input" />
+                  <PhoneInput value={identityExtras.alternate_mobile}
+                    onChange={v => setIdentityExtras(x => ({ ...x, alternate_mobile: v }))}
+                    placeholder="Optional" />
                 </div>
               </div>
 
@@ -517,9 +520,20 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 onExtrasChange={(k, v) => setAddressExtras(x => ({ ...x, [k]: v }))}
               />
 
+              {/* Custom (is_custom) fields are excluded below — customValues/
+                  onCustomChange are permanent no-op stubs here (this wizard
+                  saves into HireAction.draft_data, which has no schema for
+                  arbitrary custom fields yet), so a custom field rendered
+                  here would silently discard whatever HR typed into it.
+                  Showing an input that never saves is worse than not
+                  showing it. */}
               <DynamicStepFields
                 configs={[...(fieldConfig["0"] ?? []), ...(fieldConfig["3"] ?? [])]
-                  .filter(c => c.visible && !EMERGENCY_BUILTIN_KEYS.has(c.field_key) && !ADDRESS_BUILTIN_KEYS.has(c.field_key))}
+                  .filter(c =>
+                    c.visible && !c.is_custom
+                    && !EMERGENCY_BUILTIN_KEYS.has(c.field_key)
+                    && !ADDRESS_BUILTIN_KEYS.has(c.field_key)
+                    && !IDENTITY_STATUTORY_BUILTIN_KEYS.has(c.field_key))}
                 form={form} customValues={{}}
                 onBuiltinChange={(k, v) => setForm(f => ({ ...f, [k]: v }))}
                 onCustomChange={() => {}}
