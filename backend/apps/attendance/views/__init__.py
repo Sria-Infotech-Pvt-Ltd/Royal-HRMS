@@ -35,23 +35,35 @@ from apps.attendance.views.my_attendance import (
     MyCorrectionsListView,
 )
 from apps.attendance.views.geofence_check import AttendanceGeofenceCheckView
-from apps.attendance.views.hr_attendance import (
+from apps.attendance.views.dashboard_list_detail import (
     HRAttendanceDashboardView,
     HRAttendanceListView,
     HRAttendanceDetailView,
+)
+from apps.attendance.views.manual_create_ot import (
+    HRAttendanceCreateView,
     HROvertimeListView,
     HROvertimeCreateView,
+)
+from apps.attendance.views.invalid_unpunches import (
     HRInvalidPunchesView,
     HRUnpunchesView,
+)
+from apps.attendance.views.attendance_import import (
     HRAttendanceImportView,
     HRAttendanceImportSampleView,
     HRAttendanceImportStatusView,
-    HRAttendanceExportView,
     HRAttendanceReprocessView,
+)
+from apps.attendance.views.corrections_export import (
     HRCorrectionListView,
     HRCorrectionReviewView,
+    HRAttendanceExportView,
+)
+from apps.attendance.views.employee_month import (
     HREmployeeMonthView,
-    HRAttendanceCreateView,
+)
+from apps.attendance.views.weekly_off import (
     WeeklyOffAssignmentListView,
     WeeklyOffAssignmentBulkView,
     WeeklyOffAssignmentHistoryView,

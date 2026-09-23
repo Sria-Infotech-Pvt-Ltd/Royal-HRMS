@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from apps.attendance.views.hr_attendance import HRAttendanceDashboardView
+from apps.attendance.views.dashboard_list_detail import HRAttendanceDashboardView
 from apps.hrms.models import REQ_L2_PENDING, REQ_PENDING
 from apps.hrms.views.leave_requests import LeaveApprovalView, LeaveRequestListCreateView
 from apps.voice_commands.approval_extractor import match_employee_name
