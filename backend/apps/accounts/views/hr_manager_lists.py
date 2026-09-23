@@ -222,6 +222,23 @@ class EmployeeReportingManagerView(APIView):
             if manager.id == employee.id:
                 return error('An employee cannot be their own reporting manager.')
 
+            # Walk the proposed manager's own chain upward — if it ever
+            # reaches `employee`, assigning this manager would create a
+            # reporting cycle (e.g. A -> B -> C -> A), which breaks anything
+            # that walks reporting_manager upward (approval routing, the org
+            # chart). Bounded by a generous depth rather than an unbounded
+            # loop, in case a cycle already exists further up somehow.
+            cursor = manager.reporting_manager
+            depth = 0
+            while cursor is not None and depth < 100:
+                if cursor.id == employee.id:
+                    return error(
+                        f'Cannot assign {manager.full_name} as reporting manager — this would '
+                        f'create a reporting cycle ({manager.full_name} reports up to {employee.full_name}).'
+                    )
+                cursor = cursor.reporting_manager
+                depth += 1
+
             employee.reporting_manager = manager
 
         employee.reporting_manager_from_org_chart = False
