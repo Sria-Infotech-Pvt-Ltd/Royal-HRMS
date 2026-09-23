@@ -4,6 +4,7 @@ from apps.tenants.views import (
     CompanyDetailView,
     CompanyListCreateView,
     CompanyRevealPasswordView,
+    CompanySystemAdminView,
     PlatformAdminAccountDetailView,
     PlatformAdminAccountListCreateView,
     PlatformAdminAuditLogListView,
@@ -33,6 +34,7 @@ urlpatterns = [
     path('companies/',                       CompanyListCreateView.as_view(),    name='platform-admin-company-list'),
     path('companies/<uuid:pk>/',             CompanyDetailView.as_view(),        name='platform-admin-company-detail'),
     path('companies/<uuid:pk>/reveal-password/', CompanyRevealPasswordView.as_view(), name='platform-admin-company-reveal-password'),
+    path('companies/<uuid:pk>/system-admin/',    CompanySystemAdminView.as_view(),    name='platform-admin-company-system-admin'),
 
     path('admins/',           PlatformAdminAccountListCreateView.as_view(), name='platform-admin-account-list'),
     path('admins/<uuid:pk>/', PlatformAdminAccountDetailView.as_view(),     name='platform-admin-account-detail'),

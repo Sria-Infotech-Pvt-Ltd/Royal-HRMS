@@ -366,6 +366,160 @@ class CompanyRevealPasswordView(APIView):
         return success('Password retrieved — this is the only time it will be shown.', data={'password': password})
 
 
+class CompanySystemAdminView(APIView):
+    """
+    GET/POST /platform-admin/companies/<pk>/system-admin/
+
+    The single official place a Platform Admin views/changes a company's
+    System Admin login email — deliberately not part of the tenant-side
+    Employee Profile page, since a provisioned System Admin has no
+    employee_id and never reliably appears in that company's own Employees
+    list (see EmployeeListCreateView.get()'s .exclude(employee_id='')).
+    This view never requires one.
+
+    Reuses the exact same validation/notification/never-touch-password
+    logic as apps.accounts.views.EmployeeChangeLoginEmailView (the
+    tenant-side sibling of this action) rather than a second
+    implementation — the only real difference is *how* the target company's
+    schema is reached: that view runs inside an already-tenant-scoped
+    request; this one is public-schema platform-admin code, so it must
+    explicitly enter the tenant schema via `with client:` (the same
+    established pattern apps.tenants.services._seed_company_data and
+    apps.accounts.views.ResetPasswordView._reset already use) before
+    touching apps.accounts.models.User/AuditLog/SMTPSettings at all.
+
+    The System Admin is resolved by capability (role carries settings.edit)
+    rather than by the literal name "system_admin" — same reasoning as
+    EmployeeChangeLoginEmailView and _branch_admin_role(). If a company
+    somehow has more than one such account, the earliest-created (lowest id)
+    is treated as "the" System Admin shown here — a company is provisioned
+    with exactly one, so this only matters if one was added since.
+    """
+    authentication_classes = [PlatformAdminAuthentication]
+    permission_classes     = [IsPlatformAdmin]
+
+    def _get_client(self, pk):
+        try:
+            return Client.objects.get(pk=pk)
+        except Client.DoesNotExist:
+            return None
+
+    def _resolve_system_admin(self):
+        """Must be called from inside a `with client:` block."""
+        from apps.accounts.models import User
+        return (
+            User.objects
+            .filter(role__role_permissions__permission__codename='settings.edit')
+            .order_by('id')
+            .first()
+        )
+
+    def get(self, request, pk):
+        client = self._get_client(pk)
+        if not client:
+            return error('Company not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        with client:
+            admin = self._resolve_system_admin()
+            if not admin:
+                return error('No System Admin account found for this company.', http_status=status.HTTP_404_NOT_FOUND)
+            return success('System Admin retrieved.', data={
+                'full_name': admin.full_name, 'email': admin.email,
+            })
+
+    def post(self, request, pk):
+        client = self._get_client(pk)
+        if not client:
+            return error('Company not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        new_email_raw = (request.data.get('new_email') or '').strip()
+        if not new_email_raw:
+            return error('new_email is required.', data={'new_email': 'This field is required.'})
+        from apps.accounts.views import EMAIL_RE
+        if not EMAIL_RE.match(new_email_raw):
+            return error('Enter a valid email address.', data={'new_email': 'Enter a valid email address.'})
+
+        with client:
+            from apps.accounts.models import AuditLog, User
+            from apps.accounts.utils import send_email_change_notifications
+
+            admin = self._resolve_system_admin()
+            if not admin:
+                return error('No System Admin account found for this company.', http_status=status.HTTP_404_NOT_FOUND)
+
+            new_email = User.objects.normalize_email(new_email_raw)
+            old_email = admin.email
+
+            if new_email.lower() == old_email.lower():
+                return error('That is already this account\'s login email.')
+            if User.objects.filter(email__iexact=new_email).exclude(pk=admin.pk).exists():
+                return error(
+                    'Another account already uses this email address.',
+                    data={'new_email': 'Already in use.'},
+                )
+
+            admin.email = new_email
+            admin.save(update_fields=['email', 'updated_at'])
+
+            # Tenant-side audit trail — same {from, to} shape
+            # EmployeeChangeLoginEmailView already writes, so this company's
+            # own admins see it too, not just the platform-admin log below.
+            # `user` is left null: the actor here is a PlatformAdmin, a
+            # public-schema model this FK (which points at the tenant User
+            # model) cannot reference.
+            AuditLog.objects.create(
+                user       = None,
+                action     = 'system_admin_email_changed',
+                module     = 'employees',
+                object_id  = str(admin.id),
+                changes    = {
+                    'employee_id': admin.employee_id, 'full_name': admin.full_name,
+                    'email': {'from': old_email, 'to': new_email},
+                    'changed_by_platform_admin': request.user.email,
+                },
+                branch     = admin.branch,
+                ip_address = get_client_ip(request),
+            )
+            logger.info(
+                'System Admin email changed for company %s (%s -> %s) by platform admin %s',
+                client.company_code, old_email, new_email, request.user.email,
+            )
+
+            new_sent, old_sent = send_email_change_notifications(admin, old_email)
+
+        # Back in the public schema — this is the platform-level audit trail
+        # (see _log_platform_action's docstring), separate from the
+        # tenant-side AuditLog row written above.
+        _log_platform_action(
+            request, 'company_system_admin_email_changed', target_company=client,
+            changes={'old_email': old_email, 'new_email': new_email, 'system_admin_name': admin.full_name},
+        )
+
+        if new_sent and old_sent:
+            message = f'System Admin email changed to {new_email}. Confirmation sent to both the new and previous address.'
+        elif new_sent:
+            message = (
+                f'System Admin email changed to {new_email}. Confirmation sent to the new address, but the '
+                f'security notice to the previous address ({old_email}) could not be sent.'
+            )
+        elif old_sent:
+            message = (
+                f'System Admin email changed to {new_email}, but the confirmation email to the new address could '
+                f'not be sent — share the new login email with them directly. (Security notice to the previous '
+                f'address was sent.)'
+            )
+        else:
+            message = (
+                f'System Admin email changed to {new_email}, but neither notification email could be sent — '
+                f'that company\'s SMTP settings may need attention. Share the new login email directly.'
+            )
+
+        return success(message, data={
+            'email': new_email, 'full_name': admin.full_name,
+            'new_email_sent': new_sent, 'old_email_sent': old_sent,
+        })
+
+
 class PlatformSMTPSettingsView(APIView):
     """
     The platform's own outbound-mail account (apps.tenants.models.

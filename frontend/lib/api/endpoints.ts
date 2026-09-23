@@ -21,6 +21,7 @@ export const API = {
       list: "/platform-admin/companies/",
       detail: (id: string) => `/platform-admin/companies/${id}/`,
       revealPassword: (id: string) => `/platform-admin/companies/${id}/reveal-password/`,
+      systemAdmin:    (id: string) => `/platform-admin/companies/${id}/system-admin/`,
     },
     admins: {
       list: "/platform-admin/admins/",
@@ -80,7 +81,6 @@ export const API = {
     documents: (id: string) => `/employees/${id}/documents/`,
     customFileFields: (id: string) => `/employees/${id}/custom-file-fields/`,
     resetPassword: (id: string) => `/employees/${id}/reset-password/`,
-    changeEmail:   (id: string) => `/employees/${id}/change-email/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",

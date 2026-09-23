@@ -20,13 +20,9 @@ interface Props {
    *  matches every other admin action already on this page. */
   canResetPassword?: boolean;
   onResetPassword?: () => void;
-  /** Gated on settings.edit AND this employee being a System Admin — see
-   *  EmployeeChangeLoginEmailView on the backend for why both are required. */
-  canChangeEmail?: boolean;
-  onChangeEmail?: () => void;
 }
 
-export default function ProfileHeader({ employee, canResetPassword, onResetPassword, canChangeEmail, onChangeEmail }: Props) {
+export default function ProfileHeader({ employee, canResetPassword, onResetPassword }: Props) {
   const router = useRouter();
   const user = useCurrentUser();
   const exp = experienceFrom(employee.dateOfJoining);
@@ -55,21 +51,6 @@ export default function ProfileHeader({ employee, canResetPassword, onResetPassw
         </div>
 
         <div className="flex items-center gap-2">
-          {canChangeEmail && onChangeEmail && (
-            <button
-              onClick={onChangeEmail}
-              suppressHydrationWarning
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
-              style={{
-                borderColor: "var(--outline-v)",
-                color: "var(--on-bg)",
-                background: "#fff",
-              }}
-            >
-              <i className="ti ti-mail-cog text-[14px]" />
-              Change Login Email
-            </button>
-          )}
           {canResetPassword && onResetPassword && (
             <button
               onClick={onResetPassword}

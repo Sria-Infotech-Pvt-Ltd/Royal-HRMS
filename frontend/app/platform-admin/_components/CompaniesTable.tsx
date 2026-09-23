@@ -26,6 +26,20 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
   const [revealError, setRevealError] = useState("");
   const [copied, setCopied] = useState(false);
 
+  // System Admin view/change-email — the single official place to do this
+  // (see backend CompanySystemAdminView); the previous Employee Profile
+  // page attempt was removed since a provisioned System Admin has no
+  // employee_id and never reliably shows up in that company's own
+  // Employees list.
+  const [sysAdminFor,     setSysAdminFor]     = useState<Company | null>(null);
+  const [sysAdminInfo,    setSysAdminInfo]    = useState<{ full_name: string; email: string } | null>(null);
+  const [sysAdminLoading, setSysAdminLoading] = useState(false);
+  const [sysAdminError,   setSysAdminError]   = useState("");
+  const [newAdminEmail,   setNewAdminEmail]   = useState("");
+  const [confirmingEmail, setConfirmingEmail] = useState(false);
+  const [changingEmail,   setChangingEmail]   = useState(false);
+  const [changeResult,    setChangeResult]    = useState<{ message: string; ok: boolean } | null>(null);
+
   const visibleCompanies = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return companies;
@@ -77,6 +91,76 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  const EMAIL_RE = /^[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
+  async function openSystemAdmin(company: Company) {
+    setSysAdminFor(company);
+    setSysAdminInfo(null);
+    setSysAdminError("");
+    setNewAdminEmail("");
+    setConfirmingEmail(false);
+    setChangeResult(null);
+    setSysAdminLoading(true);
+    try {
+      const { data } = await platformAdminApi.get<{ data: { full_name: string; email: string } }>(
+        API.platformAdmin.companies.systemAdmin(company.id),
+      );
+      setSysAdminInfo(data.data);
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Failed to load System Admin details.";
+      setSysAdminError(message);
+    } finally {
+      setSysAdminLoading(false);
+    }
+  }
+
+  function closeSystemAdmin() {
+    setSysAdminFor(null);
+  }
+
+  function continueToConfirm() {
+    setSysAdminError("");
+    const trimmed = newAdminEmail.trim();
+    if (!trimmed) { setSysAdminError("Enter the new System Admin email."); return; }
+    if (!EMAIL_RE.test(trimmed)) { setSysAdminError("Enter a valid email address."); return; }
+    if (sysAdminInfo && trimmed.toLowerCase() === sysAdminInfo.email.toLowerCase()) {
+      setSysAdminError("That is already the current System Admin email.");
+      return;
+    }
+    setConfirmingEmail(true);
+  }
+
+  async function confirmChangeSystemAdminEmail() {
+    if (!sysAdminFor) return;
+    setChangingEmail(true);
+    setSysAdminError("");
+    try {
+      const { data } = await platformAdminApi.post<{
+        message: string;
+        data?: { email: string; full_name: string; new_email_sent?: boolean; old_email_sent?: boolean };
+      }>(API.platformAdmin.companies.systemAdmin(sysAdminFor.id), { new_email: newAdminEmail.trim() });
+
+      setSysAdminInfo({
+        full_name: data.data?.full_name ?? sysAdminInfo?.full_name ?? "",
+        email:     data.data?.email ?? newAdminEmail.trim(),
+      });
+      setChangeResult({
+        message: data.message,
+        ok: !(data.data && (data.data.new_email_sent === false || data.data.old_email_sent === false)),
+      });
+      setConfirmingEmail(false);
+      setNewAdminEmail("");
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Failed to change System Admin email.";
+      setSysAdminError(message);
+      setConfirmingEmail(false);
+    } finally {
+      setChangingEmail(false);
+    }
   }
 
   return (
@@ -164,6 +248,16 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
                           {revealingId === c.id ? "…" : (<><i className="ti ti-key" /> View credentials</>)}
                         </button>
                       )}
+                      {c.provisioning_status === "active" && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => openSystemAdmin(c)}
+                          suppressHydrationWarning
+                        >
+                          <i className="ti ti-user-shield" /> System Admin
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={`btn btn-sm ${c.is_active ? "btn-ghost" : "btn-outline"}`}
@@ -213,6 +307,104 @@ export default function CompaniesTable({ companies, onChanged }: Props) {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {sysAdminFor && (
+        <Modal
+          title={confirmingEmail ? "Confirm Email Change?" : "System Admin"}
+          onClose={closeSystemAdmin}
+          closeDisabled={changingEmail}
+          maxWidth={440}
+          footer={
+            confirmingEmail ? (
+              <>
+                <button className="btn btn-ghost" onClick={() => setConfirmingEmail(false)} disabled={changingEmail} suppressHydrationWarning>
+                  Back
+                </button>
+                <button className="btn btn-filled" onClick={confirmChangeSystemAdminEmail} disabled={changingEmail} suppressHydrationWarning>
+                  {changingEmail ? "Changing…" : "Yes, Change Email"}
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-filled" onClick={closeSystemAdmin} suppressHydrationWarning>
+                Done
+              </button>
+            )
+          }
+        >
+          {sysAdminLoading ? (
+            <div style={{ textAlign: "center", padding: "24px 0", color: "var(--on-variant)" }}>
+              <i className="ti ti-loader-2 spin" /> Loading…
+            </div>
+          ) : (
+            <>
+              {sysAdminError && (
+                <div className="alert alert-warn mb-16">
+                  <i className="ti ti-alert-triangle" />
+                  <div>{sysAdminError}</div>
+                </div>
+              )}
+              {changeResult && (
+                <div className={`alert ${changeResult.ok ? "alert-success" : "alert-warn"} mb-16`}>
+                  <i className={`ti ${changeResult.ok ? "ti-check" : "ti-alert-triangle"}`} />
+                  <div>{changeResult.message}</div>
+                </div>
+              )}
+
+              {sysAdminInfo && !confirmingEmail && (
+                <>
+                  <div className="field-group mb-16">
+                    <span className="field-label">{sysAdminFor.company_name} — System Admin</span>
+                    <div style={{ padding: "10px 12px", background: "var(--bg-low)", borderRadius: 8, marginTop: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{sysAdminInfo.full_name}</div>
+                      <div style={{ fontSize: 13, color: "var(--on-variant)", marginTop: 2 }}>{sysAdminInfo.email}</div>
+                    </div>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Change Login Email</label>
+                    <input
+                      type="email"
+                      className="field-input"
+                      placeholder="new.email@company.com"
+                      value={newAdminEmail}
+                      onChange={e => { setNewAdminEmail(e.target.value); setSysAdminError(""); }}
+                      suppressHydrationWarning
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-filled btn-sm"
+                      style={{ marginTop: 8 }}
+                      onClick={continueToConfirm}
+                      suppressHydrationWarning
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {sysAdminInfo && confirmingEmail && (
+                <div style={{ fontSize: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: "var(--bg-low)", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: "var(--on-variant)" }}>Current Email</span>
+                    <span style={{ fontWeight: 600 }}>{sysAdminInfo.email}</span>
+                  </div>
+                  <div style={{ textAlign: "center", color: "var(--on-variant)", marginBottom: 8 }}>
+                    <i className="ti ti-arrow-down" />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: "rgba(234,179,8,0.1)", marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, color: "var(--on-variant)" }}>New Email</span>
+                    <span style={{ fontWeight: 600 }}>{newAdminEmail.trim()}</span>
+                  </div>
+                  <p style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
+                    The System Admin will need to log in with the new email going forward. A confirmation will be
+                    sent to the new address, and a security notice to the old one. Their password will not change.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </Modal>
       )}
     </div>
