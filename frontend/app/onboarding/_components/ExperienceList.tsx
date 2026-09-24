@@ -70,7 +70,9 @@ interface Props {
 const Req = () => <span style={{ color: "var(--error)", marginLeft: 2 }}>*</span>;
 
 export default function ExperienceList({
-  totalExperienceYears, entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
+  // No longer displayed (see hint text below instead) — kept in Props so
+  // existing callers passing it don't need a matching update.
+  totalExperienceYears: _totalExperienceYears, entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
   documents, uploading, onUploadDoc, onDeleteDoc,
 }: Props) {
   function isVisible(key: string): boolean {
@@ -84,14 +86,9 @@ export default function ExperienceList({
     <div>
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      <div className="field-group" style={{ maxWidth: 260, marginBottom: 8 }}>
-        <label className="field-label">Total Experience (Years)</label>
-        <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-          {totalExperienceYears ?? "—"}
-        </div>
-      </div>
+      <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Work Experience</div>
       <p style={{ color: "var(--on-variant)", fontSize: ".85rem", marginBottom: 20 }}>
-        Calculated automatically from the employment dates below. Fresher with no prior work experience? Leave this whole step blank and click Save &amp; Continue.
+        Leave empty for a fresher — total experience reads zero. Experience is counted up to the joining date.
       </p>
 
       {entries.length === 0 && (
