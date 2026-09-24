@@ -105,6 +105,61 @@ FAR_LAT = 17.529730
 FAR_LON = 78.618416
 
 
+class AttendanceCorrectionValidationTests(TestCase):
+    """Covers CorrectionWriteSerializer's business rules — no prior test
+    exercised the correction-submission endpoint at all."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        role = make_role('correction_employee_test')
+        self.employee = make_user('corrector@test.com', role=role, password='TestPass123!')
+        _login(self.client, 'corrector@test.com')
+
+    def _submit(self, **overrides):
+        import datetime
+        payload = {
+            'date': (datetime.date.today() - datetime.timedelta(days=1)).isoformat(),
+            'punch_type': 'BOTH',
+            'correct_in_time': '09:00:00',
+            'correct_out_time': '18:00:00',
+            'reason': 'forgot_to_punch',
+        }
+        payload.update(overrides)
+        return self.client.post(reverse('attendance-correction'), payload, format='json')
+
+    def test_valid_correction_succeeds(self):
+        resp = self._submit()
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    def test_future_date_rejected(self):
+        import datetime
+        resp = self._submit(date=(datetime.date.today() + datetime.timedelta(days=1)).isoformat())
+        self.assertEqual(resp.status_code, 422)
+
+    def test_in_time_required_when_punch_type_in(self):
+        resp = self._submit(punch_type='IN', correct_in_time=None)
+        self.assertEqual(resp.status_code, 422)
+
+    def test_out_time_required_when_punch_type_out(self):
+        resp = self._submit(punch_type='OUT', correct_out_time=None)
+        self.assertEqual(resp.status_code, 422)
+
+    def test_out_time_before_in_time_rejected(self):
+        resp = self._submit(correct_in_time='18:00:00', correct_out_time='09:00:00')
+        self.assertEqual(resp.status_code, 422)
+
+    def test_invalid_reason_choice_rejected(self):
+        resp = self._submit(reason='not_a_real_reason')
+        self.assertEqual(resp.status_code, 422)
+
+    def test_duplicate_pending_correction_for_same_date_rejected(self):
+        first = self._submit()
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self._submit()
+        self.assertEqual(second.status_code, 409)
+
+
 class PunchServiceTests(TestCase):
     def setUp(self):
         cache.clear()
