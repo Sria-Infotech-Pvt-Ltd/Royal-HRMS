@@ -78,6 +78,17 @@ export default function ForgotPasswordForm({
     } finally { setLoading(false); }
   }
 
+  async function resendOtp() {
+    setLoading(true); setError("");
+    try {
+      await clientApi.post(API.auth.forgotPassword, { email: emailVal.trim() });
+      setOtp("");
+    } catch (err) {
+      const { message } = err as { message: string };
+      setError(message || "Unable to resend OTP. Please try again.");
+    } finally { setLoading(false); }
+  }
+
   async function verifyOtp(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!otp.trim()) { setError("Please enter the OTP."); return; }
@@ -203,11 +214,21 @@ export default function ForgotPasswordForm({
             </button>
             <button
               type="button"
+              disabled={loading}
               style={{ display: "block", marginTop: "10px", fontSize: "13px", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
-              onClick={() => { setStep("email"); setError(""); setOtp(""); }}
+              onClick={resendOtp}
               suppressHydrationWarning
             >
               Resend code
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              style={{ display: "block", marginTop: "6px", fontSize: "13px", color: "var(--on-variant)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+              onClick={() => { setStep("email"); setError(""); setOtp(""); }}
+              suppressHydrationWarning
+            >
+              Change email address
             </button>
           </form>
         </>

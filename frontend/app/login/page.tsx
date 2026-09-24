@@ -45,6 +45,8 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!email.trim()) { setError("Please enter your email address."); return; }
+    if (!password) { setError("Please enter your password."); return; }
     setLoading(true);
     setError("");
     try {
