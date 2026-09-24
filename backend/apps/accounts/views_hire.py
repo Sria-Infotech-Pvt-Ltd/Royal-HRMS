@@ -7,6 +7,7 @@ in draft_data — see HireAction's own docstring for why); Stage 2
 (HireActionCompleteView.post) is what actually creates the User, mirroring
 the sequence EmployeeListCreateView.post already runs today.
 """
+import hashlib
 import logging
 from datetime import datetime
 
@@ -303,8 +304,29 @@ class HireActionDocumentListCreateView(APIView):
         if not type_config:
             return error('Invalid document type.', http_status=status.HTTP_400_BAD_REQUEST)
 
+        # Not real content verification (nothing here confirms a "PAN card"
+        # upload is actually a PAN card — that needs a real OCR/ID-
+        # verification service this app doesn't have) — just catches the
+        # careless mistake of uploading the same file twice under two
+        # different document types (e.g. the PAN photo re-used for Aadhaar).
+        content_hash = hashlib.sha256(file_obj.read()).hexdigest()
+        file_obj.seek(0)
+        dup = HireActionDocument.objects.filter(
+            hire_action=action, content_hash=content_hash,
+        ).exclude(document_type=doc_type).first()
+        if dup:
+            dup_label = _get_document_type_config(dup.document_type)
+            dup_label = dup_label.label if dup_label else dup.document_type
+            return error(
+                f'This file is already uploaded as "{dup_label}". '
+                f'Upload the correct document for {type_config.label} instead.',
+            )
+
         with transaction.atomic():
-            doc = serializer.save(hire_action=action, file_name=file_obj.name[:255], file_size=file_obj.size)
+            doc = serializer.save(
+                hire_action=action, file_name=file_obj.name[:255], file_size=file_obj.size,
+                content_hash=content_hash,
+            )
             if not type_config.allow_multiple:
                 HireActionDocument.objects.filter(
                     hire_action=action, document_type=doc_type,

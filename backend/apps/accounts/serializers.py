@@ -1828,6 +1828,11 @@ class HireActionDocumentSerializer(serializers.ModelSerializer):
             return None
         return request.build_absolute_uri(f'/api/hire-actions/{obj.hire_action_id}/documents/{obj.pk}/')
 
+    # A genuine ID-card photo or scan is never this small — catches a blank
+    # page, a 1x1 placeholder image, or a truncated upload that technically
+    # passes the format check above but clearly isn't a real document.
+    MIN_FILE_SIZE = 2 * 1024
+
     def validate_file(self, value):
         import os
         if not getattr(value, 'name', None):
@@ -1842,6 +1847,10 @@ class HireActionDocumentSerializer(serializers.ModelSerializer):
         if value.size > EmployeeDocument.MAX_FILE_SIZE:
             raise serializers.ValidationError(
                 f'File size {value.size / (1024 * 1024):.1f} MB exceeds the 5 MB limit.'
+            )
+        if value.size < self.MIN_FILE_SIZE:
+            raise serializers.ValidationError(
+                'This file is too small to be a real document scan or photo. Please check the file and try again.'
             )
         value.name = os.path.basename(value.name).strip()
         return value

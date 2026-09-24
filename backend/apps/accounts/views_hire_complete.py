@@ -62,6 +62,7 @@ _PROFILE_FIELDS = (
     'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
     'account_number', 'ifsc_code', 'bank_name', 'account_holder_name',
     'pan_number', 'aadhaar_number', 'uan_number', 'passport_number', 'passport_expiry',
+    'passport_issue_date', 'passport_place_of_issue', 'passport_country_of_issue',
 )
 
 

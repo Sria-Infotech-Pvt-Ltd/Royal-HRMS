@@ -306,6 +306,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (statutory.account_number.trim().length < 6) return "Enter a valid account number.";
         if (!statutory.ifsc_code.trim()) return "IFSC code is required.";
         if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
+        if (statutory.passport_issue_date && statutory.passport_expiry && statutory.passport_expiry <= statutory.passport_issue_date) {
+          return "Passport expiry must be after the issue date.";
+        }
         return null;
       }
       default:

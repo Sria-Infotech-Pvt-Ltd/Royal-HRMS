@@ -753,6 +753,14 @@ class HireActionDocument(models.Model):
     file          = models.FileField(upload_to=_hire_action_doc_path, storage=AuthenticatedImageKitStorage(), max_length=255)
     file_name     = models.CharField(max_length=255)
     file_size     = models.PositiveBigIntegerField()
+    # SHA-256 of the file's bytes — lets the upload view catch the same file
+    # being uploaded twice under two different document types (e.g. the PAN
+    # photo accidentally re-used for Aadhaar) without re-reading every other
+    # file from storage on each new upload. Not a substitute for real content
+    # verification (nothing here confirms a "PAN card" upload is actually a
+    # PAN card) — just the one cheap, honest check available without a real
+    # OCR/ID-verification service.
+    content_hash  = models.CharField(max_length=64, blank=True, db_index=True)
     uploaded_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1823,6 +1831,9 @@ class EmployeeProfile(models.Model):
     international_worker_country  = models.CharField(max_length=100, blank=True)
     passport_number    = EncryptedCharField(max_length=255, blank=True)
     passport_expiry    = models.DateField(null=True, blank=True)
+    passport_issue_date       = models.DateField(null=True, blank=True)
+    passport_place_of_issue   = models.CharField(max_length=100, blank=True)
+    passport_country_of_issue = models.CharField(max_length=100, blank=True)
 
     # Emergency Contact
     emergency_name         = models.CharField(max_length=150, blank=True)

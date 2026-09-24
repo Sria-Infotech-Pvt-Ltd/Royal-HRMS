@@ -2,15 +2,18 @@
 
 import DocUploadButton from "./DocUploadButton";
 import type { HireDocument } from "./DocumentsChecklistStep";
+import CountrySelect from "@/components/CountrySelect";
 
 export interface StatutoryDraft {
   pan_number: string; aadhaar_number: string; passport_number: string; passport_expiry: string;
+  passport_issue_date: string; passport_place_of_issue: string; passport_country_of_issue: string;
   uan_number: string; esi_number: string; pf_covered: string; esi_covered: string;
   account_number: string; ifsc_code: string; bank_name: string; account_holder_name: string;
 }
 
 export const EMPTY_STATUTORY: StatutoryDraft = {
   pan_number: "", aadhaar_number: "", passport_number: "", passport_expiry: "",
+  passport_issue_date: "", passport_place_of_issue: "", passport_country_of_issue: "",
   uan_number: "", esi_number: "", pf_covered: "true", esi_covered: "false",
   account_number: "", ifsc_code: "", bank_name: "", account_holder_name: "",
 };
@@ -73,10 +76,30 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         <div className="f">
           <label>Passport <span className="tag">OPTIONAL</span></label>
           <input value={value.passport_number} onChange={e => set("passport_number", e.target.value)} placeholder="Optional" className="finput" />
+          <div style={{ marginTop: 6 }}>
+            <DocUploadButton documentType="passport_photo" label="passport" existing={docFor("passport_photo")}
+              uploading={uploading === "passport_photo"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
+          </div>
+        </div>
+        <div className="f">
+          <label>Passport issue date <span className="tag">OPTIONAL</span></label>
+          <input type="date" value={value.passport_issue_date} onChange={e => set("passport_issue_date", e.target.value)} disabled={!value.passport_number} className="finput" />
         </div>
         <div className="f">
           <label>Passport expiry <span className="tag">OPTIONAL</span></label>
           <input type="date" value={value.passport_expiry} onChange={e => set("passport_expiry", e.target.value)} disabled={!value.passport_number} className="finput" />
+          {value.passport_issue_date && value.passport_expiry && value.passport_expiry <= value.passport_issue_date && (
+            <div className="hint" style={{ color: "var(--error)" }}>Expiry must be after the issue date.</div>
+          )}
+        </div>
+        <div className="f">
+          <label>Place of issue <span className="tag">OPTIONAL</span></label>
+          <input value={value.passport_place_of_issue} onChange={e => set("passport_place_of_issue", e.target.value)} placeholder="e.g. Hyderabad" disabled={!value.passport_number} className="finput" />
+        </div>
+        <div className="f">
+          <label>Country of issue <span className="tag">OPTIONAL</span></label>
+          <CountrySelect value={value.passport_country_of_issue} onChange={v => set("passport_country_of_issue", v)}
+            mode="name" placeholder="Select country" />
         </div>
       </div>
 
