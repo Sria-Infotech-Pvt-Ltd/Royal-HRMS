@@ -36,10 +36,15 @@ export default function CountrySelect({ value, onChange, mode, placeholder, inpu
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
 
-  const options = useMemo(
-    () => COUNTRIES.map(c => (mode === "demonym" ? c.demonym : c.name)),
-    [mode],
-  );
+  // A few countries genuinely share the same English demonym (e.g. both
+  // "Congo" states are "Congolese"; Dominica and the Dominican Republic are
+  // both "Dominican") — deduped here so the dropdown never shows the same
+  // label twice. Nationality is stored as plain text either way, so picking
+  // the single "Congolese" entry behaves exactly as it always has.
+  const options = useMemo(() => {
+    const raw = COUNTRIES.map(c => (mode === "demonym" ? c.demonym : c.name));
+    return Array.from(new Set(raw));
+  }, [mode]);
   const filtered = options.filter(o => o.toLowerCase().includes(search.trim().toLowerCase()));
   const isKnownValue = value === "" || options.includes(value);
 
