@@ -300,6 +300,7 @@ class HireActionDocumentListCreateView(APIView):
             return error(first_error(serializer.errors), data=serializer.errors)
         file_obj = serializer.validated_data['file']
         doc_type = serializer.validated_data['document_type']
+        entry_ref = serializer.validated_data.get('entry_ref', '') or ''
         type_config = _get_document_type_config(doc_type)
         if not type_config:
             return error('Invalid document type.', http_status=status.HTTP_400_BAD_REQUEST)
@@ -325,11 +326,18 @@ class HireActionDocumentListCreateView(APIView):
         with transaction.atomic():
             doc = serializer.save(
                 hire_action=action, file_name=file_obj.name[:255], file_size=file_obj.size,
-                content_hash=content_hash,
+                content_hash=content_hash, entry_ref=entry_ref,
             )
-            if not type_config.allow_multiple:
+            if entry_ref:
+                # Per-entry attachment (e.g. one certificate per education
+                # entry) — a re-upload replaces just that entry's file, never
+                # touches another entry's file of the same document_type.
                 HireActionDocument.objects.filter(
-                    hire_action=action, document_type=doc_type,
+                    hire_action=action, document_type=doc_type, entry_ref=entry_ref,
+                ).exclude(pk=doc.pk).delete()
+            elif not type_config.allow_multiple:
+                HireActionDocument.objects.filter(
+                    hire_action=action, document_type=doc_type, entry_ref='',
                 ).exclude(pk=doc.pk).delete()
 
         logger.info('Hire action document %s uploaded for %s by %s', doc_type, action.id, request.user.email)

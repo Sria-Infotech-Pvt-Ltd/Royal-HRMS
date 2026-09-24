@@ -1,6 +1,7 @@
 "use client";
 
 import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConfig";
+import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 
 // ── Step: Experience ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of previous employers (unlike
@@ -58,12 +59,19 @@ interface Props {
   onFieldChange: (id: string, field: keyof ExperienceEntry, value: FieldValue) => void;
   onRemove: (id: string) => void;
   error: string | null;
+  // Optional — only the Hire wizard passes these today; every other caller
+  // of this shared component keeps working exactly as before.
+  documents?: HireDocument[];
+  uploading?: string | null;
+  onUploadDoc?: (documentType: string, file: File, entryRef?: string) => void;
+  onDeleteDoc?: (doc: HireDocument) => void;
 }
 
 const Req = () => <span style={{ color: "var(--error)", marginLeft: 2 }}>*</span>;
 
 export default function ExperienceList({
   totalExperienceYears, entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
+  documents, uploading, onUploadDoc, onDeleteDoc,
 }: Props) {
   function isVisible(key: string): boolean {
     return fieldConfig.find(c => c.field_key === key)?.visible ?? true;
@@ -126,7 +134,7 @@ export default function ExperienceList({
               )}
               {isVisible("end_date") && (
                 <div className="field-group">
-                  <label className="field-label">End Date{isRequired("end_date") && !entry.is_current && <Req />}</label>
+                  <label className="field-label">Last working day{isRequired("end_date") && !entry.is_current && <Req />}</label>
                   <input
                     className="field-input" type="date"
                     value={entry.end_date}
@@ -134,6 +142,7 @@ export default function ExperienceList({
                     onChange={e => onFieldChange(entry.id, "end_date", e.target.value)}
                     style={entry.is_current ? { background: "var(--bg-low)", color: "var(--on-variant)" } : undefined}
                   />
+                  <div className="hint">Actual, or expected if serving notice.</div>
                 </div>
               )}
             </div>
@@ -160,7 +169,18 @@ export default function ExperienceList({
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {onUploadDoc && (
+                <DocUploadButton
+                  documentType="experience_letter"
+                  label="experience letter"
+                  entryRef={entry.id}
+                  existing={documents?.find(d => d.document_type === "experience_letter" && d.entry_ref === entry.id)}
+                  uploading={uploading === `experience_letter:${entry.id}`}
+                  onUpload={onUploadDoc}
+                  onDelete={onDeleteDoc}
+                />
+              )}
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)}>
                 <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
               </button>

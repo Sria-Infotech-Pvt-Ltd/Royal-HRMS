@@ -1812,11 +1812,11 @@ class HireActionDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model  = HireActionDocument
         fields = [
-            'id', 'document_type', 'document_type_display',
+            'id', 'document_type', 'document_type_display', 'entry_ref',
             'file', 'file_url', 'file_name', 'file_size', 'uploaded_at',
         ]
         read_only_fields = ('id', 'document_type_display', 'file_url', 'file_name', 'file_size', 'uploaded_at')
-        extra_kwargs = {'file': {'write_only': True}}
+        extra_kwargs = {'file': {'write_only': True}, 'entry_ref': {'required': False, 'allow_blank': True}}
 
     def get_document_type_display(self, obj):
         from core.cache_service import DocumentTypeConfigCacheService

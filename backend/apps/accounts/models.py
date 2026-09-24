@@ -750,6 +750,15 @@ class HireActionDocument(models.Model):
     id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hire_action   = models.ForeignKey(HireAction, on_delete=models.CASCADE, related_name='documents')
     document_type = models.CharField(max_length=64)
+    # The client-generated (`temp-...`) id of the specific education/
+    # experience entry this file belongs to — blank for every other document
+    # type, which stay one-slot-per-type (PAN, Aadhaar, Passport, etc). Lets
+    # "Attach certificate"/"Attach experience letter" keep one file per
+    # qualification/employer instead of one shared slot for the whole step,
+    # even though those entries themselves are only real rows (EducationRecord/
+    # WorkExperienceRecord) from Stage 2 onward — this field is what makes a
+    # per-entry attachment possible before that point.
+    entry_ref     = models.CharField(max_length=64, blank=True)
     file          = models.FileField(upload_to=_hire_action_doc_path, storage=AuthenticatedImageKitStorage(), max_length=255)
     file_name     = models.CharField(max_length=255)
     file_size     = models.PositiveBigIntegerField()
@@ -1834,6 +1843,12 @@ class EmployeeProfile(models.Model):
     passport_issue_date       = models.DateField(null=True, blank=True)
     passport_place_of_issue   = models.CharField(max_length=100, blank=True)
     passport_country_of_issue = models.CharField(max_length=100, blank=True)
+    # Free text, not a structured skills-tag list — this is a hire-time
+    # summary ("React, payroll operations, team leadership"), not a
+    # searchable skills matrix; building a real tag/taxonomy system is a
+    # separate feature, not something to half-build here.
+    core_skills    = models.CharField(max_length=500, blank=True)
+    certifications = models.CharField(max_length=500, blank=True)
 
     # Emergency Contact
     emergency_name         = models.CharField(max_length=150, blank=True)

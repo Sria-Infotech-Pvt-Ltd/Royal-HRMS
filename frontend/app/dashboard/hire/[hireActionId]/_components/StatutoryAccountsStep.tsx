@@ -1,7 +1,6 @@
 "use client";
 
-import DocUploadButton from "./DocUploadButton";
-import type { HireDocument } from "./DocumentsChecklistStep";
+import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import CountrySelect from "@/components/CountrySelect";
 
 export interface StatutoryDraft {

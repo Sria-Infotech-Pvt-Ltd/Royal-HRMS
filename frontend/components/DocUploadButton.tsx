@@ -1,28 +1,43 @@
 "use client";
 
 import { useRef } from "react";
-import type { HireDocument } from "./DocumentsChecklistStep";
+
+export interface HireDocument {
+  id: string;
+  document_type: string;
+  document_type_display: string;
+  entry_ref: string;
+  file_name: string;
+  file_size: number;
+  uploaded_at: string;
+}
 
 interface Props {
   documentType: string;
   label: string;
   existing?: HireDocument;
   uploading: boolean;
-  onUpload: (documentType: string, file: File) => void;
+  onUpload: (documentType: string, file: File, entryRef?: string) => void;
   onDelete?: (doc: HireDocument) => void;
+  /** The specific education/experience entry this file belongs to — set
+   * for per-entry attachments (a certificate per qualification, a letter
+   * per employer), left unset for the one-slot-per-type documents
+   * (PAN, Aadhaar, Passport, etc). */
+  entryRef?: string;
 }
 
-/** Small inline "Upload"/"Uploaded" control reused by the Statutory step
- * (PAN/Aadhaar) and the Documents step (every item) — both talk to the same
- * hire-action document endpoint, so a file uploaded from either place shows
- * up as already-uploaded in the other, with no separate state to keep in
- * sync. */
-export default function DocUploadButton({ documentType, label, existing, uploading, onUpload, onDelete }: Props) {
+/** Small inline "Upload"/"Uploaded" control shared by the Hire wizard's
+ * Statutory step (PAN/Aadhaar/Passport), its Documents step (every item),
+ * and Education & Experience (one certificate per entry) — all talk to the
+ * same hire-action document endpoint, so a file uploaded from any of these
+ * places shows up as already-uploaded everywhere else, with no separate
+ * state to keep in sync. */
+export default function DocUploadButton({ documentType, label, existing, uploading, onUpload, onDelete, entryRef }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) onUpload(documentType, file);
+    if (file) onUpload(documentType, file, entryRef);
     e.target.value = "";
   }
 

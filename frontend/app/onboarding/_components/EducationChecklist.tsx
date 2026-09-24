@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConfig";
+import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 
 // ── Step: Education ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of qualifications (two Bachelor's
@@ -71,6 +72,7 @@ export interface EducationEntry {
   percentage: string;
   start_date: string;
   end_date: string;
+  is_highest?: boolean;
 }
 
 interface Props {
@@ -86,11 +88,25 @@ interface Props {
   onFieldChange: (id: string, field: keyof EducationEntry, value: string) => void;
   onRemove: (id: string) => void;
   error: string | null;
+  // "Highest" is mutually exclusive across entries (only one qualification
+  // can be the highest), so it needs its own callback rather than routing
+  // through onFieldChange, which only ever touches the one entry it's
+  // called on. Both these and the certificate-upload props are optional —
+  // only the Hire wizard passes them today; every other caller of this
+  // shared component keeps working exactly as before.
+  onSetHighest?: (id: string) => void;
+  documents?: HireDocument[];
+  uploading?: string | null;
+  onUploadDoc?: (documentType: string, file: File, entryRef?: string) => void;
+  onDeleteDoc?: (doc: HireDocument) => void;
 }
 
 const Req = () => <span style={{ color: "var(--error)", marginLeft: 2 }}>*</span>;
 
-export default function EducationChecklist({ entries, fieldConfig, onAdd, onFieldChange, onRemove, error }: Props) {
+export default function EducationChecklist({
+  entries, fieldConfig, onAdd, onFieldChange, onRemove, error,
+  onSetHighest, documents, uploading, onUploadDoc, onDeleteDoc,
+}: Props) {
   // Local-only UI state: which entries currently have "Other" picked in
   // the Specialization dropdown (so the free-text box under it stays open
   // even while that text box is empty) — not part of EducationEntry itself
@@ -136,6 +152,14 @@ export default function EducationChecklist({ entries, fieldConfig, onAdd, onFiel
         const key = entry.id;
         return (
           <div key={key} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
+            {onSetHighest && (
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+                <label className="module-check" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                  <input type="checkbox" checked={!!entry.is_highest} onChange={() => onSetHighest(entry.id)} />
+                  <span>Highest</span>
+                </label>
+              </div>
+            )}
             <div className="form-row cols-2">
               <div className="field-group">
                 <label className="field-label">Education Level</label>
@@ -212,7 +236,18 @@ export default function EducationChecklist({ entries, fieldConfig, onAdd, onFiel
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+              {onUploadDoc && (
+                <DocUploadButton
+                  documentType="degree_certificate"
+                  label="certificate"
+                  entryRef={entry.id}
+                  existing={documents?.find(d => d.document_type === "degree_certificate" && d.entry_ref === entry.id)}
+                  uploading={uploading === `degree_certificate:${entry.id}`}
+                  onUpload={onUploadDoc}
+                  onDelete={onDeleteDoc}
+                />
+              )}
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)}>
                 <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
               </button>

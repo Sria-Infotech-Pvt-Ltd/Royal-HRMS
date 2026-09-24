@@ -6,16 +6,9 @@
 // uploaded here or from the Statutory step's own inline upload show up in
 // both places, since both read/write the same underlying document list.
 
-import DocUploadButton from "./DocUploadButton";
+import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 
-export interface HireDocument {
-  id: string;
-  document_type: string;
-  document_type_display: string;
-  file_name: string;
-  file_size: number;
-  uploaded_at: string;
-}
+export type { HireDocument };
 
 interface DocItem { key: string; label: string; required: boolean; category: string }
 
@@ -48,9 +41,16 @@ interface Props {
   onVerificationChange: (v: VerificationDraft) => void;
 }
 
+// These two are attached per qualification/employer on the Education &
+// Experience step (one certificate per entry, not one shared slot) — shown
+// here as a rollup count instead of a single upload button, since there's
+// no one "the" file to attach at this flat, step-level list.
+const PER_ENTRY_TYPES = new Set(["degree_certificate", "experience_letter"]);
+
 export default function DocumentsChecklistStep({ documents, uploading, error, onUpload, onDelete, verification, onVerificationChange }: Props) {
   const categories = Array.from(new Set(DOC_ITEMS.map(d => d.category)));
   const docFor = (key: string) => documents.find(d => d.document_type === key);
+  const countFor = (key: string) => documents.filter(d => d.document_type === key).length;
 
   return (
     <div className="mstep on">
@@ -72,14 +72,22 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
                     {d.required ? "Required" : "Optional"}
                   </span>
                 </div>
-                <DocUploadButton
-                  documentType={d.key}
-                  label={d.label}
-                  existing={docFor(d.key)}
-                  uploading={uploading === d.key}
-                  onUpload={onUpload}
-                  onDelete={onDelete}
-                />
+                {PER_ENTRY_TYPES.has(d.key) ? (
+                  <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                    {countFor(d.key) > 0
+                      ? <span className="badge badge-success"><i className="ti ti-circle-check" /> {countFor(d.key)} attached</span>
+                      : "Attach from Education & experience"}
+                  </span>
+                ) : (
+                  <DocUploadButton
+                    documentType={d.key}
+                    label={d.label}
+                    existing={docFor(d.key)}
+                    uploading={uploading === d.key}
+                    onUpload={onUpload}
+                    onDelete={onDelete}
+                  />
+                )}
               </div>
             ))}
           </div>

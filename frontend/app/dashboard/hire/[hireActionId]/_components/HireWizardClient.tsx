@@ -80,23 +80,29 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [educationEntries, setEducationEntries] = useState<EducationEntry[]>([]);
   const [experienceEntries, setExperienceEntries] = useState<ExperienceEntry[]>([]);
   const [assetEntries, setAssetEntries] = useState<AssetEntry[]>([]);
+  const [coreSkills, setCoreSkills] = useState("");
+  const [certifications, setCertifications] = useState("");
   const [documents, setDocuments] = useState<HireDocument[]>([]);
   const [docUploading, setDocUploading] = useState<string | null>(null);
   const [docError, setDocError] = useState("");
   const [verification, setVerification] = useState<VerificationDraft>(EMPTY_VERIFICATION);
 
-  async function uploadDocument(documentType: string, file: File) {
-    setDocUploading(documentType);
+  async function uploadDocument(documentType: string, file: File, entryRef?: string) {
+    setDocUploading(entryRef ? `${documentType}:${entryRef}` : documentType);
     setDocError("");
     try {
       const formData = new FormData();
       formData.append("document_type", documentType);
+      if (entryRef) formData.append("entry_ref", entryRef);
       formData.append("file", file, file.name);
       const res = await clientApi.post<{ data: HireDocument }>(
         API.hireActions.documents(hireActionId), formData,
       );
       const saved = res.data.data;
-      setDocuments(prev => [...prev.filter(d => d.document_type !== documentType), saved]);
+      setDocuments(prev => [
+        ...prev.filter(d => !(d.document_type === documentType && (d.entry_ref || "") === (entryRef || ""))),
+        saved,
+      ]);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setDocError(msg ?? "Failed to upload document.");
@@ -169,6 +175,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setEducationEntries((d.education_entries as EducationEntry[]) ?? []);
       setExperienceEntries((d.experience_entries as ExperienceEntry[]) ?? []);
       setAssetEntries((d.asset_entries as AssetEntry[]) ?? []);
+      setCoreSkills(String(d.core_skills ?? ""));
+      setCertifications(String(d.certifications ?? ""));
       setVerification(v => ({ ...v, ...(d as Partial<VerificationDraft>) }));
     }).finally(() => setLoading(false));
   }, [hireActionId]);
@@ -340,6 +348,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         family_entries: familyEntries, nominee_entries: nomineeEntries,
         education_entries: educationEntries, experience_entries: experienceEntries,
         asset_entries: assetEntries,
+        core_skills: coreSkills, certifications,
         ...verification,
       });
       setHighestSaved(h => Math.max(h, tab));
@@ -689,9 +698,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             <div className="mstep on">
               <EducationChecklist
                 entries={educationEntries} fieldConfig={eduExpFieldConfig.education}
-                onAdd={() => setEducationEntries(p => [...p, { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "" }])}
+                onAdd={() => setEducationEntries(p => [...p, { id: nextTempId(), level: "", custom_level_label: "", institution: "", specialization: "", percentage: "", start_date: "", end_date: "", is_highest: false }])}
                 onFieldChange={(id, field, value) => setEducationEntries(p => p.map(e => e.id === id ? { ...e, [field]: value } : e))}
                 onRemove={id => setEducationEntries(p => p.filter(e => e.id !== id))}
+                onSetHighest={id => setEducationEntries(p => p.map(e => ({ ...e, is_highest: e.id === id })))}
+                documents={documents} uploading={docUploading} onUploadDoc={uploadDocument} onDeleteDoc={deleteDocument}
                 error={null}
               />
               <ExperienceList
@@ -699,8 +710,23 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 onAdd={() => setExperienceEntries(p => [...p, { id: nextTempId(), employer_name: "", designation: "", employment_type: "full_time", start_date: "", end_date: "", is_current: false, responsibilities: "", reason_for_leaving: "" }])}
                 onFieldChange={(id, field, value) => setExperienceEntries(p => p.map(e => e.id === id ? { ...e, [field]: value } : e))}
                 onRemove={id => setExperienceEntries(p => p.filter(e => e.id !== id))}
+                documents={documents} uploading={docUploading} onUploadDoc={uploadDocument} onDeleteDoc={deleteDocument}
                 error={null}
               />
+
+              <div className="divider" />
+              <div className="sechead">SKILLS &amp; CERTIFICATIONS</div>
+              <div className="g3">
+                <div className="f">
+                  <label>Core skills <span className="tag">OPTIONAL</span></label>
+                  <input value={coreSkills} onChange={e => setCoreSkills(e.target.value)} placeholder="e.g. React, payroll operations, team leadership" className="finput" />
+                  <div className="hint">Use comma-separated skills; keep this relevant to the role.</div>
+                </div>
+                <div className="f">
+                  <label>Certifications <span className="tag">OPTIONAL</span></label>
+                  <input value={certifications} onChange={e => setCertifications(e.target.value)} placeholder="Certification and year" className="finput" />
+                </div>
+              </div>
             </div>
           )}
 
