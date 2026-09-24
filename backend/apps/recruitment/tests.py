@@ -188,3 +188,100 @@ class HRDecisionAssessmentAssignmentTests(TestCase):
             {'decision': 'approve'}, format='json',
         )
         self.assertEqual(retry.status_code, 200, retry.data)
+
+
+class CandidateCreateValidationTests(TestCase):
+    """Covers CandidateCreateSerializer's field validation and the
+    interview-slot conflict check — neither had any prior test coverage."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        role = make_role('recruiter_test', permission_codenames=['recruitment.create', 'settings.edit'])
+        self.user = make_user('recruiter@test.com', role=role, password='TestPass123!')
+        _login(self.client, 'recruiter@test.com')
+
+        from apps.branch.models import Branch, City, State
+        state, _ = State.objects.get_or_create(name='Telangana')
+        city, _ = City.objects.get_or_create(name='Hyderabad', state=state)
+        self.branch, _ = Branch.objects.get_or_create(
+            branch_code='RCT', defaults={'branch_name': 'Recruitment Test Branch', 'city': city, 'state': state},
+        )
+        self.interviewer = make_user('interviewer@test.com', role=make_role('interviewer_test'), password='TestPass123!')
+
+    def _create(self, **overrides):
+        import datetime
+        payload = {
+            'name': 'Priya Sharma', 'email': 'priya.sharma@test.com',
+            'phone': '+919876543210', 'position_applied': 'Backend Engineer',
+            'branch': self.branch.id,
+        }
+        payload.update(overrides)
+        return self.client.post(reverse('candidate-list-create'), payload, format='json')
+
+    def test_valid_candidate_created(self):
+        resp = self._create()
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    def test_name_with_digits_rejected(self):
+        resp = self._create(name='Priya123')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_name_with_symbols_rejected(self):
+        resp = self._create(name='Priya@Sharma')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_duplicate_email_rejected(self):
+        first = self._create()
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self._create(name='Another Person')
+        self.assertEqual(second.status_code, 400)
+        self.assertIn('already exists', second.data['message'])
+
+    def test_malformed_phone_rejected(self):
+        resp = self._create(phone='98-76-CALL-ME')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_phone_too_short_rejected(self):
+        resp = self._create(phone='12345')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_position_with_digits_rejected(self):
+        resp = self._create(position_applied='Engineer2')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_past_interview_date_rejected(self):
+        import datetime
+        resp = self._create(interview_date=(datetime.date.today() - datetime.timedelta(days=1)).isoformat())
+        self.assertEqual(resp.status_code, 400)
+
+    def test_notes_over_2000_chars_rejected(self):
+        resp = self._create(notes='x' * 2001)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_double_booked_interviewer_rejected(self):
+        import datetime
+        interview_date = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+        first = self._create(
+            interview_date=interview_date, interview_time='10:00:00', interviewer=self.interviewer.id,
+        )
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self._create(
+            name='Second Candidate', email='second@test.com',
+            interview_date=interview_date, interview_time='10:00:00', interviewer=self.interviewer.id,
+        )
+        self.assertEqual(second.status_code, 400)
+        self.assertIn('already interviewing', second.data['message'])
+
+    def test_same_interviewer_different_time_is_allowed(self):
+        import datetime
+        interview_date = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+        first = self._create(
+            interview_date=interview_date, interview_time='10:00:00', interviewer=self.interviewer.id,
+        )
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self._create(
+            name='Second Candidate', email='second@test.com',
+            interview_date=interview_date, interview_time='11:00:00', interviewer=self.interviewer.id,
+        )
+        self.assertEqual(second.status_code, 201, second.data)
