@@ -6,7 +6,7 @@ import clientApi from "@/lib/clientApi";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import {
-  NAME_RE, POSITION_RE, PHONE_RE,
+  NAME_RE, POSITION_RE, PHONE_RE, EMAIL_RE,
   sanitizeName, sanitizePosition, sanitizePhone, todayDateString,
 } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
@@ -82,6 +82,10 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
     }
     if (!NAME_RE.test(name)) {
       setError("Full name can only contain letters, spaces, apostrophes, hyphens, and periods — no numbers or special characters.");
+      return;
+    }
+    if (!EMAIL_RE.test(form.email.trim())) {
+      setError("Enter a valid email address.");
       return;
     }
     if (!POSITION_RE.test(positionApplied)) {

@@ -21,7 +21,7 @@ interface CandidateTableProps {
   onEdit: (candidate: Candidate) => void;
   onStatusChanged: (updated: Candidate) => void;
   onMarkRequest: (candidate: Candidate, targetStatus: "selected" | "rejected") => void;
-  onSendPortalLogin: (candidateId: number) => void;
+  onSendPortalLogin: (candidate: Candidate) => void;
 }
 
 export default function CandidateTable({
@@ -130,7 +130,7 @@ export default function CandidateTable({
                         <button
                           className="btn btn-filled btn-sm"
                           style={{ fontSize: ".78rem" }}
-                          onClick={() => onSendPortalLogin(c.id)}
+                          onClick={() => onSendPortalLogin(c)}
                           disabled={sendingPortal === c.id}
                           suppressHydrationWarning
                         >

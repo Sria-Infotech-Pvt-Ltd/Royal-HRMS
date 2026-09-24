@@ -20,6 +20,7 @@ import { LogsModal }                  from "./LogsModal";
 import { EditCandidateModal }         from "./EditCandidateModal";
 import { CandidateBulkImportModal }   from "./CandidateBulkImportModal";
 import CandidateTable from "./CandidateTable";
+import ConfirmModal from "@/components/ConfirmModal";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export default function InterviewListPage() {
   const [portalMsg,     setPortalMsg]     = useState<string | null>(null);
   const [portalErr,     setPortalErr]     = useState<string | null>(null);
   const [editTarget,    setEditTarget]    = useState<Candidate | null>(null);
+  const [portalConfirm, setPortalConfirm] = useState<Candidate | null>(null);
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialFetchDone = useRef(false);
@@ -152,7 +154,10 @@ export default function InterviewListPage() {
     fetchAll(search, statusFilter, branchFilter, page);
   }
 
-  async function handleSendPortalLogin(candidateId: number) {
+  async function confirmSendPortalLogin() {
+    if (!portalConfirm) return;
+    const candidateId = portalConfirm.id;
+    setPortalConfirm(null);
     setSendingPortal(candidateId);
     setPortalMsg(null);
     setPortalErr(null);
@@ -307,8 +312,19 @@ export default function InterviewListPage() {
         onEdit={setEditTarget}
         onStatusChanged={onStatusChanged}
         onMarkRequest={(cand, status) => setMarkData({ candidate: cand, targetStatus: status })}
-        onSendPortalLogin={handleSendPortalLogin}
+        onSendPortalLogin={setPortalConfirm}
       />
+
+      {portalConfirm && (
+        <ConfirmModal
+          title="Send portal login?"
+          body={`This emails ${portalConfirm.name} (${portalConfirm.email}) their onboarding portal login credentials.`}
+          confirmLabel="Send Login"
+          saving={sendingPortal === portalConfirm.id}
+          onConfirm={confirmSendPortalLogin}
+          onCancel={() => setPortalConfirm(null)}
+        />
+      )}
 
       {/* Modals */}
       {showAdd && <AddCandidateModal onClose={() => setShowAdd(false)} onSaved={onCandidateAdded} />}

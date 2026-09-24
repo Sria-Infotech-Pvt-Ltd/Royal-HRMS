@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import ConfirmModal from "@/components/ConfirmModal";
 import AppraisalGoalCard, { AppraisalGoalFormValue } from "./AppraisalGoalCard";
 import AppraisalStageTracker from "./AppraisalStageTracker";
 import AppraisalActivityHistory, { AppraisalActivityEntry } from "./AppraisalActivityHistory";
@@ -84,6 +85,7 @@ export default function AppraisalsTab() {
   const [acknowledging, setAcknowledging] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   useEffect(() => {
     if (!review) return;
@@ -138,6 +140,7 @@ export default function AppraisalsTab() {
   }
 
   async function handleSubmit(): Promise<void> {
+    setShowSubmitConfirm(false);
     setErr(null); setMsg(null); setSubmitting(true);
     try {
       await handleSave();
@@ -250,7 +253,7 @@ export default function AppraisalsTab() {
                   <button className="btn btn-ghost" onClick={handleSave} disabled={saving || submitting}>
                     {saving ? "Saving…" : "Save draft"}
                   </button>
-                  <button className="btn btn-filled" onClick={handleSubmit} disabled={saving || submitting}>
+                  <button className="btn btn-filled" onClick={() => setShowSubmitConfirm(true)} disabled={saving || submitting}>
                     {submitting ? "Submitting…" : "Submit self-review"}
                   </button>
                 </div>
@@ -258,6 +261,18 @@ export default function AppraisalsTab() {
             </div>
           </div>
         </div>
+
+        {showSubmitConfirm && (
+          <ConfirmModal
+            title="Submit self-review?"
+            body="Once submitted, your self-review answers and ratings are locked and can no longer be edited. Your manager will be notified to complete their review."
+            confirmLabel="Submit Self-Review"
+            danger
+            saving={submitting}
+            onConfirm={handleSubmit}
+            onCancel={() => setShowSubmitConfirm(false)}
+          />
+        )}
 
         <div style={{ minWidth: 0 }}>
           <AppraisalStageTracker

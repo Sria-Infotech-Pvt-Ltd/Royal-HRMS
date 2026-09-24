@@ -12,6 +12,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export interface GrowthGoal {
   id: string;
@@ -28,7 +29,7 @@ const STATUS_BADGE: Record<string, string> = { on_track: "badge-success", at_ris
 interface RowProps {
   goal: GrowthGoal;
   onStatusChange: (id: string, status: string) => void;
-  onRemove: (id: string) => void;
+  onRemove: (goal: GrowthGoal) => void;
 }
 
 function GoalRow({ goal, onStatusChange, onRemove }: RowProps) {
@@ -51,7 +52,7 @@ function GoalRow({ goal, onStatusChange, onRemove }: RowProps) {
         >
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(goal.id)} title="Remove goal">
+        <button className="btn btn-ghost btn-sm" onClick={() => onRemove(goal)} title="Remove goal">
           <i className="ti ti-trash" />
         </button>
       </div>
@@ -73,6 +74,13 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
   const [dueDate, setDueDate] = useState("");
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState<string | null>(null);
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<GrowthGoal | null>(null);
+  const [removeSaving, setRemoveSaving] = useState(false);
+
+  function extractError(err: unknown, fallback: string): string {
+    return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
+  }
 
   async function handleAdd(): Promise<void> {
     setAddErr(null);
@@ -82,21 +90,35 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
       setTitle(""); setTargetMetric(""); setDueDate("");
       refetch();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setAddErr(msg ?? "Failed to add goal. Is there an active review cycle?");
+      setAddErr(extractError(err, "Failed to add goal. Is there an active review cycle?"));
     } finally {
       setAdding(false);
     }
   }
 
   async function updateStatus(id: string, status: string): Promise<void> {
-    await clientApi.patch(API.performance.myGoalDetail(id), { status });
-    refetch();
+    setRowErr(null);
+    try {
+      await clientApi.patch(API.performance.myGoalDetail(id), { status });
+      refetch();
+    } catch (err: unknown) {
+      setRowErr(extractError(err, "Failed to update goal status."));
+    }
   }
 
-  async function remove(id: string): Promise<void> {
-    await clientApi.delete(API.performance.myGoalDetail(id));
-    refetch();
+  async function confirmRemove(): Promise<void> {
+    if (!removing) return;
+    setRemoveSaving(true);
+    setRowErr(null);
+    try {
+      await clientApi.delete(API.performance.myGoalDetail(removing.id));
+      setRemoving(null);
+      refetch();
+    } catch (err: unknown) {
+      setRowErr(extractError(err, "Failed to remove goal."));
+    } finally {
+      setRemoveSaving(false);
+    }
   }
 
   return (
@@ -112,6 +134,7 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
 
       <div style={{ padding: "8px 20px 4px" }}>
         {error && <div className="alert alert-error mb-16">{error}</div>}
+        {rowErr && <div className="alert alert-error mb-16">{rowErr}</div>}
         {loading ? (
           <div className="empty-state"><i className="ti ti-loader-2 spin" /><h3>Loading…</h3></div>
         ) : goals.length === 0 ? (
@@ -122,10 +145,22 @@ export default function GrowthGoalsCard({ cycleName, goals, loading, error, refe
           </div>
         ) : (
           goals.map(g => (
-            <GoalRow key={g.id} goal={g} onStatusChange={updateStatus} onRemove={remove} />
+            <GoalRow key={g.id} goal={g} onStatusChange={updateStatus} onRemove={setRemoving} />
           ))
         )}
       </div>
+
+      {removing && (
+        <ConfirmModal
+          title="Remove this goal?"
+          body={`This permanently removes "${removing.title}" from ${cycleName ?? "the active cycle"}.`}
+          confirmLabel="Remove Goal"
+          danger
+          saving={removeSaving}
+          onConfirm={confirmRemove}
+          onCancel={() => setRemoving(null)}
+        />
+      )}
 
       <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--outline-v)", marginTop: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--on-variant)", marginBottom: 10 }}>ADD A GOAL</div>

@@ -6,6 +6,7 @@
 export const NAME_RE     = /^[A-Za-z][A-Za-z .'-]*$/;
 export const POSITION_RE = /^[A-Za-z][A-Za-z .&/-]*$/;
 export const PHONE_RE    = /^\+?[0-9]{10,15}$/;
+export const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function sanitizeName(value: string): string {
   return value.replace(/[^A-Za-z .'-]/g, "");
