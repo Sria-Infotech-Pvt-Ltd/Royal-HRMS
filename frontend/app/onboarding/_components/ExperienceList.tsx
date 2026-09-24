@@ -104,6 +104,12 @@ export default function ExperienceList({
         const key = entry.id;
         return (
           <div key={key} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Experience</span>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)} style={{ color: "var(--error)" }}>
+                Remove
+              </button>
+            </div>
             <div className="form-row cols-2">
               <div className="field-group">
                 <label className="field-label">Employer</label>
@@ -169,8 +175,8 @@ export default function ExperienceList({
               </div>
             )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {onUploadDoc && (
+            {onUploadDoc && (
+              <div>
                 <DocUploadButton
                   documentType="experience_letter"
                   label="experience letter"
@@ -180,11 +186,8 @@ export default function ExperienceList({
                   onUpload={onUploadDoc}
                   onDelete={onDeleteDoc}
                 />
-              )}
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)}>
-                <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         );
       })}

@@ -152,14 +152,20 @@ export default function EducationChecklist({
         const key = entry.id;
         return (
           <div key={key} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
-            {onSetHighest && (
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-                <label className="module-check" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
-                  <input type="checkbox" checked={!!entry.is_highest} onChange={() => onSetHighest(entry.id)} />
-                  <span>Highest</span>
-                </label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--on-variant)" }}>Qualification</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {onSetHighest && (
+                  <label className="module-check" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                    <input type="checkbox" checked={!!entry.is_highest} onChange={() => onSetHighest(entry.id)} />
+                    <span>Highest</span>
+                  </label>
+                )}
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)} style={{ color: "var(--error)" }}>
+                  Remove
+                </button>
               </div>
-            )}
+            </div>
             <div className="form-row cols-2">
               <div className="field-group">
                 <label className="field-label">Education Level</label>
@@ -236,8 +242,8 @@ export default function EducationChecklist({
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-              {onUploadDoc && (
+            {onUploadDoc && (
+              <div style={{ marginTop: 4 }}>
                 <DocUploadButton
                   documentType="degree_certificate"
                   label="certificate"
@@ -247,11 +253,8 @@ export default function EducationChecklist({
                   onUpload={onUploadDoc}
                   onDelete={onDeleteDoc}
                 />
-              )}
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => onRemove(entry.id)}>
-                <i className="ti ti-trash" style={{ fontSize: 13 }} /> Remove
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         );
       })}
