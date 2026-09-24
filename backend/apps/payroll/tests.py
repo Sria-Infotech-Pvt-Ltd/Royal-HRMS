@@ -188,3 +188,145 @@ class UpdatePayslipReimbBonusDecimalTests(TestCase):
     def test_invalid_reimbursements_returns_clean_validation_error_not_500(self):
         resp = self.client.patch(self._url(), {'reimbursements': 'not-a-number'}, format='json')
         self.assertEqual(resp.status_code, 400)
+
+    def test_negative_reimbursements_rejected(self):
+        resp = self.client.patch(self._url(), {'reimbursements': -100}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.payslip.refresh_from_db()
+        self.assertEqual(self.payslip.reimbursements, Decimal('0.00'))
+
+    def test_negative_bonus_rejected(self):
+        resp = self.client.patch(self._url(), {'bonus': -1}, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_negative_lop_days_rejected(self):
+        resp = self.client.patch(self._url(), {'lop_days': -1}, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_lop_days_exceeding_total_working_days_rejected(self):
+        resp = self.client.patch(self._url(), {'lop_days': 27}, format='json')  # total_working_days=26
+        self.assertEqual(resp.status_code, 400)
+
+    def test_lop_days_equal_to_total_working_days_allowed(self):
+        resp = self.client.patch(self._url(), {'lop_days': 26}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+
+class PayrollConfigValidationTests(TestCase):
+    """Regression tests for the negative/out-of-range validation added to
+    BranchPayrollConfig, StatutoryConfig, and SalaryComponent this session —
+    previously these accepted any number with zero server-side sanity
+    checking."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        role = make_role('payroll_admin_test', permission_codenames=['payroll.view', 'payroll.create', 'payroll.edit'])
+        self.user = make_user('payrolladmin@test.com', role=role, password='TestPass123!')
+        _login(self.client, 'payrolladmin@test.com')
+
+        state, _ = State.objects.get_or_create(name='Telangana')
+        city, _ = City.objects.get_or_create(name='Hyderabad', state=state)
+        self.branch, _ = Branch.objects.get_or_create(
+            branch_code='KND', defaults={'branch_name': 'Kondapur Office', 'city': city, 'state': state},
+        )
+
+        from apps.payroll.models import SalaryStructure
+        self.structure = SalaryStructure.objects.create(name='Standard Structure')
+
+    # --- BranchPayrollConfig ---
+
+    def test_branch_config_rejects_pf_employee_rate_over_100(self):
+        resp = self.client.post(reverse('branch-config-list'), {
+            'branch': str(self.branch.id), 'pf_employee_rate': '150.00',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_branch_config_rejects_negative_pf_wage_ceiling(self):
+        resp = self.client.post(reverse('branch-config-list'), {
+            'branch': str(self.branch.id), 'pf_wage_ceiling': '-1',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_branch_config_accepts_valid_rates(self):
+        resp = self.client.post(reverse('branch-config-list'), {
+            'branch': str(self.branch.id), 'pf_employee_rate': '12.00', 'pf_employer_rate': '12.00',
+        }, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    # --- StatutoryConfig ---
+
+    def test_statutory_config_rejects_negative_esi_wage_ceiling(self):
+        resp = self.client.post(reverse('statutory-list'), {
+            'state': str(self.branch.state_id), 'esi_wage_ceiling': '-500',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_statutory_config_rejects_esi_employee_rate_over_100(self):
+        resp = self.client.post(reverse('statutory-list'), {
+            'state': str(self.branch.state_id), 'esi_employee_rate': '250',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_statutory_config_rejects_malformed_pt_slabs(self):
+        resp = self.client.post(reverse('statutory-list'), {
+            'state': str(self.branch.state_id),
+            'pt_slabs': [{'min': 20000, 'max': 10000, 'amount': 200}],  # max < min
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_statutory_config_accepts_valid_pt_slabs(self):
+        resp = self.client.post(reverse('statutory-list'), {
+            'state': str(self.branch.state_id),
+            'pt_slabs': [
+                {'min': 0, 'max': 15000, 'amount': 0},
+                {'min': 15001, 'max': None, 'amount': 200},
+            ],
+        }, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    # --- SalaryComponent ---
+
+    def test_salary_component_rejects_negative_value(self):
+        resp = self.client.post(reverse('salary-component-list', args=[self.structure.id]), {
+            'name': 'Special Allowance', 'component_type': 'earning',
+            'calculation_type': 'fixed', 'value': '-500',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_salary_component_rejects_percentage_over_100(self):
+        resp = self.client.post(reverse('salary-component-list', args=[self.structure.id]), {
+            'name': 'HRA', 'component_type': 'allowance',
+            'calculation_type': 'percentage_of_basic', 'value': '150',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_salary_component_allows_fixed_value_over_100(self):
+        # A fixed-amount component's value is a rupee amount, not a
+        # percentage — the >100 cap only applies to the two percentage
+        # calculation types.
+        resp = self.client.post(reverse('salary-component-list', args=[self.structure.id]), {
+            'name': 'Special Allowance', 'component_type': 'earning',
+            'calculation_type': 'fixed', 'value': '15000',
+        }, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    # --- EmployeeSalaryConfig ---
+
+    def test_employee_salary_config_rejects_zero_ctc(self):
+        employee_role = make_role('employee_salary_test')
+        employee = make_user('salaryemp@test.com', role=employee_role, password='TestPass123!')
+        resp = self.client.post(reverse('employee-salary-list'), {
+            'employee': str(employee.id), 'annual_ctc': '0',
+            'effective_from': '2026-01-01', 'reason': 'other', 'reason_note': 'test',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_employee_salary_config_rejects_negative_ctc(self):
+        employee_role = make_role('employee_salary_test2')
+        employee = make_user('salaryemp2@test.com', role=employee_role, password='TestPass123!')
+        resp = self.client.post(reverse('employee-salary-list'), {
+            'employee': str(employee.id), 'annual_ctc': '-100000',
+            'effective_from': '2026-01-01', 'reason': 'other', 'reason_note': 'test',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
