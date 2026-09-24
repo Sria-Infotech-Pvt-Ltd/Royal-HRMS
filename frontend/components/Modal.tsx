@@ -84,8 +84,12 @@ export default function Modal({
         <div
           className="modal-body"
           style={{
-            ...bodyStyle,
             ...(scrollBody ? { flex: 1, overflowY: "auto" } : undefined),
+            // bodyStyle last so a caller can deliberately override scrollBody's
+            // own overflow/flex defaults (e.g. a multi-pane layout that wants
+            // to scroll its own inner panes independently instead of the
+            // whole body scrolling as one block).
+            ...bodyStyle,
           }}
         >
           {children}

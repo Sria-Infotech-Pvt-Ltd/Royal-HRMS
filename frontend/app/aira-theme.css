@@ -227,8 +227,15 @@ em.hl{font-style:italic;color:var(--brand-ink);font-weight:700}
 .headsup{margin-top:auto;background:var(--brand-tint);border-radius:12px;padding:12px 13px;font-size:11.5px;line-height:1.5;color:var(--ink-2)}
 .headsup b{display:block;font-size:12px;color:var(--brand-ink);margin-bottom:3px}
 
-.wiz-main{display:flex;flex-direction:column;min-width:0}
-.stephead{padding:20px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.wiz-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.stephead{padding:20px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex:none}
+/* Holds the step content only (not stephead) — scrolls on its own within
+ * .wiz-main's bounded height, same as .wiz-nav scrolls on its own. Without
+ * this, step content and the step list shared one single scroll container
+ * (whichever ancestor had overflow-y:auto), so scrolling through a long
+ * step also dragged the step list along with it instead of leaving it in
+ * place. */
+.wiz-body{flex:1;min-height:0;overflow-y:auto;padding:16px 24px 24px}
 .stephead h3{font-size:22px;font-weight:800}
 .stephead p{margin:5px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
 .stepcount{font-size:11px;font-weight:700;color:var(--faint);flex:none}

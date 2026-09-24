@@ -361,6 +361,12 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       size="lg"
       maxWidth={1100}
       scrollBody
+      // The sidebar (step list) and the step content each scroll
+      // independently within this bounded modal — see .wiz/.wiz-nav/.wiz-body
+      // in aira-theme.css. Without this override, scrollBody's default
+      // makes modal-body itself the one shared scroll container, dragging
+      // the step list along with the content instead of leaving it in place.
+      bodyStyle={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
       footer={tab < 8 ? (
         <div className="flex items-center gap-4 w-full">
           <div className="flex-1">
@@ -379,18 +385,20 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         <button onClick={onClose} className="btn btn-ghost">Close</button>
       )}
     >
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+      <div className="wiz">
         <HireWizardSidebar steps={STEPS} currentStep={tab} highestSaved={highestSaved}
           onStepClick={setTab} missingByStep={missingByStep} />
 
-        <div className="wiz-main" style={{ flex: 1, minWidth: 0 }}>
-          <div className="stephead" style={{ padding: 0, marginBottom: 12 }}>
+        <div className="wiz-main">
+          <div className="stephead" style={{ padding: "20px 24px 0" }}>
             <div>
               <h3>{STEPS[tab].label.split(" ").slice(0, -1).join(" ")} <em className="hl">{STEPS[tab].label.split(" ").slice(-1)}</em></h3>
               <p>{STEPS[tab].sub}</p>
             </div>
             <div className="stepcount">{String(tab + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</div>
           </div>
+
+        <div className="wiz-body">
           {stepErr && (
             <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg border border-[var(--error-c)] mb-4"
               style={{ background: "var(--error-c)", color: "var(--error)" }}>
@@ -693,6 +701,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             />
           )}
 
+        </div>
         </div>
       </div>
     </Modal>
