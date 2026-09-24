@@ -107,7 +107,7 @@ export const STEPS: HireStepDef[] = [
   { label: "Statutory & accounts", sub: "PAN, PF, ESI, bank", required: 5, tag: { label: "Sensitive", tone: "sensitive" } },
   { label: "Family & nomination", sub: "Dependants and nominees", group: "Records & compliance", tag: { label: "EPFO", tone: "info" } },
   { label: "Education & experience", sub: "Qualifications, past employers" },
-  { label: "Documents", sub: "Joining paperwork" },
+  { label: "Documents", sub: "Joining paperwork", required: 5 },
   { label: "Assets", sub: "Laptop, phone, access card", tag: { label: "New", tone: "new" } },
   { label: "Review", sub: "Confirm and hire" },
 ];

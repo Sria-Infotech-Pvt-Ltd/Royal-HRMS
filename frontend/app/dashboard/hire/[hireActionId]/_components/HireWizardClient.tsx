@@ -34,7 +34,7 @@ import HireWizardSidebar from "./HireWizardSidebar";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "./EmploymentStep";
 import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "./BasicPayStep";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./StatutoryAccountsStep";
-import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
+import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, REQUIRED_DOC_LABELS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
 import {
   EMPTY_FORM,
@@ -316,6 +316,14 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (!IFSC_RE.test(statutory.ifsc_code.trim())) return "Enter a valid IFSC code (format: HDFC0001234).";
         if (statutory.passport_issue_date && statutory.passport_expiry && statutory.passport_expiry <= statutory.passport_issue_date) {
           return "Passport expiry must be after the issue date.";
+        }
+        return null;
+      }
+      case 6: {
+        const uploadedTypes = new Set(documents.map(d => d.document_type));
+        const missing = REQUIRED_DOC_KEYS.filter(k => !uploadedTypes.has(k));
+        if (missing.length > 0) {
+          return `Upload the required documents before continuing: ${missing.map(k => REQUIRED_DOC_LABELS[k] ?? k).join(", ")}.`;
         }
         return null;
       }

@@ -112,8 +112,9 @@ export default function PhoneInput({ value, onChange, placeholder, className, in
       </button>
       <input
         value={national}
-        onChange={e => commit(country, e.target.value)}
+        onChange={e => commit(country, e.target.value.replace(/\D/g, ""))}
         placeholder={placeholder}
+        inputMode="numeric"
         className={inputClassName}
         style={{ flex: 1, minWidth: 0 }}
       />

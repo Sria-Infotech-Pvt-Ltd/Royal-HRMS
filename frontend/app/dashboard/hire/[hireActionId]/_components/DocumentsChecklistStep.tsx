@@ -25,6 +25,7 @@ const DOC_ITEMS: DocItem[] = [
 ];
 
 export const REQUIRED_DOC_KEYS = DOC_ITEMS.filter(d => d.required).map(d => d.key);
+export const REQUIRED_DOC_LABELS: Record<string, string> = Object.fromEntries(DOC_ITEMS.map(d => [d.key, d.label]));
 
 export interface VerificationDraft {
   verification_status: string; verification_completed_on: string; verification_provider: string;
