@@ -253,6 +253,20 @@ class RoleDetailView(APIView):
         if not role:
             return error('Role not found.', http_status=status.HTTP_404_NOT_FOUND)
 
+        # Deactivating strips every user currently assigned this role of its
+        # permissions immediately — same real-world effect as deleting it for
+        # anyone still assigned, so a system role (provisioned at setup, e.g.
+        # system_admin) gets the same protection DELETE already has. A
+        # non-system role can still be deactivated; the frontend warns with
+        # the exact active-user count first (role.active_user_count, already
+        # annotated/serialized) rather than blocking it outright, since
+        # deactivation — unlike delete — is reversible.
+        if 'is_active' in request.data and not request.data['is_active'] and role.is_system_role:
+            return error(
+                f'Role "{role.display_name}" is a system role and cannot be deactivated.',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = RoleSerializer(role, data=request.data, partial=True)
         if not serializer.is_valid():
             return error(first_error(serializer.errors), data=serializer.errors)

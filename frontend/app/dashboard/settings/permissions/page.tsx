@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { usePermission } from "@/hooks/usePermission";
+import ConfirmModal from "@/components/ConfirmModal";
 import AddRoleModal  from "./_components/AddRoleModal";
 import EditRoleModal from "./_components/EditRoleModal";
 import {
@@ -24,6 +25,7 @@ export default function RolesPermissionsPage() {
   const [editingRole,    setEditingRole]    = useState<ApiRole | null>(null);
   const [saving,         setSaving]         = useState(false);
   const [togglingId,     setTogglingId]     = useState<number | null>(null);
+  const [confirmDeactivate, setConfirmDeactivate] = useState<ApiRole | null>(null);
   const [saveMsg,        setSaveMsg]        = useState<string | null>(null);
   // Shown inside the Add/Edit modal while it's still open (validation/save failures).
   const [formError,      setFormError]      = useState<string | null>(null);
@@ -129,7 +131,20 @@ export default function RolesPermissionsPage() {
 
   // ─── Toggle active ─────────────────────────────────────────────────────────
 
+  function requestToggleActive(role: ApiRole) {
+    // Deactivating a role with active users strips their permissions
+    // immediately — worth an explicit confirmation naming exactly how many
+    // people are affected. Re-activating (already inactive -> active) is
+    // harmless, no confirmation needed.
+    if (role.is_active && role.user_count > 0) {
+      setConfirmDeactivate(role);
+      return;
+    }
+    toggleActive(role);
+  }
+
   async function toggleActive(role: ApiRole) {
+    setConfirmDeactivate(null);
     setTogglingId(role.id);
     try {
       await clientApi.patch(API.roles.detail(role.id), { is_active: !role.is_active });
@@ -265,7 +280,7 @@ export default function RolesPermissionsPage() {
                           </button>
                           <button
                             className="btn btn-ghost btn-sm icon-tooltip"
-                            onClick={() => toggleActive(role)}
+                            onClick={() => requestToggleActive(role)}
                             disabled={togglingId === role.id}
                             data-tip={role.is_active ? "Active" : "Inactive"}
                             style={{ padding: "5px 8px" }}
@@ -374,6 +389,18 @@ export default function RolesPermissionsPage() {
           error={formError}
           onClose={() => { setEditingRole(null); setFormError(null); }}
           onEdit={editRole}
+        />
+      )}
+
+      {confirmDeactivate && (
+        <ConfirmModal
+          title="Deactivate this role?"
+          body={`This immediately removes every permission this role grants from ${confirmDeactivate.user_count} active user${confirmDeactivate.user_count !== 1 ? "s" : ""} currently assigned to "${confirmDeactivate.display_name}". You can reactivate it later — this doesn't reassign or delete those users.`}
+          confirmLabel="Deactivate"
+          danger
+          saving={togglingId === confirmDeactivate.id}
+          onConfirm={() => toggleActive(confirmDeactivate)}
+          onCancel={() => setConfirmDeactivate(null)}
         />
       )}
     </>
