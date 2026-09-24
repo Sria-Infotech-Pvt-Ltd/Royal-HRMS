@@ -45,11 +45,13 @@ interface Props {
   orgUnitName: string;
   grade: string;
   costCenter: string;
+  defaultRoleId: string | null;
+  defaultRoleName: string | null;
 }
 
 export default function EmploymentStep({
   value, onChange, onSetEmploymentType, employmentTypeLocked,
-  positionTitle, orgUnitName, grade, costCenter,
+  positionTitle, orgUnitName, grade, costCenter, defaultRoleId, defaultRoleName,
 }: Props) {
   const [roles, setRoles] = useState<{ id: number; display_name: string }[]>([]);
   const [branches, setBranches] = useState<{ id: number; branch_name: string }[]>([]);
@@ -213,11 +215,19 @@ export default function EmploymentStep({
       <div className="sechead">ROLE &amp; PAY</div>
       <div className="g3">
         <div className="f">
-          <label>Role <span className="req">*</span></label>
+          <label>
+            Role <span className="req">*</span>
+            {defaultRoleId && <span className="tag">FROM POSITION</span>}
+          </label>
           <select value={value.role} onChange={e => set("role", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
             <option value="">Select</option>
             {roles.map(r => <option key={r.id} value={r.id}>{r.display_name}</option>)}
           </select>
+          {defaultRoleId ? (
+            <div className="hint">Suggested from this position&apos;s default role ({defaultRoleName}) — change it if this hire needs something different.</div>
+          ) : (
+            <div className="hint">This position has no default role set. Set one on the Position in Org Chart so future hires into this seat fill in automatically.</div>
+          )}
         </div>
         <div className="f">
           <label>Salary structure</label>

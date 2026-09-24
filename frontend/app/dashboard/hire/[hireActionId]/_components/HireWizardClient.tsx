@@ -118,7 +118,14 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       if (savedContacts && savedContacts.length > 0) setEmergencyContacts(savedContacts);
       setAddressExtras(x => ({ ...x, ...(d as Partial<AddressExtras>) }));
       setForm(f => ({ ...f, ...(d as Partial<ProfileForm>) }));
-      setEmployment(e => ({ ...e, ...(d as Partial<EmploymentDraft>), employment_type: data.employment_type }));
+      setEmployment(e => ({
+        ...e,
+        ...(d as Partial<EmploymentDraft>),
+        // Suggest the position's default role only if nothing was saved
+        // yet — never overwrite an HR override on a resumed draft.
+        role: (d.role as string | undefined) || data.default_role_id || "",
+        employment_type: data.employment_type,
+      }));
       setBasicPay(b => ({ ...b, ...(d as Partial<BasicPayDraft>) }));
       setStatutory(s => ({ ...s, ...(d as Partial<StatutoryDraft>) }));
       setFamilyEntries((d.family_entries as FamilyEntry[]) ?? []);
@@ -602,6 +609,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               employmentTypeLocked={!!action.employment_type}
               positionTitle={action.position_title} orgUnitName={action.org_unit_name} grade={action.grade}
               costCenter=""
+              defaultRoleId={action.default_role_id} defaultRoleName={action.default_role_name}
             />
           )}
 

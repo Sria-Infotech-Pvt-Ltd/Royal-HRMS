@@ -43,6 +43,8 @@ def _hire_action_dict(action: HireAction, request=None) -> dict:
         'position_title':       action.position.title,
         'org_unit_name':        action.position.org_unit.name,
         'grade':                action.position.grade,
+        'default_role_id':      str(action.position.default_role_id) if action.position.default_role_id else None,
+        'default_role_name':    action.position.default_role.display_name if action.position.default_role_id else None,
         'employment_type':      action.employment_type,
         'reserved_employee_id': action.reserved_employee_id,
         'status':               action.status,
@@ -124,14 +126,14 @@ class HireActionDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def _get_draft(self, pk):
-        return HireAction.objects.select_related('position', 'position__org_unit').filter(
+        return HireAction.objects.select_related('position', 'position__org_unit', 'position__default_role').filter(
             pk=pk, status=HireAction.STATUS_DRAFT,
         ).first()
 
     def get(self, request, pk):
         if not _has_perm(request.user, 'employees.create'):
             return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
-        action = HireAction.objects.select_related('position', 'position__org_unit').filter(pk=pk).first()
+        action = HireAction.objects.select_related('position', 'position__org_unit', 'position__default_role').filter(pk=pk).first()
         if not action:
             return error('Hire action not found.', http_status=status.HTTP_404_NOT_FOUND)
         return success('Hire action retrieved.', _hire_action_dict(action, request))

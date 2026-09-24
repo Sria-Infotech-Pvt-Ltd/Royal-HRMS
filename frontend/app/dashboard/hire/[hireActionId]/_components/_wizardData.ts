@@ -94,6 +94,7 @@ export const MAX_NATIONAL_PHONE_DIGITS = 10;
 export interface HireActionData {
   id: string; reason: string; reason_display: string; effective_from: string; position: string;
   position_title: string; org_unit_name: string; grade: string;
+  default_role_id: string | null; default_role_name: string | null;
   employment_type: string; reserved_employee_id: string; status: string;
   draft_data: Record<string, unknown>;
   photo_url: string | null;
