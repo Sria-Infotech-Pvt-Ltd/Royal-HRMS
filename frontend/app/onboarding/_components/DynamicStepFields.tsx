@@ -53,6 +53,17 @@ const CURRENT_FIELD_KEYS = new Set([
   "current_district", "current_state", "current_pin_code",
 ]);
 
+// Aadhaar/disability/international-worker/passport fields are seeded right
+// after permanent_pin_code (see migration 0150) but are their own logical
+// group, not part of the address block — without a heading of their own
+// they render directly under "Permanent Address" with nothing to signal the
+// section changed, making them look like address fields.
+const IDENTITY_DECLARATION_FIELD_KEYS = new Set([
+  "aadhaar_number", "is_disabled", "disability_type", "disability_percentage",
+  "disability_certificate_number", "is_international_worker",
+  "international_worker_country", "passport_number", "passport_expiry",
+]);
+
 // Address Line 1 -> its own Address Line 2's field_key — when the two sit
 // immediately next to each other in `configs` (their default seeded order),
 // buildRuns pairs them into one half-width row instead of Line 1 getting a
@@ -75,6 +86,12 @@ function isCurrentRun(run: Run): boolean {
   if (run.kind === "grid") return run.items.every(c => CURRENT_FIELD_KEYS.has(c.field_key));
   if (run.kind === "addressPair") return CURRENT_FIELD_KEYS.has(run.line1.field_key);
   return CURRENT_FIELD_KEYS.has(run.item.field_key);
+}
+
+function isIdentityDeclarationRun(run: Run): boolean {
+  if (run.kind === "grid") return run.items.every(c => IDENTITY_DECLARATION_FIELD_KEYS.has(c.field_key));
+  if (run.kind === "addressPair") return IDENTITY_DECLARATION_FIELD_KEYS.has(run.line1.field_key);
+  return IDENTITY_DECLARATION_FIELD_KEYS.has(run.item.field_key);
 }
 
 // PIN code field_key -> the address prefix ("current"/"permanent") whose
@@ -155,6 +172,8 @@ export default function DynamicStepFields({
   const hasPermanentFields = firstPermanentRunIndex !== -1;
   const firstCurrentRunIndex = runs.findIndex(isCurrentRun);
   const hasCurrentFields = firstCurrentRunIndex !== -1;
+  const firstIdentityRunIndex = runs.findIndex(isIdentityDeclarationRun);
+  const hasIdentityFields = firstIdentityRunIndex !== -1;
   const sameAsCurrent = (form as unknown as Record<string, string>).permanent_same_as_current === "true";
 
   const sectionHeading = (text: string) => (
@@ -171,6 +190,8 @@ export default function DynamicStepFields({
           ? sectionHeading("Current Address")
           : hasPermanentFields && i === firstPermanentRunIndex
           ? sectionHeading("Permanent Address")
+          : hasIdentityFields && i === firstIdentityRunIndex
+          ? sectionHeading("Identity & Declarations")
           : null;
         const toggle = hasPermanentFields && i === firstPermanentRunIndex && (
           <label key="permanent-same-as-current" className="module-check" style={{ margin: "4px 0 12px" }}>
