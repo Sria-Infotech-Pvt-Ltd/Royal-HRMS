@@ -299,7 +299,20 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         if (!employment.employment_type) return "Select an employment type.";
         if (!employment.role) return "Select a role.";
         if (!employment.branch) return "Select a company code.";
+        if (employment.annual_ctc.trim() && Number(employment.annual_ctc) <= 0) {
+          return "Annual fixed CTC must be greater than zero, or left blank.";
+        }
         return null;
+      case 4: {
+        const totals: Record<string, number> = {};
+        for (const n of nomineeEntries) {
+          const scheme = n.scheme || "epf_eps";
+          totals[scheme] = (totals[scheme] ?? 0) + (Number(n.share_percentage) || 0);
+        }
+        const over = Object.entries(totals).find(([, total]) => total > 100);
+        if (over) return `Nominee shares for ${over[0]} add up to ${over[1]}% — they can't exceed 100%.`;
+        return null;
+      }
       case 3: {
         // Matches the 5 fields this step's own sidebar badge already
         // advertises as required: PAN, Aadhaar, Account holder name,

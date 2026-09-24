@@ -54,10 +54,35 @@ export default function ReviewStep(props: Props) {
   } = props;
 
   const missingRequiredDocs = requiredDocTypes.filter(t => !uploadedDocTypes.has(t));
+  const nomineeTotals: Record<string, number> = {};
+  for (const n of nomineeEntries) {
+    const scheme = n.scheme || "epf_eps";
+    nomineeTotals[scheme] = (nomineeTotals[scheme] ?? 0) + (Number(n.share_percentage) || 0);
+  }
+  const overSharedScheme = Object.entries(nomineeTotals).find(([, total]) => total > 100);
+
+  // Mirrors HireActionCompleteView's own server-side check (the real gate —
+  // this is just so the button reflects it immediately instead of only
+  // failing after a round trip). Anything appearing here blocks hiring;
+  // this is no longer "can finish later" advisory text.
+  const blockingReasons: string[] = [];
+  if (!firstName.trim()) blockingReasons.push("First name");
+  if (!lastName.trim()) blockingReasons.push("Last name");
+  if (!form.date_of_birth) blockingReasons.push("Date of birth");
+  if (!form.gender) blockingReasons.push("Gender");
+  if (!employment.employment_type) blockingReasons.push("Employment type");
+  if (!employment.role) blockingReasons.push("Role");
+  if (!employment.branch) blockingReasons.push("Company code");
+  if (!panNumber.trim()) blockingReasons.push("PAN");
+  if (!aadhaarNumber.trim()) blockingReasons.push("Aadhaar");
+  if (!statutory.account_holder_name.trim()) blockingReasons.push("Account holder name");
+  if (!statutory.account_number.trim()) blockingReasons.push("Account number");
+  if (!statutory.ifsc_code.trim()) blockingReasons.push("IFSC code");
+  if (missingRequiredDocs.length) blockingReasons.push(`${missingRequiredDocs.length} required document(s)`);
+  if (overSharedScheme) blockingReasons.push(`nominee shares for ${overSharedScheme[0]} exceed 100%`);
+
   const notPayrollReasons: string[] = [];
   if (!form.father_name?.trim()) notPayrollReasons.push("father/mother's name is missing (EPF Form 2)");
-  if (missingRequiredDocs.length) notPayrollReasons.push(`${missingRequiredDocs.length} required document(s) not uploaded`);
-  if (!panNumber.trim()) notPayrollReasons.push("PAN is missing");
 
   const fieldsFilled = [
     firstName, lastName, form.date_of_birth, form.gender, employment.employment_type,
@@ -69,8 +94,15 @@ export default function ReviewStep(props: Props) {
     <div className="mstep on">
       <div className="note info" style={{ marginBottom: 14 }}>
         <b>Ready to hire</b>
-        The record is created in Onboarding status. Anything left incomplete continues after the record exists.
+        The record is created in Onboarding status. Optional details (father/mother&apos;s name, non-required documents) can still be finished afterward — the items below the completeness bar cannot.
       </div>
+
+      {blockingReasons.length > 0 && (
+        <div className="note warn" style={{ marginBottom: 14, borderColor: "var(--error)" }}>
+          <b>Complete these before hiring</b>
+          {blockingReasons.join(", ")}.
+        </div>
+      )}
 
       <div className="kv" style={{ marginBottom: 6 }}>
         <span>Record completeness{completeness < 100 ? " · Not payroll ready" : ""}</span><b>{completeness}%</b>
@@ -174,7 +206,12 @@ export default function ReviewStep(props: Props) {
         </div>
       </div>
 
-      <button onClick={onHire} disabled={hiring} className="btn btn-filled">
+      <button
+        onClick={onHire}
+        disabled={hiring || blockingReasons.length > 0}
+        title={blockingReasons.length > 0 ? `Complete these first: ${blockingReasons.join(", ")}` : undefined}
+        className="btn btn-filled"
+      >
         {hiring ? "Hiring…" : "Hire employee →"}
       </button>
     </div>

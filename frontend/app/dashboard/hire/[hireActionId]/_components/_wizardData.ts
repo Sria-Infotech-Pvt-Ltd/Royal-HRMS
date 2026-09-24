@@ -102,7 +102,7 @@ export interface HireActionData {
 
 export const STEPS: HireStepDef[] = [
   { label: "Personal identity", sub: "Name, photo, DOB, contact", required: 7 },
-  { label: "Employment", sub: "Role, reporting, work setup", required: 5 },
+  { label: "Employment", sub: "Role, reporting, work setup", required: 3 },
   { label: "Basic pay", sub: "Wage types and pay scale" },
   { label: "Statutory & accounts", sub: "PAN, PF, ESI, bank", required: 5, tag: { label: "Sensitive", tone: "sensitive" } },
   { label: "Family & nomination", sub: "Dependants and nominees", group: "Records & compliance", tag: { label: "EPFO", tone: "info" } },

@@ -8,8 +8,10 @@ email — plus, new to this flow, an EmployeeSalaryConfig and the first
 EmployeeTaxDeclaration row if the wizard collected CTC/tax-regime data.
 """
 import logging
+import re
 import secrets
 import string
+from collections import defaultdict
 
 from django.db import transaction
 from django.utils import timezone
@@ -25,6 +27,97 @@ from apps.accounts.views_hire import _hire_action_dict, _DENIED
 
 logger = logging.getLogger(__name__)
 
+_PAN_RE = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]$')
+_IFSC_RE = re.compile(r'^[A-Z]{4}0[A-Z0-9]{6}$')
+
+
+def _missing_hire_requirements(action, draft):
+    """Everything the wizard's own sidebar badges advertise as required,
+    re-checked here so "Hire employee" can't succeed just because HR jumped
+    straight to Review without ever visiting the steps that enforce these
+    client-side — free-jump navigation between steps means those per-step
+    checks are opt-in, not a real gate, so this is the one that actually is.
+    Returns a list of human-readable missing-item descriptions, empty if
+    nothing is missing."""
+    missing = []
+
+    # Personal identity — the 7 fields STEPS[0].required already advertises.
+    if not (draft.get('first_name') or '').strip():
+        missing.append('First name')
+    if not (draft.get('last_name') or '').strip():
+        missing.append('Last name')
+    if not draft.get('date_of_birth'):
+        missing.append('Date of birth')
+    if not draft.get('gender'):
+        missing.append('Gender')
+    if not (draft.get('nationality') or '').strip():
+        missing.append('Nationality')
+    if not (draft.get('email') or '').strip():
+        missing.append('Personal email')
+    if not (draft.get('phone') or '').strip():
+        missing.append('Mobile number')
+
+    # Statutory & accounts — the 5 fields STEPS[3].required already advertises.
+    pan = (draft.get('pan_number') or '').strip().upper()
+    if not pan:
+        missing.append('PAN')
+    elif not _PAN_RE.match(pan):
+        missing.append('a valid PAN')
+    aadhaar = (draft.get('aadhaar_number') or '').strip()
+    if not aadhaar:
+        missing.append('Aadhaar')
+    elif len(aadhaar) != 12:
+        missing.append('a valid 12-digit Aadhaar number')
+    if not (draft.get('account_holder_name') or '').strip():
+        missing.append('Account holder name')
+    if not (draft.get('account_number') or '').strip():
+        missing.append('Account number')
+    ifsc = (draft.get('ifsc_code') or '').strip().upper()
+    if not ifsc:
+        missing.append('IFSC code')
+    elif not _IFSC_RE.match(ifsc):
+        missing.append('a valid IFSC code')
+
+    # Documents — whichever DocumentTypeConfig rows are actually marked
+    # required, checked against what's really been uploaded to this action
+    # (not the client's own copy of which types are required, which can
+    # drift from this table — see DocumentTypeConfig itself).
+    from apps.accounts.models import DocumentTypeConfig
+    uploaded_types = set(action.documents.values_list('document_type', flat=True))
+    for type_key, label in DocumentTypeConfig.objects.filter(required=True).values_list('type_key', 'label'):
+        if type_key not in uploaded_types:
+            missing.append(label)
+
+    # Nominee shares — a scheme's shares can never validly exceed 100%,
+    # regardless of whether Family & nomination (an otherwise optional step)
+    # was even visited.
+    totals = defaultdict(float)
+    for entry in draft.get('nominee_entries') or []:
+        scheme = entry.get('scheme') or 'epf_eps'
+        try:
+            totals[scheme] += float(entry.get('share_percentage') or 0)
+        except (TypeError, ValueError):
+            pass
+    for scheme, total in totals.items():
+        if total > 100:
+            missing.append(f'nominee shares for {scheme} exceed 100% ({total:g}%) — adjust before hiring')
+
+    # Annual CTC is optional at hire time (HR can set it later from the
+    # employee's own Salary tab), but if one was entered it must be a real
+    # positive amount — the normal Salary Setup screen already rejects
+    # zero/negative via EmployeeSalaryConfigSerializer.validate_annual_ctc;
+    # this wizard writes the model directly, bypassing that serializer, so
+    # the same rule is re-checked here.
+    annual_ctc = draft.get('annual_ctc')
+    if annual_ctc not in (None, ''):
+        try:
+            if float(annual_ctc) <= 0:
+                missing.append('a positive Annual fixed CTC (or leave it blank)')
+        except (TypeError, ValueError):
+            missing.append('a valid Annual fixed CTC (or leave it blank)')
+
+    return missing
+
 
 def _assign_salary_and_tax(user, draft, actor):
     """Best-effort — a hire wizard that never reached Basic pay (e.g. a
@@ -32,7 +125,7 @@ def _assign_salary_and_tax(user, draft, actor):
     regime are exactly the kind of thing HR can assign afterwards from the
     employee's own Salary tab, same as today."""
     annual_ctc = draft.get('annual_ctc')
-    if annual_ctc:
+    if annual_ctc and float(annual_ctc) > 0:
         from apps.payroll.models import EmployeeSalaryConfig, SalaryStructure
         structure = None
         if draft.get('salary_structure'):
@@ -173,6 +266,10 @@ class HireActionCompleteView(APIView):
         branch     = (draft.get('branch')     or '').strip()
         if not all([first_name, last_name, email, role_id, branch]):
             return error('First name, last name, email, role and company code are required before hiring.')
+
+        missing = _missing_hire_requirements(action, draft)
+        if missing:
+            return error(f'Complete these before hiring: {", ".join(missing)}.')
         if User.objects.filter(email=email).exists():
             return error('A user with this email already exists.')
         role = Role.objects.filter(pk=role_id).first()
