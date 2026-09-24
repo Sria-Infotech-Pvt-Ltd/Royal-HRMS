@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from apps.attendance.views.hr_attendance import HRAttendanceDashboardView
+from apps.attendance.models import AttendanceCorrection
+from apps.attendance.views.hr_attendance import HRAttendanceDashboardView, HRCorrectionListView, HRCorrectionReviewView
 from apps.hrms.models import REQ_L2_PENDING, REQ_PENDING
 from apps.hrms.views.leave import LeaveApprovalView, LeaveRequestListCreateView
 from apps.voice_commands.approval_extractor import match_employee_name
@@ -99,6 +100,69 @@ _ACTION_FAILED_TEMPLATE = {
 _ACTION_DONE_TEMPLATE = {
     'en': '{subject} leave request has been {verb}.',
     'hi': '{subject} छुट्टी अनुरोध {verb} कर दिया गया है।',
+}
+_CORRECTION_QUEUE_RETRIEVE_FAILED_MESSAGE = {
+    'en': 'Could not retrieve the attendance correction review queue.',
+    'hi': 'उपस्थिति सुधार समीक्षा सूची प्राप्त नहीं की जा सकी।',
+}
+_WHO_TO_ACTION_CORRECTION_TEMPLATE = {
+    'en': 'Whose attendance correction would you like to {action}?',
+    'hi': 'आप किसका उपस्थिति सुधार {action} करना चाहेंगे?',
+}
+_NO_ACTIONABLE_CORRECTION_FOR_NAME_TEMPLATE = {
+    'en': 'No attendance correction awaiting your review was found for {name_query}.',
+    'hi': '{name_query} के लिए आपकी समीक्षा हेतु कोई लंबित उपस्थिति सुधार नहीं मिला।',
+}
+_MULTIPLE_ACTIONABLE_CORRECTIONS_TEMPLATE = {
+    'en': (
+        'More than one attendance correction awaiting your review matches "{name_query}" — '
+        'could you be more specific, for example with a last name?'
+    ),
+    'hi': (
+        '"{name_query}" से एक से अधिक लंबित उपस्थिति सुधार मेल खाते हैं — '
+        'क्या आप अधिक स्पष्ट बता सकते हैं, जैसे उपनाम के साथ?'
+    ),
+}
+# punch_type is always IN/OUT/BOTH (AttendanceCorrection.PUNCH_* — see
+# correction_slot_extractor.py's own _PUNCH_TYPE_SYNONYMS for the same three
+# values on the filing side) — pre-localized before .format() the same way
+# `action` already is throughout this module, not a second placeholder.
+_PUNCH_TYPE_LABELS = {'IN': 'clock-in', 'OUT': 'clock-out', 'BOTH': 'clock-in and clock-out'}
+_PUNCH_TYPE_LABELS_HI = {'IN': 'क्लॉक-इन', 'OUT': 'क्लॉक-आउट', 'BOTH': 'क्लॉक-इन और क्लॉक-आउट'}
+_CONFIRM_CORRECTION_APPROVAL_TEMPLATE = {
+    'en': (
+        "{employee_name}'s {punch_type_display} correction for {date} "
+        '— {action} this request? Please say yes or no.'
+    ),
+    'hi': (
+        '{employee_name} का {date} के लिए {punch_type_display} सुधार '
+        '— क्या इसे {action} करें? कृपया हां या नहीं कहें।'
+    ),
+}
+_LOST_TRACK_CORRECTION_MESSAGE = {
+    'en': 'I lost track of which attendance correction that was — please start over.',
+    'hi': 'मैं भूल गया कि वह कौन सा उपस्थिति सुधार था — कृपया फिर से शुरू करें।',
+}
+_CORRECTION_ACTION_FAILED_TEMPLATE = {
+    'en': 'Could not {action} the attendance correction.',
+    'hi': 'उपस्थिति सुधार को {action} नहीं किया जा सका।',
+}
+# Distinguishes a FINAL approval from one that only cleared the L1 (manager)
+# stage and escalated to L2 (HR) — services_hr_corrections._act_on_correction
+# only creates the missing punch(es)/reprocesses the day once the request
+# reaches its final stage, so a manager whose approval merely escalated it
+# must not be told their employee's attendance was already fixed.
+_CORRECTION_APPROVED_FINAL_TEMPLATE = {
+    'en': "{employee_name}'s attendance correction has been approved.",
+    'hi': '{employee_name} का उपस्थिति सुधार स्वीकृत कर दिया गया है।',
+}
+_CORRECTION_APPROVED_ESCALATED_TEMPLATE = {
+    'en': "{employee_name}'s attendance correction has been approved and sent to HR for final review.",
+    'hi': '{employee_name} का उपस्थिति सुधार स्वीकृत कर दिया गया है और अंतिम समीक्षा के लिए HR को भेजा गया है।',
+}
+_CORRECTION_REJECTED_TEMPLATE = {
+    'en': "{employee_name}'s attendance correction has been rejected.",
+    'hi': '{employee_name} का उपस्थिति सुधार अस्वीकृत कर दिया गया है।',
 }
 _TEAM_ATTENDANCE_RETRIEVE_FAILED_MESSAGE = {
     'en': 'Could not retrieve the team attendance dashboard.',
@@ -290,6 +354,141 @@ def execute_confirm_leave_approval(request, action: str, request_id: Optional[st
 
     from apps.dashboard.views.overview import push_leave_update
     push_leave_update(request.user.id)
+
+    return ExecutionResult(success=True, message=message, data=data)
+
+
+def execute_identify_attendance_correction_approval_target(
+    request, action: str, name_query: Optional[str],
+) -> ExecutionResult:
+    """
+    Turn 1 (or a "be more specific" retry) of approve_attendance_correction/
+    reject_attendance_correction. Looks up the caller's own correction review
+    queue through HRCorrectionListView.get() (the same view/scoping the web
+    Team Approvals page uses), then fuzzy-matches name_query against the
+    employee names on requests THIS caller can actually act on RIGHT NOW —
+    services_hr_corrections._build_row's own can_action flag, not merely
+    "visible to this caller". A manager who is only the L1 approver on a
+    request that has since escalated to L2/HR must not be offered it here,
+    even though HRCorrectionListView's own _approval_scope_filter still
+    returns the row (it stays in their view for visibility/history).
+
+    data['outcome'] mirrors execute_identify_leave_approval_target's four
+    values exactly — see that function's own docstring:
+      'need_name' / 'zero_match' / 'multiple_match' / 'single_match'
+      (data['matched'] on the last one).
+    """
+    django_request = _api_request_factory.get('/api/attendance/corrections/')
+    force_authenticate(django_request, user=request.user)
+    response = HRCorrectionListView.as_view()(django_request)
+
+    if response.status_code >= 400:
+        message = text(_CORRECTION_QUEUE_RETRIEVE_FAILED_MESSAGE)
+        if isinstance(response.data, dict) and response.data.get('message'):
+            message = response.data['message']  # external, dynamic — see executor_leave's own note
+        return ExecutionResult(success=False, message=message)
+
+    data = response.data.get('data') if isinstance(response.data, dict) else None
+    results = data.get('results', []) if isinstance(data, dict) else []
+    candidates = [
+        {
+            'correction_id': row['id'], 'employee_name': row['name'],
+            'date': row['date'], 'punch_type': row['punch_type'],
+        }
+        for row in results
+        if row.get('can_action')
+    ]
+
+    localized_action = text({'en': action, 'hi': _ACTION_LABELS_HI[action]})
+
+    if not name_query:
+        return ExecutionResult(
+            success=True,
+            message=text(_WHO_TO_ACTION_CORRECTION_TEMPLATE).format(action=localized_action),
+            data={'outcome': 'need_name'},
+        )
+
+    matches = match_employee_name(name_query, candidates)
+
+    if not matches:
+        return ExecutionResult(
+            success=False,
+            message=text(_NO_ACTIONABLE_CORRECTION_FOR_NAME_TEMPLATE).format(name_query=name_query),
+            data={'outcome': 'zero_match'},
+        )
+
+    if len(matches) > 1:
+        return ExecutionResult(
+            success=True,
+            message=text(_MULTIPLE_ACTIONABLE_CORRECTIONS_TEMPLATE).format(name_query=name_query),
+            data={'outcome': 'multiple_match'},
+        )
+
+    matched = matches[0]
+    punch_type_display = text({
+        'en': _PUNCH_TYPE_LABELS[matched['punch_type']], 'hi': _PUNCH_TYPE_LABELS_HI[matched['punch_type']],
+    })
+    # No TTS confidentiality redaction here (unlike approve_leave's own
+    # speech_message, which drops leave TYPE — a potential health/personal
+    # category about a third party): punch type and date carry no comparable
+    # sensitive category, and the caller needs both to confirm by voice which
+    # request this is at all — same reasoning execute_confirm_leave_approval
+    # keeps the employee name/dates in speech for.
+    message = text(_CONFIRM_CORRECTION_APPROVAL_TEMPLATE).format(
+        employee_name=matched['employee_name'], punch_type_display=punch_type_display,
+        date=matched['date'], action=localized_action,
+    )
+    return ExecutionResult(success=True, message=message, data={'outcome': 'single_match', 'matched': matched})
+
+
+def execute_confirm_attendance_correction_approval(
+    request, action: str, correction_id: Optional[str],
+) -> ExecutionResult:
+    """
+    Confirmation turn ("yes"): submits the real action through
+    HRCorrectionReviewView.patch() directly, exactly like
+    execute_confirm_leave_approval dispatches to LeaveApprovalView.post() —
+    the per-stage _can_approve_at_stage check (services_hr_corrections.py)
+    runs unchanged; voice never re-implements or bypasses it. A caller whose
+    eligibility changed between the identify and confirm turns (e.g. someone
+    else already actioned it, or it moved past the stage this caller could
+    act on) gets that view's own real rejection surfaced here, not a stale
+    success.
+    """
+    if not correction_id:
+        return ExecutionResult(success=False, message=text(_LOST_TRACK_CORRECTION_MESSAGE))
+
+    django_request = _api_request_factory.patch(
+        f'/api/attendance/corrections/{correction_id}/review/', {'action': action}, format='json',
+    )
+    force_authenticate(django_request, user=request.user)
+    response = HRCorrectionReviewView.as_view()(django_request, pk=correction_id)
+
+    if response.status_code >= 400:
+        message = text(_CORRECTION_ACTION_FAILED_TEMPLATE).format(
+            action=text({'en': action, 'hi': _ACTION_LABELS_HI[action]}),
+        )
+        if isinstance(response.data, dict) and response.data.get('message'):
+            message = response.data['message']  # external, dynamic — see executor_leave's own note
+        return ExecutionResult(success=False, message=message, data=response.data)
+
+    data = response.data.get('data') if isinstance(response.data, dict) else None
+    employee_name = data.get('name') if isinstance(data, dict) else None
+    new_status = data.get('status') if isinstance(data, dict) else None
+
+    if action == 'approve':
+        template = (
+            _CORRECTION_APPROVED_ESCALATED_TEMPLATE
+            if new_status == AttendanceCorrection.STATUS_L2_PENDING
+            else _CORRECTION_APPROVED_FINAL_TEMPLATE
+        )
+    else:
+        template = _CORRECTION_REJECTED_TEMPLATE
+
+    subject_en = employee_name or 'The employee'
+    subject_hi = employee_name or 'कर्मचारी'
+    employee_name_localized = subject_hi if get_current_language() == LANG_HI else subject_en
+    message = text(template).format(employee_name=employee_name_localized)
 
     return ExecutionResult(success=True, message=message, data=data)
 

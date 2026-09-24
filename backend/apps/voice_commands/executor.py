@@ -8,7 +8,9 @@ from apps.tenants.models import MODULE_ATTENDANCE, MODULE_LABELS, MODULE_LEAVE, 
 from apps.voice_commands.executor_approval import (
     execute_check_team_attendance,
     execute_check_team_leave_queue,
+    execute_confirm_attendance_correction_approval,
     execute_confirm_leave_approval,
+    execute_identify_attendance_correction_approval_target,
     execute_identify_leave_approval_target,
 )
 from apps.voice_commands.executor_attendance import (
@@ -55,6 +57,8 @@ INTENT_CHECK_TEAM_LEAVE_QUEUE = 'check_team_leave_queue'
 INTENT_CHECK_TEAM_ATTENDANCE = 'check_team_attendance'
 INTENT_APPROVE_LEAVE = 'approve_leave'
 INTENT_REJECT_LEAVE = 'reject_leave'
+INTENT_APPROVE_ATTENDANCE_CORRECTION = 'approve_attendance_correction'
+INTENT_REJECT_ATTENDANCE_CORRECTION = 'reject_attendance_correction'
 INTENT_CHECK_MY_PAYSLIP = 'check_my_payslip'
 INTENT_ACKNOWLEDGE_PAYSLIP = 'acknowledge_payslip'
 INTENT_RAISE_PAYSLIP_QUERY = 'raise_payslip_query'
@@ -65,6 +69,9 @@ INTENT_CHECK_BRANCH_PAYROLL_BREAKDOWN = 'check_branch_payroll_breakdown'
 INTENT_GREETING = 'greeting'
 
 _LEAVE_APPROVAL_INTENT_ACTIONS = {INTENT_APPROVE_LEAVE: 'approve', INTENT_REJECT_LEAVE: 'reject'}
+_ATTENDANCE_CORRECTION_APPROVAL_INTENT_ACTIONS = {
+    INTENT_APPROVE_ATTENDANCE_CORRECTION: 'approve', INTENT_REJECT_ATTENDANCE_CORRECTION: 'reject',
+}
 
 _PERMISSION_DENIED_MESSAGE = {
     'en': "You don't have permission to do that.",
@@ -102,6 +109,8 @@ _INTENT_MODULES = {
     INTENT_CHECK_ATTENDANCE_SUMMARY: MODULE_ATTENDANCE,
     INTENT_REQUEST_ATTENDANCE_CORRECTION: MODULE_ATTENDANCE,
     INTENT_CHECK_TEAM_ATTENDANCE: MODULE_ATTENDANCE,
+    INTENT_APPROVE_ATTENDANCE_CORRECTION: MODULE_ATTENDANCE,
+    INTENT_REJECT_ATTENDANCE_CORRECTION: MODULE_ATTENDANCE,
     INTENT_CHECK_LEAVE_BALANCE: MODULE_LEAVE,
     INTENT_CHECK_LEAVE_STATUS: MODULE_LEAVE,
     INTENT_CANCEL_LEAVE: MODULE_LEAVE,
@@ -139,7 +148,8 @@ def execute_intent(
       - executor_leave.py       — apply_leave, check_leave_balance,
         check_leave_status, cancel_leave
       - executor_approval.py    — check_team_leave_queue, check_team_attendance,
-        approve_leave, reject_leave
+        approve_leave, reject_leave, approve_attendance_correction,
+        reject_attendance_correction
       - executor_payroll.py     — check_my_payslip, acknowledge_payslip,
         raise_payslip_query, check_employee_payslip
       - executor_payroll_analytics.py — check_pending_payroll_cycles,
@@ -176,7 +186,13 @@ def execute_intent(
     'identify' (look up the team's pending requests and fuzzy-match
     slots['name_query']) or 'confirm' (actually call LeaveApprovalView.post()
     for slots['request_id']) — see conversation.py's _start_leave_approval/
-    _continue_leave_approval. raise_payslip_query uses slots['description'],
+    _continue_leave_approval. approve_attendance_correction/
+    reject_attendance_correction mirror this exact shape one level down
+    (conversation_attendance_correction_approval.py), the only difference
+    being the confirm-stage key is slots['correction_id'], not
+    slots['request_id'] — a deliberately distinct name since both intent
+    families can, in principle, have pending state for the same user at
+    once. raise_payslip_query uses slots['description'],
     filled in by conversation_payroll.py once a query message has been
     collected (single turn if the caller states it upfront, one follow-up
     question otherwise). check_employee_payslip uses slots['name_query'] on
@@ -273,6 +289,12 @@ def execute_intent(
         if slots.get('stage') == 'confirm':
             return execute_confirm_leave_approval(request, action, slots.get('request_id'))
         return execute_identify_leave_approval_target(request, action, slots.get('name_query'))
+    if intent in _ATTENDANCE_CORRECTION_APPROVAL_INTENT_ACTIONS:
+        action = _ATTENDANCE_CORRECTION_APPROVAL_INTENT_ACTIONS[intent]
+        slots = slots or {}
+        if slots.get('stage') == 'confirm':
+            return execute_confirm_attendance_correction_approval(request, action, slots.get('correction_id'))
+        return execute_identify_attendance_correction_approval_target(request, action, slots.get('name_query'))
     if intent == INTENT_CHECK_MY_PAYSLIP:
         return execute_check_my_payslip(request)
     if intent == INTENT_ACKNOWLEDGE_PAYSLIP:

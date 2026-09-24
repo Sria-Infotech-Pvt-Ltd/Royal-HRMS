@@ -10,6 +10,11 @@ from apps.voice_commands.conversation_attendance_correction import (
     continue_request_attendance_correction,
     start_request_attendance_correction,
 )
+from apps.voice_commands.conversation_attendance_correction_approval import (
+    ATTENDANCE_CORRECTION_APPROVAL_INTENTS,
+    continue_attendance_correction_approval,
+    start_attendance_correction_approval,
+)
 from apps.voice_commands.conversation_clarification import (
     CLARIFICATION_STAGE,
     continue_clarification,
@@ -393,6 +398,8 @@ def _dispatch_pending(
         )
     if pending['intent'] in LEAVE_APPROVAL_INTENTS:
         return continue_leave_approval(request, pending, normalized)
+    if pending['intent'] in ATTENDANCE_CORRECTION_APPROVAL_INTENTS:
+        return continue_attendance_correction_approval(request, pending, normalized)
     if pending['intent'] in PAYROLL_CONVERSATIONAL_INTENTS:
         return continue_payroll_conversation(request, pending, normalized)
     if pending['intent'] == INTENT_REQUEST_ATTENDANCE_CORRECTION:
@@ -420,6 +427,9 @@ def _dispatch_matched_intent(
 
     if intent in LEAVE_APPROVAL_INTENTS:
         return start_leave_approval(request, intent, intent_text, confidence)
+
+    if intent in ATTENDANCE_CORRECTION_APPROVAL_INTENTS:
+        return start_attendance_correction_approval(request, intent, intent_text, confidence)
 
     if intent in PAYROLL_CONVERSATIONAL_INTENTS:
         return start_payroll_conversation(request, intent, intent_text, confidence)

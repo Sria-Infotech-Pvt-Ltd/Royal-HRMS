@@ -430,6 +430,80 @@ intents:
       # its own natural word order, so the concatenated form scores high
       # (94.74) against it without help.
 
+  approve_attendance_correction:
+    # Requires attendance.create — the SAME codename HRCorrectionReviewView.patch()
+    # itself checks (attendance/views/hr_attendance.py:731), not attendance.view
+    # (which only gates the LIST view, HRCorrectionListView). Identify-then-confirm,
+    # same shape as approve_leave/reject_leave: voice_commands/conversation.py
+    # extracts an employee name if the first utterance has one, fuzzy-matches it
+    # against the caller's own review queue (HRCorrectionListView's own
+    # _approval_scope_filter — an L1 manager's direct reports, or an L2/HR
+    # reviewer's assigned employees), filtered to requests this caller can
+    # actually act on RIGHT NOW (services_hr_corrections._build_row's own
+    # can_action flag — a manager who is only the L1 approver on a request that
+    # has since moved to L2/HR must not be offered it here), then reads back the
+    # match and asks for an explicit yes/no before calling
+    # HRCorrectionReviewView.patch() for real.
+    #
+    # Bug reported 2026-09-24 (manager voice testing): before this intent
+    # existed at all, "approve attendance correction for ravindra" scored
+    # 80.65 against request_attendance_correction's own "file an attendance
+    # correction" — the EMPLOYEE self-service "file a new correction" intent —
+    # and silently started that flow under the MANAGER's own account instead,
+    # asking the employee-facing slot questions (date/punch-type/time/reason)
+    # and submitting a meaningless new request rather than approving anything.
+    # No dedicated intent for approving/rejecting a correction ever existed
+    # (unlike leave, which has approve_leave/reject_leave) — this is that
+    # missing intent, not a phrase-collision fix.
+    required_permission: attendance.create
+    conversational: true
+    phrases:
+      - "approve attendance correction for"
+      - "approve this attendance correction"
+      - "approve the attendance correction"
+      - "approve attendance correction"
+      - "approve pending attendance correction"
+      - "approve this correction request"
+      - "approve the correction request"
+      - "approve correction request"
+      - "approve this correction"
+      - "approve the correction"
+      - "go ahead and approve the attendance correction"
+      - "go ahead and approve the correction request"
+      - "yes approve the correction"
+      - "approve that correction request"
+      - "approve the pending correction request"
+      - "approve her attendance correction"
+      - "approve his attendance correction"
+      - "sign off on this correction request"
+
+  reject_attendance_correction:
+    # Same identify-then-confirm flow as approve_attendance_correction above,
+    # action=reject instead of approve — same attendance.create codename
+    # (HRCorrectionReviewView has no separate attendance-correction-reject
+    # permission, same reasoning reject_leave's own comment gives for
+    # leave.approve).
+    required_permission: attendance.create
+    conversational: true
+    phrases:
+      - "reject attendance correction for"
+      - "deny attendance correction for"
+      - "reject this attendance correction"
+      - "deny this attendance correction"
+      - "reject the attendance correction"
+      - "deny the attendance correction"
+      - "reject attendance correction"
+      - "deny attendance correction"
+      - "reject correction request"
+      - "deny correction request"
+      - "reject this correction request"
+      - "reject this correction"
+      - "turn down this correction request"
+      - "decline this correction request"
+      - "decline attendance correction for"
+      - "please reject this correction request"
+      - "i want to reject this correction"
+
   check_my_payslip:
     # Requires payroll.view_own — the exact codename MyPayslipsView.get()
     # itself checks (payroll/views/payslips.py:323-324), not a plain

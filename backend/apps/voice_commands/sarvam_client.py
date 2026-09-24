@@ -123,7 +123,23 @@ _STT_TIMEOUT_SECONDS = 10
 # TTS_MAX_TEXT_LENGTH in practice) synthesizes fast — sized between the two
 # above, not given chat's 20s headroom since there's no hidden-reasoning-
 # token failure mode here to protect against.
-_TTS_TIMEOUT_SECONDS = 15
+#
+# Scalability audit (2026-09-24): this whole app runs behind a single
+# Daphne ASGI process (see server-deployment-context.md) sharing one
+# asgiref thread pool (~40 slots) across EVERY synchronous view/ORM call —
+# not just voice. A slow-but-responding (retryable) TTS call held this
+# slot for the full per-attempt timeout, up to _TTS_MAX_ATTEMPTS times
+# with backoff between each: at the old 15s/3 attempts/(0.5, 1.0)s backoff,
+# worst case was 15+0.5+15+1.0+15 = 46.5s spent starving a single shared
+# thread-pool slot from other, unrelated requests. Trimmed to bound that
+# at 8+0.5+8 = 16.5s (~64% shorter) while still retrying once on a genuine
+# transient blip, per Sarvam's own guidance. Deliberately NOT applied to
+# _CHAT_TIMEOUT_SECONDS/_STT_TIMEOUT_SECONDS above — see their own
+# comments: chat's 20s is calibrated against a measured, real hidden-
+# reasoning-token worst case (shrinking it would silently kill real,
+# correct classifications before they finish, not just save time), and
+# STT already has no retry multiplier to bound.
+_TTS_TIMEOUT_SECONDS = 8
 
 # Phase 5 retry/backoff for text_to_speech(). Sarvam's own docs recommend
 # retrying 429/500/503-class responses with backoff; this client could not
@@ -135,9 +151,12 @@ _TTS_TIMEOUT_SECONDS = 15
 # network-level timeout/connection failure are never retried (see the
 # branches in text_to_speech() below): none of those are made more likely to
 # succeed by trying again, and retrying a hung request would only multiply
-# _TTS_TIMEOUT_SECONDS' already-real wait per extra attempt.
-_TTS_MAX_ATTEMPTS = 3
-_TTS_RETRY_BACKOFF_SECONDS = (0.5, 1.0)  # before attempt 2, then before attempt 3
+# _TTS_TIMEOUT_SECONDS' already-real wait per extra attempt. Cut from 3 to
+# 2 attempts (2026-09-24 scalability audit, see _TTS_TIMEOUT_SECONDS'
+# comment above) — still covers a single transient blip, without letting
+# the multiplier compound as far.
+_TTS_MAX_ATTEMPTS = 2
+_TTS_RETRY_BACKOFF_SECONDS = (0.5,)  # before attempt 2
 _TTS_RETRYABLE_STATUS_CODES = frozenset({429, 500, 503})
 
 
