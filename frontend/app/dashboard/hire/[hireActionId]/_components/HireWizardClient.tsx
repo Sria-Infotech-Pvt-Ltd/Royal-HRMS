@@ -18,6 +18,7 @@ import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import PhoneInput, { nationalDigitCount } from "@/components/PhoneInput";
 import LanguagesSelect from "@/components/LanguagesSelect";
+import CountrySelect from "@/components/CountrySelect";
 import type { ProfileForm } from "@/app/onboarding/_types";
 import type { OnboardingFieldConfigByStep, EducationExperienceFieldConfigResponse } from "@/types/onboardingFieldConfig";
 import DynamicStepFields from "@/app/onboarding/_components/DynamicStepFields";
@@ -473,7 +474,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Nationality <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input value={nationality} onChange={e => setNationality(e.target.value)} className="field-input" />
+                  <CountrySelect value={nationality} onChange={setNationality} mode="demonym" />
                 </div>
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>

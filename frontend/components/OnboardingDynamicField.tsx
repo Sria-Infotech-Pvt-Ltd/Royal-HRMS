@@ -1,6 +1,7 @@
 "use client";
 
 import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
+import CountrySelect from "@/components/CountrySelect";
 
 const INP = "field-input";
 
@@ -49,6 +50,14 @@ const PIN_CODE_FIELDS = new Set(['current_pin_code', 'permanent_pin_code']);
 // 'textarea' for the row-grouping logic above.
 const ADDRESS_LINE_FIELDS = new Set(['current_address', 'permanent_address']);
 
+// international_worker_country is seeded as a plain 'text' field (migration
+// 0150) but is really "pick a country" — rendered from the shared master
+// country list (lib/countries.ts) instead of a free-text box, the same way
+// gender/marital_status/blood_group above are special-cased rather than
+// changing the backend's field_type (avoids a config data migration for a
+// purely-frontend rendering choice).
+const COUNTRY_NAME_FIELDS = new Set(['international_worker_country']);
+
 interface Props {
   config: OnboardingFieldConfig;
   value: string;
@@ -75,6 +84,15 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
           <option value="">Select</option>
           {choiceOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      </div>
+    );
+  }
+
+  if (COUNTRY_NAME_FIELDS.has(config.field_key)) {
+    return (
+      <div className="field-group">
+        {label}
+        <CountrySelect value={value} onChange={onChange} mode="name" />
       </div>
     );
   }
