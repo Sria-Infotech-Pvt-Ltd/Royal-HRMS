@@ -236,6 +236,125 @@ class LeaveRequestFlowTests(TestCase):
         self.assertIn('cannot approve', resp.data['message'].lower())
 
 
+class LeaveRequestPolicyValidationTests(TestCase):
+    """Covers the field- and policy-level rules in LeaveRequestCreateSerializer
+    and _validate_leave_policy that had no prior test coverage — reason
+    length, date ordering, overlap with an existing leave/WFH request,
+    backdated/future-date limits, min/max duration, and attachment_required."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        employee_role = make_role('employee_policy_test')
+        self.employee = make_user('policyemp@test.com', role=employee_role, password='TestPass123!')
+        self.leave_date = _future_monday()
+        LeavePolicy.objects.update_or_create(
+            leave_type='casual',
+            defaults={'leave_type_label': 'Casual Leave', 'annual_days': Decimal('12.0'), 'is_active': True},
+        )
+        LeaveBalance.objects.create(
+            employee=self.employee, leave_type='casual', year=self.leave_date.year,
+            total_days=Decimal('12.0'), used_days=Decimal('0'),
+        )
+        _login(self.client, 'policyemp@test.com')
+
+    def _apply(self, **overrides):
+        payload = {
+            'leave_type': 'casual', 'duration': 'full_day',
+            'start_date': self.leave_date.isoformat(), 'end_date': self.leave_date.isoformat(),
+            'reason': 'Personal work to attend to.',
+        }
+        payload.update(overrides)
+        return self.client.post(reverse('leave-request-list'), payload, format='json')
+
+    def test_reason_under_10_chars_rejected(self):
+        resp = self._apply(reason='Sick')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_end_date_before_start_date_rejected(self):
+        resp = self._apply(end_date=(self.leave_date - datetime.timedelta(days=1)).isoformat())
+        self.assertEqual(resp.status_code, 400)
+
+    def test_overlapping_leave_request_rejected(self):
+        first = self._apply()
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self._apply()
+        self.assertEqual(second.status_code, 400)
+        self.assertIn('already have a leave request', second.data['message'])
+
+    def test_overlapping_wfh_request_rejected(self):
+        from apps.hrms.models import REQ_PENDING, WorkFromHomeRequest
+        WorkFromHomeRequest.objects.create(
+            employee=self.employee, start_date=self.leave_date, end_date=self.leave_date,
+            status=REQ_PENDING, latitude=Decimal('17.4483'), longitude=Decimal('78.3915'),
+        )
+        resp = self._apply()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('work-from-home', resp.data['message'])
+
+    def test_backdated_leave_rejected_when_policy_disallows(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(allow_backdated_leave=False)
+        past_date = datetime.date.today() - datetime.timedelta(days=2)
+        resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('backdated', resp.data['message'].lower())
+
+    def test_backdated_leave_allowed_within_policy_limit(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(
+            allow_backdated_leave=True, maximum_backdated_days=5,
+        )
+        past_date = datetime.date.today() - datetime.timedelta(days=2)
+        resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    def test_backdated_leave_rejected_beyond_max_backdated_days(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(
+            allow_backdated_leave=True, maximum_backdated_days=1,
+        )
+        past_date = datetime.date.today() - datetime.timedelta(days=5)
+        resp = self._apply(start_date=past_date.isoformat(), end_date=past_date.isoformat())
+        self.assertEqual(resp.status_code, 400)
+
+    def test_future_leave_rejected_when_policy_disallows(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(allow_future_leave=False)
+        resp = self._apply()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('future-dated', resp.data['message'].lower())
+
+    def test_future_leave_rejected_beyond_maximum_future_days(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(
+            allow_future_leave=True, maximum_future_days=3,
+        )
+        # self.leave_date is ~2 weeks out — well past a 3-day cap.
+        resp = self._apply()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('advance', resp.data['message'].lower())
+
+    def test_below_minimum_leave_duration_rejected(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(minimum_leave_duration=Decimal('2.0'))
+        resp = self._apply()  # single day
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('minimum', resp.data['message'].lower())
+
+    def test_above_maximum_leave_duration_rejected(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(maximum_leave_duration=1)
+        resp = self._apply(end_date=(self.leave_date + datetime.timedelta(days=3)).isoformat())
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('maximum', resp.data['message'].lower())
+
+    def test_missing_required_attachment_rejected(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(attachment_required=True)
+        resp = self._apply()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('attachment', resp.data['message'].lower())
+
+    def test_half_day_rejected_when_policy_disallows(self):
+        LeavePolicy.objects.filter(leave_type='casual').update(allow_half_day=False)
+        resp = self._apply(duration='half_morning')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('half-day', resp.data['message'].lower())
+
+
 class ExpenseSelfApprovalTests(TestCase):
     """Regression/critical-path test: an approver can never approve their
     own expense claim, even if they hold expenses.approve.
