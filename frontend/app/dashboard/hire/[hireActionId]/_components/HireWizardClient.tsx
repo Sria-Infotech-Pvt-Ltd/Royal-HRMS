@@ -34,7 +34,7 @@ import HireWizardSidebar from "./HireWizardSidebar";
 import EmploymentStep, { EMPTY_EMPLOYMENT, type EmploymentDraft } from "./EmploymentStep";
 import BasicPayStep, { EMPTY_BASIC_PAY, type BasicPayDraft } from "./BasicPayStep";
 import StatutoryAccountsStep, { EMPTY_STATUTORY, type StatutoryDraft } from "./StatutoryAccountsStep";
-import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, EMPTY_VERIFICATION, type VerificationDraft } from "./DocumentsChecklistStep";
+import DocumentsChecklistStep, { REQUIRED_DOC_KEYS, EMPTY_VERIFICATION, type VerificationDraft, type HireDocument } from "./DocumentsChecklistStep";
 import ReviewStep from "./ReviewStep";
 import {
   EMPTY_FORM,
@@ -80,8 +80,41 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   const [educationEntries, setEducationEntries] = useState<EducationEntry[]>([]);
   const [experienceEntries, setExperienceEntries] = useState<ExperienceEntry[]>([]);
   const [assetEntries, setAssetEntries] = useState<AssetEntry[]>([]);
-  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [documents, setDocuments] = useState<HireDocument[]>([]);
+  const [docUploading, setDocUploading] = useState<string | null>(null);
+  const [docError, setDocError] = useState("");
   const [verification, setVerification] = useState<VerificationDraft>(EMPTY_VERIFICATION);
+
+  async function uploadDocument(documentType: string, file: File) {
+    setDocUploading(documentType);
+    setDocError("");
+    try {
+      const formData = new FormData();
+      formData.append("document_type", documentType);
+      formData.append("file", file, file.name);
+      const res = await clientApi.post<{ data: HireDocument }>(
+        API.hireActions.documents(hireActionId), formData,
+      );
+      const saved = res.data.data;
+      setDocuments(prev => [...prev.filter(d => d.document_type !== documentType), saved]);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDocError(msg ?? "Failed to upload document.");
+    } finally {
+      setDocUploading(null);
+    }
+  }
+
+  async function deleteDocument(doc: HireDocument) {
+    setDocError("");
+    try {
+      await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
+      setDocuments(prev => prev.filter(d => d.id !== doc.id));
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDocError(msg ?? "Failed to remove document.");
+    }
+  }
 
   const [fieldConfig, setFieldConfig] = useState<OnboardingFieldConfigByStep>({});
   const [eduExpFieldConfig, setEduExpFieldConfig] = useState<EducationExperienceFieldConfigResponse>({ education: [], experience: [] });
@@ -97,12 +130,14 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       clientApi.get<{ data: HireActionData }>(API.hireActions.detail(hireActionId)),
       clientApi.get<{ data: OnboardingFieldConfigByStep }>(API.onboarding.fieldConfig),
       clientApi.get<{ data: EducationExperienceFieldConfigResponse }>(API.onboarding.educationExperienceFieldConfig),
-    ]).then(([a, fc, efc]) => {
+      clientApi.get<{ data: HireDocument[] }>(API.hireActions.documents(hireActionId)),
+    ]).then(([a, fc, efc, docs]) => {
       const data = a.data.data;
       setAction(data);
       setPhotoUrl(data.photo_url);
       setFieldConfig(fc.data?.data ?? {});
       setEduExpFieldConfig(efc.data?.data ?? { education: [], experience: [] });
+      setDocuments(docs.data?.data ?? []);
 
       const d = data.draft_data || {};
       setSalutation(String(d.salutation ?? ""));
@@ -134,7 +169,6 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setEducationEntries((d.education_entries as EducationEntry[]) ?? []);
       setExperienceEntries((d.experience_entries as ExperienceEntry[]) ?? []);
       setAssetEntries((d.asset_entries as AssetEntry[]) ?? []);
-      setSelectedDocs(new Set((d.selected_doc_keys as string[]) ?? []));
       setVerification(v => ({ ...v, ...(d as Partial<VerificationDraft>) }));
     }).finally(() => setLoading(false));
   }, [hireActionId]);
@@ -302,7 +336,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         emergency_contacts: emergencyContacts,
         family_entries: familyEntries, nominee_entries: nomineeEntries,
         education_entries: educationEntries, experience_entries: experienceEntries,
-        asset_entries: assetEntries, selected_doc_keys: Array.from(selectedDocs),
+        asset_entries: assetEntries,
         ...verification,
       });
       setHighestSaved(h => Math.max(h, tab));
@@ -627,7 +661,13 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               branchName={employment.branch} value={basicPay} onChange={setBasicPay} />
           )}
 
-          {tab === 3 && <StatutoryAccountsStep value={statutory} onChange={setStatutory} />}
+          {tab === 3 && (
+            <StatutoryAccountsStep
+              value={statutory} onChange={setStatutory}
+              documents={documents} uploading={docUploading} docError={docError}
+              onUploadDoc={uploadDocument} onDeleteDoc={deleteDocument}
+            />
+          )}
 
           {tab === 4 && (
             <FamilyNominationStep
@@ -663,12 +703,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
           {tab === 6 && (
             <DocumentsChecklistStep
-              selected={selectedDocs}
-              onToggle={key => setSelectedDocs(p => {
-                const next = new Set(p);
-                if (next.has(key)) next.delete(key); else next.add(key);
-                return next;
-              })}
+              documents={documents}
+              uploading={docUploading}
+              error={docError}
+              onUpload={uploadDocument}
+              onDelete={deleteDocument}
               verification={verification} onVerificationChange={setVerification}
             />
           )}
@@ -696,7 +735,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               panNumber={statutory.pan_number} aadhaarNumber={statutory.aadhaar_number}
               familyEntries={familyEntries} nomineeEntries={nomineeEntries}
               educationEntries={educationEntries} experienceEntries={experienceEntries} assetEntries={assetEntries}
-              uploadedDocTypes={selectedDocs} requiredDocTypes={REQUIRED_DOC_KEYS}
+              uploadedDocTypes={new Set(documents.map(d => d.document_type))} requiredDocTypes={REQUIRED_DOC_KEYS}
               onHire={handleHire} hiring={hiring} hireError={hireError}
             />
           )}

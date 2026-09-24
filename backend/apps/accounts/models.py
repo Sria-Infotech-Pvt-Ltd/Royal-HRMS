@@ -732,6 +732,37 @@ class HireAction(models.Model):
         return f'Hire — {self.position.title} ({self.get_status_display()})'
 
 
+def _hire_action_doc_path(instance, filename):
+    import os
+    return os.path.join('hire_action_documents', str(instance.hire_action_id), os.path.basename(filename))
+
+
+class HireActionDocument(models.Model):
+    """Pre-employee document uploads for the Hire wizard (PAN/Aadhaar on the
+    Statutory step, plus every item on the Documents step) — mirrors
+    EmployeeDocument's shape but keyed to a HireAction since no User row
+    exists yet. Validated against the same DocumentTypeConfig rows real
+    employee document uploads use, so the type list never has to be
+    maintained twice. Copied onto real EmployeeDocument rows at Stage 2
+    (HireActionCompleteView), the same way HireAction.photo above copies
+    onto User.profile_photo — then deleted here, since the real
+    EmployeeDocument row is the one that matters from that point on."""
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    hire_action   = models.ForeignKey(HireAction, on_delete=models.CASCADE, related_name='documents')
+    document_type = models.CharField(max_length=64)
+    file          = models.FileField(upload_to=_hire_action_doc_path, storage=AuthenticatedImageKitStorage(), max_length=255)
+    file_name     = models.CharField(max_length=255)
+    file_size     = models.PositiveBigIntegerField()
+    uploaded_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'hrms_hire_action_documents'
+        ordering = ['document_type', '-uploaded_at']
+
+    def __str__(self) -> str:
+        return f'{self.hire_action_id} — {self.document_type}'
+
+
 class PromotionRecord(models.Model):
     """Immutable audit trail of designation/role changes made through
     EmployeeDetailView.put(). One row per PUT call that actually changed

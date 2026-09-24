@@ -19,7 +19,7 @@ from rest_framework import status
 
 from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
-from apps.accounts.models import AuditLog, HireAction, Role, User
+from apps.accounts.models import AuditLog, EmployeeDocument, HireAction, HireActionDocument, Role, User
 from apps.accounts.services_placement import assign_position
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
 
@@ -65,13 +65,28 @@ _PROFILE_FIELDS = (
 )
 
 
+def _copy_hire_action_documents(user, action):
+    """Every file uploaded during the wizard (PAN/Aadhaar on the Statutory
+    step, any item on the Documents step) becomes a real EmployeeDocument now
+    that a real employee exists — same storage backend/path pattern as
+    action.photo -> user.profile_photo above, just for a whole set of files
+    instead of one. The HireActionDocument rows are deleted afterward since
+    the real EmployeeDocument row is what matters from this point on; the
+    file itself is not re-uploaded, just re-pointed."""
+    for doc in action.documents.all():
+        new_doc = EmployeeDocument(
+            user=user, document_type=doc.document_type,
+            file_name=doc.file_name, file_size=doc.file_size,
+        )
+        new_doc.file.name = doc.file.name
+        new_doc.save()
+    action.documents.all().delete()
+
+
 def _apply_wizard_records(user, draft):
     """Everything the wizard's Personal identity/Statutory & accounts/Family &
     nomination/Education & experience/Assets steps collected into draft_data,
-    applied to real rows now that a real employee exists to attach them to —
-    Documents stays deferred (see DocumentsChecklistStep's own comment for
-    why: there's nowhere to store a real file before this moment, and the
-    wizard's own copy already says uploads can finish afterward)."""
+    applied to real rows now that a real employee exists to attach them to."""
     from apps.accounts.models import CompanyAsset, EducationRecord, EmployeeProfile, EPFNominee, FamilyMember, WorkExperienceRecord
 
     profile_fields = {k: draft[k] for k in _PROFILE_FIELDS if draft.get(k)}
@@ -230,6 +245,7 @@ class HireActionCompleteView(APIView):
 
             _assign_salary_and_tax(user, draft, request.user)
             _apply_wizard_records(user, draft)
+            _copy_hire_action_documents(user, action)
 
             action.status = HireAction.STATUS_COMPLETED
             action.created_employee = user

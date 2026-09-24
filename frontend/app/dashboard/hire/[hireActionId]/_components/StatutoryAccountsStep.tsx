@@ -1,5 +1,8 @@
 "use client";
 
+import DocUploadButton from "./DocUploadButton";
+import type { HireDocument } from "./DocumentsChecklistStep";
+
 export interface StatutoryDraft {
   pan_number: string; aadhaar_number: string; passport_number: string; passport_expiry: string;
   uan_number: string; esi_number: string; pf_covered: string; esi_covered: string;
@@ -24,10 +27,21 @@ function Toggle({ value, onChange }: { value: string; onChange: (v: string) => v
   );
 }
 
-export default function StatutoryAccountsStep({ value, onChange }: { value: StatutoryDraft; onChange: (v: StatutoryDraft) => void }) {
+interface Props {
+  value: StatutoryDraft;
+  onChange: (v: StatutoryDraft) => void;
+  documents: HireDocument[];
+  uploading: string | null;
+  docError: string;
+  onUploadDoc: (documentType: string, file: File) => void;
+  onDeleteDoc: (doc: HireDocument) => void;
+}
+
+export default function StatutoryAccountsStep({ value, onChange, documents, uploading, docError, onUploadDoc, onDeleteDoc }: Props) {
   function set<K extends keyof StatutoryDraft>(key: K, v: StatutoryDraft[K]) {
     onChange({ ...value, [key]: v });
   }
+  const docFor = (key: string) => documents.find(d => d.document_type === key);
 
   return (
     <div className="mstep on">
@@ -36,15 +50,25 @@ export default function StatutoryAccountsStep({ value, onChange }: { value: Stat
         Government IDs and bank details are stored encrypted, masked in the UI by default, and every reveal is written to the audit log.
       </div>
 
+      {docError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>}
+
       <div className="sechead">GOVERNMENT IDS</div>
       <div className="g3">
         <div className="f">
           <label>PAN <span className="req">*</span></label>
           <input value={value.pan_number} onChange={e => set("pan_number", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} className="finput" />
+          <div style={{ marginTop: 6 }}>
+            <DocUploadButton documentType="pan_card" label="PAN card" existing={docFor("pan_card")}
+              uploading={uploading === "pan_card"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
+          </div>
         </div>
         <div className="f">
           <label>Aadhaar <span className="req">*</span></label>
           <input value={value.aadhaar_number} onChange={e => set("aadhaar_number", e.target.value.replace(/\D/g, ""))} placeholder="XXXX XXXX XXXX" maxLength={12} className="finput" />
+          <div style={{ marginTop: 6 }}>
+            <DocUploadButton documentType="aadhaar_card" label="Aadhaar card" existing={docFor("aadhaar_card")}
+              uploading={uploading === "aadhaar_card"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />
+          </div>
         </div>
         <div className="f">
           <label>Passport <span className="tag">OPTIONAL</span></label>

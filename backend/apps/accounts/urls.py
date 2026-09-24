@@ -5,7 +5,13 @@ from apps.accounts.views_email_log import (
     EmailLogResendView,
 )
 from apps.accounts.views_reset_password import EmployeePasswordResetView
-from apps.accounts.views_hire import HireActionDetailView, HireActionListCreateView, HireActionPhotoView
+from apps.accounts.views_hire import (
+    HireActionDetailView,
+    HireActionDocumentDetailView,
+    HireActionDocumentListCreateView,
+    HireActionListCreateView,
+    HireActionPhotoView,
+)
 from apps.accounts.views_hire_complete import HireActionCompleteView
 from apps.accounts.views_hire_scan import HireActionScanDocumentView
 from apps.accounts.views_onboarding_hr import (
@@ -238,6 +244,8 @@ urlpatterns = [
     path('hire-actions/<uuid:pk>/complete/', HireActionCompleteView.as_view(), name='hire-action-complete'),
     path('hire-actions/<uuid:pk>/scan-document/', HireActionScanDocumentView.as_view(), name='hire-action-scan-document'),
     path('hire-actions/<uuid:pk>/photo/',      HireActionPhotoView.as_view(),      name='hire-action-photo'),
+    path('hire-actions/<uuid:pk>/documents/',  HireActionDocumentListCreateView.as_view(), name='hire-action-document-list'),
+    path('hire-actions/<uuid:pk>/documents/<uuid:doc_id>/', HireActionDocumentDetailView.as_view(), name='hire-action-document-detail'),
 
     path('org-structure/units/',                          OrgUnitListCreateView.as_view(),        name='org-unit-list'),
     path('org-structure/units/<uuid:pk>/',                OrgUnitDetailView.as_view(),            name='org-unit-detail'),

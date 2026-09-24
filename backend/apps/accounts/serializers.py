@@ -30,6 +30,7 @@ from apps.accounts.models import (
     EmployeeCodeSettings,
     EmployeeDocument,
     EmployeeProfile,
+    HireActionDocument,
     JobTemplate,
     OnboardingFieldConfig,
     OnboardingSection,
@@ -1779,6 +1780,53 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         if not request:
             return None
         return request.build_absolute_uri(f'/api/onboarding/documents/{obj.pk}/')
+
+    def validate_file(self, value):
+        import os
+        if not getattr(value, 'name', None):
+            raise serializers.ValidationError('Uploaded file must have a name.')
+        if value.size == 0:
+            raise serializers.ValidationError('Uploaded file is empty.')
+        if value.content_type not in EmployeeDocument.ALLOWED_MIME_TYPES:
+            raise serializers.ValidationError('Only PDF, JPG, and PNG files are allowed.')
+        content_error = _validate_file_content(value, value.content_type)
+        if content_error:
+            raise serializers.ValidationError(content_error)
+        if value.size > EmployeeDocument.MAX_FILE_SIZE:
+            raise serializers.ValidationError(
+                f'File size {value.size / (1024 * 1024):.1f} MB exceeds the 5 MB limit.'
+            )
+        value.name = os.path.basename(value.name).strip()
+        return value
+
+
+class HireActionDocumentSerializer(serializers.ModelSerializer):
+    """Mirrors EmployeeDocumentSerializer above — same validation, same
+    ALLOWED_MIME_TYPES/MAX_FILE_SIZE (borrowed from EmployeeDocument rather
+    than duplicated, since a hire-action document becomes a real
+    EmployeeDocument at Stage 2 and must pass the exact same rules either
+    way)."""
+    document_type_display = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = HireActionDocument
+        fields = [
+            'id', 'document_type', 'document_type_display',
+            'file', 'file_url', 'file_name', 'file_size', 'uploaded_at',
+        ]
+        read_only_fields = ('id', 'document_type_display', 'file_url', 'file_name', 'file_size', 'uploaded_at')
+        extra_kwargs = {'file': {'write_only': True}}
+
+    def get_document_type_display(self, obj):
+        from core.cache_service import DocumentTypeConfigCacheService
+        return DocumentTypeConfigCacheService.label_for(obj.document_type)
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return None
+        return request.build_absolute_uri(f'/api/hire-actions/{obj.hire_action_id}/documents/{obj.pk}/')
 
     def validate_file(self, value):
         import os

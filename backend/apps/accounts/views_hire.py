@@ -18,12 +18,14 @@ from rest_framework.views import APIView
 from rest_framework import status
 
 from core.permissions import has_perm as _has_perm
-from core.responses import error, success, get_client_ip
+from core.responses import error, first_error, success, get_client_ip
 from apps.accounts.models import (
-    AuditLog, EmployeeCodeSeries, HireAction, Position, Role, User,
+    AuditLog, EmployeeCodeSeries, HireAction, HireActionDocument, Position, Role, User,
 )
+from apps.accounts.serializers import HireActionDocumentSerializer
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
 from apps.accounts.services_placement import assign_position
+from apps.accounts.views.shared import _get_document_type_config
 
 logger = logging.getLogger(__name__)
 
@@ -253,3 +255,81 @@ class HireActionPhotoView(APIView):
             action.photo = None
             action.save(update_fields=['photo', 'updated_at'])
         return success('Photo removed.', {'photo_url': None})
+
+
+class HireActionDocumentListCreateView(APIView):
+    """
+    GET  /hire-actions/<id>/documents/  — list documents uploaded so far
+    POST /hire-actions/<id>/documents/  — upload one (PAN/Aadhaar on the
+                                           Statutory step, or any item on the
+                                           Documents step)
+
+    Same shape as EmployeeDocumentView but keyed to a HireAction — there's no
+    User row yet to attach a real EmployeeDocument to. Validated against the
+    same DocumentTypeConfig rows real employee uploads use. Copied onto real
+    EmployeeDocument rows at Stage 2 (HireActionCompleteView).
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def _get_draft(self, pk):
+        return HireAction.objects.filter(pk=pk, status=HireAction.STATUS_DRAFT).first()
+
+    def get(self, request, pk):
+        if not _has_perm(request.user, 'employees.create'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        action = self._get_draft(pk)
+        if not action:
+            return error('Hire action not found or already completed.', http_status=status.HTTP_404_NOT_FOUND)
+        docs = action.documents.all()
+        return success(
+            'Documents retrieved.',
+            HireActionDocumentSerializer(docs, many=True, context={'request': request}).data,
+        )
+
+    def post(self, request, pk):
+        if not _has_perm(request.user, 'employees.create'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        action = self._get_draft(pk)
+        if not action:
+            return error('Hire action not found or already completed.', http_status=status.HTTP_404_NOT_FOUND)
+
+        serializer = HireActionDocumentSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error(first_error(serializer.errors), data=serializer.errors)
+        file_obj = serializer.validated_data['file']
+        doc_type = serializer.validated_data['document_type']
+        type_config = _get_document_type_config(doc_type)
+        if not type_config:
+            return error('Invalid document type.', http_status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            doc = serializer.save(hire_action=action, file_name=file_obj.name[:255], file_size=file_obj.size)
+            if not type_config.allow_multiple:
+                HireActionDocument.objects.filter(
+                    hire_action=action, document_type=doc_type,
+                ).exclude(pk=doc.pk).delete()
+
+        logger.info('Hire action document %s uploaded for %s by %s', doc_type, action.id, request.user.email)
+        return success(
+            'Document uploaded.',
+            HireActionDocumentSerializer(doc, context={'request': request}).data,
+            http_status=status.HTTP_201_CREATED,
+        )
+
+
+class HireActionDocumentDetailView(APIView):
+    """DELETE /hire-actions/<id>/documents/<doc_id>/ — remove an uploaded document."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, doc_id):
+        if not _has_perm(request.user, 'employees.create'):
+            return error(_DENIED, http_status=status.HTTP_403_FORBIDDEN)
+        action = HireAction.objects.filter(pk=pk, status=HireAction.STATUS_DRAFT).first()
+        if not action:
+            return error('Hire action not found or already completed.', http_status=status.HTTP_404_NOT_FOUND)
+        doc = HireActionDocument.objects.filter(pk=doc_id, hire_action=action).first()
+        if not doc:
+            return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+        doc.delete()
+        return success('Document deleted.')

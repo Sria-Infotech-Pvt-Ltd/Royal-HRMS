@@ -81,6 +81,8 @@ export const API = {
     complete:     (id: string) => `/hire-actions/${id}/complete/`,
     scanDocument: (id: string) => `/hire-actions/${id}/scan-document/`,
     photo:        (id: string) => `/hire-actions/${id}/photo/`,
+    documents:       (id: string) => `/hire-actions/${id}/documents/`,
+    documentDetail:  (id: string, docId: string) => `/hire-actions/${id}/documents/${docId}/`,
   },
 
   roles: {
