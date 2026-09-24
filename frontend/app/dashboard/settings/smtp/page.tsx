@@ -94,6 +94,7 @@ export default function SmtpSettingsPage() {
   // ── Activate ─────────────────────────────────────────────────────────────────
 
   async function handleActivate(entry: ApiSmtpEntry) {
+    if (!window.confirm(`Make "${entry.name}" the active SMTP configuration? Every company email will be sent through it from now on.`)) return;
     setActivating(entry.id);
     try {
       await clientApi.post(smtpActivate(entry.id));
