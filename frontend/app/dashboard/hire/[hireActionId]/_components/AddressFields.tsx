@@ -15,6 +15,7 @@
 
 import { useState } from "react";
 import { usePincodeLookup } from "@/hooks/usePincodeLookup";
+import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
 import type { ProfileForm } from "@/app/onboarding/_types";
 
 export type AddressFormFields = Pick<
@@ -97,7 +98,7 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
         <div className="f">
           <label>District</label>
           <div className="flex gap-2">
-            <input value={form.current_district} onChange={e => onFieldChange("current_district", e.target.value)} className="finput" />
+            <DistrictSelect value={form.current_district} state={form.current_state} onChange={v => onFieldChange("current_district", v)} inputClassName="finput" />
             <SuggestButton onClick={() => suggest("district")} disabled={!pincodeReady} loading={suggesting === "district"} />
           </div>
         </div>
@@ -107,7 +108,7 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
         <div className="f">
           <label>State</label>
           <div className="flex gap-2">
-            <input value={form.current_state} onChange={e => onFieldChange("current_state", e.target.value)} placeholder="e.g. Telangana" className="finput" />
+            <StateSelect value={form.current_state} onChange={v => { onFieldChange("current_state", v); onFieldChange("current_district", ""); }} inputClassName="finput" />
             <SuggestButton onClick={() => suggest("state")} disabled={!pincodeReady} loading={suggesting === "state"} />
           </div>
         </div>
@@ -156,11 +157,11 @@ export default function AddressFields({ form, extras, onFieldChange, onExtrasCha
             </div>
             <div className="f">
               <label>District</label>
-              <input value={form.permanent_district} onChange={e => onFieldChange("permanent_district", e.target.value)} className="finput" />
+              <DistrictSelect value={form.permanent_district} state={form.permanent_state} onChange={v => onFieldChange("permanent_district", v)} inputClassName="finput" />
             </div>
             <div className="f">
               <label>State</label>
-              <input value={form.permanent_state} onChange={e => onFieldChange("permanent_state", e.target.value)} className="finput" />
+              <StateSelect value={form.permanent_state} onChange={v => { onFieldChange("permanent_state", v); onFieldChange("permanent_district", ""); }} inputClassName="finput" />
             </div>
           </div>
           <div className="g3" style={{ marginBottom: 14 }}>

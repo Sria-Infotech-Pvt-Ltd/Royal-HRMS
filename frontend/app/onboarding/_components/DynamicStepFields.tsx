@@ -133,6 +133,19 @@ export default function DynamicStepFields({
     return (form as unknown as Record<string, string>)[config.field_key] ?? "";
   }
 
+  // current_district/permanent_district need their paired State's current
+  // value to filter the district list (StateDistrictSelect.tsx) — read
+  // directly off `form` rather than looking up another config, since
+  // current_state/permanent_state are always plain ProfileForm keys.
+  const DISTRICT_TO_STATE_KEY: Record<string, keyof ProfileForm> = {
+    current_district: "current_state",
+    permanent_district: "permanent_state",
+  };
+  function pairedStateFor(config: OnboardingFieldConfig): string | undefined {
+    const stateKey = DISTRICT_TO_STATE_KEY[config.field_key];
+    return stateKey ? form[stateKey] : undefined;
+  }
+
   const { lookup: lookupPincode } = usePincodeLookup();
   // Tracks the most recent PIN code value typed per address prefix, so that
   // if a lookup response for an older value arrives after the user has
@@ -145,6 +158,16 @@ export default function DynamicStepFields({
     return (value: string) => {
       if (config.is_custom) { onCustomChange(config.field_key, value); return; }
       onBuiltinChange(config.field_key as keyof ProfileForm, value);
+
+      // Picking a different State invalidates whatever District was
+      // selected under the previous one (StateDistrictSelect.tsx's own
+      // caller-responsibility note) — clear it here rather than leaving a
+      // stale district silently paired with a new state.
+      const STATE_TO_DISTRICT_KEY: Record<string, keyof ProfileForm> = {
+        current_state: 'current_district', permanent_state: 'permanent_district',
+      };
+      const districtKey = STATE_TO_DISTRICT_KEY[config.field_key];
+      if (districtKey) onBuiltinChange(districtKey, '');
 
       const prefix = PIN_CODE_TO_PREFIX[config.field_key];
       if (prefix) {
@@ -212,7 +235,7 @@ export default function DynamicStepFields({
               {toggle}
               <div className="field-group-row">
                 {run.items.map(config => (
-                  <DynamicField key={config.field_key} config={config} value={valueFor(config)} onChange={onChangeFor(config)} />
+                  <DynamicField key={config.field_key} config={config} value={valueFor(config)} onChange={onChangeFor(config)} pairedState={pairedStateFor(config)} />
                 ))}
               </div>
             </div>
@@ -224,8 +247,8 @@ export default function DynamicStepFields({
               {heading}
               {toggle}
               <div className="field-group-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                <DynamicField config={run.line1} value={valueFor(run.line1)} onChange={onChangeFor(run.line1)} />
-                <DynamicField config={run.line2} value={valueFor(run.line2)} onChange={onChangeFor(run.line2)} />
+                <DynamicField config={run.line1} value={valueFor(run.line1)} onChange={onChangeFor(run.line1)} pairedState={pairedStateFor(run.line1)} />
+                <DynamicField config={run.line2} value={valueFor(run.line2)} onChange={onChangeFor(run.line2)} pairedState={pairedStateFor(run.line2)} />
               </div>
             </div>
           );
@@ -254,7 +277,7 @@ export default function DynamicStepFields({
           <div key={`wrap-${run.item.field_key}`}>
             {heading}
             {toggle}
-            <DynamicField config={run.item} value={valueFor(run.item)} onChange={onChangeFor(run.item)} />
+            <DynamicField config={run.item} value={valueFor(run.item)} onChange={onChangeFor(run.item)} pairedState={pairedStateFor(run.item)} />
           </div>
         );
       })}

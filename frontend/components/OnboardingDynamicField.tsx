@@ -2,6 +2,7 @@
 
 import type { OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
 import CountrySelect from "@/components/CountrySelect";
+import { StateSelect, DistrictSelect } from "@/components/StateDistrictSelect";
 
 const INP = "field-input";
 
@@ -66,14 +67,27 @@ const COUNTRY_NAME_FIELDS = new Set(['international_worker_country']);
 // hire time for the exact same field.
 const NATIONALITY_FIELDS = new Set(['nationality']);
 
+// current_state/permanent_state and current_district/permanent_district get
+// the same real India state/district dropdowns the Hire wizard's own
+// AddressFields.tsx already uses (lib/indiaStatesDistricts.ts) instead of a
+// free-text box — same reasoning as NATIONALITY_FIELDS above: visually and
+// functionally consistent with what HR already sees at hire time for the
+// exact same fields.
+const STATE_FIELDS = new Set(['current_state', 'permanent_state']);
+const DISTRICT_FIELDS = new Set(['current_district', 'permanent_district']);
+
 interface Props {
   config: OnboardingFieldConfig;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /** Current value of this field's paired State — only meaningful for
+   * current_district/permanent_district, supplied by DynamicStepFields
+   * (which has access to the full form, unlike this per-field component). */
+  pairedState?: string;
 }
 
-export default function DynamicField({ config, value, onChange, placeholder }: Props) {
+export default function DynamicField({ config, value, onChange, placeholder, pairedState }: Props) {
   const choiceOptions = BUILTIN_CHOICE_FIELDS[config.field_key];
   const isPinCode = PIN_CODE_FIELDS.has(config.field_key);
 
@@ -110,6 +124,24 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
       <div className="field-group">
         {label}
         <CountrySelect value={value} onChange={onChange} mode="demonym" />
+      </div>
+    );
+  }
+
+  if (STATE_FIELDS.has(config.field_key)) {
+    return (
+      <div className="field-group">
+        {label}
+        <StateSelect value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
+  if (DISTRICT_FIELDS.has(config.field_key)) {
+    return (
+      <div className="field-group">
+        {label}
+        <DistrictSelect value={value} onChange={onChange} state={pairedState ?? ""} />
       </div>
     );
   }
