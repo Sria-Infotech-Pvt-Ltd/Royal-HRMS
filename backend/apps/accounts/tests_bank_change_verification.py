@@ -46,6 +46,45 @@ class BankChangeFirstEntryTests(TestCase):
         self.assertEqual(profile.bank_change_status, EmployeeProfile.BANK_CHANGE_NONE)
 
 
+class BankChangeMixedRequestTests(TestCase):
+    """Regression test for the "any field already filled -> whole request
+    pending" bug: a request mixing a genuine overwrite of one already-filled
+    field with a FIRST-TIME entry for other, still-blank required fields must
+    apply the first-time fields immediately, not sweep them into pending
+    alongside the real overwrite."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.role = make_role('bank_test_employee_mixed')
+        self.employee = make_user('bankmixed@test.com', role=self.role, password='TestPass123!')
+        # Only account_number/ifsc_code pre-filled — account_type/bank_name/
+        # bank_branch_name/account_holder_name are still genuinely blank,
+        # exactly like a partially-completed Bank Details step.
+        self.profile = EmployeeProfile.objects.create(
+            user=self.employee, account_number='1111111111', ifsc_code='HDFC0000001',
+        )
+        _login(self.client, 'bankmixed@test.com')
+
+    def test_first_time_fields_apply_directly_alongside_an_overwrite(self):
+        resp = self.client.patch(reverse('onboarding-step', args=[BANK_STEP]), {
+            'account_number': '2222222222',  # overwrite of an existing value
+            'account_type': 'savings', 'bank_name': 'HDFC Bank',  # first-time
+            'bank_branch_name': 'Kondapur', 'account_holder_name': 'Test Employee',  # first-time
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.profile.refresh_from_db()
+        # The overwrite is held pending, not applied live.
+        self.assertEqual(self.profile.account_number, '1111111111')
+        self.assertEqual(self.profile.pending_account_number, '2222222222')
+        self.assertEqual(self.profile.bank_change_status, EmployeeProfile.BANK_CHANGE_PENDING)
+        # The first-time fields are applied immediately — not stuck pending.
+        self.assertEqual(self.profile.account_type, 'savings')
+        self.assertEqual(self.profile.bank_name, 'HDFC Bank')
+        self.assertEqual(self.profile.bank_branch_name, 'Kondapur')
+        self.assertEqual(self.profile.account_holder_name, 'Test Employee')
+
+
 class BankChangeOverwriteTests(TestCase):
     def setUp(self):
         cache.clear()

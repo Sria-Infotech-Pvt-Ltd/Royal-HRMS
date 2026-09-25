@@ -1060,12 +1060,26 @@ def _save_profile_step(request, step: int, target_user=None):
     if target_user == request.user:
         incoming_bank = {k: filled_data.pop(k) for k in list(filled_data) if k in _BANK_FIELDS}
         if incoming_bank:
-            already_filled = any(getattr(profile, k, '') for k in _BANK_FIELDS)
-            if already_filled:
-                profile.submit_bank_change(incoming_bank)
+            # Per-FIELD, not per-request: a field with no existing live value
+            # (first-time entry) or an unchanged value writes straight
+            # through, even when submitted alongside a genuine overwrite of a
+            # different bank field in the same request. Treating the whole
+            # request as "one overwrite" the moment ANY bank field already
+            # had a value meant filling in Account Type/Bank Name/Branch for
+            # the first time — while also correcting an already-filled
+            # Account Number — sent ALL of them to pending, so the
+            # first-time fields never actually got saved and kept failing
+            # the step's own required-field check forever.
+            overwrite_fields = {
+                k: v for k, v in incoming_bank.items()
+                if getattr(profile, k, '') and v != getattr(profile, k, '')
+            }
+            direct_fields = {k: v for k, v in incoming_bank.items() if k not in overwrite_fields}
+            if overwrite_fields:
+                profile.submit_bank_change(overwrite_fields)
                 bank_change_requested = True
-            else:
-                filled_data.update(incoming_bank)
+            if direct_fields:
+                filled_data.update(direct_fields)
 
     if not filled_data and bank_change_requested:
         all_data  = EmployeeProfileSerializer(profile).data
