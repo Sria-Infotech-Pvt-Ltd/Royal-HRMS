@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import SearchableSelect from "@/components/SearchableSelect";
 import { useFetch } from "@/hooks/useFetch";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermission } from "@/hooks/usePermission";
@@ -101,12 +102,12 @@ export default function OtEntryTab() {
           <div className="form-row cols-3">
             <div className="field-group">
               <label className="field-label">Employee</label>
-              <select className="field-input field-select" value={form.employee_id} onChange={e => setField("employee_id", e.target.value)}>
-                <option value="">Select employee…</option>
-                {employees.map(e => (
-                  <option key={e.employee_id} value={e.employee_id}>{e.full_name} ({e.employee_id})</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.employee_id} onChange={v => setField("employee_id", v)}
+                placeholder="Select employee…"
+                options={employees.map(e => ({ value: e.employee_id, label: `${e.full_name} (${e.employee_id})` }))}
+                inputClassName="field-input"
+              />
             </div>
             <div className="field-group">
               <label className="field-label">Date</label>
@@ -132,12 +133,12 @@ export default function OtEntryTab() {
             </div>
             <div className="field-group">
               <label className="field-label">Approved By</label>
-              <select className="field-input field-select" value={form.approved_by} onChange={e => setField("approved_by", e.target.value)}>
-                <option value="">Select approver…</option>
-                {(approvers ?? []).map(a => (
-                  <option key={a.employee_id} value={a.employee_id}>{a.full_name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.approved_by ?? ""} onChange={v => setField("approved_by", v)}
+                placeholder="Select approver…"
+                options={(approvers ?? []).map(a => ({ value: a.employee_id, label: a.full_name ?? a.employee_id }))}
+                inputClassName="field-input"
+              />
             </div>
           </div>
           <div className="field-group mb-16">

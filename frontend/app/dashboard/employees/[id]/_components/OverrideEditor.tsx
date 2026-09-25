@@ -5,8 +5,9 @@ import { API } from "@/lib/api/endpoints";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import type { WorkflowMatrixRow, ApprovalWorkflowType } from "@/types/approvalMatrix";
-import { type PickerEmployee, SELECT_CLS, SELECT_STYLE } from "./approvalMatrixShared";
+import { type PickerEmployee, SELECT_CLS } from "./approvalMatrixShared";
 
 interface OverrideEditorProps {
   row:              WorkflowMatrixRow;
@@ -94,18 +95,14 @@ export default function OverrideEditor({ row, employeeCode, branch, defaultManag
               (default: {row.l1_approver_label})
             </span>
           </label>
-          <select
+          <SearchableSelect
             value={l1Id}
-            onChange={e => setL1Id(e.target.value)}
+            onChange={setL1Id}
             disabled={loadingManagers}
-            className={SELECT_CLS}
-            style={SELECT_STYLE}
-          >
-            <option value="">{loadingManagers ? "Loading…" : "— Global default —"}</option>
-            {managers.map(m => (
-              <option key={m.id} value={m.id}>{m.full_name} ({m.employee_id})</option>
-            ))}
-          </select>
+            placeholder={loadingManagers ? "Loading…" : "— Global default —"}
+            options={managers.map(m => ({ value: m.id, label: `${m.full_name} (${m.employee_id})` }))}
+            inputClassName={SELECT_CLS}
+          />
         </div>
 
         {row.l2_approver_role && (
@@ -116,18 +113,14 @@ export default function OverrideEditor({ row, employeeCode, branch, defaultManag
                 (default: {row.l2_approver_label})
               </span>
             </label>
-            <select
+            <SearchableSelect
               value={l2Id}
-              onChange={e => setL2Id(e.target.value)}
+              onChange={setL2Id}
               disabled={loadingHrs}
-              className={SELECT_CLS}
-              style={SELECT_STYLE}
-            >
-              <option value="">{loadingHrs ? "Loading…" : "— Global default —"}</option>
-              {hrs.map(h => (
-                <option key={h.id} value={h.id}>{h.full_name} ({h.employee_id})</option>
-              ))}
-            </select>
+              placeholder={loadingHrs ? "Loading…" : "— Global default —"}
+              options={hrs.map(h => ({ value: h.id, label: `${h.full_name} (${h.employee_id})` }))}
+              inputClassName={SELECT_CLS}
+            />
           </div>
         )}
       </div>

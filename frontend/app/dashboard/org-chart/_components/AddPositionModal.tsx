@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import SearchableSelect from "@/components/SearchableSelect";
 import type { JobTemplate, OrgUnit, Position, PositionPayload } from "@/types/orgStructure";
 import type { BranchOption, RoleOption } from "./OrgStructureClient";
 
@@ -90,10 +91,11 @@ export default function AddPositionModal({ unit, jobs, branches, roles, hasChief
 
       <div className="field-group mb-16">
         <label className="field-label">Job Template</label>
-        <select className="field-input field-select" value={jobTemplate} onChange={e => setJobTemplate(e.target.value)}>
-          <option value="">None</option>
-          {jobs.filter(j => j.is_active).map(j => <option key={j.id} value={j.id}>{j.name}{j.band ? ` · ${j.band}` : ""}</option>)}
-        </select>
+        <SearchableSelect
+          value={jobTemplate} onChange={setJobTemplate} placeholder="None"
+          options={jobs.filter(j => j.is_active).map(j => ({ value: String(j.id), label: `${j.name}${j.band ? ` · ${j.band}` : ""}` }))}
+          inputClassName="field-input"
+        />
       </div>
 
       <div className="field-group mb-16">
@@ -103,18 +105,20 @@ export default function AddPositionModal({ unit, jobs, branches, roles, hasChief
 
       <div className="field-group mb-16">
         <label className="field-label">Company Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
-        <select className="field-input field-select" value={branch} onChange={e => setBranch(e.target.value)}>
-          <option value="">Company-wide</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
-        </select>
+        <SearchableSelect
+          value={branch} onChange={setBranch} placeholder="Company-wide"
+          options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
+          inputClassName="field-input"
+        />
       </div>
 
       <div className="field-group mb-16">
         <label className="field-label">Default Role <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — suggested to HR when hiring into this seat)</span></label>
-        <select className="field-input field-select" value={defaultRole} onChange={e => setDefaultRole(e.target.value)}>
-          <option value="">None</option>
-          {roles.map(r => <option key={r.id} value={r.id}>{r.display_name}</option>)}
-        </select>
+        <SearchableSelect
+          value={defaultRole} onChange={setDefaultRole} placeholder="None"
+          options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
+          inputClassName="field-input"
+        />
       </div>
 
       <div className="mb-8">

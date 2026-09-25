@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { JobTemplate, OrgUnit, Placement, Position } from "@/types/orgStructure";
 import type { BranchOption, RoleOption, Selected } from "./OrgStructureClient";
 import ToggleSwitch from "@/components/ToggleSwitch";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface Props {
   selected: Selected;
@@ -204,10 +205,13 @@ export default function OrgDetail({
           </div>
           <div className="field-group">
             <label className="field-label">Parent unit</label>
-            <select className="field-input field-select" defaultValue={unit.parent ?? ""} disabled={!canEdit} onChange={e => onUnitField(unit.id, "parent", e.target.value || null)}>
-              <option value="">None — top level</option>
-              {parentOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={unit.parent ?? ""} disabled={!canEdit}
+              onChange={v => onUnitField(unit.id, "parent", v || null)}
+              placeholder="None — top level"
+              options={parentOptions.map(o => ({ value: o.id, label: o.name }))}
+              inputClassName="field-input"
+            />
           </div>
           <div className="field-group">
             <label className="field-label">Cost center <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional)</span></label>
@@ -340,30 +344,42 @@ export default function OrgDetail({
           </div>
           <div className="field-group">
             <label className="field-label">Org unit</label>
-            <select className="field-input field-select" defaultValue={p.org_unit} disabled={!canEdit} onChange={e => onPositionField(p.id, "org_unit", e.target.value)}>
-              {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={p.org_unit} disabled={!canEdit}
+              onChange={v => onPositionField(p.id, "org_unit", v)}
+              options={units.map(u => ({ value: u.id, label: u.name }))}
+              inputClassName="field-input"
+            />
           </div>
           <div className="field-group">
             <label className="field-label">Job template</label>
-            <select className="field-input field-select" defaultValue={p.job_template ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "job_template", e.target.value || null)}>
-              <option value="">None</option>
-              {jobs.map(j => <option key={j.id} value={j.id}>{j.name}{j.band ? ` · ${j.band}` : ""}</option>)}
-            </select>
+            <SearchableSelect
+              value={p.job_template ?? ""} disabled={!canEdit}
+              onChange={v => onPositionField(p.id, "job_template", v || null)}
+              placeholder="None"
+              options={jobs.map(j => ({ value: j.id, label: `${j.name}${j.band ? ` · ${j.band}` : ""}` }))}
+              inputClassName="field-input"
+            />
           </div>
           <div className="field-group">
             <label className="field-label">Company Code <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(optional — leave unset for a company-wide seat)</span></label>
-            <select className="field-input field-select" defaultValue={p.branch ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "branch", e.target.value || null)}>
-              <option value="">Company-wide</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
-            </select>
+            <SearchableSelect
+              value={p.branch != null ? String(p.branch) : ""} disabled={!canEdit}
+              onChange={v => onPositionField(p.id, "branch", v || null)}
+              placeholder="Company-wide"
+              options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
+              inputClassName="field-input"
+            />
           </div>
           <div className="field-group">
             <label className="field-label">Default role <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(suggested to HR when hiring into this seat)</span></label>
-            <select className="field-input field-select" defaultValue={p.default_role ?? ""} disabled={!canEdit} onChange={e => onPositionField(p.id, "default_role", e.target.value || null)}>
-              <option value="">None</option>
-              {roles.map(r => <option key={r.id} value={r.id}>{r.display_name}</option>)}
-            </select>
+            <SearchableSelect
+              value={p.default_role != null ? String(p.default_role) : ""} disabled={!canEdit}
+              onChange={v => onPositionField(p.id, "default_role", v || null)}
+              placeholder="None"
+              options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
+              inputClassName="field-input"
+            />
           </div>
         </div>
         <div style={{ marginTop: 4 }}>

@@ -8,6 +8,7 @@ import { getEffectiveBranch, isUnrestrictedUser } from "@/lib/auth";
 import { NAME_RE, POSITION_RE, sanitizeName, sanitizePosition, todayDateString } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, MODE_LABELS, RECRUITMENT_API } from "./_data";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface Props {
   candidate: Candidate;
@@ -169,13 +170,12 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
           <div className="field-group mb-16">
             <label className="field-label">Company Code <span style={{ color: "var(--error)" }}>*</span></label>
             {unrestricted ? (
-              <select className="field-input field-select" value={branch}
-                onChange={e => setBranch(e.target.value)} suppressHydrationWarning>
-                <option value="">Select Company Code</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.branch_name} ({b.branch_code})</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={branch} onChange={setBranch}
+                placeholder="Select Company Code"
+                options={branches.map(b => ({ value: String(b.id), label: `${b.branch_name} (${b.branch_code})` }))}
+                inputClassName="field-input"
+              />
             ) : (
               <input className="field-input" value={effectiveBranch} disabled readOnly suppressHydrationWarning />
             )}
@@ -227,13 +227,12 @@ export function EditCandidateModal({ candidate, branches, onClose, onSaved }: Pr
 
           <div className="field-group">
             <label className="field-label">Interviewer</label>
-            <select className="field-input field-select" value={interviewer}
-              onChange={e => setInterviewer(e.target.value)} suppressHydrationWarning>
-              <option value="">— Select interviewer —</option>
-              {employees.map(e => (
-                <option key={e.uuid} value={e.uuid}>{e.full_name} ({e.id})</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={interviewer} onChange={setInterviewer}
+              placeholder="— Select interviewer —"
+              options={employees.map(e => ({ value: e.uuid, label: `${e.full_name} (${e.id})` }))}
+              inputClassName="field-input"
+            />
           </div>
     </Modal>
   );

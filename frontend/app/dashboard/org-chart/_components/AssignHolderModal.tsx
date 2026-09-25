@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import type { Position } from "@/types/orgStructure";
 import type { EmployeeOption } from "./OrgStructureClient";
 
@@ -75,14 +76,13 @@ export default function AssignHolderModal({ position, employees, onClose, onAssi
 
       <div className="field-group mb-16">
         <label className="field-label">Employee <span style={{ color: "var(--error)" }}>*</span></label>
-        <select
-          className={`field-input field-select${fieldError ? " field-error" : ""}`}
+        <SearchableSelect
+          inputClassName={`field-input${fieldError ? " field-error" : ""}`}
           value={employeeId}
-          onChange={e => { setEmployeeId(e.target.value); setFieldError(null); }}
-        >
-          <option value="">Select an employee…</option>
-          {employees.map(e => <option key={e.id} value={e.id}>{e.full_name} ({e.employee_id})</option>)}
-        </select>
+          onChange={v => { setEmployeeId(v); setFieldError(null); }}
+          placeholder="Select an employee…"
+          options={employees.map(e => ({ value: e.id, label: `${e.full_name} (${e.employee_id})` }))}
+        />
         {fieldError && <p className="field-error-msg">{fieldError}</p>}
       </div>
 

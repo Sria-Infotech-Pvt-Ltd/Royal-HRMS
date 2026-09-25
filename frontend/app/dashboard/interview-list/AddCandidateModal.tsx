@@ -11,6 +11,7 @@ import {
 } from "@/lib/candidateValidation";
 import { Branch, Candidate, InterviewMode, RECRUITMENT_API } from "./_data";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface Props {
   onClose: () => void;
@@ -168,18 +169,13 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
           <div className="field-group mb-16">
             <label className="field-label">Company Code *</label>
             {unrestricted ? (
-              <select
-                className="field-input field-select"
+              <SearchableSelect
                 value={form.branch}
-                onChange={e => set("branch", e.target.value)}
-              >
-                <option value="">— Select Company Code —</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.branch_name} ({b.branch_code})
-                  </option>
-                ))}
-              </select>
+                onChange={v => set("branch", v)}
+                placeholder="— Select Company Code —"
+                options={branches.map(b => ({ value: String(b.id), label: `${b.branch_name} (${b.branch_code})` }))}
+                inputClassName="field-input"
+              />
             ) : (
               <input className="field-input" value={effectiveBranch} disabled readOnly />
             )}
@@ -215,12 +211,12 @@ export function AddCandidateModal({ onClose, onSaved }: Props) {
 
           <div className="field-group mb-16">
             <label className="field-label">Interviewer</label>
-            <select className="field-input field-select" value={form.interviewer} onChange={e => set("interviewer", e.target.value)}>
-              <option value="">— Select interviewer —</option>
-              {employees.map(e => (
-                <option key={e.uuid} value={e.uuid}>{e.full_name} ({e.id})</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={form.interviewer} onChange={v => set("interviewer", v)}
+              placeholder="— Select interviewer —"
+              options={employees.map(e => ({ value: e.uuid, label: `${e.full_name} (${e.id})` }))}
+              inputClassName="field-input"
+            />
           </div>
 
           <div className="field-group">

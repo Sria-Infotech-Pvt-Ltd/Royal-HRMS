@@ -7,6 +7,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import type { GlobalApprovalRule, ApprovalWorkflowType } from "@/types/approvalMatrix";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface RoleOption {
   id:           number;
@@ -180,17 +181,14 @@ export default function ApprovalRulesPage() {
 
           <div className="field-group mb-16">
             <label className="field-label">L1 Approver Role *</label>
-            <select
-              className="field-input field-select"
-              value={editing.l1_approver_role ?? ""}
-              onChange={e => setEditing(prev => prev ? { ...prev, l1_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
+            <SearchableSelect
+              value={editing.l1_approver_role != null ? String(editing.l1_approver_role) : ""}
+              onChange={v => setEditing(prev => prev ? { ...prev, l1_approver_role: v ? Number(v) : null } : prev)}
               disabled={loadingRoles}
-            >
-              <option value="">{loadingRoles ? "Loading roles…" : "— Select role —"}</option>
-              {roles.map(r => (
-                <option key={r.id} value={r.id}>{r.display_name}</option>
-              ))}
-            </select>
+              placeholder={loadingRoles ? "Loading roles…" : "— Select role —"}
+              options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
+              inputClassName="field-input"
+            />
           </div>
 
           <div className="field-group">
@@ -198,17 +196,14 @@ export default function ApprovalRulesPage() {
               L2 Approver Role{" "}
               <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>(leave blank for single-level)</span>
             </label>
-            <select
-              className="field-input field-select"
-              value={editing.l2_approver_role ?? ""}
-              onChange={e => setEditing(prev => prev ? { ...prev, l2_approver_role: e.target.value ? Number(e.target.value) : null } : prev)}
+            <SearchableSelect
+              value={editing.l2_approver_role != null ? String(editing.l2_approver_role) : ""}
+              onChange={v => setEditing(prev => prev ? { ...prev, l2_approver_role: v ? Number(v) : null } : prev)}
               disabled={loadingRoles}
-            >
-              <option value="">— Single level (no L2) —</option>
-              {roles.map(r => (
-                <option key={r.id} value={r.id}>{r.display_name}</option>
-              ))}
-            </select>
+              placeholder="— Single level (no L2) —"
+              options={roles.map(r => ({ value: String(r.id), label: r.display_name }))}
+              inputClassName="field-input"
+            />
           </div>
         </Modal>
       )}

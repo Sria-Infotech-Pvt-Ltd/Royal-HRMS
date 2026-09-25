@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import SearchableSelect from "@/components/SearchableSelect";
 
 export interface EmploymentDraft {
   employment_type: string;
@@ -137,17 +138,13 @@ export default function EmploymentStep({
         </div>
         <div className="f">
           <label>Reporting manager</label>
-          <select value={value.reporting_manager_id} onChange={e => set("reporting_manager_id", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-            <option value="">Auto-assign</option>
-            {people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
+          <SearchableSelect value={value.reporting_manager_id} onChange={v => set("reporting_manager_id", v)}
+            placeholder="Auto-assign" options={people.map(p => ({ value: p.id, label: p.full_name }))} />
         </div>
         <div className="f">
           <label>Dotted-line manager <span className="tag">OPTIONAL</span></label>
-          <select value={value.dotted_line_manager_id} onChange={e => set("dotted_line_manager_id", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-            <option value="">None</option>
-            {people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
+          <SearchableSelect value={value.dotted_line_manager_id} onChange={v => set("dotted_line_manager_id", v)}
+            placeholder="None" options={people.map(p => ({ value: p.id, label: p.full_name }))} />
         </div>
         <div className="f">
           <label>Cost center <span className="tag">FROM UNIT</span></label>
@@ -160,10 +157,8 @@ export default function EmploymentStep({
       <div className="g3">
         <div className="f">
           <label>Company code <span className="req">*</span></label>
-          <select value={value.branch} onChange={e => set("branch", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-            <option value="">Select</option>
-            {branches.map(b => <option key={b.id} value={b.branch_name}>{b.branch_name}</option>)}
-          </select>
+          <SearchableSelect value={value.branch} onChange={v => set("branch", v)}
+            placeholder="Select" options={branches.map(b => ({ value: b.branch_name, label: b.branch_name }))} />
         </div>
         <div className="f">
           <label>Work mode</label>
@@ -204,10 +199,8 @@ export default function EmploymentStep({
         </div>
         <div className="f">
           <label>Leave plan</label>
-          <select value={value.leave_plan} onChange={e => set("leave_plan", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-            <option value="">Not assigned yet</option>
-            {leavePolicies.map(p => <option key={p.id} value={p.id}>{p.leave_type_display}</option>)}
-          </select>
+          <SearchableSelect value={value.leave_plan} onChange={v => set("leave_plan", v)}
+            placeholder="Not assigned yet" options={leavePolicies.map(p => ({ value: String(p.id), label: p.leave_type_display }))} />
         </div>
       </div>
 
@@ -219,10 +212,8 @@ export default function EmploymentStep({
             Role <span className="req">*</span>
             {defaultRoleId && <span className="tag">FROM POSITION</span>}
           </label>
-          <select value={value.role} onChange={e => set("role", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-            <option value="">Select</option>
-            {roles.map(r => <option key={r.id} value={r.id}>{r.display_name}</option>)}
-          </select>
+          <SearchableSelect value={value.role} onChange={v => set("role", v)}
+            placeholder="Select" options={roles.map(r => ({ value: String(r.id), label: r.display_name }))} />
           {defaultRoleId ? (
             <div className="hint">Suggested from this position&apos;s default role ({defaultRoleName}) — change it if this hire needs something different.</div>
           ) : (
@@ -231,10 +222,8 @@ export default function EmploymentStep({
         </div>
         <div className="f">
           <label>Salary structure</label>
-          <select value={value.salary_structure} onChange={e => set("salary_structure", e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-            <option value="">None yet</option>
-            {structures.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <SearchableSelect value={value.salary_structure} onChange={v => set("salary_structure", v)}
+            placeholder="None yet" options={structures.map(s => ({ value: s.id, label: s.name }))} />
         </div>
         <div className="f">
           <label>Annual fixed CTC (₹) <span className="tag">HR</span></label>
