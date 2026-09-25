@@ -1508,10 +1508,22 @@ class EmployeeCodeSettings(models.Model):
                 pk=1,
                 defaults={'prefix': 'EMP', 'padding': 5, 'next_sequence': 1},
             )[0]
-            prefix   = cfg.prefix or 'EMP'
-            seq      = str(cfg.next_sequence).zfill(cfg.padding)
-            emp_id   = f'{prefix}{seq}'
-            cfg.next_sequence += 1
+            prefix = cfg.prefix or 'EMP'
+            # This counter and EmployeeCodeSeries' per-employment-type
+            # counters below share the same default prefix ('EMP') but never
+            # coordinate with each other — two independently-incrementing
+            # sequences using the same prefix WILL eventually both produce
+            # the same ID (confirmed in production: two real employees ended
+            # up with the identical employee_id, breaking every _get_employee
+            # lookup for that code). Skipping forward past any sequence
+            # number already claimed by a real User is a collision-proof
+            # guard regardless of how out of sync the two counters get.
+            while True:
+                seq    = str(cfg.next_sequence).zfill(cfg.padding)
+                emp_id = f'{prefix}{seq}'
+                cfg.next_sequence += 1
+                if not User.objects.filter(employee_id=emp_id).exists():
+                    break
             cfg.save(update_fields=['next_sequence', 'updated_at'])
         return emp_id
 
@@ -1556,9 +1568,16 @@ class EmployeeCodeSeries(models.Model):
                 employment_type=employment_type,
                 defaults={'prefix': base.prefix, 'padding': base.padding, 'next_sequence': 1},
             )[0]
-            seq    = str(series.next_sequence).zfill(series.padding)
-            emp_id = f'{series.prefix}{seq}'
-            series.next_sequence += 1
+            # Same collision guard as EmployeeCodeSettings.generate_employee_id
+            # above — this series and that singleton counter (and every other
+            # employment type's own series) can all produce the same prefix,
+            # and increment completely independently of each other.
+            while True:
+                seq    = str(series.next_sequence).zfill(series.padding)
+                emp_id = f'{series.prefix}{seq}'
+                series.next_sequence += 1
+                if not User.objects.filter(employee_id=emp_id).exists():
+                    break
             series.save(update_fields=['next_sequence', 'updated_at'])
         return emp_id
 
