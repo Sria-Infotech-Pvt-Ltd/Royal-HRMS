@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { usePermission } from "@/hooks/usePermission";
 import type { Position } from "@/types/orgStructure";
@@ -144,10 +145,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
           </div>
           <div className="f">
             <label>Reason <span className="req">*</span></label>
-            <select value={reason} onChange={e => setReason(e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-              <option value="">Select a reason</option>
-              {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
+            <SearchableSelect value={reason} onChange={setReason} placeholder="Select a reason" options={REASONS} />
           </div>
           <div className="f">
             <label>Effective from <span className="req">*</span></label>
@@ -160,19 +158,23 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
         <div className="g2">
           <div className="f">
             <label>Org unit</label>
-            <select value={orgUnitId} onChange={e => { setOrgUnitId(e.target.value); setPositionId(""); }}
-              disabled={positionsLoading} className="finput" style={{ cursor: "pointer" }}>
-              <option value="">Select an org unit</option>
-              {units.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={orgUnitId}
+              onChange={v => { setOrgUnitId(v); setPositionId(""); }}
+              disabled={positionsLoading}
+              placeholder="Select an org unit"
+              options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
+            />
           </div>
           <div className="f">
             <label>Position <span className="req">*</span></label>
-            <select value={positionId} onChange={e => setPositionId(e.target.value)}
-              disabled={!orgUnitId || positionsLoading} className="finput" style={{ cursor: "pointer" }}>
-              <option value="">{!orgUnitId ? "Select an org unit first" : "Select a position"}</option>
-              {positionOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
+            <SearchableSelect
+              value={positionId}
+              onChange={setPositionId}
+              disabled={!orgUnitId || positionsLoading}
+              placeholder={!orgUnitId ? "Select an org unit first" : "Select a position"}
+              options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
+            />
             {orgUnitId && !positionsLoading && canCreatePosition && !showCreatePosition && (
               <button
                 type="button"
