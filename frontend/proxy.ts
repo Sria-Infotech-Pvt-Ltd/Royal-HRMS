@@ -6,13 +6,20 @@ const ACCESS_COOKIE = "royal_access_token";
 const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/dashboard/announcements": "announcements.view",
   "/dashboard/interview-list": "recruitment.view",
-  "/dashboard/candidate-review": "recruitment.view",
+  // Also hosts the Onboarding Approvals tab (?tab=onboarding) — an HR user
+  // with onboarding.approve but not recruitment.view must still be able to
+  // reach it; recruitment.view alone would otherwise gate out anyone whose
+  // job is only reviewing onboarding submissions, not candidates.
+  "/dashboard/candidate-review": ["recruitment.view", "onboarding.approve"],
   // /dashboard/assessments intentionally absent — every employee can view
   // their own assigned assessments here, not just assessments.* holders
   // (same self-service reasoning as /dashboard/separation below). The page
   // itself picks admin management vs. EmployeeMyAssessments based on
   // permission (see app/dashboard/assessments/page.tsx's isAdminView check).
-  "/dashboard/onboarding-approvals": "employees.approve",
+  // Client-side redirects straight to /dashboard/candidate-review?tab=onboarding
+  // — this route's own guard must accept the exact same permissions as that
+  // real destination, or the redirect never gets a chance to fire.
+  "/dashboard/onboarding-approvals": ["recruitment.view", "onboarding.approve"],
   "/dashboard/email-logs": "email_logs.view",
   "/dashboard/employees": "employees.view",
   "/dashboard/org-chart": "org_chart.view",
