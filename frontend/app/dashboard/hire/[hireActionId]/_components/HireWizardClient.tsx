@@ -759,6 +759,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               onUpload={uploadDocument}
               onDelete={deleteDocument}
               verification={verification} onVerificationChange={setVerification}
+              hasExperienceEntries={experienceEntries.length > 0}
             />
           )}
 

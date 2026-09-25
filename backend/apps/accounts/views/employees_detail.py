@@ -610,3 +610,52 @@ class EmployeeDetailView(APIView):
 
     def post(self, request, employee_id: str):
         return self.put(request, employee_id)
+
+
+class EmployeeBankChangeReviewView(APIView):
+    """
+    POST /employees/<employee_id>/bank-change/approve/
+    POST /employees/<employee_id>/bank-change/reject/
+
+    HR review step for a self-service bank detail change — see
+    EmployeeProfile.submit_bank_change()/approve_bank_change()/
+    reject_bank_change() and the bank-change verification gate in
+    _save_profile_step() (views/shared.py). Approving copies the pending_*
+    values onto the live columns payroll reads; rejecting discards them and
+    leaves the previous bank details untouched.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _decide(self, request, employee_id: str, *, approve: bool):
+        from apps.accounts.models import EmployeeProfile
+        if not _has_perm(request.user, 'employees.edit'):
+            return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
+        employee = _get_employee(employee_id)
+        if not employee:
+            return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        profile = getattr(employee, 'profile', None)
+        if not profile or profile.bank_change_status != EmployeeProfile.BANK_CHANGE_PENDING:
+            return error('There is no pending bank detail change for this employee.')
+
+        if approve:
+            profile.approve_bank_change(actor=request.user)
+            action, message = 'bank_change_approved', 'Bank detail change approved.'
+        else:
+            profile.reject_bank_change(actor=request.user)
+            action, message = 'bank_change_rejected', 'Bank detail change rejected.'
+
+        AuditLog.objects.create(
+            user=request.user, action=action, module='employees',
+            object_id=str(employee.id),
+            changes={'employee': employee.employee_id or employee.email},
+            branch=employee.branch, ip_address=get_client_ip(request),
+        )
+        logger.info('%s for %s by %s', action, employee.email, request.user.email)
+        return success(message)
+
+    def post(self, request, employee_id: str, decision: str):
+        if decision == 'approve':
+            return self._decide(request, employee_id, approve=True)
+        if decision == 'reject':
+            return self._decide(request, employee_id, approve=False)
+        return error('Invalid decision.', http_status=status.HTTP_400_BAD_REQUEST)

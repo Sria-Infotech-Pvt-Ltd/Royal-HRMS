@@ -21,6 +21,14 @@ EMAIL_RE = re.compile(
     r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$'
 )
 
+# Bank fields gated behind HR review when a self-service edit would overwrite
+# an already-filled value — see the bank-change verification gate in
+# _save_profile_step() and EmployeeProfile.submit_bank_change().
+_BANK_FIELDS = frozenset((
+    'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
+    'account_holder_name', 'account_type',
+))
+
 
 def _is_valid_phone(raw: str) -> bool:
     """True if raw is a 10-digit number, with formatting (spaces/-/()/. /) and
@@ -299,6 +307,8 @@ def _employee_dict(user: User) -> dict:
         'ifsc_code':           p.ifsc_code           if p else '',
         'bank_name':           p.bank_name           if p else '',
         'bank_branch_name':    p.bank_branch_name    if p else '',
+        'bank_change_status':       p.bank_change_status       if p else '',
+        'bank_change_requested_at': p.bank_change_requested_at if p else None,
         # PAN is otherwise write-only (never surfaced on any read view) —
         # this masked preview is always safe to include regardless of
         # viewer permission; the real value only ever comes back from
@@ -697,6 +707,12 @@ def _extract_step_data(profile, all_data: dict, step: int) -> dict:
     data = {k: v for k, v in all_data.items() if k in step_fields}
     for key in custom_keys:
         data[key] = (profile.custom_field_values or {}).get(key)
+    # Not an OnboardingFieldConfig-driven field (no HR-configurable step it
+    # belongs to) but the bank step's own UI needs it on every response to
+    # know whether to show "pending HR review" instead of the live values.
+    if 'account_number' in step_fields:
+        data['bank_change_status'] = all_data.get('bank_change_status')
+        data['bank_change_requested_at'] = all_data.get('bank_change_requested_at')
     return data
 
 
@@ -1032,6 +1048,33 @@ def _save_profile_step(request, step: int, target_user=None):
         step_data = _extract_step_data(profile, all_data, step)
         return success('Nothing to save.', data=step_data)
 
+    # ── Bank-change verification gate ───────────────────────────────────────
+    # Self-service editing of ALREADY-FILLED bank details (the same
+    # empty->filled vs filled->different distinction _alert_bank_details_
+    # changed() on the model already draws) is held for HR review instead of
+    # writing straight to the columns payroll reads from — see
+    # EmployeeProfile.submit_bank_change(). First-time entry and any HR-
+    # assisted save (HREmployeeOnboardingView, target_user != request.user)
+    # skip this and save directly, same as before this gate existed.
+    bank_change_requested = False
+    if target_user == request.user:
+        incoming_bank = {k: filled_data.pop(k) for k in list(filled_data) if k in _BANK_FIELDS}
+        if incoming_bank:
+            already_filled = any(getattr(profile, k, '') for k in _BANK_FIELDS)
+            if already_filled:
+                profile.submit_bank_change(incoming_bank)
+                bank_change_requested = True
+            else:
+                filled_data.update(incoming_bank)
+
+    if not filled_data and bank_change_requested:
+        all_data  = EmployeeProfileSerializer(profile).data
+        step_data = _extract_step_data(profile, all_data, step)
+        return success(
+            'Bank detail change submitted — your previous details remain active on payroll until HR approves this change.',
+            data=step_data,
+        )
+
     serializer = EmployeeProfileSerializer(profile, data=filled_data, partial=True)
     if not serializer.is_valid():
         return error(
@@ -1063,7 +1106,12 @@ def _save_profile_step(request, step: int, target_user=None):
     all_data  = EmployeeProfileSerializer(profile).data
     step_data = _extract_step_data(profile, all_data, step)
     logger.info('Onboarding step %d saved for user %s', step, target_user.email)
-    return success('Profile saved.', data=step_data)
+    message = (
+        'Profile saved. Your bank detail change was submitted for HR review — '
+        'your previous details remain active on payroll until it is approved.'
+        if bank_change_requested else 'Profile saved.'
+    )
+    return success(message, data=step_data)
 
 
 def _can_manage_employee_documents(user, employee) -> bool:

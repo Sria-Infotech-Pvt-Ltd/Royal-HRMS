@@ -70,6 +70,7 @@ export const API = {
     resetPassword: (id: string) => `/employees/${id}/reset-password/`,
     revealSensitive: (id: string) => `/employees/${id}/reveal-sensitive/`,
     confirm: (id: string) => `/employees/${id}/confirm/`,
+    bankChangeReview: (id: string, decision: "approve" | "reject") => `/employees/${id}/bank-change/${decision}/`,
     branches:    "/branch/branches/",
     bulkImport:  "/employees/bulk-import/",
     bulkImportSample: "/employees/bulk-import/sample/",

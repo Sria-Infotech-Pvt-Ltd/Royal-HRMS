@@ -6,6 +6,7 @@
 // uploaded here or from the Statutory step's own inline upload show up in
 // both places, since both read/write the same underlying document list.
 
+import { useEffect, useRef } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 
 export type { HireDocument };
@@ -40,29 +41,43 @@ interface Props {
   onDelete: (doc: HireDocument) => void;
   verification: VerificationDraft;
   onVerificationChange: (v: VerificationDraft) => void;
+  /** Experience Letter only makes sense once at least one prior employer has
+   * actually been added on the Education & Experience step — asking for it
+   * on a first job with no experience entries at all is a dead requirement. */
+  hasExperienceEntries: boolean;
 }
 
-// These two are attached per qualification/employer on the Education &
-// Experience step (one certificate per entry, not one shared slot) — shown
-// here as a rollup count instead of a single upload button, since there's
-// no one "the" file to attach at this flat, step-level list.
+// These two can also be attached per qualification/employer on the
+// Education & Experience step (one certificate per entry) — that's in
+// addition to, not instead of, uploading one directly here.
 const PER_ENTRY_TYPES = new Set(["degree_certificate", "experience_letter"]);
 
-export default function DocumentsChecklistStep({ documents, uploading, error, onUpload, onDelete, verification, onVerificationChange }: Props) {
-  const categories = Array.from(new Set(DOC_ITEMS.map(d => d.category)));
-  const docFor = (key: string) => documents.find(d => d.document_type === key);
-  const countFor = (key: string) => documents.filter(d => d.document_type === key).length;
+export default function DocumentsChecklistStep({ documents, uploading, error, onUpload, onDelete, verification, onVerificationChange, hasExperienceEntries }: Props) {
+  const items = DOC_ITEMS.filter(d => d.key !== "experience_letter" || hasExperienceEntries);
+  const categories = Array.from(new Set(items.map(d => d.category)));
+  const docFor = (key: string) => documents.find(d => d.document_type === key && !d.entry_ref);
+  const perEntryCount = (key: string) => documents.filter(d => d.document_type === key && d.entry_ref).length;
+
+  // The alert lives at the top of a long, scrollable checklist — a failed
+  // upload down in Financial/Onboarding otherwise sets `error` off-screen
+  // above the user's current scroll position, so it never becomes visible
+  // even though it's genuinely in the DOM (looked like a "silent" 400 that
+  // only showed up in the network console).
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
 
   return (
     <div className="mstep on">
       {error && (
-        <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>
+        <div ref={errorRef} className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{error}</div></div>
       )}
       {categories.map(cat => (
         <div key={cat} className="mb-5">
           <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>{cat}</div>
           <div className="space-y-2">
-            {DOC_ITEMS.filter(d => d.category === cat).map(d => (
+            {items.filter(d => d.category === cat).map(d => (
               <div key={d.key} className="flex items-center justify-between px-3.5 py-3 rounded-lg border border-[var(--outline-v)]">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold">{d.label}</span>
@@ -73,13 +88,7 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
                     {d.required ? "Required" : "Optional"}
                   </span>
                 </div>
-                {PER_ENTRY_TYPES.has(d.key) ? (
-                  <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
-                    {countFor(d.key) > 0
-                      ? <span className="badge badge-success"><i className="ti ti-circle-check" /> {countFor(d.key)} attached</span>
-                      : "Attach from Education & experience"}
-                  </span>
-                ) : (
+                <div className="flex items-center gap-2">
                   <DocUploadButton
                     documentType={d.key}
                     label={d.label}
@@ -88,7 +97,12 @@ export default function DocumentsChecklistStep({ documents, uploading, error, on
                     onUpload={onUpload}
                     onDelete={onDelete}
                   />
-                )}
+                  {PER_ENTRY_TYPES.has(d.key) && perEntryCount(d.key) > 0 && (
+                    <span style={{ fontSize: 11, color: "var(--on-variant)" }}>
+                      + {perEntryCount(d.key)} more attached in Education &amp; experience
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

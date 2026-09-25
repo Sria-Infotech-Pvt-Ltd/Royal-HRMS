@@ -58,6 +58,14 @@ const ADDRESS_LINE_FIELDS = new Set(['current_address', 'permanent_address']);
 // purely-frontend rendering choice).
 const COUNTRY_NAME_FIELDS = new Set(['international_worker_country']);
 
+// nationality gets the same CountrySelect the Hire wizard's own Personal
+// identity step already uses (HireWizardClient.tsx) — demonym mode
+// ("Indian", "American") rather than country name, matching what this field
+// actually stores. Previously rendered as a plain native <select> here,
+// visually inconsistent with the polished searchable dropdown HR sees at
+// hire time for the exact same field.
+const NATIONALITY_FIELDS = new Set(['nationality']);
+
 interface Props {
   config: OnboardingFieldConfig;
   value: string;
@@ -93,6 +101,15 @@ export default function DynamicField({ config, value, onChange, placeholder }: P
       <div className="field-group">
         {label}
         <CountrySelect value={value} onChange={onChange} mode="name" />
+      </div>
+    );
+  }
+
+  if (NATIONALITY_FIELDS.has(config.field_key)) {
+    return (
+      <div className="field-group">
+        {label}
+        <CountrySelect value={value} onChange={onChange} mode="demonym" />
       </div>
     );
   }

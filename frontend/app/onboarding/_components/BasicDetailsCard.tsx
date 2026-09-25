@@ -32,6 +32,12 @@ export interface BasicDetails {
   branch:          string; // Branch name string, matches User.branch's own convention
   department:      string;
   designation:     string;
+  /** The real Org Unit/Position assigned at hire time (Placement) — kept
+   * separate from `department` (the nearest is_department-level ancestor,
+   * legitimately blank when the org chart has no such ancestor). Shown in
+   * preference to `department` so this row never looks blank/unfilled for
+   * an employee HR already placed into a real seat during hiring. */
+  org_unit_name:   string | null;
 }
 
 interface Props {
@@ -131,6 +137,7 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
         branch:          String(u.branch ?? form.branch),
         department:      String(u.department ?? form.department),
         designation:     String(u.designation ?? form.designation),
+        org_unit_name:   u.org_unit_name != null ? String(u.org_unit_name) : form.org_unit_name,
       });
       setOrgUnitId("");
       setPositionId("");
@@ -176,7 +183,7 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
           <Row label="Date of Joining" value={form.date_of_joining} />
           <Row label="Role" value={form.role_display} />
           <Row label="Company Code" value={form.branch} />
-          <Row label="Org Unit" value={form.department} />
+          <Row label="Org Unit" value={form.org_unit_name || form.department} />
           <Row label="Designation" value={form.designation} />
         </div>
       ) : (

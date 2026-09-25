@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import CountrySelect from "@/components/CountrySelect";
 
@@ -45,6 +46,11 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
   }
   const docFor = (key: string) => documents.find(d => d.document_type === key);
 
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (docError) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [docError]);
+
   return (
     <div className="mstep on">
       <div className="note warn" style={{ marginBottom: 16 }}>
@@ -52,7 +58,7 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         Government IDs and bank details are stored encrypted, masked in the UI by default, and every reveal is written to the audit log.
       </div>
 
-      {docError && <div className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>}
+      {docError && <div ref={errorRef} className="alert alert-error mb-16"><i className="ti ti-alert-circle" /><div>{docError}</div></div>}
 
       <div className="sechead">GOVERNMENT IDS</div>
       <div className="g3">

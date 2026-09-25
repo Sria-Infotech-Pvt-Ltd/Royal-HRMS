@@ -48,6 +48,10 @@ export default function OnboardingPage() {
   // never blocks advancing either — treated as always-passed below, same
   // as saveSection()'s own "experience" branch always returning true.
   const [completedStepNumbers, setCompletedStepNumbers] = useState<number[]>([]);
+  // "none" | "pending" — a self-service bank-detail edit that would
+  // overwrite an already-filled value is held for HR review instead of
+  // applying immediately (see backend's bank-change verification gate).
+  const [bankChangeStatus, setBankChangeStatus] = useState<string>("none");
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Per-company configurable fields (steps 0-3) — see Settings > Onboarding
@@ -98,6 +102,7 @@ export default function OnboardingPage() {
         branch:          String(d.branch ?? ""),
         department:      String(d.department ?? ""),
         designation:     String(d.designation ?? ""),
+        org_unit_name:   d.org_unit_name != null ? String(d.org_unit_name) : null,
       });
     }).catch(() => {});
   }, []);
@@ -543,6 +548,7 @@ export default function OnboardingPage() {
         ),
       );
       setCompletedStepNumbers(d.completed_steps ?? []);
+      setBankChangeStatus(d.bank_change_status ?? "none");
     }).catch(() => {});
     clientApi.get(API.onboarding.documents).then(r => {
       setDocs(r.data?.data ?? []);
@@ -670,15 +676,16 @@ export default function OnboardingPage() {
 
     setSaving(true);
     try {
-      const res = await clientApi.patch<{ success: boolean; message: string }>(
+      const res = await clientApi.patch<{ success: boolean; message: string; data?: { bank_change_status?: string } }>(
         API.onboarding.profileStep(currentStep.step), { ...form, ...customForStep },
       );
       if (res.data?.success === false) {
         setSaveErr(res.data.message ?? "Please fill in all required fields.");
         return false;
       }
-      setSaveMsg("Saved successfully.");
-      setTimeout(() => setSaveMsg(null), 2500);
+      if (res.data?.data?.bank_change_status) setBankChangeStatus(res.data.data.bank_change_status);
+      setSaveMsg(res.data?.message?.includes("HR review") ? res.data.message : "Saved successfully.");
+      setTimeout(() => setSaveMsg(null), res.data?.message?.includes("HR review") ? 6000 : 2500);
       return true;
     } catch (err: unknown) {
       setSaveErr((err as { message?: string })?.message ?? "Save failed. Please try again.");
@@ -897,6 +904,19 @@ export default function OnboardingPage() {
             />
           )}
 
+          {steps[tab].kind === "fields" && steps[tab].step === 2 && bankChangeStatus === "pending" && (
+            <div style={{
+              display: "flex", alignItems: "flex-start", gap: 10, padding: "0.9rem 1rem",
+              marginBottom: "1.25rem", borderRadius: 10,
+              background: "var(--warn-c)", color: "var(--warn)", fontSize: 13,
+            }}>
+              <i className="ti ti-clock-hour-4" style={{ fontSize: 16, marginTop: 1 }} />
+              <div>
+                A bank detail change you submitted is awaiting HR review — your previous
+                details remain active for payroll until it&apos;s approved.
+              </div>
+            </div>
+          )}
           {steps[tab].kind === "fields" && (
             <DynamicStepFields
               configs={(fieldConfig[String(steps[tab].step)] ?? []).filter(c => c.visible)}
@@ -1054,8 +1074,15 @@ export default function OnboardingPage() {
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 
+// The global stylesheet makes <body> a fixed, non-scrolling 100vh frame by
+// design (see globals.css) — every full page is expected to supply its own
+// inner overflow-y:auto region. This page previously relied on ordinary
+// document scroll via `minHeight: 100vh`, which body's `overflow: hidden`
+// silently blocked once the form got taller than the viewport (visible as
+// "the page won't scroll" on longer steps or smaller screens).
 const ROOT_STYLE: React.CSSProperties = {
-  minHeight: "100vh",
+  height: "100vh",
+  overflowY: "auto",
   background: "linear-gradient(140deg, #f0f4ff 0%, #e9effe 45%, #f3f0ff 100%)",
   display: "flex",
   flexDirection: "column",

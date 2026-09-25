@@ -1792,6 +1792,28 @@ class EmployeeProfile(models.Model):
     account_holder_name = models.CharField(max_length=150, blank=True)
     account_type        = models.CharField(max_length=10, choices=ACCOUNT_CHOICES, blank=True)
 
+    # Bank-change verification gate — a self-service edit to *already-filled*
+    # bank details (the same condition _alert_bank_details_changed() below
+    # already treats as suspicious) is held here pending HR review instead of
+    # overwriting the live fields payroll actually reads. First-time entry
+    # (empty -> filled) skips this and writes directly — no fraud risk in
+    # giving your bank details for the first time. See _save_profile_step()
+    # in views/shared.py for where this gate is actually applied.
+    BANK_CHANGE_NONE     = 'none'
+    BANK_CHANGE_PENDING  = 'pending'
+    BANK_CHANGE_STATUS_CHOICES = [
+        (BANK_CHANGE_NONE,    'No pending change'),
+        (BANK_CHANGE_PENDING, 'Pending HR review'),
+    ]
+    bank_change_status       = models.CharField(max_length=10, choices=BANK_CHANGE_STATUS_CHOICES, default=BANK_CHANGE_NONE, blank=True)
+    bank_change_requested_at = models.DateTimeField(null=True, blank=True)
+    pending_account_number      = EncryptedCharField(max_length=255, blank=True)
+    pending_ifsc_code           = EncryptedCharField(max_length=255, blank=True)
+    pending_bank_name           = models.CharField(max_length=200, blank=True)
+    pending_bank_branch_name    = models.CharField(max_length=200, blank=True)
+    pending_account_holder_name = models.CharField(max_length=150, blank=True)
+    pending_account_type        = models.CharField(max_length=10, choices=ACCOUNT_CHOICES, blank=True)
+
     # Statutory identity — PII requiring encryption at rest (CLAUDE.md §3).
     # pan_number can never be looked up by exact match against ciphertext
     # (Fernet is non-deterministic) — pan_number_hash is a deterministic
@@ -1922,6 +1944,95 @@ class EmployeeProfile(models.Model):
 
         if bank_details_changed:
             self._alert_bank_details_changed()
+
+    def submit_bank_change(self, fields: dict) -> None:
+        """Self-service edit to already-filled bank details — held in the
+        pending_* columns instead of overwriting what payroll reads, until
+        HR reviews it (see approve_bank_change/reject_bank_change)."""
+        self.pending_account_number      = fields.get('account_number', self.account_number)
+        self.pending_ifsc_code           = fields.get('ifsc_code', self.ifsc_code)
+        self.pending_bank_name           = fields.get('bank_name', self.bank_name)
+        self.pending_bank_branch_name    = fields.get('bank_branch_name', self.bank_branch_name)
+        self.pending_account_holder_name = fields.get('account_holder_name', self.account_holder_name)
+        self.pending_account_type        = fields.get('account_type', self.account_type)
+        self.bank_change_status = self.BANK_CHANGE_PENDING
+        self.bank_change_requested_at = timezone.now()
+        self.save(update_fields=[
+            'pending_account_number', 'pending_ifsc_code', 'pending_bank_name',
+            'pending_bank_branch_name', 'pending_account_holder_name', 'pending_account_type',
+            'bank_change_status', 'bank_change_requested_at',
+        ])
+        self._notify_bank_change_submitted()
+
+    def approve_bank_change(self, actor=None) -> None:
+        self.account_number      = self.pending_account_number
+        self.ifsc_code           = self.pending_ifsc_code
+        self.bank_name           = self.pending_bank_name
+        self.bank_branch_name    = self.pending_bank_branch_name
+        self.account_holder_name = self.pending_account_holder_name
+        self.account_type        = self.pending_account_type
+        self._clear_pending_bank_change()
+        self._changed_by = actor
+        self.save()
+        self._notify_bank_change_decision(approved=True)
+
+    def reject_bank_change(self, actor=None) -> None:
+        self._clear_pending_bank_change()
+        self.save(update_fields=[
+            'pending_account_number', 'pending_ifsc_code', 'pending_bank_name',
+            'pending_bank_branch_name', 'pending_account_holder_name', 'pending_account_type',
+            'bank_change_status', 'bank_change_requested_at',
+        ])
+        self._notify_bank_change_decision(approved=False)
+
+    def _clear_pending_bank_change(self) -> None:
+        self.pending_account_number = ''
+        self.pending_ifsc_code = ''
+        self.pending_bank_name = ''
+        self.pending_bank_branch_name = ''
+        self.pending_account_holder_name = ''
+        self.pending_account_type = ''
+        self.bank_change_status = self.BANK_CHANGE_NONE
+        self.bank_change_requested_at = None
+
+    def _notify_bank_change_submitted(self) -> None:
+        try:
+            from apps.notifications.models import Notification
+            from apps.notifications.signals import _push_live
+            hr_users = User.objects.filter(
+                role__role_permissions__permission__codename='employees.edit', is_active=True,
+            ).distinct()
+            for hr_user in hr_users:
+                notification = Notification.objects.create(
+                    user=hr_user,
+                    title='Bank detail change awaiting review',
+                    message=(
+                        f'{self.user.full_name or self.user.email} submitted a change to their '
+                        'salary bank account details — review before it takes effect for payroll.'
+                    ),
+                    notification_type='approval_request', module='employees',
+                )
+                _push_live(notification)
+        except Exception:
+            pass
+
+    def _notify_bank_change_decision(self, *, approved: bool) -> None:
+        try:
+            from apps.notifications.models import Notification
+            from apps.notifications.signals import _push_live
+            notification = Notification.objects.create(
+                user=self.user,
+                title='Bank detail change ' + ('approved' if approved else 'rejected'),
+                message=(
+                    'Your requested bank detail change has been approved and now applies to payroll.'
+                    if approved else
+                    'Your requested bank detail change was rejected by HR. Your previous bank details remain in effect.'
+                ),
+                notification_type='approval_result', module='employees',
+            )
+            _push_live(notification)
+        except Exception:
+            pass
 
     def _alert_bank_details_changed(self) -> None:
         """

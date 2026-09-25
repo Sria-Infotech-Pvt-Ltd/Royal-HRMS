@@ -1481,6 +1481,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'total_experience_years', 'previous_employer', 'previous_designation', 'leaving_reason',
             'account_number', 'ifsc_code', 'bank_name', 'bank_branch_name',
             'account_holder_name', 'account_type',
+            'bank_change_status', 'bank_change_requested_at',
             'emergency_name', 'emergency_relationship', 'emergency_phone', 'emergency_email',
             'uan_number', 'esi_number', 'name_as_per_aadhar', 'pan_number',
             'aadhaar_number', 'pf_covered', 'pf_number', 'esi_covered',
@@ -1489,7 +1490,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
             'custom_field_values',
             'updated_at',
         ]
-        read_only_fields = ('updated_at',)
+        read_only_fields = ('updated_at', 'bank_change_status', 'bank_change_requested_at')
 
     def validate_pan_number(self, value: str) -> str:
         if not value:
@@ -2138,18 +2139,44 @@ class MyProfileSerializer(serializers.ModelSerializer):
     # NOTICE PERIOD) — both fields already existed on the User model but
     # were never exposed to the employee's own profile endpoint before.
     employment_status_display = serializers.CharField(source='get_employment_status_display', read_only=True)
+    # The real Org Unit/Position an employee was placed into at hire time
+    # (Placement, set via assign_position() during the Hire wizard) — kept
+    # separate from `department`, which is only the nearest is_department
+    # -level ancestor's name and stays legitimately blank when no such
+    # ancestor exists in the org chart. Without this, self-service onboarding
+    # had no way to show the org unit HR already assigned and looked like it
+    # was "asking again" for something never actually filled.
+    org_unit_name  = serializers.SerializerMethodField()
+    position_title = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
         fields = [
             'id', 'full_name', 'email', 'phone', 'employee_id',
             'department', 'designation', 'branch', 'employee_type',
+            'org_unit_name', 'position_title',
             'role_name', 'role_display', 'date_of_joining', 'date_joined',
             'work_location', 'onboarding_status', 'assessment_status',
             'employment_status', 'employment_status_display', 'notice_period_days',
             'reporting_manager', 'reporting_approver', 'hr',
             'profile', 'profile_photo_url',
         ]
+
+    def _current_placement(self, obj: User):
+        # Same "open, still-current" filter _employee_dict() (views/shared.py)
+        # already uses elsewhere — an open-ended Placement (no effective_to)
+        # is the one that's active right now.
+        return obj.placements.filter(effective_to__isnull=True).select_related(
+            'position', 'position__org_unit',
+        ).first()
+
+    def get_org_unit_name(self, obj: User) -> str | None:
+        placement = self._current_placement(obj)
+        return placement.position.org_unit.name if placement else None
+
+    def get_position_title(self, obj: User) -> str | None:
+        placement = self._current_placement(obj)
+        return placement.position.title if placement else None
 
     def get_profile_photo_url(self, obj: User) -> str | None:
         if not obj.profile_photo:

@@ -120,6 +120,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
         branch:          raw.branch ?? "",
         department:      raw.department ?? "",
         designation:     raw.designation ?? "",
+        org_unit_name:   raw.org_unit_name ?? null,
       });
     }).catch(() => setNotFound(true)).finally(() => setLoading(false));
   }, [id]);

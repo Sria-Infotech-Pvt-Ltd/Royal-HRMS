@@ -45,6 +45,7 @@ interface EmployeeDetailSensitive {
     account_number?: string;
     ifsc_code?:      string;
     personal_email?: string;
+    bank_change_status?: string;
   };
   reporting_manager?: { name: string | null } | null;
   position_grade?: string | null;
@@ -81,7 +82,7 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
   );
   const currentSalary = (salaryHistory ?? []).find(s => s.is_active) ?? null;
 
-  const { data: detail } = useFetch<EmployeeDetailSensitive>(hasEmployeeId ? API.employees.detail(employee.id) : null);
+  const { data: detail, refetch: refetchDetail } = useFetch<EmployeeDetailSensitive>(hasEmployeeId ? API.employees.detail(employee.id) : null);
   const { data: actionHistory } = useFetch<ActionHistoryRow[]>(hasEmployeeId ? API.employees.actionHistory(employee.id) : null);
   const { data: auditTrail } = useFetch<AuditTrailRow[]>(hasEmployeeId ? API.employees.auditTrail(employee.id) : null);
   const p = detail?.profile;
@@ -90,6 +91,21 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
   const [revealed, setRevealed]   = useState<RevealedFields | null>(null);
   const [revealing, setRevealing] = useState(false);
   const [revealErr, setRevealErr] = useState<string | null>(null);
+  const [bankDeciding, setBankDeciding] = useState(false);
+  const [bankDecideErr, setBankDecideErr] = useState<string | null>(null);
+
+  async function decideBankChange(decision: "approve" | "reject") {
+    setBankDeciding(true);
+    setBankDecideErr(null);
+    try {
+      await clientApi.post(API.employees.bankChangeReview(employee.id, decision));
+      await refetchDetail();
+    } catch (err: unknown) {
+      setBankDecideErr((err as { message?: string })?.message ?? "Failed to record decision.");
+    } finally {
+      setBankDeciding(false);
+    }
+  }
 
   async function handleReveal() {
     setRevealing(true);
@@ -205,6 +221,26 @@ export default function EmployeeFullRecordBody({ employee, mode = "admin" }: Pro
             <p style={{ fontSize: 11, color: "var(--on-variant)" }}>
               This reveal was recorded in the audit log.
             </p>
+          )}
+          {isAdmin && p?.bank_change_status === "pending" && (
+            <div style={{
+              marginTop: 8, padding: "0.75rem", borderRadius: 10,
+              background: "var(--warn-c)", color: "var(--warn)", fontSize: 12,
+            }}>
+              <div style={{ marginBottom: 8 }}>
+                This employee submitted a bank detail change awaiting your review — their
+                previous details remain active for payroll until you decide.
+              </div>
+              {bankDecideErr && <div style={{ color: "var(--error)", marginBottom: 8 }}>{bankDecideErr}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-sm" disabled={bankDeciding} onClick={() => decideBankChange("approve")}>
+                  {bankDeciding ? <i className="ti ti-loader-2 animate-spin" /> : <i className="ti ti-check" />} Approve
+                </button>
+                <button className="btn btn-outline btn-sm" disabled={bankDeciding} onClick={() => decideBankChange("reject")}>
+                  <i className="ti ti-x" /> Reject
+                </button>
+              </div>
+            </div>
           )}
         </SectionCard>
       </div>
