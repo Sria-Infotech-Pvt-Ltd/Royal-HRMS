@@ -345,33 +345,63 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     }
   }
 
+  // Every field currently held in this wizard's local state — used
+  // wherever a save must capture EVERYTHING typed so far, not just the
+  // step currently on screen (patchAction() sends exactly the object it's
+  // given, no implicit merge with whatever's already in local state). Built
+  // as one function so "Next", jumping to another step via the sidebar, and
+  // "Save draft" all persist the exact same snapshot instead of drifting
+  // out of sync with each other.
+  function buildFullDraftPayload() {
+    return {
+      salutation, first_name: firstName, middle_name: middleName, last_name: lastName,
+      display_name: displayName, nationality, place_of_birth: placeOfBirth, email, phone,
+      ...identityExtras,
+      ...addressExtras,
+      ...form,
+      role: employment.role, branch: employment.branch, work_email: employment.work_email,
+      reporting_manager_id: employment.reporting_manager_id, dotted_line_manager_id: employment.dotted_line_manager_id,
+      work_location: employment.work_location, work_mode: employment.work_mode,
+      probation_period_months: employment.probation_period_months, notice_period_days: employment.notice_period_days,
+      weekly_off_policy: employment.weekly_off_policy, working_hours_policy: employment.working_hours_policy,
+      salary_structure: employment.salary_structure, annual_ctc: employment.annual_ctc,
+      pay_group: employment.pay_group, attendance_scheme: employment.attendance_scheme, leave_plan: employment.leave_plan,
+      tax_regime: basicPay.tax_regime, payment_method: basicPay.payment_method,
+      ...statutory,
+      emergency_contacts: emergencyContacts,
+      family_entries: familyEntries, nominee_entries: nomineeEntries,
+      education_entries: educationEntries, experience_entries: experienceEntries,
+      asset_entries: assetEntries,
+      core_skills: coreSkills, certifications,
+      ...verification,
+    };
+  }
+
+  // Jumping to another step via the sidebar (HireWizardSidebar's own
+  // onStepClick) previously called setTab directly with no save at all —
+  // whatever was typed on the step being left silently never reached
+  // draft_data, and "Hire employee" at the end used whatever was last
+  // actually PATCHed, not what was on screen. Saving here first (same full
+  // snapshot "Next" already sends) closes that gap; errors are swallowed
+  // rather than blocking navigation, since jumping between steps must never
+  // get stuck the way advancing past a required-field gate should.
+  async function goToStep(index: number) {
+    try {
+      await patchAction(buildFullDraftPayload());
+    } catch {
+      // Best-effort — still navigate even if this particular snapshot
+      // failed to validate; the field-level errors surface again next time
+      // "Next" is pressed from wherever the user lands.
+    }
+    setTab(index);
+  }
+
   async function handleNext() {
     const err = validateCurrentStep();
     if (err) { setStepErr(err); return; }
     setStepErr("");
     try {
-      await patchAction({
-        salutation, first_name: firstName, middle_name: middleName, last_name: lastName,
-        display_name: displayName, nationality, place_of_birth: placeOfBirth, email, phone,
-        ...identityExtras,
-        ...addressExtras,
-        ...form,
-        role: employment.role, branch: employment.branch, work_email: employment.work_email,
-        reporting_manager_id: employment.reporting_manager_id, dotted_line_manager_id: employment.dotted_line_manager_id,
-        work_location: employment.work_location, work_mode: employment.work_mode,
-        probation_period_months: employment.probation_period_months, notice_period_days: employment.notice_period_days,
-        weekly_off_policy: employment.weekly_off_policy, working_hours_policy: employment.working_hours_policy,
-        salary_structure: employment.salary_structure, annual_ctc: employment.annual_ctc,
-        pay_group: employment.pay_group, attendance_scheme: employment.attendance_scheme, leave_plan: employment.leave_plan,
-        tax_regime: basicPay.tax_regime, payment_method: basicPay.payment_method,
-        ...statutory,
-        emergency_contacts: emergencyContacts,
-        family_entries: familyEntries, nominee_entries: nomineeEntries,
-        education_entries: educationEntries, experience_entries: experienceEntries,
-        asset_entries: assetEntries,
-        core_skills: coreSkills, certifications,
-        ...verification,
-      });
+      await patchAction(buildFullDraftPayload());
       setHighestSaved(h => Math.max(h, tab));
       setTab(t => Math.min(t + 1, STEPS.length - 1));
     } catch (e) {
@@ -383,6 +413,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     setHiring(true);
     setHireError(null);
     try {
+      // Belt-and-suspenders: whatever's currently in local state gets saved
+      // one more time right before completing, in case the last edit
+      // happened without going through handleNext/goToStep (e.g. the last
+      // real save site missed in some future change to this file).
+      await patchAction(buildFullDraftPayload()).catch(() => {});
       await clientApi.post(API.hireActions.complete(hireActionId));
       onHired();
     } catch (e) {
@@ -443,9 +478,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             <div className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>{progressPct}% complete</div>
           </div>
           <button onClick={onClose} className="btn btn-ghost">Discard</button>
-          <button onClick={() => patchAction({}).catch(() => {})} className="btn btn-ghost">Save draft</button>
+          <button onClick={() => patchAction(buildFullDraftPayload()).catch(() => {})} className="btn btn-ghost">Save draft</button>
           <button onClick={() => setShowScanFill(true)} className="btn btn-ghost">Scan &amp; fill</button>
-          {tab > 0 && <button onClick={() => setTab(t => Math.max(0, t - 1))} className="btn btn-ghost">Back</button>}
+          {tab > 0 && <button onClick={() => goToStep(Math.max(0, tab - 1))} className="btn btn-ghost">Back</button>}
           <button onClick={handleNext} className="btn btn-filled">Next →</button>
         </div>
       ) : (
@@ -454,7 +489,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     >
       <div className="wiz">
         <HireWizardSidebar steps={STEPS} currentStep={tab} highestSaved={highestSaved}
-          onStepClick={setTab} missingByStep={missingByStep} />
+          onStepClick={goToStep} missingByStep={missingByStep} />
 
         <div className="wiz-main">
           <div className="stephead" style={{ padding: "20px 24px 0" }}>
