@@ -10,6 +10,7 @@ Run with: python manage.py test apps.accounts.tests_hire_wizard
 """
 from __future__ import annotations
 
+import datetime
 import io
 
 from django.core.cache import cache
@@ -36,6 +37,14 @@ def _png_file(name: str, content: bytes = _VALID_PNG) -> SimpleUploadedFile:
     return SimpleUploadedFile(name, content, content_type='image/png')
 
 
+def _tomorrow_iso() -> str:
+    # Always a real future date relative to whenever the suite actually
+    # runs — a hardcoded literal date here would silently become "the
+    # past" (and start failing every create for an unrelated reason) the
+    # moment the calendar caught up to it.
+    return (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+
+
 class HireWizardTestCase(TestCase):
     """Shared fixtures: an HR user with employees.create, a Position to hire
     into, and the URL helpers every test below reuses."""
@@ -55,7 +64,7 @@ class HireWizardTestCase(TestCase):
     def _create_draft(self, **overrides) -> HireAction:
         payload = {
             'reason': 'new_position',
-            'effective_from': '2026-09-24',
+            'effective_from': _tomorrow_iso(),
             'position': str(self.position.id),
         }
         payload.update(overrides)
@@ -107,7 +116,7 @@ class Stage1CreateTests(HireWizardTestCase):
 
     def test_create_rejects_missing_reason(self):
         resp = self.client.post(reverse('hire-action-list'), {
-            'effective_from': '2026-09-24', 'position': str(self.position.id),
+            'effective_from': _tomorrow_iso(), 'position': str(self.position.id),
         }, format='json')
         self.assertEqual(resp.status_code, 400)
 
@@ -120,7 +129,7 @@ class Stage1CreateTests(HireWizardTestCase):
 
     def test_create_rejects_unknown_position(self):
         resp = self.client.post(reverse('hire-action-list'), {
-            'reason': 'new_position', 'effective_from': '2026-09-24',
+            'reason': 'new_position', 'effective_from': _tomorrow_iso(),
             'position': '00000000-0000-0000-0000-000000000000',
         }, format='json')
         self.assertEqual(resp.status_code, 400)
@@ -129,7 +138,7 @@ class Stage1CreateTests(HireWizardTestCase):
         no_perm_user = make_user('noperm@test.com', role=self.plain_role, password='TestPass123!')
         self.client.force_authenticate(user=no_perm_user)
         resp = self.client.post(reverse('hire-action-list'), {
-            'reason': 'new_position', 'effective_from': '2026-09-24', 'position': str(self.position.id),
+            'reason': 'new_position', 'effective_from': _tomorrow_iso(), 'position': str(self.position.id),
         }, format='json')
         self.assertEqual(resp.status_code, 403)
 

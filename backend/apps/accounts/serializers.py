@@ -5,6 +5,7 @@ import os
 import re
 
 from django.core import signing
+from django.db import transaction
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -635,19 +636,29 @@ class PositionSerializer(serializers.ModelSerializer):
             'holder_name': target_placement.employee.full_name if target_placement else None,
         }
 
-    def _unset_other_chiefs(self, instance: Position) -> None:
-        if instance.is_chief:
-            Position.objects.filter(org_unit=instance.org_unit).exclude(pk=instance.pk).update(is_chief=False)
+    def _unset_other_chiefs(self, org_unit, exclude_pk=None) -> None:
+        qs = Position.objects.filter(org_unit=org_unit, is_chief=True)
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        qs.update(is_chief=False)
 
     def create(self, validated_data):
-        instance = super().create(validated_data)
-        self._unset_other_chiefs(instance)
-        return instance
+        # Unset any existing chief in this org unit BEFORE inserting the new
+        # row — position_one_chief_per_unit is a non-deferrable DB
+        # constraint, so doing this the other way around (create, then
+        # unset) would violate it the instant the new row is inserted while
+        # the old one still has is_chief=True, before the unset ever runs.
+        with transaction.atomic():
+            if validated_data.get('is_chief'):
+                self._unset_other_chiefs(validated_data['org_unit'])
+            return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        instance = super().update(instance, validated_data)
-        self._unset_other_chiefs(instance)
-        return instance
+        with transaction.atomic():
+            if validated_data.get('is_chief'):
+                org_unit = validated_data.get('org_unit', instance.org_unit)
+                self._unset_other_chiefs(org_unit, exclude_pk=instance.pk)
+            return super().update(instance, validated_data)
 
 
 class PlacementSerializer(serializers.ModelSerializer):
