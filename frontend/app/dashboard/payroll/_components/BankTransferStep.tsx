@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
-import type { EmployeePayslip, PayrollCycle } from "@/types/payroll";
+import type { EmployeePayslip, PayrollCycle, SalaryTransferStatus } from "@/types/payroll";
 
 interface Props {
   cycleId: string;
@@ -21,13 +21,33 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
   const { data: payslipPage, loading, refetch } =
     useFetch<PagedResponse<EmployeePayslip>>(API.payroll.cyclePayslips(cycleId));
   const { data: cycle, refetch: refetchCycle } = useFetch<PayrollCycle>(API.payroll.cycle(cycleId));
+  const { data: transferStatus, refetch: refetchTransferStatus } =
+    useFetch<SalaryTransferStatus>(API.payroll.salaryTransferStatus(cycleId));
 
   const [marking, setMarking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmErr, setConfirmErr] = useState<string | null>(null);
 
   const payslips = payslipPage?.results ?? [];
   const totalNet = payslips.reduce((s, p) => s + Number(p.net_pay), 0);
   const isPaid   = cycle?.status === "paid" || cycle?.status === "closed";
+  const transferConfirmed = transferStatus?.batch_status === "confirmed";
+
+  async function confirmTransfer() {
+    setConfirming(true);
+    setConfirmErr(null);
+    try {
+      await clientApi.post(API.payroll.confirmSalaryTransfer(cycleId));
+      refetchTransferStatus();
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? "Failed to confirm salary transfer.";
+      setConfirmErr(msg);
+    } finally {
+      setConfirming(false);
+    }
+  }
 
   async function markPaid() {
     setMarking(true);
@@ -66,6 +86,53 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
         <div className="alert alert-error" style={{ margin: "0", borderRadius: 0 }}>
           <i className="ti ti-alert-circle" />
           <span>{err}</span>
+        </div>
+      )}
+
+      {/* Salary Transfer — employer sign-off required before Mark as Paid.
+          Employee side (payslip acknowledgement) is read-only here; only
+          the confirm action (existing POST .../salary-transfer/confirm/)
+          is new — no new backend endpoint. */}
+      {!isPaid && (
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--outline-v)" }}>
+          {confirmErr && (
+            <div className="alert alert-error" style={{ marginBottom: 12 }}>
+              <i className="ti ti-alert-circle" />
+              <span>{confirmErr}</span>
+            </div>
+          )}
+          {transferConfirmed ? (
+            <div className="alert alert-success" style={{ margin: 0 }}>
+              <i className="ti ti-circle-check" />
+              <span>
+                Salary transfer confirmed{transferStatus?.confirmed_by ? ` by ${transferStatus.confirmed_by}` : ""}
+                {transferStatus?.confirmed_at ? ` on ${new Date(transferStatus.confirmed_at).toLocaleDateString("en-IN")}` : ""}.
+                {" "}You can now mark this payroll as paid.
+              </span>
+            </div>
+          ) : (
+            <div className="alert alert-warn" style={{ margin: 0, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <i className="ti ti-alert-triangle" />
+                <span>
+                  Salary transfer not yet confirmed.
+                  {transferStatus && !transferStatus.employee_side_ready && transferStatus.reason
+                    ? ` ${transferStatus.reason}`
+                    : " Confirm the transfer to lock bank details and enable Mark as Paid."}
+                </span>
+              </div>
+              <button
+                className="btn btn-filled btn-sm"
+                onClick={confirmTransfer}
+                disabled={confirming || !transferStatus?.employee_side_ready}
+                title={!transferStatus?.employee_side_ready ? transferStatus?.reason || "Not ready" : undefined}
+              >
+                {confirming
+                  ? <><i className="ti ti-loader-2 animate-spin" /> Confirming…</>
+                  : <><i className="ti ti-shield-check" /> Confirm Salary Transfer</>}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -144,17 +211,25 @@ export default function BankTransferStep({ cycleId, onNext, onBack }: Props) {
       )}
 
       <div style={{ padding: "16px 20px", borderTop: "1px solid var(--outline-v)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {!isPaid && (
-            <button
-              className="btn btn-success"
-              onClick={markPaid}
-              disabled={marking || payslips.length === 0}
-            >
-              {marking
-                ? <><i className="ti ti-loader-2 animate-spin" /> Marking Paid…</>
-                : <><i className="ti ti-checks" /> Mark All Paid</>}
-            </button>
+            <>
+              <button
+                className="btn btn-success"
+                onClick={markPaid}
+                disabled={marking || payslips.length === 0 || !transferConfirmed}
+                title={!transferConfirmed ? "Confirm the salary transfer above first" : undefined}
+              >
+                {marking
+                  ? <><i className="ti ti-loader-2 animate-spin" /> Marking Paid…</>
+                  : <><i className="ti ti-checks" /> Mark All Paid</>}
+              </button>
+              {!transferConfirmed && payslips.length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--on-variant)" }}>
+                  Confirm the salary transfer above to enable this.
+                </span>
+              )}
+            </>
           )}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
