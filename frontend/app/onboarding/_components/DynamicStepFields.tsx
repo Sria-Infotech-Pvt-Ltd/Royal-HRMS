@@ -200,7 +200,18 @@ export default function DynamicStepFields({
   const sameAsCurrent = (form as unknown as Record<string, string>).permanent_same_as_current === "true";
 
   const sectionHeading = (text: string) => (
-    <h4 key={`heading-${text}`} style={{ fontSize: ".95rem", fontWeight: 600, margin: "18px 0 6px" }}>{text}</h4>
+    <h4
+      key={`heading-${text}`}
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        fontSize: ".8rem", fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase",
+        color: "var(--on-variant)", margin: "22px 0 10px",
+        paddingBottom: 8, borderBottom: "1px solid var(--outline-v)",
+      }}
+    >
+      <span style={{ width: 4, height: 14, borderRadius: 2, background: "var(--primary)", flexShrink: 0 }} />
+      {text}
+    </h4>
   );
 
   return (

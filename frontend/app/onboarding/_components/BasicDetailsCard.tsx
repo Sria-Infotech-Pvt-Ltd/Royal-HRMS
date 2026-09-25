@@ -150,18 +150,20 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
   }
 
   return (
-    // Plain white (var(--bg)), not var(--bg-low) — .field-static below is
-    // ALSO var(--bg-low), so a matching container background here would
-    // make every read-only field box blend invisibly into it (exactly the
-    // "no separate boxes" bug). Kept as a distinct section only via the
-    // border, matching how .field-static is used everywhere else in the app
-    // (always sitting on a white card, never on another tinted surface).
+    // A subtly tinted surface (var(--bg-mid)), not flat var(--bg) — the old
+    // fill was the exact same grey as the page background sitting behind
+    // the wizard card, so this whole section visually blurred into one
+    // undifferentiated grey mass instead of reading as a distinct grouped
+    // panel. .field-static's own var(--bg-low) fill is lighter still, so the
+    // two remain visually distinct from each other, just less washed-out
+    // overall.
     <div style={{
-      background: "var(--bg)",
+      background: "var(--bg-mid)",
       border: "1px solid var(--outline-v)",
       borderRadius: "var(--radius-lg, 12px)",
       padding: "18px 20px",
       marginBottom: 24,
+      boxShadow: "0 1px 3px rgba(20, 21, 31, 0.04)",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>Basic Details</div>
