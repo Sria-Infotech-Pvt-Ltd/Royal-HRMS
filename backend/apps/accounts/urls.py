@@ -85,6 +85,7 @@ from apps.accounts.views import (
     CompanyFinancialYearView,
     CompanyGSTRegistrationDetailView,
     CompanyGSTRegistrationListCreateView,
+    CompanyPublicBrandingView,
     CompanyRetrieveUpdateView,
     EmployeeBulkImportSampleView,
     DocumentDetailView,
@@ -271,6 +272,7 @@ urlpatterns = [
     path('permissions/<int:pk>/', PermissionDetailView.as_view(), name='permission-detail'),
 
     # Company (singleton)
+    path('company/public-branding/',               CompanyPublicBrandingView.as_view(),     name='company-public-branding'),
     path('settings/company/',                     CompanyRetrieveUpdateView.as_view(),     name='company'),
     path('settings/company/financial-year/',      CompanyFinancialYearView.as_view(),      name='company-financial-year'),
     path('settings/company/gst-registrations/',           CompanyGSTRegistrationListCreateView.as_view(), name='company-gst-registration-list'),

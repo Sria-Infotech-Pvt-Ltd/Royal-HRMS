@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import clientApi, { resetSessionExpired } from "@/lib/clientApi";
@@ -30,8 +30,11 @@ interface LoginApiResponse {
   };
 }
 
-const BRAND_NAME = "Aira HRMS";
-const BRAND_LOGO = "/logo-icon.png";
+// Fallback only — used until the real company branding loads (or if it
+// fails to load/isn't configured yet). This app is single-tenant, so in
+// practice the fetched company_name always wins once it resolves.
+const FALLBACK_BRAND_NAME = "Aira HRMS";
+const FALLBACK_BRAND_LOGO = "/logo-icon.png";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,6 +45,21 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+  const [brandName, setBrandName] = useState(FALLBACK_BRAND_NAME);
+  const [brandLogo, setBrandLogo] = useState(FALLBACK_BRAND_LOGO);
+
+  useEffect(() => {
+    clientApi.get<{ data: { company_name: string | null; logo_url: string | null } }>(
+      API.companyPublicBranding,
+    ).then(r => {
+      const d = r.data?.data;
+      if (d?.company_name) setBrandName(d.company_name);
+      if (d?.logo_url) setBrandLogo(d.logo_url);
+    }).catch(() => {
+      // Real company info couldn't load — keep the fallback brand rather
+      // than showing a broken/blank login screen.
+    });
+  }, []);
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -97,7 +115,7 @@ export default function LoginPage() {
     }
   }
 
-  const subtitle = `Sign in to your ${BRAND_NAME} account`;
+  const subtitle = `Sign in to your ${brandName} account`;
 
   return (
     <div className="login-page-root">
@@ -107,7 +125,7 @@ export default function LoginPage() {
         <div className="login-image-panel">
           <Image
             src="/login.jpg"
-            alt={BRAND_NAME}
+            alt={brandName}
             fill
             className="login-image"
             sizes="60vw"
@@ -123,8 +141,8 @@ export default function LoginPage() {
             <div className="login-brand-wrap">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={BRAND_LOGO}
-                alt={BRAND_NAME}
+                src={brandLogo}
+                alt={brandName}
                 width={240}
                 height={160}
                 style={{ width: 240, height: "auto", maxHeight: 100, objectFit: "contain" }}
@@ -225,7 +243,7 @@ export default function LoginPage() {
             )}
 
             <p className="login-footer-text">
-              Protected by {BRAND_NAME} · Enterprise SSO available
+              Protected by {brandName} · Enterprise SSO available
             </p>
 
           </div>

@@ -8,6 +8,10 @@ export const API = {
     changePassword: "/change-password/",
   },
 
+  // No-auth-required — used by the pre-login screen to show the real
+  // company name/logo instead of a hardcoded product brand string.
+  companyPublicBranding: "/company/public-branding/",
+
   announcements: {
     list: "/announcements/",
     detail: (id: string | number) => `/announcements/${id}/`,

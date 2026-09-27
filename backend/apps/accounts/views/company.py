@@ -122,6 +122,36 @@ from apps.accounts.views.shared import *  # noqa: F401,F403
 
 # ─── Company ──────────────────────────────────────────────────────────────────
 
+class CompanyPublicBrandingView(APIView):
+    """
+    GET /company/public-branding/ — the only Company fields safe to expose
+    with NO authentication at all, for the pre-login screen (page title,
+    logo, product name shown before anyone has signed in). This app is
+    single-tenant (Company.objects.first() is always the one and only
+    company — see Company's own docstring), so there's no risk of leaking
+    one tenant's name to another; this deliberately returns nothing else
+    (no address, no GST/PAN, no financial config) since it's reachable by
+    literally anyone who can reach this server, logged in or not.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from core.cache_service import CompanyCacheService
+        company = CompanyCacheService.get()
+        if not company or not company.company_name:
+            return success('No company info found.', data={'company_name': None, 'logo_url': None})
+        logo_url = None
+        if company.logo:
+            try:
+                logo_url = request.build_absolute_uri(company.logo.url)
+            except ValueError:
+                logo_url = None
+        return success('Company branding retrieved.', data={
+            'company_name': company.company_name,
+            'logo_url': logo_url,
+        })
+
+
 class CompanyRetrieveUpdateView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes     = [MultiPartParser, FormParser, JSONParser]
