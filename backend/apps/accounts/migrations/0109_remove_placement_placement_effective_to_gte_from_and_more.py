@@ -4,6 +4,12 @@ import django.contrib.postgres.constraints
 import django.contrib.postgres.fields.ranges
 from django.db import migrations, models
 
+from apps.accounts.migration_utils import (
+    PortableExclusionConstraint,
+    PostgresOnlyAddConstraint,
+    PostgresOnlyRemoveConstraint,
+)
+
 
 class Migration(migrations.Migration):
 
@@ -16,11 +22,11 @@ class Migration(migrations.Migration):
             model_name="placement",
             name="placement_effective_to_gte_from",
         ),
-        migrations.RemoveConstraint(
+        PostgresOnlyRemoveConstraint(
             model_name="placement",
             name="placement_position_no_overlap",
         ),
-        migrations.RemoveConstraint(
+        PostgresOnlyRemoveConstraint(
             model_name="placement",
             name="placement_employee_no_overlap",
         ),
@@ -36,9 +42,9 @@ class Migration(migrations.Migration):
                 violation_error_message="The end date cannot be before the start date.",
             ),
         ),
-        migrations.AddConstraint(
+        PostgresOnlyAddConstraint(
             model_name="placement",
-            constraint=django.contrib.postgres.constraints.ExclusionConstraint(
+            constraint=PortableExclusionConstraint(
                 expressions=[
                     ("position", "="),
                     (
@@ -58,9 +64,9 @@ class Migration(migrations.Migration):
                 violation_error_message="This position already has an overlapping placement for that date range.",
             ),
         ),
-        migrations.AddConstraint(
+        PostgresOnlyAddConstraint(
             model_name="placement",
-            constraint=django.contrib.postgres.constraints.ExclusionConstraint(
+            constraint=PortableExclusionConstraint(
                 expressions=[
                     ("employee", "="),
                     (

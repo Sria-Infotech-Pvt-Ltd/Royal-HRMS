@@ -25,6 +25,22 @@ column and its data are still there to adopt.
 from django.db import migrations
 
 
+def set_default(apps, schema_editor):
+    # Postgres-only drift fix (see module docstring) — a fresh SQLite
+    # install never has this extra column, so there's nothing to fix.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE attendance_face_registration_request ALTER COLUMN is_active SET DEFAULT true;")
+
+
+def drop_default(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE attendance_face_registration_request ALTER COLUMN is_active DROP DEFAULT;")
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -32,8 +48,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="ALTER TABLE attendance_face_registration_request ALTER COLUMN is_active SET DEFAULT true;",
-            reverse_sql="ALTER TABLE attendance_face_registration_request ALTER COLUMN is_active DROP DEFAULT;",
-        ),
+        migrations.RunPython(set_default, drop_default),
     ]

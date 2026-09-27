@@ -32,6 +32,35 @@ against its OWN state, independent of every other tenant's schema.
 from django.db import migrations
 
 
+def fix_cross_schema_drift(apps, schema_editor):
+    # Postgres-multi-tenant-schema-only drift fix (see module docstring) —
+    # no meaning on SQLite (no schema concept, no tenant provisioning path).
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'hrms_audit_logs'
+                      AND column_name = 'branch'
+                ) THEN
+                    ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NULL DEFAULT '';
+                ELSIF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'hrms_audit_logs'
+                      AND column_name = 'branch'
+                      AND is_nullable = 'NO'
+                ) THEN
+                    ALTER TABLE hrms_audit_logs ALTER COLUMN branch DROP NOT NULL;
+                END IF;
+            END $$;
+        """)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -39,28 +68,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = current_schema()
-                          AND table_name = 'hrms_audit_logs'
-                          AND column_name = 'branch'
-                    ) THEN
-                        ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NULL DEFAULT '';
-                    ELSIF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = current_schema()
-                          AND table_name = 'hrms_audit_logs'
-                          AND column_name = 'branch'
-                          AND is_nullable = 'NO'
-                    ) THEN
-                        ALTER TABLE hrms_audit_logs ALTER COLUMN branch DROP NOT NULL;
-                    END IF;
-                END $$;
-            """,
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(fix_cross_schema_drift, migrations.RunPython.noop),
     ]

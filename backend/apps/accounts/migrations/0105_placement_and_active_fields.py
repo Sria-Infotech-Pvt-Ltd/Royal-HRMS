@@ -13,6 +13,8 @@ import uuid
 from django.conf import settings
 from django.db import migrations, models
 
+from apps.accounts.migration_utils import PortableExclusionConstraint, PostgresOnlyAddConstraint
+
 
 class Migration(migrations.Migration):
 
@@ -90,9 +92,9 @@ class Migration(migrations.Migration):
                 name="placement_effective_to_gte_from",
             ),
         ),
-        migrations.AddConstraint(
+        PostgresOnlyAddConstraint(
             model_name="placement",
-            constraint=django.contrib.postgres.constraints.ExclusionConstraint(
+            constraint=PortableExclusionConstraint(
                 expressions=[
                     ("position", "="),
                     (
@@ -111,9 +113,9 @@ class Migration(migrations.Migration):
                 name="placement_position_no_overlap",
             ),
         ),
-        migrations.AddConstraint(
+        PostgresOnlyAddConstraint(
             model_name="placement",
-            constraint=django.contrib.postgres.constraints.ExclusionConstraint(
+            constraint=PortableExclusionConstraint(
                 expressions=[
                     ("employee", "="),
                     (

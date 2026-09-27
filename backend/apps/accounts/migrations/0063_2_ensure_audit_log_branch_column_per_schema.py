@@ -26,6 +26,29 @@ never actually made nullable (e.g. tenant_royalhrms itself).
 from django.db import migrations
 
 
+def ensure_branch_column(apps, schema_editor):
+    # Postgres-schema-per-tenant drift fix (see module docstring) — has no
+    # meaning on SQLite (no schema concept, no multi-tenant provisioning
+    # path), where the column was already added for real by the previous
+    # migration's non-postgres branch. No-op there.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'hrms_audit_logs'
+                      AND column_name = 'branch'
+                ) THEN
+                    ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NULL DEFAULT '';
+                END IF;
+            END $$;
+        """)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -37,20 +60,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = current_schema()
-                          AND table_name = 'hrms_audit_logs'
-                          AND column_name = 'branch'
-                    ) THEN
-                        ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NULL DEFAULT '';
-                    END IF;
-                END $$;
-            """,
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(ensure_branch_column, migrations.RunPython.noop),
     ]

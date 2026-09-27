@@ -25,6 +25,24 @@ from django.db import migrations
 import core.encrypted_fields
 
 
+def cast_jsonb_to_text(apps, schema_editor):
+    # Postgres-only: AlterField alone doesn't actually change the column
+    # type there (see module docstring — Django's autodetector treats this
+    # AlterField as a no-op since it only compares field classes, not the
+    # underlying jsonb-vs-text column types). SQLite has no such gap — its
+    # schema editor implements every AlterField via a real table rebuild
+    # using the NEW field's type, so the AlterField operation right after
+    # this one already does the real work there; this raw cast would just
+    # be invalid SQLite syntax for a no-op.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            "ALTER TABLE attendance_face_registration_request "
+            "ALTER COLUMN face_embedding TYPE text USING face_embedding::text;"
+        )
+
+
 def encrypt_existing_face_embeddings(apps, schema_editor):
     """
     One-pass, idempotent backfill — same pattern as
@@ -48,13 +66,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql=(
-                "ALTER TABLE attendance_face_registration_request "
-                "ALTER COLUMN face_embedding TYPE text USING face_embedding::text;"
-            ),
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(cast_jsonb_to_text, migrations.RunPython.noop),
         migrations.AlterField(
             model_name='faceregistrationrequest',
             name='face_embedding',

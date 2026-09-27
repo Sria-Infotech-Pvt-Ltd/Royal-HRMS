@@ -1,6 +1,22 @@
 from django.db import migrations
 
 
+def drop_not_null(apps, schema_editor):
+    # Postgres-only drift fix (see module docstring) — a fresh SQLite
+    # install never has this stray column, so there's nothing to fix.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE hrms_candidates ALTER COLUMN meeting_link DROP NOT NULL;")
+
+
+def set_not_null(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE hrms_candidates ALTER COLUMN meeting_link SET NOT NULL;")
+
+
 class Migration(migrations.Migration):
     """
     hrms_candidates.meeting_link is a stray column with no corresponding
@@ -16,8 +32,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="ALTER TABLE hrms_candidates ALTER COLUMN meeting_link DROP NOT NULL;",
-            reverse_sql="ALTER TABLE hrms_candidates ALTER COLUMN meeting_link SET NOT NULL;",
-        ),
+        migrations.RunPython(drop_not_null, set_not_null),
     ]

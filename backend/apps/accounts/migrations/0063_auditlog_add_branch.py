@@ -12,6 +12,33 @@
 from django.db import migrations, models
 
 
+def add_branch_column(apps, schema_editor):
+    """Postgres gets the original IF-NOT-EXISTS-guarded DO block (real
+    environments may already carry this column from independent drift-fixes
+    merged around the same time — see the module docstring above). SQLite
+    has no equivalent to a conditional DDL block and, for local dev, never
+    carries that historical drift in the first place — a plain ADD COLUMN
+    is always correct there."""
+    if schema_editor.connection.vendor != 'postgresql':
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(
+                "ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NOT NULL DEFAULT ''",
+            )
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'hrms_audit_logs' AND column_name = 'branch'
+                ) THEN
+                    ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NOT NULL DEFAULT '';
+                END IF;
+            END $$;
+        """)
+
+
 def backfill_branch_from_actor(apps, schema_editor):
     """
     Best-effort backfill for existing rows: use the acting user's branch.
@@ -49,20 +76,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                        DO $$
-                        BEGIN
-                            IF NOT EXISTS (
-                                SELECT 1 FROM information_schema.columns
-                                WHERE table_name = 'hrms_audit_logs' AND column_name = 'branch'
-                            ) THEN
-                                ALTER TABLE hrms_audit_logs ADD COLUMN branch varchar(100) NOT NULL DEFAULT '';
-                            END IF;
-                        END $$;
-                    """,
-                    reverse_sql=migrations.RunSQL.noop,
-                ),
+                migrations.RunPython(add_branch_column, migrations.RunPython.noop),
             ],
         ),
         migrations.RunPython(backfill_branch_from_actor, migrations.RunPython.noop),

@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password as _check_hash
 from django.contrib.auth.hashers import make_password as _make_hash
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from django.contrib.postgres.constraints import ExclusionConstraint
+from apps.accounts.migration_utils import PortableExclusionConstraint as ExclusionConstraint
 from django.contrib.postgres.fields import DateRangeField, RangeBoundary, RangeOperators
 from django.db import models, transaction
 from django.db.models import CheckConstraint, F, Func, Q, UniqueConstraint

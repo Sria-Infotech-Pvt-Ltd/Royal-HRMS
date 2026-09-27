@@ -27,6 +27,47 @@ the request record). Data (4 rows, real face embeddings) is left intact.
 from django.db import migrations
 
 
+def fix_fk_constraints(apps, schema_editor):
+    # Postgres-only ghost-table drift fix (see module docstring) — a fresh
+    # SQLite install never has this table (no model anywhere declares it),
+    # so there's nothing to fix.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            ALTER TABLE attendance_face_registration_request
+                DROP CONSTRAINT IF EXISTS attendance_face_regi_employee_id_9572e967_fk_hrms_user;
+            ALTER TABLE attendance_face_registration_request
+                ADD CONSTRAINT attendance_face_regi_employee_id_9572e967_fk_hrms_user
+                FOREIGN KEY (employee_id) REFERENCES hrms_users(id) ON DELETE CASCADE;
+
+            ALTER TABLE attendance_face_registration_request
+                DROP CONSTRAINT IF EXISTS attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user;
+            ALTER TABLE attendance_face_registration_request
+                ADD CONSTRAINT attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user
+                FOREIGN KEY (approved_by_id) REFERENCES hrms_users(id) ON DELETE SET NULL;
+        """)
+
+
+def revert_fk_constraints(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            ALTER TABLE attendance_face_registration_request
+                DROP CONSTRAINT IF EXISTS attendance_face_regi_employee_id_9572e967_fk_hrms_user;
+            ALTER TABLE attendance_face_registration_request
+                ADD CONSTRAINT attendance_face_regi_employee_id_9572e967_fk_hrms_user
+                FOREIGN KEY (employee_id) REFERENCES hrms_users(id);
+
+            ALTER TABLE attendance_face_registration_request
+                DROP CONSTRAINT IF EXISTS attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user;
+            ALTER TABLE attendance_face_registration_request
+                ADD CONSTRAINT attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user
+                FOREIGN KEY (approved_by_id) REFERENCES hrms_users(id);
+        """)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -34,32 +75,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                ALTER TABLE attendance_face_registration_request
-                    DROP CONSTRAINT IF EXISTS attendance_face_regi_employee_id_9572e967_fk_hrms_user;
-                ALTER TABLE attendance_face_registration_request
-                    ADD CONSTRAINT attendance_face_regi_employee_id_9572e967_fk_hrms_user
-                    FOREIGN KEY (employee_id) REFERENCES hrms_users(id) ON DELETE CASCADE;
-
-                ALTER TABLE attendance_face_registration_request
-                    DROP CONSTRAINT IF EXISTS attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user;
-                ALTER TABLE attendance_face_registration_request
-                    ADD CONSTRAINT attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user
-                    FOREIGN KEY (approved_by_id) REFERENCES hrms_users(id) ON DELETE SET NULL;
-            """,
-            reverse_sql="""
-                ALTER TABLE attendance_face_registration_request
-                    DROP CONSTRAINT IF EXISTS attendance_face_regi_employee_id_9572e967_fk_hrms_user;
-                ALTER TABLE attendance_face_registration_request
-                    ADD CONSTRAINT attendance_face_regi_employee_id_9572e967_fk_hrms_user
-                    FOREIGN KEY (employee_id) REFERENCES hrms_users(id);
-
-                ALTER TABLE attendance_face_registration_request
-                    DROP CONSTRAINT IF EXISTS attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user;
-                ALTER TABLE attendance_face_registration_request
-                    ADD CONSTRAINT attendance_face_regi_approved_by_id_8dc2795b_fk_hrms_user
-                    FOREIGN KEY (approved_by_id) REFERENCES hrms_users(id);
-            """,
-        ),
+        migrations.RunPython(fix_fk_constraints, revert_fk_constraints),
     ]

@@ -1,6 +1,17 @@
 from django.db import migrations
 
 
+def drop_orphaned_gstin_column(apps, schema_editor):
+    # Fixes a real, unrecorded drift against production only (see module
+    # docstring) — a fresh SQLite install never has this column in the first
+    # place (0096 already removed it from the model/migration state), so
+    # there's nothing to drop there.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute('ALTER TABLE hrms_company DROP COLUMN IF EXISTS gstin;')
+
+
 class Migration(migrations.Migration):
     """
     Drops a `gstin` column that reappeared on `hrms_company` outside of this
@@ -18,8 +29,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql='ALTER TABLE hrms_company DROP COLUMN IF EXISTS gstin;',
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(drop_orphaned_gstin_column, migrations.RunPython.noop),
     ]

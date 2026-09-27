@@ -24,6 +24,23 @@ are still there, untouched, ready to be adopted into the model properly.
 from django.db import migrations
 
 
+def set_default(apps, schema_editor):
+    # Postgres-only drift fix (see module docstring) — the column this
+    # targets isn't part of this branch's model/migration history at all; a
+    # fresh SQLite install never has it, so there's nothing to fix.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE attendance_punches ALTER COLUMN face_verified SET DEFAULT false;")
+
+
+def drop_default(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("ALTER TABLE attendance_punches ALTER COLUMN face_verified DROP DEFAULT;")
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -31,8 +48,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="ALTER TABLE attendance_punches ALTER COLUMN face_verified SET DEFAULT false;",
-            reverse_sql="ALTER TABLE attendance_punches ALTER COLUMN face_verified DROP DEFAULT;",
-        ),
+        migrations.RunPython(set_default, drop_default),
     ]

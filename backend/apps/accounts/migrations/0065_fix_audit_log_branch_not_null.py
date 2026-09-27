@@ -1,6 +1,27 @@
 from django.db import migrations
 
 
+def drop_not_null(apps, schema_editor):
+    # Postgres-only schema-drift fix (see module docstring) — SQLite never
+    # picked up that drift (0063_auditlog_add_branch's sqlite branch already
+    # adds the column matching the model field's blank=True, no null=True),
+    # so there's nothing to fix there.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'hrms_audit_logs' AND column_name = 'branch'
+                ) THEN
+                    ALTER TABLE hrms_audit_logs ALTER COLUMN branch DROP NOT NULL;
+                END IF;
+            END $$;
+        """)
+
+
 class Migration(migrations.Migration):
     """
     `hrms_audit_logs.branch` exists on production with a NOT NULL constraint
@@ -21,18 +42,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql="""
-                DO $$
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name = 'hrms_audit_logs' AND column_name = 'branch'
-                    ) THEN
-                        ALTER TABLE hrms_audit_logs ALTER COLUMN branch DROP NOT NULL;
-                    END IF;
-                END $$;
-            """,
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(drop_not_null, migrations.RunPython.noop),
     ]
