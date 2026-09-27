@@ -2092,6 +2092,14 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
     candidate_id     = serializers.SerializerMethodField()
     position_applied = serializers.SerializerMethodField()
     branch           = serializers.SerializerMethodField()
+    # Family/EPF nominee data was previously invisible to HR at the one real
+    # review checkpoint this data ever gets (onboarding approval locks
+    # further self-service edits once approved — see _self_locked() in
+    # views_family_nomination.py) — HR was approving nominee share
+    # percentages (a real EPF/gratuity statutory filing input) completely
+    # blind. Surfaced here so the approval screen can actually show it.
+    family_members = serializers.SerializerMethodField()
+    nominees       = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -2100,8 +2108,16 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
             'role_name', 'role_display', 'employee_id', 'date_of_joining',
             'onboarding_status', 'date_joined',
             'candidate_id', 'position_applied',
-            'profile', 'documents',
+            'profile', 'documents', 'family_members', 'nominees',
         ]
+
+    def get_family_members(self, obj):
+        from apps.accounts.views_family_nomination import family_dict
+        return [family_dict(m) for m in obj.family_members.all().order_by('order')]
+
+    def get_nominees(self, obj):
+        from apps.accounts.views_family_nomination import nominee_dict
+        return [nominee_dict(n) for n in obj.epf_nominees.select_related('family_member').order_by('order')]
 
     def _candidate(self, obj):
         return self.context.get('candidates_by_user', {}).get(obj.pk)

@@ -9,6 +9,9 @@ import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 
 interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
 
+interface FamilyMemberData { id: string; name: string; relationship: string; is_dependent: boolean; }
+interface NomineeData { id: string; family_member_name: string; relationship: string; scheme: string; share_percentage: number; }
+
 interface ProfileData {
   date_of_birth?: string; gender?: string; marital_status?: string;
   father_name?: string; blood_group?: string;
@@ -36,6 +39,8 @@ export interface ApprovalUser {
   candidate_id?: number | null;
   profile: ProfileData | null;
   documents: OnboardingDocument[];
+  family_members?: FamilyMemberData[];
+  nominees?: NomineeData[];
 }
 
 interface AssessmentOption { id: string; title: string; }
@@ -282,6 +287,38 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 <Row label="Phone"        value={user.profile.emergency_phone} />
               </Section>
             </>
+          )}
+
+          {((user.family_members?.length ?? 0) > 0 || (user.nominees?.length ?? 0) > 0) && (
+            <Section title="Family & Nomination">
+              {(user.family_members ?? []).map(m => (
+                <Row key={m.id} label={`${m.name} (${m.relationship})`} value={m.is_dependent ? "Dependent" : "Not dependent"} />
+              ))}
+              {(user.nominees ?? []).length > 0 && (
+                <div style={{ marginTop: ".5rem" }}>
+                  {["epf_eps", "gratuity", "both"].map(scheme => {
+                    const rows = (user.nominees ?? []).filter(n => n.scheme === scheme);
+                    if (rows.length === 0) return null;
+                    const total = rows.reduce((sum, n) => sum + n.share_percentage, 0);
+                    return (
+                      <div key={scheme} style={{ marginBottom: ".5rem" }}>
+                        <div style={{ fontSize: ".78rem", fontWeight: 600, color: "var(--on-variant)", marginBottom: 2 }}>
+                          {scheme === "epf_eps" ? "EPF + EPS" : scheme === "gratuity" ? "Gratuity" : "Both"}
+                        </div>
+                        {rows.map(n => (
+                          <Row key={n.id} label={n.family_member_name} value={`${n.share_percentage}%`} />
+                        ))}
+                        {total !== 100 && (
+                          <div style={{ color: "var(--error, #dc2626)", fontSize: ".78rem", marginTop: 2 }}>
+                            <i className="ti ti-alert-triangle" /> Shares total {total}%, not 100% — check before approving.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Section>
           )}
 
           <Section title={`Documents (${user.documents.length})`}>

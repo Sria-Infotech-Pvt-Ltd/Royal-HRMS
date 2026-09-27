@@ -184,7 +184,7 @@ def send_test_email(recipient_email: str, smtp_config: dict) -> None:
     html_body = _company_email_wrapper(html_body, *branding)
 
     msg = _build_message(
-        subject='Aira HRMS — SMTP Configuration Test',
+        subject=f'{company_name} — SMTP Configuration Test',
         html_body=html_body,
         from_email=from_email,
         to=[recipient_email],

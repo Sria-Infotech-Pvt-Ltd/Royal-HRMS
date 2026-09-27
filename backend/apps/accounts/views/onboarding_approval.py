@@ -578,6 +578,8 @@ class OnboardingApprovalView(APIView):
                 .select_related('role', 'profile')
                 .prefetch_related('employee_documents')
                 .prefetch_related('custom_field_files')
+                .prefetch_related('family_members')
+                .prefetch_related('epf_nominees__family_member')
                 .get(pk=user_id)
             )
         except User.DoesNotExist:
