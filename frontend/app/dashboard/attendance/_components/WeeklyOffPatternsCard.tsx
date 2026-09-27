@@ -344,7 +344,7 @@ export default function WeeklyOffPatternsCard() {
           footer={
             <>
               <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={deleting} suppressHydrationWarning>Cancel</button>
-              <button className="btn btn-filled" style={{ background: "var(--error)" }} onClick={handleDelete} disabled={deleting} suppressHydrationWarning>
+              <button className="btn btn-filled" style={{ background: "var(--error-solid)" }} onClick={handleDelete} disabled={deleting} suppressHydrationWarning>
                 {deleting ? "Deactivating…" : "Deactivate"}
               </button>
             </>

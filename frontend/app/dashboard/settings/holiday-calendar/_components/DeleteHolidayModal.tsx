@@ -55,7 +55,7 @@ export default function DeleteHolidayModal({ holiday, onClose, onDeleted }: Prop
             Cancel
           </button>
           <button onClick={confirmDelete} disabled={deleting}
-            className="flex-1 py-2 rounded-xl bg-[var(--error)] hover:bg-[var(--error)] text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2">
+            className="flex-1 py-2 rounded-xl bg-[var(--error-solid)] hover:bg-[var(--error-solid)] text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2">
             {deleting ? <><i className="ti ti-loader-2 animate-spin" /> Deleting…</> : "Delete"}
           </button>
         </div>

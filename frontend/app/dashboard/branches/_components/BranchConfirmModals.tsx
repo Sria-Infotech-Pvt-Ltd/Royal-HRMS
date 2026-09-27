@@ -108,7 +108,7 @@ export function DeleteConfirmModal({
           <button className="btn btn-ghost" onClick={onClose} disabled={deleting}>Cancel</button>
           <button
             className="btn btn-filled"
-            style={{ background: "var(--error)" }}
+            style={{ background: "var(--error-solid)" }}
             onClick={onConfirm}
             disabled={deleting}
           >

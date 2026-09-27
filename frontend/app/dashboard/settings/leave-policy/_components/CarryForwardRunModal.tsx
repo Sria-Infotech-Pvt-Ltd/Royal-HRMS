@@ -20,7 +20,7 @@ export default function CarryForwardRunModal({ fromYear, toYear, pendingCount, r
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose} disabled={running}>Cancel</button>
-          <button className="btn btn-filled" style={{ background: "var(--error)" }} onClick={onConfirm} disabled={running}>
+          <button className="btn btn-filled" style={{ background: "var(--error-solid)" }} onClick={onConfirm} disabled={running}>
             {running ? <><i className="ti ti-loader-2" style={{ animation: "spin 1s linear infinite" }} />&nbsp;Running…</> : "Run Carry Forward"}
           </button>
         </>

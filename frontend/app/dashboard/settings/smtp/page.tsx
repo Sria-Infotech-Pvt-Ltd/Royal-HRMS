@@ -368,7 +368,7 @@ export default function SmtpSettingsPage() {
               <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={deleting === deleteTarget.id}>Cancel</button>
               <button
                 className="btn btn-filled"
-                style={{ background: "var(--error)" }}
+                style={{ background: "var(--error-solid)" }}
                 onClick={confirmDelete}
                 disabled={deleting === deleteTarget.id}
                 suppressHydrationWarning

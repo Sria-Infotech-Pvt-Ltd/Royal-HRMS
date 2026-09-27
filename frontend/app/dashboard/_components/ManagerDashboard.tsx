@@ -174,7 +174,7 @@ function ManagerDashboardInner({ session }: Props) {
                     </div>
                     <span className="qa-label">{action.label}</span>
                     {action.count !== null && action.count > 0 && (
-                      <span style={{ position: "absolute", top: 4, right: 4, background: "var(--error)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 5px", lineHeight: 1.4 }}>
+                      <span style={{ position: "absolute", top: 4, right: 4, background: "var(--error-solid)", color: "#fff", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "1px 5px", lineHeight: 1.4 }}>
                         {action.count}
                       </span>
                     )}

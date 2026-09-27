@@ -622,7 +622,7 @@ export default function AnnouncementsPage() {
               </button>
               <button
                 className="btn btn-filled"
-                style={{ background: "var(--error)" }}
+                style={{ background: "var(--error-solid)" }}
                 onClick={handleDelete}
                 disabled={deleting}
                 suppressHydrationWarning

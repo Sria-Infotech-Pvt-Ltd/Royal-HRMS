@@ -88,7 +88,14 @@ export function NotificationBell() {
           <path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute top-[2px] right-[2px] min-w-[16px] h-[16px] px-[3px] rounded-full flex items-center justify-center text-[9px] font-bold text-white bg-[var(--error)] border-[1.5px] border-[var(--surface)]">
+          // A fixed, always-vivid red — not var(--error), which is a TEXT
+          // color meant to stay readable against the page background and
+          // gets lightened to a soft pink in dark mode (see html[data-theme
+          // ="dark"] in globals.css). Used here as a solid fill behind white
+          // text instead, that light-pink dark-mode value made the count
+          // nearly invisible (light pink background, white text). A count
+          // badge needs to look the same, always-vivid, in both themes.
+          <span className="absolute top-[2px] right-[2px] min-w-[16px] h-[16px] px-[3px] rounded-full flex items-center justify-center text-[9px] font-bold text-white border-[1.5px] border-[var(--surface)]" style={{ background: "var(--error-solid)" }}>
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}

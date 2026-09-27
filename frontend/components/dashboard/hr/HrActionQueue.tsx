@@ -89,7 +89,7 @@ export default function HrActionQueue() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {count > 0 && (
                     <span style={{
-                      minWidth: 22, height: 22, borderRadius: 11, background: "var(--error)",
+                      minWidth: 22, height: 22, borderRadius: 11, background: "var(--error-solid)",
                       color: "#fff", fontSize: 11, fontWeight: 700,
                       display: "inline-flex", alignItems: "center", justifyContent: "center",
                       padding: "0 6px",

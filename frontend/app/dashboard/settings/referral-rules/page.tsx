@@ -273,7 +273,7 @@ export default function ReferralRulesSettingsPage() {
                       {confirmDelete === rule.id ? (
                         <>
                           <button suppressHydrationWarning
-                            style={{ background: "var(--error)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
+                            style={{ background: "var(--error-solid)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
                             onClick={() => handleDelete(rule.id)}>
                             <i className="ti ti-check" /> Confirm
                           </button>

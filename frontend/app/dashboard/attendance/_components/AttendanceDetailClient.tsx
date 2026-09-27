@@ -176,7 +176,7 @@ export default function AttendanceDetailClient({ initialTab, onBack }: { initial
             {!!tab.badge && (
               <span style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
-                minWidth: 18, height: 18, borderRadius: 9, background: "var(--error)",
+                minWidth: 18, height: 18, borderRadius: 9, background: "var(--error-solid)",
                 color: "#fff", fontSize: 10, fontWeight: 700, marginLeft: 6, padding: "0 4px",
               }}>
                 {tab.badge}

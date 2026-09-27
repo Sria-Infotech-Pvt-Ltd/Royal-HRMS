@@ -185,7 +185,7 @@ export default function CarryForwardTab() {
                 </button>
                 <button
                   className="btn btn-filled"
-                  style={{ background: "var(--error)" }}
+                  style={{ background: "var(--error-solid)" }}
                   onClick={() => { setRunError(null); setShowRunModal(true); }}
                   disabled={busy || fromYear === null || toYear === null}
                 >

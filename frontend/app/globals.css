@@ -29,6 +29,16 @@
   --purple: #a78bfa;
   --error: #c23a2f;
   --error-c: #fcebe9;
+  /* A fixed, always-vivid red for solid fills with white text on top
+     (danger buttons, count badges) — deliberately NOT redefined in dark
+     mode. --error itself IS redefined there (to a soft, readable-as-text
+     pink), which is correct for its real purpose (text color against the
+     page background) but breaks badly when misused as a solid background
+     fill instead: white text on that dark-mode pink reads as nearly
+     invisible. Every "background: var(--error)" + white-text spot in the
+     app (delete buttons, notification/count badges) should use this
+     instead — see NotificationBell.tsx for the bug this fixes. */
+  --error-solid: #dc2626;
   --success: #17905a;
   --success-c: #e6f6ee;
   --info: #2563eb;
