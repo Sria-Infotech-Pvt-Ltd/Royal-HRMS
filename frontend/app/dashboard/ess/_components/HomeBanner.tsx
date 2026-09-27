@@ -6,10 +6,12 @@
 // useAttendanceStatus hook so punching in here is the exact same flow as
 // every other punch-in button in the app, not a new one.
 
+import { useEffect } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import { API } from "@/lib/api/endpoints";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import ClockInButton from "@/components/ClockInButton";
+import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 import type { AttendanceStatus } from "@/types/employeeDashboard";
 
 interface Shift { name: string; start_time: string; end_time: string }
@@ -41,7 +43,13 @@ interface Props {
 }
 
 export default function HomeBanner({ status, onPunchSuccess }: Props) {
-  const { data: profile } = useFetch<HomeProfile>(API.employees.me);
+  const { data: profile, refetch: refetchProfile } = useFetch<HomeProfile>(API.employees.me);
+
+  useEffect(() => {
+    function onPhotoUpdated() { refetchProfile(); }
+    window.addEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
+    return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
+  }, [refetchProfile]);
   // Org-wide default shift (no per-employee shift assignment exists yet —
   // see /attendance/my-shift/'s own docstring). Falls back to the real
   // clock-in status line when no default is configured, rather than a

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
@@ -16,6 +17,7 @@ import DashboardFooter from "@/components/dashboard/DashboardFooter";
 import { useFetch } from "@/hooks/useFetch";
 import Avatar from "@/app/dashboard/employees/_components/Avatar";
 import { NAV_ICONS } from "@/components/dashboard/NavIcons";
+import { PROFILE_PHOTO_UPDATED_EVENT } from "@/hooks/useProfilePhotoUpload";
 
 function initials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -34,7 +36,13 @@ export default function DashboardShell({
   // Fetched independently of the server-rendered session cookie (name/role
   // only) so a photo change shows up immediately, without needing to log in
   // again for the cookie to refresh.
-  const { data: myProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me);
+  const { data: myProfile, refetch: refetchMyProfile } = useFetch<{ profile_photo_url: string | null }>(API.employees.me);
+
+  useEffect(() => {
+    function onPhotoUpdated() { refetchMyProfile(); }
+    window.addEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
+    return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
+  }, [refetchMyProfile]);
 
 
   const visibleNav = buildNav(session.permissions ?? []);
