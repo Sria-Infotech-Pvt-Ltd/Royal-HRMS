@@ -16,6 +16,9 @@ import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
 import ProfileEditModal from "@/app/dashboard/employees/_components/ProfileEditModal";
+import Avatar from "@/app/dashboard/employees/_components/Avatar";
+import ProfilePhotoModal from "@/components/ProfilePhotoModal";
+import { initials } from "@/app/dashboard/employees/_data";
 import type { Employee } from "@/app/dashboard/employees/_data";
 
 interface ProfileSummaryData {
@@ -26,6 +29,7 @@ interface ProfileSummaryData {
   designation:      string;
   department:       string;
   branch:           string;
+  profile_photo_url?: string | null;
   date_of_joining:  string | null;
   date_joined:      string | null;
   work_location:    string | null;
@@ -79,18 +83,51 @@ export default function ProfileSummaryTab() {
   const [showRecord, setShowRecord] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [savedJustNow, setSavedJustNow] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [photoOverride, setPhotoOverride] = useState<string | null | undefined>(undefined);
+  const photoUrl = photoOverride !== undefined ? photoOverride : (data?.profile_photo_url ?? null);
+  const [firstName, ...restName] = (data?.full_name ?? "").split(" ");
 
   return (
     <div>
       <div className="page-header">
-        <div>
-          <div className="page-title">My profile</div>
-          <div className="page-sub">The same employee record and layout used by Admin, with self-service permissions.</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ position: "relative", width: 48, height: 48, flexShrink: 0 }}>
+            <Avatar text={initials(firstName || "", restName.join(" "))} size={48} photoUrl={photoUrl} />
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(true)}
+              suppressHydrationWarning
+              title="Change profile photo"
+              style={{
+                position: "absolute", bottom: -2, right: -2,
+                width: 20, height: 20, borderRadius: "50%",
+                background: "var(--primary)", color: "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                border: "2px solid var(--surface)", cursor: "pointer",
+              }}
+            >
+              <i className="ti ti-camera" style={{ fontSize: 10 }} />
+            </button>
+          </div>
+          <div>
+            <div className="page-title">My profile</div>
+            <div className="page-sub">The same employee record and layout used by Admin, with self-service permissions.</div>
+          </div>
         </div>
         <div className="page-actions">
           <button className="btn btn-filled" onClick={() => setShowRecord(true)}>Open full employee profile</button>
         </div>
       </div>
+
+      {showPhotoModal && (
+        <ProfilePhotoModal
+          hasExistingPhoto={Boolean(photoUrl)}
+          onClose={() => setShowPhotoModal(false)}
+          onUploaded={url => { setPhotoOverride(url); setShowPhotoModal(false); }}
+          onRemoved={() => { setPhotoOverride(null); setShowPhotoModal(false); }}
+        />
+      )}
 
       {savedJustNow && (
         <div className="alert alert-success mb-16">
