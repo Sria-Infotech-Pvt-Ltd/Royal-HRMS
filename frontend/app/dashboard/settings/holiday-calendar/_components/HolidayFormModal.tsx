@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
 import type { Holiday, HolidayFormPayload, HolidayType } from "@/types/holidays";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface BranchOption { id: number; branch_name: string }
 
@@ -122,11 +123,13 @@ export default function HolidayFormModal({ mode, editing, branches, onClose, onS
           </div>
           <div>
             <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Applicable Company Code</label>
-            <select className={`${INPUT} field-select`} value={form.branch === null ? "" : String(form.branch)}
-              onChange={e => setField("branch", e.target.value === "" ? null : Number(e.target.value))}>
-              <option value="">All Company Codes</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
-            </select>
+            <SearchableSelect
+              inputClassName={INPUT}
+              value={form.branch === null ? "" : String(form.branch)}
+              onChange={v => setField("branch", v === "" ? null : Number(v))}
+              placeholder="All Company Codes"
+              options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-[var(--on-variant)] mb-1.5">Description</label>

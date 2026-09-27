@@ -10,6 +10,7 @@ import OrgDetail from "./OrgDetail";
 import AddUnitModal from "./AddUnitModal";
 import AddPositionModal from "./AddPositionModal";
 import AssignHolderModal from "./AssignHolderModal";
+import SearchableSelect from "@/components/SearchableSelect";
 import EndPlacementModal from "./EndPlacementModal";
 import DeactivatePositionModal from "./DeactivatePositionModal";
 import ManageJobTemplatesModal from "./ManageJobTemplatesModal";
@@ -229,15 +230,13 @@ export default function OrgStructureClient({ onBack, initialSelectedUnitId }: { 
               />
             </div>
             <div style={{ margin: "8px 8px" }}>
-              <select
-                className="field-input field-select"
+              <SearchableSelect
+                inputClassName="field-input"
                 value={branchFilter}
-                onChange={e => setBranchFilter(e.target.value)}
-                title="Positions with no Company Code set always show, in every view"
-              >
-                <option value="">All Company Codes</option>
-                {branches.map(b => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
-              </select>
+                onChange={setBranchFilter}
+                placeholder="All Company Codes"
+                options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
+              />
             </div>
             <div className="org-tree-scroll" style={{ maxHeight: 640, overflow: "auto" }}>
               <OrgTree

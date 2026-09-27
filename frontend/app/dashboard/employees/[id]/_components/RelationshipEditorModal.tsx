@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import Modal from "@/components/Modal";
-import { type PickerEmployee, SELECT_CLS, SELECT_STYLE } from "./approvalMatrixShared";
+import SearchableSelect from "@/components/SearchableSelect";
+import { type PickerEmployee, SELECT_CLS } from "./approvalMatrixShared";
 
 interface RelationshipEditorProps {
   title:        string;
@@ -67,20 +68,14 @@ export default function RelationshipEditorModal({
       )}
       <div className="field-group">
         <label className="field-label">Select person</label>
-        <select
+        <SearchableSelect
           value={selectedId}
-          onChange={e => setSelectedId(e.target.value)}
+          onChange={setSelectedId}
           disabled={loading}
-          className={SELECT_CLS}
-          style={SELECT_STYLE}
-        >
-          <option value="">{loading ? "Loading…" : "— Select —"}</option>
-          {people.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.full_name} ({p.employee_id})
-            </option>
-          ))}
-        </select>
+          inputClassName={SELECT_CLS}
+          placeholder={loading ? "Loading…" : "— Select —"}
+          options={people.map(p => ({ value: p.id, label: `${p.full_name} (${p.employee_id})` }))}
+        />
       </div>
     </Modal>
   );

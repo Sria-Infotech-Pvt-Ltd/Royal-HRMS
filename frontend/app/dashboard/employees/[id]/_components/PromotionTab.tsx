@@ -7,6 +7,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import type { FieldOption } from "../../_data";
 import { formatDate } from "@/lib/formatDate";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface Props {
   employeeId: string;
@@ -269,34 +270,29 @@ export default function PromotionTab({
 
               <div className="field-group">
                 <label className="field-label">Org Unit</label>
-                <select
-                  className="field-input field-select"
+                <SearchableSelect
+                  inputClassName="field-input"
                   value={reassignOrgUnit}
                   disabled={positionsLoading}
-                  onChange={e => { setReassignOrgUnit(e.target.value); setReassignPosition(""); setReassignError(null); }}
-                >
-                  <option value="">— Select an org unit —</option>
-                  {units.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
+                  onChange={v => { setReassignOrgUnit(v); setReassignPosition(""); setReassignError(null); }}
+                  placeholder="— Select an org unit —"
+                  options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
+                />
               </div>
 
               <div className="field-group">
                 <label className="field-label">Position</label>
-                <select
-                  className="field-input field-select"
+                <SearchableSelect
+                  inputClassName="field-input"
                   value={reassignPosition}
                   disabled={!reassignOrgUnit}
-                  onChange={e => { setReassignPosition(e.target.value); setReassignError(null); }}
-                >
-                  <option value="">
-                    {!reassignOrgUnit ? "Select an org unit first" : reassignPositionOptions.length === 0 ? "No active positions in this unit" : "— Select Position —"}
-                  </option>
-                  {reassignPositionOptions.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}{p.holder_name ? ` — currently ${p.holder_name}` : " (vacant)"}
-                    </option>
-                  ))}
-                </select>
+                  onChange={v => { setReassignPosition(v); setReassignError(null); }}
+                  placeholder={!reassignOrgUnit ? "Select an org unit first" : reassignPositionOptions.length === 0 ? "No active positions in this unit" : "— Select Position —"}
+                  options={reassignPositionOptions.map(p => ({
+                    value: p.id,
+                    label: `${p.title}${p.holder_name ? ` — currently ${p.holder_name}` : " (vacant)"}`,
+                  }))}
+                />
               </div>
 
               <div className="field-group">
@@ -311,16 +307,15 @@ export default function PromotionTab({
 
               <div className="field-group">
                 <label className="field-label">New role <span className="text-muted">(optional)</span></label>
-                <select
-                  className="field-input field-select"
+                <SearchableSelect
+                  inputClassName="field-input"
                   value={reassignRole}
-                  onChange={e => { setReassignRole(e.target.value); setRoleConfirmed(false); setReassignError(null); }}
-                >
-                  {!roleOptions.find(o => o.value === currentRole) && (
-                    <option value={currentRole}>{currentRole}</option>
-                  )}
-                  {roleOptions.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
+                  onChange={v => { setReassignRole(v); setRoleConfirmed(false); setReassignError(null); }}
+                  options={[
+                    ...(!roleOptions.find(o => o.value === currentRole) ? [{ value: currentRole, label: currentRole }] : []),
+                    ...roleOptions,
+                  ]}
+                />
               </div>
 
               {reassignSelectedPosition?.holder_name && reassignSelectedPosition.holder_employee_id !== employeeId && (

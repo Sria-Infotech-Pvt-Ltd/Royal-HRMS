@@ -10,6 +10,7 @@ import type { OrgUnit } from "@/types/orgStructure";
 import BirthdayCelebrationCard from "@/components/dashboard/employee/BirthdayCelebrationCard";
 import BirthdayCelebrationModal from "@/components/dashboard/employee/BirthdayCelebrationModal";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import AnnouncementCard from "./AnnouncementCard";
 import {
   type Category, type Visibility, type FormVisibility, type Announcement, type PageMeta,
@@ -494,17 +495,16 @@ export default function AnnouncementsPage() {
                 <div className="field-group">
                   <label className="field-label">Company Code{isOrgWide && <span style={{ color: "var(--error)" }}> *</span>}</label>
                   {isOrgWide ? (
-                    <select
-                      className="field-input field-select"
+                    <SearchableSelect
+                      inputClassName="field-input"
                       value={form.target_branch}
-                      onChange={e => setField("target_branch", e.target.value)}
+                      onChange={v => setField("target_branch", v)}
                       disabled={form.visibility === "department"}
-                    >
-                      <option value="">All Company Codes</option>
-                      {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name} ({b.branch_code})</option>)}
-                    </select>
+                      placeholder="All Company Codes"
+                      options={branches.map(b => ({ value: String(b.id), label: `${b.branch_name} (${b.branch_code})` }))}
+                    />
                   ) : (
-                    <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
+                    <div className="field-input" style={{ background: "var(--bg-mid)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
                       <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
                       {branches.find(b => String(b.id) === form.target_branch)?.branch_name ?? "Not assigned"}
                     </div>
@@ -532,14 +532,13 @@ export default function AnnouncementsPage() {
               {form.visibility === "department" && (
                 <div className="field-group">
                   <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
-                  <select
-                    className={`field-input field-select${formErrors.target_org_unit ? " field-error" : ""}`}
+                  <SearchableSelect
+                    inputClassName={`field-input${formErrors.target_org_unit ? " field-error" : ""}`}
                     value={form.target_org_unit}
-                    onChange={e => setField("target_org_unit", e.target.value)}
-                  >
-                    <option value="">Select org unit…</option>
-                    {orgUnits.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
+                    onChange={v => setField("target_org_unit", v)}
+                    placeholder="Select org unit…"
+                    options={orgUnits.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
+                  />
                   {formErrors.target_org_unit && <div className="field-error-msg">{formErrors.target_org_unit}</div>}
                 </div>
               )}

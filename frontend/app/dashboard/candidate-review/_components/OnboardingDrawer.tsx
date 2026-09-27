@@ -5,6 +5,7 @@ import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import DocPreviewModal from "@/components/DocPreviewModal";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 
 interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
@@ -375,30 +376,26 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
 
               <div className="field-group" style={{ marginBottom: ".75rem" }}>
                 <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
-                <select
-                  className="field-input field-select"
+                <SearchableSelect
+                  inputClassName="field-input"
                   value={orgUnitId}
                   disabled={positionsLoading}
-                  onChange={e => { setOrgUnitId(e.target.value); setSelPosition(""); setAssignErr(""); }}
-                >
-                  <option value="">— Select an org unit —</option>
-                  {units.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
+                  onChange={v => { setOrgUnitId(v); setSelPosition(""); setAssignErr(""); }}
+                  placeholder="— Select an org unit —"
+                  options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
+                />
               </div>
 
               <div className="field-group" style={{ marginBottom: ".75rem" }}>
                 <label className="field-label">Position <span style={{ color: "var(--error)" }}>*</span></label>
-                <select
-                  className="field-input field-select"
+                <SearchableSelect
+                  inputClassName="field-input"
                   value={selPosition}
                   disabled={!orgUnitId}
-                  onChange={e => { setSelPosition(e.target.value); setAssignErr(""); }}
-                >
-                  <option value="">
-                    {!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
-                  </option>
-                  {positionOptions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
+                  onChange={v => { setSelPosition(v); setAssignErr(""); }}
+                  placeholder={!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
+                  options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
+                />
               </div>
 
               {selPosition && (
@@ -419,7 +416,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 </>
               )}
 
-              <div style={{ marginTop: ".75rem", padding: ".75rem", borderRadius: 6, background: "var(--bg)", border: "1px solid var(--outline-v)" }}>
+              <div style={{ marginTop: ".75rem", padding: ".75rem", borderRadius: 6, background: "var(--bg-mid)", border: "1px solid var(--outline-v)" }}>
                 <div style={{ fontSize: ".78rem", fontWeight: 700, color: "var(--on-variant)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: ".5rem" }}>
                   EPF Details <span style={{ fontWeight: 400, textTransform: "none", fontSize: ".75rem" }}>(optional — can be filled later from employee profile)</span>
                 </div>
@@ -481,14 +478,13 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 {loadAssess ? (
                   <div style={{ fontSize: ".85rem", color: "var(--on-variant)" }}><i className="ti ti-loader-2 spin" /> Loading…</div>
                 ) : (
-                  <select
-                    className="field-input field-select"
+                  <SearchableSelect
+                    inputClassName="field-input"
                     value={selAssessment}
-                    onChange={e => setSelAssessment(e.target.value)}
-                  >
-                    <option value="">— No assessment —</option>
-                    {assessments.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
-                  </select>
+                    onChange={setSelAssessment}
+                    placeholder="— No assessment —"
+                    options={assessments.map(a => ({ value: a.id, label: a.title }))}
+                  />
                 )}
               </div>
             </div>

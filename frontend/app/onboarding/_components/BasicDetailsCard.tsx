@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
+import SearchableSelect from "@/components/SearchableSelect";
 
 // Shown at the top of the onboarding wizard's first step — the "basic
 // details" captured back at Add Employee time (name, contact, employment
@@ -215,38 +216,54 @@ export default function BasicDetailsCard({ employeeId, details, editable, onSave
             </div>
             <div className="field-group">
               <label className="field-label">Role</label>
-              <select className="field-input field-select" value={form.role} onChange={e => set("role", e.target.value)}>
-                <option value={form.role}>{form.role_display || "— current —"}</option>
-                {roles.filter(r => r.name !== form.role).map(r => (
-                  <option key={r.id} value={r.name}>{r.display_name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                inputClassName="field-input"
+                value={form.role}
+                onChange={v => set("role", v)}
+                options={[
+                  { value: form.role, label: form.role_display || "— current —" },
+                  ...roles.filter(r => r.name !== form.role).map(r => ({ value: r.name, label: r.display_name })),
+                ]}
+              />
             </div>
             <div className="field-group">
               <label className="field-label">Company Code</label>
-              <select className="field-input field-select" value={form.branch} onChange={e => set("branch", e.target.value)}>
-                <option value={form.branch}>{form.branch || "— current —"}</option>
-                {branches.filter(b => b.branch_name !== form.branch).map(b => (
-                  <option key={b.id} value={b.branch_name}>{b.branch_name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                inputClassName="field-input"
+                value={form.branch}
+                onChange={v => set("branch", v)}
+                options={[
+                  { value: form.branch, label: form.branch || "— current —" },
+                  ...branches.filter(b => b.branch_name !== form.branch).map(b => ({ value: b.branch_name, label: b.branch_name })),
+                ]}
+              />
             </div>
           </div>
 
           <div className="form-row cols-2" style={{ marginTop: 4 }}>
             <div className="field-group">
               <label className="field-label">Org Unit <span style={{ fontWeight: 400, color: "var(--on-variant)" }}>(only if reassigning)</span></label>
-              <select className="field-input field-select" value={orgUnitId} onChange={e => { setOrgUnitId(e.target.value); setPositionId(""); }}>
-                <option value="">— Keep current: {form.department || "none"} —</option>
-                {units.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              <SearchableSelect
+                inputClassName="field-input"
+                value={orgUnitId}
+                onChange={v => { setOrgUnitId(v); setPositionId(""); }}
+                placeholder={`— Keep current: ${form.department || "none"} —`}
+                options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
+              />
             </div>
             <div className="field-group">
               <label className="field-label">Position</label>
-              <select className="field-input field-select" value={positionId} onChange={e => setPositionId(e.target.value)} disabled={!orgUnitId}>
-                <option value="">{orgUnitId ? "— Select position —" : "Pick an org unit first"}</option>
-                {positionOptions.map(p => <option key={p.id} value={p.id}>{p.title}{p.default_role_name ? ` — ${p.default_role_name}` : ""}</option>)}
-              </select>
+              <SearchableSelect
+                inputClassName="field-input"
+                value={positionId}
+                onChange={setPositionId}
+                disabled={!orgUnitId}
+                placeholder={orgUnitId ? "— Select position —" : "Pick an org unit first"}
+                options={positionOptions.map(p => ({
+                  value: p.id,
+                  label: `${p.title}${p.default_role_name ? ` — ${p.default_role_name}` : ""}`,
+                }))}
+              />
             </div>
           </div>
 

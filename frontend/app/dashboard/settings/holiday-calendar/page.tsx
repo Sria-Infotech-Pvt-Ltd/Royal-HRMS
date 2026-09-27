@@ -10,6 +10,7 @@ import HolidayFormModal from "./_components/HolidayFormModal";
 import HolidayViewModal from "./_components/HolidayViewModal";
 import DeleteHolidayModal from "./_components/DeleteHolidayModal";
 import HolidayListView, { TYPE_STYLES } from "./_components/HolidayListView";
+import SearchableSelect from "@/components/SearchableSelect";
 import HolidayCalendarView from "./_components/HolidayCalendarView";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -169,11 +170,15 @@ export default function HolidayCalendarPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <select value={fBranch} onChange={e => { setFBranch(e.target.value); setPage(1); }}
-            className="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer field-select">
-            <option>All Company Codes</option>
-            {branches.map(b => <option key={b.id}>{b.branch_name}</option>)}
-          </select>
+          <SearchableSelect
+            value={fBranch} onChange={v => { setFBranch(v); setPage(1); }}
+            inputClassName="text-sm border border-[var(--outline-v)] rounded-lg px-3 py-2 bg-[var(--surface)] outline-none focus:border-[var(--primary)] text-[var(--on-bg)] cursor-pointer"
+            placeholder="All Company Codes"
+            options={[
+              { value: "All Branches", label: "All Company Codes" },
+              ...branches.map(b => ({ value: b.branch_name, label: b.branch_name })),
+            ]}
+          />
           <div className="relative">
             <i className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[var(--on-variant)] text-sm" />
             <input

@@ -4,6 +4,7 @@ import { useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import type { OrgUnit, OrgUnitPayload } from "@/types/orgStructure";
 
 interface Props {
@@ -87,10 +88,13 @@ export default function AddUnitModal({ units, parentId, onClose, onCreated }: Pr
 
       <div className="field-group mb-16">
         <label className="field-label">Parent Unit</label>
-        <select className="field-input field-select" value={parent} onChange={e => setParent(e.target.value)}>
-          <option value="">None — top level</option>
-          {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
+        <SearchableSelect
+          inputClassName="field-input"
+          value={parent}
+          onChange={setParent}
+          placeholder="None — top level"
+          options={units.map(u => ({ value: u.id, label: u.name }))}
+        />
       </div>
 
       <div className="field-group mb-16">

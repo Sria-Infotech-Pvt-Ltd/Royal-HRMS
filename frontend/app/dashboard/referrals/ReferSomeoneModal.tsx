@@ -1,6 +1,7 @@
 "use client";
 
 import Modal from "@/components/Modal";
+import SearchableSelect from "@/components/SearchableSelect";
 import type { Branch } from "@/app/dashboard/interview-list/_data";
 import { RELATIONSHIP_OPTIONS, EMPTY_FORM } from "./_data";
 
@@ -64,18 +65,15 @@ export default function ReferSomeoneModal({
               <div className="field-group">
                 <label className="field-label">Company Code{isAdmin && <span style={{ color: "var(--error)" }}> *</span>}</label>
                 {isAdmin ? (
-                  <select
-                    className="field-input field-select"
+                  <SearchableSelect
+                    inputClassName="field-input"
                     value={form.branch}
-                    onChange={e => setField("branch", e.target.value)}
-                    required
-                    suppressHydrationWarning
-                  >
-                    <option value="">Select Company Code…</option>
-                    {branches.map(b => <option key={b.id} value={String(b.id)}>{b.branch_name}</option>)}
-                  </select>
+                    onChange={v => setField("branch", v)}
+                    placeholder="Select Company Code…"
+                    options={branches.map(b => ({ value: String(b.id), label: b.branch_name }))}
+                  />
                 ) : (
-                  <div className="field-input" style={{ background: "var(--bg)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
+                  <div className="field-input" style={{ background: "var(--bg-mid)", color: "var(--on-variant)", display: "flex", alignItems: "center", gap: 8, cursor: "default" }}>
                     <i className="ti ti-building" style={{ fontSize: 14, flexShrink: 0 }} />
                     {myBranch || "Not assigned"}
                   </div>

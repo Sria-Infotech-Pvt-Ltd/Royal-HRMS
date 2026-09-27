@@ -5,6 +5,7 @@ import { useFetch } from "@/hooks/useFetch";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { useToast } from "@/components/ToastProvider";
+import SearchableSelect from "@/components/SearchableSelect";
 import Modal from "@/components/Modal";
 import type { InvalidPunch } from "@/types/attendance";
 
@@ -73,12 +74,13 @@ export default function AssignPunchModal({ punch, onClose, onAssigned }: Props) 
 
           <div className="field-group">
             <label className="field-label">Assign to HR user</label>
-            <select className="field-input field-select" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
-              <option value="">Select HR user…</option>
-              {(hrUsers ?? []).map(u => (
-                <option key={u.id} value={u.id}>{u.full_name} ({u.employee_id})</option>
-              ))}
-            </select>
+            <SearchableSelect
+              inputClassName="field-input"
+              value={assignedTo}
+              onChange={setAssignedTo}
+              placeholder="Select HR user…"
+              options={(hrUsers ?? []).map(u => ({ value: u.id, label: `${u.full_name} (${u.employee_id})` }))}
+            />
           </div>
     </Modal>
   );

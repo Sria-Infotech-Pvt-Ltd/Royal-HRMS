@@ -7,6 +7,7 @@
 
 import type { FieldOption } from "../../_data";
 import type { ReasonOption } from "./types";
+import SearchableSelect from "@/components/SearchableSelect";
 
 interface SelectFieldProps {
   label: string;
@@ -73,10 +74,7 @@ export function OrgAssignmentFields({ managerId, setManagerId, managerOptions, w
     <div className="g2">
       <div className="f">
         <label>Reporting manager <span className="text-muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-        <select value={managerId} onChange={e => setManagerId(e.target.value)} className="finput" style={{ cursor: "pointer" }}>
-          <option value="">Keep current</option>
-          {managerOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        <SearchableSelect value={managerId} onChange={setManagerId} inputClassName="finput" placeholder="Keep current" options={managerOptions} />
       </div>
       <div className="f">
         <label>Work location <span className="text-muted" style={{ fontWeight: 400 }}>(optional)</span></label>
