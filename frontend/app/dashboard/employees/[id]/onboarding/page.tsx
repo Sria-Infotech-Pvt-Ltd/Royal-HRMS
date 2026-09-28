@@ -647,6 +647,7 @@ export default function HREmployeeOnboardingPage({ params }: { params: Promise<{
   }
 
   async function handleApproveNow() {
+    if (!window.confirm(`Approve and activate ${employeeName || "this employee"}'s account? They'll get full access immediately.`)) return;
     setApproving(true);
     try {
       await clientApi.post(API.onboarding.approve(employeeUuid), { decision: "approve" });

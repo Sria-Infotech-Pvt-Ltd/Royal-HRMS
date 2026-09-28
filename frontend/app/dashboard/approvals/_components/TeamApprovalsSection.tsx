@@ -157,6 +157,11 @@ export default function TeamApprovalsSection() {
       return;
     }
     if (item.kind === "attendance_correction") {
+      if (!window.confirm(
+        action === "approve"
+          ? `Approve this correction? ${item.employeeName}'s attendance record will be updated immediately.`
+          : `Reject this correction request for ${item.employeeName}?`,
+      )) return;
       runCorrectionAction(item.id, action);
       return;
     }
@@ -165,6 +170,11 @@ export default function TeamApprovalsSection() {
     // rather than forcing it through ApprovalModal's leave/expense template
     // picker with nothing relevant to select.
     if (item.kind === "wfh") {
+      if (!window.confirm(
+        action === "approve"
+          ? `Approve ${item.employeeName}'s work-from-home request?`
+          : `Reject ${item.employeeName}'s work-from-home request?`,
+      )) return;
       runWfhAction(item.id, action);
       return;
     }
