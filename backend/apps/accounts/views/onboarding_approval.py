@@ -197,14 +197,28 @@ class OnboardingApprovalView(APIView):
             return error('decision must be "approve" or "reject".')
         req_position_obj = None
         if decision == 'approve':
+            # A user hired through the Hire wizard already has a Position
+            # (assigned at hire completion, via a Placement row) — re-asking
+            # for it here would force HR to pick from vacant-only positions,
+            # which doesn't even include the one this person already holds.
+            # Only genuinely position-less users (candidates converted
+            # straight to employee, never touching the Hire wizard —
+            # target.employee_id is still blank) must have one selected now.
+            current_placement = Placement.objects.filter(
+                employee=target, effective_to__isnull=True,
+            ).select_related('position', 'position__org_unit', 'position__job_template').first()
+
             if not req_position_id:
-                return error('A position is required to approve onboarding.', data={'position': 'Position is required.'})
-            try:
-                req_position_obj = Position.objects.select_related(
-                    'org_unit', 'job_template',
-                ).get(pk=req_position_id, is_active=True)
-            except (Position.DoesNotExist, ValueError, ValidationError):
-                return error('Select a valid, active position.', data={'position': 'Position not found.'})
+                if current_placement is None:
+                    return error('A position is required to approve onboarding.', data={'position': 'Position is required.'})
+                # Reuse the existing position as-is — no reassignment needed.
+            else:
+                try:
+                    req_position_obj = Position.objects.select_related(
+                        'org_unit', 'job_template',
+                    ).get(pk=req_position_id, is_active=True)
+                except (Position.DoesNotExist, ValueError, ValidationError):
+                    return error('Select a valid, active position.', data={'position': 'Position not found.'})
 
             if req_pan_number:
                 # Validated before any state changes below — an invalid/duplicate

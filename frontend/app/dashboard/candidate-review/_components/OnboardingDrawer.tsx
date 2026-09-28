@@ -80,7 +80,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function OnboardingDrawer({ user, remarks, acting, actionErr, onRemarksChange, onAction, onClose }: Props) {
+  // A Hire-wizard-hired employee already has a Position (assigned at hire
+  // completion, before onboarding even started) — employee_id is only ever
+  // set at that point or at this same approval's own conversion branch, so
+  // its presence here means "already positioned," matching the backend's
+  // own needs_conversion check (onboarding_approval.py).
+  const alreadyPositioned = Boolean(user.employee_id);
   const [showAssign, setShowAssign] = useState(false);
+  const [changingPosition, setChangingPosition] = useState(false);
   const [orgUnitId,   setOrgUnitId]   = useState("");
   const [selPosition, setSelPosition] = useState("");
   const { units, positionsForUnit, resolveDepartmentName, loading: positionsLoading } = useOrgUnitsAndPositions();
@@ -133,8 +140,13 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     return null;
   }
 
+  // Position is only required from this picker for a genuinely
+  // position-less user, or when HR explicitly chose to change an
+  // already-assigned one — never forced re-entry of what hiring already set.
+  const positionRequiredHere = !alreadyPositioned || changingPosition;
+
   function handleConfirm() {
-    if (!selPosition) {
+    if (positionRequiredHere && !selPosition) {
       setAssignErr("Select a Position before confirming.");
       return;
     }
@@ -149,7 +161,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       return;
     }
     onAction(user.id, "approve", {
-      position: selPosition,
+      position: positionRequiredHere ? selPosition : undefined,
       uanNumber: uanNumber || undefined, aadharName: aadharName || undefined,
       panNumber: panNumber ? panNumber.toUpperCase() : undefined,
     });
@@ -160,7 +172,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
     // Confirm click that advances to this step, so re-check here too —
     // without this, clearing the position after passing that first check
     // would silently submit a bad value and the backend would reject it.
-    if (!selPosition) {
+    if (positionRequiredHere && !selPosition) {
       setAssignErr("Select a Position before confirming.");
       setShowAssessment(false);
       return;
@@ -171,7 +183,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       return;
     }
     onAction(user.id, "approve", {
-      position:     selPosition,
+      position:     positionRequiredHere ? selPosition : undefined,
       assessmentId: selAssessment || undefined,
       uanNumber:    uanNumber    || undefined,
       aadharName:   aadharName   || undefined,
@@ -374,45 +386,84 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
                 </div>
               )}
 
-              <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
-                <SearchableSelect
-                  inputClassName="field-input"
-                  value={orgUnitId}
-                  disabled={positionsLoading}
-                  onChange={v => { setOrgUnitId(v); setSelPosition(""); setAssignErr(""); }}
-                  placeholder="— Select an org unit —"
-                  options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
-                />
-              </div>
-
-              <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                <label className="field-label">Position <span style={{ color: "var(--error)" }}>*</span></label>
-                <SearchableSelect
-                  inputClassName="field-input"
-                  value={selPosition}
-                  disabled={!orgUnitId}
-                  onChange={v => { setSelPosition(v); setAssignErr(""); }}
-                  placeholder={!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
-                  options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
-                />
-              </div>
-
-              {selPosition && (
+              {alreadyPositioned && !changingPosition ? (
+                // Already assigned at hire time — show it read-only instead
+                // of forcing a re-pick (which would only offer vacant
+                // positions anyway, not even including the one held today).
+                <div style={{ marginBottom: ".75rem" }}>
+                  <div className="field-group" style={{ marginBottom: ".5rem" }}>
+                    <label className="field-label">Position</label>
+                    <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                      {user.designation} · {user.department}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { setChangingPosition(true); setAssignErr(""); }}
+                  >
+                    <i className="ti ti-pencil" /> Change position
+                  </button>
+                </div>
+              ) : (
                 <>
-                  <div className="field-group" style={{ marginBottom: ".75rem" }}>
-                    <label className="field-label">Org Unit</label>
-                    <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-                      {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
+                  {alreadyPositioned && (
+                    <div style={{ fontSize: ".78rem", color: "var(--on-variant)", marginBottom: ".5rem" }}>
+                      Currently: {user.designation} · {user.department}
                     </div>
+                  )}
+                  <div className="field-group" style={{ marginBottom: ".75rem" }}>
+                    <label className="field-label">Org Unit <span style={{ color: "var(--error)" }}>*</span></label>
+                    <SearchableSelect
+                      inputClassName="field-input"
+                      value={orgUnitId}
+                      disabled={positionsLoading}
+                      onChange={v => { setOrgUnitId(v); setSelPosition(""); setAssignErr(""); }}
+                      placeholder="— Select an org unit —"
+                      options={units.filter(u => u.is_active).map(u => ({ value: u.id, label: u.name }))}
+                    />
                   </div>
 
-                  <div className="field-group">
-                    <label className="field-label">Designation</label>
-                    <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
-                      {selectedPosition?.job_template_name || selectedPosition?.title}
-                    </div>
+                  <div className="field-group" style={{ marginBottom: ".75rem" }}>
+                    <label className="field-label">Position <span style={{ color: "var(--error)" }}>*</span></label>
+                    <SearchableSelect
+                      inputClassName="field-input"
+                      value={selPosition}
+                      disabled={!orgUnitId}
+                      onChange={v => { setSelPosition(v); setAssignErr(""); }}
+                      placeholder={!orgUnitId ? "Select an org unit first" : positionOptions.length === 0 ? "No vacant positions in this unit" : "— Select Position —"}
+                      options={positionOptions.map(p => ({ value: p.id, label: p.title }))}
+                    />
                   </div>
+
+                  {selPosition && (
+                    <>
+                      <div className="field-group" style={{ marginBottom: ".75rem" }}>
+                        <label className="field-label">Org Unit</label>
+                        <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                          {derivedDepartmentName || "(no department-level unit in this org unit's chain)"}
+                        </div>
+                      </div>
+
+                      <div className="field-group">
+                        <label className="field-label">Designation</label>
+                        <div className="field-input" style={{ background: "var(--bg-low)", color: "var(--on-variant)" }}>
+                          {selectedPosition?.job_template_name || selectedPosition?.title}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {alreadyPositioned && changingPosition && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ marginTop: ".5rem" }}
+                      onClick={() => { setChangingPosition(false); setSelPosition(""); setOrgUnitId(""); setAssignErr(""); }}
+                    >
+                      Cancel — keep current position
+                    </button>
+                  )}
                 </>
               )}
 
