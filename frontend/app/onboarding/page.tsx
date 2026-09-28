@@ -698,6 +698,52 @@ export default function OnboardingPage() {
     }
   }
 
+  // ── Autosave (fields steps only) ────────────────────────────────────────────
+  // Best-effort background save ~2s after the user stops typing — reduces
+  // data loss on an accidental refresh/tab-close. Deliberately NOT the real
+  // validation gate: it skips the required-field check entirely (the
+  // backend's step-save endpoint accepts a partial save; completeness is
+  // only ever enforced at final submit and at the explicit Save & Continue
+  // click), and any failure is swallowed silently rather than shown as an
+  // error — Save & Continue remains the one place that actually blocks
+  // navigation or reports a problem.
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Suppresses the autosave that would otherwise fire the moment a step's
+  // existing data finishes loading into `form`/`customValues` — only a
+  // genuine subsequent edit should schedule a save.
+  const skipAutosaveRef = useRef(true);
+
+  useEffect(() => {
+    skipAutosaveRef.current = true;
+  }, [tab]);
+
+  async function silentAutosave() {
+    const currentStep = steps[tab];
+    if (currentStep.kind !== "fields") return;
+    const stepConfigs = fieldConfig[String(currentStep.step)] ?? [];
+    const customForStep = Object.fromEntries(
+      stepConfigs.filter(c => c.is_custom && c.field_type !== "file").map(c => [c.field_key, customValues[c.field_key] ?? ""]),
+    );
+    setAutosaveStatus("saving");
+    try {
+      await clientApi.patch(API.onboarding.profileStep(currentStep.step), { ...form, ...customForStep });
+      setAutosaveStatus("saved");
+      setTimeout(() => setAutosaveStatus(s => (s === "saved" ? "idle" : s)), 3000);
+    } catch {
+      setAutosaveStatus("idle");
+    }
+  }
+
+  useEffect(() => {
+    if (steps[tab]?.kind !== "fields") return;
+    if (skipAutosaveRef.current) { skipAutosaveRef.current = false; return; }
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => { void silentAutosave(); }, 2000);
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- silentAutosave is recreated every render (reads current form/customValues/tab via closure) and isn't itself a dependency; including it would just restart the debounce timer on every render instead of only on real form/customValues edits
+  }, [form, customValues, tab, steps, fieldConfig]);
+
   async function next() {
     const ok = await saveSection();
     if (ok && tab < steps.length - 1) {
@@ -907,12 +953,14 @@ export default function OnboardingPage() {
               <div style={{ fontSize: ".7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--outline)", marginBottom: 2 }}>Step {tab + 1} of {steps.length}</div>
               <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--on-bg)" }}>{steps[tab].label}</div>
             </div>
-            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div style={{ fontSize: ".75rem", color: "var(--on-variant)", marginBottom: 4 }}>{Math.round(((highestSaved + 1) / steps.length) * 100)}% complete</div>
-              <div style={{ width: 100, height: 5, borderRadius: 3, background: "var(--outline-v)", overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${((highestSaved + 1) / steps.length) * 100}%`, background: "var(--primary)", borderRadius: 3, transition: "width 0.4s ease" }} />
+            {steps[tab].kind === "fields" && autosaveStatus !== "idle" && (
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: ".78rem", color: autosaveStatus === "saved" ? "var(--success)" : "var(--on-variant)" }}>
+                {autosaveStatus === "saving"
+                  ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 13 }} /> Saving…</>
+                  : <><i className="ti ti-cloud-check" style={{ fontSize: 13 }} /> All changes saved</>
+                }
               </div>
-            </div>
+            )}
           </div>
 
           {saveErr && <div className="alert alert-error"  style={{ marginBottom: "1.25rem" }}>{saveErr}</div>}
