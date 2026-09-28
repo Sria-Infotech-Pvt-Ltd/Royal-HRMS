@@ -34,6 +34,7 @@ export default function OnboardingPage() {
   const [saveMsg,   setSaveMsg]   = useState<string | null>(null);
   const [saveErr,   setSaveErr]   = useState<string | null>(null);
   const [uploading,    setUploading]    = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [panErr,       setPanErr]       = useState<string | null>(null);
   const [panSaving,    setPanSaving]    = useState(false);
   const [submitted,          setSubmitted]          = useState(false);
@@ -737,6 +738,7 @@ export default function OnboardingPage() {
 
   async function handleUpload(docType: string, file: File) {
     setUploading(docType);
+    setUploadProgress(0);
     try {
       // If a document of this type already exists, delete it first
       const existing = docs.find(d => d.document_type === docType);
@@ -746,11 +748,32 @@ export default function OnboardingPage() {
       const fd = new FormData();
       fd.append("document_type", docType);
       fd.append("file", file);
-      await clientApi.post(API.onboarding.documents, fd);
+      await clientApi.post(API.onboarding.documents, fd, {
+        onUploadProgress: evt => {
+          if (!evt.total) return;
+          setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+        },
+      });
       const r = await clientApi.get(API.onboarding.documents);
       setDocs(r.data?.data ?? []);
     } catch (err: unknown) {
       setSaveErr((err as { message?: string })?.message ?? "Upload failed. Max 5 MB, PDF/JPG/PNG only.");
+    } finally {
+      setUploading(null);
+      setUploadProgress(0);
+    }
+  }
+
+  async function handleRemoveDocument(docType: string) {
+    const existing = docs.find(d => d.document_type === docType);
+    if (!existing) return;
+    setUploading(docType);
+    try {
+      await clientApi.delete(API.onboarding.documentDetail(existing.id));
+      const r = await clientApi.get(API.onboarding.documents);
+      setDocs(r.data?.data ?? []);
+    } catch (err: unknown) {
+      setSaveErr((err as { message?: string })?.message ?? "Could not remove this document. Please try again.");
     } finally {
       setUploading(null);
     }
@@ -939,8 +962,10 @@ export default function OnboardingPage() {
               docs={docs}
               uploadedTypes={uploadedTypes}
               uploading={uploading}
+              uploadProgress={uploadProgress}
               fileRefs={fileRefs}
               onUpload={handleUpload}
+              onRemove={handleRemoveDocument}
               panNumber={form.pan_number}
               onPanNumberChange={v => { set("pan_number", v); setPanErr(null); }}
               onPanCardUpload={handlePanCardUpload}
