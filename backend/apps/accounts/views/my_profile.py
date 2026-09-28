@@ -138,6 +138,13 @@ class MyProfileView(APIView):
     def patch(self, request):
         from apps.accounts.models import EmployeeProfile
         from apps.accounts.serializers import MyProfileUpdateSerializer
+
+        if not _has_perm(request.user, 'employees.edit_own_profile'):
+            return error(
+                'You do not have permission to edit your own profile. Contact HR.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = MyProfileUpdateSerializer(data=request.data)
         if not serializer.is_valid():
             return error(first_error(serializer.errors))

@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { useFetch } from "@/hooks/useFetch";
+import { usePermission } from "@/hooks/usePermission";
 import { API } from "@/lib/api/endpoints";
 import { formatDate } from "@/lib/formatDate";
 import EmployeeDrawer from "@/app/dashboard/employees/_components/EmployeeDrawer";
@@ -80,6 +81,7 @@ function toDrawerEmployee(d: ProfileSummaryData): Employee {
 
 export default function ProfileSummaryTab() {
   const { data, refetch } = useFetch<ProfileSummaryData>(API.employees.me);
+  const canEditOwnProfile = usePermission("employees.edit_own_profile");
   const [showRecord, setShowRecord] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [savedJustNow, setSavedJustNow] = useState(false);
@@ -94,21 +96,23 @@ export default function ProfileSummaryTab() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ position: "relative", width: 48, height: 48, flexShrink: 0 }}>
             <Avatar text={initials(firstName || "", restName.join(" "))} size={48} photoUrl={photoUrl} />
-            <button
-              type="button"
-              onClick={() => setShowPhotoModal(true)}
-              suppressHydrationWarning
-              title="Change profile photo"
-              style={{
-                position: "absolute", bottom: -2, right: -2,
-                width: 20, height: 20, borderRadius: "50%",
-                background: "var(--primary)", color: "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                border: "2px solid var(--surface)", cursor: "pointer",
-              }}
-            >
-              <i className="ti ti-camera" style={{ fontSize: 10 }} />
-            </button>
+            {canEditOwnProfile && (
+              <button
+                type="button"
+                onClick={() => setShowPhotoModal(true)}
+                suppressHydrationWarning
+                title="Change profile photo"
+                style={{
+                  position: "absolute", bottom: -2, right: -2,
+                  width: 20, height: 20, borderRadius: "50%",
+                  background: "var(--primary)", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  border: "2px solid var(--surface)", cursor: "pointer",
+                }}
+              >
+                <i className="ti ti-camera" style={{ fontSize: 10 }} />
+              </button>
+            )}
           </div>
           <div>
             <div className="page-title">My profile</div>
@@ -149,14 +153,16 @@ export default function ProfileSummaryTab() {
             <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>View employee record</div>
             <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Personal, employment, pay, statutory, leave and audit details</div>
           </button>
-          <button
-            type="button"
-            onClick={() => setShowEdit(true)}
-            style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
-          >
-            <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my details</div>
-            <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
-          </button>
+          {canEditOwnProfile && (
+            <button
+              type="button"
+              onClick={() => setShowEdit(true)}
+              style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: "var(--radius)", padding: "14px 16px", cursor: "pointer" }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my details</div>
+              <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
+            </button>
+          )}
         </div>
       </div>
 

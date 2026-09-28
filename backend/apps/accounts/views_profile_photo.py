@@ -19,6 +19,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.permissions import has_perm
 from core.responses import error, first_error, success
 
 from apps.accounts.serializers_profile_photo import ProfilePhotoUploadSerializer
@@ -42,6 +43,12 @@ class ProfilePhotoView(APIView):
     parser_classes     = [MultiPartParser, FormParser]
 
     def post(self, request: Request) -> Response:
+        if not has_perm(request.user, 'employees.edit_own_profile'):
+            return error(
+                'You do not have permission to change your profile photo. Contact HR.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = ProfilePhotoUploadSerializer(data=request.data)
         if not serializer.is_valid():
             return error(
@@ -64,6 +71,12 @@ class ProfilePhotoView(APIView):
         })
 
     def delete(self, request: Request) -> Response:
+        if not has_perm(request.user, 'employees.edit_own_profile'):
+            return error(
+                'You do not have permission to remove your profile photo. Contact HR.',
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
         user = request.user
         if user.profile_photo:
             user.profile_photo.delete(save=False)

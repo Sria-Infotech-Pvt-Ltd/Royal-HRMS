@@ -40,6 +40,11 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
   // instead of the HR-ticket "Request profile correction" flow, which is
   // for employees who genuinely need someone else's approval.
   const canEditDirectly = (session.permissions ?? []).includes("employees.edit");
+  // Gates the camera button below and "Edit my details" — an admin-revocable
+  // toggle (default granted) separate from canEditDirectly, so HR can lock
+  // down self-service editing for a role without touching the employees.edit
+  // permission that governs editing OTHER people's records.
+  const canEditOwnProfile = (session.permissions ?? []).includes("employees.edit_own_profile");
   const { data: profile, loading, error: profileError, refetch: refetchProfile } = useFetch<ProfileData>(API.employees.me);
   const { data: docs, refetch: refetchDocs } = useFetch<DocumentItem[]>(API.onboarding.documents);
   const { data: documentTypeConfigData } = useFetch<DocumentTypeConfig[]>(API.onboarding.documentTypeConfig);
@@ -105,21 +110,23 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
       <div className="card mb-16" style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20 }}>
         <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
           <Avatar text={ini} size={72} photoUrl={photoUrl} />
-          <button
-            type="button"
-            onClick={() => setShowPhotoModal(true)}
-            suppressHydrationWarning
-            title="Change profile photo"
-            style={{
-              position: "absolute", bottom: -2, right: -2,
-              width: 26, height: 26, borderRadius: "50%",
-              background: "var(--primary)", color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              border: "2px solid #fff", cursor: "pointer",
-            }}
-          >
-            <i className="ti ti-camera" style={{ fontSize: 12 }} />
-          </button>
+          {canEditOwnProfile && (
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(true)}
+              suppressHydrationWarning
+              title="Change profile photo"
+              style={{
+                position: "absolute", bottom: -2, right: -2,
+                width: 26, height: 26, borderRadius: "50%",
+                background: "var(--primary)", color: "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                border: "2px solid #fff", cursor: "pointer",
+              }}
+            >
+              <i className="ti ti-camera" style={{ fontSize: 12 }} />
+            </button>
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: "var(--on-bg)" }}>
@@ -175,7 +182,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my record</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update contact, address or personal information directly</div>
             </button>
-          ) : (
+          ) : canEditOwnProfile ? (
             <button
               type="button"
               onClick={() => setShowEdit(true)}
@@ -184,6 +191,10 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
               <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--on-bg)" }}>Edit my details</div>
               <div style={{ fontSize: 12, color: "var(--on-variant)", marginTop: 3 }}>Update your mobile number, address or emergency contact</div>
             </button>
+          ) : (
+            <div style={{ padding: "14px 16px", color: "var(--on-variant)", fontSize: 12.5 }}>
+              Self-service profile editing has been disabled for your role. Contact HR to update your details.
+            </div>
           )}
         </div>
       </div>
