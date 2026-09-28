@@ -31,17 +31,18 @@ def _is_hr_or_admin(user):
 def _hr_dashboard_branch(user):
     """
     Branch to scope the HR dashboard's KPI/action-queue counts to, or None for
-    company-wide totals. Deliberately checks role name / the raw is_superuser
-    flag rather than the 'settings.edit' permission — that permission has
-    historically also been granted to the HR role itself (see seed migration
+    company-wide totals. Checks the dedicated 'dashboard.view_company_wide'
+    permission rather than 'settings.edit' — that permission has historically
+    also been granted to the HR role itself (see seed migration
     0002_seed_roles_permissions), which would make company-wide totals leak
-    to branch HR users if used here.
+    to branch HR users if used here. Seeded to system_admin only (migration
+    0173) — same effective behavior as before, but revocable/grantable per
+    role like every other permission in this codebase, not a hardcoded role
+    name.
     """
     if not user:
         return None
-    if user.role and user.role.name == 'system_admin':
-        return None
-    if getattr(user, 'is_superuser', False):
+    if _has_perm(user, 'dashboard.view_company_wide'):
         return None
     return user.branch or None
 
