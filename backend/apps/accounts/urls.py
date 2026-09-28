@@ -80,6 +80,7 @@ from apps.accounts.views import (
     OnboardingSectionPublicView,
     OnboardingView,
     OnboardingApprovalView,
+    OnboardingDocumentVerifyView,
     CompanyDirectorDetailView,
     CompanyDirectorListCreateView,
     CompanyFinancialYearView,
@@ -179,6 +180,7 @@ urlpatterns = [
     path('onboarding/custom-file-fields/<str:value_id>/', CustomFieldFileValueView.as_view(), name='onboarding-custom-file-field-detail'),
     path('onboarding/approvals/',                    OnboardingApprovalView.as_view(), name='onboarding-approvals'),
     path('onboarding/approvals/<str:user_id>/',      OnboardingApprovalView.as_view(), name='onboarding-approve'),
+    path('onboarding/documents/<int:doc_id>/verify/', OnboardingDocumentVerifyView.as_view(), name='onboarding-document-verify'),
     path('onboarding/field-config/',                 OnboardingFieldConfigPublicView.as_view(), name='onboarding-field-config'),
     path(
         'onboarding/education-experience-field-config/',

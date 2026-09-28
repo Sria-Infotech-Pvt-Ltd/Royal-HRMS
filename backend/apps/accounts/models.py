@@ -2631,6 +2631,27 @@ class EmployeeDocument(models.Model):
     uploaded_at   = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
+    VERIFICATION_PENDING          = 'pending'
+    VERIFICATION_VERIFIED         = 'verified'
+    VERIFICATION_NEEDS_CORRECTION = 'needs_correction'
+    VERIFICATION_CHOICES = (
+        (VERIFICATION_PENDING,          'Pending review'),
+        (VERIFICATION_VERIFIED,         'Verified'),
+        (VERIFICATION_NEEDS_CORRECTION, 'Needs correction'),
+    )
+    # HR's per-document review at onboarding approval time — separate from
+    # the document simply existing (uploaded_at/_missing_required_docs
+    # already cover "was something uploaded"). A document can be present but
+    # illegible/wrong/expired, which is exactly what this field lets HR flag
+    # before approving, with verification_note explaining what's wrong.
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_CHOICES, default=VERIFICATION_PENDING)
+    verification_note   = models.CharField(max_length=500, blank=True, default='')
+    verified_by          = models.ForeignKey(
+                                User, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+',
+                            )
+    verified_at           = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = 'hrms_employee_documents'
         ordering = ['document_type', '-uploaded_at']

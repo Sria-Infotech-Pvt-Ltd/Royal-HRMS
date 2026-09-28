@@ -68,6 +68,7 @@ from apps.accounts.models import (
     EmailTemplateCategory,
     EmployeeApprovalOverride,
     EmployeeCodeSettings,
+    EmployeeDocument,
     HireAction,
     JobTemplate,
     OnboardingFieldConfig,
@@ -617,5 +618,50 @@ class OnboardingApprovalView(APIView):
                 },
             ).data,
         )
+
+
+class OnboardingDocumentVerifyView(APIView):
+    """POST /onboarding/documents/<uuid:doc_id>/verify/ — HR's per-document
+    Verified/Needs Correction call during onboarding review (separate from
+    the document simply existing — a document can be uploaded but illegible,
+    the wrong one, or expired, which is exactly what this flags before
+    Approve). Gated the same as the rest of this review surface
+    (onboarding.approve), and out-of-branch-scoped the same way too."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, doc_id):
+        if not _has_perm(request.user, 'onboarding.approve'):
+            return error('You do not have permission to review onboarding documents.',
+                         http_status=status.HTTP_403_FORBIDDEN)
+
+        verification_status = request.data.get('verification_status')
+        if verification_status not in (EmployeeDocument.VERIFICATION_VERIFIED, EmployeeDocument.VERIFICATION_NEEDS_CORRECTION):
+            return error('verification_status must be "verified" or "needs_correction".')
+
+        note = (request.data.get('verification_note') or '').strip()
+        if verification_status == EmployeeDocument.VERIFICATION_NEEDS_CORRECTION and not note:
+            return error('A note is required when flagging a document as needing correction.',
+                         data={'verification_note': 'This field is required.'})
+
+        try:
+            doc = EmployeeDocument.objects.select_related('user').get(pk=doc_id)
+        except (EmployeeDocument.DoesNotExist, ValueError):
+            return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if _employee_out_of_branch_scope(request.user, doc.user):
+            return error('Document not found.', http_status=status.HTTP_404_NOT_FOUND)
+
+        doc.verification_status = verification_status
+        doc.verification_note = note
+        doc.verified_by = request.user
+        doc.verified_at = timezone.now()
+        doc.save(update_fields=['verification_status', 'verification_note', 'verified_by', 'verified_at'])
+
+        return success('Document review saved.', data={
+            'id': str(doc.id),
+            'verification_status': doc.verification_status,
+            'verification_note': doc.verification_note,
+        })
 
 

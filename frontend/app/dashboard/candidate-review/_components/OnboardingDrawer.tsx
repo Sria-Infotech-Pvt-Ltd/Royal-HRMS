@@ -9,7 +9,11 @@ import SearchableSelect from "@/components/SearchableSelect";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
 import { usePermission } from "@/hooks/usePermission";
 
-interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
+interface OnboardingDocument {
+  id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number;
+  verification_status?: "pending" | "verified" | "needs_correction";
+  verification_note?: string;
+}
 
 interface FamilyMemberData { id: string; name: string; relationship: string; is_dependent: boolean; }
 interface NomineeData { id: string; family_member_name: string; relationship: string; scheme: string; share_percentage: number; }
@@ -99,6 +103,41 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const [assignErr,      setAssignErr]      = useState("");
   const [previewDoc,     setPreviewDoc]     = useState<OnboardingDocument | null>(null);
 
+  // Per-document Verified/Needs Correction — overlays `user.documents`
+  // locally rather than requiring the parent to refetch the whole approval
+  // record after every single document review call.
+  const [docOverrides, setDocOverrides] = useState<Record<number, { verification_status: "verified" | "needs_correction"; verification_note: string }>>({});
+  const [docNoteDrafts, setDocNoteDrafts] = useState<Record<number, string>>({});
+  const [docVerifying, setDocVerifying] = useState<number | null>(null);
+  const [docVerifyErr, setDocVerifyErr] = useState<Record<number, string>>({});
+
+  function docStatus(d: OnboardingDocument): "pending" | "verified" | "needs_correction" {
+    return docOverrides[d.id]?.verification_status ?? d.verification_status ?? "pending";
+  }
+  function docNote(d: OnboardingDocument): string {
+    return docOverrides[d.id]?.verification_note ?? d.verification_note ?? "";
+  }
+
+  async function handleVerifyDoc(d: OnboardingDocument, status: "verified" | "needs_correction") {
+    const note = status === "needs_correction" ? (docNoteDrafts[d.id] ?? "").trim() : "";
+    if (status === "needs_correction" && !note) {
+      setDocVerifyErr(prev => ({ ...prev, [d.id]: "Add a note explaining what needs correcting." }));
+      return;
+    }
+    setDocVerifying(d.id);
+    setDocVerifyErr(prev => ({ ...prev, [d.id]: "" }));
+    try {
+      await clientApi.post(API.onboarding.documentVerify(d.id), {
+        verification_status: status, verification_note: note,
+      });
+      setDocOverrides(prev => ({ ...prev, [d.id]: { verification_status: status, verification_note: note } }));
+    } catch (err: unknown) {
+      setDocVerifyErr(prev => ({ ...prev, [d.id]: (err as { message?: string })?.message ?? "Could not save this review." }));
+    } finally {
+      setDocVerifying(null);
+    }
+  }
+
   // Government IDs & Bank — masked by default (see
   // OnboardingApprovalSerializer.get_profile on the backend); Reveal calls
   // the same audited endpoint every other "someone else's sensitive data"
@@ -187,6 +226,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setShowAssessment(true);
       return;
     }
+    if (!window.confirm(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`)) return;
     onAction(user.id, "approve", {
       position: positionRequiredHere ? selPosition : undefined,
       uanNumber: uanNumber || undefined, aadharName: aadharName || undefined,
@@ -209,6 +249,7 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
       setAssignErr(fieldErr);
       return;
     }
+    if (!window.confirm(`Approve and activate ${user.full_name}'s account? They'll get full access immediately.`)) return;
     onAction(user.id, "approve", {
       position:     positionRequiredHere ? selPosition : undefined,
       assessmentId: selAssessment || undefined,
@@ -238,7 +279,13 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           <button
             className="btn btn-ghost"
             style={{ color: "var(--error)", borderColor: "var(--error)" }}
-            onClick={() => onAction(user.id, "reject")}
+            onClick={() => {
+              if (!window.confirm(
+                `Send ${user.full_name}'s onboarding back for corrections? They'll see your remarks and need to ` +
+                `resubmit before this can be reviewed again.`,
+              )) return;
+              onAction(user.id, "reject");
+            }}
             disabled={acting}
           >
             {acting ? "…" : "Send Back for Corrections"}
@@ -393,28 +440,71 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
           <Section title={`Documents (${user.documents.length})`}>
             {user.documents.length === 0
               ? <p style={{ color: "var(--on-variant)", fontSize: ".85rem" }}>No documents uploaded.</p>
-              : user.documents.map(d => (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: ".4rem 0", borderBottom: "1px solid var(--outline-v)", fontSize: ".85rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <i className="ti ti-file-text" style={{ color: "var(--primary)", fontSize: 16, flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600 }}>{d.document_type_display}</div>
-                      <div style={{ color: "var(--on-variant)", fontSize: ".78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{d.file_name}</div>
+              : user.documents.map(d => {
+                const status = docStatus(d);
+                const isVerifying = docVerifying === d.id;
+                return (
+                <div key={d.id} style={{ padding: ".5rem 0", borderBottom: "1px solid var(--outline-v)", fontSize: ".85rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      <i className="ti ti-file-text" style={{ color: "var(--primary)", fontSize: 16, flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{d.document_type_display}</div>
+                        <div style={{ color: "var(--on-variant)", fontSize: ".78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>{d.file_name}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      {status === "verified" && (
+                        <span className="badge badge-success" style={{ fontSize: ".7rem" }}><i className="ti ti-check" /> Verified</span>
+                      )}
+                      {status === "needs_correction" && (
+                        <span className="badge" style={{ fontSize: ".7rem", background: "var(--error-c)", color: "var(--error)" }}><i className="ti ti-alert-triangle" /> Needs Correction</span>
+                      )}
+                      {d.file_url
+                        ? <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(d)} title="Preview">
+                            <i className="ti ti-eye" style={{ fontSize: 15 }} />
+                          </button>
+                        : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>No link</span>
+                      }
                     </div>
                   </div>
-                  {d.file_url
-                    ? <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ flexShrink: 0 }}
-                        onClick={() => setPreviewDoc(d)}
-                        title="Preview"
-                      >
-                        <i className="ti ti-eye" style={{ fontSize: 15 }} />
-                      </button>
-                    : <span style={{ fontSize: ".78rem", color: "var(--outline)" }}>No link</span>
-                  }
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={status === "verified" ? { color: "var(--success)", borderColor: "var(--success)" } : undefined}
+                      disabled={isVerifying}
+                      onClick={() => handleVerifyDoc(d, "verified")}
+                    >
+                      {isVerifying ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-check" />} Verified
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={status === "needs_correction" ? { color: "var(--error)", borderColor: "var(--error)" } : undefined}
+                      disabled={isVerifying}
+                      onClick={() => handleVerifyDoc(d, "needs_correction")}
+                    >
+                      <i className="ti ti-alert-triangle" /> Needs Correction
+                    </button>
+                  </div>
+
+                  {(status === "needs_correction" || docNoteDrafts[d.id] !== undefined) && (
+                    <input
+                      className="field-input"
+                      style={{ marginTop: 6, fontSize: ".8rem" }}
+                      placeholder="What needs to be corrected?"
+                      value={docNoteDrafts[d.id] ?? docNote(d)}
+                      onChange={e => setDocNoteDrafts(prev => ({ ...prev, [d.id]: e.target.value }))}
+                    />
+                  )}
+                  {docVerifyErr[d.id] && (
+                    <div style={{ fontSize: ".75rem", color: "var(--error)", marginTop: 4 }}>{docVerifyErr[d.id]}</div>
+                  )}
                 </div>
-              ))
+                );
+              })
             }
           </Section>
 

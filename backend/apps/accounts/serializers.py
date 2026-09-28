@@ -1782,8 +1782,12 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'document_type', 'document_type_display',
             'file', 'file_url', 'file_name', 'file_size', 'uploaded_at',
+            'verification_status', 'verification_note',
         ]
-        read_only_fields = ('id', 'document_type_display', 'file_url', 'file_name', 'file_size', 'uploaded_at')
+        read_only_fields = (
+            'id', 'document_type_display', 'file_url', 'file_name', 'file_size', 'uploaded_at',
+            'verification_status', 'verification_note',
+        )
         extra_kwargs = {'file': {'write_only': True}}
 
     def get_document_type_display(self, obj):

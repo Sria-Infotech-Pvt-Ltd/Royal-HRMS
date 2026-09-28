@@ -182,6 +182,7 @@ export const API = {
     ifscLookup: (ifsc: string) => `/onboarding/ifsc-lookup/${ifsc}/`,
     documents: "/onboarding/documents/",
     documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,
+    documentVerify: (docId: string | number) => `/onboarding/documents/${docId}/verify/`,
     customFileFields: "/onboarding/custom-file-fields/",
     customFileFieldDetail: (valueId: number | string) => `/onboarding/custom-file-fields/${valueId}/`,
     education: "/onboarding/education/",
