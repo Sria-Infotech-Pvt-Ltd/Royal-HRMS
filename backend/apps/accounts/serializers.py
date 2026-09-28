@@ -2100,7 +2100,18 @@ class OnboardingPipelineSerializer(serializers.ModelSerializer):
 class OnboardingApprovalSerializer(serializers.ModelSerializer):
     role_name        = serializers.CharField(source='role.name',         read_only=True, default='')
     role_display     = serializers.CharField(source='role.display_name', read_only=True, default='')
-    profile          = EmployeeProfileSerializer(read_only=True)
+    # NOT a plain nested EmployeeProfileSerializer — that serializer is the
+    # self-service one (/onboarding/, /employees/me/) and legitimately
+    # returns your OWN full pan_number/aadhaar_number/account_number/
+    # ifsc_code/pf_number/passport_number. Reused directly here it would
+    # leak all of those, in full, to ANY user holding onboarding.approve —
+    # bypassing the employees.view_sensitive gate and the AuditLog trail
+    # every other read of these fields goes through (see
+    # EmployeeRevealSensitiveView, _mask_bank_fields). get_profile below
+    # masks them the same way _employee_dict()'s pan_masked/aadhaar_masked/
+    # pf_masked previews already do, unless the requester actually holds
+    # employees.view_sensitive.
+    profile          = serializers.SerializerMethodField()
     documents        = EmployeeDocumentSerializer(source='employee_documents', many=True, read_only=True)
     candidate_id     = serializers.SerializerMethodField()
     position_applied = serializers.SerializerMethodField()
@@ -2123,6 +2134,31 @@ class OnboardingApprovalSerializer(serializers.ModelSerializer):
             'candidate_id', 'position_applied',
             'profile', 'documents', 'family_members', 'nominees',
         ]
+
+    _SENSITIVE_PROFILE_FIELDS = ('pan_number', 'aadhaar_number', 'name_as_per_aadhar', 'pf_number', 'passport_number', 'account_number', 'ifsc_code')
+
+    def get_profile(self, obj):
+        from core.permissions import has_perm
+
+        data = EmployeeProfileSerializer(obj.profile).data if obj.profile else {}
+        request = self.context.get('request')
+        if request and has_perm(request.user, 'employees.view_sensitive'):
+            return data
+
+        data = dict(data)
+        pan = data.get('pan_number') or ''
+        aadhaar = data.get('aadhaar_number') or ''
+        pf = data.get('pf_number') or ''
+        acct = data.get('account_number') or ''
+        ifsc = data.get('ifsc_code') or ''
+        data['pan_number'] = f'{pan[:5]}••••{pan[-1]}' if len(pan) >= 6 else ''
+        data['aadhaar_number'] = f'XXXX XXXX {aadhaar[-4:]}' if len(aadhaar) >= 4 else ''
+        data['pf_number'] = f'••••{pf[-4:]}' if len(pf) >= 4 else ''
+        data['account_number'] = f'••••{acct[-4:]}' if len(acct) >= 4 else ('••••' if acct else '')
+        data['ifsc_code'] = '•' * len(ifsc) if ifsc else ''
+        data['name_as_per_aadhar'] = ''
+        data['passport_number'] = ''
+        return data
 
     def get_family_members(self, obj):
         from apps.accounts.views_family_nomination import family_dict

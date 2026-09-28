@@ -7,6 +7,7 @@ import DocPreviewModal from "@/components/DocPreviewModal";
 import Modal from "@/components/Modal";
 import SearchableSelect from "@/components/SearchableSelect";
 import { useOrgUnitsAndPositions } from "@/hooks/useOrgUnitsAndPositions";
+import { usePermission } from "@/hooks/usePermission";
 
 interface OnboardingDocument { id: number; document_type_display: string; file_name: string; file_url?: string; file_size?: number; }
 
@@ -30,6 +31,7 @@ interface ProfileData {
   emergency_name?: string; emergency_relationship?: string;
   emergency_phone?: string; emergency_email?: string;
   uan_number?: string; name_as_per_aadhar?: string; pan_number?: string;
+  aadhaar_number?: string;
 }
 
 export interface ApprovalUser {
@@ -96,6 +98,31 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
   const derivedDepartmentName = resolveDepartmentName(orgUnitId);
   const [assignErr,      setAssignErr]      = useState("");
   const [previewDoc,     setPreviewDoc]     = useState<OnboardingDocument | null>(null);
+
+  // Government IDs & Bank — masked by default (see
+  // OnboardingApprovalSerializer.get_profile on the backend); Reveal calls
+  // the same audited endpoint every other "someone else's sensitive data"
+  // view in this app uses, gated on the same permission.
+  const canViewSensitive = usePermission("employees.view_sensitive");
+  const [revealed, setRevealed] = useState<{ pan_number?: string; aadhaar_number?: string; account_number?: string; ifsc_code?: string } | null>(null);
+  const [revealing, setRevealing] = useState(false);
+  const [revealErr, setRevealErr] = useState<string | null>(null);
+
+  async function handleReveal() {
+    setRevealing(true);
+    setRevealErr(null);
+    try {
+      const { data } = await clientApi.post<{ data: typeof revealed }>(
+        API.employees.revealSensitive(user.employee_id),
+        { fields: ["pan_number", "aadhaar_number", "account_number", "ifsc_code"] },
+      );
+      setRevealed(data.data ?? {});
+    } catch (err: unknown) {
+      setRevealErr((err as { message?: string })?.message ?? "Could not reveal these fields.");
+    } finally {
+      setRevealing(false);
+    }
+  }
   const [showAssessment, setShowAssessment] = useState(false);
   const [assessments,    setAssessments]    = useState<AssessmentOption[]>([]);
   const [loadAssess,     setLoadAssess]     = useState(false);
@@ -288,11 +315,40 @@ export default function OnboardingDrawer({ user, remarks, acting, actionErr, onR
               </Section>
               <Section title="Bank Details">
                 <Row label="Account Holder" value={user.profile.account_holder_name} />
-                <Row label="Account No."    value={user.profile.account_number ? `••••${user.profile.account_number.slice(-4)}` : undefined} />
-                <Row label="IFSC"           value={user.profile.ifsc_code} />
+                <Row label="Account No."    value={revealed?.account_number || user.profile.account_number} />
+                <Row label="IFSC"           value={revealed?.ifsc_code || user.profile.ifsc_code} />
                 <Row label="Bank"           value={user.profile.bank_name} />
                 <Row label="Branch"         value={user.profile.bank_branch_name} />
                 <Row label="Account Type"   value={user.profile.account_type} />
+              </Section>
+              <Section title="Government IDs · Masked">
+                {revealErr && <div className="alert alert-error" style={{ marginBottom: ".5rem", padding: "6px 10px", fontSize: ".78rem" }}>{revealErr}</div>}
+                <Row label="PAN"     value={revealed?.pan_number || user.profile.pan_number} />
+                <Row label="Aadhaar" value={revealed?.aadhaar_number || user.profile.aadhaar_number} />
+                {alreadyPositioned && (
+                  canViewSensitive ? (
+                    !revealed && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={revealing}
+                        onClick={handleReveal}
+                        style={{ marginTop: 6 }}
+                      >
+                        {revealing ? <i className="ti ti-loader-2 spin" /> : <i className="ti ti-eye" />} Reveal full values
+                      </button>
+                    )
+                  ) : (
+                    <p style={{ fontSize: ".72rem", color: "var(--on-variant)", marginTop: 6 }}>
+                      Masked values above are placeholders — revealing the real ones requires the employees.view_sensitive permission.
+                    </p>
+                  )
+                )}
+                {revealed && (
+                  <p style={{ fontSize: ".72rem", color: "var(--on-variant)", marginTop: 6 }}>
+                    This reveal was recorded in the audit log.
+                  </p>
+                )}
               </Section>
               <Section title="Emergency Contact">
                 <Row label="Name"         value={user.profile.emergency_name} />
