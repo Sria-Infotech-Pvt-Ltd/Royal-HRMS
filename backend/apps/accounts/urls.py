@@ -131,6 +131,7 @@ from apps.accounts.views import (
 )
 from apps.accounts.views_profile_photo import ProfilePhotoView
 from apps.accounts.views_pincode import PincodeLookupView
+from apps.accounts.views_ifsc import IfscLookupView
 
 urlpatterns = [
     # Auth
@@ -212,6 +213,7 @@ urlpatterns = [
     # PIN code -> District/State lookup, used by the address fields in step
     # 0 of both wizards (see views_pincode.py).
     path('onboarding/pincode-lookup/<str:pincode>/', PincodeLookupView.as_view(),      name='onboarding-pincode-lookup'),
+    path('onboarding/ifsc-lookup/<str:ifsc>/',       IfscLookupView.as_view(),         name='onboarding-ifsc-lookup'),
 
     # Onboarding — HR/Admin completes the wizard on an employee's behalf
     # (onboarding.edit permission). user_id-keyed, not employee_id-keyed —

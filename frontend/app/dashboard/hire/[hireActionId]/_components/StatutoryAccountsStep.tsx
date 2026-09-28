@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
 import CountrySelect from "@/components/CountrySelect";
+import { useIfscLookup } from "@/hooks/useIfscLookup";
 
 export interface StatutoryDraft {
   pan_number: string; aadhaar_number: string; passport_number: string; passport_expiry: string;
@@ -45,6 +46,20 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
     onChange({ ...value, [key]: v });
   }
   const docFor = (key: string) => documents.find(d => d.document_type === key);
+
+  const { lookup: lookupIfsc } = useIfscLookup();
+  const latestIfscRef = useRef("");
+  function setIfsc(raw: string) {
+    const normalized = raw.toUpperCase();
+    set("ifsc_code", normalized);
+    latestIfscRef.current = normalized;
+    if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(normalized)) {
+      lookupIfsc(normalized).then(info => {
+        if (!info || latestIfscRef.current !== normalized) return;
+        if (info.bank) set("bank_name", info.bank);
+      });
+    }
+  }
 
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -150,7 +165,7 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         </div>
         <div className="f">
           <label>IFSC code <span className="req">*</span></label>
-          <input value={value.ifsc_code} onChange={e => set("ifsc_code", e.target.value.toUpperCase())} placeholder="HDFC0001234" maxLength={11} className="finput" />
+          <input value={value.ifsc_code} onChange={e => setIfsc(e.target.value)} placeholder="HDFC0001234" maxLength={11} className="finput" />
         </div>
         <div className="f">
           <label>Bank name <span className="tag">OPTIONAL</span></label>

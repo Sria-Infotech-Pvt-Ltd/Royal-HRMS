@@ -179,6 +179,7 @@ export const API = {
     sections: "/onboarding/sections/",
     documentTypeConfig: "/onboarding/document-type-config/",
     pincodeLookup: (pincode: string) => `/onboarding/pincode-lookup/${pincode}/`,
+    ifscLookup: (ifsc: string) => `/onboarding/ifsc-lookup/${ifsc}/`,
     documents: "/onboarding/documents/",
     documentDetail: (docId: string) => `/onboarding/documents/${docId}/`,
     customFileFields: "/onboarding/custom-file-fields/",

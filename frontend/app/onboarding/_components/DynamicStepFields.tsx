@@ -4,6 +4,7 @@ import { useRef } from "react";
 import DynamicField from "@/components/OnboardingDynamicField";
 import CustomFieldFileUpload from "@/components/CustomFieldFileUpload";
 import { usePincodeLookup } from "@/hooks/usePincodeLookup";
+import { useIfscLookup } from "@/hooks/useIfscLookup";
 import type { CustomFieldFileValue, OnboardingFieldConfig } from "@/types/onboardingFieldConfig";
 import type { ProfileForm } from "../_types";
 
@@ -154,6 +155,11 @@ export default function DynamicStepFields({
   // with stale data for a PIN code that's no longer in the field.
   const latestPincodeRef = useRef<Record<string, string>>({});
 
+  const { lookup: lookupIfsc } = useIfscLookup();
+  // Same stale-response guard as latestPincodeRef above, keyed by the
+  // single ifsc_code field this step ever has (no prefix needed).
+  const latestIfscRef = useRef<string>("");
+
   function onChangeFor(config: OnboardingFieldConfig) {
     return (value: string) => {
       if (config.is_custom) { onCustomChange(config.field_key, value); return; }
@@ -178,6 +184,19 @@ export default function DynamicStepFields({
             if (latestPincodeRef.current[prefix] !== value) return; // superseded by a newer edit
             if (loc.district) onBuiltinChange(`${prefix}_district` as keyof ProfileForm, loc.district);
             if (loc.state) onBuiltinChange(`${prefix}_state` as keyof ProfileForm, loc.state);
+          });
+        }
+      }
+
+      if (config.field_key === "ifsc_code") {
+        const normalized = value.trim().toUpperCase();
+        latestIfscRef.current = normalized;
+        if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(normalized)) {
+          lookupIfsc(normalized).then(info => {
+            if (!info) return;
+            if (latestIfscRef.current !== normalized) return; // superseded by a newer edit
+            if (info.bank) onBuiltinChange("bank_name" as keyof ProfileForm, info.bank);
+            if (info.branch) onBuiltinChange("bank_branch_name" as keyof ProfileForm, info.branch);
           });
         }
       }
