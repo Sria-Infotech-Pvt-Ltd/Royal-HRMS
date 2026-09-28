@@ -357,6 +357,24 @@ class HireCompletionRequiredFieldTests(HireWizardTestCase):
         resp = self._complete_with({'annual_ctc': ''})
         self.assertEqual(resp.status_code, 201, resp.data)
 
+    def test_positive_ctc_completes_and_creates_salary_config(self):
+        # Regression: _assign_salary_and_tax() used to pass draft_data's
+        # annual_ctc straight through as a plain str into
+        # EmployeeSalaryConfig.objects.create() instead of casting it to
+        # Decimal — the in-memory instance was still that str the moment
+        # post_save fired, which crashed
+        # notifications.signals._on_salary_config_created's f'{...:,.0f}'
+        # format spec with "Unknown format code 'f' for object of type
+        # 'str'", a 500 on every hire completion that actually set a CTC.
+        # None of the other CTC tests above exercise this — they use
+        # negative/zero/blank values, all of which skip the create() call
+        # entirely.
+        from apps.payroll.models import EmployeeSalaryConfig
+        resp = self._complete_with({'annual_ctc': '600000'})
+        self.assertEqual(resp.status_code, 201, resp.data)
+        config = EmployeeSalaryConfig.objects.get(employee_id=resp.data['data']['created_employee'])
+        self.assertEqual(config.annual_ctc, 600000)
+
     def test_nominee_shares_over_100_percent_blocks_hire(self):
         resp = self._complete_with({
             'nominee_entries': [

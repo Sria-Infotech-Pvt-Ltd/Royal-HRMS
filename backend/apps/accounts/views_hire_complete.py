@@ -126,12 +126,21 @@ def _assign_salary_and_tax(user, draft, actor):
     employee's own Salary tab, same as today."""
     annual_ctc = draft.get('annual_ctc')
     if annual_ctc and float(annual_ctc) > 0:
+        from decimal import Decimal
         from apps.payroll.models import EmployeeSalaryConfig, SalaryStructure
         structure = None
         if draft.get('salary_structure'):
             structure = SalaryStructure.objects.filter(pk=draft['salary_structure']).first()
         EmployeeSalaryConfig.objects.create(
-            employee=user, annual_ctc=annual_ctc, salary_structure=structure,
+            # draft_data is raw JSON — annual_ctc arrives as a plain str, not
+            # a Decimal. Passed through unconverted, the in-memory instance's
+            # annual_ctc is still that str the moment post_save fires (before
+            # any DB round trip normalizes it), which crashes
+            # notifications.signals._on_salary_config_created's ':,.0f'
+            # format spec ("Unknown format code 'f' for object of type
+            # 'str'") — a 500 on every hire wizard completion that has an
+            # Annual CTC set. Cast here, matching the float() check just above.
+            employee=user, annual_ctc=Decimal(str(annual_ctc)), salary_structure=structure,
             effective_from=user.date_of_joining, reason=EmployeeSalaryConfig.REASON_OTHER,
             reason_note='Set at hire',
         )
