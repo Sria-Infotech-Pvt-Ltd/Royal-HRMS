@@ -41,6 +41,17 @@ export function useProfilePhotoUpload(): UseProfilePhotoUpload {
       formData.append("photo", file);
       const res = await clientApi.post(API.employees.myPhoto, formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        // The default 15s client timeout (clientApi.ts) is too short here —
+        // this one request does real work server-side (Pillow re-encodes/
+        // resizes the image to fit a target file-size band, then uploads
+        // the result to ImageKit) before it can respond, on top of the
+        // upload itself. A large source photo or a slow connection reliably
+        // exceeds 15s, which silently failed the upload ("timeout of
+        // 15000ms exceeded") — same convention this app already uses for
+        // other genuinely slow requests (onboarding submit, voice
+        // transcription) rather than raising the global default for
+        // everything.
+        timeout: 60000,
       });
       const envelope = res.data as { data?: { profile_photo_url?: string | null } };
       const url = envelope.data?.profile_photo_url ?? null;
