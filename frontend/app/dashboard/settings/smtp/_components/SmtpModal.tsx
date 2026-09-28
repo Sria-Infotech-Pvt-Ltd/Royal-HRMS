@@ -156,7 +156,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                 value={form.name}
                 onChange={e => { patch({ name: e.target.value }); clearErr("name"); }}
                 suppressHydrationWarning />
-              {errors.name && <span className="field-error">{errors.name}</span>}
+              {errors.name && <span className="field-error-msg">{errors.name}</span>}
             </div>
 
             {/* ── Local-only fields ── */}
@@ -173,7 +173,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                   {provider.locked && (
                     <span style={{ fontSize: 11, color: "var(--on-variant)" }}>Fixed for {provider.label} — not editable</span>
                   )}
-                  {errors.host && <span className="field-error">{errors.host}</span>}
+                  {errors.host && <span className="field-error-msg">{errors.host}</span>}
                   {provider.helpText && (
                     <span style={{ fontSize: 11, color: "var(--on-variant)", display: "block", marginTop: 4 }}>{provider.helpText}</span>
                   )}
@@ -206,7 +206,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                     value={form.username}
                     onChange={e => { patch({ username: e.target.value }); clearErr("username"); }}
                     suppressHydrationWarning />
-                  {errors.username && <span className="field-error">{errors.username}</span>}
+                  {errors.username && <span className="field-error-msg">{errors.username}</span>}
                 </div>
 
                 {/* Password */}
@@ -223,7 +223,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                     value={form.password}
                     onChange={e => { patch({ password: e.target.value }); clearErr("password"); }}
                     suppressHydrationWarning />
-                  {errors.password && <span className="field-error">{errors.password}</span>}
+                  {errors.password && <span className="field-error-msg">{errors.password}</span>}
                 </div>
               </>
             )}
@@ -244,7 +244,7 @@ export default function SmtpModal({ entry, saving, onClose, onSave }: Props) {
                 value={form.fromEmail}
                 onChange={e => { patch({ fromEmail: e.target.value }); clearErr("fromEmail"); }}
                 suppressHydrationWarning />
-              {errors.fromEmail && <span className="field-error">{errors.fromEmail}</span>}
+              {errors.fromEmail && <span className="field-error-msg">{errors.fromEmail}</span>}
             </div>
 
             {/* BCC */}

@@ -440,7 +440,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                         setErrors(p => ({ ...p, display_name: undefined }));
                       }}
                       suppressHydrationWarning />
-                    {errors.display_name && <span className="field-error">{errors.display_name}</span>}
+                    {errors.display_name && <span className="field-error-msg">{errors.display_name}</span>}
                   </div>
 
                   <div className="field-group">
@@ -457,7 +457,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                       }}
                       style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}
                       suppressHydrationWarning />
-                    {errors.name && <span className="field-error">{errors.name}</span>}
+                    {errors.name && <span className="field-error-msg">{errors.name}</span>}
                   </div>
                 </>
               )}
@@ -572,7 +572,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                 )}
 
                 {(errors as Record<string, string | undefined>).template_type && (
-                  <span className="field-error">{(errors as Record<string, string | undefined>).template_type}</span>
+                  <span className="field-error-msg">{(errors as Record<string, string | undefined>).template_type}</span>
                 )}
                 {!isAddMode && (
                   <span style={{ fontSize: 11, color: "var(--outline)", marginTop: 2 }}>Category cannot be changed after creation.</span>
@@ -586,7 +586,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   value={form.subject}
                   onChange={e => { setForm(p => ({ ...p, subject: e.target.value })); setErrors(p => ({ ...p, subject: undefined })); }}
                   suppressHydrationWarning />
-                {errors.subject && <span className="field-error">{errors.subject}</span>}
+                {errors.subject && <span className="field-error-msg">{errors.subject}</span>}
               </div>
 
               {/* Body */}
@@ -683,7 +683,7 @@ export default function EditTemplateModal({ template, saving, onClose, onSave }:
                   />
                 )}
 
-                {errors.body && <span className="field-error">{errors.body}</span>}
+                {errors.body && <span className="field-error-msg">{errors.body}</span>}
               </div>
 
               <div style={{ height: 4, flexShrink: 0 }} />

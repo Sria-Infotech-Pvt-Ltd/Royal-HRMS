@@ -77,7 +77,7 @@ export default function RoleFormFields({ form, errors, permissionsMap, onChange,
             onClearError("display_name");
           }}
         />
-        {errors.display_name && <span className="field-error">{errors.display_name}</span>}
+        {errors.display_name && <span className="field-error-msg">{errors.display_name}</span>}
       </div>
 
       {/* Can manage team */}
@@ -213,7 +213,7 @@ export default function RoleFormFields({ form, errors, permissionsMap, onChange,
         )}
 
         {errors.permission_codenames && (
-          <span className="field-error" style={{ marginTop: 8 }}>{errors.permission_codenames}</span>
+          <span className="field-error-msg" style={{ marginTop: 8 }}>{errors.permission_codenames}</span>
         )}
       </div>
     </>

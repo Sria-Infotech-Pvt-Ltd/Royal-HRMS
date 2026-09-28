@@ -380,7 +380,7 @@ function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalP
         <label className="field-label">Employee Code <span style={{ color: "var(--error)" }}>*</span></label>
         <input className="field-input" placeholder="e.g. EMP001" value={form.employee_code}
           onChange={e => { setForm(p => ({ ...p, employee_code: e.target.value })); setErrors(p => ({ ...p, employee_code: undefined })); }} />
-        {errors.employee_code && <span className="field-error">{errors.employee_code}</span>}
+        {errors.employee_code && <span className="field-error-msg">{errors.employee_code}</span>}
       </div>
 
       <div className="field-group mb-16">
@@ -396,14 +396,14 @@ function AddAdjustmentModal({ month, saving, error, onClose, onSave }: AddModalP
         <label className="field-label">Label <span style={{ color: "var(--error)" }}>*</span></label>
         <input className="field-input" placeholder="e.g. Festival Bonus, Loan Recovery" value={form.label}
           onChange={e => { setForm(p => ({ ...p, label: e.target.value })); setErrors(p => ({ ...p, label: undefined })); }} />
-        {errors.label && <span className="field-error">{errors.label}</span>}
+        {errors.label && <span className="field-error-msg">{errors.label}</span>}
       </div>
 
       <div className="field-group">
         <label className="field-label">Amount (₹) <span style={{ color: "var(--error)" }}>*</span></label>
         <input className="field-input" type="number" min="1" placeholder="e.g. 5000" value={form.amount}
           onChange={e => { setForm(p => ({ ...p, amount: e.target.value })); setErrors(p => ({ ...p, amount: undefined })); }} />
-        {errors.amount && <span className="field-error">{errors.amount}</span>}
+        {errors.amount && <span className="field-error-msg">{errors.amount}</span>}
       </div>
     </Modal>
   );

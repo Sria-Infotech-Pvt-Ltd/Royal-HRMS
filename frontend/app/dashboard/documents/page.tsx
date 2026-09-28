@@ -594,7 +594,7 @@ export default function DocumentCenterPage() {
                   </>
                 )}
               </div>
-              {uploadErrors.file && <span className="field-error">{uploadErrors.file}</span>}
+              {uploadErrors.file && <span className="field-error-msg">{uploadErrors.file}</span>}
 
               {/* Document name */}
               <div className="field-group">
@@ -603,7 +603,7 @@ export default function DocumentCenterPage() {
                   value={uploadForm.title}
                   onChange={e => { setUploadForm(p => ({ ...p, title: e.target.value })); setUploadErrors(p => ({ ...p, title: undefined })); }}
                   suppressHydrationWarning />
-                {uploadErrors.title && <span className="field-error">{uploadErrors.title}</span>}
+                {uploadErrors.title && <span className="field-error-msg">{uploadErrors.title}</span>}
               </div>
 
               {/* Description */}
@@ -629,7 +629,7 @@ export default function DocumentCenterPage() {
                   <option value="template">Template</option>
                   <option value="other">Other</option>
                 </select>
-                {uploadErrors.category && <span className="field-error">{uploadErrors.category}</span>}
+                {uploadErrors.category && <span className="field-error-msg">{uploadErrors.category}</span>}
               </div>
 
               {/* Version / effective date — only meaningful for policy documents */}
