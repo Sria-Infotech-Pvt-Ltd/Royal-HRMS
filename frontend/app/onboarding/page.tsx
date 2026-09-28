@@ -19,7 +19,8 @@ import EducationChecklist, { type EducationEntry } from "./_components/Education
 import ExperienceList, { type ExperienceEntry } from "./_components/ExperienceList";
 import FamilyNominationStep, { type FamilyEntry, type NomineeEntry } from "./_components/FamilyNominationStep";
 import AssetsList, { type AssetEntry } from "./_components/AssetsList";
-import { EMPTY, PAN_RE, BUILTIN_STEPS, DOCUMENTS_STEP, FACE_STEP, type WizardStep } from "./_wizardSteps";
+import ReviewSummary from "./_components/ReviewSummary";
+import { EMPTY, PAN_RE, BUILTIN_STEPS, DOCUMENTS_STEP, FACE_STEP, REVIEW_STEP, type WizardStep } from "./_wizardSteps";
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -471,6 +472,7 @@ export default function OnboardingPage() {
       ...customSteps,
       DOCUMENTS_STEP,
       ...(faceMandatory ? [FACE_STEP] : []),
+      REVIEW_STEP,
     ];
   }, [customSections, faceMandatory]);
 
@@ -484,7 +486,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     let highest = -1;
     for (let i = 0; i < steps.length; i++) {
-      const passes = steps[i].kind === "experience" || steps[i].kind === "family-nomination" || steps[i].kind === "assets"
+      const passes = steps[i].kind === "experience" || steps[i].kind === "family-nomination" || steps[i].kind === "assets" || steps[i].kind === "review"
         || completedStepNumbers.includes(steps[i].step);
       if (!passes) break;
       highest = i;
@@ -994,6 +996,24 @@ export default function OnboardingPage() {
               onFieldChange={handleAssetFieldChange}
               onRemove={handleRemoveAsset}
               error={assetErr}
+            />
+          )}
+          {steps[tab].kind === "review" && (
+            <ReviewSummary
+              steps={steps}
+              form={form}
+              customValues={customValues}
+              fieldConfig={fieldConfig}
+              educationEntries={educationEntries}
+              experienceEntries={experienceEntries}
+              familyEntries={familyEntries}
+              nomineeEntries={nomineeEntries}
+              assetEntries={assetEntries}
+              docTypes={docTypes}
+              docs={docs}
+              faceRegistration={faceRegistration}
+              faceMandatory={faceMandatory}
+              onEditStep={setTab}
             />
           )}
 

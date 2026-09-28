@@ -26,7 +26,7 @@ export const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
 // backend step number itself. That split is what lets HR-created custom
 // sections (step 5+, see OnboardingSection) slot in between Emergency
 // Contact and Documents without shifting Documents'/Face ID's own identity.
-export type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "face" | "education" | "experience" | "family-nomination" | "assets" };
+export type WizardStep = { step: number; label: string; shortLabel: string; icon: string; kind: "fields" | "documents" | "face" | "education" | "experience" | "family-nomination" | "assets" | "review" };
 
 // Education and Experience are their own bespoke steps now (a fixed
 // checklist and a real add/remove list respectively — neither fits the
@@ -58,3 +58,10 @@ export const DOCUMENTS_STEP: WizardStep = { step: 4, label: "Documents", shortLa
 // step. `step: -1` is a sentinel — Face ID never round-trips through
 // /onboarding/step/<n>/, so no real step number is needed for it.
 export const FACE_STEP: WizardStep = { step: -1, label: "Face ID", shortLabel: "Face ID", icon: "ti-face-id", kind: "face" };
+
+// Always the very last step, after Face ID when present — a read-only
+// rollup of every earlier step with an Edit link back to each (see
+// ReviewSummary.tsx). Never round-trips through /onboarding/step/<n>/
+// (nothing of its own to save), same sentinel convention as the other
+// bespoke steps above.
+export const REVIEW_STEP: WizardStep = { step: -6, label: "Review & Submit", shortLabel: "Review", icon: "ti-clipboard-check", kind: "review" };
