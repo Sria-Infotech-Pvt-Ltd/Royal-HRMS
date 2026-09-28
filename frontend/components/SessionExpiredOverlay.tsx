@@ -34,7 +34,13 @@ export default function SessionExpiredOverlay() {
     <div style={{
       position:       "fixed",
       inset:          0,
-      zIndex:         9999,
+      // Must outrank every other in-app overlay (feature modals all use
+      // 9999) — this notice fires while some modal may already be open
+      // (e.g. mid profile-photo-upload), and if it renders behind that
+      // modal the user never sees it: the action just silently fails
+      // with no explanation, looking like a plain upload bug instead of
+      // "you were logged out".
+      zIndex:         2147483647,
       background:     "rgba(10, 18, 32, 0.72)",
       backdropFilter: "blur(4px)",
       display:        "flex",
