@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { useFetch } from "@/hooks/useFetch";
 import { usePermission } from "@/hooks/usePermission";
 import { formatDate } from "@/lib/formatDate";
 import {
@@ -32,6 +33,40 @@ export default function ProfileHeader({
   const [resetting, setResetting] = useState(false);
   const [resetMsg,  setResetMsg]  = useState<string | null>(null);
   const [resetErr,  setResetErr]  = useState<string | null>(null);
+
+  // Only meaningful before the employee has ever set a real password —
+  // invite_status comes back null once no invite token exists at all (a
+  // pre-invite-flow account, or one created some other way), so the
+  // badge/Resend button below simply don't render in that case either.
+  const { data: invite, refetch: refetchInvite } = useFetch<{
+    invite_status: "sent" | "opened" | "activated" | "expired" | null;
+    invite_sent_at: string | null;
+    invite_expires_at: string | null;
+  }>(canResetPassword ? API.employees.inviteStatus(employeeUuid) : null);
+  const [resending, setResending] = useState(false);
+
+  async function handleResendInvite() {
+    setResending(true);
+    setResetMsg(null);
+    setResetErr(null);
+    try {
+      const res = await clientApi.post(API.employees.resendInvite(employeeUuid));
+      setResetMsg(res.data?.message ?? "Activation invite resent.");
+      refetchInvite();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? "Failed to resend invite.";
+      setResetErr(msg);
+    } finally {
+      setResending(false);
+    }
+  }
+
+  const INVITE_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+    sent:    { label: "Invite Sent",    bg: "var(--info-c)",    color: "var(--info)" },
+    opened:  { label: "Invite Opened",  bg: "var(--warn-c)",    color: "var(--warn)" },
+    expired: { label: "Invite Expired", bg: "var(--error-c)",   color: "var(--error)" },
+  };
 
   async function handleResetPassword() {
     if (!employeeUuid) return;
@@ -79,6 +114,23 @@ export default function ProfileHeader({
 
         <div className="flex items-center gap-2">
           <ActionMenu employee={employee} />
+          {canResetPassword && invite?.invite_status && invite.invite_status !== "activated" && (
+            <button
+              onClick={handleResendInvite}
+              disabled={resending}
+              suppressHydrationWarning
+              title="Resend the account-activation email"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium border transition-colors"
+              style={{
+                borderColor: "var(--outline-v)",
+                color: "var(--on-bg)",
+                background: "var(--surface)",
+              }}
+            >
+              <i className={`ti ${resending ? "ti-loader-2 animate-spin" : "ti-mail-forward"} text-[14px]`} />
+              {resending ? "Sending…" : "Resend Invite"}
+            </button>
+          )}
           {canResetPassword && (
             <button
               onClick={handleResetPassword}
@@ -152,6 +204,22 @@ export default function ProfileHeader({
                 {fullName(employee)}
               </h2>
               <StatusBadge status={employee.status} />
+              {invite?.invite_status && INVITE_BADGE[invite.invite_status] && (
+                <span
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                  style={{
+                    background: INVITE_BADGE[invite.invite_status].bg,
+                    color: INVITE_BADGE[invite.invite_status].color,
+                  }}
+                  title={
+                    invite.invite_expires_at
+                      ? `Expires ${formatDate(invite.invite_expires_at)}`
+                      : undefined
+                  }
+                >
+                  {INVITE_BADGE[invite.invite_status].label}
+                </span>
+              )}
             </div>
 
             <p className="text-[13px] mb-4" style={{ color: "var(--on-variant)" }}>

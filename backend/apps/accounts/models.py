@@ -896,11 +896,30 @@ class OTPVerification(models.Model):
 # ─── Password Reset Token ──────────────────────────────────────────────────────
 
 class PasswordResetToken(models.Model):
+    PURPOSE_RESET  = 'reset'
+    PURPOSE_INVITE = 'invite'
+    PURPOSE_CHOICES = (
+        (PURPOSE_RESET,  'Forgot-password reset'),
+        (PURPOSE_INVITE, 'New-hire account activation invite'),
+    )
+
+    STATUS_SENT      = 'sent'
+    STATUS_OPENED    = 'opened'
+    STATUS_ACTIVATED = 'activated'
+    STATUS_EXPIRED   = 'expired'
+
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reset_tokens')
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(db_index=True)
     is_used    = models.BooleanField(default=False, db_index=True)
+    # purpose/opened_at only matter for PURPOSE_INVITE — a forgot-password
+    # token is a one-shot OTP-adjacent flow with no "did they open the
+    # email" concept the admin side needs to track; a hire invite link is
+    # exactly the kind of thing HR needs Sent/Opened/Activated/Expired
+    # visibility into (was it delivered? did the new hire even see it?).
+    purpose    = models.CharField(max_length=10, choices=PURPOSE_CHOICES, default=PURPOSE_RESET)
+    opened_at  = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'hrms_password_reset_tokens'
@@ -911,14 +930,36 @@ class PasswordResetToken(models.Model):
     def is_valid(self) -> bool:
         return not self.is_used and timezone.now() < self.expires_at
 
+    @property
+    def status(self) -> str:
+        """Sent -> Opened -> Activated, or Expired if the window passed
+        before either of those happened. Only meaningful for invite tokens,
+        but computed generically since nothing else depends on purpose."""
+        if self.is_used:
+            return self.STATUS_ACTIVATED
+        if timezone.now() >= self.expires_at:
+            return self.STATUS_EXPIRED
+        if self.opened_at:
+            return self.STATUS_OPENED
+        return self.STATUS_SENT
+
+    def mark_opened(self) -> None:
+        if not self.opened_at:
+            self.opened_at = timezone.now()
+            self.save(update_fields=['opened_at'])
+
     @classmethod
     @transaction.atomic
-    def create_for_user(cls, user: User) -> PasswordResetToken:
-        """Invalidate all outstanding tokens for this user then issue a new one."""
-        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+    def create_for_user(cls, user: User, *, purpose: str = PURPOSE_RESET, validity_hours: float = 1) -> PasswordResetToken:
+        """Invalidate all outstanding tokens of this purpose for this user
+        then issue a new one — a resent invite must make the previous
+        link stop working, same principle as a repeated forgot-password
+        request already had for PURPOSE_RESET."""
+        cls.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
         return cls.objects.create(
             user       = user,
-            expires_at = timezone.now() + timedelta(minutes=60),
+            purpose    = purpose,
+            expires_at = timezone.now() + timedelta(hours=validity_hours),
         )
 
 

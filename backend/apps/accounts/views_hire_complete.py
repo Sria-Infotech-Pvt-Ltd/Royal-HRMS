@@ -23,6 +23,7 @@ from core.permissions import has_perm as _has_perm
 from core.responses import error, success, get_client_ip
 from apps.accounts.models import AuditLog, EmployeeDocument, HireAction, HireActionDocument, Role, User
 from apps.accounts.services_placement import assign_position
+from apps.accounts.utils import send_activation_invite
 from apps.accounts.views_hire import _hire_action_dict, _DENIED
 
 logger = logging.getLogger(__name__)
@@ -287,10 +288,12 @@ class HireActionCompleteView(APIView):
         if role.role_permissions.filter(permission__codename='settings.edit').exists():
             return error('System Admin accounts cannot be created through the Hire flow.')
 
-        # Same inline generation EmployeeListCreateView.post already uses —
-        # there's no shared helper for this today (duplicated at 3 existing
-        # call sites), so this follows the same pattern rather than
-        # introducing a new one of its own.
+        # Never emailed/shown anywhere — the account's real password is set
+        # by the new hire themselves via the activation-invite link below.
+        # This random value only exists because create_user() requires one;
+        # must_change_password stays True so even a leaked/guessed value
+        # here can't be used to log in without immediately being forced to
+        # replace it.
         temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
         full_name = f'{first_name} {last_name}'
 
@@ -370,34 +373,9 @@ class HireActionCompleteView(APIView):
             )
 
         try:
-            from apps.accounts.utils import (
-                _get_smtp_connection, _build_message, _company_email_wrapper,
-                _get_company_branding,
-            )
-
-            company_name, logo_url, website, address = _get_company_branding()
-            company_name = company_name or 'Aira HRMS'
-            body = (
-                f'<p>Hi <strong>{full_name}</strong>,</p>'
-                f'<p>Your {company_name} account has been created.'
-                f' Use the credentials below to log in:</p>'
-                f'<p>'
-                f'<strong>Employee ID:</strong> {action.reserved_employee_id}<br>'
-                f'<strong>Login Email:</strong> {email}<br>'
-                f'<strong>Temporary Password:</strong> {temp_password}'
-                f'</p>'
-                f'<p>You will be asked to change your password on first login.</p>'
-                f'<p>— HR Team</p>'
-            )
-            html_body = _company_email_wrapper(body, company_name, logo_url, website, address)
-            connection, from_email, _smtp = _get_smtp_connection()
-            msg = _build_message(
-                subject=f'Welcome to {company_name} — Your Login Credentials',
-                html_body=html_body, from_email=from_email, to=[email], connection=connection,
-            )
-            msg.send(fail_silently=False)
+            send_activation_invite(user, created_by=request.user)
         except Exception as exc:
-            logger.error('Welcome email failed for %s: %s', email, exc)
+            logger.error('Activation invite email failed for %s: %s', email, exc)
 
         logger.info('Employee %s (%s) hired via HireAction %s by %s', action.reserved_employee_id, email, action.id, request.user.email)
         return success('Employee hired.', _hire_action_dict(action), http_status=201)

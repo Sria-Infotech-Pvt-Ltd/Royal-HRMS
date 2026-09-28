@@ -157,6 +157,72 @@ def send_otp_email(email: str, otp: str, full_name: str) -> None:
     msg.send(fail_silently=False)
 
 
+INVITE_VALIDITY_HOURS = 72
+
+
+def _activation_link(token_id) -> str:
+    """Absolute activation URL if Company.portal_url is configured, else a
+    bare relative path — an email client can't resolve a relative link
+    against "the frontend's origin" the way a browser tab can, but this
+    never silently fails outright: a company that hasn't set portal_url
+    yet still gets a link that works once opened from the same site,
+    matching how portal_url is already used elsewhere in this codebase
+    (see OnboardingApprovalView) rather than hardcoding any origin here."""
+    from apps.accounts.models import Company
+
+    company = Company.objects.first()
+    base = (company.portal_url if company else '') or ''
+    path = f'/activate/{token_id}/'
+    return f'{base.rstrip("/")}{path}' if base else path
+
+
+def send_activation_invite(user, *, created_by=None) -> 'PasswordResetToken':  # noqa: F821 - type-hint only, real import below to avoid a cycle
+    """Issues a fresh single-use activation invite (replacing any
+    outstanding one for this user) and emails the link — the credentials-
+    delivery path for every newly hired employee, and also what
+    ResendInviteView calls to reissue one. Never emails a password; the new
+    hire sets their own via this link (POST /reset-password/, same
+    endpoint forgot-password already uses — a PasswordResetToken is a
+    PasswordResetToken regardless of purpose)."""
+    from apps.accounts.models import PasswordResetToken
+
+    token = PasswordResetToken.create_for_user(
+        user, purpose=PasswordResetToken.PURPOSE_INVITE, validity_hours=INVITE_VALIDITY_HOURS,
+    )
+
+    connection, from_email, _smtp = _get_smtp_connection()
+    branding = _get_company_branding()
+    company_name = branding[0] or 'Aira HRMS'
+    link = _activation_link(token.id)
+    expiry_hours = INVITE_VALIDITY_HOURS
+
+    html_body = (
+        f'<p>Hi <strong>{user.full_name}</strong>,</p>'
+        f'<p>Your {company_name} account has been created'
+        f'{f" (Employee ID: <strong>{user.employee_id}</strong>)" if user.employee_id else ""}.</p>'
+        f'<p>Click below to set your password and activate your account:</p>'
+        f'<p style="text-align:center;margin:28px 0;">'
+        f'<a href="{link}" style="background:#4f46e5;color:#fff;padding:12px 28px;'
+        f'border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">'
+        f'Set Your Password</a></p>'
+        f'<p>This link is valid for <strong>{expiry_hours} hours</strong> and can only be used once. '
+        f'If it expires, ask HR to resend your invite.</p>'
+        f'<p>If you did not expect this email, please contact your HR team.</p>'
+        f'<p style="margin-top:32px;">Regards,<br><strong>HR Team</strong><br>{company_name}</p>'
+    )
+    html_body = _company_email_wrapper(html_body, *branding)
+
+    msg = _build_message(
+        subject=f'Welcome to {company_name} — Activate Your Account',
+        html_body=html_body,
+        from_email=from_email,
+        to=[user.email],
+        connection=connection,
+    )
+    msg.send(fail_silently=False)
+    return token
+
+
 def send_test_email(recipient_email: str, smtp_config: dict) -> None:
     
     sender_name = smtp_config.get('sender_name', '').strip()

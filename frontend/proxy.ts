@@ -125,8 +125,12 @@ export function proxy(request: NextRequest) {
   const isLoginPage = pathname.startsWith("/login");
   const isOnboarding = pathname.startsWith("/onboarding");
   const isChangePasswordPage = pathname.startsWith("/change-password");
+  // Account activation (the new-hire invite link) is deliberately reached
+  // signed out — there's no session yet at that point, only a one-time
+  // token in the URL the page itself validates against the backend.
+  const isActivatePage = pathname.startsWith("/activate");
 
-  if (!isAuthenticated && !isLoginPage) {
+  if (!isAuthenticated && !isLoginPage && !isActivatePage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

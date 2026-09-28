@@ -4,7 +4,7 @@ from apps.accounts.views_email_log import (
     EmailLogListView,
     EmailLogResendView,
 )
-from apps.accounts.views_reset_password import EmployeePasswordResetView
+from apps.accounts.views_reset_password import EmployeePasswordResetView, EmployeeInviteStatusView, ResendInviteView
 from apps.accounts.views_hire import (
     HireActionDetailView,
     HireActionDocumentDetailView,
@@ -112,6 +112,7 @@ from apps.accounts.views import (
     ForgotPasswordView,
     VerifyOTPView,
     ResetPasswordView,
+    InviteCheckView,
     ChangePasswordView,
     RoleListCreateView,
     RoleDetailView,
@@ -140,6 +141,7 @@ urlpatterns = [
     path('verify-otp/',      VerifyOTPView.as_view(),       name='verify-otp'),
     path('reset-password/',  ResetPasswordView.as_view(),   name='reset-password'),
     path('change-password/', ChangePasswordView.as_view(),  name='change-password'),
+    path('invite/<uuid:token>/', InviteCheckView.as_view(), name='invite-check'),
 
     # Employees
     path('employees/',                                           EmployeeListCreateView.as_view(),       name='employee-list-create'),
@@ -163,6 +165,8 @@ urlpatterns = [
     path('employees/<str:employee_id>/bank-change/<str:decision>/', EmployeeBankChangeReviewView.as_view(), name='employee-bank-change-review'),
     path('employees/<str:employee_id>/hr/',                      EmployeeDetailView.as_view(),           name='employee-hr-assign'),
     path('employees/<uuid:pk>/reset-password/',                   EmployeePasswordResetView.as_view(),    name='employee-reset-password'),
+    path('employees/<uuid:pk>/resend-invite/',                    ResendInviteView.as_view(),             name='employee-resend-invite'),
+    path('employees/<uuid:pk>/invite-status/',                    EmployeeInviteStatusView.as_view(),     name='employee-invite-status'),
     path('employees/<str:employee_id>/',                         EmployeeDetailView.as_view(),           name='employee-detail'),
 
     # Onboarding (self-service wizard — unified view)

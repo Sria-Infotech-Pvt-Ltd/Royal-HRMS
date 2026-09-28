@@ -416,6 +416,7 @@ class ResetPasswordView(APIView):
             return error('This reset token has already been used or has expired.')
 
         user = token_obj.user
+        is_activation = token_obj.purpose == PasswordResetToken.PURPOSE_INVITE
 
         with transaction.atomic():
             user.set_password(new_password)
@@ -429,20 +430,59 @@ class ResetPasswordView(APIView):
             token_obj.save(update_fields=['is_used'])
 
         AuditLog.objects.create(
-            user=user, action='password_reset', module='accounts',
+            user=user, action='account_activated' if is_activation else 'password_reset', module='accounts',
             ip_address=get_client_ip(request),
         )
         try:
             from apps.notifications.signals import _notify
-            _notify(
-                user, 'Password Reset',
-                'Your password was just reset. If you did not do this, contact HR immediately.',
-                'password_reset', 'security', str(user.id), category='system',
-            )
+            if is_activation:
+                _notify(
+                    user, 'Account Activated',
+                    'Your account is now active. Welcome aboard!',
+                    'account_activated', 'security', str(user.id), category='system',
+                )
+            else:
+                _notify(
+                    user, 'Password Reset',
+                    'Your password was just reset. If you did not do this, contact HR immediately.',
+                    'password_reset', 'security', str(user.id), category='system',
+                )
         except Exception:
             logger.exception('Failed to send password-reset notification for %s', user.email)
         logger.info('Password reset for %s', user.email)
-        return success('Password has been reset successfully. Please log in with your new password.')
+        return success(
+            'Your account is now active. Please log in.' if is_activation else
+            'Password has been reset successfully. Please log in with your new password.'
+        )
+
+
+class InviteCheckView(APIView):
+    """GET /invite/<uuid:token>/ — public, unauthenticated check backing the
+    new-hire activation page: is this link still good, and who is it for?
+    Marks the invite Opened (first call only) so HR can see "did they even
+    open the email" without that being conflated with actually setting a
+    password (Activated, which only POST /reset-password/ produces)."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        try:
+            token_obj = PasswordResetToken.objects.select_related('user').get(
+                id=token, purpose=PasswordResetToken.PURPOSE_INVITE,
+            )
+        except (PasswordResetToken.DoesNotExist, ValueError):
+            return error('This activation link is invalid.', http_status=status.HTTP_404_NOT_FOUND)
+
+        if not token_obj.is_valid():
+            return error(
+                'This activation link has expired or was already used. Ask HR to resend your invite.',
+                http_status=status.HTTP_410_GONE,
+            )
+
+        token_obj.mark_opened()
+        return success('Invite is valid.', data={
+            'full_name': token_obj.user.full_name,
+            'email':     token_obj.user.email,
+        })
 
 
 class ChangePasswordView(APIView):

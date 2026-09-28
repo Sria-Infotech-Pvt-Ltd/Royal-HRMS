@@ -6,6 +6,7 @@ export const API = {
     verifyOtp: "/verify-otp/",
     resetPassword: "/reset-password/",
     changePassword: "/change-password/",
+    inviteCheck: (token: string) => `/invite/${token}/`,
   },
 
   // No-auth-required — used by the pre-login screen to show the real
@@ -72,6 +73,8 @@ export const API = {
     documents: (id: string) => `/employees/${id}/documents/`,
     customFileFields: (id: string) => `/employees/${id}/custom-file-fields/`,
     resetPassword: (id: string) => `/employees/${id}/reset-password/`,
+    resendInvite: (id: string) => `/employees/${id}/resend-invite/`,
+    inviteStatus: (id: string) => `/employees/${id}/invite-status/`,
     revealSensitive: (id: string) => `/employees/${id}/reveal-sensitive/`,
     confirm: (id: string) => `/employees/${id}/confirm/`,
     bankChangeReview: (id: string, decision: "approve" | "reject") => `/employees/${id}/bank-change/${decision}/`,
