@@ -86,6 +86,26 @@ class SMTPSettingsValidationTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_server_type_config_saves_without_host_or_username(self):
+        # Regression: the frontend never sends host/username/port/password for
+        # smtp_type=server (only local-mode fields), but the serializer used
+        # to mark host/username required unconditionally (no blank=True on
+        # the model fields) — every "server" config silently failed with a
+        # 400 the frontend rendered as a generic, easy-to-miss toast.
+        resp = self.client.post(reverse('smtp-list'), {
+            'name': 'Dedicated Mail Server', 'smtp_type': 'server',
+            'from_email': 'noreply@example.com',
+        }, format='json')
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+    def test_local_type_still_requires_host_and_username(self):
+        resp = self.client.post(reverse('smtp-list'), {
+            'name': 'Local Missing Fields', 'smtp_type': 'local',
+            'from_email': 'noreply@example.com', 'password': 'secret123',
+        }, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('host', resp.data.get('data', resp.data) if isinstance(resp.data, dict) else {})
+
     def test_create_denied_without_settings_edit(self):
         no_perm = make_user('nosmtpperm@test.com', role=make_role('no_smtp_perm_test'), password='TestPass123!')
         self.client.force_authenticate(user=no_perm)

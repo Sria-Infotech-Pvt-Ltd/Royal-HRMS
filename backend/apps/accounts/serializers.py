@@ -225,6 +225,11 @@ class SMTPSettingsSerializer(serializers.ModelSerializer):
     password_display  = serializers.SerializerMethodField()
     smtp_type_display = serializers.CharField(source='get_smtp_type_display', read_only=True)
     password          = serializers.CharField(write_only=True, required=False, max_length=255)
+    # Only meaningful for smtp_type=local (the frontend omits them entirely for
+    # smtp_type=server) — required=False here, actually enforced conditionally
+    # in validate() below so a "server" config isn't rejected for missing them.
+    host              = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    username          = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
     class Meta:
         model  = SMTPSettings
@@ -249,8 +254,6 @@ class SMTPSettingsSerializer(serializers.ModelSerializer):
         return v
 
     def validate_host(self, value: str) -> str:
-        if not value.strip():
-            raise serializers.ValidationError('Host must not be blank.')
         return value.strip()
 
     def validate_port(self, value: int) -> int:
@@ -259,8 +262,6 @@ class SMTPSettingsSerializer(serializers.ModelSerializer):
         return value
 
     def validate_username(self, value: str) -> str:
-        if not value or not value.strip():
-            raise serializers.ValidationError('SMTP username must not be blank.')
         return value.strip()
 
     def validate_from_email(self, value: str) -> str:
@@ -279,6 +280,18 @@ class SMTPSettingsSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'name': f'An SMTP config named "{new_name}" already exists.'}
                 )
+
+        smtp_type = attrs.get('smtp_type', getattr(instance, 'smtp_type', SMTPSettings.SMTPType.LOCAL))
+        if smtp_type == SMTPSettings.SMTPType.LOCAL:
+            host = attrs.get('host', getattr(instance, 'host', ''))
+            username = attrs.get('username', getattr(instance, 'username', ''))
+            errors = {}
+            if not host.strip():
+                errors['host'] = 'Host must not be blank.'
+            if not username.strip():
+                errors['username'] = 'SMTP username must not be blank.'
+            if errors:
+                raise serializers.ValidationError(errors)
         return attrs
 
 
