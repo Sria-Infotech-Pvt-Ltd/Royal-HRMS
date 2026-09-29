@@ -60,7 +60,13 @@ export default function AssetsList({ entries, onAdd, onFieldChange, onRemove, er
 
       {entries.map(entry => (
         <div key={entry.id} style={{ border: "1px solid var(--outline-v)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
-          <div className="form-row cols-2">
+          {/* QA report #54 — with the toggle in its own full-width row, its
+              w-fit button pair left most of that row's width empty ("only
+              fills half its container"). Placing it as a third grid cell
+              alongside Asset/Condition gives it the same proportioned
+              width as its siblings instead of a lone narrow control
+              floating in a full-width row. */}
+          <div className={`form-row ${showIssueToggle ? "cols-3" : "cols-2"}`}>
             <div className="field-group">
               <label className="field-label">Asset</label>
               <select className="field-input field-select" value={entry.asset_type} onChange={e => onFieldChange(entry.id, "asset_type", e.target.value)}>
@@ -74,26 +80,25 @@ export default function AssetsList({ entries, onAdd, onFieldChange, onRemove, er
                 {CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
-          </div>
-
-          {showIssueToggle && (
-            <div className="field-group" style={{ marginTop: 4, marginBottom: entry.issue_when === "now" ? 12 : 4 }}>
-              <label className="field-label">Issue</label>
-              <div className="flex rounded-lg overflow-hidden border border-[var(--outline-v)] w-fit">
-                {(["now", "later"] as const).map(v => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => onFieldChange(entry.id, "issue_when", v)}
-                    className="px-4 py-1.5 text-[12.5px] font-semibold"
-                    style={{ background: (entry.issue_when ?? "later") === v ? "var(--primary)" : "var(--surface)", color: (entry.issue_when ?? "later") === v ? "#fff" : "var(--on-bg)" }}
-                  >
-                    {v === "now" ? "Issue now" : "Issue later"}
-                  </button>
-                ))}
+            {showIssueToggle && (
+              <div className="field-group">
+                <label className="field-label">Issue</label>
+                <div className="flex rounded-lg overflow-hidden border border-[var(--outline-v)] w-full">
+                  {(["now", "later"] as const).map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => onFieldChange(entry.id, "issue_when", v)}
+                      className="flex-1 px-4 py-1.5 text-[12.5px] font-semibold"
+                      style={{ background: (entry.issue_when ?? "later") === v ? "var(--primary)" : "var(--surface)", color: (entry.issue_when ?? "later") === v ? "#fff" : "var(--on-bg)" }}
+                    >
+                      {v === "now" ? "Issue now" : "Issue later"}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {(!showIssueToggle || entry.issue_when === "now") && (
             <div className="field-group" style={{ marginBottom: 12, maxWidth: 260 }}>

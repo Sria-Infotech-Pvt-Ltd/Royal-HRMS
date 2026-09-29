@@ -613,7 +613,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               <div className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--on-variant)" }}>Identity</div>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Salutation <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Salutation <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <select value={salutation} onChange={e => setSalutation(e.target.value)} className="field-input field-select">
                     <option value="">Select</option>
                     {["Mr.", "Ms.", "Mrs.", "Dr."].map(s => <option key={s} value={s}>{s}</option>)}
@@ -624,7 +624,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="e.g. Rahul" className="field-input" />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Middle name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Middle name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <input value={middleName} onChange={e => setMiddleName(e.target.value)} placeholder="e.g. Kumar" className="field-input" />
                 </div>
               </div>
@@ -665,7 +665,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Blood group <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Blood group <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <select value={form.blood_group} onChange={e => setForm(f => ({ ...f, blood_group: e.target.value }))} className="field-input field-select">
                     <option value="">Select</option>
                     {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(b => <option key={b} value={b}>{b}</option>)}
@@ -684,7 +684,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   <CountrySelect value={nationality} onChange={setNationality} mode="demonym" />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Place of birth <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <div className="flex gap-2">
                     <input value={placeOfBirth} onChange={e => setPlaceOfBirth(e.target.value)} placeholder="City / town" className="field-input" />
                     <button type="button" onClick={() => setPlaceOfBirth(form.current_village || form.current_district)}
@@ -707,7 +707,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Required on EPF Form 2.</p>
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Languages known <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Languages known <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <LanguagesSelect value={identityExtras.languages_known}
                     onChange={v => setIdentityExtras(x => ({ ...x, languages_known: v }))} />
                 </div>
@@ -743,7 +743,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               </p>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Category / community <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Category / community <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <select value={identityExtras.category} onChange={e => setIdentityExtras(x => ({ ...x, category: e.target.value }))} className="field-input field-select">
                     <option value="prefer_not_to_say">Prefer not to say</option>
                     <option value="general">General</option>
@@ -766,7 +766,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   <PhoneInput value={phone} onChange={setPhone} placeholder="90000 00000" />
                 </div>
                 <div>
-                  <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>optional</span></label>
+                  <label className="block text-[12.5px] font-semibold mb-1.5">Alternate mobile <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>OPTIONAL</span></label>
                   <PhoneInput value={identityExtras.alternate_mobile}
                     onChange={v => setIdentityExtras(x => ({ ...x, alternate_mobile: v }))}
                     placeholder="Optional" />

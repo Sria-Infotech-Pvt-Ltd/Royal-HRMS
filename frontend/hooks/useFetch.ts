@@ -41,11 +41,18 @@ export function useFetch<T>(url: string | null, options?: UseFetchOptions): Fetc
   const useCache = options?.cache ?? false;
   const cacheTtlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
 
-  const cached = useCache && url ? responseCache.get(url) : undefined;
-  const hasFreshCache = !!cached && cached.expiresAt > Date.now();
-
-  const [data,    setData]    = useState<T | null>(hasFreshCache ? (cached!.data as T) : null);
-  const [loading, setLoading] = useState<boolean>(!!url && !hasFreshCache);
+  // Date.now() is impure, so this freshness check must run inside a
+  // useState lazy initializer (evaluated once, at mount) rather than as a
+  // plain expression in the render body.
+  const [data,    setData]    = useState<T | null>(() => {
+    const cached = useCache && url ? responseCache.get(url) : undefined;
+    return cached && cached.expiresAt > Date.now() ? (cached.data as T) : null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = useCache && url ? responseCache.get(url) : undefined;
+    const hasFreshCache = !!cached && cached.expiresAt > Date.now();
+    return !!url && !hasFreshCache;
+  });
   const [error,   setError]   = useState<string | null>(null);
   const [status,  setStatus]  = useState<number | null>(null);
   const counter = useRef(0);

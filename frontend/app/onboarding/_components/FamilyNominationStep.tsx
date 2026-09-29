@@ -116,7 +116,14 @@ export default function FamilyNominationStep({
             </div>
             <div className="field-group">
               <label className="field-label">Blood Group</label>
-              <input className="field-input" value={entry.blood_group} onChange={e => onFamilyFieldChange(entry.id, "blood_group", e.target.value)} placeholder="e.g. O+" />
+              {/* Free text let through values Personal Identity's own
+                  dropdown never would (typos, non-standard formats) — QA
+                  report #56 caught the inconsistency; matching the same
+                  fixed option list used there. */}
+              <select className="field-input field-select" value={entry.blood_group} onChange={e => onFamilyFieldChange(entry.id, "blood_group", e.target.value)}>
+                <option value="">— Select —</option>
+                {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
             </div>
           </div>
           <label className="module-check" style={{ marginTop: 4, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
