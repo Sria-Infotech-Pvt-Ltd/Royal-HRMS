@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import clientApi, { markIntentionalLogout } from "@/lib/clientApi";
+import clientApi, { markIntentionalLogout, refreshAccessToken } from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser, setOnboardingStatus, clearAuth } from "@/lib/auth";
 import FaceRegistrationModal from "@/components/FaceRegistrationModal";
@@ -40,6 +40,7 @@ export default function OnboardingPage() {
   const [submitted,          setSubmitted]          = useState(false);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
   const [checkingApproval,   setCheckingApproval]   = useState(false);
+  const [checkApprovalMsg,   setCheckApprovalMsg]   = useState<string | null>(null);
   const [highestSaved, setHighestSaved] = useState(-1);
   // Raw step numbers the backend already considers complete (GET
   // /onboarding/'s own `completed_steps`) — restores unlocked progress when
@@ -521,14 +522,41 @@ export default function OnboardingPage() {
     refetchFaceRegistration();
   }, [refetchFaceRegistration]);
 
-  // When on the "waiting for approval" screen, poll assessments API.
-  // If HR has approved and assigned assessments, redirect the candidate there.
+  // When on the "waiting for approval" screen, poll for HR's actual
+  // decision — used to only check for assigned assessments (a side effect
+  // of approval, not approval itself), so an approved account with no
+  // assessments assigned (the common case) never redirected anywhere: it
+  // just sat on this screen forever, "Check Approval Status" included,
+  // even though the account was genuinely already approved and waiting on
+  // nothing but a stale JWT (onboarding_status is baked into the access
+  // token and isn't picked up by a plain client-side navigation — a real
+  // refresh is required, see refreshAccessToken below).
+  async function checkAndHandleApproval(): Promise<boolean> {
+    try {
+      const { data } = await clientApi.get<{ data: { onboarding_status: string; assessment_status: string } }>(API.employees.me);
+      const info = data?.data;
+      if (!info) return false;
+      if (info.onboarding_status === "complete") {
+        await refreshAccessToken().catch(() => {});
+        if (info.assessment_status === "pending") {
+          router.replace("/onboarding/assessments");
+        } else {
+          router.replace("/dashboard");
+        }
+        return true;
+      }
+      if (info.onboarding_status === "rejected") {
+        router.replace("/onboarding");
+        return true;
+      }
+    } catch { /* stay on this screen */ }
+    return false;
+  }
+
   useEffect(() => {
     if (!submitted && !isAlreadySubmitted) return;
-    clientApi.get(API.assessments.my).then(r => {
-      const assignments = r.data?.data?.assignments ?? [];
-      if (assignments.length > 0) router.replace("/onboarding/assessments");
-    }).catch(() => {});
+    void checkAndHandleApproval();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- checkAndHandleApproval is stable enough for this one-time-per-mount poll; including it would re-run on every render since it's redefined each time
   }, [submitted, isAlreadySubmitted, router]);
 
 
@@ -845,13 +873,13 @@ export default function OnboardingPage() {
 
   async function handleCheckApproval() {
     setCheckingApproval(true);
+    setCheckApprovalMsg(null);
     try {
-      const r = await clientApi.get(API.assessments.my);
-      const assignments = r.data?.data?.assignments ?? [];
-      if (assignments.length > 0) {
-        router.replace("/onboarding/assessments");
+      const redirected = await checkAndHandleApproval();
+      if (!redirected) {
+        setCheckApprovalMsg("Still awaiting HR review — check back later, or wait for the email notification.");
       }
-    } catch { /* stay on page */ } finally {
+    } finally {
       setCheckingApproval(false);
     }
   }
@@ -872,6 +900,9 @@ export default function OnboardingPage() {
           <p style={{ fontSize: ".82rem", color: "var(--outline)", background: "var(--bg-low)", padding: ".75rem 1rem", borderRadius: 8, marginBottom: "1.5rem" }}>
             You can close this tab. We will notify you by email when approved.
           </p>
+          {checkApprovalMsg && (
+            <p style={{ fontSize: ".82rem", color: "var(--on-variant)", marginBottom: "1rem" }}>{checkApprovalMsg}</p>
+          )}
           <button
             onClick={handleCheckApproval}
             disabled={checkingApproval}

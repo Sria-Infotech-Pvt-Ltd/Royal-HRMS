@@ -100,7 +100,7 @@ async function callTokenRefresh(): Promise<void> {
   markRefreshedNow();
 }
 
-function refreshAccessToken(): Promise<void> {
+export function refreshAccessToken(): Promise<void> {
   const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
   if (locks) {
     return locks.request<void>(REFRESH_LOCK_NAME, () => callTokenRefresh());
