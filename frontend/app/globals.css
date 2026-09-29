@@ -388,7 +388,12 @@ tr:hover td {
 
 .btn-filled {
   background: var(--primary);
-  color: #fff;
+  /* --on-primary, not a hardcoded #fff — dark mode's --primary is a light
+     lavender (#a78bfa) that white text sits on at ~2.7:1 contrast (fails
+     WCAG AA's 4.5:1 for this button's 13px bold label). --on-primary
+     already flips to a near-black in dark mode for exactly this reason;
+     it just wasn't being used here. */
+  color: var(--on-primary);
   font-weight: 700;
 }
 
@@ -515,7 +520,11 @@ tr:hover td {
 
 .field-input:focus {
   border-color: var(--primary);
-  background: var(--surface);
+  /* background-color, not the `background` shorthand — the shorthand resets
+     background-image too, which wiped out .field-select's custom chevron
+     (background-image) the moment a <select class="field-input field-select">
+     was focused, e.g. after picking a Status or Company Code filter option. */
+  background-color: var(--surface);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
@@ -524,7 +533,7 @@ tr:hover td {
 }
 
 .field-input:disabled {
-  background: var(--bg-mid);
+  background-color: var(--bg-mid);
   color: var(--on-variant);
   box-shadow: none;
   cursor: not-allowed;
@@ -783,7 +792,11 @@ textarea.field-input {
   position: fixed;
   inset: 0;
   background: rgba(28, 28, 25, 0.5);
-  z-index: 1000;
+  /* Above the floating voice/chatbot button (z-index: 1000 in
+     VoiceCommandButton.tsx) — QA report #51 found it covering the
+     Hire wizard's Next/Close footer buttons on every step because both
+     shared the same z-index and DOM order decided the winner. */
+  z-index: 1100;
   display: none;
   align-items: center;
   justify-content: center;

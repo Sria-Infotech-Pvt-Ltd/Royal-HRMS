@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { SessionPayload } from "@/lib/session";
 import { clearAuth } from "@/lib/auth";
@@ -43,6 +43,16 @@ export default function DashboardShell({
     window.addEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
     return () => window.removeEventListener(PROFILE_PHOTO_UPDATED_EVENT, onPhotoUpdated);
   }, [refetchMyProfile]);
+
+  // The nav row scrolls horizontally with its scrollbar hidden — on a
+  // narrow/zoomed viewport with ~28 items, the active page's own link could
+  // sit off-screen with no indication where it went. Scrolls it into view
+  // whenever the active page changes, instead of always landing back at
+  // the (possibly unrelated) leftmost item.
+  const activeLinkRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    activeLinkRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pathname]);
 
 
   const visibleNav = buildNav(session.permissions ?? []);
@@ -124,6 +134,7 @@ export default function DashboardShell({
             return (
               <button
                 key={item.id}
+                ref={isActive ? activeLinkRef : undefined}
                 className={`navlink${isActive ? " on" : ""}`}
                 onClick={() => navigate(item.path)}
                 suppressHydrationWarning

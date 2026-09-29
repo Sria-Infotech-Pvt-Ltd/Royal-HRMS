@@ -223,7 +223,13 @@ export default function ProfileHeader({
             </div>
 
             <p className="text-[13px] mb-4" style={{ color: "var(--on-variant)" }}>
-              {employee.designation} · {employee.department}
+              {/* orgUnitName first (the real OrgUnit, e.g. "AI & ML") — the
+                  legacy `department` string is blank for anyone hired onto a
+                  real Position (see _data.ts's own apiToEmployee comment).
+                  Only joins with " · " when BOTH sides are non-empty, so a
+                  blank department/org-unit doesn't leave a trailing
+                  separator with nothing after it. */}
+              {[employee.designation, employee.orgUnitName || employee.department].filter(Boolean).join(" · ")}
             </p>
 
             {/* 2-col meta grid: left column DOB/Phone/Location, right column DOJ/Current Exp/Total Exp */}

@@ -77,22 +77,29 @@ export default function AiAssistPanel({ departments, branches, onClose, onApply 
         ))}
       </div>
 
-      {parsed && (
-        <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "var(--bg-low)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--on-variant)", marginBottom: 6 }}>
-            DETECTED
-          </div>
-          {parsed.matched.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
-              Nothing matched a known status, org unit or location — Apply will search this text by name, ID or email instead.
+      {/* Reserves the "Detected" block's own layout space (min-height) even
+          before it appears, instead of it popping in and pushing every
+          element below it — including the Apply button in the modal's
+          footer — down the moment the user finishes typing (issue: Apply
+          jumping out from under the cursor mid-click). */}
+      <div style={{ marginTop: 16, minHeight: 76 }}>
+        {parsed && (
+          <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--bg-low)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "var(--on-variant)", marginBottom: 6 }}>
+              DETECTED
             </div>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--on-bg)" }}>
-              {parsed.matched.map(m => <li key={m}>{m}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
+            {parsed.matched.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: "var(--on-variant)" }}>
+                Nothing matched a known status, org unit or location — Apply will search this text by name, ID or email instead.
+              </div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--on-bg)" }}>
+                {parsed.matched.map(m => <li key={m}>{m}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }

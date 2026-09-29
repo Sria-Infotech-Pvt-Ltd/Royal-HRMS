@@ -7,13 +7,13 @@ import Avatar from "./Avatar";
 import EmployeeRowActionsMenu, { type RowAction } from "./EmployeeRowActionsMenu";
 import PerformActionModal from "./PerformActionModal";
 import StatusPill from "@/components/employees/StatusPill";
+import { formatDate } from "@/lib/formatDate";
 
+// Standardized on the shared formatDate util (dd-mm-yyyy) instead of this
+// row's own ad-hoc dd/mm/yyyy formatter — the Directory table, its Drafts
+// panel, and the Hire wizard were each showing a different date format.
 function slashDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return formatDate(iso) || "—";
 }
 
 interface Props {

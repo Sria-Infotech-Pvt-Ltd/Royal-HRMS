@@ -79,7 +79,17 @@ export default function StepIndicator({ steps, currentStep, highestSaved, onStep
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: isDone ? "var(--success)" : isActive ? "var(--primary)" : "var(--outline)", marginBottom: 3 }}>
                     {isDone ? "Done" : `Step ${i + 1}`}
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: isActive ? 700 : 500, color: isActive ? "var(--on-bg)" : isDone ? "var(--success)" : "var(--on-variant)", maxWidth: 80, lineHeight: 1.3 }}>
+                  <div style={{
+                    fontSize: 12, fontWeight: isActive ? 700 : 500,
+                    color: isActive ? "var(--on-bg)" : isDone ? "var(--success)" : "var(--on-variant)",
+                    // whiteSpace/wordBreak explicit rather than relying on the
+                    // default — a maxWidth alone with no wrap behavior set
+                    // let an inherited `white-space: nowrap` (from a more
+                    // general button/label rule elsewhere) clip this label
+                    // mid-word ("Personal" → "ersonal", "Document" →
+                    // "Documen") instead of wrapping it onto a second line.
+                    maxWidth: 88, lineHeight: 1.3, whiteSpace: "normal", wordBreak: "break-word",
+                  }}>
                     {step.shortLabel}
                   </div>
                 </div>
