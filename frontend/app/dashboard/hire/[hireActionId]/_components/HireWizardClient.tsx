@@ -691,7 +691,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   <div className="flex gap-2">
                     <input value={displayName} onChange={e => { displayNameTouchedRef.current = true; setDisplayName(e.target.value); }} placeholder="Generated from name" className="field-input" />
                     <button type="button" onClick={() => { displayNameTouchedRef.current = false; setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" ")); }}
-                      className="btn btn-ghost btn-sm" style={{ whiteSpace: "nowrap" }}>+ Suggest</button>
+                      className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}>+ Suggest</button>
                   </div>
                   <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
                 </div>
@@ -741,7 +741,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                   <div className="flex gap-2">
                     <input value={placeOfBirth} onChange={e => setPlaceOfBirth(e.target.value)} placeholder="City / town" className="field-input" />
                     <button type="button" onClick={() => setPlaceOfBirth(form.current_village || form.current_district)}
-                      className="btn btn-ghost btn-sm" style={{ whiteSpace: "nowrap" }}>+ Suggest</button>
+                      className="btn btn-sm" style={{ whiteSpace: "nowrap", background: "#7c3aed", color: "#ffffff", border: "none" }}>+ Suggest</button>
                   </div>
                 </div>
               </div>
