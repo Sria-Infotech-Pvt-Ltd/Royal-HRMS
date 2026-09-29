@@ -185,15 +185,19 @@ export default function EmploymentStep({
       <div className="g3">
         <div className="f">
           <label>Position <span className="tag">FROM ACTION</span></label>
-          <div className="finput auto">{positionTitle}</div>
+          {/* .finput has a fixed height with zero vertical padding — a
+              real <input>/<select> centers its text natively, but a plain
+              <div> doesn't get that for free, so this text sat at the top
+              of the box instead of centered. */}
+          <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>{positionTitle}</div>
         </div>
         <div className="f">
           <label>Org unit <span className="tag">FROM POSITION</span></label>
-          <div className="finput auto">{orgUnitName}</div>
+          <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>{orgUnitName}</div>
         </div>
         <div className="f">
           <label>Grade / band <span className="tag">FROM POSITION</span></label>
-          <div className="finput auto">{grade || "—"}</div>
+          <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>{grade || "—"}</div>
         </div>
         <div className="f">
           <label>Reporting manager</label>
@@ -207,7 +211,7 @@ export default function EmploymentStep({
         </div>
         <div className="f">
           <label>Cost center <span className="tag">FROM UNIT</span></label>
-          <div className="finput auto">{costCenter || "—"}</div>
+          <div className="finput auto" style={{ display: "flex", alignItems: "center" }}>{costCenter || "—"}</div>
         </div>
       </div>
 
