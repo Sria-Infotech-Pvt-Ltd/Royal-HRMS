@@ -195,7 +195,21 @@ class EmployeeDetailView(APIView):
         employee = _get_employee(employee_id)
         if employee is None or _employee_out_of_branch_scope(request.user, employee):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
+        return self._update_fields(request, employee, employee_id)
 
+    def _update_fields(self, request, employee, employee_id: str):
+        """
+        Shared basic-fields update logic for both PUT (full/mostly-full edit
+        from the Employee Detail page's Edit form) and PATCH when the request
+        body carries anything other than `is_active` (QA #68 — PATCH used to
+        support ONLY the is_active toggle and 400'd with "is_active field is
+        required" for any other partial update, e.g. correcting an
+        employee's email/address/DOB, even though this exact field-by-field
+        validation already existed here for PUT). Every field below is only
+        touched when the request actually sent it (`if field in data` / `if
+        'x' in data`), so a partial PATCH body naturally only updates the
+        fields it includes — nothing here assumes a full payload.
+        """
         data          = request.data
         update_fields = ['updated_at']
         changes       = {}
@@ -511,7 +525,11 @@ class EmployeeDetailView(APIView):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
 
         if 'is_active' not in request.data:
-            return error('is_active field is required.')
+            # Not an active/inactive toggle request — a genuine partial
+            # update of the employee's other fields (email/address/DOB/etc).
+            # Reuses the exact same field-by-field validation PUT already
+            # has (_update_fields) instead of duplicating it, per QA #68.
+            return self._update_fields(request, employee, employee_id)
 
         raw = request.data.get('is_active')
         if isinstance(raw, bool):

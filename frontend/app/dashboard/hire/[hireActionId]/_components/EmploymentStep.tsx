@@ -32,6 +32,28 @@ export const EMPTY_EMPLOYMENT: EmploymentDraft = {
   pay_group: "monthly", attendance_scheme: "standard", leave_plan: "",
 };
 
+// In-memory cache for this step's 7 lookup calls (roles, branches, people,
+// weekly-off/shift/salary-structure/leave policies) — previously these
+// reloaded from scratch every single time the Employment step was
+// opened/reopened within the same Hire wizard session, with no caching at
+// all (QA #67). Module-level so it survives this component unmounting when
+// the wizard moves to another step and remounting when the user comes back,
+// but not a page reload — matches "within the wizard session", not a
+// permanent cross-session cache. Mirrors the same short-TTL, session-scoped
+// cache added to the shared useFetch hook for the same reason.
+const EMPLOYMENT_LOOKUPS_CACHE_TTL_MS = 5 * 60 * 1000;
+let employmentLookupsCache: { data: EmploymentLookups; expiresAt: number } | null = null;
+
+interface EmploymentLookups {
+  roles: { id: number; display_name: string }[];
+  branches: { id: number; branch_name: string }[];
+  people: { id: string; full_name: string; employee_id: string }[];
+  weeklyPolicies: { id: string; name: string }[];
+  shiftPolicies: { id: string; name: string }[];
+  structures: { id: string; name: string }[];
+  leavePolicies: { id: string | number; leave_type_display: string }[];
+}
+
 const EMP_TYPES = ["Permanent", "Contract", "Freelancer", "Consultant", "Part-Time", "Temporary", "Intern"];
 const WORK_MODES = [["office", "Office"], ["remote", "Remote"], ["hybrid", "Hybrid"]];
 const PAY_GROUPS = [["monthly", "Monthly – India"], ["weekly", "Weekly"], ["biweekly", "Bi-Weekly"], ["daily", "Daily Wage"]];
@@ -63,6 +85,18 @@ export default function EmploymentStep({
   const [leavePolicies, setLeavePolicies] = useState<{ id: string | number; leave_type_display: string }[]>([]);
 
   useEffect(() => {
+    if (employmentLookupsCache && employmentLookupsCache.expiresAt > Date.now()) {
+      const c = employmentLookupsCache.data;
+      setRoles(c.roles);
+      setBranches(c.branches);
+      setPeople(c.people);
+      setWeeklyPolicies(c.weeklyPolicies);
+      setShiftPolicies(c.shiftPolicies);
+      setStructures(c.structures);
+      setLeavePolicies(c.leavePolicies);
+      return;
+    }
+
     Promise.allSettled([
       clientApi.get<{ data: { results: typeof roles } }>(API.roles.list, { params: { page_size: 100 } }),
       clientApi.get<{ data: { results: typeof branches } }>(API.employees.branches, { params: { page_size: 100 } }),
@@ -72,13 +106,34 @@ export default function EmploymentStep({
       clientApi.get<{ data: { results: typeof structures } }>(API.payroll.structures, { params: { page_size: 100 } }),
       clientApi.get<{ data: typeof leavePolicies }>(API.leave.policy),
     ]).then(([r, b, p, w, s, st, lp]) => {
-      if (r.status === "fulfilled") setRoles(r.value.data.data.results ?? []);
-      if (b.status === "fulfilled") setBranches(b.value.data.data.results ?? []);
-      if (p.status === "fulfilled") setPeople(p.value.data.data.results ?? []);
-      if (lp.status === "fulfilled") setLeavePolicies(lp.value.data.data ?? []);
-      if (w.status === "fulfilled") setWeeklyPolicies(w.value.data.data.results ?? []);
-      if (s.status === "fulfilled") setShiftPolicies(s.value.data.data.results ?? []);
-      if (st.status === "fulfilled") setStructures(st.value.data.data.results ?? []);
+      const resolved: EmploymentLookups = {
+        roles:          r.status === "fulfilled" ? (r.value.data.data.results ?? []) : [],
+        branches:       b.status === "fulfilled" ? (b.value.data.data.results ?? []) : [],
+        people:         p.status === "fulfilled" ? (p.value.data.data.results ?? []) : [],
+        weeklyPolicies: w.status === "fulfilled" ? (w.value.data.data.results ?? []) : [],
+        shiftPolicies:  s.status === "fulfilled" ? (s.value.data.data.results ?? []) : [],
+        structures:     st.status === "fulfilled" ? (st.value.data.data.results ?? []) : [],
+        leavePolicies:  lp.status === "fulfilled" ? (lp.value.data.data ?? []) : [],
+      };
+      setRoles(resolved.roles);
+      setBranches(resolved.branches);
+      setPeople(resolved.people);
+      setLeavePolicies(resolved.leavePolicies);
+      setWeeklyPolicies(resolved.weeklyPolicies);
+      setShiftPolicies(resolved.shiftPolicies);
+      setStructures(resolved.structures);
+
+      // Only cache when every lookup actually succeeded — caching a
+      // partial/failed result would keep serving empty dropdowns for the
+      // next 5 minutes even after a transient failure (e.g. QA #66's
+      // intermittent 503) has cleared up.
+      const allFulfilled = [r, b, p, w, s, st, lp].every(x => x.status === "fulfilled");
+      if (allFulfilled) {
+        employmentLookupsCache = {
+          data: resolved,
+          expiresAt: Date.now() + EMPLOYMENT_LOOKUPS_CACHE_TTL_MS,
+        };
+      }
     });
   }, []);
 
