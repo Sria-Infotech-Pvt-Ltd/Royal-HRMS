@@ -6,7 +6,11 @@ import type { EmergencyContactEntry } from "./EmergencyContactsList";
 import type { HireStepDef } from "./HireWizardSidebar";
 
 export const EMPTY_FORM: ProfileForm = {
-  date_of_birth: "", gender: "", marital_status: "", father_name: "", blood_group: "",
+  // The Marital status <select> has no blank option — its first <option>
+  // is "Single", so an empty string here rendered as "Single" on screen
+  // while the value actually saved was "" (QA report #41). Match the
+  // default the UI already visibly shows.
+  date_of_birth: "", gender: "", marital_status: "single", father_name: "", blood_group: "",
   current_address: "", current_address_line2: "", current_village: "", current_district: "",
   current_state: "", current_pin_code: "", permanent_address: "", permanent_address_line2: "",
   permanent_village: "", permanent_district: "", permanent_state: "", permanent_pin_code: "",
@@ -61,6 +65,13 @@ export const ADDRESS_BUILTIN_KEYS = new Set([
 export const IDENTITY_STATUTORY_BUILTIN_KEYS = new Set([
   "date_of_birth", "gender", "marital_status", "blood_group", "father_name",
   "aadhaar_number", "passport_number", "passport_expiry",
+  // Same duplication problem as the rest of this set, just under different
+  // key names — the org's configurable statutory fields seed a checkbox
+  // "is_disabled"/"is_international_worker" (see migration
+  // 0150_seed_statutory_field_configs) that asks the exact same yes/no
+  // question this step's own "Specially abled"/"International worker"
+  // selects already ask (QA report #42).
+  "is_disabled", "is_international_worker",
 ]);
 
 export function emptyEmergencyContact(id: string, isPrimary: boolean): EmergencyContactEntry {

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from apps.branch.models import Branch, City, State
+from apps.payroll.models import StatutoryConfig
 from apps.payroll.services_estimate import estimate_salary_breakdown
 
 # A few paise of floating-point/Decimal rounding across 8 iterations is
@@ -40,3 +42,32 @@ class EstimateSalaryBreakdownCtcConvergenceTests(TestCase):
             + result['gratuity_provision'] + result['employer_esi']
         )
         self.assertAlmostEqual(result['monthly_cost_to_company'], expected, delta=0.01)
+
+    def test_employer_pf_and_eps_together_never_exceed_the_statutory_employer_rate(self):
+        # QA report #47 — Employer PF and EPS used to each be computed at
+        # their own full rate independently (12% + 8.33%), double-counting
+        # EPS since it's statutorily carved OUT of the employer's 12% PF
+        # share, not paid on top of it.
+        result = estimate_salary_breakdown(600000, None, None, None)
+        pf_wage_base = min(result['basic'], 15000.0)
+        expected_total = pf_wage_base * 12 / 100
+        self.assertAlmostEqual(result['employer_pf'] + result['employer_eps'], expected_total, delta=0.01)
+
+
+class ProfessionalTaxTests(TestCase):
+    def test_telangana_pt_applies_at_50k_monthly_gross(self):
+        # QA report #48 — PT always showed Rs 0 regardless of gross salary.
+        # Root cause: zero StatutoryConfig rows existed in the database at
+        # all (not a formula bug) — see migration
+        # 0024_seed_telangana_statutory_config.
+        state, _ = State.objects.get_or_create(code='TG', defaults={'name': 'Telangana'})
+        city, _ = City.objects.get_or_create(name='Hyderabad', state=state)
+        branch = Branch.objects.create(branch_code='PTTEST', branch_name='PT Test Branch', state=state, city=city)
+        statutory = StatutoryConfig.objects.get(state=state)
+        self.assertTrue(statutory.pt_applicable)
+
+        result = estimate_salary_breakdown(600000, None, branch, statutory)
+        # 6,00,000 / 12 with the flat-split default structure lands gross
+        # comfortably above the Rs 20,000 slab boundary, so PT must be the
+        # top Telangana slab amount (Rs 200).
+        self.assertEqual(result['pt_deduction'], 200.0)

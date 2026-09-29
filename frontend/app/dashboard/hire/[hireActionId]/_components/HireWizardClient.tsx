@@ -12,11 +12,11 @@
 // to Documents/Review without filling every earlier step first) — same
 // pattern as the HR-onboarding wizard, not the self-service wizard's
 // sequential step-locking.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
-import PhoneInput, { nationalDigitCount } from "@/components/PhoneInput";
+import PhoneInput, { nationalDigitCount, isPlausibleNationalNumber } from "@/components/PhoneInput";
 import LanguagesSelect from "@/components/LanguagesSelect";
 import CountrySelect from "@/components/CountrySelect";
 import type { ProfileForm } from "@/app/onboarding/_types";
@@ -112,6 +112,7 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   }
 
   async function deleteDocument(doc: HireDocument) {
+    if (!window.confirm("Remove this document? You'll need to re-upload it before hiring.")) return;
     setDocError("");
     try {
       await clientApi.delete(API.hireActions.documentDetail(hireActionId, doc.id));
@@ -127,6 +128,32 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
   const [hiring, setHiring] = useState(false);
   const [hireError, setHireError] = useState<string | null>(null);
+
+  // QA report #37 — the error banner rendered at the top of the step, so
+  // if the user had scrolled down while filling a long step (Personal
+  // identity is the worst offender), pressing Next showed the error
+  // off-screen with no indication anything happened at all.
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (stepErr) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [stepErr]);
+
+  // QA report #53 — the previous step's scroll position was still applied
+  // to the next one (e.g. landing on step 2 already scrolled to the
+  // bottom, wherever step 1 happened to be left).
+  const wizBodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    wizBodyRef.current?.scrollTo({ top: 0 });
+  }, [tab]);
+
+  // "auto" next to Display name promised it would fill itself in — it
+  // never did until the user manually clicked "+ Suggest" (QA report #40).
+  // Only auto-fills while the user hasn't typed their own override.
+  const displayNameTouchedRef = useRef(false);
+  useEffect(() => {
+    if (displayNameTouchedRef.current) return;
+    setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" "));
+  }, [salutation, firstName, middleName, lastName]);
 
   let tempId = 0;
   const nextTempId = () => `temp-${++tempId}`;
@@ -150,7 +177,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
       setFirstName(String(d.first_name ?? ""));
       setMiddleName(String(d.middle_name ?? ""));
       setLastName(String(d.last_name ?? ""));
-      setDisplayName(String(d.display_name ?? ""));
+      const savedDisplayName = String(d.display_name ?? "");
+      setDisplayName(savedDisplayName);
+      if (savedDisplayName) displayNameTouchedRef.current = true;
       setNationality(String(d.nationality ?? "Indian"));
       setPlaceOfBirth(String(d.place_of_birth ?? ""));
       setEmail(String(d.email ?? ""));
@@ -286,11 +315,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         {
           const digits = nationalDigitCount(phone);
           if (digits < MIN_NATIONAL_PHONE_DIGITS || digits > MAX_NATIONAL_PHONE_DIGITS) return "Enter a valid mobile number.";
+          if (!isPlausibleNationalNumber(phone)) return "Enter a valid Indian mobile number — it must start with 6-9.";
         }
         if (identityExtras.alternate_mobile.trim()) {
           const altDigits = nationalDigitCount(identityExtras.alternate_mobile);
           if (altDigits < MIN_NATIONAL_PHONE_DIGITS || altDigits > MAX_NATIONAL_PHONE_DIGITS) {
             return "Enter a valid alternate mobile number, or leave it blank.";
+          }
+          if (!isPlausibleNationalNumber(identityExtras.alternate_mobile)) {
+            return "Enter a valid alternate Indian mobile number — it must start with 6-9.";
           }
         }
         return null;
@@ -307,6 +340,15 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
         }
         return null;
       case 4: {
+        // Family member DOB — QA report #35: a father with DOB 2030-01-01
+        // (in the future) was accepted with no validation at all.
+        const badDob = familyEntries.find(f => {
+          if (!f.date_of_birth) return false;
+          const d = new Date(f.date_of_birth);
+          return Number.isNaN(d.getTime()) || d > new Date();
+        });
+        if (badDob) return `${badDob.name || "A family member"}'s date of birth cannot be in the future.`;
+
         const totals: Record<string, number> = {};
         for (const n of nomineeEntries) {
           const scheme = n.scheme || "epf_eps";
@@ -389,6 +431,11 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // rather than blocking navigation, since jumping between steps must never
   // get stuck the way advancing past a required-field gate should.
   async function goToStep(index: number) {
+    // A validation error from the step being LEFT must never still be
+    // showing on the step being landed on — QA report #38 found a PAN
+    // error from Statutory (step 3) still visible after jumping to Family
+    // (step 4) or Assets (step 7).
+    setStepErr("");
     try {
       await patchAction(buildFullDraftPayload());
     } catch {
@@ -442,8 +489,20 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // fields) fall back to the old highestSaved-based "done" in the sidebar.
   const missingByStep = useMemo(() => {
     const m: Record<number, string[]> = {};
-    m[0] = [!firstName.trim() && "First name", !lastName.trim() && "Last name", !form.date_of_birth && "Date of birth"].filter(Boolean) as string[];
-    m[1] = [!employment.employment_type && "Employment type", !employment.role && "Reporting manager"].filter(Boolean) as string[];
+    // All 7 fields the step's own sidebar badge (STEPS[0].required) has
+    // always claimed as required — QA report #36 found the badge itself
+    // never actually reflected these (it was a static "7" from _wizardData
+    // that never changed no matter what was filled in).
+    m[0] = [
+      !firstName.trim() && "First name", !lastName.trim() && "Last name",
+      !form.date_of_birth && "Date of birth", !form.gender && "Gender",
+      !nationality.trim() && "Nationality", !email.trim() && "Personal email",
+      !phone.trim() && "Mobile number",
+    ].filter(Boolean) as string[];
+    m[1] = [
+      !employment.employment_type && "Employment type", !employment.role && "Role",
+      !employment.branch && "Company code",
+    ].filter(Boolean) as string[];
     m[3] = [
       !statutory.pan_number.trim() && "PAN",
       !statutory.aadhaar_number.trim() && "Aadhaar",
@@ -458,7 +517,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     })();
     return m;
   }, [
-    firstName, lastName, form.date_of_birth, employment.employment_type, employment.role,
+    firstName, lastName, form.date_of_birth, form.gender, nationality, email, phone,
+    employment.employment_type, employment.role, employment.branch,
     statutory.pan_number, statutory.aadhaar_number, statutory.account_holder_name,
     statutory.account_number, statutory.ifsc_code, educationEntries, documents,
   ]);
@@ -537,9 +597,9 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
             <div className="stepcount">{String(tab + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}</div>
           </div>
 
-        <div className="wiz-body">
+        <div className="wiz-body" ref={wizBodyRef}>
           {stepErr && (
-            <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg border border-[var(--error-c)] mb-4"
+            <div ref={errorRef} className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg border border-[var(--error-c)] mb-4"
               style={{ background: "var(--error-c)", color: "var(--error)" }}>
               <i className="ti ti-alert-circle text-[14px] mt-0.5 flex-shrink-0" />
               <span className="text-[13px]">{stepErr}</span>
@@ -576,8 +636,8 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
                 <div>
                   <label className="block text-[12.5px] font-semibold mb-1.5">Display name <span style={{ color: "var(--on-variant)", fontWeight: 400 }}>auto</span></label>
                   <div className="flex gap-2">
-                    <input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Generated from name" className="field-input" />
-                    <button type="button" onClick={() => setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" "))}
+                    <input value={displayName} onChange={e => { displayNameTouchedRef.current = true; setDisplayName(e.target.value); }} placeholder="Generated from name" className="field-input" />
+                    <button type="button" onClick={() => { displayNameTouchedRef.current = false; setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" ")); }}
                       className="btn btn-ghost btn-sm" style={{ whiteSpace: "nowrap" }}>+ Suggest</button>
                   </div>
                   <p className="text-[11px] mt-1" style={{ color: "var(--on-variant)" }}>Shown across the app and in approvals.</p>
@@ -837,7 +897,6 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
 
           {tab === 7 && (
             <div className="mstep on">
-              <div className="hint" style={{ marginBottom: 12 }}>Optional at hiring time — assets are usually issued on the joining date.</div>
               <AssetsList
                 entries={assetEntries}
                 onAdd={() => setAssetEntries(p => [...p, { id: nextTempId(), asset_type: "laptop", tag_number: "", condition: "new", issue_when: "later" }])}
@@ -854,7 +913,12 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
               reservedEmployeeId={action.reserved_employee_id} positionTitle={action.position_title}
               orgUnitName={action.org_unit_name} grade={action.grade} effectiveFrom={action.effective_from}
               firstName={firstName} lastName={lastName} form={form} employment={employment} basicPay={basicPay}
-              statutory={statutory} emergencyContactCount={emergencyContacts.length}
+              statutory={statutory}
+              // The wizard always starts with one blank placeholder row —
+              // counting it as "1 emergency contact added" before the user
+              // typed anything into it was QA report #50's "1 emergency
+              // contact shown when none added".
+              emergencyContactCount={emergencyContacts.filter(c => c.name.trim() && c.phone.trim()).length}
               panNumber={statutory.pan_number} aadhaarNumber={statutory.aadhaar_number}
               familyEntries={familyEntries} nomineeEntries={nomineeEntries}
               educationEntries={educationEntries} experienceEntries={experienceEntries} assetEntries={assetEntries}

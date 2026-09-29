@@ -22,6 +22,10 @@ interface Breakdown {
 }
 
 const INR = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+// A minus sign in front of a currency figure reads as "this went wrong" to
+// most users — QA report #49 flagged "Rs -1,800" specifically. Parentheses
+// are the standard accounting convention for a deduction/negative amount.
+const INR_DEDUCTION = (n: number) => `(₹${Math.round(Math.abs(n)).toLocaleString("en-IN")})`;
 
 interface Props {
   annualCtc: string;
@@ -101,8 +105,13 @@ export default function BasicPayStep({ annualCtc, salaryStructureId, branchName,
             <SummaryRow label="Monthly gross — paid to the employee" value={breakdown.gross_earnings} />
             <SummaryRow label="Employer contributions — on top of gross" value={breakdown.total_employer_contributions} />
             <SummaryRow label="Monthly cost to company" value={breakdown.monthly_cost_to_company} />
-            <SummaryRow label="Annual cost to company" value={breakdown.annual_cost_to_company} />
-            <SummaryRow label="Statutory deductions" value={-breakdown.total_deductions} />
+            {/* Derived from the ROUNDED monthly figure directly above (not
+                the backend's own separately-rounded annual_cost_to_company)
+                so what's on screen is always internally consistent —
+                QA report #49: "54,012 x 12 = 6,48,144" (what a user would
+                manually check) didn't match the displayed "6,48,138". */}
+            <SummaryRow label="Annual cost to company" value={Math.round(breakdown.monthly_cost_to_company) * 12} />
+            <SummaryRow label="Statutory deductions" formatted={INR_DEDUCTION(breakdown.total_deductions)} />
             <SummaryRow label="Net take-home before income tax" value={breakdown.net_pay} bold />
           </div>
         </>
@@ -139,11 +148,11 @@ function Row({ label, value, bold }: { label: string; value: number; bold?: bool
   );
 }
 
-function SummaryRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+function SummaryRow({ label, value, formatted, bold }: { label: string; value?: number; formatted?: string; bold?: boolean }) {
   return (
     <div className="flex justify-between text-[12.5px]" style={{ fontWeight: bold ? 700 : 400 }}>
       <span style={{ color: bold ? "var(--on-bg)" : "var(--on-variant)" }}>{label}</span>
-      <span>{INR(value)}</span>
+      <span>{formatted ?? INR(value ?? 0)}</span>
     </div>
   );
 }

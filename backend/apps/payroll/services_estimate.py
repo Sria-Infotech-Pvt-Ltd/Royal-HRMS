@@ -95,8 +95,16 @@ def _compute_from_gross_basis(monthly_gross_basis, structure, is_metro, branch_c
         pf_er_rate  = branch_config.pf_employer_rate if branch_config else _PF_DEFAULT_RATE
         pf_wage_base = min(basic, pf_ceiling)
         pf_employee = pf_wage_base * pf_emp_rate / 100
-        pf_employer = pf_wage_base * pf_er_rate / 100
-        employer_eps = min(basic, pf_ceiling) * eps_rate / 100
+        # QA report #47 — EPS is not an ADDITIONAL employer contribution on
+        # top of the employer's 12% PF share, it's carved OUT of it (the
+        # statutory 12% employer contribution splits into 8.33% to EPS and
+        # the remainder to the employee's own PF account). Showing both
+        # "Employer PF" at the full pf_er_rate AND "EPS" at eps_rate
+        # double-counted EPS. "Employer PF" here is now only the
+        # non-EPS remainder, so pf_employer + employer_eps together still
+        # equal the true total employer PF-side contribution.
+        employer_eps = pf_wage_base * eps_rate / 100
+        pf_employer = pf_wage_base * max(pf_er_rate - eps_rate, Decimal('0')) / 100
         gratuity_provision = basic * gratuity_rate / 100
 
     esi_employee = Decimal('0')

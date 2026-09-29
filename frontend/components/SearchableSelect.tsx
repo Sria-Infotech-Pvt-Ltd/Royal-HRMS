@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface SearchableSelectOption {
   value: string;
@@ -32,14 +33,37 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // QA report #29 — this panel used to be position:absolute inside its own
+  // field wrapper, so any scrollable ancestor with overflow:hidden/auto
+  // (a modal body, most often) clipped it instead of letting it float
+  // above everything. Rendered into a portal and positioned from the
+  // trigger's own bounding rect so it always escapes that clipping.
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (
+        rootRef.current && !rootRef.current.contains(e.target as Node) &&
+        panelRef.current && !panelRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
     }
+    function updateRect() {
+      const r = rootRef.current?.getBoundingClientRect();
+      if (r) setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+    updateRect();
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    window.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("scroll", updateRect, true);
+      window.removeEventListener("resize", updateRect);
+    };
   }, [open]);
 
   const filtered = options.filter(o => o.label.toLowerCase().includes(search.trim().toLowerCase()));
@@ -66,11 +90,12 @@ export default function SearchableSelect({
         <i className="ti ti-chevron-down" style={{ fontSize: 14, color: "var(--on-variant)", flexShrink: 0 }} />
       </button>
 
-      {open && !disabled && (
+      {open && !disabled && rect && createPortal(
         <div
+          ref={panelRef}
           style={{
-            position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 30,
-            width: "100%", minWidth: 220, maxHeight: 280, overflow: "hidden", display: "flex", flexDirection: "column",
+            position: "fixed", top: rect.top, left: rect.left, zIndex: 1200,
+            width: rect.width, minWidth: 220, maxHeight: 280, overflow: "hidden", display: "flex", flexDirection: "column",
             background: "var(--surface, #fff)", border: "1px solid var(--outline-v, #e2e2e2)",
             borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
           }}
@@ -100,7 +125,8 @@ export default function SearchableSelect({
               </div>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

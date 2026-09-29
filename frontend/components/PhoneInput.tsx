@@ -59,6 +59,17 @@ export function nationalDigitCount(value: string): number {
   return splitValue(value).national.replace(/\D/g, "").length;
 }
 
+/** Digit-count bounds alone accepted "1234567890" as a valid Indian mobile
+ * number (QA report #34) — real Indian mobile numbers always start with
+ * 6-9. Only enforced for the 10-digit Indian case; other countries in
+ * COUNTRY_DIAL_OPTIONS have no equivalent leading-digit rule known here. */
+export function isPlausibleNationalNumber(value: string): boolean {
+  const { country, national } = splitValue(value);
+  const digits = national.replace(/\D/g, "");
+  if (country.iso === "IN" && digits.length === 10 && !/^[6-9]/.test(digits)) return false;
+  return true;
+}
+
 interface PhoneInputProps {
   value: string;
   onChange: (value: string) => void;

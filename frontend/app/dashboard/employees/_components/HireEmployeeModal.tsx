@@ -98,6 +98,7 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
     if (!reason)         { setErr("Select a reason.");        return; }
     if (!effectiveFrom)  { setErr("Effective from is required."); return; }
     if (effectiveFrom < todayStr) { setErr("Effective from cannot be in the past."); return; }
+    if (!orgUnitId)      { setErr("Select an org unit.");     return; }
     if (!positionId)     { setErr("Select a position.");      return; }
     setSaving(true);
     setErr("");
@@ -116,6 +117,11 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
     <Modal
       title={<h2 className="modal-title">Hire an <em style={{ color: "var(--brand-ink)" }}>employee</em></h2>}
       onClose={onClose}
+      // Without this, the whole modal (body + footer) scrolled as one
+      // block — on a short viewport (QA report #28: 643px) the
+      // Continue/Cancel footer buttons ended up below the fold with no
+      // sticky footer to keep them reachable without scrolling.
+      scrollBody
       footer={
         <>
           <button onClick={onClose} disabled={saving} className="btn btn-ghost">Cancel</button>
@@ -157,7 +163,11 @@ export default function HireEmployeeModal({ onClose, onHired, initialHireActionI
         <div className="section-label">Fields this hire may change</div>
         <div className="g2">
           <div className="f">
-            <label>Org unit</label>
+            {/* Position (required) can't be picked until an org unit is
+                selected — QA report #30 found only Position marked
+                required, leaving no visual cue for why it stayed
+                unselectable. */}
+            <label>Org unit <span className="req">*</span></label>
             <SearchableSelect
               value={orgUnitId}
               onChange={v => { setOrgUnitId(v); setPositionId(""); }}

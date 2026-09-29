@@ -87,7 +87,7 @@ export default function StatutoryAccountsStep({ value, onChange, documents, uplo
         </div>
         <div className="f">
           <label>Aadhaar <span className="req">*</span></label>
-          <input value={value.aadhaar_number} onChange={e => set("aadhaar_number", e.target.value.replace(/\D/g, ""))} placeholder="XXXX XXXX XXXX" maxLength={12} className="finput" />
+          <input value={value.aadhaar_number} onChange={e => set("aadhaar_number", e.target.value.replace(/\D/g, ""))} placeholder="123456789012" maxLength={12} className="finput" />
           <div style={{ marginTop: 6 }}>
             <DocUploadButton documentType="aadhaar_card" label="Aadhaar card" existing={docFor("aadhaar_card")}
               uploading={uploading === "aadhaar_card"} onUpload={onUploadDoc} onDelete={onDeleteDoc} />

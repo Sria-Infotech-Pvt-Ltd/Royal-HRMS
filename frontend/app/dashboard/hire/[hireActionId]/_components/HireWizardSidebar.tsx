@@ -52,6 +52,13 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
         const isDone = missingByStep[i] !== undefined
           ? missingByStep[i].length === 0
           : i <= highestSaved;
+        // The little count pill next to a step's label used to be a static
+        // number from STEPS[i].required that never changed regardless of
+        // what was actually filled in (QA report #36 — "Personal stays 7
+        // after filling"). For any step this component tracks live missing
+        // fields for, show that real count instead; untracked steps
+        // (Basic Pay, Assets) keep the original static hint.
+        const requiredBadge = missingByStep[i] !== undefined ? missingByStep[i].length : step.required;
         const isActive    = i === currentStep;
         return (
           <div key={step.label}>
@@ -68,9 +75,9 @@ export default function HireWizardSidebar({ steps, currentStep, highestSaved, on
                 <div className="t1">
                   {step.label}
                   {step.tag && <span className={`tag ${step.tag.tone}`}>{step.tag.label}</span>}
-                  {!!step.required && step.required > 0 && (
+                  {!!requiredBadge && requiredBadge > 0 && (
                     <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--onbrand)", background: "var(--crit)", borderRadius: 99, padding: "1px 5px" }}>
-                      {step.required}
+                      {requiredBadge}
                     </span>
                   )}
                 </div>

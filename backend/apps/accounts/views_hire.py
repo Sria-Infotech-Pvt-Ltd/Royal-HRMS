@@ -34,6 +34,23 @@ logger = logging.getLogger(__name__)
 
 _DENIED = 'You do not have permission to perform this action.'
 
+# first_error() prefixes every message with its field name so callers know
+# which field is invalid (e.g. "employee_id: ..."), which is genuinely
+# useful for named business fields. For a raw file upload the field is
+# always literally called "file"/"photo" — a name the end user never typed
+# and that means nothing to them (QA report #44: "file: Only PDF, JPG, and
+# PNG files are allowed." read as a stray broken prefix, not a field label).
+_FILE_FIELD_NAMES = {'file', 'photo'}
+
+
+def _first_file_error(serializer_errors: dict) -> str:
+    message = first_error(serializer_errors)
+    for field_name in _FILE_FIELD_NAMES:
+        prefix = f'{field_name}: '
+        if message.startswith(prefix):
+            return message[len(prefix):]
+    return message
+
 
 def _hire_action_dict(action: HireAction, request=None) -> dict:
     photo_url = None
@@ -245,8 +262,7 @@ class HireActionPhotoView(APIView):
 
         serializer = ProfilePhotoUploadSerializer(data=request.data)
         if not serializer.is_valid():
-            from core.responses import first_error
-            return error(first_error(serializer.errors), data=serializer.errors, http_status=422)
+            return error(_first_file_error(serializer.errors), data=serializer.errors, http_status=422)
 
         if action.photo:
             action.photo.delete(save=False)
@@ -309,7 +325,7 @@ class HireActionDocumentListCreateView(APIView):
 
         serializer = HireActionDocumentSerializer(data=request.data)
         if not serializer.is_valid():
-            return error(first_error(serializer.errors), data=serializer.errors)
+            return error(_first_file_error(serializer.errors), data=serializer.errors)
         file_obj = serializer.validated_data['file']
         doc_type = serializer.validated_data['document_type']
         entry_ref = serializer.validated_data.get('entry_ref', '') or ''

@@ -8,6 +8,7 @@ import type { AssetEntry } from "@/app/onboarding/_components/AssetsList";
 import type { EmploymentDraft } from "./EmploymentStep";
 import type { BasicPayDraft } from "./BasicPayStep";
 import type { StatutoryDraft } from "./StatutoryAccountsStep";
+import { REQUIRED_DOC_LABELS } from "./DocumentsChecklistStep";
 
 interface Props {
   reservedEmployeeId: string;
@@ -78,6 +79,11 @@ export default function ReviewStep(props: Props) {
   if (!statutory.account_holder_name.trim()) blockingReasons.push("Account holder name");
   if (!statutory.account_number.trim()) blockingReasons.push("Account number");
   if (!statutory.ifsc_code.trim()) blockingReasons.push("IFSC code");
+  // The shared EducationChecklist component's own copy ("at least one is
+  // required before you can submit") was never actually enforced anywhere
+  // in this wizard — QA report #39 caught the step passing through empty.
+  // Enforcing it here at Review matches what that text already promises.
+  if (!educationEntries.some(e => e.institution?.trim())) blockingReasons.push("At least one education entry");
   if (missingRequiredDocs.length) blockingReasons.push(`${missingRequiredDocs.length} required document(s)`);
   if (overSharedScheme) blockingReasons.push(`nominee shares for ${overSharedScheme[0]} exceed 100%`);
 
@@ -92,14 +98,17 @@ export default function ReviewStep(props: Props) {
 
   return (
     <div className="mstep on">
-      <div className="note info" style={{ marginBottom: 14 }}>
-        <b>Ready to hire</b>
-        The record is created in Onboarding status. Optional details (father/mother&apos;s name, non-required documents) can still be finished afterward — the items below the completeness bar cannot.
-      </div>
-
-      {blockingReasons.length > 0 && (
+      {/* QA report #50 — this used to say "Ready to hire" unconditionally,
+          even with 10 blocking items still listed right below it. Now it
+          only claims that when it's actually true. */}
+      {blockingReasons.length === 0 ? (
+        <div className="note info" style={{ marginBottom: 14 }}>
+          <b>Ready to hire</b>
+          The record is created in Onboarding status. Optional details (father/mother&apos;s name, non-required documents) can still be finished afterward.
+        </div>
+      ) : (
         <div className="note warn" style={{ marginBottom: 14, borderColor: "var(--error)" }}>
-          <b>Complete these before hiring</b>
+          <b>Not ready to hire — complete these first</b>
           {blockingReasons.join(", ")}.
         </div>
       )}
@@ -132,7 +141,7 @@ export default function ReviewStep(props: Props) {
           <div className="kvlist">
             <Row label="Legal name" value={`${firstName} ${lastName}`.trim()} />
             <Row label="Date of birth" value={form.date_of_birth} />
-            <Row label="Gender" value={form.gender} />
+            <Row label="Gender" value={form.gender ? form.gender[0].toUpperCase() + form.gender.slice(1) : ""} />
             <Row label="Marital status" value={form.marital_status} />
             <Row label="Father/mother" value={form.father_name} />
             <Row label="Current address" value={[form.current_village, form.current_state].filter(Boolean).join(", ")} />
@@ -195,7 +204,9 @@ export default function ReviewStep(props: Props) {
           <h4>DOCUMENTS</h4>
           <div className="kvlist">
             <Row label="Uploaded" value={`${uploadedDocTypes.size} of ${requiredDocTypes.length}`} />
-            {missingRequiredDocs.length > 0 && <Row label="Missing required" value={missingRequiredDocs.join(", ")} warn />}
+            {missingRequiredDocs.length > 0 && (
+              <Row label="Missing required" value={missingRequiredDocs.map(k => REQUIRED_DOC_LABELS[k] ?? k).join(", ")} warn />
+            )}
           </div>
         </div>
         <div className="rvcard">
