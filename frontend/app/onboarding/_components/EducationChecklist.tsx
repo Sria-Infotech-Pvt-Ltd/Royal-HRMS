@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { EducationExperienceFieldConfig } from "@/types/onboardingFieldConfig";
 import DocUploadButton, { type HireDocument } from "@/components/DocUploadButton";
+import SearchableSelect from "@/components/SearchableSelect";
 
 // ── Step: Education ──────────────────────────────────────────────────────────
 // A genuinely repeatable, unbounded list of qualifications (two Bachelor's
@@ -205,10 +206,17 @@ export default function EducationChecklist({
                   <>
                     <div className="field-group">
                       <label className="field-label">Specialization{isRequired("specialization") && <Req />}</label>
-                      <select className="field-input field-select" value={selectValue} onChange={e => handleSpecializationChange(entry.id, e.target.value)}>
-                        <option value="">Select…</option>
-                        {list.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      {/* A native <select> here left the browser free to
+                          open the options list upward whenever it decided
+                          there wasn't room below, overlapping the fields
+                          above it — SearchableSelect always renders its
+                          list below the trigger via a portal. */}
+                      <SearchableSelect
+                        value={selectValue}
+                        onChange={v => handleSpecializationChange(entry.id, v)}
+                        placeholder="Select…"
+                        options={list.map(s => ({ value: s, label: s }))}
+                      />
                     </div>
                     {showCustom && (
                       <div className="field-group">

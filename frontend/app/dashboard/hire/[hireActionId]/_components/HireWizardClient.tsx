@@ -12,7 +12,7 @@
 // to Documents/Review without filling every earlier step first) — same
 // pattern as the HR-onboarding wizard, not the self-service wizard's
 // sequential step-locking.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import Modal from "@/components/Modal";
@@ -142,8 +142,12 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
   // to the next one (e.g. landing on step 2 already scrolled to the
   // bottom, wherever step 1 happened to be left).
   const wizBodyRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    wizBodyRef.current?.scrollTo({ top: 0 });
+  // useLayoutEffect (synchronous, before the browser paints), not
+  // useEffect — the same reset one frame later left a visible flash of
+  // the previous step's scroll position (reported: "the Employment page
+  // opens at the middle of the page").
+  useLayoutEffect(() => {
+    if (wizBodyRef.current) wizBodyRef.current.scrollTop = 0;
   }, [tab]);
 
   // "auto" next to Display name promised it would fill itself in — it
@@ -155,8 +159,19 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" "));
   }, [salutation, firstName, middleName, lastName]);
 
-  let tempId = 0;
-  const nextTempId = () => `temp-${++tempId}`;
+  // A plain local variable here reset to 0 on every render, so nearly
+  // every "Add" click (each one triggers a re-render before the next
+  // click) generated the exact same id ("temp-1") — every repeatable list
+  // in this wizard (Family, Nominees, Education, Experience, Assets,
+  // Emergency contacts) ended up with duplicate-id entries. Any
+  // id-matching operation (Remove's .filter(e => e.id !== id), field edits'
+  // .map(e => e.id === id ? ... : e)) then matched EVERY entry sharing that
+  // id, not just the one clicked — removing one removed all of them, and
+  // editing one field on entry #2 silently overwrote entry #1 too (both
+  // matched the same id). A ref persists across renders and always
+  // increments, so every id is genuinely unique.
+  const tempIdCounter = useRef(0);
+  const nextTempId = () => `temp-${++tempIdCounter.current}`;
 
   useEffect(() => {
     Promise.all([
