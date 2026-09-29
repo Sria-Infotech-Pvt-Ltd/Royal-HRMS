@@ -92,7 +92,7 @@ export function fmtDate(iso: string | null | undefined): string {
   return formatDate(d);
 }
 
-export function toDrawerEmployee(d: ProfileData): Employee {
+export function toDrawerEmployee(d: ProfileData, photoUrl?: string | null): Employee {
   const [firstName, ...rest] = (d.full_name || "").split(" ");
   return {
     id: d.employee_id, code: d.employee_id,
@@ -103,5 +103,6 @@ export function toDrawerEmployee(d: ProfileData): Employee {
     location: d.branch, gender: "male",
     status: "active", employmentStatus: "probation", confirmationDate: null,
     details: {}, tables: {},
+    photoUrl: photoUrl ?? d.profile_photo_url ?? undefined,
   };
 }

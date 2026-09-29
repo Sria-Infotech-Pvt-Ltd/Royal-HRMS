@@ -65,7 +65,7 @@ function fmtDate(iso: string | null | undefined): string {
   return formatDate(d);
 }
 
-function toDrawerEmployee(d: ProfileSummaryData): Employee {
+function toDrawerEmployee(d: ProfileSummaryData, photoUrl?: string | null): Employee {
   const [firstName, ...rest] = (d.full_name || "").split(" ");
   return {
     id: d.employee_id, code: d.employee_id,
@@ -76,6 +76,7 @@ function toDrawerEmployee(d: ProfileSummaryData): Employee {
     location: d.branch, gender: "male",
     status: "active", employmentStatus: "probation", confirmationDate: null,
     details: {}, tables: {},
+    photoUrl: photoUrl ?? d.profile_photo_url ?? undefined,
   };
 }
 
@@ -209,7 +210,7 @@ export default function ProfileSummaryTab() {
 
       {showRecord && data && (
         <EmployeeDrawer
-          employee={toDrawerEmployee(data)}
+          employee={toDrawerEmployee(data, photoUrl)}
           mode="self"
           onClose={() => setShowRecord(false)}
           onRequestCorrection={() => { setShowRecord(false); setShowEdit(true); }}

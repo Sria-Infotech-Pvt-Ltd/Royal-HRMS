@@ -255,7 +255,7 @@ export default function ProfileClient({ session }: { session: SessionPayload }) 
 
       {showRecord && profile && (
         <EmployeeDrawer
-          employee={toDrawerEmployee(profile)}
+          employee={toDrawerEmployee(profile, photoUrl)}
           mode="self"
           onClose={() => setShowRecord(false)}
           onRequestCorrection={canEditDirectly
