@@ -159,34 +159,30 @@ export default function HireWizardClient({ hireActionId, onClose, onHired }: { h
     setDisplayName([salutation, firstName, middleName, lastName].filter(Boolean).join(" "));
   }, [salutation, firstName, middleName, lastName]);
 
-  // A plain local variable here reset to 0 on every render, so nearly
-  // every "Add" click (each one triggers a re-render before the next
-  // click) generated the exact same id ("temp-1") — every repeatable list
-  // in this wizard (Family, Nominees, Education, Experience, Assets,
-  // Emergency contacts) ended up with duplicate-id entries. Any
-  // id-matching operation (Remove's .filter(e => e.id !== id), field edits'
-  // .map(e => e.id === id ? ... : e)) then matched EVERY entry sharing that
-  // id, not just the one clicked — removing one removed all of them, and
-  // editing one field on entry #2 silently overwrote entry #1 too (both
-  // matched the same id). A ref persists across renders and always
-  // increments, so every id is genuinely unique.
-  const tempIdCounter = useRef(0);
-  const nextTempId = () => `temp-${++tempIdCounter.current}`;
+  // This used to be a sequential counter ("temp-1", "temp-2", ...). Even
+  // moved into a useRef (persists across renders, unlike a plain local
+  // variable that reset to 0 on every render — the very first version of
+  // this bug), a small integer counter is still fragile: an effect that
+  // runs more than once for the same component instance (React 18 Strict
+  // Mode double-invokes effects with no cleanup in dev, exactly what the
+  // load effect below is), or a draft resumed from a previous session,
+  // can each independently produce "temp-1"/"temp-2"/etc., and two
+  // separate counters landing on the same small number is exactly a
+  // collision. A random UUID has no such shared-counter dependency at
+  // all — regenerated logic in any order, in any number of effect runs,
+  // never collides. Every id-matching operation in this file (Remove's
+  // .filter(e => e.id !== id), field edits' .map(e => e.id === id ? ... :
+  // e)) matches EVERY entry sharing an id, not just the one clicked —
+  // which is what made a collision here show up as "editing entry #2
+  // overwrote entry #1" / "removing one removed all of them".
+  const nextTempId = () => `temp-${crypto.randomUUID()}`;
 
   // A resumed draft's entries carry ids that were already saved into
-  // draft_data in a PREVIOUS session — the ref above always restarts its
-  // count at 0 on a fresh mount, so without this, newly added entries in
-  // this session could still collide with ids saved earlier (or, for a
-  // draft saved back when nextTempId() was the old, non-unique local
-  // variable, the loaded list itself can already contain duplicates).
-  // Called once, right when a draft's entries are loaded: raises the
-  // counter past every "temp-N" id already in use, then reassigns a fresh
-  // id to any entry whose id collides with an earlier one in the same list.
+  // draft_data in a PREVIOUS session — this repairs any list that still
+  // contains a duplicate id from before ids were made collision-proof
+  // (or from Strict Mode's double effect run), by reassigning a fresh id
+  // to any entry after the first one to use a given id.
   function repairTempIds<T extends { id: string }>(list: T[]): T[] {
-    for (const entry of list) {
-      const match = /^temp-(\d+)$/.exec(entry.id);
-      if (match) tempIdCounter.current = Math.max(tempIdCounter.current, Number(match[1]));
-    }
     const seen = new Set<string>();
     return list.map(entry => {
       if (seen.has(entry.id)) return { ...entry, id: nextTempId() };
