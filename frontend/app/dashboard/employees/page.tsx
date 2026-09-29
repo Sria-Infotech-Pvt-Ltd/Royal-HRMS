@@ -64,20 +64,30 @@ function EmployeesPageInner() {
         onHireEmployee={() => setShowModal(true)}
       />
 
-      <EmployeeStatCards stats={emp.stats} />
+      {/* Tailwind's own mt-4/mb-4 (1rem) scale — same spacing unit the
+          toolbar below already uses for its own mb-4 — applied consistently
+          between every section here instead of the sections sitting flush
+          (0px) or near-flush (1px) against each other. */}
+      <div className="mt-4">
+        <EmployeeStatCards stats={emp.stats} />
+      </div>
 
-      <AppraisalBanner />
+      <div className="mt-4">
+        <AppraisalBanner />
+      </div>
 
-      <EmployeeToolbar
-        search={emp.search} onSearchChange={emp.setSearch}
-        branch={emp.branch} branchOptions={emp.branchOptions} onBranchChange={emp.setBranch}
-        isAdmin={emp.isAdmin} userBranch={emp.userBranch}
-        dept={emp.dept} deptOptions={emp.deptOptions} onDeptChange={emp.setDept}
-        status={emp.status} statusFilters={STATUS_FILTERS} onStatusChange={emp.setStatus}
-        hasActiveFilters={!!(emp.search || emp.branch !== "all" || emp.dept !== "all" || emp.status !== "all")}
-        onClearFilters={emp.clearFilters}
-        canImport={canCreate} onBulkImport={() => setShowImport(true)}
-      />
+      <div className="mt-4">
+        <EmployeeToolbar
+          search={emp.search} onSearchChange={emp.setSearch}
+          branch={emp.branch} branchOptions={emp.branchOptions} onBranchChange={emp.setBranch}
+          isAdmin={emp.isAdmin} userBranch={emp.userBranch}
+          dept={emp.dept} deptOptions={emp.deptOptions} onDeptChange={emp.setDept}
+          status={emp.status} statusFilters={STATUS_FILTERS} onStatusChange={emp.setStatus}
+          hasActiveFilters={!!(emp.search || emp.branch !== "all" || emp.dept !== "all" || emp.status !== "all")}
+          onClearFilters={emp.clearFilters}
+          canImport={canCreate} onBulkImport={() => setShowImport(true)}
+        />
+      </div>
 
       <EmployeeTable
         employees={emp.employees}
@@ -89,7 +99,7 @@ function EmployeesPageInner() {
         onOpen={open}
         onToggleStatus={emp.toggleStatus}
         onRetry={() => emp.fetchEmployees()}
-        onActionApplied={() => emp.fetchEmployees()}
+        onActionApplied={() => { emp.fetchEmployees(); emp.fetchStats(emp.branch, emp.dept, emp.status); }}
       />
 
       <Pagination
@@ -101,7 +111,7 @@ function EmployeesPageInner() {
         <HireEmployeeModal
           initialHireActionId={resumeDraftId ?? undefined}
           onClose={() => { setShowModal(false); setResumeDraftId(null); }}
-          onHired={() => emp.fetchEmployees(emp.search, 1)}
+          onHired={() => { emp.fetchEmployees(emp.search, 1); emp.fetchStats(emp.branch, emp.dept, emp.status); }}
         />
       )}
 
@@ -115,7 +125,7 @@ function EmployeesPageInner() {
       )}
 
       {showImport && (
-        <BulkImportModal onClose={() => setShowImport(false)} onSuccess={() => emp.fetchEmployees(emp.search, 1)} />
+        <BulkImportModal onClose={() => setShowImport(false)} onSuccess={() => { emp.fetchEmployees(emp.search, 1); emp.fetchStats(emp.branch, emp.dept, emp.status); }} />
       )}
 
       {drawerEmployee && (

@@ -6,6 +6,7 @@
 // used, just collected into one dropdown.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface RowAction {
   label: string;
@@ -27,20 +28,44 @@ const TONE_COLOR: Record<NonNullable<RowAction["tone"]>, string> = {
 
 export default function EmployeeRowActionsMenu({ actions }: Props) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The table's own scroll container (.tbl-wrap / .overflow-x-auto) clips
+  // any absolutely-positioned descendant to its bounds — that's what cut
+  // off the last couple of options (and the entire last row's menu). Portal
+  // to <body> with fixed coordinates from the trigger button's own rect so
+  // the menu escapes that clipping/scrolling ancestor entirely.
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onDocClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+    <div style={{ position: "relative", display: "inline-block" }}>
       <button
+        ref={btnRef}
         onClick={() => setOpen(v => !v)}
         title="Actions"
         suppressHydrationWarning
@@ -48,10 +73,11 @@ export default function EmployeeRowActionsMenu({ actions }: Props) {
       >
         <i className="ti ti-dots-vertical text-[16px]" />
       </button>
-      {open && (
+      {open && coords && createPortal(
         <div
+          ref={menuRef}
           style={{
-            position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20,
+            position: "fixed", top: coords.top, right: coords.right, zIndex: 1000,
             background: "var(--surface)", border: "1px solid var(--outline-v)", borderRadius: 10,
             boxShadow: "var(--shadow-md)", minWidth: 180, padding: 6,
           }}
@@ -73,7 +99,8 @@ export default function EmployeeRowActionsMenu({ actions }: Props) {
               {a.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

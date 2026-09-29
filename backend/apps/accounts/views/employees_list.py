@@ -621,10 +621,25 @@ class EmployeeStatsView(APIView):
         if branch_filter and branch_filter != 'all':
             qs = qs.filter(branch=branch_filter)
 
+        # Org Unit / department filter — same matching EmployeeListCreateView.get()
+        # uses (real OrgUnit via Placement, OR the legacy `department` string)
+        # so narrowing the table by org unit narrows these cards the same way
+        # instead of them staying stuck at the branch-only count.
+        dept_filter = request.query_params.get('department', '').strip()
+        if dept_filter:
+            qs = qs.filter(
+                Q(department=dept_filter) |
+                Q(placements__effective_to__isnull=True, placements__position__org_unit__name=dept_filter)
+            ).distinct()
+
         from datetime import date
         from apps.hrms.models import SeparationRequest, SEP_APPROVED
 
         today = date.today()
+        notice_period_q = Q(
+            separation_requests__status=SEP_APPROVED,
+            separation_requests__proposed_last_working_day__gte=today,
+        )
         active_qs = qs.filter(is_active=True)
         # "Onboarding / Probation" — either still going through the wizard
         # (must_change_password, same signal EmployeeListCreateView.get()'s
@@ -634,10 +649,7 @@ class EmployeeStatsView(APIView):
         onboarding_or_probation_qs = active_qs.filter(
             Q(must_change_password=True) | Q(employment_status=User.EMPLOYMENT_STATUS_PROBATION)
         )
-        notice_period_count = active_qs.filter(
-            separation_requests__status=SEP_APPROVED,
-            separation_requests__proposed_last_working_day__gte=today,
-        ).distinct().count()
+        notice_period_count = active_qs.filter(notice_period_q).distinct().count()
         new_this_month = active_qs.filter(
             date_of_joining__year=today.year, date_of_joining__month=today.month,
         ).count()
@@ -651,9 +663,18 @@ class EmployeeStatsView(APIView):
             .values_list('position__org_unit_id', flat=True)
         ) | set(qs.exclude(department='').values_list('department', flat=True)))
 
+        # "Active" here must mean exactly what the table's own Active status
+        # filter means (EmployeeListCreateView.get()'s status_param == 'active')
+        # — confirmed, not still onboarding/probation, and not on notice period
+        # — otherwise the two disagree (e.g. this card showing a nonzero count
+        # while the table's Active filter shows none, or vice versa).
+        active_count = qs.filter(
+            is_active=True, must_change_password=False, employment_status=User.EMPLOYMENT_STATUS_CONFIRMED,
+        ).exclude(notice_period_q).count()
+
         return success('Employee statistics retrieved.', data={
             'total':             qs.count(),
-            'active':            qs.filter(is_active=True, must_change_password=False).count(),
+            'active':            active_count,
             'onboarding':        qs.filter(is_active=True, must_change_password=True).count(),
             'departments':       departments_count,
             'branch_names':      branch_names,

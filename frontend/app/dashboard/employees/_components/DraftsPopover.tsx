@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
+import { formatDateTime } from "@/lib/formatDate";
 
 interface Draft {
   id: string;
@@ -35,8 +36,15 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
     function onDocClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   async function handleDelete(id: string) {
@@ -51,7 +59,7 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
 
   return (
     <span className="draftwrap" ref={ref}>
-      <button className="btn" type="button" onClick={() => setOpen(v => !v)} suppressHydrationWarning>
+      <button className="btn btn-ghost" type="button" onClick={() => setOpen(v => !v)} suppressHydrationWarning>
         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}>
           <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" />
         </svg>
@@ -71,11 +79,11 @@ export default function DraftsPopover({ onResume }: { onResume: (hireActionId: s
                   <b>{d.label}</b>
                   <span className="meta">
                     {d.position_title}{d.reserved_employee_id ? ` · ${d.reserved_employee_id}` : ""} ·{" "}
-                    {new Date(d.updated_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    {formatDateTime(d.updated_at)}
                   </span>
                 </div>
                 <span className="acts">
-                  <button className="btn" onClick={() => { setOpen(false); onResume(d.id); }}>Resume</button>
+                  <button className="btn btn-outline" onClick={() => { setOpen(false); onResume(d.id); }}>Resume</button>
                   <button className="mini" onClick={() => handleDelete(d.id)}>Delete</button>
                 </span>
               </div>

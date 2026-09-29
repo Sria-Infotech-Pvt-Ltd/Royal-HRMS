@@ -36,6 +36,7 @@ export default function EmployeeToolbar({
         <i className="ti ti-search" />
         <input
           placeholder="Search by name, ID or email"
+          aria-label="Search employees by name, ID or email"
           value={search}
           onChange={e => onSearchChange(e.target.value)}
           suppressHydrationWarning
@@ -91,7 +92,7 @@ export default function EmployeeToolbar({
       {canImport && (
         <button
           onClick={onBulkImport}
-          className="btn btn-ghost btn-sm" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}
+          className="btn btn-ghost" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}
           title="Bulk import employees from a spreadsheet"
           suppressHydrationWarning
         >

@@ -2,11 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clientApi from "@/lib/clientApi";
 import { API } from "@/lib/api/endpoints";
 import { getStoredUser } from "@/lib/auth";
+import { useToast } from "@/components/ToastProvider";
 import {
   apiToEmployee, fullName,
   type ApiEmployee, type Employee, type EmployeeStatusFilter,
 } from "@/app/dashboard/employees/_data";
 import type { EmployeeStatCard } from "@/app/dashboard/employees/_components/EmployeeStatCards";
+
+/** Same row-status precedence StatusBadge/EmployeeTableRow render, applied to
+ * the raw list-API shape so the exported CSV's Status column reads the same
+ * human label the table shows instead of the raw backend value. */
+function exportStatusLabel(r: ApiEmployee): string {
+  const onNotice = r.status === "active" && !!r.last_working_day;
+  if (onNotice) return "Notice Period";
+  if (r.status === "active") return "Active";
+  if (r.status === "onboarding") return "Onboarding";
+  if (r.status === "probation") return "Probation";
+  return "Exited";
+}
 
 interface EmployeeStats {
   total: number; active: number; onboarding: number; departments: number;
@@ -24,6 +37,7 @@ const EMPTY_STATS: EmployeeStats = {
 /** Data-fetching + filter state for the Employee Directory list/stats — the
  * page component only composes UI around what this returns. */
 export function useEmployees() {
+  const { showToast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [userBranch, setUserBranch] = useState("");
 
@@ -77,10 +91,18 @@ export function useEmployees() {
   // keeps the current search term.
   useEffect(() => { fetchEmployees(search, 1); }, [fetchEmployees]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchStats = useCallback(async (br: string) => {
+  // Takes the SAME branch/dept/status filters the table itself uses (not
+  // just branch) so the KPI cards never show a count the filtered table
+  // contradicts — e.g. narrowing to a branch + org unit that has zero
+  // matching employees now shows 0 on the cards too, not a stale count.
+  const fetchStats = useCallback(async (br: string, dp = "all", st: "all" | EmployeeStatusFilter = "all") => {
     try {
+      const params: Record<string, string> = {};
+      if (br !== "all") params.branch = br;
+      if (dp !== "all") params.department = dp;
+      if (st !== "all") params.status = st;
       const { data } = await clientApi.get<{ data: EmployeeStats }>(
-        API.employees.stats, { params: br === "all" ? {} : { branch: br } },
+        API.employees.stats, { params },
       );
       if (data.data) setEmpStats(data.data);
     } catch {
@@ -88,7 +110,7 @@ export function useEmployees() {
     }
   }, []);
 
-  useEffect(() => { fetchStats(branch); }, [branch, fetchStats]);
+  useEffect(() => { fetchStats(branch, dept, status); }, [branch, dept, status, fetchStats]);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -113,7 +135,14 @@ export function useEmployees() {
 
   function clearFilters() {
     setSearch(""); setBranch("all"); setDept("all"); setStatus("all");
-    fetchEmployees("", 1);
+    // fetchEmployees's closure still holds the PRE-clear branch/dept/status
+    // (setState above is async/batched, so this call runs before those
+    // updates land) — most visibly after an AI Assist filter is applied,
+    // where the dropdowns visually reset to "All" but the table kept
+    // showing the AI-Assist-filtered rows. Passing explicit overrides
+    // (the same mechanism applyFilters already uses) makes this call
+    // actually query with "all" instead of the stale values.
+    fetchEmployees("", 1, { branch: "all", dept: "all", status: "all" });
   }
 
   function applyFilters(result: { status: "all" | EmployeeStatusFilter | null; branch: string | null; dept: string | null; search: string }) {
@@ -140,9 +169,21 @@ export function useEmployees() {
       if (status !== "all") params.status     = status;
       const { data } = await clientApi.get<{ data: { results: ApiEmployee[] } }>(API.employees.list, { params });
       const rows = data.data?.results ?? [];
-      const headers = ["Employee ID", "Name", "Email", "Phone", "Department", "Designation", "Branch", "Role", "Date of Joining", "Status"];
+      const headers = [
+        "Employee ID", "Name", "Email", "Phone", "Department", "Designation", "Branch",
+        "Role", "Date of Joining", "Status", "Reporting Manager", "Org Unit",
+      ];
       const csvRows = rows.map(r => [
-        r.employee_id, r.full_name, r.email, r.phone, r.department, r.designation, r.branch, r.role_display, r.date_of_joining, r.status,
+        r.employee_id, r.full_name, r.email, r.phone,
+        // The legacy `department` string is blank for anyone hired onto a real
+        // Position (see apiToEmployee's own comment) — derive it the same way
+        // the table row does (org_unit_name first, falling back to the legacy
+        // field) instead of the always-blank legacy field alone.
+        r.org_unit_name || r.department || "",
+        r.designation, r.branch, r.role_display, r.date_of_joining,
+        exportStatusLabel(r),
+        r.reporting_manager?.name ?? "",
+        r.org_unit_name ?? "",
       ]);
       const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
       const csv = [headers, ...csvRows].map(row => row.map(escape).join(",")).join("\r\n");
@@ -155,8 +196,9 @@ export function useEmployees() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast("Employee directory exported.", "success");
     } catch {
-      // no error UI for a best-effort export — the filters/table are unaffected either way
+      showToast("Could not export the employee directory. Please try again.", "error");
     } finally {
       setExporting(false);
     }
@@ -172,6 +214,7 @@ export function useEmployees() {
       setEmployees(prev => prev.map(e =>
         e.id === employee.id ? { ...e, status: isCurrentlyActive ? "inactive" : "active" } : e,
       ));
+      fetchStats(branch, dept, status);
     } catch {
       // silently ignore — employee list state unchanged
     } finally {
@@ -212,6 +255,15 @@ export function useEmployees() {
     },
   ], [empStats, activePct]);
 
+  // Refreshes both the table and the KPI cards together with the current
+  // filters — used after any action that changes headcount (Hire, Bulk
+  // Import, Delete/deactivate) so the cards never go stale until a manual
+  // reload.
+  function refetchAll() {
+    fetchEmployees(search, page);
+    fetchStats(branch, dept, status);
+  }
+
   return {
     isAdmin, userBranch,
     employees, loading, fetchError, total: empStats.total,
@@ -222,6 +274,7 @@ export function useEmployees() {
     page, totalPages, totalCount,
     branchOptions, deptOptions, stats,
     exporting, toggling,
-    fetchEmployees, handlePageChange, handleExport, toggleStatus, clearFilters, applyFilters,
+    fetchEmployees, fetchStats, refetchAll,
+    handlePageChange, handleExport, toggleStatus, clearFilters, applyFilters,
   };
 }
