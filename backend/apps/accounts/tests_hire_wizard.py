@@ -100,9 +100,17 @@ class HireWizardTestCase(TestCase):
     def _upload_all_required_docs(self, action: HireAction):
         required_keys = DocumentTypeConfig.objects.filter(required=True).values_list('type_key', flat=True)
         for key in required_keys:
+            # Content must differ per key — the real upload endpoint rejects
+            # byte-identical files reused across two document types (a
+            # genuine anti-mistake check). len(key) alone isn't a safe way
+            # to vary the bytes: two different keys can share the same
+            # length (e.g. "signed_offer_letter" and "twelfth_certificate"
+            # are both 19 chars), which collided here once a new required
+            # type happened to land on the same length as an existing one.
+            # The key's own bytes are unique per key by definition.
             resp = self.client.post(
                 reverse('hire-action-document-list', args=[action.id]),
-                {'document_type': key, 'file': _png_file(f'{key}.png', _VALID_PNG + bytes([len(key)]) + b'\x00' * 10)},
+                {'document_type': key, 'file': _png_file(f'{key}.png', _VALID_PNG + key.encode() + b'\x00' * 10)},
                 format='multipart',
             )
             self.assertEqual(resp.status_code, 201, resp.data)

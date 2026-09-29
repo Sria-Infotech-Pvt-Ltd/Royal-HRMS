@@ -17,6 +17,8 @@ const DOC_ITEMS: DocItem[] = [
   { key: "pan_card",         label: "PAN Card",           required: true,  category: "Identity" },
   { key: "aadhaar_card",     label: "Aadhaar Card",       required: true,  category: "Identity" },
   { key: "passport_photo",   label: "Passport",           required: false, category: "Identity" },
+  { key: "tenth_certificate", label: "10th Certificate", required: true, category: "Education & Experience" },
+  { key: "twelfth_certificate", label: "12th Certificate", required: true, category: "Education & Experience" },
   { key: "degree_certificate", label: "Degree Certificate", required: true, category: "Education & Experience" },
   { key: "experience_letter", label: "Experience Letter", required: false, category: "Education & Experience" },
   { key: "cancelled_cheque", label: "Cancelled Cheque",   required: true,  category: "Financial" },
