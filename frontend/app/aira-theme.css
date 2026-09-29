@@ -397,8 +397,13 @@ select.finput{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://w
 .draftempty{padding:14px;font-size:12px;color:var(--muted);line-height:1.5}
 .cntbadge{background:var(--brand);color:var(--onbrand);border-radius:99px;font-size:9.5px;font-weight:800;padding:1px 6px}
 .filebtn.sm{height:30px;font-size:11px;padding:0 10px}
-.sugbtn{margin-left:auto;border:1px solid color-mix(in srgb,var(--brand) 30%,transparent);background:var(--brand-tint);color:var(--brand-ink);font-size:9.5px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:99px;display:inline-flex;align-items:center;gap:4px}
-.sugbtn:hover{background:var(--brand);color:var(--onbrand)}
+/* Solid purple + white by default, not just on hover — the pale tint
+   version read as a decorative label rather than a clickable action,
+   which was reported as "that suggest should have to work" even though
+   its onClick was already wired correctly. */
+.sugbtn{margin-left:auto;border:1px solid var(--brand);background:var(--brand);color:var(--onbrand);font-size:9.5px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:99px;display:inline-flex;align-items:center;gap:4px}
+.sugbtn:hover:not(:disabled){background:color-mix(in srgb,var(--brand) 85%,black)}
+.sugbtn:disabled{background:var(--brand-tint);color:var(--brand-ink);border-color:color-mix(in srgb,var(--brand) 30%,transparent)}
 .attach{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}
 /* edit mode is a record editor, not a wizard: free navigation between
    sections, no step numbers, no progress, no next/back, save from anywhere */
