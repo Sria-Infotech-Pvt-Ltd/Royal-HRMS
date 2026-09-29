@@ -585,6 +585,9 @@ class EmployeeDetailView(APIView):
         if employee.id == request.user.id:
             return error('You cannot delete your own account.')
 
+        if not employee.is_active:
+            return error(f'Employee "{employee.full_name}" is already deactivated.')
+
         if employee.role and employee.role.role_permissions.filter(permission__codename='settings.edit').exists():
             active_admins = User.objects.filter(
                 role__role_permissions__permission__codename='settings.edit',
@@ -617,7 +620,14 @@ class EmployeeDetailView(APIView):
             ip_address = get_client_ip(request),
         )
         logger.info('Employee "%s" deactivated (deleted) by %s', full_name, request.user.email)
-        return success(f'Employee "{full_name}" deleted successfully.')
+        # Not a real "deleted successfully" — this is a soft delete
+        # (is_active=False) that keeps the full record, including PII, for
+        # statutory retention (see the Consent & Retention section of the
+        # employee record: retained N years after exit, non-statutory
+        # fields only erasable separately/later). Saying "deleted" here was
+        # actively misleading — the record is fully intact and still
+        # queryable/exportable, just marked inactive.
+        return success(f'Employee "{full_name}" deactivated. Record retained for statutory compliance.')
 
     def post(self, request, employee_id: str):
         return self.put(request, employee_id)
