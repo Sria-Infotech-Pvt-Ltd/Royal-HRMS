@@ -162,10 +162,21 @@ class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, employee_id: str):
-        if not _has_perm(request.user, 'employees.view'):
+        # Self-view bypass — mirrors EmployeeAuditTrailView/
+        # EmployeeActionHistoryView's own is_self pattern. This endpoint is
+        # the one the ESS "My Profile" → "Open full employee profile" drawer
+        # (mode="self") deliberately reuses (see EmployeeFullRecordBody.tsx —
+        # "the same employee record and layout used by Admin, with
+        # self-service permissions"), but a plain employee role never holds
+        # employees.view (an HR/admin permission for looking up OTHER
+        # people's records) — without this bypass, every self-view request
+        # 403'd before ever reaching the self-view-aware masking logic below,
+        # leaving that whole drawer blank for any non-admin employee.
+        is_self = request.user.employee_id == employee_id
+        if not is_self and not _has_perm(request.user, 'employees.view'):
             return error('You do not have permission to perform this action.', http_status=status.HTTP_403_FORBIDDEN)
         employee = _get_employee(employee_id)
-        if employee is None or _employee_out_of_branch_scope(request.user, employee):
+        if employee is None or (not is_self and _employee_out_of_branch_scope(request.user, employee)):
             return error('Employee not found.', http_status=status.HTTP_404_NOT_FOUND)
         auto_changed = _auto_assign_managers(employee)
         if auto_changed:
@@ -174,7 +185,7 @@ class EmployeeDetailView(APIView):
         # Bank details are only masked when viewing SOMEONE ELSE's record
         # without employees.view_sensitive — self-view always sees the real
         # values, matching every other self-service surface in this app.
-        if employee.id != request.user.id and not _has_perm(request.user, 'employees.view_sensitive'):
+        if not is_self and not _has_perm(request.user, 'employees.view_sensitive'):
             data = _mask_bank_fields(data)
         return success('Employee retrieved.', data=data)
 
