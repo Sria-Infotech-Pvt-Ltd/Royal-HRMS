@@ -230,6 +230,14 @@ class PayrollConfigValidationTests(TestCase):
         self.branch, _ = Branch.objects.get_or_create(
             branch_code='KND', defaults={'branch_name': 'Kondapur Office', 'city': city, 'state': state},
         )
+        # This class tests StatutoryConfig's own POST-create validation in
+        # isolation — a data migration (0024_seed_telangana_statutory_config)
+        # now seeds a real Telangana row so the Hire wizard's salary preview
+        # isn't always Rs 0 PT out of the box; clear it here so these tests
+        # keep exercising "create a fresh config" rather than colliding with
+        # that seed.
+        from apps.payroll.models import StatutoryConfig
+        StatutoryConfig.objects.filter(state=state).delete()
 
         from apps.payroll.models import SalaryStructure
         self.structure = SalaryStructure.objects.create(name='Standard Structure')
